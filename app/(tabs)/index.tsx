@@ -1,31 +1,19 @@
-import { StyleSheet } from 'react-native';
+import { Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
-import EditScreenInfo from '@/components/EditScreenInfo';
-import { Text, View } from '@/components/Themed';
-
-export default function TabOneScreen() {
+export default function HomeScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Tab One</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/(tabs)/index.tsx" />
-    </View>
-  );
+    <SafeAreaView className="flex-1 bg-wood-900">
+      <View className="flex-1 items-center justify-center px-6">
+        <Text className="text-4xl font-serif text-amber-accent">Harmoniq</Text>
+        <Text className="mt-4 text-center font-sans text-cream text-base">
+          NativeWind + fonts sanity check (Playfair / DM Sans / JetBrains Mono below).
+        </Text>
+        <Text className="mt-2 text-center font-serif-italic text-amber-light text-sm">Playfair Italic - design token check</Text>
+        <Text className="mt-2 font-serif-bold text-cream text-sm">Playfair Bold - heading weight</Text>
+        <Text className="mt-2 font-sans-medium text-muted-brown text-sm">DM Sans Medium - tab labels use this</Text>
+        <Text className="mt-2 font-mono text-amber-light text-sm">{'const demo = "JetBrains Mono"'}</Text>
+      </View>
+    </SafeAreaView>
+  )
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  separator: {
-    marginVertical: 30,
-    height: 1,
-    width: '80%',
-  },
-});
