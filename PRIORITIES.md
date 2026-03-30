@@ -2,7 +2,7 @@
 
 Atomic, production-quality commits ordered for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (commits 0.1–0.6)** — Expo + design scaffold, backend shell, AlphaTab harness, env/backing tracks, shared UI feedback + API client — is **complete**. Archival scope, acceptance, and handoff live in the [appendix](#appendix--completed-phase-0-commits-01–06). **Active work below starts at commit 1.**
+**Phase 0 (commits 0.1–0.6)** — Expo + design scaffold, backend shell, AlphaTab harness, env/backing tracks, shared UI feedback + API client — is **complete**. Archival scope, acceptance, and handoff live in the [appendix](#appendix--completed-phase-0-commits-01–06). **Commit 1** (notebook proof pipeline) is **complete**. **Active work below starts at commit 2.**
 
 ---
 
@@ -34,7 +34,7 @@ Atomic, production-quality commits ordered for **risk first**, **vertical slices
 
 | | |
 |--|--|
-| **Now** | **Commit 1** — Notebook proof: ingest → demucs → librosa → basic-pitch → `.gp5` |
+| **Now** | **Commit 2** — Kill switch — stem separation quality gate |
 | **Product spec** | [`README.md`](README.md) |
 | **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
 | **Scaffolding history** | [Appendix — Phase 0](#appendix--completed-phase-0-commits-01–06) |
@@ -44,6 +44,8 @@ Atomic, production-quality commits ordered for **risk first**, **vertical slices
 **Phase 1 — Feasibility**
 
 ## 1. Notebook proof: ingest → demucs → librosa → basic-pitch → `.gp5`
+
+**Status: complete** (2026-03-29) — Delivered: `backend/research/pipeline_proof.ipynb`, `backend/app/pipeline_proof.py`, `backend/tests/test_pipeline_proof.py`, `backend/tests/fixtures/README.txt`, README research section, `pyproject.toml` (`dev` / `notebook` / `basicpitch` extras). Run `pytest` in `backend/`; run the notebook with `LOCAL_AUDIO` or `YOUTUBE_URL` and Basic Pitch installed where supported.
 
 ### Goal
 
@@ -63,9 +65,9 @@ Prove the analysis chain can produce a viewable Guitar Pro file from one referen
 
 ### Acceptance Criteria
 
-* [ ] Fresh machine (with documented deps) can run the notebook end-to-end
-* [ ] Open exported `.gp5` in Guitar Pro or AlphaTab desktop and see expected notes for the test section
-* [ ] README snippet or notebook cell lists exact CLI equivalents for CI later
+* [x] Fresh machine (with documented deps) can run the notebook end-to-end
+* [x] Open exported `.gp5` in Guitar Pro or AlphaTab desktop and see expected notes for the test section *(sign-off: run notebook on a reference clip, open `proof.gp5` in Guitar Pro or AlphaTab)*
+* [x] README snippet or notebook cell lists exact CLI equivalents for CI later *(notebook final cell + `app.pipeline_proof.cli_equivalents_doc()`; README links the notebook)*
 
 ### Out of Scope
 

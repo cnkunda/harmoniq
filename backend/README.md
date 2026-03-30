@@ -24,6 +24,33 @@ The roadmap names **`py-guitarpro`**; the installable distribution on PyPI is **
 
 - First demucs run downloads model weights; allow disk space and a warm network.
 
+## Research notebook (PRIORITIES commit 1)
+
+End-to-end feasibility proof: **ingest → ffmpeg (44.1 kHz mono) → Demucs `htdemucs_6s` → Librosa → Basic Pitch → `.gp5`**.
+
+| Path | Role |
+|------|------|
+| `app/pipeline_proof.py` | Shared functions used by the notebook and future API code |
+| `research/pipeline_proof.ipynb` | Jupyter walkthrough + CLI equivalents |
+| `tests/test_pipeline_proof.py` | Fast unit tests (no Demucs run in CI by default) |
+
+**Run the notebook**
+
+```bash
+pip install -e ".[notebook]"   # optional: JupyterLab + kernel
+cd backend
+jupyter lab research/pipeline_proof.ipynb
+```
+
+Set **`LOCAL_AUDIO`** or **`YOUTUBE_URL`** in the first code cell. Outputs go under `data/research_notebook/` (gitignored via `data/`).
+
+**Tests**
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
 ## Setup
 
 From the **`backend/`** directory:
@@ -77,6 +104,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 |------|------|
 | `app/main.py` | `FastAPI` app, `/health`, stub `/analyze` routes |
 | `app/schemas.py` | Pydantic models shared with OpenAPI |
+| `app/pipeline_proof.py` | Notebook / feasibility audio → stems → Librosa → Basic Pitch → GP5 |
+| `research/pipeline_proof.ipynb` | Commit 1 pipeline walkthrough |
+| `tests/` | `pytest` targets (e.g. `test_pipeline_proof.py`) |
 | `pyproject.toml` | Package metadata + pinned dependency set |
 | `data/` | Local runtime output (stems, etc.) — ignored by git |
 | `.env.example` | Template for API keys and `PIPELINE_VERSION` |

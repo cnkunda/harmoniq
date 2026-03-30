@@ -29,6 +29,23 @@ dependencies = [
 basicpitch = [
     "basic-pitch>=0.4.0",
 ]
+dev = [
+    "pytest>=8.0",
+]
+notebook = [
+    "jupyterlab>=4.0",
+    "ipykernel>=6.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    # audioread still imports stdlib modules deprecated for removal in Python 3.13 (aifc, audioop, sunau).
+    "ignore::DeprecationWarning:audioread.*",
+    # Librosa can hit short internal frames during chroma_cqt; harmless for our summarize smoke test.
+    "ignore:n_fft=1024 is too large for input signal:UserWarning",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

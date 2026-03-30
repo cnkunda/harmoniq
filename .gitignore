@@ -33,6 +33,13 @@ yarn-error.*
 .env
 .env*.local
 
+# Python virtual environments (never commit site-packages / editable installs)
+.venv/
+venv/
+env/
+ENV/
+.venv-ci/
+
 # Backend / analysis artifacts (see PRIORITIES 0.5)
 backend/data/
 *.wav
