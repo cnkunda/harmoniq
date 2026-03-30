@@ -188,12 +188,38 @@ Run work off the request thread so real processing can plug in without blocking.
 
 ### Acceptance Criteria
 
-* [ ] POST returns quickly; GET shows `processing` then `complete` within a few seconds
-* [ ] Forced exception in worker surfaces as `failed` with user-safe message
+* [x] POST returns quickly; GET shows `processing` then `complete` within a few seconds
+* [x] Forced exception in worker surfaces as `failed` with user-safe message
 
 ### Out of Scope
 
 * Redis, Celery, multi-worker scale
+
+## ✅ Status: COMPLETE
+
+### Completion Notes
+Implemented an in-memory async job runner for `POST /analyze` + `GET /analyze/{job_id}` in `backend/app/main.py` and `backend/app/jobs.py`.
+
+Small deviation:
+* Used a daemon `threading.Thread` worker (instead of FastAPI `BackgroundTasks`) so `TestClient` polling reliably observes the `processing -> complete/failed` transition.
+
+Fixes applied:
+* Documented the forced-failure smoke-test hook (`{"url":"force_error"}`) in `backend/README.md`.
+
+### Validation
+Test scenarios used:
+* `backend/tests/test_analyze_api.py`: initial GET shows `processing`, then polls to `complete`; forced `{"url":"force_error"}` polls to `failed`; unknown job id 404 validation.
+
+Results:
+* `pytest tests/test_analyze_api.py` → PASS (exit code 0)
+
+### Output behavior
+* Initial `GET /analyze/{job_id}` returns `status="processing"` with `result=null` and `error=null`
+* After worker sleep (~1s), `status` becomes `complete` (stub `LessonJSON`) or `failed` (user-safe `error` string)
+* Unknown job id returns `404` with JSON `{"detail":"..."}`.
+
+### Follow-ups (ONLY if needed)
+* None for this smoke-test commit.
 
 ---
 

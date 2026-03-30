@@ -1,4 +1,4 @@
-"""Harmoniq API entrypoint — health, CORS, in-memory analyze stub (PRIORITIES §3)."""
+"""Harmoniq API entrypoint — health, CORS, async analyze job polling (PRIORITIES §4)."""
 
 from __future__ import annotations
 
@@ -12,42 +12,15 @@ from app.schemas import (
     AnalyzeJobCreated,
     AnalyzeRequest,
     JobStatus,
-    LessonJSON,
-    LessonSectionStub,
 )
+from app.jobs import enqueue_analyze_job, jobs
 
 logger = logging.getLogger("harmoniq.api")
 logger.setLevel(logging.INFO)
 
-# In-memory job store (single process). Values match GET /analyze/{job_id} JSON shape.
-jobs: dict[str, JobStatus] = {}
-
-
-def _stub_lesson(job_id: str, source_url: str | None) -> LessonJSON:
-    """Deterministic fake lesson for client contract tests; pipeline replaces this later."""
-    _ = source_url  # reserved for future ingest logging
-    return LessonJSON(
-        job_id=job_id,
-        song_title="Stub Song",
-        artist="Stub Artist",
-        key="G major",
-        key_confidence=0.99,
-        tempo=72.0,
-        tempo_confidence=0.95,
-        transcription_confidence=0.5,
-        beat_grid=[0.0, 0.5, 1.0],
-        bar_timestamps=[0.0, 3.33, 6.66],
-        stems={},
-        lyrics_aligned=[],
-        sections=[
-            LessonSectionStub(label="Solo (stub)", confidence=0.8),
-        ],
-    )
-
-
 app = FastAPI(
     title="Harmoniq API",
-    description="Local analysis backend for Harmoniq (in-memory analyze stub — real pipeline in later commits).",
+    description="Local analysis backend for Harmoniq (in-memory job runner; real pipeline later).",
     version="0.1.0",
 )
 
@@ -74,18 +47,18 @@ async def health() -> dict[str, str]:
     "/analyze",
     response_model=AnalyzeJobCreated,
     tags=["Analyze"],
-    summary="POST /analyze (stub — returns job_id immediately)",
+    summary="POST /analyze (async — returns job_id immediately)",
 )
 async def analyze(body: AnalyzeRequest) -> AnalyzeJobCreated:
     """JSON `{ url }` only; multipart upload lands in PRIORITIES §5."""
     job_id = str(uuid.uuid4())
-    result = _stub_lesson(job_id, body.url)
-    jobs[job_id] = JobStatus(status="complete", result=result, error=None)
     logger.info(
-        "POST /analyze created job_id=%s status=complete (stub) url=%r",
+        "POST /analyze created job_id=%s status=processing url=%r",
         job_id,
         body.url,
     )
+    # Enqueue immediately; worker runs after response is sent.
+    enqueue_analyze_job(job_id=job_id, url=body.url)
     return AnalyzeJobCreated(job_id=job_id)
 
 

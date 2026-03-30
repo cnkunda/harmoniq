@@ -97,6 +97,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 - Health: `curl http://127.0.0.1:8000/health` → `{"status":"ok"}`
 - Stub analyze: `curl.exe -s -X POST http://127.0.0.1:8000/analyze -H "Content-Type: application/json" -d '{"url":null}'` → `{"job_id":"…"}`; then `curl.exe -s http://127.0.0.1:8000/analyze/<job_id>` → `status":"complete"` and a stub `result` (JSON `LessonJSON` shape). Unknown id → **404** with `{"detail":"…"}`.
+- Forced failure (smoke-test hook): POST `{"url":"force_error"}`; GET should transition to `status:"failed"` with a user-safe `error` string.
 - Docs: open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) — **Analyze** routes and schemas **`AnalyzeJobCreated`**, **`AnalyzeRequest`**, **`JobStatus`**, **`LessonJSON`**.
 
 ## Project layout
