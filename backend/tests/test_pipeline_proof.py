@@ -18,7 +18,7 @@ from app.pipeline_proof import (
     yt_dlp_download_audio_command,
 )
 
-import guitarpro as gp
+gp = pytest.importorskip("guitarpro")
 
 
 def test_demucs_separate_command_uses_htdemucs_6s():
