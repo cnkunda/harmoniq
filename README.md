@@ -42,6 +42,10 @@ The target player: intermediate guitarist drawn to John Mayer, Tommy Emmanuel, a
 
 ## Tech Stack
 
+### Engineering roadmap
+
+Implementation order, phase groupings, and acceptance criteria live in **`PRIORITIES.md`**. **Phase 0** (Expo scaffold, design tokens, harness, env, shared UI feedback, typed analyze client) is complete; **Phase 1** onward is active work.
+
 ### Frontend
 - **Framework:**
   - React Native (Expo SDK 54, managed workflow) for iOS + Android
@@ -54,7 +58,7 @@ The target player: intermediate guitarist drawn to John Mayer, Tommy Emmanuel, a
 - **Waveform / pitch display:** Custom animated bars component (`WaveformVisualizer`) using React Native `View` + `react-native-reanimated`; `PitchIndicator` using `react-native-reanimated` shared values. `react-native-svg` for the skill graph radar chart.
 - **Gradients:** `expo-linear-gradient` (`WoodGradient` wrapper component). All screen backgrounds use this — not CSS gradients.
 - **Icons:** `lucide-react-native` (native + web). Lucide is used in lieu of Phosphor — official RN package, consistent with DESIGN_SYSTEM component specs.
-- **Animations:** `react-native-reanimated` v3 in place of `framer-motion` (web-only). Reanimated works across iOS, Android, and Expo Web.
+- **Animations:** `react-native-reanimated` v4 in place of `framer-motion` (web-only). Reanimated works across iOS, Android, and Expo Web.
 - **Interaction feedback:** `expo-haptics` for impact / selection haptics on every `AnimatedPressable`. Calls are silent no-ops on web and simulator — no platform guards needed. `react-native-gesture-handler` required as a peer dependency of Reanimated and Expo Router.
 - **Toast / notifications:** `react-native-toast-message` with a wood-themed config (`ToastConfig.tsx`). Use `toast.success()` / `toast.error()` helpers throughout.
 - **Audio playback:** `expo-av` for stem playback, loop, and rate control (`shouldCorrectPitch: true`). **Web:** Web Audio API via Expo Web. Support: rate 50–100%, pitch correction (degrade gracefully on web), looping, per-stem mute via parallel `Sound` instances (native) or `GainNode` graph (web).

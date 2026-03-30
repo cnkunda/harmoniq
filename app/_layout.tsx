@@ -2,6 +2,7 @@ import 'react-native-gesture-handler'
 import 'react-native-reanimated'
 import '../global.css'
 
+import { LinearGradient } from 'expo-linear-gradient'
 import { DMSans_400Regular, DMSans_500Medium } from '@expo-google-fonts/dm-sans'
 import { JetBrainsMono_400Regular } from '@expo-google-fonts/jetbrains-mono'
 import {
@@ -16,8 +17,14 @@ import { useEffect } from 'react'
 import { View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { cssInterop } from 'nativewind'
 
 import { NoiseOverlay } from '@/components/NoiseOverlay'
+import Toast from 'react-native-toast-message'
+
+import { toastConfig } from '@/components/ToastConfig'
+
+cssInterop(LinearGradient, { className: 'style' })
 
 SplashScreen.preventAutoHideAsync()
 
@@ -51,6 +58,7 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
           </Stack>
+          <Toast config={toastConfig} />
         </View>
       </SafeAreaProvider>
     </GestureHandlerRootView>

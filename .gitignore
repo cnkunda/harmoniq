@@ -30,7 +30,13 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+
+# Backend / analysis artifacts (see PRIORITIES 0.5)
+backend/data/
+*.wav
+*.gp5
 
 # typescript
 *.tsbuildinfo

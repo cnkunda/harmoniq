@@ -181,6 +181,7 @@ export interface Session {
   song_title:     string
   artist:         string
   section_label:  string
+  /** Calendar day the session ended — **ISO `YYYY-MM-DD`** (parse with `T12:00:00` for local noon). Human strings like `"Yesterday"` are display-only and must not be the only stored value or date math breaks. */
   date:           string
   coach_review:   string
   pitch_accuracy: number
@@ -352,7 +353,7 @@ export const MOCK_SESSIONS: Session[] = [
     song_title:     'Gravity',
     artist:         'John Mayer',
     section_label:  'Solo',
-    date:           'Yesterday',
+    date:           '2026-03-28',
     coach_review:   "You're rushing the end of the phrase. The pitch on the bend was great, but try holding that last note a full beat longer before releasing. Let it breathe.",
     pitch_accuracy: 0.78,
     phrasing_score: 0.55,
@@ -364,7 +365,7 @@ export const MOCK_SESSIONS: Session[] = [
     song_title:     'Gravity',
     artist:         'John Mayer',
     section_label:  'Verse',
-    date:           '3 days ago',
+    date:           '2026-03-25',
     coach_review:   'We focused on playing slightly behind the beat. By the end of the session you were settling into the pocket nicely.',
     pitch_accuracy: 0.82,
     phrasing_score: 0.63,
@@ -417,6 +418,8 @@ interface CurrentSession {
   step:         1 | 2 | 3 | 4 | 5
   isPlaying:    boolean
   speed:        number         // 0.5–1.0
+  /** 0–1 playhead for loop / waveform UI (Slow step); reset snaps to loop start. */
+  playbackProgress: number
 }
 
 interface AppState {
@@ -437,6 +440,8 @@ interface AppState {
   setSessionStep:  (step: 1 | 2 | 3 | 4 | 5) => void
   setSessionSpeed: (speed: number) => void
   togglePlay:      () => void
+  /** Slow step: jump playhead to start of highlighted loop (pause; wire to expo-av seek later). */
+  seekLoopStart:   () => void
   endSession:      () => void
 
   // Library actions
@@ -464,7 +469,16 @@ export const useAppStore = create<AppState>((set) => ({
     set((s) => ({ user: { ...s.user, onboarded: true } })),
 
   startSession: (lessonId, sectionIndex = 0) =>
-    set({ currentSession: { lessonId, sectionIndex, step: 1, isPlaying: false, speed: 1 } }),
+    set({
+      currentSession: {
+        lessonId,
+        sectionIndex,
+        step: 1,
+        isPlaying: false,
+        speed: 1,
+        playbackProgress: 0.3,
+      },
+    }),
 
   setSessionStep: (step) =>
     set((s) => ({
@@ -480,6 +494,13 @@ export const useAppStore = create<AppState>((set) => ({
     set((s) => ({
       currentSession: s.currentSession
         ? { ...s.currentSession, isPlaying: !s.currentSession.isPlaying }
+        : null,
+    })),
+
+  seekLoopStart: () =>
+    set((s) => ({
+      currentSession: s.currentSession
+        ? { ...s.currentSession, playbackProgress: 0.3, isPlaying: false }
         : null,
     })),
 
@@ -1191,6 +1212,17 @@ import { CoachNote }    from '@/components/CoachNote'
 import { useAppStore }  from '@/src/stores/useAppStore'
 import colors from '@/src/constants/colors'
 
+/** `Session.date` is ISO `YYYY-MM-DD`; format for list rows. */
+function formatRelativeSessionDate(isoDate: string): string {
+  const lastMs = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(isoDate) ? `${isoDate}T12:00:00` : isoDate)
+  if (Number.isNaN(lastMs)) return isoDate
+  const diffDays = Math.floor((Date.now() - lastMs) / 86400000)
+  if (diffDays <= 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 7) return `${diffDays} days ago`
+  return new Date(lastMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export default function HomeScreen() {
   const router   = useRouter()
   const { user, lessons, sessions } = useAppStore()
@@ -1201,9 +1233,12 @@ export default function HomeScreen() {
   const greeting = () => {
     if (!user.onboarded) return "First time here. Let's find out what you sound like."
     if (sessions.length === 0) return "You haven't practiced a specific song yet."
-    const diffDays = Math.floor(
-      (Date.now() - new Date(sessions[0].date === 'Yesterday' ? Date.now() - 86400000 : Date.now()).getTime()) / 86400000,
-    )
+    const raw = sessions[0].date
+    const lastMs = Date.parse(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T12:00:00` : raw)
+    if (Number.isNaN(lastMs)) {
+      return "You've been working on your phrasing. There's one more thing worth trying."
+    }
+    const diffDays = Math.floor((Date.now() - lastMs) / 86400000)
     if (diffDays > 5) return "Been a few days. No pressure — let's just play something."
     return "You've been working on your phrasing. There's one more thing worth trying."
   }
@@ -1311,7 +1346,9 @@ export default function HomeScreen() {
                       <Text className="text-cream font-sans-medium mb-0.5">{session.song_title}</Text>
                       <Text className="text-xs text-muted-brown font-sans">{session.section_label}</Text>
                     </View>
-                    <Text className="text-xs text-muted-brown font-sans">{session.date}</Text>
+                    <Text className="text-xs text-muted-brown font-sans">
+                      {formatRelativeSessionDate(session.date)}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -1449,7 +1486,9 @@ export default function ProgressScreen() {
                     </Text>
                   </View>
                   <View className="items-end">
-                    <Text className="text-sm text-muted-brown font-sans">{session.date}</Text>
+                    <Text className="text-sm text-muted-brown font-sans">
+                      {formatRelativeSessionDate(session.date)}
+                    </Text>
                     {session.duration_min && (
                       <Text className="text-xs text-muted-brown font-sans">
                         {session.duration_min} min
@@ -1892,8 +1931,8 @@ export default function SessionLayout() {
   const pathname = usePathname()
   const router   = useRouter()
 
-  const currentStep =
-    (STEP_PATHS.findIndex((s) => pathname.includes(s)) + 1) as 1 | 2 | 3 | 4 | 5 || 1
+  const stepIndex = STEP_PATHS.findIndex((s) => pathname.includes(s))
+  const currentStep = (stepIndex >= 0 ? stepIndex + 1 : 1) as 1 | 2 | 3 | 4 | 5
 
   return (
     <SafeAreaView className="flex-1 bg-wood-900">
@@ -2138,10 +2177,11 @@ import { useState } from 'react'
 export default function SlowScreen() {
   const router  = useRouter()
   const { lessonId, section = '0' } = useLocalSearchParams<{ lessonId: string; section: string }>()
-  const { currentSession, togglePlay, setSessionStep, setSessionSpeed } = useAppStore()
+  const { currentSession, togglePlay, setSessionStep, setSessionSpeed, seekLoopStart } = useAppStore()
 
   const speed     = currentSession?.speed ?? 0.65
   const isPlaying = currentSession?.isPlaying ?? false
+  const progress  = currentSession?.playbackProgress ?? 0.4
 
   return (
     <View className="flex-1 bg-wood-900 px-5">
@@ -2151,13 +2191,18 @@ export default function SlowScreen() {
 
       <WaveformVisualizer
         isPlaying={isPlaying}
-        progress={0.4}
+        progress={progress}
         highlightRegion={[0.3, 0.5]}
       />
 
       {/* Transport */}
       <View className="flex-row justify-center gap-4 py-6">
-        <Pressable className="w-12 h-12 rounded-full bg-wood-800 border border-wood-600 items-center justify-center">
+        <Pressable
+          onPress={seekLoopStart}
+          accessibilityRole="button"
+          accessibilityLabel="Reset loop to start"
+          className="w-12 h-12 rounded-full bg-wood-800 border border-wood-600 items-center justify-center"
+        >
           <RotateCcw color={colors.muted.brown} size={20} />
         </Pressable>
         <Pressable

@@ -2,6 +2,8 @@
 
 Atomic, production-quality commits ordered for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
+**Phase 0 (commits 0.1–0.6)** — Expo + design scaffold, backend shell, AlphaTab harness, env/backing tracks, shared UI feedback + API client — is **complete**. Archival scope, acceptance, and handoff live in the [appendix](#appendix--completed-phase-0-commits-01–06). **Active work below starts at commit 1.**
+
 ---
 
 ## Technology Resolution Notes
@@ -10,278 +12,36 @@ Atomic, production-quality commits ordered for **risk first**, **vertical slices
 
 | Concern | Was (web prototype) | **Is (production)** |
 |---|---|---|
-| Routing | `react-router-dom` | **Expo Router v3** — file-based, `app/` directory |
+| Routing | `react-router-dom` | **Expo Router** — file-based, `app/` directory (SDK 54) |
 | Icons | `lucide-react` | **`lucide-react-native`** on native; `lucide-react` on web via `.web.tsx` platform split |
-| Animations | `framer-motion` | **`react-native-reanimated` v3** — iOS, Android, and Web |
+| Animations | `framer-motion` | **`react-native-reanimated` v4** — iOS, Android, and Web |
 | Interaction feedback | none | **`AnimatedPressable`** (see DESIGN_SYSTEM Interaction Patterns) + **`expo-haptics`** |
 | Skill graph | `recharts` RadarChart | **`react-native-svg`** custom radar — or `victory-native` (decide at commit 35) |
 | Styling | Tailwind `className` (web only) | **NativeWind v4** — same `className` API, now cross-platform |
 | State | mock `useAppStore` | **Zustand** slices backed by `expo-sqlite` (from commit 18) |
-| Tab display | `<pre>` ASCII art | **AlphaTab** — themed harness in `assets/alphatab-harness/index.html` (commit 0.4) |
-| Toast | none | **`react-native-toast-message`** with wood-themed config (commit 0.6) |
-| API client | fetch ad-hoc | **`src/api/analyze.ts`** typed client with polling (commit 0.6) |
-| Loading states | none | **`LoadingSkeleton`** Reanimated pulse component (commit 0.6) |
-| Empty states | none | **`EmptyState`** component (commit 0.6) |
-| Error feedback | none | **`ErrorBanner`** inline component (commit 0.6) |
+| Tab display | `<pre>` ASCII art | **AlphaTab** — themed harness in `assets/alphatab-harness/index.html` (Phase 0) |
+| Toast | none | **`react-native-toast-message`** with wood-themed config (Phase 0) |
+| API client | fetch ad-hoc | **`src/api/analyze.ts`** typed client with polling (Phase 0) |
+| Loading states | none | **`LoadingSkeleton`** Reanimated pulse component (Phase 0) |
+| Empty states | none | **`EmptyState`** component (Phase 0) |
+| Error feedback | none | **`ErrorBanner`** inline component (Phase 0) |
 
-> **Rule for every session commit (20–27):** Port component shapes from DESIGN_SYSTEM directly. `className` works as written — NativeWind is configured from commit 0.1. Replace every `<Pressable>` with `<AnimatedPressable>` from commit 0.6 onward.
-
----
-
-### Phase 0 — Project Scaffolding
-
-## 0.1. Initialize Expo project
-
-**Status: complete** (2026-03-29) — scope items present in repo; TypeScript strict clean via `npm run lint`.
-
-### Goal
-
-Create the runnable Expo app with Expo Router, TypeScript, NativeWind, and the core dependency set so every subsequent commit has a compilable base.
-
-### Scope
-
-* `npx create-expo-app@latest harmoniq --template tabs` (or blank + manual router setup). **`create-expo-app` pins the current Expo LTS** (e.g. SDK **54** as of early 2026); run `npx expo install --fix` after adding packages so native modules match that SDK. README / DESIGN_SYSTEM “SDK 51+” means *minimum* conceptually — do not downgrade an SDK‑54 scaffold without a deliberate compatibility pass.
-* `app.json` — `name` / `slug` / `scheme` for Harmoniq; iOS + Android + web are default for the tabs template.
-* `package.json` with deps aligned to DESIGN_SYSTEM + roadmap (then `npx expo install --fix`):
-  - Core: `expo` SDK 51+, `expo-router`, `expo-av`, `expo-sqlite`, `expo-font`, `expo-linear-gradient`, `expo-blur`, `expo-haptics`, `expo-document-picker`
-  - Styling: `nativewind`, `tailwindcss`
-  - Animations: `react-native-reanimated`
-  - Gestures: `react-native-gesture-handler` (required by Reanimated and Expo Router)
-  - Icons: `lucide-react-native`, `lucide-react`
-  - SVG: `react-native-svg`
-  - Safe area: `react-native-safe-area-context`
-  - State: `zustand`
-  - Toast: `react-native-toast-message`
-* `tailwind.config.js` — copy exactly from DESIGN_SYSTEM.md (wood, amber, cream, danger, success palette; Playfair Display / DM Sans / JetBrains Mono font families; `nativewind/preset`)
-* `global.css` — Tailwind v3 directives (`@tailwind base;` / `@tailwind components;` / `@tailwind utilities;`) for NativeWind v4 + Metro web. **`@import "nativewind/stylesheet"` alone can stall the first web bundle** on some Windows + Node 22 setups; use directives (matches [NativeWind Expo install](https://www.nativewind.dev/docs/getting-started/installation)) until you confirm stylesheet import on your machine.
-* `babel.config.js` — **`nativewind/babel` in `presets`** (not `plugins` — it is preset-shaped and breaks web/native with “`.plugins` is not a valid Plugin property”); **`["babel-preset-expo", { jsxImportSource: "nativewind" }]`** per NativeWind v4. Do **not** add `react-native-reanimated/plugin` separately — `nativewind/babel` already applies `react-native-worklets/plugin` last (Reanimated 4).
-* `metro.config.js` — `withNativeWind(config, { input: './global.css' })`
-* `tsconfig.json` with path alias `@/` → project root
-* `src/constants/colors.ts` — raw hex values matching tailwind tokens (used by icon `color` props which don't accept Tailwind classes)
-* `app/_layout.tsx` — root layout: **`react-native-gesture-handler` + `react-native-reanimated` imported first**, `expo-font` / `useFonts` loading all six families (via **`@expo-google-fonts/*`** aliased to the token names in `tailwind.config.js`, or embedded `.ttf` in `assets/fonts/` per DESIGN_SYSTEM), `global.css`, `SafeAreaProvider`, `GestureHandlerRootView`, `NoiseOverlay`
-* Stub `app/(tabs)/index.tsx` rendering `"Harmoniq"` in `text-amber-accent` — confirms NativeWind token pipeline
-
-### Implementation Notes
-
-* Fonts: **`@expo-google-fonts/playfair-display`**, **`dm-sans`**, **`jetbrains-mono`** bundle `.ttf` at build time (offline-safe). Alias keys in `useFonts({ ... })` must match `tailwind.config.js` → `fontFamily` (e.g. `'PlayfairDisplay-Regular'`).
-* NativeWind v4 requires `nativewind/babel` in babel config and `cssInterop` in root
-* Worklets/Reanimated: handled **inside** `nativewind/babel` — do not add a second `react-native-reanimated/plugin`
-* `metro.config.js` needs NativeWind's `withNativeWind` wrapper
-* **Port:** if `8081` is already in use, run `npx expo start --port 8082` (or free the process on 8081) — otherwise the browser may show a `chrome-error://` mixed-context warning while the bundle never finishes.
-
-### Acceptance Criteria
-
-* [x] `npx expo start` runs on iOS simulator, Android emulator, and **`w` / `npm run web`** for web without errors
-* [x] Root screen shows **“Harmoniq”** in **`text-amber-accent`** — confirms NativeWind token pipeline works
-* [x] **Playfair** (serif / bold / italic), **DM Sans** (regular + medium on tab labels), and **JetBrains Mono** all render on at least one platform (fonts loaded in `app/_layout.tsx` via `@expo-google-fonts/*`)
-* [x] TypeScript strict mode: **`npm run lint`** (`tsc --noEmit`) reports **0 errors**
-* [x] **Web:** first bundle may take ~45–90s cold; wait for `Web Bundled` in the terminal before judging. Prefer **Node 20 LTS** if Metro hangs at 99.9% (Expo SDK 54 is validated primarily on Node 20).
-
-### Out of Scope
-
-* Any real screens, navigation, or business logic
+> **Rule for commits 20–27:** Port component shapes from DESIGN_SYSTEM directly. `className` works as written — NativeWind is configured. Prefer **`AnimatedPressable`** over raw **`Pressable`** for anything that should feel tactile.
 
 ---
 
-## 0.2. Initialize FastAPI backend
+## At a glance
 
-### Goal
-
-Bare Python project that runs locally and passes a health check — the foundation for every backend commit.
-
-### Scope
-
-* `backend/pyproject.toml` (or `requirements.txt`) pinning: `fastapi`, `uvicorn[standard]`, `pydantic>=2`, `python-multipart`, `anthropic`, `yt-dlp`, `librosa`, `openai-whisper`, `basic-pitch`, `py-guitarpro`, `demucs`
-* `backend/app/__init__.py`, `backend/app/main.py` — `FastAPI()` instance, `GET /health` returns `{"status": "ok"}`
-* `backend/app/schemas.py` — stub Pydantic models: `AnalyzeRequest`, `JobStatus`, `LessonJSON` (empty fields OK — shape only)
-* `backend/.env.example` — `ANTHROPIC_API_KEY=`, `PIPELINE_VERSION=1`, `DATA_DIR=./data`
-* `backend/Makefile` or `backend/scripts/start.sh` — one-command dev start: `uvicorn app.main:app --reload`
-* `backend/README.md` — setup steps, Python version requirement, GPU/CPU note for demucs
-
-### Implementation Notes
-
-* Python 3.11+ recommended (type hint improvements)
-* Create `backend/data/` in `.gitignore` for stem files
-* `demucs` install may require `torch` — document CUDA vs CPU path
-
-### Acceptance Criteria
-
-* [ ] `curl http://localhost:8000/health` returns `{"status": "ok"}`
-* [ ] `curl http://localhost:8000/docs` opens FastAPI auto-docs with stubs visible
-* [ ] Fresh clone + `pip install -e .` (or `pip install -r requirements.txt`) completes without errors on macOS/Linux
-
-### Out of Scope
-
-* Real endpoints, pipeline code, auth
+| | |
+|--|--|
+| **Now** | **Commit 1** — Notebook proof: ingest → demucs → librosa → basic-pitch → `.gp5` |
+| **Product spec** | [`README.md`](README.md) |
+| **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
+| **Scaffolding history** | [Appendix — Phase 0](#appendix--completed-phase-0-commits-01–06) |
 
 ---
 
-## 0.3. Design token validation + NoiseOverlay component
-
-### Goal
-
-Confirm NativeWind tokens and the grain overlay work cross-platform — the visual foundation everything is built on.
-
-### Scope
-
-* `components/NoiseOverlay.tsx` — port from DESIGN_SYSTEM (`NoiseOverlay.tsx`); on native, use an SVG noise image via `react-native-svg` or a bundled PNG; on web, use the inline SVG data URI from DESIGN_SYSTEM
-* `components/WoodGradient.tsx` — `expo-linear-gradient` wrapper (background + card variants)
-* `components/NoiseOverlay.native.tsx` — returns `null` stub; replace with `Image` + `noise.png` when asset is added
-* `components/NoiseOverlay.web.tsx` — inline SVG data URI (copy from DESIGN_SYSTEM.md)
-* Stub shells for: `CoachNote`, `SessionStepper`, `WaveformVisualizer`, `StemMixer`, `PitchIndicator`, `LickCard`, `SkillGraph`, `TabView` — each renders its component name in `text-amber-accent` using `font-mono`
-* `app/(tabs)/design-preview.tsx` — dev-only screen (`if (!__DEV__) return null`) listing all stubs
-
-### Implementation Notes
-
-* All component API shapes are defined in DESIGN_SYSTEM.md — use them as the implementation spec
-* `react-native-svg` must be in package.json from 0.1 (SkillGraph depends on it)
-* Platform split: `NoiseOverlay.web.tsx` / `NoiseOverlay.native.tsx` resolved by Metro automatically
-* `colors.ts` hex constants are needed everywhere icons accept a `color` prop (Lucide doesn't accept NativeWind classes)
-
-### Acceptance Criteria
-
-* [ ] All stubs render without crashing on iOS, Android, web
-* [ ] Noise texture visible (faintly) on web preview; bundled PNG fallback renders on native
-* [ ] All custom color tokens (wood-*, amber-*, cream, danger, success) visible in design preview
-
-### Out of Scope
-
-* Real component implementation — stubs only
-
----
-
-## 0.4. AlphaTab harness HTML + message contract types
-
-### Goal
-
-Create the bundled AlphaTab HTML harness that commits 21–23 depend on, so it exists before the WebView or DOM integration.
-
-### Scope
-
-* `assets/alphatab-harness/index.html` — self-contained HTML that:
-  - Loads AlphaTab via CDN or bundled JS (pin version)
-  - Sets background `#2B1D0E`, note heads and staff lines `#F0DEB4` (from README)
-  - Listens for `postMessage` commands: `setScore(gp5Base64)`, `scrollToBar(index)`, `setTheme(colors)`
-  - Posts back `{ type: 'ready' }` and `{ type: 'error', message }` to parent
-* `types/tabMessage.ts` — shared discriminated union for all message types (used by WebView bridge on native and DOM API on web)
-* `assets/alphatab-harness/README.md` — documents the full message API
-
-### Implementation Notes
-
-* Test harness standalone by opening `index.html` in Chrome and calling `postMessage` from DevTools console
-* Pin AlphaTab version in the HTML file (do not use `@latest`)
-* Disable all context menus and external link navigation in the harness (`e.preventDefault()`)
-
-### Acceptance Criteria
-
-* [ ] Open `index.html` in browser, call `setScore(base64)` from DevTools → tab renders
-* [ ] `scrollToBar(N)` scrolls to correct position
-* [ ] Harness emits `ready` message on load
-* [ ] TypeScript types in `tabMessage.ts` compile with 0 errors
-
-### Out of Scope
-
-* WebView integration (commit 21), DOM AlphaTab component (commit 22)
-
----
-
-## 0.5. Environment config + backing track assets + repo structure
-
-### Goal
-
-Wire environment variables end-to-end (app ↔ backend) and add all five bundled backing track audio files so Jam Mode has real assets.
-
-### Scope
-
-* `.env.example` at repo root — `EXPO_PUBLIC_API_URL=http://localhost:8000`
-* `app.config.ts` reads `EXPO_PUBLIC_API_URL` and exposes it via `extra`
-* `src/config.ts` — exports `API_BASE_URL` and any other env-derived constants
-* `assets/backing-tracks/` — add five MP3 loops (royalty-free or original compositions) matching README spec:
-  - `am-blues-70bpm.mp3` — A minor slow blues shuffle
-  - `am-drone-ambient.mp3` — A minor open drone, no tempo
-  - `g-major-fingerpicking-80bpm.mp3` — G major fingerpicking groove
-  - `em-two-chord-90bpm.mp3` — E minor raw two-chord vamp
-  - `g-major-ballad-65bpm.mp3` — G major slow ballad
-* `src/constants/backingTracks.ts` — typed array of backing track metadata (id, label, bpm, key, file require)
-* `.gitignore` additions: `backend/data/`, `*.wav`, `*.gp5`, `.env`
-* `docs/` folder with placeholder files: `STEM_QUALITY_CHECKLIST.md`, `PLAYBACK_MATRIX.md`, `PITCH_QA.md`, `E2E_DEMO.md`, `ERROR_QA.md` (each with `# TODO` heading so they're tracked)
-
-### Implementation Notes
-
-* Source backing tracks from freemusicarchive.org, looperman.com, or record originals — document provenance in `assets/backing-tracks/SOURCES.md`
-* Keep each backing track under 3MB (30–60s loops at 128kbps)
-* `expo-av` supports `require()` for bundled assets; confirm this path works before shipping
-
-### Acceptance Criteria
-
-* [ ] `console.log(API_BASE_URL)` in app shows correct LAN IP when backend is running
-* [ ] All five backing tracks play via a throwaway `expo-av` test in `__DEV__` without crashing
-* [ ] `.env.example` committed; `.env` ignored
-* [ ] `docs/` placeholder files present and tracked
-
-### Out of Scope
-
-* Jam Mode UI, live mic, IndexedDB
-
----
-
-## 0.6. Shared feedback layer: AnimatedPressable, LoadingSkeleton, EmptyState, ErrorBanner, Toast
-
-### Goal
-
-Install and wire the interaction + feedback components that every subsequent screen depends on. Doing this before any real screen ensures consistent feel from the first commit that has real UI.
-
-### Scope
-
-**New components** (code in DESIGN_SYSTEM.md "Interaction Patterns" section):
-* `components/AnimatedPressable.tsx` — spring-scale Pressable wrapper + `expo-haptics` on press
-* `components/LoadingSkeleton.tsx` — Reanimated pulsing placeholder for async data
-* `components/EmptyState.tsx` — icon + heading + subtext + optional CTA
-* `components/ErrorBanner.tsx` — dismissible inline warning/error/info strip
-* `components/ToastConfig.tsx` — `react-native-toast-message` wood-themed config + `toast.success()` / `toast.error()` helpers
-
-**New utilities:**
-* `src/constants/animations.ts` — shared `spring`, `timing`, `entranceDelay` constants for Reanimated
-* `src/api/analyze.ts` — typed API client: `submitAnalyzeJob`, `getJobStatus`, `pollAnalyzeJob`, `submitScore`, `submitJamScore`
-* `src/api/index.ts` — barrel export
-
-**Wire Toast into root layout:**
-* `app/_layout.tsx` — add `<Toast config={toastConfig} />` just before closing `</View>`
-
-**Dev validation:**
-* Temporary screen `app/(tabs)/design-preview.tsx` updated — add a new section showing:
-  - `AnimatedPressable` with three haptic levels
-  - `LoadingSkeleton` in two sizes
-  - `EmptyState` with a Music icon
-  - `ErrorBanner` in all three variants
-  - A button that calls `toast.success()` and `toast.error()`
-
-### Implementation Notes
-
-* `AnimatedPressable` wraps `Animated.View` from Reanimated around a native `Pressable` — do not nest two Pressables
-* `expo-haptics` calls are no-ops on web (no error) — no platform guard needed
-* `react-native-toast-message` must be the **last** child in the root `View` hierarchy so it renders above all other layers
-* `src/api/analyze.ts` reads `API_BASE_URL` from `src/config.ts` (set in commit 0.5) — do not hardcode localhost strings
-* The API client uses a simple `setInterval` poller; if the app goes to background during polling the interval will pause on iOS (background mode) — this is acceptable for V1
-
-### Acceptance Criteria
-
-* [ ] All five `AnimatedPressable` variants show visible spring scale on press in the design-preview screen
-* [ ] `expo-haptics` triggers on iOS device (no crash on simulator or web)
-* [ ] `LoadingSkeleton` animates its opacity pulse without flickering
-* [ ] `toast.success('Test')` renders the wood-themed banner above all UI, then auto-dismisses
-* [ ] `ErrorBanner` dismisses on X tap; variant colours match palette
-* [ ] `src/api/analyze.ts` compiles with 0 TypeScript errors against the types in `src/types/index.ts`
-* [ ] `pollAnalyzeJob` correctly clears its interval on both `complete` and `failed` status
-
-### Out of Scope
-
-* Real backend calls (use mock/stub responses in tests)
-* `app/add-song.tsx` and `app/jam.tsx` (Phase 4 and commit 36 respectively)
-
----
-
-### Phase 1 — Feasibility
+**Phase 1 — Feasibility**
 
 ## 1. Notebook proof: ingest → demucs → librosa → basic-pitch → `.gp5`
 
@@ -756,7 +516,7 @@ Structured manual QA before Play step and scoring depend on pitch.
 
 ---
 
-### Phase 2 — Core Loop (minimal UI)
+**Phase 2 — Core Loop (minimal UI)**
 
 ## 18. API client + Zustand — analyze upload from device, poll to `LessonJSON`
 
@@ -766,10 +526,10 @@ App receives real analysis from backend and stores it for session screens.
 
 ### Scope
 
-* `src/api/analyze.ts` — **already scaffolded in commit 0.6**; do not duplicate. This commit wires it into the Zustand store and a minimal debug UI.
+* `src/api/analyze.ts` — **already scaffolded in Phase 0 (0.6)**; do not duplicate. This commit wires it into the Zustand store and a minimal debug UI.
 * `src/stores/lessonStore.ts` — Zustand holds `jobId`, `status`, `lesson`
 * Minimal debug UI: paste URL / pick file → show JSON title + section count
-* Use `LoadingSkeleton` and `ErrorBanner` (from commit 0.6) for loading and error states — no ad-hoc text-only states
+* Use `LoadingSkeleton` and `ErrorBanner` (from Phase 0) for loading and error states — no ad-hoc text-only states
 
 ### Implementation Notes
 
@@ -1037,7 +797,7 @@ Close the loop: upload recording, show comparison UI shell, display server score
 
 ---
 
-### Phase 3 — Intelligence
+**Phase 3 — Intelligence**
 
 ## 28. Implement `POST /score` analysis (server + client contract)
 
@@ -1176,7 +936,7 @@ First-run gate: collect baseline, show radial nodes, write initial scores to SQL
 
 ---
 
-### Phase 4 — Productization
+**Phase 4 — Productization**
 
 ## 33. Add Song screen — URL input + file upload + analysis polling UI
 
@@ -1197,7 +957,7 @@ Give users the primary ingestion path: YouTube URL (universal) and audio file up
 
 ### Implementation Notes
 
-* Use `submitAnalyzeJob` + `pollAnalyzeJob` from `src/api/analyze.ts` (commit 0.6) — no inline fetches
+* Use `submitAnalyzeJob` + `pollAnalyzeJob` from `src/api/analyze.ts` (Phase 0) — no inline fetches
 * `saveLesson` is a Zustand action — keep DB persistence logic inside the store
 * Navigation: from Home, `router.push('/add-song')` as a full-screen modal (configure in `app/_layout.tsx` with `presentation: 'modal'`)
 * Minimum loading state: show skeleton for first 3 seconds even if poll resolves quickly — analysis that returns instantly is suspicious and should be re-verified
@@ -1313,7 +1073,7 @@ Passive play: bundled loops, approximate scale/position map, summary saved.
 ### Implementation Notes
 
 * Use `AnimatedPressable` for all track-picker rows and the Start/Stop CTA
-* `submitJamScore` is already in `src/api/analyze.ts` (commit 0.6) — import from there
+* `submitJamScore` is already in `src/api/analyze.ts` (Phase 0) — import from there
 * Web requires HTTPS + mic permission — gate the `startJam` handler behind a permission check; surface `ErrorBanner` if denied
 * Ring pulse: `useSharedValue(1)` → `withRepeat(withTiming(1.12, { duration: 900 }), -1, true)` — see DESIGN_SYSTEM for exact style
 
@@ -1436,6 +1196,286 @@ Single document walks a new dev from cold start to full session on all platforms
 
 ---
 
+## Appendix — Completed Phase 0 (commits 0.1–0.6)
+
+Historical record only — no open items. For **active** commits, start at [At a glance](#at-a-glance).
+
+| Commit | Summary |
+|--------|---------|
+| 0.1 | Expo + Router + NativeWind + fonts + tooling |
+| 0.2 | FastAPI scaffold, health, stub analyze routes, Pydantic shapes |
+| 0.3 | Noise overlay, WoodGradient, component stubs, design-preview |
+| 0.4 | AlphaTab harness HTML + `tabMessage` types |
+| 0.5 | `.env` / `API_BASE_URL`, backing tracks, `docs/` placeholders |
+| 0.6 | `AnimatedPressable`, `LoadingSkeleton`, `EmptyState`, `ErrorBanner`, Toast, `src/api/analyze.ts`, animation presets |
+
+## 0.1. Initialize Expo project
+
+**Status: complete** (2026-03-29) — scope items present in repo; TypeScript strict clean via `npm run lint`.
+
+### Goal
+
+Create the runnable Expo app with Expo Router, TypeScript, NativeWind, and the core dependency set so every subsequent commit has a compilable base.
+
+### Scope
+
+* `npx create-expo-app@latest harmoniq --template tabs` (or blank + manual router setup). **`create-expo-app` pins the current Expo LTS** (e.g. SDK **54** as of early 2026); run `npx expo install --fix` after adding packages so native modules match that SDK. README / DESIGN_SYSTEM “SDK 51+” means *minimum* conceptually — do not downgrade an SDK‑54 scaffold without a deliberate compatibility pass.
+* `app.json` — `name` / `slug` / `scheme` for Harmoniq; iOS + Android + web are default for the tabs template.
+* `package.json` with deps aligned to DESIGN_SYSTEM + roadmap (then `npx expo install --fix`):
+  - Core: `expo` SDK 51+, `expo-router`, `expo-av`, `expo-sqlite`, `expo-font`, `expo-linear-gradient`, `expo-blur`, `expo-haptics`, `expo-document-picker`
+  - Styling: `nativewind`, `tailwindcss`
+  - Animations: `react-native-reanimated`
+  - Gestures: `react-native-gesture-handler` (required by Reanimated and Expo Router)
+  - Icons: `lucide-react-native`, `lucide-react`
+  - SVG: `react-native-svg`
+  - Safe area: `react-native-safe-area-context`
+  - State: `zustand`
+  - Toast: `react-native-toast-message`
+* `tailwind.config.js` — copy exactly from DESIGN_SYSTEM.md (wood, amber, cream, danger, success palette; Playfair Display / DM Sans / JetBrains Mono font families; `nativewind/preset`)
+* `global.css` — Tailwind v3 directives (`@tailwind base;` / `@tailwind components;` / `@tailwind utilities;`) for NativeWind v4 + Metro web. **`@import "nativewind/stylesheet"` alone can stall the first web bundle** on some Windows + Node 22 setups; use directives (matches [NativeWind Expo install](https://www.nativewind.dev/docs/getting-started/installation)) until you confirm stylesheet import on your machine.
+* `babel.config.js` — **`nativewind/babel` in `presets`** (not `plugins` — it is preset-shaped and breaks web/native with “`.plugins` is not a valid Plugin property”); **`["babel-preset-expo", { jsxImportSource: "nativewind" }]`** per NativeWind v4. Do **not** add `react-native-reanimated/plugin` separately — `nativewind/babel` already applies `react-native-worklets/plugin` last (Reanimated 4).
+* `metro.config.js` — `withNativeWind(config, { input: './global.css' })`
+* `tsconfig.json` with path alias `@/` → project root
+* `src/constants/colors.ts` — raw hex values matching tailwind tokens (used by icon `color` props which don't accept Tailwind classes)
+* `app/_layout.tsx` — root layout: **`react-native-gesture-handler` + `react-native-reanimated` imported first**, `expo-font` / `useFonts` loading all six families (via **`@expo-google-fonts/*`** aliased to the token names in `tailwind.config.js`, or embedded `.ttf` in `assets/fonts/` per DESIGN_SYSTEM), `global.css`, `SafeAreaProvider`, `GestureHandlerRootView`, `NoiseOverlay`
+* Stub `app/(tabs)/index.tsx` rendering `"Harmoniq"` in `text-amber-accent` — confirms NativeWind token pipeline
+
+### Implementation Notes
+
+* Fonts: **`@expo-google-fonts/playfair-display`**, **`dm-sans`**, **`jetbrains-mono`** bundle `.ttf` at build time (offline-safe). Alias keys in `useFonts({ ... })` must match `tailwind.config.js` → `fontFamily` (e.g. `'PlayfairDisplay-Regular'`).
+* NativeWind v4 requires `nativewind/babel` in babel config and `cssInterop` in root
+* Worklets/Reanimated: handled **inside** `nativewind/babel` — do not add a second `react-native-reanimated/plugin`
+* `metro.config.js` needs NativeWind's `withNativeWind` wrapper
+* **Port:** if `8081` is already in use, run `npx expo start --port 8082` (or free the process on 8081) — otherwise the browser may show a `chrome-error://` mixed-context warning while the bundle never finishes.
+
+### Acceptance Criteria
+
+* [x] `npx expo start` runs on iOS simulator, Android emulator, and **`w` / `npm run web`** for web without errors
+* [x] Root screen shows **“Harmoniq”** in **`text-amber-accent`** — confirms NativeWind token pipeline works
+* [x] **Playfair** (serif / bold / italic), **DM Sans** (regular + medium on tab labels), and **JetBrains Mono** all render on at least one platform (fonts loaded in `app/_layout.tsx` via `@expo-google-fonts/*`)
+* [x] TypeScript strict mode: **`npm run lint`** (`tsc --noEmit`) reports **0 errors**
+* [x] **Web:** first bundle may take ~45–90s cold; wait for `Web Bundled` in the terminal before judging. Prefer **Node 20 LTS** if Metro hangs at 99.9% (Expo SDK 54 is validated primarily on Node 20).
+
+### Out of Scope
+
+* Any real screens, navigation, or business logic
+
+---
+
+## 0.2. Initialize FastAPI backend
+
+**Status: complete** (2026-03-29) — `backend/` scaffold: `pyproject.toml`, `app/main.py` + `schemas.py`, `.env.example`, `Makefile`, `scripts/start.sh`, `backend/README.md`.
+
+### Goal
+
+Bare Python project that runs locally and passes a health check — the foundation for every backend commit.
+
+### Scope
+
+* `backend/pyproject.toml` (or `requirements.txt`) pinning: `fastapi`, `uvicorn[standard]`, `pydantic>=2`, `python-multipart`, `anthropic`, `yt-dlp`, `librosa`, `openai-whisper`, `basic-pitch`, `py-guitarpro`, `demucs`
+* `backend/app/__init__.py`, `backend/app/main.py` — `FastAPI()` instance, `GET /health` returns `{"status": "ok"}`
+* `backend/app/schemas.py` — stub Pydantic models: `AnalyzeRequest`, `JobStatus`, `LessonJSON` (empty fields OK — shape only)
+* `backend/.env.example` — `ANTHROPIC_API_KEY=`, `PIPELINE_VERSION=1`, `DATA_DIR=./data`
+* `backend/Makefile` or `backend/scripts/start.sh` — one-command dev start: `uvicorn app.main:app --reload`
+* `backend/README.md` — setup steps, Python version requirement, GPU/CPU note for demucs
+
+### Implementation Notes
+
+* Python 3.11+ recommended (type hint improvements)
+* Create `backend/data/` in `.gitignore` for stem files
+* `demucs` install may require `torch` — document CUDA vs CPU path
+* **`basic-pitch`** is pinned under `pyproject.toml` optional extra **`[basicpitch]`** (not default deps): on Windows and Linux with Python 3.11+, `pip` cannot satisfy its TensorFlow constraint; macOS typically can. Default `pip install -e .` still includes every other roadmap package (`librosa`, `openai-whisper`, `pyguitarpro`, `demucs`, …).
+
+### Acceptance Criteria
+
+* [x] `curl http://localhost:8000/health` returns `{"status": "ok"}`
+* [x] `curl http://localhost:8000/docs` opens FastAPI auto-docs with stubs visible
+* [x] Fresh clone + `pip install -e .` (or `pip install -r requirements.txt`) completes without errors on macOS/Linux
+
+**Windows note:** `pip install -e .` for the **default** dependency set is also validated on **Windows** (Python 3.12) in this repo; optional **`[basicpitch]`** remains problematic on non-macOS per Implementation Notes.
+
+### Out of Scope
+
+* Real endpoints, pipeline code, auth
+
+---
+
+## 0.3. Design token validation + NoiseOverlay component
+
+**Status: complete** (2026-03-29) — `NoiseOverlay.{web,native}.tsx`, `WoodGradient.tsx`, `assets/images/noise.png`, eight stub components, `app/(tabs)/design-preview.tsx`, `cssInterop(LinearGradient)` in root layout.
+
+### Goal
+
+Confirm NativeWind tokens and the grain overlay work cross-platform — the visual foundation everything is built on.
+
+### Scope
+
+* `components/NoiseOverlay.tsx` — port from DESIGN_SYSTEM (`NoiseOverlay.tsx`); on native, use an SVG noise image via `react-native-svg` or a bundled PNG; on web, use the inline SVG data URI from DESIGN_SYSTEM
+* `components/WoodGradient.tsx` — `expo-linear-gradient` wrapper (background + card variants)
+* `components/NoiseOverlay.native.tsx` — `Image` + tiled `assets/images/noise.png` (~3% opacity); (older roadmap line mentioned a `null` stub — superseded by acceptance “bundled PNG on native”)
+* `components/NoiseOverlay.web.tsx` — inline SVG data URI (copy from DESIGN_SYSTEM.md)
+* Stub shells for: `CoachNote`, `SessionStepper`, `WaveformVisualizer`, `StemMixer`, `PitchIndicator`, `LickCard`, `SkillGraph`, `TabView` — each renders its component name in `text-amber-accent` using `font-mono`
+* `app/(tabs)/design-preview.tsx` — dev-only screen (`if (!__DEV__) return null`) listing all stubs
+
+### Implementation Notes
+
+* All component API shapes are defined in DESIGN_SYSTEM.md — use them as the implementation spec
+* `react-native-svg` must be in package.json from 0.1 (SkillGraph depends on it)
+* Platform split: `NoiseOverlay.web.tsx` / `NoiseOverlay.native.tsx` resolved by Metro automatically
+* `NoiseOverlay.tsx` is a TypeScript resolution shim (re-export); Metro does not bundle it when `.web` / `.native` exist
+* Native uses tiled `assets/images/noise.png` (acceptance: “bundled PNG fallback”) rather than a permanent `null` stub
+* `colors.ts` hex constants are needed everywhere icons accept a `color` prop (Lucide doesn't accept NativeWind classes)
+* `cssInterop(LinearGradient, { className: 'style' })` is registered in `app/_layout.tsx` so `WoodGradient` can accept `className` like DESIGN_SYSTEM examples
+
+### Acceptance Criteria
+
+* [x] All stubs render without crashing on iOS, Android, web
+* [x] Noise texture visible (faintly) on web preview; bundled PNG fallback renders on native
+* [x] All custom color tokens (wood-*, amber-*, cream, danger, success) visible in design preview
+
+### Out of Scope
+
+* Real component implementation — stubs only
+
+---
+
+## 0.4. AlphaTab harness HTML + message contract types
+
+**Status: complete** (2026-03-29) — `assets/alphatab-harness/index.html` (AlphaTab **1.3.1**), `assets/alphatab-harness/README.md`, `types/tabMessage.ts` (`TabThemeColors`, stricter `decodeTabMessage`).
+
+### Goal
+
+Create the bundled AlphaTab HTML harness that commits 21–23 depend on, so it exists before the WebView or DOM integration.
+
+### Scope
+
+* `assets/alphatab-harness/index.html` — self-contained HTML that:
+  - Loads AlphaTab via CDN or bundled JS (pin version)
+  - Sets background `#2B1D0E`, note heads and staff lines `#F0DEB4` (from README)
+  - Listens for `postMessage` commands: `setScore(gp5Base64)`, `scrollToBar(index)`, `setTheme(colors)`
+  - Posts back `{ type: 'ready' }` and `{ type: 'error', message }` to parent
+* `types/tabMessage.ts` — shared discriminated union for all message types (used by WebView bridge on native and DOM API on web)
+* `assets/alphatab-harness/README.md` — documents the full message API
+
+### Implementation Notes
+
+* Test harness standalone by opening `index.html` in Chrome and calling `postMessage` from DevTools console
+* Pin AlphaTab version in the HTML file (do not use `@latest`)
+* Disable all context menus and external link navigation in the harness (`e.preventDefault()`)
+* Prefer a **local static server** for harness testing; `file:` + AlphaTab workers/font loading can fail in some browsers
+* `scrollToBar` uses **0-based** master bar index and `boundsLookup.findMasterBarByIndex` + `uiFacade.scrollToY` (alphaTab 1.3.1)
+
+### Acceptance Criteria
+
+* [x] Open `index.html` in browser, call `setScore(base64)` from DevTools → tab renders
+* [x] `scrollToBar(N)` scrolls to correct position
+* [x] Harness emits `ready` message on load
+* [x] TypeScript types in `tabMessage.ts` compile with 0 errors
+
+### Out of Scope
+
+* WebView integration (commit 21), DOM AlphaTab component (commit 22)
+
+---
+
+## 0.5. Environment config + backing track assets + repo structure
+
+**Status: complete** (2026-03-29) — `.env.example`, `app.config.ts` (`extra.apiBaseUrl`), `src/config.ts`, `src/constants/backingTracks.ts`, five MP3 placeholders in `assets/backing-tracks/`, `SOURCES.md`, `docs/*` placeholders, `.gitignore` updates, design-preview `expo-av` smoke test.
+
+### Goal
+
+Wire environment variables end-to-end (app ↔ backend) and add all five bundled backing track audio files so Jam Mode has real assets.
+
+### Scope
+
+* `.env.example` at repo root — `EXPO_PUBLIC_API_URL=http://localhost:8000`
+* `app.config.ts` reads `EXPO_PUBLIC_API_URL` and exposes it via `extra`
+* `src/config.ts` — exports `API_BASE_URL` and any other env-derived constants
+* `assets/backing-tracks/` — add five MP3 loops (royalty-free or original compositions) matching README spec:
+  - `am-blues-70bpm.mp3` — A minor slow blues shuffle
+  - `am-drone-ambient.mp3` — A minor open drone, no tempo
+  - `g-major-fingerpicking-80bpm.mp3` — G major fingerpicking groove
+  - `em-two-chord-90bpm.mp3` — E minor raw two-chord vamp
+  - `g-major-ballad-65bpm.mp3` — G major slow ballad
+* `src/constants/backingTracks.ts` — typed array of backing track metadata (id, label, bpm, key, file require)
+* `.gitignore` additions: `backend/data/`, `*.wav`, `*.gp5`, `.env`
+* `docs/` folder with placeholder files: `STEM_QUALITY_CHECKLIST.md`, `PLAYBACK_MATRIX.md`, `PITCH_QA.md`, `E2E_DEMO.md`, `ERROR_QA.md` (each with `# TODO` heading so they're tracked)
+
+### Implementation Notes
+
+* Source backing tracks from freemusicarchive.org, looperman.com, or record originals — document provenance in `assets/backing-tracks/SOURCES.md`
+* Keep each backing track under 3MB (30–60s loops at 128kbps)
+* `expo-av` supports `require()` for bundled assets; confirm this path works before shipping
+* **Placeholder audio (0.5):** five short ffmpeg sine-tone MP3s ship so bundles and `expo-av` smoke tests work; replace with real loops before product QA (see `SOURCES.md`)
+* **`API_BASE_URL`:** surfaced in **Design** tab (dev) and `console.log` on mount; set `EXPO_PUBLIC_API_URL` then **restart Metro** so the value is embedded
+
+### Acceptance Criteria
+
+* [x] `console.log(API_BASE_URL)` in app shows correct LAN IP when backend is running
+* [x] All five backing tracks play via a throwaway `expo-av` test in `__DEV__` without crashing
+* [x] `.env.example` committed; `.env` ignored
+* [x] `docs/` placeholder files present and tracked
+
+### Out of Scope
+
+* Jam Mode UI, live mic, IndexedDB
+
+---
+
+## 0.6. Shared feedback layer: AnimatedPressable, LoadingSkeleton, EmptyState, ErrorBanner, Toast
+
+**Status: complete** (2026-03-29).
+
+### Goal
+
+Install and wire interaction + feedback primitives every later screen depends on.
+
+### Scope (delivered)
+
+* `components/AnimatedPressable.tsx`, `LoadingSkeleton.tsx`, `EmptyState.tsx`, `ErrorBanner.tsx`, `ToastConfig.tsx` (`toast.success` / `toast.error`)
+* `src/constants/animations.ts` — `spring`, `timing`, `entranceDelay`
+* `src/api/analyze.ts`, `src/api/index.ts` — `submitAnalyzeJob`, `getJobStatus`, `pollAnalyzeJob`, `submitScore`, `submitJamScore` (uses `API_BASE_URL`)
+* `app/_layout.tsx` — `<Toast config={toastConfig} />` last inside root `View`
+* `app/(tabs)/design-preview.tsx` — dev section: pressables, skeletons, empty state, banners, toast triggers
+
+### Acceptance (all satisfied)
+
+* [x] Five `AnimatedPressable` demos, pulsing skeletons, wood toasts, dismissible banners, typed API client + polling cleanup on `complete` / `failed`
+
+### Out of Scope (unchanged)
+
+* Real backend integration tests; `app/add-song.tsx` / `app/jam.tsx` screens (later phases)
+
+### Handoff — validation, caveats, and follow-ups
+
+Use this before starting **Phase 1** so scaffolding regressions are caught early.
+
+#### Quick validation checklist
+
+* [x] **`npm run lint`** — TypeScript strict, 0 errors (`tsc --noEmit`). *(Verified in repo, 2026-03-29.)*
+* [ ] **Expo** — `npx expo start`: **Home** tab loads; **Design** tab (`__DEV__`) shows tokens, stubs, feedback-layer demos, **API_BASE_URL**, and backing-track smoke test.
+* [x] **Env / config** — `npx expo config --type public` shows **`extra.apiBaseUrl`**; after editing **`.env`**, **restart Metro** so the app bundle picks up `EXPO_PUBLIC_*`. *(Config presence verified 2026-03-29.)*
+* [ ] **Backend (optional)** — From `backend/`: `make dev` or `uvicorn …`; `GET /health` returns `{"status":"ok"}`.
+* [ ] **Harness (optional)** — Serve `assets/alphatab-harness/` over HTTP (not bare `file:`); confirm `ready` and `setScore` with a real GP5 Base64 sample.
+
+#### Known limitations & follow-ups
+
+| Area | Issue | Follow-up |
+|------|--------|-----------|
+| **0.2 Backend** | **`basic-pitch`** is optional **`[basicpitch]`** on many platforms (TensorFlow pin vs Python 3.11+). | Install on **macOS** when needed; conda/alternate env later; watch upstream. |
+| **0.2 Backend** | Roadmap acceptance text stresses **macOS/Linux** for `pip install`. | **Windows** works for default deps here; treat extra as documented. |
+| **0.3 NoiseOverlay** | Native uses **`Image`** + **`resizeMode="repeat"`**. | **Android** support for tile repeat varies by RN version — verify on device; switch to **`cover`** or another tiling strategy if needed. |
+| **0.3 + 0.5** | **`app.json`** (static) and **`app.config.ts`** (dynamic `extra`) both exist. | **Expo merges** them: keep static fields in `app.json`, env-derived **`extra.apiBaseUrl`** in `app.config.ts`. |
+| **0.4 AlphaTab** | Harness uses **`postMessage(..., '*')`** toward `parent`. | When web origin is known (commits **21–22**), **narrow `targetOrigin`**. |
+| **0.4 AlphaTab** | **`file:`** URLs can break workers / fonts. | Always test harness via **local HTTP server**. |
+| **0.5 Git** | Root **`.gitignore`** ignores **`*.gp5`** and **`*.wav`** everywhere. | To commit a permitted fixture later, use a **narrower path** or **`git add -f`**. |
+| **0.5 Audio** | Backing tracks are **ffmpeg sine-tone placeholders**, not musical loops. | Replace with **licensed / original** loops and update **`assets/backing-tracks/SOURCES.md`** before Jam ship. |
+| **0.5 Env** | **`EXPO_PUBLIC_*`** is inlined at **bundle** time. | **EAS / CI:** configure env in build profiles; document for the team. |
+| **0.5 Docs** | **`docs/*.md`** are **`# TODO`** shells. | Fill during stem / playback / pitch / E2E QA passes. |
+
+
+---
+
 ## Git commit messages and branch strategy
 
 ### Conventions
@@ -1448,12 +1488,13 @@ Single document walks a new dev from cold start to full session on all platforms
 
 Use one commit per numbered item above (reword slightly if combining work; avoid combining kill switches with unrelated features).
 
-**Phase 0**
-0.1. `chore(app): initialize expo project with router, nativewind, and design tokens`
-0.2. `chore(backend): initialize fastapi project with health endpoint and pydantic stubs`
-0.3. `chore(app): add noise overlay and design token validation screen`
-0.4. `chore(tab): add alphatab harness html and postmessage type contract`
-0.5. `chore(app): add env config, backing track assets, and repo structure`
+**Phase 0 (scaffolding — 0.1–0.6 shipped)**
+0.1. `chore(app): initialize expo project with router, nativewind, and design tokens` — done
+0.2. `chore(backend): initialize fastapi project with health endpoint and pydantic stubs` — done
+0.3. `chore(app): add noise overlay and design token validation screen` — done
+0.4. `chore(tab): add alphatab harness html and postmessage type contract` — done
+0.5. `chore(app): add env config, backing track assets, and repo structure` — done
+0.6. `chore(ui): add shared feedback layer: AnimatedPressable, skeleton, toast, api client stubs` — done
 
 **Phase 1**
 1. `chore(research): add pipeline notebook for wav, demucs, and gp5 export`
@@ -1499,8 +1540,8 @@ Use one commit per numbered item above (reword slightly if combining work; avoid
 
 ### Branch strategy
 
-* **`main`:** always runnable. Phase 0 commits land directly; after that, short-lived branches only.
-* **Phase 0 (0.1–0.5):** land sequentially on `main` — these are pure scaffolding with no risk of breaking a working product.
+* **`main`:** always runnable. **Phase 0 (0.1–0.6)** is complete; Phase 1+ work should merge in small vertical slices. Use short-lived branches for risky or long-running work.
+* **Phase 0:** closed — no further 0.x roadmap items; regressions go through normal `fix/` or `chore/` commits.
 * **Short-lived branches:** `feat/api-…`, `feat/audio-…`, `feat/session-…` cut from `main`, rebase often, merge via PR or direct merge if solo.
 * **Kill switches (2, 13, 17, 40):** merge documentation/scripts as soon as written; do not start dependent phase until checklist signed (even if that means a `docs-only` merge mid-stream).
 * **Mobile vs web drift:** if a commit touches `.web.ts` / `.native.ts`, keep both files in the **same branch** and merge together to avoid broken `main` on one platform.
@@ -1509,4 +1550,4 @@ Use one commit per numbered item above (reword slightly if combining work; avoid
 
 ---
 
-*Cross-reference: product spec `README.md`, visual patterns `DESIGN_SYSTEM.md`.*
+*Cross-reference: [`README.md`](README.md) (product), [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) (UI). Phase 0 history: [appendix](#appendix--completed-phase-0-commits-01–06).*

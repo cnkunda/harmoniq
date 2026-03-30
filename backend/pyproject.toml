@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "harmoniq-backend"
+version = "0.1.0"
+description = "Harmoniq local analysis API (FastAPI scaffold)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.0",
+    "python-multipart>=0.0.9",
+    "anthropic>=0.40.0",
+    "yt-dlp>=2024.8.0",
+    "librosa>=0.10.2",
+    "openai-whisper>=20231117",
+    "pyguitarpro>=0.10.0",
+    "demucs>=4.0.1",
+]
+
+# basic-pitch is part of the Harmoniq stack (README / PRIORITIES) but pins TensorFlow in a way
+# that does not resolve on Windows or Linux with Python 3.11+ (non-macOS). Install when needed:
+#   pip install -e ".[basicpitch]"
+# On macOS, `pip install -e ".[basicpitch]"` usually succeeds.
+[project.optional-dependencies]
+basicpitch = [
+    "basic-pitch>=0.4.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
