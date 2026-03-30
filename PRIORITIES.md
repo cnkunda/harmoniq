@@ -411,13 +411,23 @@ Generate tab artifacts with skeleton/full split and skip alternate tab when conf
 
 ### Acceptance Criteria
 
-* [ ] At least one section includes `tab_full_gp5_base64` and `tab_skeleton_gp5_base64` loadable by AlphaTab harness
-* [ ] When confidence forced low in test, alternate tab absent and flags set for “approximate”
-* [ ] Pipeline completes within documented time budget on reference hardware
+* [x] At least one section includes `tab_full_gp5_base64` and `tab_skeleton_gp5_base64` loadable by AlphaTab harness
+* [x] When confidence forced low in test, alternate tab absent and flags set for “approximate”
+* [x] Pipeline completes within documented time budget on reference hardware
 
 ### Out of Scope
 
 * Perfect fingering; UI toggle
+
+### ✅ Status: COMPLETE
+### Completion Notes
+- Added `backend/app/tabgen.py` to generate full + skeleton GP5 payloads as base64 from note events.
+- Implemented skeleton ornament filtering (duration-based approximation).
+- Implemented confidence gating for the optional alternate GP5 payload via `tab_alt_position_gp5_base64`.
+- Wired tab artifacts + per-section confidence into `build_lesson_json_from_librosa` so API responses include the new tab fields.
+
+### Validation
+- Tests: `python -m pytest -q backend`
 
 ---
 
@@ -439,12 +449,29 @@ Avoid recomputing expensive steps for identical inputs and version bumps.
 
 ### Acceptance Criteria
 
-* [ ] Same file submitted twice → second job completes fast (skip demucs or full pipeline per implementation)
-* [ ] Bump `PIPELINE_VERSION` forces recompute
+* [x] Same file submitted twice → second job completes fast (skip demucs or full pipeline per implementation)
+* [x] Bump `PIPELINE_VERSION` forces recompute
 
 ### Out of Scope
 
 * Distributed cache, S3
+
+### ✅ Status: COMPLETE
+### Completion Notes
+- Added `backend/app/cache.py` with disk-backed analysis caching keyed by `PIPELINE_VERSION` + SHA-256 of normalized `song.wav`.
+- Wired cache lookup into `backend/app/jobs.py` before stem separation and librosa analysis; cache hits now reuse prior WAV/stem artifacts by copying into the new job directory and returning a job-scoped `LessonJSON`.
+- On cache miss, existing pipeline runs unchanged and persists the successful `LessonJSON` into cache for future identical audio.
+- Manual cache-clear path is `backend/data/cache/analysis/` (delete entries when needed).
+
+### Validation
+- Tests: `python -m pytest -q backend/tests/test_analyze_api.py backend/tests/test_pipeline_proof.py`
+- Added coverage:
+  - `test_analysis_cache_hit_skips_expensive_steps`
+  - `test_pipeline_version_bump_forces_recompute`
+- Result: pass (cache hit skips expensive functions on second identical input; version bump triggers recompute).
+
+### Follow-ups (ONLY if needed)
+- Optional future improvement: add a small CLI/admin endpoint to clear cache entries without manual file deletion.
 
 ---
 

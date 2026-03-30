@@ -100,6 +100,7 @@ def test_build_gp5_from_note_events_roundtrip(tmp_path: Path):
 
 def test_librosa_summarize_runs(tmp_path: Path):
     """Requires librosa (reads WAV via soundfile or audioread)."""
+    pytest.importorskip("librosa")
     p = tmp_path / "tone.wav"
     # ~2s so chroma_cqt / STFT paths stay above librosa's n_fft minimum (avoids UserWarning on tiny clips).
     p.write_bytes(_mini_wav_mono_pcm16(duration_s=2.0))

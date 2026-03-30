@@ -18,6 +18,7 @@ import time
 from app.schemas import JobStatus, LessonJSON, LessonSectionStub
 
 from app.analyze_audio import build_lesson_json_from_librosa
+from app.cache import load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
 from app.ingest import IngestError, YouTubeUrlInvalidError, get_data_dir, get_job_dir
 
 from app.separate import SeparationError, separate_song_to_stems
@@ -112,6 +113,13 @@ def _process_analyze_job(
             upload_path=upload_path,
         )
         wav_path = str(wav_path_obj)
+        cached_lesson = load_cached_lesson_for_wav(wav_path_obj)
+        if cached_lesson is not None:
+            reused = reuse_cached_artifacts_into_job(cached_lesson, job_id=job_id)
+            if reused is not None:
+                jobs[job_id] = JobStatus(status="complete", result=reused, error=None)
+                logger.info("worker cache hit job_id=%s", job_id)
+                return
 
         job_dir = get_job_dir(job_id)
         stems = separate_song_to_stems(wav_path_obj, job_dir)
@@ -132,6 +140,7 @@ def _process_analyze_job(
                 wav_path=wav_path,
                 source_url=youtube_url,
             )
+        save_cached_lesson_for_wav(wav_path_obj, result)
         jobs[job_id] = JobStatus(status="complete", result=result, error=None)
         logger.info("worker complete job_id=%s", job_id)
     except YouTubeUrlInvalidError:

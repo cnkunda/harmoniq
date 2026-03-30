@@ -15,6 +15,7 @@ from typing import Any
 from app.pipeline_proof import librosa_summarize
 from app.transcribe import transcribe_vocals_to_lyrics_aligned
 from app.schemas import LessonJSON, LessonSectionStub
+from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidence, generate_tab_artifacts_for_guitar_stem
 
 logger = logging.getLogger("harmoniq.analyze_audio")
 logger.setLevel(logging.INFO)
@@ -29,9 +30,31 @@ def _sorted_unique_floats(values: list[float], *, tol: float = 1e-3) -> list[flo
     return out
 
 
-def _fallback_lesson(job_id: str, *, stems: dict[str, str], wav_path: str) -> LessonJSON:
+def _fallback_lesson(
+    job_id: str,
+    *,
+    stems: dict[str, str],
+    wav_path: str,
+    guitar_stem_path: Path,
+) -> LessonJSON:
     # Deterministic placeholder so API contract tests pass even when librosa
     # fails on tiny clips or in constrained environments.
+    transcription_confidence = 0.1
+    bpm = 72.0
+    try:
+        tab_artifacts = generate_tab_artifacts_for_guitar_stem(
+            guitar_stem_path,
+            bpm=bpm,
+            transcription_confidence=transcription_confidence,
+        )
+        sections = apply_tab_artifacts_to_sections(
+            [LessonSectionStub(label="Intro", confidence=derive_section_confidence(transcription_confidence))],
+            transcription_confidence=transcription_confidence,
+            tab_artifacts=tab_artifacts,
+        )
+    except Exception:
+        logger.exception("tabgen failed during fallback; returning empty tab base64")
+        sections = [LessonSectionStub(label="Intro", confidence=derive_section_confidence(transcription_confidence))]
     return LessonJSON(
         job_id=job_id,
         song_title="Stub Song",
@@ -40,12 +63,12 @@ def _fallback_lesson(job_id: str, *, stems: dict[str, str], wav_path: str) -> Le
         key_confidence=0.99,
         tempo=72.0,
         tempo_confidence=0.95,
-        transcription_confidence=0.1,
+        transcription_confidence=transcription_confidence,
         beat_grid=[0.0, 0.5, 1.0],
         bar_timestamps=[0.0, 3.33, 6.66],
         stems=stems,
         lyrics_aligned=[],
-        sections=[LessonSectionStub(label="Intro", confidence=0.3)],
+        sections=sections,
         wav_path=wav_path,
     )
 
@@ -65,7 +88,7 @@ def build_lesson_json_from_librosa(
         summary = librosa_summarize(guitar_stem_path)
     except Exception:
         logger.exception("librosa analysis failed for job_id=%s audio_path=%s", job_id, guitar_stem_path)
-        return _fallback_lesson(job_id, stems=stems, wav_path=wav_path)
+        return _fallback_lesson(job_id, stems=stems, wav_path=wav_path, guitar_stem_path=guitar_stem_path)
 
     beat_grid = _sorted_unique_floats(summary.beat_times_s)
     if not beat_grid:
@@ -82,7 +105,7 @@ def build_lesson_json_from_librosa(
         label = seg.get("label") if isinstance(seg, dict) else None
         if not isinstance(label, str) or not label.strip():
             label = "Section"
-        # Placeholder section confidence: schema wiring only.
+        # Placeholder confidence (overwritten once we have transcription confidence).
         sections.append(LessonSectionStub(label=label, confidence=0.6))
 
     if not sections:
@@ -91,6 +114,22 @@ def build_lesson_json_from_librosa(
     lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
         vocals_stem_path, beat_grid=beat_grid, bar_timestamps=bar_timestamps
     )
+
+    try:
+        tab_artifacts = generate_tab_artifacts_for_guitar_stem(
+            guitar_stem_path,
+            bpm=summary.tempo_bpm,
+            transcription_confidence=transcription_confidence,
+        )
+        sections = apply_tab_artifacts_to_sections(
+            sections,
+            transcription_confidence=transcription_confidence,
+            tab_artifacts=tab_artifacts,
+        )
+    except Exception:
+        logger.exception("tab generation failed for job_id=%s; returning lesson without tabs", job_id)
+        section_conf = derive_section_confidence(transcription_confidence)
+        sections = [LessonSectionStub(label=sec.label, confidence=section_conf) for sec in sections]
 
     return LessonJSON(
         job_id=job_id,

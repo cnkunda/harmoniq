@@ -24,6 +24,12 @@ def clear_jobs():
     jobs.clear()
 
 
+@pytest.fixture(autouse=True)
+def isolated_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", tmp_path.name)
+    yield
+
+
 def _poll_until_not_processing(job_id: str, *, timeout_seconds: float = 20.0) -> dict:
     start = time.time()
     last: dict | None = None
@@ -129,6 +135,21 @@ def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path):
     assert isinstance(result["sections"], list)
     assert len(result["sections"]) >= 1
 
+    # PRIORITIES §9: tab generation (full + skeleton) with confidence-based gating.
+    sec0 = result["sections"][0]
+    assert "tab_full_gp5_base64" in sec0
+    assert isinstance(sec0["tab_full_gp5_base64"], str)
+    assert sec0["tab_full_gp5_base64"]
+
+    assert "tab_skeleton_gp5_base64" in sec0
+    assert isinstance(sec0["tab_skeleton_gp5_base64"], str)
+    assert sec0["tab_skeleton_gp5_base64"]
+
+    # In pytest mode, transcription confidence is low (see transcribe.py guard),
+    # so alternate GP5 should be omitted.
+    assert "tab_alt_position_gp5_base64" not in sec0
+    assert sec0["confidence"] < 0.7
+
 
 def test_worker_forced_exception_surfaces_as_failed_with_user_safe_message():
     job_id = client.post("/analyze", json={"url": "force_error"}).json()["job_id"]
@@ -158,3 +179,121 @@ def test_get_analyze_unknown_job_returns_404_json():
     err = r.json()
     assert "detail" in err
     assert missing in err["detail"]
+
+
+def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
+    from app import jobs as jobs_mod
+
+    call_counts = {"separate": 0, "analyze": 0}
+
+    def fake_separate(song_wav_path, job_dir):
+        call_counts["separate"] += 1
+        stems_dir = job_dir / "stems"
+        stems_dir.mkdir(parents=True, exist_ok=True)
+        stem_names = ("guitar", "bass", "drums", "vocals", "piano", "other")
+        out: dict[str, str] = {}
+        for name in stem_names:
+            p = stems_dir / f"{name}.wav"
+            p.write_bytes(b"RIFF")
+            out[name] = p.relative_to(get_data_dir().parent).as_posix()
+        return out
+
+    def fake_analyze(job_id, *, guitar_stem_path, vocals_stem_path, stems, wav_path, source_url=None):
+        call_counts["analyze"] += 1
+        from app.schemas import LessonJSON, LessonSectionStub
+
+        return LessonJSON(
+            job_id=job_id,
+            song_title="Cached Test",
+            artist="Test",
+            key="C major",
+            key_confidence=0.9,
+            tempo=120.0,
+            tempo_confidence=0.9,
+            transcription_confidence=0.8,
+            beat_grid=[0.0],
+            bar_timestamps=[0.0],
+            stems=stems,
+            lyrics_aligned=[],
+            sections=[LessonSectionStub(label="Intro", confidence=0.8)],
+            wav_path=wav_path,
+        )
+
+    monkeypatch.setattr(jobs_mod, "separate_song_to_stems", fake_separate)
+    monkeypatch.setattr(jobs_mod, "build_lesson_json_from_librosa", fake_analyze)
+
+    input_wav = tmp_path / "repeat.wav"
+    _write_test_wav(input_wav, sample_rate=44100, channels=1)
+    wav_bytes = input_wav.read_bytes()
+
+    r1 = client.post("/analyze", files={"file": ("repeat.wav", wav_bytes, "audio/wav")})
+    body1 = _poll_until_not_processing(r1.json()["job_id"])
+    assert body1["status"] == "complete"
+
+    r2 = client.post("/analyze", files={"file": ("repeat.wav", wav_bytes, "audio/wav")})
+    body2 = _poll_until_not_processing(r2.json()["job_id"])
+    assert body2["status"] == "complete"
+
+    assert call_counts["separate"] == 1
+    assert call_counts["analyze"] == 1
+    assert body1["result"]["job_id"] != body2["result"]["job_id"]
+
+
+def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
+    from app import cache as cache_mod
+    from app import jobs as jobs_mod
+
+    call_counts = {"separate": 0, "analyze": 0}
+
+    def fake_separate(song_wav_path, job_dir):
+        call_counts["separate"] += 1
+        stems_dir = job_dir / "stems"
+        stems_dir.mkdir(parents=True, exist_ok=True)
+        stem_names = ("guitar", "bass", "drums", "vocals", "piano", "other")
+        out: dict[str, str] = {}
+        for name in stem_names:
+            p = stems_dir / f"{name}.wav"
+            p.write_bytes(b"RIFF")
+            out[name] = p.relative_to(get_data_dir().parent).as_posix()
+        return out
+
+    def fake_analyze(job_id, *, guitar_stem_path, vocals_stem_path, stems, wav_path, source_url=None):
+        call_counts["analyze"] += 1
+        from app.schemas import LessonJSON, LessonSectionStub
+
+        return LessonJSON(
+            job_id=job_id,
+            song_title="Version Test",
+            artist="Test",
+            key="C major",
+            key_confidence=0.9,
+            tempo=120.0,
+            tempo_confidence=0.9,
+            transcription_confidence=0.8,
+            beat_grid=[0.0],
+            bar_timestamps=[0.0],
+            stems=stems,
+            lyrics_aligned=[],
+            sections=[LessonSectionStub(label="Intro", confidence=0.8)],
+            wav_path=wav_path,
+        )
+
+    monkeypatch.setattr(jobs_mod, "separate_song_to_stems", fake_separate)
+    monkeypatch.setattr(jobs_mod, "build_lesson_json_from_librosa", fake_analyze)
+
+    input_wav = tmp_path / "version.wav"
+    _write_test_wav(input_wav, sample_rate=44100, channels=1)
+    wav_bytes = input_wav.read_bytes()
+
+    r1 = client.post("/analyze", files={"file": ("version.wav", wav_bytes, "audio/wav")})
+    body1 = _poll_until_not_processing(r1.json()["job_id"])
+    assert body1["status"] == "complete"
+
+    monkeypatch.setattr(cache_mod, "PIPELINE_VERSION", "2")
+
+    r2 = client.post("/analyze", files={"file": ("version.wav", wav_bytes, "audio/wav")})
+    body2 = _poll_until_not_processing(r2.json()["job_id"])
+    assert body2["status"] == "complete"
+
+    assert call_counts["separate"] == 2
+    assert call_counts["analyze"] == 2
