@@ -108,6 +108,14 @@ def test_librosa_summarize_runs(tmp_path: Path):
     assert isinstance(summary.beat_times_s, list)
     assert "major" in summary.key_name or "minor" in summary.key_name
     assert summary.tempo_bpm > 0
+    assert isinstance(summary.bar_timestamps_s, list)
+    assert len(summary.bar_timestamps_s) >= 1
+    assert all(
+        summary.bar_timestamps_s[i] <= summary.bar_timestamps_s[i + 1]
+        for i in range(len(summary.bar_timestamps_s) - 1)
+    )
+    assert isinstance(summary.segments, list)
+    assert len(summary.segments) >= 1
 
 
 def _mini_wav_mono_pcm16(

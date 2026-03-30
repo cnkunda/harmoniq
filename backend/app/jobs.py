@@ -17,7 +17,8 @@ import time
 
 from app.schemas import JobStatus, LessonJSON, LessonSectionStub
 
-from app.ingest import IngestError, YouTubeUrlInvalidError, get_job_dir
+from app.analyze_audio import build_lesson_json_from_librosa
+from app.ingest import IngestError, YouTubeUrlInvalidError, get_data_dir, get_job_dir
 
 from app.separate import SeparationError, separate_song_to_stems
 
@@ -114,7 +115,20 @@ def _process_analyze_job(
 
         job_dir = get_job_dir(job_id)
         stems = separate_song_to_stems(wav_path_obj, job_dir)
-        result = _stub_lesson(job_id, youtube_url, wav_path=wav_path, stems=stems)
+        guitar_rel_path = stems.get("guitar")
+        if not guitar_rel_path:
+            # Separation contract should always return a guitar stem; fall back to stub.
+            result = _stub_lesson(job_id, youtube_url, wav_path=wav_path, stems=stems)
+        else:
+            backend_root = get_data_dir().parent
+            guitar_stem_path = backend_root / guitar_rel_path
+            result = build_lesson_json_from_librosa(
+                job_id,
+                guitar_stem_path=guitar_stem_path,
+                stems=stems,
+                wav_path=wav_path,
+                source_url=youtube_url,
+            )
         jobs[job_id] = JobStatus(status="complete", result=result, error=None)
         logger.info("worker complete job_id=%s", job_id)
     except YouTubeUrlInvalidError:

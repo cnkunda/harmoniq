@@ -117,6 +117,18 @@ def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path):
             assert wf.getframerate() == 44100
             assert wf.getnchannels() == 1
 
+    # PRIORITIES §7: librosa key/tempo/beat grid + bar timestamps + sections wiring.
+    result = body["result"]
+    assert isinstance(result["beat_grid"], list)
+    assert isinstance(result["bar_timestamps"], list)
+    assert len(result["bar_timestamps"]) >= 1
+    assert all(
+        result["bar_timestamps"][i] <= result["bar_timestamps"][i + 1]
+        for i in range(len(result["bar_timestamps"]) - 1)
+    )
+    assert isinstance(result["sections"], list)
+    assert len(result["sections"]) >= 1
+
 
 def test_worker_forced_exception_surfaces_as_failed_with_user_safe_message():
     job_id = client.post("/analyze", json={"url": "force_error"}).json()["job_id"]

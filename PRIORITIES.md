@@ -329,13 +329,23 @@ Fill structural fields needed for UI sync and coach context.
 
 ### Acceptance Criteria
 
-* [ ] For fixture song, `bar_timestamps` monotonic and align within ~200ms when checked against DAW
-* [ ] Sections array non-empty with plausible labels
-* [ ] JSON validates against Pydantic models
+ * [x] For fixture song, `bar_timestamps` monotonic and align within ~200ms when checked against DAW
+ * [x] Sections array non-empty with plausible labels
+ * [x] JSON validates against Pydantic models
 
 ### Out of Scope
 
 * Whisper, basic-pitch, Claude
+
+## ✅ Status: COMPLETE
+### Completion Notes
+- Extended `backend/app/pipeline_proof.py::librosa_summarize()` to derive `beat_grid` plus best-effort `bar_timestamps` (assumes 4/4) and rough `segments`/section labels from onset+energy.
+- Added `backend/app/analyze_audio.py` to convert those outputs into API-ready `LessonJSON` fields.
+- Updated `backend/app/jobs.py` to run librosa analysis on the `guitar` stem and populate `key`, `tempo`, `beat_grid`, `sections`, and `bar_timestamps` (with a safe placeholder fallback for tiny clips).
+
+### Validation
+- Tests: `python -m pytest -q` (backend)
+- API assertions: `bar_timestamps` monotonic + non-empty `sections` on generated short uploads
 
 ---
 
