@@ -1,6 +1,6 @@
 # Harmoniq backend (FastAPI)
 
-Local Python API for the Harmoniq analysis pipeline (YouTube / upload → stems → transcription → lesson JSON). This package is introduced in roadmap commit **0.2**: runnable app, health check, OpenAPI stubs only — no real jobs yet.
+Local Python API for the Harmoniq analysis pipeline (YouTube / upload → stems → transcription → lesson JSON). **§3 (current):** `POST /analyze` and `GET /analyze/{job_id}` return an in-memory stub `LessonJSON` (no real pipeline). Earlier roadmap commit **0.2** added the runnable app shell.
 
 ## Requirements
 
@@ -96,7 +96,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ### Verify
 
 - Health: `curl http://127.0.0.1:8000/health` → `{"status":"ok"}`
-- Docs: open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) — you should see **`AnalyzeRequest`**, **`JobStatus`**, and **`LessonJSON`** under *Schemas*, plus **Stubs** operations that return **501** until the pipeline is implemented.
+- Stub analyze: `curl.exe -s -X POST http://127.0.0.1:8000/analyze -H "Content-Type: application/json" -d '{"url":null}'` → `{"job_id":"…"}`; then `curl.exe -s http://127.0.0.1:8000/analyze/<job_id>` → `status":"complete"` and a stub `result` (JSON `LessonJSON` shape). Unknown id → **404** with `{"detail":"…"}`.
+- Docs: open [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) — **Analyze** routes and schemas **`AnalyzeJobCreated`**, **`AnalyzeRequest`**, **`JobStatus`**, **`LessonJSON`**.
 
 ## Project layout
 

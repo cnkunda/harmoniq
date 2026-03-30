@@ -40,6 +40,9 @@ env/
 ENV/
 .venv-ci/
 
+# Stem smoke spectrograms / scratch outputs (STEM_QUALITY_CHECKLIST.md)
+artifacts/
+
 # Backend / analysis artifacts (see PRIORITIES 0.5)
 backend/data/
 *.wav

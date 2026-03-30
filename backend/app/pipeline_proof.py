@@ -22,6 +22,22 @@ from typing import Any, Sequence
 DEMUCS_MODEL = "htdemucs_6s"
 TARGET_SR = 44100
 
+# Long-running CLIs may print a lot of stderr; only the tail is attached to failures.
+_SUBPROCESS_FAIL_SNIP = 8000
+
+
+def _run_subprocess_checked(cmd: list[str], *, what: str) -> None:
+    """Run a command; on failure raise RuntimeError with stderr/stdout (truncated), not a bare exit code."""
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode == 0:
+        return
+    out = ((p.stderr or "").strip() + "\n" + (p.stdout or "").strip()).strip()
+    if len(out) > _SUBPROCESS_FAIL_SNIP:
+        out = "…\n" + out[-_SUBPROCESS_FAIL_SNIP :]
+    if not out:
+        out = f"(no stderr/stdout, exit {p.returncode})"
+    raise RuntimeError(f"{what} failed (exit {p.returncode}): {out}") from None
+
 
 # Krumhansl–Schmuckler major / minor key profiles (C rotated in estimator)
 _KS_MAJOR = [
@@ -89,7 +105,7 @@ def ffmpeg_normalize_wav(
 ) -> None:
     """Resample / downmix via ffmpeg (44.1 kHz mono per Harmoniq README)."""
     cmd = ffmpeg_normalize_command(input_path, output_path, sample_rate=sample_rate, mono=mono)
-    subprocess.run(cmd, check=True, capture_output=True, text=True)
+    _run_subprocess_checked(cmd, what="ffmpeg")
 
 
 def demucs_separate_command(
@@ -128,7 +144,7 @@ def run_demucs_htdemucs_6s(
     cmd = demucs_separate_command(
         input_wav, out_dir, model=model, python_executable=python_executable
     )
-    subprocess.run(cmd, check=True)
+    _run_subprocess_checked(cmd, what="demucs")
     # Typical: out_dir/htdemucs_6s/<track>/guitar.wav
     stems_root = out_dir / model
     if not stems_root.is_dir():

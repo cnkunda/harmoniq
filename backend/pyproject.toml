@@ -30,6 +30,7 @@ basicpitch = [
     "basic-pitch>=0.4.0",
 ]
 dev = [
+    "httpx>=0.27.0",
     "pytest>=8.0",
 ]
 notebook = [

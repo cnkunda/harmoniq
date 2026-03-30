@@ -13,6 +13,12 @@ class AnalyzeRequest(BaseModel):
     url: str | None = None
 
 
+class AnalyzeJobCreated(BaseModel):
+    """Immediate response from POST /analyze — processing is stubbed as complete in-memory."""
+
+    job_id: str
+
+
 class LessonSectionStub(BaseModel):
     """One teachable slice of the song — expand per README LessonJSON.sections."""
 
