@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from app.pipeline_proof import librosa_summarize
+from app.transcribe import transcribe_vocals_to_lyrics_aligned
 from app.schemas import LessonJSON, LessonSectionStub
 
 logger = logging.getLogger("harmoniq.analyze_audio")
@@ -39,7 +40,7 @@ def _fallback_lesson(job_id: str, *, stems: dict[str, str], wav_path: str) -> Le
         key_confidence=0.99,
         tempo=72.0,
         tempo_confidence=0.95,
-        transcription_confidence=0.5,
+        transcription_confidence=0.1,
         beat_grid=[0.0, 0.5, 1.0],
         bar_timestamps=[0.0, 3.33, 6.66],
         stems=stems,
@@ -53,6 +54,7 @@ def build_lesson_json_from_librosa(
     job_id: str,
     *,
     guitar_stem_path: Path,
+    vocals_stem_path: Path | None,
     stems: dict[str, str],
     wav_path: str,
     source_url: str | None = None,
@@ -86,6 +88,10 @@ def build_lesson_json_from_librosa(
     if not sections:
         sections = [LessonSectionStub(label="Intro", confidence=0.3)]
 
+    lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
+        vocals_stem_path, beat_grid=beat_grid, bar_timestamps=bar_timestamps
+    )
+
     return LessonJSON(
         job_id=job_id,
         song_title="Librosa Lesson",
@@ -94,11 +100,11 @@ def build_lesson_json_from_librosa(
         key_confidence=summary.key_confidence,
         tempo=summary.tempo_bpm,
         tempo_confidence=summary.tempo_confidence,
-        transcription_confidence=0.5,
+        transcription_confidence=transcription_confidence,
         beat_grid=beat_grid,
         bar_timestamps=bar_timestamps,
         stems=stems,
-        lyrics_aligned=[],
+        lyrics_aligned=lyrics_aligned,
         sections=sections,
         wav_path=wav_path,
     )

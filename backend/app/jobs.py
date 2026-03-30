@@ -73,7 +73,7 @@ def _stub_lesson(
         key_confidence=0.99,
         tempo=72.0,
         tempo_confidence=0.95,
-        transcription_confidence=0.5,
+        transcription_confidence=0.1,
         beat_grid=[0.0, 0.5, 1.0],
         bar_timestamps=[0.0, 3.33, 6.66],
         stems=stems or {},
@@ -116,15 +116,18 @@ def _process_analyze_job(
         job_dir = get_job_dir(job_id)
         stems = separate_song_to_stems(wav_path_obj, job_dir)
         guitar_rel_path = stems.get("guitar")
+        vocals_rel_path = stems.get("vocals")
         if not guitar_rel_path:
             # Separation contract should always return a guitar stem; fall back to stub.
             result = _stub_lesson(job_id, youtube_url, wav_path=wav_path, stems=stems)
         else:
             backend_root = get_data_dir().parent
             guitar_stem_path = backend_root / guitar_rel_path
+            vocals_stem_path = backend_root / vocals_rel_path if vocals_rel_path else None
             result = build_lesson_json_from_librosa(
                 job_id,
                 guitar_stem_path=guitar_stem_path,
+                vocals_stem_path=vocals_stem_path,
                 stems=stems,
                 wav_path=wav_path,
                 source_url=youtube_url,

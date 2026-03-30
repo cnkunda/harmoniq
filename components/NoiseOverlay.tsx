@@ -1,9 +1,12 @@
+import { Platform } from 'react-native'
+
+import { NoiseOverlay as NativeNoiseOverlay } from './NoiseOverlay.native'
+import { NoiseOverlay as WebNoiseOverlay } from './NoiseOverlay.web'
+
 /**
- * Metro resolves `@/components/NoiseOverlay` to:
- * - `NoiseOverlay.web.tsx` on web
- * - `NoiseOverlay.native.tsx` on iOS / Android
+ * Wrapper to ensure web uses `NoiseOverlay.web.tsx`.
  *
- * This file exists so TypeScript resolves the module when running `tsc`
- * (no platform suffixes in tsconfig). It is not bundled when `.web` / `.native` exist.
+ * Without this, some bundler/TS setups end up re-exporting the native version,
+ * which triggers react-native-web deprecation warnings (e.g. `pointerEvents` prop).
  */
-export { NoiseOverlay } from './NoiseOverlay.native'
+export const NoiseOverlay = Platform.OS === 'web' ? WebNoiseOverlay : NativeNoiseOverlay

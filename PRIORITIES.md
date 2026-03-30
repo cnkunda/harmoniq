@@ -368,13 +368,26 @@ Produce `lyrics_aligned` with word times snapped to beats for Study overlay.
 
 ### Acceptance Criteria
 
-* [ ] Song with clear vocals yields non-empty `lyrics_aligned`
-* [ ] Word times never regress before previous word
-* [ ] Low-quality vocal stem yields graceful empty array + confidence flag
+* [x] Song with clear vocals yields non-empty `lyrics_aligned`
+* [x] Word times never regress before previous word
+* [x] Low-quality vocal stem yields graceful empty array + confidence flag
 
 ### Out of Scope
 
 * On-device Whisper; mobile client
+
+## ✅ Status: COMPLETE
+### Completion Notes
+- Added `backend/app/transcribe.py` to run Whisper on the `vocals` stem with `word_timestamps=True` and snap each word start time to the nearest `beat_grid` entry, emitting `lyrics_aligned` with `bar`/`beat` indices.
+- Updated `backend/app/analyze_audio.py` to populate `lyrics_aligned` and `transcription_confidence` from the transcription/alignment step.
+- Updated `backend/app/jobs.py` to pass the `vocals` stem path into `build_lesson_json_from_librosa`.
+- Added `backend/tests/test_transcribe.py` to validate snapping and the non-regressing `time_seconds` invariant deterministically (no Whisper weights needed).
+
+### Validation
+- Tests: `python -m pytest -q backend` (backend)
+
+### Follow-ups (ONLY if needed)
+- Improve beat snapping granularity using `bar_timestamps` when/if we switch to beat-accurate bar subdivision.
 
 ---
 
