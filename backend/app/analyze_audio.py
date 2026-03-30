@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app.coach import merge_coach_copy_into_sections
 from app.pipeline_proof import librosa_summarize
 from app.transcribe import transcribe_vocals_to_lyrics_aligned
 from app.schemas import LessonJSON, LessonSectionStub
@@ -55,6 +56,12 @@ def _fallback_lesson(
     except Exception:
         logger.exception("tabgen failed during fallback; returning empty tab base64")
         sections = [LessonSectionStub(label="Intro", confidence=derive_section_confidence(transcription_confidence))]
+    sections = merge_coach_copy_into_sections(
+        sections,
+        song_title="Stub Song",
+        artist="Stub Artist",
+        key="G major",
+    )
     return LessonJSON(
         job_id=job_id,
         song_title="Stub Song",
@@ -130,6 +137,12 @@ def build_lesson_json_from_librosa(
         logger.exception("tab generation failed for job_id=%s; returning lesson without tabs", job_id)
         section_conf = derive_section_confidence(transcription_confidence)
         sections = [LessonSectionStub(label=sec.label, confidence=section_conf) for sec in sections]
+    sections = merge_coach_copy_into_sections(
+        sections,
+        song_title="Librosa Lesson",
+        artist="Stub Artist",
+        key=summary.key_name,
+    )
 
     return LessonJSON(
         job_id=job_id,

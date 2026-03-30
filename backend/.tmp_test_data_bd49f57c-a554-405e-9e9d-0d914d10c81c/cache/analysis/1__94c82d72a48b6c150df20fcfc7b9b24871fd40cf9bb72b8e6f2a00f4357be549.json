@@ -1,0 +1,36 @@
+{
+  "pipeline_version": "1",
+  "audio_sha256": "94c82d72a48b6c150df20fcfc7b9b24871fd40cf9bb72b8e6f2a00f4357be549",
+  "lesson_json": {
+    "job_id": "d89e523e-87bf-4ced-81ac-15b175601644",
+    "song_title": "Cached Test",
+    "artist": "Test",
+    "key": "C major",
+    "key_confidence": 0.9,
+    "tempo": 120.0,
+    "tempo_confidence": 0.9,
+    "transcription_confidence": 0.8,
+    "beat_grid": [
+      0.0
+    ],
+    "bar_timestamps": [
+      0.0
+    ],
+    "stems": {
+      "guitar": ".tmp_test_data_bd49f57c-a554-405e-9e9d-0d914d10c81c/jobs/d89e523e-87bf-4ced-81ac-15b175601644/stems/guitar.wav",
+      "bass": ".tmp_test_data_bd49f57c-a554-405e-9e9d-0d914d10c81c/jobs/d89e523e-87bf-4ced-81ac-15b175601644/stems/bass.wav",
+      "drums": ".tmp_test_data_bd49f57c-a554-405e-9e9d-0d914d10c81c/jobs/d89e523e-87bf-4ced-81ac-15b175601644/stems/drums.wav",
+      "vocals": ".tmp_test_data_bd49f57c-a554-405e-9e9d-0d914d10c81c/jobs/d89e523e-87bf-4ced-81ac-15b175601644/stems/vocals.wav",
+      "piano": ".tmp_test_data_bd49f57c-a554-405e-9e9d-0d914d10c81c/jobs/d89e523e-87bf-4ced-81ac-15b175601644/stems/piano.wav",
+      "other": ".tmp_test_data_bd49f57c-a554-405e-9e9d-0d914d10c81c/jobs/d89e523e-87bf-4ced-81ac-15b175601644/stems/other.wav"
+    },
+    "lyrics_aligned": [],
+    "sections": [
+      {
+        "label": "Intro",
+        "confidence": 0.8
+      }
+    ],
+    "wav_path": "C:\\Users\\Irankunda\\OneDrive\\Desktop\\Workspace\\harmoniq\\backend\\.tmp_test_data_bd49f57c-a554-405e-9e9d-0d914d10c81c\\jobs\\d89e523e-87bf-4ced-81ac-15b175601644\\song.wav"
+  }
+}

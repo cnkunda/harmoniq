@@ -1,0 +1,36 @@
+{
+  "pipeline_version": "1",
+  "audio_sha256": "94c82d72a48b6c150df20fcfc7b9b24871fd40cf9bb72b8e6f2a00f4357be549",
+  "lesson_json": {
+    "job_id": "4a41f015-5724-4fbc-9bf3-aa6fbc7d940d",
+    "song_title": "Missing Artifact Test",
+    "artist": "Test",
+    "key": "C major",
+    "key_confidence": 0.9,
+    "tempo": 120.0,
+    "tempo_confidence": 0.9,
+    "transcription_confidence": 0.8,
+    "beat_grid": [
+      0.0
+    ],
+    "bar_timestamps": [
+      0.0
+    ],
+    "stems": {
+      "guitar": ".tmp_test_data_62c98cfd-53a6-4522-8a29-9543efdfe787/jobs/4a41f015-5724-4fbc-9bf3-aa6fbc7d940d/stems/guitar.wav",
+      "bass": ".tmp_test_data_62c98cfd-53a6-4522-8a29-9543efdfe787/jobs/4a41f015-5724-4fbc-9bf3-aa6fbc7d940d/stems/bass.wav",
+      "drums": ".tmp_test_data_62c98cfd-53a6-4522-8a29-9543efdfe787/jobs/4a41f015-5724-4fbc-9bf3-aa6fbc7d940d/stems/drums.wav",
+      "vocals": ".tmp_test_data_62c98cfd-53a6-4522-8a29-9543efdfe787/jobs/4a41f015-5724-4fbc-9bf3-aa6fbc7d940d/stems/vocals.wav",
+      "piano": ".tmp_test_data_62c98cfd-53a6-4522-8a29-9543efdfe787/jobs/4a41f015-5724-4fbc-9bf3-aa6fbc7d940d/stems/piano.wav",
+      "other": ".tmp_test_data_62c98cfd-53a6-4522-8a29-9543efdfe787/jobs/4a41f015-5724-4fbc-9bf3-aa6fbc7d940d/stems/other.wav"
+    },
+    "lyrics_aligned": [],
+    "sections": [
+      {
+        "label": "Intro",
+        "confidence": 0.8
+      }
+    ],
+    "wav_path": "C:\\Users\\Irankunda\\OneDrive\\Desktop\\Workspace\\harmoniq\\backend\\.tmp_test_data_62c98cfd-53a6-4522-8a29-9543efdfe787\\jobs\\4a41f015-5724-4fbc-9bf3-aa6fbc7d940d\\song.wav"
+  }
+}

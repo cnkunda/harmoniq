@@ -72,6 +72,76 @@ cp .env.example .env
 
 The `data/` folder is gitignored except `.gitkeep`; stems and caches should land there in later commits.
 
+## Analysis cache lifecycle
+
+The backend uses a disk-backed analysis cache so repeated analyzes of the same
+normalized audio can skip expensive separation/analysis work.
+
+### What is cached
+
+- Cache entries live at `data/cache/analysis/<cache_key>.json`.
+- Each entry stores:
+  - `pipeline_version`
+  - `audio_sha256` (hash of the normalized `song.wav`)
+  - `lesson_json` (the full `LessonJSON`, including relative `wav_path` and `stems`)
+
+### Cache key composition
+
+- Cache key format: `<PIPELINE_VERSION>:<audio_sha256>`.
+- `PIPELINE_VERSION` currently comes from `app.cache.PIPELINE_VERSION`.
+- `audio_sha256` is computed from the normalized per-job `song.wav` bytes.
+
+### On-hit behavior
+
+When a cache entry exists for the same key:
+
+1. Backend loads cached `lesson_json`.
+2. Backend attempts to copy referenced artifacts into the new job directory:
+   - cached `wav_path` -> `data/jobs/<job_id>/song.wav`
+   - cached stem files -> `data/jobs/<job_id>/stems/<stem>.wav`
+3. If all required artifacts are present and copied, job completes from cache.
+
+### Invalidation behavior
+
+- **Global invalidation:** bump `PIPELINE_VERSION` to force recompute for all audio.
+- **Per-audio invalidation:** deleting `data/cache/analysis/<cache_key>.json` forces recompute for that audio on next run.
+- **Artifact drift handling:** if cached `lesson_json` exists but any referenced wav/stem file is missing, backend treats cache reuse as invalid and recomputes instead of failing.
+
+### Disk locations (cache + reused artifacts)
+
+- Cache files: `data/cache/analysis/*.json`
+- Reused artifacts source paths: paths referenced in cached `lesson_json` (typically under `data/jobs/<prior_job_id>/...`)
+- Reused artifacts destination paths: `data/jobs/<new_job_id>/song.wav` and `data/jobs/<new_job_id>/stems/*.wav`
+
+### Deletion safety
+
+- Safe to delete anytime:
+  - `data/cache/analysis/*.json` (only impacts performance; next run recomputes)
+- Potentially disruptive while jobs are active:
+  - `data/jobs/` (includes source artifacts that cache reuse may reference)
+- Safe cleanup window for `data/jobs/`:
+  - when no analyze jobs are currently running and you accept that future analyzes may recompute
+
+### Manual recovery (developer)
+
+If analyze reliability looks degraded due to local file moves/deletions:
+
+1. Clear analysis cache entries:
+   - `python scripts/clear_analysis_cache.py`
+2. Re-run analyze for the affected audio once to repopulate cache.
+3. If issues persist, inspect and clean stale job artifact directories under `data/jobs/` while the API is idle.
+
+### Cache-clear utility
+
+Clear analysis cache only (idempotent, prints removed files):
+
+```bash
+python scripts/clear_analysis_cache.py
+```
+
+This command only clears `data/cache/analysis/*.json`; it does **not** delete
+job artifacts under `data/jobs/`.
+
 ## Run the dev server
 
 **Makefile** (macOS/Linux, or Windows with GNU Make):

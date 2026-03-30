@@ -76,6 +76,25 @@ def save_cached_lesson_for_wav(wav_path: Path, lesson: LessonJSON) -> None:
     p.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def clear_analysis_cache() -> list[Path]:
+    """
+    Delete all analysis cache entry files and return removed paths.
+
+    This only clears `data/cache/analysis/*.json` and does not touch job
+    directories (including reused wav/stem artifacts under `data/jobs/`).
+    """
+    cache_dir = _cache_dir()
+    removed: list[Path] = []
+    for entry in cache_dir.glob("*.json"):
+        try:
+            entry.unlink()
+            removed.append(entry)
+        except FileNotFoundError:
+            # Ignore races / already-deleted entries for idempotence.
+            continue
+    return removed
+
+
 def _copy_if_present(src: Path, dst: Path) -> bool:
     if not src.exists():
         return False

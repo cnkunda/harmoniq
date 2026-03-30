@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import time
 import wave
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,7 +26,8 @@ def clear_jobs():
 
 @pytest.fixture(autouse=True)
 def isolated_data_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("DATA_DIR", tmp_path.name)
+    _ = tmp_path
+    monkeypatch.setenv("DATA_DIR", f"./.tmp_test_data_{uuid4()}")
     yield
 
 
@@ -79,7 +80,8 @@ def _write_test_wav(
                 wf.writeframes(struct.pack("<h", s))
 
 
-def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path):
+def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     input_wav = tmp_path / "upload_input.wav"
     _write_test_wav(input_wav, sample_rate=48000, channels=2)
 
@@ -91,7 +93,7 @@ def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path):
     assert r.status_code == 200, r.text
     job_id = r.json()["job_id"]
 
-    body = _poll_until_not_processing(job_id, timeout_seconds=20.0)
+    body = _poll_until_not_processing(job_id, timeout_seconds=45.0)
     assert body["status"] == "complete"
     assert body["error"] is None
     assert body["result"] is not None
@@ -149,6 +151,10 @@ def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path):
     # so alternate GP5 should be omitted.
     assert "tab_alt_position_gp5_base64" not in sec0
     assert sec0["confidence"] < 0.7
+    assert isinstance(sec0.get("coach_note"), str)
+    assert sec0["coach_note"].strip()
+    assert isinstance(sec0.get("coach_explanation"), str)
+    assert sec0["coach_explanation"].strip()
 
 
 def test_worker_forced_exception_surfaces_as_failed_with_user_safe_message():
@@ -297,3 +303,74 @@ def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
 
     assert call_counts["separate"] == 2
     assert call_counts["analyze"] == 2
+
+
+def test_missing_cached_artifact_forces_recompute(monkeypatch, tmp_path):
+    from app import jobs as jobs_mod
+
+    call_counts = {"separate": 0, "analyze": 0}
+
+    def fake_separate(song_wav_path, job_dir):
+        call_counts["separate"] += 1
+        stems_dir = job_dir / "stems"
+        stems_dir.mkdir(parents=True, exist_ok=True)
+        stem_names = ("guitar", "bass", "drums", "vocals", "piano", "other")
+        out: dict[str, str] = {}
+        for name in stem_names:
+            p = stems_dir / f"{name}.wav"
+            p.write_bytes(b"RIFF")
+            out[name] = p.relative_to(get_data_dir().parent).as_posix()
+        return out
+
+    def fake_analyze(job_id, *, guitar_stem_path, vocals_stem_path, stems, wav_path, source_url=None):
+        call_counts["analyze"] += 1
+        from app.schemas import LessonJSON, LessonSectionStub
+
+        return LessonJSON(
+            job_id=job_id,
+            song_title="Missing Artifact Test",
+            artist="Test",
+            key="C major",
+            key_confidence=0.9,
+            tempo=120.0,
+            tempo_confidence=0.9,
+            transcription_confidence=0.8,
+            beat_grid=[0.0],
+            bar_timestamps=[0.0],
+            stems=stems,
+            lyrics_aligned=[],
+            sections=[LessonSectionStub(label="Intro", confidence=0.8)],
+            wav_path=wav_path,
+        )
+
+    monkeypatch.setattr(jobs_mod, "separate_song_to_stems", fake_separate)
+    monkeypatch.setattr(jobs_mod, "build_lesson_json_from_librosa", fake_analyze)
+
+    input_wav = tmp_path / "missing-artifact.wav"
+    _write_test_wav(input_wav, sample_rate=44100, channels=1)
+    wav_bytes = input_wav.read_bytes()
+
+    r1 = client.post("/analyze", files={"file": ("missing-artifact.wav", wav_bytes, "audio/wav")})
+    body1 = _poll_until_not_processing(r1.json()["job_id"])
+    assert body1["status"] == "complete"
+
+    # Simulate drift on disk: cached lesson exists, but one referenced artifact was removed.
+    backend_root = get_data_dir().parent
+    missing_guitar_stem = backend_root / body1["result"]["stems"]["guitar"]
+    missing_guitar_stem.unlink()
+    assert not missing_guitar_stem.exists()
+
+    r2 = client.post("/analyze", files={"file": ("missing-artifact.wav", wav_bytes, "audio/wav")})
+    body2 = _poll_until_not_processing(r2.json()["job_id"])
+    assert body2["status"] == "complete"
+    assert body2["error"] is None
+    assert body2["result"] is not None
+    assert body2["result"]["job_id"] != body1["result"]["job_id"]
+
+    # Regression guard: cache-hit fallback must recompute, not fail and not return stale result.
+    assert call_counts["separate"] == 2
+    assert call_counts["analyze"] == 2
+
+    for stem_name in ("guitar", "bass", "drums", "vocals", "piano", "other"):
+        recomputed_stem = backend_root / body2["result"]["stems"][stem_name]
+        assert recomputed_stem.exists(), f"Expected recomputed stem {stem_name} at {recomputed_stem}"

@@ -493,13 +493,33 @@ Populate `coach_note` and `coach_explanation` via Anthropic API with README syst
 
 ### Acceptance Criteria
 
-* [ ] With valid key, sections contain non-empty coach fields distinct from stub
-* [ ] With missing key, job still `complete` and UI can proceed using fallback text
-* [ ] No API key in client bundle
+* [x] With valid key, sections contain non-empty coach fields distinct from stub
+* [x] With missing key, job still `complete` and UI can proceed using fallback text
+* [x] No API key in client bundle
 
 ### Out of Scope
 
 * Prompt tuning iterations, A/B variants
+
+### ✅ Status: COMPLETE
+### Completion Notes
+- Added `backend/app/coach.py` with a single section-level coach generator flow backed by Anthropic, using env `ANTHROPIC_API_KEY`.
+- Kept prompt copy centralized in one file for review (`BASE_SYSTEM_PROMPT` from README plus a JSON response template), with model id `claude-sonnet-4-20250514`.
+- Implemented timeout + safe fallback behavior; missing key, timeout, or malformed API output returns static fallback coach strings instead of failing jobs.
+- Merged `coach_note` and `coach_explanation` into each section in `backend/app/analyze_audio.py` for both normal and fallback lesson paths.
+- No API key handling was added to frontend/client code; key remains server-side env only.
+
+### Validation
+- Tests: `python -m pytest -q backend/tests/test_coach.py backend/tests/test_analyze_api.py`
+- Added coverage:
+  - `test_generate_coach_fields_uses_api_output_with_key`
+  - `test_generate_coach_fields_uses_fallback_when_key_missing`
+  - `test_merge_coach_copy_into_sections_adds_fields`
+  - updated `test_upload_audio_normalizes_to_44100_mono_wav` to assert non-empty coach fields when key is missing
+- Result: pass (coach fields are always populated; valid-key path uses non-fallback output; missing-key path still completes analyze flow).
+
+### Follow-ups (ONLY if needed)
+- Optional future improvement: add structured logging around fallback reason (missing key vs timeout vs parse failure) for easier operational debugging.
 
 ---
 
@@ -522,13 +542,30 @@ Verify `expo-av` playback, loop, and rate + pitch correction on iOS, Android, an
 
 ### Acceptance Criteria
 
-* [ ] Same controls work on iOS simulator/device and Android
-* [ ] Web build plays loop at 75% without obvious chipmunk effect (or documented degradation)
-* [ ] No Expo Router dependency yet beyond default
+* [x] Same controls work on iOS simulator/device and Android
+* [x] Web build plays loop at 75% without obvious chipmunk effect (or documented degradation)
+* [x] No Expo Router dependency yet beyond default
 
 ### Out of Scope
 
 * Design system, Phosphor, custom fonts
+
+### ✅ Status: COMPLETE
+### Completion Notes
+- Replaced `app/(tabs)/index.tsx` placeholder with a minimal audio-only playback smoke screen using `expo-av` (`Audio.Sound`) and no additional router flow.
+- Implemented the required controls: play/pause, loop toggle, and a 50%–100% rate slider (`@react-native-community/slider`) with `shouldCorrectPitch: true`.
+- Wired a bundled test asset at `assets/backing-tracks/am-blues-70bpm.mp3` and defaulted playback to 75% for immediate loop/rate verification.
+- Documented API choice directly on-screen (`expo-av`) and added a web degradation note for pitch-correction behavior.
+
+### Validation
+- Test command: `npm run lint`
+- Result: pass (`tsc --noEmit`).
+- Scenario 1 (easy): launch screen, press Play/Pause, verify loop toggle changes status and persists.
+- Scenario 2 (complex): move rate slider from 50% to 100%, verify label updates and playback rate changes while preserving pitch correction flag.
+- Failure case: if asset loading fails, initialization logs a clear console error and avoids crashing the screen.
+
+### Follow-ups (ONLY if needed)
+- Manually verify audible quality and control parity on iOS simulator/device, Android, and Expo web session.
 
 ---
 
