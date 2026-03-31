@@ -85,7 +85,7 @@ Reference frequencies (Hz, rounded):
 
 | Check | Pass / Fail | Notes |
 |-------|-------------|-------|
-| Bend stability | | |
+| Bend stability |Pass | |
 
 ---
 
@@ -95,7 +95,7 @@ Repeat A–C (or subset noted) per platform.
 
 | Platform | Build / browser / device | A | B | C | Overall Pass / Fail |
 |----------|---------------------------|---|---|---|---------------------|
-| Web | | | | | |
+| Web |Yes | brave | Windows | Pass | Pass |
 | iOS | | | | | |
 | Android | | | | | |
 

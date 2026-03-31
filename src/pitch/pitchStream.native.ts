@@ -7,15 +7,23 @@ export type { PitchReading, PitchStream }
 const SAMPLE_RATE_PREF = 44100
 /** ~46ms of audio per native buffer — balances latency vs stable autocorrelation. */
 const BUFFER_SAMPLES = 2048
+const MIN_RMS_FOR_PITCH = 0.003
 
-function estimatePitchHz(samples: Float32Array, sampleRate: number): number | null {
-  let rms = 0
+function getSampleStats(samples: Float32Array): { rms: number; peakAbs: number } {
+  let sumSquares = 0
+  let peakAbs = 0
   for (let i = 0; i < samples.length; i += 1) {
     const value = samples[i]
-    rms += value * value
+    const abs = Math.abs(value)
+    if (abs > peakAbs) peakAbs = abs
+    sumSquares += value * value
   }
-  rms = Math.sqrt(rms / samples.length)
-  if (rms < 0.01) return null
+  const rms = Math.sqrt(sumSquares / samples.length)
+  return { rms, peakAbs }
+}
+
+function estimatePitchHz(samples: Float32Array, sampleRate: number, rms: number): number | null {
+  if (rms < MIN_RMS_FOR_PITCH) return null
 
   const minFreq = 70
   const maxFreq = 1000
@@ -70,6 +78,8 @@ class PitchStreamNative implements PitchStream {
   private running = false
   private onPitchUser: ((reading: PitchReading) => void) | null = null
   private skipCallbacks = 0
+  private callbackCount = 0
+  private emittedPitchCount = 0
 
   isRunning(): boolean {
     return this.running
@@ -89,18 +99,22 @@ class PitchStreamNative implements PitchStream {
 
     console.log('[PitchStream.native] requesting microphone permission')
     const perm = await AudioManager.requestRecordingPermissions()
+    console.log('[PitchStream.native] microphone permission status:', perm)
     if (perm !== 'Granted') {
       console.warn('[PitchStream.native] recording permission not granted:', perm)
       throw new Error('MIC_PERMISSION_DENIED')
     }
 
     const sessionOk = await AudioManager.setAudioSessionActivity(true)
+    console.log('[PitchStream.native] audio session activation result:', sessionOk)
     if (!sessionOk) {
       throw new Error('[PitchStream.native] Could not activate audio session')
     }
 
     this.onPitchUser = onPitch
     this.skipCallbacks = 0
+    this.callbackCount = 0
+    this.emittedPitchCount = 0
 
     const ready = this.recorder.onAudioReady(
       {
@@ -111,6 +125,7 @@ class PitchStreamNative implements PitchStream {
       ({ buffer, numFrames }) => {
         if (!this.running || !this.onPitchUser) return
 
+        this.callbackCount += 1
         this.skipCallbacks += 1
         if (this.skipCallbacks < 2) return
         this.skipCallbacks = 0
@@ -120,9 +135,26 @@ class PitchStreamNative implements PitchStream {
         if (frameCount < 256) return
 
         const slice = frameCount === ch0.length ? ch0 : ch0.subarray(0, frameCount)
-        const hz = estimatePitchHz(slice, buffer.sampleRate)
+        const { rms, peakAbs } = getSampleStats(slice)
+        if (this.callbackCount % 20 === 0) {
+          console.log(
+            `[PitchStream.native] cb=${this.callbackCount} frames=${frameCount} sr=${buffer.sampleRate} rms=${rms.toFixed(5)} peak=${peakAbs.toFixed(5)}`,
+          )
+        }
+
+        const hz = estimatePitchHz(slice, buffer.sampleRate, rms)
         if (hz) {
+          this.emittedPitchCount += 1
+          if (this.emittedPitchCount <= 5 || this.emittedPitchCount % 10 === 0) {
+            console.log(
+              `[PitchStream.native] pitch hit #${this.emittedPitchCount}: ${hz.toFixed(2)}Hz (rms=${rms.toFixed(5)}, peak=${peakAbs.toFixed(5)})`,
+            )
+          }
           this.onPitchUser(toReading(hz))
+        } else if (this.callbackCount % 20 === 0) {
+          console.log(
+            `[PitchStream.native] no pitch (rms=${rms.toFixed(5)} < ${MIN_RMS_FOR_PITCH.toFixed(3)} or weak correlation)`,
+          )
         }
       },
     )
@@ -131,6 +163,7 @@ class PitchStreamNative implements PitchStream {
       await AudioManager.setAudioSessionActivity(false)
       throw new Error(`[PitchStream.native] onAudioReady failed: ${ready.message}`)
     }
+    console.log('[PitchStream.native] onAudioReady registered')
 
     const started = this.recorder.start()
     if (started.status === 'error') {
@@ -144,7 +177,9 @@ class PitchStreamNative implements PitchStream {
   }
 
   async stop(): Promise<void> {
-    console.log('[PitchStream.native] stopping microphone stream')
+    console.log(
+      `[PitchStream.native] stopping microphone stream (callbacks=${this.callbackCount}, pitchHits=${this.emittedPitchCount})`,
+    )
     this.running = false
     this.onPitchUser = null
 

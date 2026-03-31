@@ -161,3 +161,11 @@ Using:
 - Overbuilding beyond scope
 - Silent failures
 - Adding “future-proof” abstractions
+
+
+
+
+1st Terminal: npx expo start -c
+2nd Terminal: cd /backend
+              source .venv/Scripts/activate
+              uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
