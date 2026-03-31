@@ -63,9 +63,12 @@ Implementation order, phase groupings, and acceptance criteria live in **`PRIORI
 - **Toast / notifications:** `react-native-toast-message` with a wood-themed config (`ToastConfig.tsx`). Use `toast.success()` / `toast.error()` helpers throughout.
 - **Audio playback:** `expo-av` for stem playback, loop, and rate control (`shouldCorrectPitch: true`). **Web:** Web Audio API via Expo Web. Support: rate 50–100%, pitch correction (degrade gracefully on web), looping, per-stem mute via parallel `Sound` instances (native) or `GainNode` graph (web).
 - **Mic / real-time pitch:**
-  - **Mobile:** Native-safe low-latency path (JSI or dedicated Expo module). No JS worker thread DSP.
-  - **Web:** `getUserMedia` + `AudioWorklet`. Shared `usePitchStream()` hook with `.native.ts` / `.web.ts` platform files.
+  - **Mobile:** [`react-native-audio-api`](https://docs.swmansion.com/react-native-audio-api/) with `AudioRecorder.onAudioReady` (PCM float buffers over JSI). Same autocorrelation estimator as web, run on small chunks on the JS thread — not a generic `AudioWorklet` worker and not the `pitchy` package. Requires a **development build** or release build with native modules (not Expo Go). The Expo config plugin in `app.config.ts` adds iOS microphone usage text and Android `RECORD_AUDIO`.
+  - **Web:** `getUserMedia` + `AudioWorklet`. Shared `usePitchStream()` hook; Metro resolves `usePitchStream.native` / `usePitchStream.web`, with a `usePitchStream.ts` stub for TypeScript only.
   - On-device only — no network calls during play.
+  - **Web testing note:** browser mic capture requires **HTTPS** (or `http://localhost`). On non-localhost HTTP origins, `getUserMedia` is blocked.
+  - **Permissions:** iOS prompts once for mic access (copy from plugin string). Android requests `RECORD_AUDIO` at runtime via the audio API. If the user denies, the design-preview dev surface surfaces `MIC_PERMISSION_DENIED` with retry (web: unblock in site settings; native: enable in system settings).
+  - **Background:** Continuous capture while the app is backgrounded is **not** configured in this repo (would need iOS `audio` background mode, Android foreground service + extra manifest entries per the audio-api docs). The practice flow targets foreground use.
 - **File handling (web):** Drag-and-drop via `AudioDropzone.web.tsx`, file picker, IndexedDB storage.
 
 ### Backend (Python FastAPI)

@@ -18,9 +18,19 @@ loadProjectEnv(path.dirname(__filename), { silent: true })
  * `extra.apiBaseUrl` is read at runtime via `expo-constants` in `src/config.ts`.
  * Set `EXPO_PUBLIC_API_URL` in `.env` (see `.env.example`) for LAN/device testing.
  */
+const audioApiPlugin: NonNullable<ExpoConfig['plugins']>[number] = [
+  'react-native-audio-api',
+  {
+    iosMicrophonePermission:
+      'Harmoniq uses the microphone to hear your instrument and show live pitch while you practice.',
+    androidPermissions: ['android.permission.RECORD_AUDIO'],
+  },
+]
+
 export default ({ config }: ConfigContext): ExpoConfig =>
   ({
     ...config,
+    plugins: [...(config.plugins ?? []), audioApiPlugin],
     extra: {
       ...config.extra,
       apiBaseUrl: process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000',
