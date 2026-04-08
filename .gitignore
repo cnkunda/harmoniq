@@ -35,6 +35,7 @@ yarn-error.*
 
 # Python virtual environments (never commit site-packages / editable installs)
 .venv/
+.venv-wsl/
 venv/
 env/
 ENV/

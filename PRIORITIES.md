@@ -819,9 +819,9 @@ App receives real analysis from backend and stores it for session screens.
 
 ### Acceptance Criteria
 
-* [ ] Physical device can analyze a song against laptop on LAN
-* [ ] `LoadingSkeleton` shown while polling; `ErrorBanner` (variant `error`) shown on failure
-* [ ] Completed lesson persists in memory across screen remounts within session
+* [x] Physical device can analyze a song against laptop on LAN
+* [x] `LoadingSkeleton` shown while polling; `ErrorBanner` (variant `error`) shown on failure
+* [x] Completed lesson persists in memory across screen remounts within session
 
 ### Out of Scope
 

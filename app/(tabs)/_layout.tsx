@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router'
-import { Home, Palette } from 'lucide-react-native'
+import { FlaskConical, Home, Palette } from 'lucide-react-native'
 
 import colors from '@/src/constants/colors'
 
@@ -36,6 +36,14 @@ export default function TabLayout() {
           title: 'Design',
           href: __DEV__ ? undefined : null,
           tabBarIcon: ({ color, size }) => <Palette color={color} size={size} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="analyze-debug"
+        options={{
+          title: 'Analyze',
+          href: __DEV__ ? undefined : null,
+          tabBarIcon: ({ color, size }) => <FlaskConical color={color} size={size} strokeWidth={2} />,
         }}
       />
     </Tabs>

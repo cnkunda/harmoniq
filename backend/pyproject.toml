@@ -18,6 +18,11 @@ dependencies = [
     "librosa>=0.10.2",
     "openai-whisper>=20231117",
     "pyguitarpro>=0.10.0",
+    # Demucs uses torchaudio.save(); torchaudio 2.9+ routes save through TorchCodec, which is
+    # painful on Windows (libtorchcodec + FFmpeg shared DLLs). Pin a 2.5.x pair that still
+    # uses the classic backends. Remove these pins if you intentionally standardize on TorchCodec.
+    "torch==2.5.1",
+    "torchaudio==2.5.1",
     "demucs>=4.0.1",
 ]
 

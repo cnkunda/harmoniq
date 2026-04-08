@@ -187,6 +187,19 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 A full `pip install -e .` pulls **audio/ML** stacks (`librosa`, `openai-whisper`, `pyguitarpro`, `demucs`, …) and can take several minutes and **multiple GB** (especially PyTorch). That matches the roadmap’s default backend environment for stems, transcription, and Guitar Pro I/O.
 
+### Windows: Demucs and TorchCodec
+
+**Demucs** calls `torchaudio.save()`. Recent **torchaudio** releases use **TorchCodec** for that path, which on Windows often fails until **FFmpeg “full-shared”** DLLs and matching **torch/torchcodec** builds are set up correctly.
+
+This repo **pins `torch==2.5.1` and `torchaudio==2.5.1`** in `pyproject.toml` so separation keeps using the **classic** audio I/O backends and avoids TorchCodec. If you previously installed `torchcodec`, remove it and reinstall:
+
+```bash
+python -m pip uninstall -y torchcodec torchaudio torch
+python -m pip install -e .
+```
+
+For CUDA or a newer PyTorch line, install the **matching** `torch` / `torchaudio` pair from the [PyTorch install matrix](https://pytorch.org/get-started/locally/) first, then `pip install -e .` — but note that **torchaudio ≥ 2.9** may pull you back into the TorchCodec save path unless upstream Demucs or your environment is adjusted.
+
 ### Optional: `basic-pitch`
 
 **`basic-pitch`** is required for the eventual MIDI / pitch pipeline but declares TensorFlow constraints that **do not resolve with `pip` on Windows or Linux under Python 3.11+** (the resolver looks for `tensorflow<2.15.1`, which is unavailable for those platforms). It remains **pinned in this repo** under the optional extra `basicpitch`:

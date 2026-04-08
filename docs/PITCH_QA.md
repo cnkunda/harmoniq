@@ -96,8 +96,8 @@ Repeat A–C (or subset noted) per platform.
 | Platform | Build / browser / device | A | B | C | Overall Pass / Fail |
 |----------|---------------------------|---|---|---|---------------------|
 | Web |Yes | brave | Windows | Pass | Pass |
-| iOS | | | | | |
-| Android | | | | | |
+| iOS |Yes | | | | |
+| Android |Yes | | | | |
 
 ---
 
@@ -122,7 +122,7 @@ For **each** failed step, record one outcome (do not leave blank):
 | Role | Name | Date | Notes |
 |------|------|------|-------|
 | Tester / reviewer 1 | Claude | 3/30/2026| Tested Web |
-| Tester / reviewer 2 | | | |
+| Tester / reviewer 2 | AI| 4/6/2026 | |
 
 **Solo + recording path:** one row above + attach **screen recording** (show Design tab, Start mic, and at least **A1** + **one guitar string**) — link or file path:
 
