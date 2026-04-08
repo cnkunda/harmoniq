@@ -1,6 +1,6 @@
 /**
  * Contract between the Expo app and `assets/alphatab-harness/index.html`
- * (WebView on native, iframe or direct `postMessage` on web).
+ * (WebView on native) or `AlphaTabWeb.web.tsx` (DOM on Expo web).
  */
 
 /** Parent → harness */
@@ -20,6 +20,12 @@ export type TabThemeColors = {
   scoreInfoColor?: string
   staffLineColor?: string
   barNumberColor?: string
+}
+
+/** Imperative API shared by `AlphaTabWebView` (native) and `AlphaTabWeb` (Expo web DOM). */
+export type AlphaTabSurfaceRef = {
+  scrollToBar: (barIndex: number) => void
+  setTheme: (colors: Partial<TabThemeColors>) => void
 }
 
 /** Harness → parent */

@@ -93,4 +93,4 @@ The script uses `window.parent.postMessage(data, '*')` when `parent !== window`.
 
 - Type definitions: `types/tabMessage.ts`
 - WebView shell (native): `components/AlphaTabWebView.tsx`
-- DOM / web (later commit): `components/AlphaTabWeb.tsx`
+- DOM / Expo web: `components/AlphaTabWeb.web.tsx` (via `components/TabViewport.web.tsx`)

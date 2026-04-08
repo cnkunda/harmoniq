@@ -929,8 +929,8 @@ Same lesson renders on Expo Web without WebView.
 
 ### Acceptance Criteria
 
-* [ ] Chrome renders identical section tab as mobile for same payload
-* [ ] No WebView on web build
+* [x] Chrome renders identical section tab as mobile for same payload
+* [x] No WebView on web build
 
 ### Out of Scope
 

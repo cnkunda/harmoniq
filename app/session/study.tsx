@@ -2,17 +2,18 @@ import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
-import { AlphaTabWebView, type AlphaTabWebViewRef } from '@/components/AlphaTabWebView'
+import { TabViewport } from '@/components/TabViewport'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 
 type TabVariant = 'full' | 'skeleton' | 'alt'
 
 export default function StudyScreen() {
   const router = useRouter()
-  const tabRef = useRef<AlphaTabWebViewRef>(null)
+  const tabRef = useRef<AlphaTabSurfaceRef>(null)
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
 
@@ -55,7 +56,7 @@ export default function StudyScreen() {
   return (
     <SessionStepScreen
       title="Study"
-      subtitle="AlphaTab in WebView: switch full vs skeleton GP5 (same section). External links stay blocked in the harness."
+      subtitle="Full vs skeleton GP5 (same section). Native: WebView harness. Web: DOM AlphaTab (no WebView)."
       showBack
       onBack={() => router.back()}
       showNext
@@ -76,7 +77,7 @@ export default function StudyScreen() {
       </View>
 
       <View className="mt-3 min-h-[300px] flex-1">
-        <AlphaTabWebView ref={tabRef} gp5Base64={gp5Base64} style={{ flex: 1 }} />
+        <TabViewport ref={tabRef} gp5Base64={gp5Base64} style={{ flex: 1 }} />
       </View>
     </SessionStepScreen>
   )

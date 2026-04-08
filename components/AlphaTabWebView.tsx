@@ -4,8 +4,11 @@ import { ActivityIndicator, Platform, Pressable, Text, View, type StyleProp, typ
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
-import type { TabInboundMessage, TabThemeColors } from '@/types/tabMessage'
+import type { AlphaTabSurfaceRef, TabInboundMessage, TabThemeColors } from '@/types/tabMessage'
 import { decodeTabMessage, encodeTabMessage } from '@/types/tabMessage'
+
+/** @deprecated Use `AlphaTabSurfaceRef` from `@/types/tabMessage`. */
+export type AlphaTabWebViewRef = AlphaTabSurfaceRef
 
 const HARNESS_HTML = require('../assets/alphatab-harness/index.html') as number
 
@@ -14,11 +17,6 @@ export type AlphaTabWebViewProps = {
   style?: StyleProp<ViewStyle>
   onReady?: () => void
   onHarnessError?: (message: string) => void
-}
-
-export type AlphaTabWebViewRef = {
-  scrollToBar: (barIndex: number) => void
-  setTheme: (colors: Partial<TabThemeColors>) => void
 }
 
 function isAllowedNavigationUrl(url: string): boolean {
@@ -33,7 +31,7 @@ function isAllowedNavigationUrl(url: string): boolean {
   return false
 }
 
-export const AlphaTabWebView = forwardRef<AlphaTabWebViewRef, AlphaTabWebViewProps>(
+export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewProps>(
   function AlphaTabWebView({ gp5Base64, style, onReady, onHarnessError }, ref) {
     const webRef = useRef<WebView>(null)
     const themeSentRef = useRef(false)
