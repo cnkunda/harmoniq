@@ -112,11 +112,21 @@ def build_lesson_json_from_librosa(
         label = seg.get("label") if isinstance(seg, dict) else None
         if not isinstance(label, str) or not label.strip():
             label = "Section"
+        start_raw = seg.get("start_s") if isinstance(seg, dict) else None
+        start_time_seconds = (
+            float(start_raw) if isinstance(start_raw, (int, float)) else None
+        )
         # Placeholder confidence (overwritten once we have transcription confidence).
-        sections.append(LessonSectionStub(label=label, confidence=0.6))
+        sections.append(
+            LessonSectionStub(
+                label=label,
+                confidence=0.6,
+                start_time_seconds=start_time_seconds,
+            )
+        )
 
     if not sections:
-        sections = [LessonSectionStub(label="Intro", confidence=0.3)]
+        sections = [LessonSectionStub(label="Intro", confidence=0.3, start_time_seconds=0.0)]
 
     lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
         vocals_stem_path, beat_grid=beat_grid, bar_timestamps=bar_timestamps
@@ -136,7 +146,14 @@ def build_lesson_json_from_librosa(
     except Exception:
         logger.exception("tab generation failed for job_id=%s; returning lesson without tabs", job_id)
         section_conf = derive_section_confidence(transcription_confidence)
-        sections = [LessonSectionStub(label=sec.label, confidence=section_conf) for sec in sections]
+        sections = [
+            LessonSectionStub(
+                label=sec.label,
+                confidence=section_conf,
+                start_time_seconds=sec.start_time_seconds,
+            )
+            for sec in sections
+        ]
     sections = merge_coach_copy_into_sections(
         sections,
         song_title="Librosa Lesson",

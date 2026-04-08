@@ -11,6 +11,9 @@ export interface LessonStoreState {
   status: LessonStoreStatus
   lesson: LessonJSON | null
   error: string | null
+  /** Index into `lesson.sections` for the current practice target (session flow / `?section=` deep link). */
+  lessonSectionIndex: number
+  setLessonSectionIndex: (index: number) => void
   /** Starts URL analyze; cancels any in-flight poll from a previous call. */
   analyzeFromUrl: (url: string) => Promise<void>
   /** Starts file upload analyze; cancels any in-flight poll from a previous call. */
@@ -37,6 +40,10 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
   status: 'idle',
   lesson: null,
   error: null,
+  lessonSectionIndex: 0,
+
+  setLessonSectionIndex: (index: number) =>
+    set({ lessonSectionIndex: Math.max(0, Math.floor(index)) }),
 
   clearError: () => set({ error: null }),
 

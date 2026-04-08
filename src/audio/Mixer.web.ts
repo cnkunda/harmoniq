@@ -1,6 +1,7 @@
 import { Asset } from 'expo-asset'
 
 import type { StemDefinition, StemMixer } from './mixerTypes'
+import { assertStemDefinitions } from './mixerTypes'
 
 const LOG = '[StemMixer.web]'
 
@@ -9,6 +10,11 @@ function clampGain(g: number): number {
     throw new Error(`${LOG} gain is NaN`)
   }
   return Math.min(1, Math.max(0, g))
+}
+
+function clampRate(r: number): number {
+  if (Number.isNaN(r)) return 1
+  return Math.min(2, Math.max(0.25, r))
 }
 
 function getAudioContextClass(): typeof AudioContext {
@@ -44,6 +50,19 @@ async function decodeAssetToBuffer(ctx: AudioContext, sourceModule: number): Pro
   })
 }
 
+async function decodeUrlToBuffer(ctx: AudioContext, uri: string): Promise<AudioBuffer> {
+  const res = await fetch(uri)
+  if (!res.ok) {
+    throw new Error(`${LOG} fetch stem failed ${res.status}`)
+  }
+  const raw = await res.arrayBuffer()
+  return await new Promise<AudioBuffer>((resolve, reject) => {
+    ctx.decodeAudioData(raw.slice(0), resolve, (err) => {
+      reject(err ?? new Error(`${LOG} decodeAudioData (url) failed`))
+    })
+  })
+}
+
 type StemWebState = {
   label: string
   buffer: AudioBuffer
@@ -55,8 +74,19 @@ type StemWebState = {
 class WebAudioStemMixer implements StemMixer {
   private ctx: AudioContext | null = null
   private stems = new Map<string, StemWebState>()
+  private durationSec = 0
+  private playbackRate = 1
+  private pausedAt = 0
+  private playStartCtxTime = 0
+  private playing = false
+
+  /** Exposed for metronome scheduling on the same clock. */
+  getAudioContext(): AudioContext | null {
+    return this.ctx
+  }
 
   async load(stems: StemDefinition[]): Promise<void> {
+    assertStemDefinitions(stems)
     if (this.stems.size > 0) {
       throw new Error(`${LOG} already loaded — call unload() first`)
     }
@@ -69,15 +99,26 @@ class WebAudioStemMixer implements StemMixer {
     console.info(`${LOG} AudioContext state=${this.ctx.state}, loading ${stems.length} stem(s)`)
 
     try {
+      let maxDur = 0
       for (const def of stems) {
-        const buffer = await decodeAssetToBuffer(this.ctx, def.source)
+        const buffer =
+          def.uri != null
+            ? await decodeUrlToBuffer(this.ctx, def.uri)
+            : await decodeAssetToBuffer(this.ctx, def.source as number)
+        maxDur = Math.max(maxDur, buffer.duration)
         const gain = this.ctx.createGain()
         gain.gain.value = 1
         gain.connect(this.ctx.destination)
         this.stems.set(def.id, { label: def.label, buffer, gain, sources: [] })
-        console.info(`${LOG} decoded ${def.id} (${def.label}) duration=${buffer.duration.toFixed(2)}s sr=${buffer.sampleRate}`)
+        console.info(
+          `${LOG} decoded ${def.id} (${def.label}) duration=${buffer.duration.toFixed(2)}s sr=${buffer.sampleRate}`,
+        )
       }
-      console.info(`${LOG} load OK`)
+      this.durationSec = maxDur
+      this.pausedAt = 0
+      this.playbackRate = 1
+      this.playing = false
+      console.info(`${LOG} load OK duration=${this.durationSec.toFixed(2)}s`)
     } catch (e) {
       console.error(`${LOG} load failed`, e)
       await this.unload()
@@ -96,8 +137,11 @@ class WebAudioStemMixer implements StemMixer {
       const src = this.ctx.createBufferSource()
       src.buffer = state.buffer
       src.loop = true
+      src.loopStart = 0
+      src.loopEnd = state.buffer.duration
+      src.playbackRate.value = this.playbackRate
       src.connect(state.gain)
-      src.start(0)
+      src.start(0, this.pausedAt)
       state.sources.push(src)
     }
   }
@@ -124,16 +168,71 @@ class WebAudioStemMixer implements StemMixer {
       await this.ctx.resume()
       console.info(`${LOG} AudioContext resumed -> ${this.ctx.state}`)
     }
+    this.stopLoopSources()
+    this.playStartCtxTime = this.ctx.currentTime
+    this.playing = true
     this.startLoopSources()
-    console.info(`${LOG} play (looping)`)
+    console.info(`${LOG} play from ${this.pausedAt.toFixed(3)}s rate=${this.playbackRate}`)
   }
 
   async pause(): Promise<void> {
     if (!this.ctx || this.stems.size === 0) {
       throw new Error(`${LOG} pause() called before load()`)
     }
+    if (this.playing) {
+      const elapsed = (this.ctx.currentTime - this.playStartCtxTime) * this.playbackRate
+      const d = this.durationSec || 1
+      this.pausedAt = (this.pausedAt + elapsed) % d
+    }
     this.stopLoopSources()
-    console.info(`${LOG} pause (sources stopped)`)
+    this.playing = false
+    console.info(`${LOG} pause at ${this.pausedAt.toFixed(3)}s`)
+  }
+
+  async seek(positionSeconds: number): Promise<void> {
+    if (!this.ctx || this.stems.size === 0) {
+      return
+    }
+    const d = this.durationSec || 0
+    if (d <= 0) return
+    const wrapped = ((positionSeconds % d) + d) % d
+    const wasPlaying = this.playing
+    if (wasPlaying) {
+      this.stopLoopSources()
+      this.playing = false
+    }
+    this.pausedAt = wrapped
+    if (wasPlaying) {
+      await this.play()
+    }
+  }
+
+  async setPlaybackRate(rate: number): Promise<void> {
+    this.playbackRate = clampRate(rate)
+    if (!this.ctx || !this.playing) {
+      return
+    }
+    const pos = await this.getPositionSeconds()
+    this.stopLoopSources()
+    this.playing = false
+    this.pausedAt = pos
+    await this.play()
+  }
+
+  async getPositionSeconds(): Promise<number> {
+    if (!this.ctx || this.stems.size === 0) {
+      return this.pausedAt
+    }
+    const d = this.durationSec || 1
+    if (this.playing) {
+      const elapsed = (this.ctx.currentTime - this.playStartCtxTime) * this.playbackRate
+      return (this.pausedAt + elapsed) % d
+    }
+    return this.pausedAt
+  }
+
+  getDurationSeconds(): number {
+    return this.durationSec
   }
 
   async setStemGain(stemId: string, linearGain: number): Promise<void> {
@@ -152,6 +251,9 @@ class WebAudioStemMixer implements StemMixer {
       state.gain.disconnect()
     }
     this.stems.clear()
+    this.durationSec = 0
+    this.pausedAt = 0
+    this.playing = false
     if (this.ctx) {
       await this.ctx.close().catch((err) => console.error(`${LOG} context.close`, err))
       console.info(`${LOG} AudioContext closed`)

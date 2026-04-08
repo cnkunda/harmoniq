@@ -80,7 +80,7 @@ def _stub_lesson(
         stems=stems or {},
         lyrics_aligned=[],
         sections=[
-            LessonSectionStub(label="Solo (stub)", confidence=0.8),
+            LessonSectionStub(label="Solo (stub)", confidence=0.8, start_time_seconds=0.0),
         ],
         wav_path=wav_path,
     )

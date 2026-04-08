@@ -26,6 +26,8 @@ class LessonSectionStub(BaseModel):
 
     label: str | None = None
     confidence: float | None = None
+    # Start time in seconds for Listen step section chips (librosa segments).
+    start_time_seconds: float | None = None
 
 
 class LessonJSON(BaseModel):

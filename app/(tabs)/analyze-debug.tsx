@@ -1,4 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker'
+import { useRouter } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -8,9 +9,11 @@ import { ErrorBanner } from '@/components/ErrorBanner'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { API_BASE_URL } from '@/src/config'
 import colors from '@/src/constants/colors'
+import { sessionHref } from '@/src/constants/sessionFlow'
 import { useLessonStore } from '@/src/stores/lessonStore'
 
 export default function AnalyzeDebugScreen() {
+  const router = useRouter()
   const [url, setUrl] = useState('')
   const [pickError, setPickError] = useState<string | null>(null)
   const jobId = useLessonStore((s) => s.jobId)
@@ -146,6 +149,13 @@ export default function AnalyzeDebugScreen() {
             <Text className="mt-1 font-sans text-cream">
               Sections: <Text className="font-sans-medium">{sectionCount}</Text>
             </Text>
+            <Pressable
+              onPress={() => router.push(sessionHref('listen'))}
+              className="mt-4 rounded-lg bg-amber-accent px-4 py-3"
+              accessibilityRole="button"
+            >
+              <Text className="text-center font-sans-medium text-wood-900">Continue to session</Text>
+            </Pressable>
           </View>
         ) : null}
       </ScrollView>

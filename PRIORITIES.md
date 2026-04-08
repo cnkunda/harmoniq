@@ -847,8 +847,8 @@ Navigate Listen → Study → Slow → Play → Review with shared lesson state.
 
 ### Acceptance Criteria
 
-* [ ] Forward/back through steps without losing `lessonStore` data
-* [ ] Web and mobile routes behave the same
+* [x] Forward/back through steps without losing `lessonStore` data
+* [x] Web and mobile routes behave the same
 
 ### Out of Scope
 
@@ -874,9 +874,9 @@ One vertical slice: hear guitar stem, jump sections, optional click tied to `bea
 
 ### Acceptance Criteria
 
-* [ ] Play/pause seeks correctly when tapping chip
-* [ ] Metronome on/off; when on, aligns within one beat of backing for test song
-* [ ] Speed slider still works
+* [x] Play/pause seeks correctly when tapping chip
+* [x] Metronome on/off; when on, aligns within one beat of backing for test song
+* [x] Speed slider still works
 
 ### Out of Scope
 

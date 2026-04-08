@@ -268,6 +268,7 @@ def apply_tab_artifacts_to_sections(
             LessonSectionStub(
                 label=sec.label,
                 confidence=section_conf,
+                start_time_seconds=sec.start_time_seconds,
                 **tab_fields,
             )
         )

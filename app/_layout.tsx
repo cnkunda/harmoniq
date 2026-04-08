@@ -57,6 +57,7 @@ export default function RootLayout() {
           <NoiseOverlay />
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="session" />
           </Stack>
           <Toast config={toastConfig} />
         </View>

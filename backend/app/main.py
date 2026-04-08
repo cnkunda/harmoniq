@@ -7,8 +7,9 @@ import inspect
 from pathlib import Path
 import uuid
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.schemas import (
     AnalyzeJobCreated,
@@ -43,6 +44,33 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _backend_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+@app.get(
+    "/lesson-file",
+    tags=["Artifacts"],
+    summary="Serve a lesson stem or other job-relative audio file (PRIORITIES §20)",
+)
+async def lesson_file(
+    rel: str = Query(..., description="Path relative to backend root, e.g. data/jobs/…/stems/guitar.wav"),
+) -> FileResponse:
+    """Return WAV/audio from disk; used by the app to decode stems referenced in LessonJSON.stems."""
+    backend_root = _backend_root().resolve()
+    rel_norm = rel.replace("\\", "/").lstrip("/")
+    if not rel_norm or ".." in Path(rel_norm).parts:
+        raise HTTPException(status_code=400, detail="Invalid rel path")
+    candidate = (backend_root / rel_norm).resolve()
+    if not str(candidate).startswith(str(backend_root)):
+        raise HTTPException(status_code=403, detail="Path escapes backend root")
+    if not candidate.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    suffix = candidate.suffix.lower()
+    media = "audio/wav" if suffix == ".wav" else "application/octet-stream"
+    return FileResponse(candidate, media_type=media, filename=candidate.name)
 
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # per README: max 50MB
