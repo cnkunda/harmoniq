@@ -3,6 +3,10 @@ const { withNativeWind } = require('nativewind/metro')
 
 const config = getDefaultConfig(__dirname)
 
+if (!config.resolver.assetExts.includes('html')) {
+  config.resolver.assetExts.push('html')
+}
+
 // Python venv dirs (especially WSL-created `.venv-wsl` on NTFS) confuse Metro's file watcher
 // (EACCES on `lib64` symlinks). They are never part of the JS bundle.
 //

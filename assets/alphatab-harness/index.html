@@ -119,7 +119,7 @@
         api.updateSettings()
       }
 
-      window.addEventListener('message', function (event) {
+      function onInboundMessage(event) {
         var msg = parseInbound(event.data)
         if (!msg || !msg.type) return
 
@@ -143,7 +143,10 @@
         if (msg.type === 'setTheme' && msg.colors) {
           applyTheme(msg.colors)
         }
-      })
+      }
+
+      window.addEventListener('message', onInboundMessage)
+      document.addEventListener('message', onInboundMessage)
 
       api.error.on(function (err) {
         var m = err && (err.message || err.toString())

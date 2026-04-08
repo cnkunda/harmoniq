@@ -903,8 +903,8 @@ Render lesson `.gp5` in-app on iOS/Android via bundled HTML.
 
 ### Acceptance Criteria
 
-* [ ] Skeleton vs full tab can be switched by message or reload with different base64 payload
-* [ ] Tapping external link disabled; JS bridge works on device
+* [x] Skeleton vs full tab can be switched by message or reload with different base64 payload
+* [x] Tapping external link disabled; JS bridge works on device
 
 ### Out of Scope
 
