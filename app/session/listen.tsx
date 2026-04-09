@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect } from 'react'
 
-import { ListenStemPanel } from '@/components/ListenStemPanel'
+import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { useLessonStore } from '@/src/stores/lessonStore'
@@ -27,7 +27,7 @@ export default function ListenScreen() {
   return (
     <SessionStepScreen
       title="Listen"
-      subtitle="Section chips seek the mix; toggle stems, speed, and an optional metronome aligned to beat_grid."
+      subtitle="Stems + tab + SmartScroll (bar_timestamps ↔ playback). Skew demo while playing."
       showBack
       backLabel="Close"
       onBack={exitSession}
@@ -35,7 +35,7 @@ export default function ListenScreen() {
       nextLabel="Next: Study"
       onNext={() => router.push(sessionHref('study'))}
     >
-      <ListenStemPanel />
+      <SessionStemAndTab />
     </SessionStepScreen>
   )
 }

@@ -9,9 +9,15 @@ import type { StemMixer } from '@/src/audio/mixerTypes'
 import colors from '@/src/constants/colors'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { LessonJSON } from '@/src/types'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { lessonStemUrl, parseSectionRecord, sectionSeekSeconds } from '@/src/utils/lessonAudio'
 
 const STEM_UI_ORDER = ['guitar', 'bass', 'drums', 'vocals', 'piano', 'other'] as const
+
+/** Matches design-preview StemMixerDevSection Switch styling. */
+const STEM_SWITCH_TRACK = { false: colors.wood[500], true: `${colors.amber.accent}80` } as const
+const STEM_SWITCH_THUMB_ON = colors.cream
+const STEM_SWITCH_THUMB_OFF = colors.wood[600]
 
 function orderedStemIds(stems: Record<string, string>): string[] {
   const keys = Object.keys(stems)
@@ -26,13 +32,40 @@ function orderedStemIds(stems: Record<string, string>): string[] {
   return keys
 }
 
+export type ListenStemPanelProps = {
+  /** Fired on playback poll while playing, and once after pause when position is refreshed. */
+  onPlaybackTick?: (ctx: PlaybackTickContext) => void
+  /** Fired after a section chip seek completes. */
+  onSeek?: () => void
+  /** Optional initial speed (e.g. 0.65 for Slow step). */
+  initialRate?: number
+  /** Optional initial metronome state. */
+  initialMetronomeOn?: boolean
+  /** Optional pre-entered loop region. Can be cleared by user. */
+  autoLoopRegion?: { startSec: number; endSec: number; label?: string } | null
+  /** Optional per-stem initial mute defaults (true = muted). */
+  initialStemMuteById?: Record<string, boolean>
+}
+
 function lessonLoadKey(lesson: LessonJSON | null): string {
   if (!lesson?.stems || Object.keys(lesson.stems).length === 0) return ''
   const paths = orderedStemIds(lesson.stems).map((k) => lesson.stems![k] ?? '')
   return `${lesson.job_id ?? 'nj'}|${paths.join('|')}`
 }
 
-export function ListenStemPanel() {
+function clampPlaybackRate(value: number): number {
+  if (!Number.isFinite(value)) return 1
+  return Math.max(0.5, Math.min(1.25, value))
+}
+
+export function ListenStemPanel({
+  onPlaybackTick,
+  onSeek,
+  initialRate = 1,
+  initialMetronomeOn = false,
+  autoLoopRegion = null,
+  initialStemMuteById,
+}: ListenStemPanelProps = {}) {
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
@@ -46,9 +79,10 @@ export function ListenStemPanel() {
   const [playing, setPlaying] = useState(false)
   const [positionSec, setPositionSec] = useState(0)
   const [durationSec, setDurationSec] = useState(0)
-  const [rate, setRate] = useState(1)
-  const [metronomeOn, setMetronomeOn] = useState(false)
+  const [rate, setRate] = useState(clampPlaybackRate(initialRate))
+  const [metronomeOn, setMetronomeOn] = useState(Boolean(initialMetronomeOn))
   const [stemMute, setStemMute] = useState<Record<string, boolean>>({})
+  const [loopRegion, setLoopRegion] = useState<{ startSec: number; endSec: number; label?: string } | null>(autoLoopRegion)
 
   const positionRef = useRef(0)
   positionRef.current = positionSec
@@ -61,6 +95,23 @@ export function ListenStemPanel() {
 
   const loadKey = lessonLoadKey(lesson)
   const beatGridKey = lesson?.beat_grid?.join(',') ?? ''
+
+  const onPlaybackTickRef = useRef(onPlaybackTick)
+  onPlaybackTickRef.current = onPlaybackTick
+  const onSeekRef = useRef(onSeek)
+  onSeekRef.current = onSeek
+
+  useEffect(() => {
+    setRate(clampPlaybackRate(initialRate))
+  }, [initialRate])
+
+  useEffect(() => {
+    setMetronomeOn(Boolean(initialMetronomeOn))
+  }, [initialMetronomeOn])
+
+  useEffect(() => {
+    setLoopRegion(autoLoopRegion)
+  }, [autoLoopRegion])
 
   const syncStemGains = useCallback(
     async (mixer: StemMixer, muteMap: Record<string, boolean>) => {
@@ -104,12 +155,14 @@ export function ListenStemPanel() {
           return
         }
         const initMute: Record<string, boolean> = {}
-        for (const id of ids) initMute[id] = false
+        for (const id of ids) initMute[id] = Boolean(initialStemMuteById?.[id])
         setStemMute(initMute)
         await syncStemGains(mixer, initMute)
         setDurationSec(mixer.getDurationSeconds())
         const idx = useLessonStore.getState().lessonSectionIndex
         const t0 = sectionSeekSeconds(lesson, idx)
+        const seededRate = clampPlaybackRate(initialRate)
+        await mixer.setPlaybackRate(seededRate).catch(() => {})
         await mixer.seek(t0)
         setPositionSec(t0)
         setReady(true)
@@ -135,15 +188,41 @@ export function ListenStemPanel() {
       mixer.unload().catch(() => {})
       mixerRef.current = null
     }
-  }, [loadKey, lesson, syncStemGains])
+  }, [initialRate, initialStemMuteById, loadKey, lesson, syncStemGains])
 
   useEffect(() => {
-    if (!playing || !ready) return
-    const id = setInterval(() => {
+    if (!ready) return
+
+    const emitTick = (p: number) => {
+      onPlaybackTickRef.current?.({
+        positionSec: p,
+        playing: playingRef.current,
+        rate: rateRef.current,
+        ready: true,
+      })
+    }
+
+    if (!playing) {
+      const m = mixerRef.current
+      if (m) {
+        void m.getPositionSeconds().then((p) => {
+          setPositionSec(p)
+          emitTick(p)
+        })
+      }
+      return
+    }
+
+    const tick = () => {
       const m = mixerRef.current
       if (!m) return
-      void m.getPositionSeconds().then((p) => setPositionSec(p))
-    }, 200)
+      void m.getPositionSeconds().then((p) => {
+        setPositionSec(p)
+        emitTick(p)
+      })
+    }
+    tick()
+    const id = setInterval(tick, 200)
     return () => clearInterval(id)
   }, [playing, ready])
 
@@ -165,6 +244,25 @@ export function ListenStemPanel() {
     })
     return () => m.stop()
   }, [metronomeOn, playing, ready, beatGridKey, lesson?.tempo, rate])
+
+  useEffect(() => {
+    if (!ready || !playing || !loopRegion) return
+    const { startSec, endSec } = loopRegion
+    if (!Number.isFinite(startSec) || !Number.isFinite(endSec) || endSec <= startSec + 0.05) return
+    const id = setInterval(() => {
+      const m = mixerRef.current
+      if (!m || !playingRef.current) return
+      void m.getPositionSeconds().then((p) => {
+        if (p >= endSec - 0.02) {
+          void m.seek(startSec).then(() => {
+            setPositionSec(startSec)
+            onSeekRef.current?.()
+          })
+        }
+      })
+    }, 120)
+    return () => clearInterval(id)
+  }, [loopRegion, playing, ready])
 
   const toggleStem = (id: string) => {
     setStemMute((prev) => {
@@ -208,6 +306,7 @@ export function ListenStemPanel() {
     try {
       await m.seek(t)
       setPositionSec(t)
+      onSeekRef.current?.()
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Seek failed')
     }
@@ -239,7 +338,7 @@ export function ListenStemPanel() {
   return (
     <View className="mt-4 gap-4">
       {loadError ? (
-        <Text className="rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 font-sans text-sm text-red-200">
+        <Text className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 font-sans text-sm text-danger">
           {loadError}
         </Text>
       ) : null}
@@ -248,7 +347,7 @@ export function ListenStemPanel() {
         <Pressable
           onPress={() => void togglePlay()}
           disabled={!ready || loading}
-          className="rounded-lg bg-amber-accent px-5 py-2.5 disabled:opacity-40"
+          className="rounded-lg bg-amber-accent/90 px-5 py-2.5 disabled:opacity-40"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">{playing ? 'Pause' : 'Play'}</Text>
@@ -258,8 +357,23 @@ export function ListenStemPanel() {
         </Text>
       </View>
 
+      {loopRegion ? (
+        <View className="rounded-lg border border-amber-accent/35 bg-amber-accent/10 px-3 py-2">
+          <Text className="font-sans text-xs text-wood-900">
+            Loop active: {loopRegion.label ?? 'target bar'} ({fmt(loopRegion.startSec)} - {fmt(loopRegion.endSec)})
+          </Text>
+          <Pressable
+            onPress={() => setLoopRegion(null)}
+            className="mt-2 self-start rounded-md border border-wood-600/45 bg-cream-dark/50 px-2.5 py-1.5"
+            accessibilityRole="button"
+          >
+            <Text className="font-sans text-xs text-wood-900">Clear loop</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <View>
-        <Text className="mb-1 font-sans-medium text-sm text-cream">Speed</Text>
+        <Text className="mb-1 font-sans-medium text-sm text-wood-900">Speed</Text>
         <Slider
           minimumValue={0.5}
           maximumValue={1.25}
@@ -275,13 +389,13 @@ export function ListenStemPanel() {
       </View>
 
       <View className="flex-row items-center justify-between">
-        <Text className="font-sans-medium text-sm text-cream">Metronome</Text>
+        <Text className="font-sans-medium text-sm text-wood-900">Metronome</Text>
         <Switch
           value={metronomeOn}
           onValueChange={setMetronomeOn}
           disabled={!ready || loading}
-          trackColor={{ false: '#5c4a38', true: '#D4860A80' }}
-          thumbColor={metronomeOn ? '#F0DEB4' : '#7A5A3B'}
+          trackColor={STEM_SWITCH_TRACK}
+          thumbColor={metronomeOn ? STEM_SWITCH_THUMB_ON : STEM_SWITCH_THUMB_OFF}
         />
       </View>
       {Platform.OS !== 'web' ? (
@@ -292,7 +406,7 @@ export function ListenStemPanel() {
 
       {sections.length > 0 ? (
         <View>
-          <Text className="mb-2 font-sans-medium text-sm text-cream">Sections</Text>
+          <Text className="mb-2 font-sans-medium text-sm text-wood-900">Sections</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
             <View className="flex-row flex-wrap gap-2 pb-1">
               {sections.map((raw, i) => {
@@ -305,13 +419,13 @@ export function ListenStemPanel() {
                     onPress={() => void onChip(i)}
                     disabled={!ready || loading}
                     className={`rounded-full border px-3 py-1.5 ${
-                      active ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600 bg-wood-800'
+                      active ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/40'
                     }`}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
                   >
                     <Text
-                      className={`font-sans text-xs ${active ? 'text-amber-light' : 'text-cream'}`}
+                      className={`font-sans text-xs ${active ? 'text-wood-900' : 'text-muted-brown'}`}
                     >
                       {label}
                     </Text>
@@ -324,17 +438,17 @@ export function ListenStemPanel() {
       ) : null}
 
       <View>
-        <Text className="mb-2 font-sans-medium text-sm text-cream">Stems</Text>
+        <Text className="mb-2 font-sans-medium text-sm text-wood-900">Stems</Text>
         <View className="gap-2">
           {orderedStemIds(lesson.stems as Record<string, string>).map((id) => (
             <View key={id} className="flex-row items-center justify-between">
-              <Text className="font-sans capitalize text-cream">{id}</Text>
+              <Text className="font-sans capitalize text-wood-900">{id}</Text>
               <Switch
                 value={!stemMute[id]}
                 onValueChange={() => toggleStem(id)}
                 disabled={!ready || loading}
-                trackColor={{ false: '#5c4a38', true: '#D4860A80' }}
-                thumbColor={stemMute[id] ? '#7A5A3B' : '#F0DEB4'}
+                trackColor={STEM_SWITCH_TRACK}
+                thumbColor={stemMute[id] ? STEM_SWITCH_THUMB_OFF : STEM_SWITCH_THUMB_ON}
               />
             </View>
           ))}

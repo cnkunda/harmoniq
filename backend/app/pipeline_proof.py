@@ -400,7 +400,6 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
 
 # --- Basic Pitch ----------------------------------------------------------------
 
-
 @dataclass
 class NoteEvent:
     start_s: float
@@ -432,7 +431,15 @@ def basic_pitch_predict_events(
     kwargs: dict[str, Any] = {}
     if midi_tempo is not None:
         kwargs["midi_tempo"] = float(midi_tempo)
-    _, _, raw_events = basic_pitch_predict(str(audio_path), **kwargs)
+    try:
+        _, _, raw_events = basic_pitch_predict(str(audio_path), **kwargs)
+    except Exception as default_err:
+        import basic_pitch as basic_pitch_pkg
+
+        tflite_path = Path(basic_pitch_pkg.__file__).resolve().parent / "saved_models" / "icassp_2022" / "nmp.tflite"
+        if not tflite_path.exists():
+            raise
+        _, _, raw_events = basic_pitch_predict(str(audio_path), model_or_model_path=tflite_path, **kwargs)
     out: list[NoteEvent] = []
     for row in raw_events:
         # (start_s, end_s, pitch_midi, amplitude, pitch_bends?)

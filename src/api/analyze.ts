@@ -92,6 +92,7 @@ export function pollAnalyzeJob(
 
 export async function submitScore(payload: {
   recording_wav_base64: string
+  recording_mime_type?: string
   section: unknown
   skill_nodes: string[]
 }): Promise<ScoreResult> {

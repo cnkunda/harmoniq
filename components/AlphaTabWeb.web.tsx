@@ -67,29 +67,6 @@ function loadAlphaTabScript(): Promise<void> {
   return w.__harmoniqAlphaTabScript
 }
 
-function preventUiHooks() {
-  document.addEventListener(
-    'contextmenu',
-    (e) => {
-      e.preventDefault()
-    },
-    { capture: true },
-  )
-  document.addEventListener(
-    'click',
-    (e) => {
-      const t = e.target as HTMLElement | null
-      if (!t?.closest) return
-      const a = t.closest('a[href]')
-      if (a && a.getAttribute('href') && a.getAttribute('href') !== '#') {
-        e.preventDefault()
-        e.stopPropagation()
-      }
-    },
-    true,
-  )
-}
-
 function mergeResources(theme?: Partial<TabThemeColors>): Record<string, string> {
   const out: Record<string, string> = {}
   const base = { ...TAB_HARNESS_THEME, ...theme }
@@ -104,6 +81,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const hostRef = useRef<HTMLDivElement | null>(null)
     const apiRef = useRef<AlphaTabApiLike | null>(null)
     const readyPostedRef = useRef(false)
+    /** When SmartScroll / UI calls scrollToBar before bounds exist, apply after render. */
+    const pendingBarRef = useRef<number | null>(null)
 
     const [mounted, setMounted] = useState(false)
     const [engineReady, setEngineReady] = useState(false)
@@ -113,31 +92,43 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
     const themeKey = useMemo(() => JSON.stringify(theme ?? {}), [theme])
 
-    const scrollToBarIndex = useCallback((api: AlphaTabApiLike, barIndex: number) => {
+    const tryScrollToBar = useCallback((api: AlphaTabApiLike, barIndex: number): boolean => {
       const lookup = api.boundsLookup
-      if (!lookup?.isFinished) {
-        const msg = 'scrollToBar: bounds not ready yet'
-        setEngineError(msg)
-        onError?.(msg)
-        return
-      }
+      if (!lookup?.isFinished) return false
       const mb = lookup.findMasterBarByIndex(barIndex)
       if (!mb) {
         const msg = `scrollToBar: unknown bar index ${barIndex}`
         setEngineError(msg)
         onError?.(msg)
-        return
+        return true
       }
       try {
         const scrollEl = api.uiFacade.getScrollContainer()
         const y = mb.visualBounds.y
-        api.uiFacade.scrollToY(scrollEl, Math.max(0, y - 24), 200)
+        const targetY = Math.max(0, y - 24)
+        api.uiFacade.scrollToY(scrollEl, targetY, 200)
+        return true
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'scrollToBar failed'
         setEngineError(msg)
         onError?.(msg)
+        return true
       }
     }, [onError])
+
+    const tryScrollToBarRef = useRef(tryScrollToBar)
+    tryScrollToBarRef.current = tryScrollToBar
+
+    const scrollToBarIndex = useCallback(
+      (api: AlphaTabApiLike, barIndex: number) => {
+        if (tryScrollToBar(api, barIndex)) {
+          pendingBarRef.current = null
+          return
+        }
+        pendingBarRef.current = barIndex
+      },
+      [tryScrollToBar],
+    )
 
     const applyThemePartial = useCallback((api: AlphaTabApiLike, colors: Partial<TabThemeColors>) => {
       const res = api.settings.display.resources
@@ -171,15 +162,39 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       const el = hostRef.current
       if (!el) return
 
+      /** Scope to host `el` only — document-level capture broke Expo Router `<a>` tab links after leaving session. */
+      const uiGuard = new AbortController()
+      const { signal } = uiGuard
+      el.addEventListener(
+        'contextmenu',
+        (e) => {
+          e.preventDefault()
+        },
+        { capture: true, signal },
+      )
+      el.addEventListener(
+        'click',
+        (e) => {
+          const t = e.target as HTMLElement | null
+          if (!t?.closest) return
+          const a = t.closest('a[href]')
+          if (a && a.getAttribute('href') && a.getAttribute('href') !== '#') {
+            e.preventDefault()
+            e.stopPropagation()
+          }
+        },
+        { capture: true, signal },
+      )
+
       let cancelled = false
       readyPostedRef.current = false
+      pendingBarRef.current = null
       setBootError(null)
       setEngineError(null)
       setEngineReady(false)
 
       const run = async () => {
         try {
-          preventUiHooks()
           await loadAlphaTabScript()
           if (cancelled) return
 
@@ -192,13 +207,20 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           }
 
           const resources = mergeResources(theme ?? {})
-          const api = new AlphaTabApi(el, {
+          // Expo web / Metro: worker script URL resolution breaks (Invalid base URL) — render on main thread.
+          const apiOptions = {
+            core: {
+              useWorkers: false,
+              scriptFile: SCRIPT_SRC,
+              enableLazyLoading: false,
+            },
             display: {
               resources,
               scale: 1.1,
             },
             player: { enablePlayer: false },
-          })
+          }
+          const api = new AlphaTabApi(el, apiOptions)
           if (cancelled) {
             api.destroy?.()
             return
@@ -216,9 +238,14 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           })
 
           api.renderFinished.on(() => {
-            if (readyPostedRef.current) return
-            readyPostedRef.current = true
-            onReady?.()
+            if (!readyPostedRef.current) {
+              readyPostedRef.current = true
+              onReady?.()
+            }
+            const p = pendingBarRef.current
+            if (p !== null && tryScrollToBarRef.current(api, p)) {
+              pendingBarRef.current = null
+            }
           })
 
           setEngineReady(true)
@@ -235,7 +262,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
       return () => {
         cancelled = true
+        uiGuard.abort()
         setEngineReady(false)
+        pendingBarRef.current = null
         const api = apiRef.current
         apiRef.current = null
         readyPostedRef.current = false
@@ -274,14 +303,14 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
     return (
       <View
-        className="min-h-[220px] flex-1 overflow-hidden rounded-xl border border-wood-600 bg-wood-900"
+        className="min-h-[220px] flex-1 overflow-hidden rounded-xl border border-wood-600/45 bg-ivory"
         style={style}
       >
         {(bootError || engineError) && (
-          <View className="border-b border-wood-600 bg-wood-800 px-3 py-2">
-            <Text className="font-sans text-xs text-amber-light">{bootError ?? engineError}</Text>
+          <View className="border-b border-amber-accent/30 bg-amber-accent/10 px-3 py-2">
+            <Text className="font-sans text-xs text-wood-900">{bootError ?? engineError}</Text>
             <Pressable onPress={onRetry} className="mt-2 self-start" accessibilityRole="button">
-              <Text className="font-sans-medium text-xs text-cream underline">Retry</Text>
+              <Text className="font-sans-medium text-xs text-amber-accent underline">Retry</Text>
             </Pressable>
           </View>
         )}
@@ -304,7 +333,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         )}
         {!gp5Base64?.trim() && mounted ? (
           <View
-            className="absolute bottom-2 left-2 right-2 rounded-lg bg-wood-900/90 px-2 py-1.5"
+            className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
             <Text className="text-center font-sans text-[11px] text-muted-brown">

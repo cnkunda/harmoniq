@@ -4,7 +4,7 @@ import { View } from 'react-native'
 import colors from '@/src/constants/colors'
 import { SESSION_STEPS, sessionStepIndexFromPathname } from '@/src/constants/sessionFlow'
 
-/** Minimal top dots: filled amber through current step, muted wood ahead. */
+/** Minimal top dots — same tokens as design preview (amber-accent · wood-600). */
 export function SessionStepIndicator() {
   const pathname = usePathname()
   const active = sessionStepIndexFromPathname(pathname)

@@ -47,6 +47,11 @@
       }
 
       var api = new alphaTab.AlphaTabApi(container, {
+        core: {
+          useWorkers: false,
+          enableLazyLoading: false,
+          scriptFile: 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.3.1/dist/alphaTab.min.js',
+        },
         display: {
           resources: {
             mainGlyphColor: '#F0DEB4',

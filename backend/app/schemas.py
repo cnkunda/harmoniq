@@ -56,3 +56,31 @@ class JobStatus(BaseModel):
     status: Literal["processing", "complete", "failed"] = "processing"
     result: LessonJSON | None = None
     error: str | None = None
+
+
+class ScoreRequest(BaseModel):
+    """POST /score request payload."""
+
+    model_config = ConfigDict(extra="allow")
+
+    recording_wav_base64: str
+    recording_mime_type: str | None = None
+    section: dict[str, Any] = Field(default_factory=dict)
+    skill_nodes: list[str] = Field(default_factory=list)
+
+
+class ScoreWaveformComparison(BaseModel):
+    user_wav_base64: str = ""
+    reference_wav_base64: str = ""
+
+
+class ScoreResult(BaseModel):
+    """POST /score response payload."""
+
+    pitch_accuracy: float
+    note_duration_deltas: list[float] = Field(default_factory=list)
+    phrasing_score: float
+    bend_pitch_error_cents: float
+    rushing_score: float
+    node_scores: dict[str, float] = Field(default_factory=dict)
+    waveform_comparison: ScoreWaveformComparison

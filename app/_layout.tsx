@@ -23,6 +23,7 @@ import { NoiseOverlay } from '@/components/NoiseOverlay'
 import Toast from 'react-native-toast-message'
 
 import { toastConfig } from '@/components/ToastConfig'
+import { initDb } from '@/src/db/client'
 
 cssInterop(LinearGradient, { className: 'style' })
 
@@ -45,6 +46,12 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded) SplashScreen.hideAsync()
   }, [loaded])
+
+  useEffect(() => {
+    void initDb().catch((e) => {
+      console.error('[db] init failed', e)
+    })
+  }, [])
 
   if (!loaded) {
     return null

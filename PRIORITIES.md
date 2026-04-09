@@ -955,8 +955,8 @@ Keep tab viewport aligned with playback; correct if >100ms drift.
 
 ### Acceptance Criteria
 
-* [ ] Scrolling tracks playback through at least one verse on test song
-* [ ] Artificial clock skew test (dev toggle) triggers resync visibly once
+* [x] Scrolling tracks playback through at least one verse on test song
+* [x] Artificial clock skew test (dev toggle) triggers resync visibly once
 
 ### Out of Scope
 
@@ -983,9 +983,9 @@ Combine pedagogy UI: fretboard SVG/skia simple, lyrics strip from `lyrics_aligne
 
 ### Acceptance Criteria
 
-* [ ] Lyrics highlight or scroll follows playback time when audio plays from Study
-* [ ] Capo line renders plausible text for test keys
-* [ ] Annotation persists while app stays mounted
+* [x] Lyrics highlight or scroll follows playback time when audio plays from Study
+* [x] Capo line renders plausible text for test keys
+* [x] Annotation persists while app stays mounted
 
 ### Out of Scope
 
@@ -1010,9 +1010,9 @@ Reuse Listen controls with different defaults and auto-loop hottest bar from ana
 
 ### Acceptance Criteria
 
-* [ ] Entering Slow starts at 65% with pitch correction on where supported
-* [ ] Hardest bar loops until user clears loop
-* [ ] SmartScroll still works
+* [x] Entering Slow starts at 65% with pitch correction on where supported
+* [x] Hardest bar loops until user clears loop
+* [x] SmartScroll still works
 
 ### Out of Scope
 
@@ -1039,9 +1039,9 @@ User plays along: guitar stem muted, bass+drums on, pitch UI, silence detection 
 
 ### Acceptance Criteria
 
-* [ ] Recording buffer non-zero duration after Play
-* [ ] Pitch ladder colors match README thresholds (amber/sage/terracotta) — rough OK
-* [ ] Web shows HTTPS + mic guidance
+* [x] Recording buffer non-zero duration after Play
+* [x] Pitch ladder colors match README thresholds (amber/sage/terracotta) — rough OK
+* [x] Web shows HTTPS + mic guidance
 
 ### Out of Scope
 
@@ -1067,9 +1067,9 @@ Close the loop: upload recording, show comparison UI shell, display server score
 
 ### Acceptance Criteria
 
-* [ ] Successful score shows numeric summary text (even if ugly)
-* [ ] Failure shows retry affordance
-* [ ] MIDI file opens in external app when shared/exported
+* [x] Successful score shows numeric summary text (even if ugly)
+* [x] Failure shows retry affordance
+* [x] MIDI file opens in external app when shared/exported
 
 ### Out of Scope
 
@@ -1097,9 +1097,9 @@ Real `ScoreResult` per README: pitch accuracy, phrasing, rushing, node_scores, w
 
 ### Acceptance Criteria
 
-* [ ] Known-good recording scores higher than random noise fixture
-* [ ] Response JSON validates; client renders without crash
-* [ ] Latency acceptable for UX (<10s on dev machine for short clip)
+* [x] Known-good recording scores higher than random noise fixture
+* [x] Response JSON validates; client renders without crash
+* [x] Latency acceptable for UX (<10s on dev machine for short clip)
 
 ### Out of Scope
 
@@ -1125,8 +1125,8 @@ Persist sessions, licks, skill nodes, jam snapshots per README SQL.
 
 ### Acceptance Criteria
 
-* [ ] App relaunch retains inserted session row
-* [ ] Foreign-less schema matches README columns
+* [x] App relaunch retains inserted session row
+* [x] Foreign-less schema matches README columns
 
 ### Out of Scope
 
@@ -1152,8 +1152,8 @@ After Review, update skill nodes and compute `next_review_date` per README formu
 
 ### Acceptance Criteria
 
-* [ ] Unit tests cover interval expansion/contraction
-* [ ] Completing session changes SQLite row and log shows new dates
+* [x] Unit tests cover interval expansion/contraction
+* [x] Completing session changes SQLite row and log shows new dates
 
 ### Out of Scope
 

@@ -3,6 +3,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { ActivityIndicator, Platform, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 
+import colors from '@/src/constants/colors'
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
 import type { AlphaTabSurfaceRef, TabInboundMessage, TabThemeColors } from '@/types/tabMessage'
 import { decodeTabMessage, encodeTabMessage } from '@/types/tabMessage'
@@ -121,7 +122,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
     if (Platform.OS === 'web') {
       return (
         <View
-          className="items-center justify-center rounded-xl border border-wood-600 bg-wood-900 p-4"
+          className="items-center justify-center rounded-xl border border-wood-600/45 bg-cream-dark/40 p-4"
           style={style}
         >
           <Text className="text-center font-sans text-sm text-muted-brown">
@@ -134,21 +135,21 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
     if (assetError || !harnessUri) {
       return (
         <View
-          className="min-h-[200px] items-center justify-center gap-3 rounded-xl border border-wood-600 bg-wood-900 p-4"
+          className="min-h-[200px] items-center justify-center gap-3 rounded-xl border border-wood-600/45 bg-ivory p-4"
           style={style}
         >
           {assetError ? (
-            <Text className="text-center font-sans text-sm text-red-300">{assetError}</Text>
+            <Text className="text-center font-sans text-sm text-danger">{assetError}</Text>
           ) : (
-            <ActivityIndicator color="#D4860A" />
+            <ActivityIndicator color={colors.amber.accent} />
           )}
           {assetError ? (
             <Pressable
               onPress={onRetry}
-              className="rounded-lg border border-amber-accent px-4 py-2"
+              className="rounded-lg border border-amber-accent/50 bg-amber-accent/90 px-4 py-2"
               accessibilityRole="button"
             >
-              <Text className="font-sans-medium text-amber-light">Retry</Text>
+              <Text className="font-sans-medium text-wood-900">Retry</Text>
             </Pressable>
           ) : null}
         </View>
@@ -156,12 +157,12 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
     }
 
     return (
-      <View className="min-h-[220px] flex-1 overflow-hidden rounded-xl border border-wood-600 bg-wood-900" style={style}>
+      <View className="min-h-[220px] flex-1 overflow-hidden rounded-xl border border-wood-600/45 bg-ivory" style={style}>
         {harnessError ? (
-          <View className="border-b border-wood-600 bg-wood-800 px-3 py-2">
-            <Text className="font-sans text-xs text-amber-light">{harnessError}</Text>
+          <View className="border-b border-amber-accent/30 bg-amber-accent/10 px-3 py-2">
+            <Text className="font-sans text-xs text-wood-900">{harnessError}</Text>
             <Pressable onPress={onRetry} className="mt-2 self-start" accessibilityRole="button">
-              <Text className="font-sans-medium text-xs text-cream underline">Reload harness</Text>
+              <Text className="font-sans-medium text-xs text-amber-accent underline">Reload harness</Text>
             </Pressable>
           </View>
         ) : null}
@@ -190,7 +191,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         />
         {!gp5Base64?.trim() ? (
           <View
-            className="absolute bottom-2 left-2 right-2 rounded-lg bg-wood-900/90 px-2 py-1.5"
+            className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
             <Text className="text-center font-sans text-[11px] text-muted-brown">

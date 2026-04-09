@@ -210,6 +210,40 @@ pip install -e ".[basicpitch]"
 
 On **macOS**, that extra usually installs cleanly. If you are on Windows or Linux, track [basic-pitch](https://pypi.org/project/basic-pitch/) / TensorFlow updates, use a **conda** environment the project documents later, or install pitch tooling in a separate venv until upstream relaxes the pin.
 
+#### WSL / Linux + Python 3.11+ — `No matching distribution found for tensorflow<2.15.1`
+
+If `pip install -e ".[basicpitch]"` fails with that error (your resolver only sees TensorFlow **2.16+** wheels), the **metadata pin** from `basic-pitch` is stricter than what PyPI publishes for your platform. **Unofficial workaround** (many teams use this until upstream relaxes the pin):
+
+1. With your backend venv activated and `pip install -e .` already OK:
+
+   ```bash
+   pip install "tensorflow>=2.16,<2.21"
+   ```
+
+   Use **`tensorflow-cpu`** instead of `tensorflow` if you want a smaller CPU-only wheel and avoid pulling CUDA TF by default.
+
+2. Install **basic-pitch without letting pip pull TensorFlow**:
+
+   ```bash
+   pip install "basic-pitch>=0.4.0" --no-deps
+   ```
+
+3. Install **basic-pitch 0.4.0**’s remaining runtime deps explicitly. Do **not** use `resampy` 0.4.3 — that package caps at **`resampy<0.4.3`** (pip conflict if you only ran `pip install resampy`):
+
+   ```bash
+   pip install "mir-eval>=0.6" "pretty-midi>=0.2.9" "resampy>=0.2.2,<0.4.3" scipy typing-extensions
+   ```
+
+4. Verify:
+
+   ```bash
+   python -c "from basic_pitch.inference import predict; print('basic-pitch OK')"
+   ```
+
+**Expected noise:** `pip check` may still report conflicts with **basic-pitch**’s *declared* pins (`tensorflow<2.15.1`, etc.) because you intentionally overrode them. If step 4 succeeds and analyze no longer logs `stub note events`, you are fine.
+
+If inference crashes inside TensorFlow, versions are incompatible — fall back to **stub tabs** or use **macOS** / **conda** until Spotify ships a relaxed pin.
+
 ## License / stack
 
 Same as the parent Harmoniq repository. Not all upstream models (e.g. demucs checkpoints, whisper weights) are redistributed here — they download on first use.

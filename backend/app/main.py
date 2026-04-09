@@ -14,9 +14,12 @@ from fastapi.responses import FileResponse
 from app.schemas import (
     AnalyzeJobCreated,
     JobStatus,
+    ScoreRequest,
+    ScoreResult,
 )
 from app.ingest import get_job_dir
 from app.jobs import ANALYSIS_FAILED_USER_MESSAGE, enqueue_analyze_job, jobs
+from app.score import score_recording
 
 logger = logging.getLogger("harmoniq.api")
 logger.setLevel(logging.INFO)
@@ -195,3 +198,16 @@ async def analyze_status(job_id: str) -> JobStatus:
         raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
     logger.info("GET /analyze/%s status=%s", job_id, job.status)
     return job
+
+
+@app.post(
+    "/score",
+    response_model=ScoreResult,
+    tags=["Score"],
+    summary="POST /score",
+)
+async def score(payload: ScoreRequest) -> ScoreResult:
+    try:
+        return score_recording(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
