@@ -1506,8 +1506,8 @@ Placement results screen must not show raw exception text when `commitPlacementO
 
 ### Acceptance Criteria
 
-* [ ] Forced DB failure shows user-safe message only (no SQL / stack)
-* [ ] Success path unchanged
+* [x] Forced DB failure shows user-safe message only (no SQL / stack)
+* [x] Success path unchanged
 
 ### Out of Scope
 
