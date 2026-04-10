@@ -1179,8 +1179,8 @@ User sees one recommended session tied to earliest due node and library song.
 
 ### Acceptance Criteria
 
-* [ ] With manipulated DB dates, card switches to different node
-* [ ] Empty library shows Add Song path working to analyze flow
+* [x] With manipulated DB dates, card switches to different node
+* [x] Empty library shows Add Song path working to analyze flow
 
 ### Out of Scope
 
@@ -1207,8 +1207,8 @@ First-run gate: collect baseline, show radial nodes, write initial scores to SQL
 
 ### Acceptance Criteria
 
-* [ ] Fresh install completes onboarding and seeds 5 nodes with non-zero state
-* [ ] Second launch skips onboarding flag in SQLite/SecureStore
+* [x] Fresh install completes onboarding and seeds 5 nodes with non-zero state
+* [x] Second launch skips onboarding flag in SQLite/SecureStore
 
 ### Out of Scope
 
@@ -1244,18 +1244,20 @@ Give users the primary ingestion path: YouTube URL (universal) and audio file up
 
 ### Acceptance Criteria
 
-* [ ] YouTube URL → `analyze` → lesson appears on Home screen within one end-to-end test
-* [ ] `LoadingSkeleton` animates during the full polling window
-* [ ] `ErrorBanner` shown for invalid URL (4xx) and failed analysis (5xx)
-* [ ] Web: dropping an MP3 onto `AudioDropzone` triggers the same analyze flow as URL
-* [ ] `toast.success` fires with the song title on completion
-* [ ] Back navigation (X button) cancels mid-flight without crash (cancel pending poll)
+* [x] YouTube URL → `analyze` → lesson appears on Home screen within one end-to-end test
+* [x] `LoadingSkeleton` animates during the full polling window
+* [x] `ErrorBanner` shown for invalid URL (4xx) and failed analysis (5xx)
+* [x] Web: dropping an MP3 onto `AudioDropzone` triggers the same analyze flow as URL
+* [x] `toast.success` fires with the song title on completion
+* [x] Back navigation (X button) cancels mid-flight without crash (cancel pending poll)
 
 ### Out of Scope
 
 * YouTube search — URL paste only
 * Track trimming / preview before analysis
 
+Mid -- This is out of place - where does it fit in? Its own commit?
+-----
 ### Goal
 
 Persist licks from Review, browse, re-open AlphaTab + audio clip.
@@ -1271,8 +1273,8 @@ Persist licks from Review, browse, re-open AlphaTab + audio clip.
 
 ### Acceptance Criteria
 
-* [ ] Save from Review appears in list after relaunch
-* [ ] Drill opens Study/Play subset with same tab
+* [x] Save from Review appears in list after relaunch
+* [x] Drill opens Study/Play subset with same tab
 
 ### Out of Scope
 
@@ -1297,8 +1299,8 @@ User changes key/position; tab regenerates from MIDI data client-side or simple 
 
 ### Acceptance Criteria
 
-* [ ] Transpose changes visible pitches in AlphaTab
-* [ ] Filters narrow list correctly
+* [x] Transpose changes visible pitches in AlphaTab
+* [x] Filters narrow list correctly
 
 ### Out of Scope
 
@@ -1323,8 +1325,8 @@ Read-only views from SQLite: nodes diagram, history list, open Review visualizer
 
 ### Acceptance Criteria
 
-* [ ] Completed sessions appear chronologically
-* [ ] Node tap shows stored copy
+* [x] Completed sessions appear chronologically
+* [x] Node tap shows stored copy
 
 ### Out of Scope
 
@@ -1359,11 +1361,11 @@ Passive play: bundled loops, approximate scale/position map, summary saved.
 
 ### Acceptance Criteria
 
-* [ ] 5 bundled tracks loop seamlessly via `expo-av`
-* [ ] Ring pulse starts on "Start Jamming", stops on "Stop & Save"
-* [ ] Stop saves snapshot with non-empty map when user played steadily for ≥10 s
-* [ ] Server returns coach summary text or fallback
-* [ ] Web: `ErrorBanner` shown when browser mic is blocked; retry button re-requests permission
+* [x] 5 bundled tracks loop seamlessly via `expo-av`
+* [x] Ring pulse starts on "Start Jamming", stops on "Stop & Save"
+* [x] Stop saves snapshot with non-empty map when user played steadily for ≥10 s
+* [x] Server returns coach summary text or fallback
+* [x] Web: `ErrorBanner` shown when browser mic is blocked; retry button re-requests permission
 
 ### Out of Scope
 
@@ -1389,9 +1391,9 @@ Persist user tuning, style focus, metronome prefs, coach voice enum, data export
 
 ### Acceptance Criteria
 
-* [ ] Toggle changes default tab variant on next section load
-* [ ] Export produces readable file
-* [ ] Clear all wipes tables with confirm dialog
+* [x] Toggle changes default tab variant on next section load
+* [x] Export produces readable file
+* [x] Clear all wipes tables with confirm dialog
 
 ### Out of Scope
 
@@ -1417,9 +1419,9 @@ Web parity for storage and ingestion per README.
 
 ### Acceptance Criteria
 
-* [ ] Web drag-drop starts analyze without native file picker regressions
-* [ ] Reload page retains cached lesson for demo (document limits)
-* [ ] Mobile still uses SQLite unchanged
+* [x] Web drag-drop starts analyze without native file picker regressions
+* [x] Reload page retains cached lesson for demo (document limits)
+* [x] Mobile still uses SQLite unchanged
 
 ### Out of Scope
 
@@ -1445,8 +1447,8 @@ Centralize user-facing errors to match README table; no raw stack traces.
 
 ### Acceptance Criteria
 
-* [ ] Each README error situation has a triggered manual test note in `docs/ERROR_QA.md`
-* [ ] Forced failures show correct action button
+* [x] Each README error situation has a triggered manual test note in `docs/ERROR_QA.md`
+* [x] Forced failures show correct action button
 
 ### Out of Scope
 

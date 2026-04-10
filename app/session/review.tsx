@@ -6,9 +6,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 
+import { ErrorBanner } from '@/components/ErrorBanner'
+import { PhrasingVisualizerStub, ScoreSummaryCard } from '@/components/ReviewSessionPanel'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { toast } from '@/components/ToastConfig'
 import { submitScore } from '@/src/api/analyze'
-import { applyReviewSkillUpdates, getSessionCount, insertSessionRow } from '@/src/db/client'
+import type { MappedUiError } from '@/src/errors/mapErrorToUi'
+import { mapScoreFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
+import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
+import { applyReviewSkillUpdates, getSessionCount, insertLickRow, insertSessionRow } from '@/src/db/client'
 import { useSkillStore } from '@/src/stores/skillStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
@@ -80,9 +86,10 @@ export default function ReviewScreen() {
   const clearLatestTake = useSessionPlayStore((s) => s.clearLatestTake)
   const [busy, setBusy] = useState(false)
   const [score, setScore] = useState<ScoreResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [reviewError, setReviewError] = useState<MappedUiError | null>(null)
   const [exportState, setExportState] = useState<string>('Idle')
   const [sessionCount, setSessionCount] = useState<number | null>(null)
+  const [savingLick, setSavingLick] = useState(false)
 
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
   const sectionMidiBase64 =
@@ -96,17 +103,27 @@ export default function ReviewScreen() {
 
   const runScore = useCallback(async () => {
     if (!latestTake || latestTake.audioBytes.length === 0) {
-      setError('No recording buffer found from Play step. Re-run Play and record a take.')
+      setReviewError({
+        message: 'No performance capture yet. Go back to Play and record a short take.',
+        variant: 'warning',
+        actionKind: 'dismiss',
+        actionLabel: 'Dismiss',
+      })
       setScore(null)
       return
     }
     if (!section) {
-      setError('No section metadata found for scoring.')
+      setReviewError({
+        message: 'This section is missing data needed to score. Try another section or re-analyze the song.',
+        variant: 'warning',
+        actionKind: 'dismiss',
+        actionLabel: 'Dismiss',
+      })
       setScore(null)
       return
     }
     setBusy(true)
-    setError(null)
+    setReviewError(null)
     try {
       const result = await submitScore({
         recording_wav_base64: bytesToBase64(latestTake.audioBytes),
@@ -136,23 +153,26 @@ export default function ReviewScreen() {
         pitch_accuracy: result.pitch_accuracy,
         phrasing_score: result.phrasing_score,
         nodes_targeted: targeted,
+        review_snapshot: JSON.stringify(result),
       })
       await applyReviewSkillUpdates({
         node_scores: result.node_scores,
         targeted_node_ids: targeted,
       })
       await useSkillStore.getState().loadFromDb()
-      const refreshed = useSkillStore.getState().nodes
-      console.log(
-        '[skill] SM-2 after review',
-        refreshed
-          .filter((n) => targetedSet.has(n.id))
-          .map((n) => ({ id: n.id, score: n.score, next_review_date: n.next_review_date, interval_days: n.interval_days })),
-      )
+      if (__DEV__) {
+        const refreshed = useSkillStore.getState().nodes
+        console.log(
+          '[skill] SM-2 after review',
+          refreshed
+            .filter((n) => targetedSet.has(n.id))
+            .map((n) => ({ id: n.id, score: n.score, next_review_date: n.next_review_date, interval_days: n.interval_days })),
+        )
+      }
       setSessionCount(await getSessionCount())
     } catch (e) {
       setScore(null)
-      setError(e instanceof Error ? e.message : 'Score request failed')
+      setReviewError(mapScoreFlowError(e))
     } finally {
       setBusy(false)
     }
@@ -192,34 +212,67 @@ export default function ReviewScreen() {
     router.replace('/(tabs)')
   }
 
+  const saveLick = useCallback(async () => {
+    const gp5 = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
+    if (!gp5) {
+      setReviewError({
+        message: 'No tab is available to save for this section yet.',
+        variant: 'warning',
+        actionKind: 'dismiss',
+        actionLabel: 'Dismiss',
+      })
+      return
+    }
+    if (!section || typeof section !== 'object') {
+      setReviewError({
+        message: 'Section data is missing, so this lick cannot be saved.',
+        variant: 'warning',
+        actionKind: 'dismiss',
+        actionLabel: 'Dismiss',
+      })
+      return
+    }
+    setSavingLick(true)
+    try {
+      const sec = section as Record<string, unknown>
+      await insertLickRow({
+        id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        song_title: typeof lesson?.song_title === 'string' ? lesson.song_title : null,
+        artist: typeof lesson?.artist === 'string' ? lesson.artist : null,
+        key: typeof lesson?.key === 'string' ? lesson.key : null,
+        scale: null,
+        position: typeof sec.primary_position === 'string' ? sec.primary_position : typeof sec.label === 'string' ? sec.label : null,
+        tab_gp5_base64: gp5,
+        audio_segment_path: null,
+        coach_oneliner: typeof sec.coach_note === 'string' ? sec.coach_note : null,
+        technique_tags: [],
+        user_annotations: [],
+        date_saved: new Date().toISOString(),
+      })
+      toast.success('Saved to Library.')
+    } catch {
+      setReviewError({
+        message: 'Could not save to Library. Try again in a moment.',
+        variant: 'error',
+        actionKind: 'dismiss',
+        actionLabel: 'Dismiss',
+      })
+    } finally {
+      setSavingLick(false)
+    }
+  }, [insertLickRow, lesson?.artist, lesson?.key, lesson?.song_title, section, tabs.alt, tabs.full, tabs.skeleton])
+
   return (
     <SessionStepScreen
       title="Review"
-      subtitle="Score upload + phrasing visualizer shell + MIDI export."
+      subtitle="Session scores, optional MIDI export, and a placeholder phrasing view until the visualizer ships."
       showBack
       onBack={() => router.back()}
       showNext
       nextLabel="Done"
       onNext={finish}
     >
-      <View className="mt-3 rounded-lg border border-wood-600/45 bg-cream-dark/40 px-3 py-3">
-        <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
-          Phrasing visualizer (stub)
-        </Text>
-        <View className="mt-2 h-28 w-full overflow-hidden rounded-md border border-wood-600/45 bg-ivory">
-          <View className="absolute inset-0 flex-row">
-            {Array.from({ length: 12 }, (_, i) => (
-              <View key={`grid-${i}`} className="h-full flex-1 border-r border-wood-600/20" />
-            ))}
-          </View>
-          <View className="absolute left-2 right-2 top-6 h-1 rounded-full bg-danger/70" />
-          <View className="absolute left-2 right-4 top-14 h-1 rounded-full bg-amber-accent/85" />
-          <View className="absolute left-4 right-10 top-22 h-1 rounded-full bg-danger/70" />
-        </View>
-        <Text className="mt-2 font-sans text-[11px] text-muted-brown">
-          Terracotta = user take, amber = reference guide. Beat lines are static placeholders in this commit.
-        </Text>
-      </View>
+      <PhrasingVisualizerStub />
 
       <View className="mt-3 flex-row flex-wrap items-center gap-2">
         <Pressable
@@ -237,34 +290,44 @@ export default function ReviewScreen() {
         >
           <Text className="font-sans-medium text-wood-900">Export MIDI</Text>
         </Pressable>
+        <Pressable
+          onPress={() => void saveLick()}
+          disabled={savingLick}
+          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2 disabled:opacity-40"
+          accessibilityRole="button"
+        >
+          <Text className="font-sans-medium text-wood-900">{savingLick ? 'Saving…' : 'Save to Library'}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/library')}
+          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
+          accessibilityRole="button"
+        >
+          <Text className="font-sans-medium text-wood-900">Open Library</Text>
+        </Pressable>
       </View>
 
       <Text className="mt-2 font-mono text-[11px] text-muted-brown">{exportState}</Text>
 
-      {error ? (
-        <View className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2">
-          <Text className="font-sans text-sm text-danger">{error}</Text>
-          <Pressable
-            onPress={() => void runScore()}
-            className="mt-2 self-start rounded-md border border-danger/40 px-3 py-1.5"
-            accessibilityRole="button"
-          >
-            <Text className="font-sans-medium text-xs text-danger">Retry score</Text>
-          </Pressable>
-        </View>
+      {reviewError ? (
+        <ErrorBanner
+          className="mt-3"
+          {...toErrorBannerProps(reviewError, {
+            onRetry: () => {
+              setReviewError(null)
+              void runScore()
+            },
+            onDismiss: () => setReviewError(null),
+            onOpenSettings: () => {
+              void openHarmoniqAppSettings()
+              setReviewError(null)
+            },
+            onContinue: () => setReviewError(null),
+          })}
+        />
       ) : null}
 
-      {score ? (
-        <View className="mt-3 rounded-lg border border-success/30 bg-success/10 px-3 py-2">
-          <Text className="font-sans-medium text-sm text-wood-900">Score summary (numeric)</Text>
-          <Text className="mt-1 font-mono text-xs text-wood-900">
-            pitch_accuracy={score.pitch_accuracy.toFixed(3)} | phrasing_score={score.phrasing_score.toFixed(3)}
-          </Text>
-          <Text className="mt-1 font-mono text-xs text-wood-900">
-            rushing_score={score.rushing_score.toFixed(3)} | bend_error_cents={score.bend_pitch_error_cents.toFixed(1)}
-          </Text>
-        </View>
-      ) : null}
+      {score ? <ScoreSummaryCard score={score} /> : null}
 
       {!sectionMidiBase64 && (tabs.full || tabs.skeleton || tabs.alt) ? (
         <Text className="mt-2 font-sans text-[11px] text-muted-brown">

@@ -2,15 +2,20 @@ import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 
+import { ErrorBanner } from '@/components/ErrorBanner'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { createSessionRecorder } from '@/src/audio/recordSession'
+import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import type { RecordedTake } from '@/src/audio/recordSession.types'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
+import type { MappedUiError } from '@/src/errors/mapErrorToUi'
+import { mapMicPermissionDenied, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
+import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 const PITCH_COLORS = {
@@ -33,6 +38,7 @@ function hzToMidiFloat(hz: number): number {
 
 export default function PlayScreen() {
   const router = useRouter()
+  const initialMetronomeOn = useMetronomeDefaultOn()
   const lesson = useLessonStore((s) => s.lesson)
   const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const section = lesson?.sections?.[sectionIndex] as Record<string, unknown> | undefined
@@ -62,12 +68,12 @@ export default function PlayScreen() {
   const [status, setStatus] = useState('Idle')
   const [targetLabel, setTargetLabel] = useState(targetLadder[0]?.label ?? 'A')
   const [centsFromTarget, setCentsFromTarget] = useState<number | null>(null)
-  const [permissionHint, setPermissionHint] = useState<string | null>(null)
+  const [micError, setMicError] = useState<MappedUiError | null>(null)
   const [autostopTriggered, setAutostopTriggered] = useState(false)
 
   const startCapture = useCallback(async () => {
     setStatus('Starting mic + recorder…')
-    setPermissionHint(null)
+    setMicError(null)
     await recorderRef.current.start()
     await start((reading) => {
       lastPitchAtRef.current = Date.now()
@@ -184,13 +190,9 @@ export default function PlayScreen() {
             void (recording ? stopCapture('done') : startCapture()).catch((e) => {
               const message = e instanceof Error ? e.message : String(e)
               if (message === 'MIC_PERMISSION_DENIED') {
-                setPermissionHint(
-                  Platform.OS === 'web'
-                    ? 'Microphone permission denied. Enable it in browser site settings and retry.'
-                    : 'Microphone permission denied. Enable it in system settings and retry.',
-                )
+                setMicError(mapMicPermissionDenied(Platform.OS))
               }
-              setStatus(`Capture error: ${message}`)
+              setStatus(message === 'MIC_PERMISSION_DENIED' ? 'Microphone access needed' : `Capture error: ${message}`)
             })
           }}
           className="rounded-lg bg-amber-accent/90 px-4 py-2"
@@ -200,7 +202,21 @@ export default function PlayScreen() {
         </Pressable>
         <Text className="font-mono text-[11px] text-muted-brown">{status}</Text>
       </View>
-      {permissionHint ? <Text className="mt-1 font-sans text-xs text-danger">{permissionHint}</Text> : null}
+      {micError ? (
+        <ErrorBanner
+          className="mt-2"
+          dismissible={false}
+          {...toErrorBannerProps(micError, {
+            onRetry: () => setMicError(null),
+            onDismiss: () => setMicError(null),
+            onOpenSettings: () => {
+              void openHarmoniqAppSettings()
+              setMicError(null)
+            },
+            onContinue: () => setMicError(null),
+          })}
+        />
+      ) : null}
       {autostopTriggered ? (
         <Text className="mt-1 font-sans text-xs text-muted-brown">Auto-end triggered after 5 seconds of silence.</Text>
       ) : null}
@@ -212,6 +228,7 @@ export default function PlayScreen() {
 
       <SessionStemAndTab
         showSkewDemoButton={false}
+        initialMetronomeOn={initialMetronomeOn}
         initialStemMuteById={{ guitar: true, bass: false, drums: false, vocals: true, piano: true, other: true }}
         onPlaybackTick={(ctx) => {
           tickRef.current = ctx

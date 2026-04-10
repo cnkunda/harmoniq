@@ -1,7 +1,9 @@
+import { useFocusEffect } from '@react-navigation/native'
 import { useRouter } from 'expo-router'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
+import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { ListenStemPanel } from '@/components/ListenStemPanel'
 import { LyricsStrip } from '@/components/LyricsStrip'
@@ -13,6 +15,9 @@ import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
+import { getAppPref } from '@/src/db/client'
+import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
+import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 
 type TabVariant = 'full' | 'skeleton' | 'alt'
@@ -55,6 +60,10 @@ export default function StudyScreen() {
   const [tick, setTick] = useState<PlaybackTickContext>(DEFAULT_TICK)
 
   const section = lesson?.sections?.[lessonSectionIndex]
+  const transposeSemitones =
+    section && typeof section === 'object' && typeof (section as Record<string, unknown>).transposition_semitones === 'number'
+      ? ((section as Record<string, unknown>).transposition_semitones as number)
+      : 0
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
   const lyricWords = useMemo(() => toLyricWords(lesson?.lyrics_aligned), [lesson?.lyrics_aligned])
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()
@@ -69,10 +78,46 @@ export default function StudyScreen() {
   const sectionNotes = notesBySection[sectionKey] ?? {}
 
   const [variant, setVariant] = useState<TabVariant>('full')
+  const [preferSimplerTabs, setPreferSimplerTabs] = useState(false)
+  const [lowConfBannerDismissed, setLowConfBannerDismissed] = useState(false)
+
+  const transcriptionConfidence = lesson?.transcription_confidence
+  const showLowTranscriptionBanner =
+    typeof transcriptionConfidence === 'number' &&
+    transcriptionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX &&
+    !lowConfBannerDismissed
+
+  useFocusEffect(
+    useCallback(() => {
+      void getAppPref(PREF_PREFER_SIMPLER_TABS).then((v) => setPreferSimplerTabs(v === '1'))
+    }, []),
+  )
 
   useEffect(() => {
-    setVariant(tabs.full ? 'full' : tabs.skeleton ? 'skeleton' : tabs.alt ? 'alt' : 'full')
-  }, [lesson?.job_id, lessonSectionIndex, tabs.alt, tabs.full, tabs.skeleton])
+    setLowConfBannerDismissed(false)
+  }, [lesson?.job_id, lessonSectionIndex])
+
+  useEffect(() => {
+    const conf = lesson?.transcription_confidence
+    const uncertain = typeof conf === 'number' && conf < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX
+    let primary: TabVariant
+    if (preferSimplerTabs && uncertain) {
+      if (tabs.skeleton) primary = 'skeleton'
+      else if (tabs.alt) primary = 'alt'
+      else primary = tabs.full ? 'full' : 'skeleton'
+    } else {
+      primary = tabs.full ? 'full' : tabs.skeleton ? 'skeleton' : tabs.alt ? 'alt' : 'full'
+    }
+    setVariant(primary)
+  }, [
+    lesson?.job_id,
+    lesson?.transcription_confidence,
+    lessonSectionIndex,
+    preferSimplerTabs,
+    tabs.alt,
+    tabs.full,
+    tabs.skeleton,
+  ])
 
   const gp5Base64 = useMemo(() => {
     if (variant === 'full') return tabs.full ?? null
@@ -112,6 +157,19 @@ export default function StudyScreen() {
       onNext={() => router.push(sessionHref('slow'))}
     >
       <ListenStemPanel onPlaybackTick={setTick} />
+
+      {showLowTranscriptionBanner ? (
+        <ErrorBanner
+          className="mt-3"
+          dismissible
+          {...toErrorBannerProps(mapLowTranscriptionConfidenceBanner(), {
+            onRetry: () => setLowConfBannerDismissed(true),
+            onDismiss: () => setLowConfBannerDismissed(true),
+            onOpenSettings: () => setLowConfBannerDismissed(true),
+            onContinue: () => setLowConfBannerDismissed(true),
+          })}
+        />
+      ) : null}
 
       <FretboardDiagram keyLabel={keyLabel} positionLabel={positionLabel} capoText={capoText} />
 
@@ -158,7 +216,12 @@ export default function StudyScreen() {
       </View>
 
       <View className="mt-3 h-[320px] w-full">
-        <TabViewport ref={tabRef} gp5Base64={gp5Base64} style={{ flex: 1, height: '100%', width: '100%' }} />
+        <TabViewport
+          ref={tabRef}
+          gp5Base64={gp5Base64}
+          transposeSemitones={transposeSemitones}
+          style={{ flex: 1, height: '100%', width: '100%' }}
+        />
       </View>
     </SessionStepScreen>
   )
