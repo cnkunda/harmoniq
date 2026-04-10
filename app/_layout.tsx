@@ -14,7 +14,7 @@ import { useFonts } from 'expo-font'
 import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import { useEffect } from 'react'
-import { View } from 'react-native'
+import { Platform, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { cssInterop } from 'nativewind'
@@ -23,7 +23,7 @@ import { NoiseOverlay } from '@/components/NoiseOverlay'
 import Toast from 'react-native-toast-message'
 
 import { toastConfig } from '@/components/ToastConfig'
-import { initDb } from '@/src/db/client'
+import { hydrateWebLessonStore, initDb } from '@/src/db/client'
 
 cssInterop(LinearGradient, { className: 'style' })
 
@@ -48,9 +48,16 @@ export default function RootLayout() {
   }, [loaded])
 
   useEffect(() => {
-    void initDb().catch((e) => {
-      console.error('[db] init failed', e)
-    })
+    void (async () => {
+      try {
+        await initDb()
+        if (Platform.OS === 'web') {
+          await hydrateWebLessonStore()
+        }
+      } catch (e) {
+        console.error('[db] init failed', e)
+      }
+    })()
   }, [])
 
   if (!loaded) {
@@ -63,7 +70,15 @@ export default function RootLayout() {
         <View className="flex-1 bg-wood-900">
           <NoiseOverlay />
           <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding" />
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="add-song" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="library" />
+            <Stack.Screen name="jam" />
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="progress" />
+            <Stack.Screen name="review-archive/[sessionId]" />
             <Stack.Screen name="session" />
           </Stack>
           <Toast config={toastConfig} />

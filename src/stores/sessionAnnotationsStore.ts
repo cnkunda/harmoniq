@@ -10,6 +10,7 @@ type SessionAnnotationsState = {
   notesBySection: Record<string, Record<number, SessionAnnotation>>
   setNote: (sectionKey: string, barIndex: number, text: string) => void
   clearSection: (sectionKey: string) => void
+  clearAll: () => void
 }
 
 export const useSessionAnnotationsStore = create<SessionAnnotationsState>((set) => ({
@@ -35,4 +36,6 @@ export const useSessionAnnotationsStore = create<SessionAnnotationsState>((set) 
       delete next[sectionKey]
       return { notesBySection: next }
     }),
+
+  clearAll: () => set({ notesBySection: {} }),
 }))

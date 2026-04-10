@@ -7,6 +7,7 @@
 export type TabInboundMessage =
   | { type: 'setScore'; gp5Base64: string }
   | { type: 'scrollToBar'; barIndex: number }
+  | { type: 'setTranspose'; semitones: number }
   | { type: 'setTheme'; colors: Partial<TabThemeColors> }
 
 /**
@@ -26,6 +27,7 @@ export type TabThemeColors = {
 export type AlphaTabSurfaceRef = {
   scrollToBar: (barIndex: number) => void
   setTheme: (colors: Partial<TabThemeColors>) => void
+  setTranspose: (semitones: number) => void
 }
 
 /** Harness → parent */

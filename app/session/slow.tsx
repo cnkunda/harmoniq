@@ -5,6 +5,7 @@ import { Text, View } from 'react-native'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
+import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { parseSectionRecord } from '@/src/utils/lessonAudio'
 
@@ -128,6 +129,7 @@ function deriveSlowLoopRegion(
 
 export default function SlowScreen() {
   const router = useRouter()
+  const initialMetronomeOn = useMetronomeDefaultOn()
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
 
@@ -159,7 +161,7 @@ export default function SlowScreen() {
       <SessionStemAndTab
         showSkewDemoButton={false}
         initialRate={0.65}
-        initialMetronomeOn
+        initialMetronomeOn={initialMetronomeOn}
         autoLoopRegion={loopRegion ? { startSec: loopRegion.startSec, endSec: loopRegion.endSec, label: loopRegion.label } : null}
       />
     </SessionStepScreen>

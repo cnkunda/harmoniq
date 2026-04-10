@@ -15,6 +15,7 @@ const HARNESS_HTML = require('../assets/alphatab-harness/index.html') as number
 
 export type AlphaTabWebViewProps = {
   gp5Base64?: string | null
+  transposeSemitones?: number
   style?: StyleProp<ViewStyle>
   onReady?: () => void
   onHarnessError?: (message: string) => void
@@ -33,7 +34,7 @@ function isAllowedNavigationUrl(url: string): boolean {
 }
 
 export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewProps>(
-  function AlphaTabWebView({ gp5Base64, style, onReady, onHarnessError }, ref) {
+  function AlphaTabWebView({ gp5Base64, transposeSemitones = 0, style, onReady, onHarnessError }, ref) {
     const webRef = useRef<WebView>(null)
     const themeSentRef = useRef(false)
 
@@ -55,6 +56,9 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         },
         setTheme: (colors: Partial<TabThemeColors>) => {
           postInbound({ type: 'setTheme', colors })
+        },
+        setTranspose: (semitones: number) => {
+          postInbound({ type: 'setTranspose', semitones: Math.max(-12, Math.min(12, Math.round(semitones))) })
         },
       }),
       [postInbound],
@@ -88,11 +92,12 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         themeSentRef.current = true
         postInbound({ type: 'setTheme', colors: TAB_HARNESS_THEME })
       }
+      postInbound({ type: 'setTranspose', semitones: Math.max(-12, Math.min(12, Math.round(transposeSemitones))) })
       const raw = gp5Base64?.trim()
       if (raw) {
         postInbound({ type: 'setScore', gp5Base64: raw })
       }
-    }, [harnessReady, gp5Base64, postInbound])
+    }, [harnessReady, gp5Base64, postInbound, transposeSemitones])
 
     const onRetry = useCallback(() => {
       themeSentRef.current = false

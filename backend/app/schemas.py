@@ -82,5 +82,34 @@ class ScoreResult(BaseModel):
     phrasing_score: float
     bend_pitch_error_cents: float
     rushing_score: float
-    node_scores: dict[str, float] = Field(default_factory=dict)
+    node_scores: dict[str, float] = Field(default_factory=list)
     waveform_comparison: ScoreWaveformComparison
+
+
+class OnboardingPlacementRequest(BaseModel):
+    """Aggregated placement metrics for coach paragraph (PRIORITIES §32)."""
+
+    pitch_avg: float = Field(ge=0.0, le=1.0)
+    phrasing_avg: float = Field(ge=0.0, le=1.0)
+    timing_avg: float = Field(ge=0.0, le=1.0)
+    bend_error_cents_avg: float = Field(ge=0.0)
+
+
+class OnboardingPlacementResponse(BaseModel):
+    coach_paragraph: str
+
+
+class JamScoreRequest(BaseModel):
+    """POST /jam-score — passive jam summary (PRIORITIES §36)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    recording_wav_base64: str = ""
+    duration_seconds: int = Field(ge=0, default=0)
+    scale_position_map: dict[str, float] = Field(default_factory=dict)
+    inferred_scale_label: str | None = None
+
+
+class JamScoreResult(BaseModel):
+    coach_summary: str
+    scale_position_map: dict[str, float] = Field(default_factory=dict)

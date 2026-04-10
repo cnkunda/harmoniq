@@ -55,6 +55,13 @@ FALLBACK_COACH_EXPLANATION = (
     "Think about phrasing like a short sentence with a clear breath."
 )
 
+FALLBACK_ONBOARDING_PLACEMENT = (
+    "Your placement takes give us a usable baseline for pitch, phrasing, and timing. "
+    "What usually opens up first is a little more air between ideas — micro-pauses make the next note feel intentional instead of rushed. "
+    "Harmoniq will weight suggestions from here; when you add a real song, the home card will line up drills with what you are working on. "
+    "Keep bends relaxed and let vibrato settle before you move on — small stability wins there carry into everything else."
+)
+
 
 def _fallback_coach_fields() -> tuple[str, str]:
     return FALLBACK_COACH_NOTE, FALLBACK_COACH_EXPLANATION
@@ -162,6 +169,85 @@ def generate_coach_fields_for_section(
     finally:
         # Don't let hung network calls pin the caller after timeout fallback.
         pool.shutdown(wait=False, cancel_futures=True)
+
+
+def generate_onboarding_placement_summary(
+    *,
+    pitch_avg: float,
+    phrasing_avg: float,
+    timing_avg: float,
+    bend_error_cents_avg: float,
+) -> str:
+    """Single plain-text paragraph for placement results; never JSON."""
+    if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("HARMONIQ_ENABLE_COACH_IN_TESTS") != "1":
+        logger.info("onboarding placement coach fallback reason=pytest_mode")
+        return FALLBACK_ONBOARDING_PLACEMENT
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        logger.warning("onboarding placement coach fallback reason=missing_api_key")
+        return FALLBACK_ONBOARDING_PLACEMENT
+
+    user_prompt = f"""The guitarist just finished a Harmoniq placement session: three very short phrases recorded back-to-back.
+Aggregated scores (0–1 scale): pitch {pitch_avg:.2f}, phrasing {phrasing_avg:.2f}, timing {timing_avg:.2f}.
+Mean bend intonation error across takes: {bend_error_cents_avg:.1f} cents (lower is tighter).
+
+Write exactly one paragraph, 3–4 sentences, plain English. No bullet points, no JSON, no markdown.
+Follow README coach rules: one specific observation about their baseline, one actionable priority to work first, end with specific encouragement (not generic praise).
+Never start with "Great job" or "Nice work"."""
+
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(_call_claude_text, api_key=api_key, user_prompt=user_prompt)
+    try:
+        raw_text = future.result(timeout=COACH_TIMEOUT_SECONDS)
+        text = (raw_text or "").strip()
+        if len(text) < 50:
+            logger.warning("onboarding placement coach fallback reason=short_response")
+            return FALLBACK_ONBOARDING_PLACEMENT
+        return text
+    except FutureTimeoutError:
+        future.cancel()
+        logger.warning("onboarding placement coach fallback reason=timeout")
+        return FALLBACK_ONBOARDING_PLACEMENT
+    except Exception as exc:
+        logger.warning(
+            "onboarding placement coach fallback reason=api_error error=%s",
+            exc.__class__.__name__,
+        )
+        return FALLBACK_ONBOARDING_PLACEMENT
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
+def generate_jam_coach_summary(
+    duration_seconds: int,
+    inferred_scale_label: str | None,
+    scale_position_map: dict[str, float],
+) -> str:
+    """Local jam summary (PRIORITIES §36 — incremental; no LLM yet)."""
+    if duration_seconds < 10:
+        return (
+            "Short jam — try at least ten seconds next time so we can summarize your pitch tendencies against the loop."
+        )
+    label = (inferred_scale_label or "").strip()
+    lead = ""
+    if label and label != "—":
+        if not label.endswith("."):
+            label = f"{label}."
+        lead = f"You were leaning toward {label} "
+
+    if scale_position_map:
+        top_key, top_val = max(scale_position_map.items(), key=lambda kv: kv[1])
+        note = top_key.replace("pc_", "").replace("_", "")
+        rest = (
+            f"Strongest pitch-class weight: {note} ({top_val:.0%} of hits). "
+            "Use that tone as a home base and connect stepwise phrases around it."
+        )
+        return (lead + rest).strip()
+
+    return (
+        lead + "We did not pick up a clear pitch histogram — play a bit closer to the mic or a little louder next time."
+    ).strip() or "Jam saved. Keep connecting melodic ideas to the groove."
 
 
 def merge_coach_copy_into_sections(

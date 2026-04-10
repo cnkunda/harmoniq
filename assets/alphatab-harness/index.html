@@ -65,6 +65,7 @@
         },
         player: { enablePlayer: false },
       })
+      var currentTranspose = 0
 
       function postOut(msg) {
         try {
@@ -124,6 +125,15 @@
         api.updateSettings()
       }
 
+      function applyTranspose(semitones) {
+        var val = Number.isFinite(semitones) ? Math.round(semitones) : 0
+        val = Math.max(-12, Math.min(12, val))
+        currentTranspose = val
+        if (!api.settings.notation) api.settings.notation = {}
+        api.settings.notation.transpositionPitches = [val]
+        api.updateSettings()
+      }
+
       function onInboundMessage(event) {
         var msg = parseInbound(event.data)
         if (!msg || !msg.type) return
@@ -134,6 +144,7 @@
               return c.charCodeAt(0)
             })
             api.load(bytes.buffer)
+            applyTranspose(currentTranspose)
           } catch (e) {
             postOut({ type: 'error', message: (e && e.message) ? e.message : 'setScore: invalid GP5 data' })
           }
@@ -147,6 +158,11 @@
 
         if (msg.type === 'setTheme' && msg.colors) {
           applyTheme(msg.colors)
+          return
+        }
+
+        if (msg.type === 'setTranspose') {
+          applyTranspose(msg.semitones)
         }
       }
 

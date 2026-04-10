@@ -1,0 +1,2 @@
+{"sessionId":"f6121b","runId":"run-2","hypothesisId":"H2","location":"app/onboarding/index.tsx:mount","message":"onboarding welcome route mounted","data":{"pathname":"/onboarding/mic"},"timestamp":1775703044069}
+{"sessionId":"f6121b","runId":"run-2","hypothesisId":"H3","location":"app/+not-found.tsx:mount","message":"not-found screen mounted","data":{"pathname":"/onboarding/index"},"timestamp":1775703103199}

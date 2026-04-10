@@ -13,12 +13,17 @@ from fastapi.responses import FileResponse
 
 from app.schemas import (
     AnalyzeJobCreated,
+    JamScoreRequest,
+    JamScoreResult,
     JobStatus,
+    OnboardingPlacementRequest,
+    OnboardingPlacementResponse,
     ScoreRequest,
     ScoreResult,
 )
 from app.ingest import get_job_dir
 from app.jobs import ANALYSIS_FAILED_USER_MESSAGE, enqueue_analyze_job, jobs
+from app.coach import generate_jam_coach_summary, generate_onboarding_placement_summary
 from app.score import score_recording
 
 logger = logging.getLogger("harmoniq.api")
@@ -211,3 +216,39 @@ async def score(payload: ScoreRequest) -> ScoreResult:
         return score_recording(payload)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post(
+    "/onboarding-placement",
+    response_model=OnboardingPlacementResponse,
+    tags=["Onboarding"],
+    summary="POST /onboarding-placement — placement baseline coach paragraph",
+)
+async def onboarding_placement(payload: OnboardingPlacementRequest) -> OnboardingPlacementResponse:
+    paragraph = generate_onboarding_placement_summary(
+        pitch_avg=payload.pitch_avg,
+        phrasing_avg=payload.phrasing_avg,
+        timing_avg=payload.timing_avg,
+        bend_error_cents_avg=payload.bend_error_cents_avg,
+    )
+    return OnboardingPlacementResponse(coach_paragraph=paragraph)
+
+
+@app.post(
+    "/jam-score",
+    response_model=JamScoreResult,
+    tags=["Jam"],
+    summary="POST /jam-score — jam session summary (stub → incremental)",
+)
+async def jam_score(payload: JamScoreRequest) -> JamScoreResult:
+    client_map = {k: float(v) for k, v in (payload.scale_position_map or {}).items()}
+    coach = generate_jam_coach_summary(
+        duration_seconds=int(payload.duration_seconds),
+        inferred_scale_label=payload.inferred_scale_label,
+        scale_position_map=client_map,
+    )
+    merged = dict(client_map)
+    if int(payload.duration_seconds) >= 10 and client_map:
+        top = max(client_map.items(), key=lambda kv: kv[1])
+        merged["focus_pitch_class"] = float(top[1])
+    return JamScoreResult(coach_summary=coach, scale_position_map=merged)

@@ -1,0 +1,7 @@
+{"sessionId":"7ce2dc","runId":"pre-fix","hypothesisId":"H1","location":"app/add-song.tsx:77","message":"Analyze finished with lesson payload","data":{"jobId":"a52bfbed-c84a-4cea-966d-07c6ceaf5b1d","songTitle":"Librosa Lesson","sectionCount":3,"firstSectionHasTab":true},"timestamp":1775819999351}
+{"sessionId":"7ce2dc","runId":"pre-fix","hypothesisId":"H2","location":"src/stores/lessonStore.ts:63","message":"persistCachedLessonIfWeb resolved","data":{"ok":true},"timestamp":1775819999423}
+{"sessionId":"7ce2dc","runId":"pre-fix","hypothesisId":"H2","location":"src/stores/lessonStore.ts:59","message":"saveLesson invoked","data":{"songTitle":"Librosa Lesson","sectionCount":3},"timestamp":1775819999353}
+{"sessionId":"7ce2dc","runId":"pre-fix","hypothesisId":"H4","location":"app/library.tsx:95","message":"Library filter state evaluated","data":{"songFilter":"all","techniqueFilter":"all","lickCount":0,"filteredCount":0},"timestamp":1775820005203}
+{"sessionId":"7ce2dc","runId":"pre-fix","hypothesisId":"H3","location":"app/library.tsx:25","message":"Library loaded licks","data":{"count":0,"firstSong":null},"timestamp":1775820005205}
+{"sessionId":"7ce2dc","runId":"pre-fix","hypothesisId":"H4","location":"app/library.tsx:95","message":"Library filter state evaluated","data":{"songFilter":"all","techniqueFilter":"all","lickCount":0,"filteredCount":0},"timestamp":1775820089481}
+{"sessionId":"7ce2dc","runId":"pre-fix","hypothesisId":"H3","location":"app/library.tsx:25","message":"Library loaded licks","data":{"count":0,"firstSong":null},"timestamp":1775820089483}

@@ -17,6 +17,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       () => ({
         scrollToBar: () => {},
         setTheme: () => {},
+        setTranspose: () => {},
       }),
       [],
     )

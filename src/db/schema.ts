@@ -57,6 +57,40 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 `
 
+/** v3: app key-value (onboarding flag, future prefs). */
+export const MIGRATION_V3_APP_PREFS = `
+CREATE TABLE IF NOT EXISTS app_prefs (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL
+);
+`
+
+/** v4: persisted review payload + optional on-disk waveform paths (PRIORITIES §35). */
+export const MIGRATION_V4_SESSIONS_REVIEW = [
+  'ALTER TABLE sessions ADD COLUMN review_snapshot TEXT',
+  'ALTER TABLE sessions ADD COLUMN waveform_user_path TEXT',
+  'ALTER TABLE sessions ADD COLUMN waveform_ref_path TEXT',
+] as const
+
+export const PREF_ONBOARDING_COMPLETE = 'onboarding_complete'
+
+/** Prefer skeleton (or alt) tab when `LessonJSON.transcription_confidence` is low (PRIORITIES §37). */
+export const PREF_PREFER_SIMPLER_TABS = 'prefer_simpler_tabs'
+/** A4 reference in Hz (future tuner / playback). */
+export const PREF_STANDARD_TUNING_HZ = 'standard_tuning_hz'
+/** Short free-text style focus for coach context later. */
+export const PREF_STYLE_FOCUS = 'style_focus'
+/** Default metronome on when Slow/Play expose it. */
+export const PREF_METRONOME_DEFAULT_ON = 'metronome_default_on'
+/** `warm` | `concise` | `technical` — API prompt variant later. */
+export const PREF_COACH_VOICE = 'coach_voice'
+
+export const COACH_VOICE_OPTIONS = ['warm', 'concise', 'technical'] as const
+export type CoachVoiceId = (typeof COACH_VOICE_OPTIONS)[number]
+
+/** Below this `transcription_confidence`, analysis is treated as “uncertain” for tab defaults. */
+export const TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX = 0.72
+
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },
   { id: 'phrasing', label: 'Phrasing' },

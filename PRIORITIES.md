@@ -2,7 +2,7 @@
 
 Atomic, production-quality commits ordered for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (commits 0.1–0.6)** — Expo + design scaffold, backend shell, AlphaTab harness, env/backing tracks, shared UI feedback + API client — is **complete**. Archival scope, acceptance, and handoff live in the [appendix](#appendix--completed-phase-0-commits-01–06). **Commit 1** (notebook proof pipeline) is **complete**. **Active work below starts at commit 2.**
+**Phase 0 (commits 0.1–0.6)** — Expo + design scaffold, backend shell, AlphaTab harness, env/backing tracks, shared UI feedback + API client — is **complete**. Archival scope, acceptance, and handoff live in the [appendix](#appendix--completed-phase-0-commits-01–06). **Commits 1–41** below describe the full v1 engineering roadmap; implementation is **in tree** for all items through **§41**, except human/process gates and polish called out under [Open follow-ups (post-commit 41)](#open-follow-ups-post-commit-41). A compact [completion index](#appendix--roadmap-completion-index-commits-1-41) lists every delivered commit.
 
 ---
 
@@ -34,10 +34,13 @@ Atomic, production-quality commits ordered for **risk first**, **vertical slices
 
 | | |
 |--|--|
-| **Now** | **Commit 2** — Kill switch — stem separation quality gate |
+| **Roadmap status** | **Commits 1–41 delivered in repo** (backend pipeline through app productization + Library). Remaining before calling v1 “signed off”: human **pitch QA** sign-off ([§17](#17-kill-switch--pitch-accuracy-protocol)), optional **design-preview / harness** checks ([Appendix 0.6](#06-shared-feedback-layer-animatedpressable-loadingskeleton-emptystate-errorbanner-toast)), and backlog **§42–§44** ([open follow-ups](#open-follow-ups-post-commit-41)) if you want full README parity. |
 | **Product spec** | [`README.md`](README.md) |
 | **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
+| **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
+| **Error QA** | [`docs/ERROR_QA.md`](docs/ERROR_QA.md) |
 | **Scaffolding history** | [Appendix — Phase 0](#appendix--completed-phase-0-commits-01–06) |
+| **Completion index** | [Appendix — commits 1–41](#appendix--roadmap-completion-index-commits-1-41) |
 
 ---
 
@@ -776,7 +779,7 @@ Structured manual QA before Play step and scoring depend on pitch.
 
 * Automated pitch unit tests against synthetic sine (optional later)
 
-### ✅ Status: COMPLETE
+### ✅ Status: COMPLETE (protocol — human sign-off outstanding)
 
 ### Completion Notes
 
@@ -1256,29 +1259,41 @@ Give users the primary ingestion path: YouTube URL (universal) and audio file up
 * YouTube search — URL paste only
 * Track trimming / preview before analysis
 
-Mid -- This is out of place - where does it fit in? Its own commit?
------
+---
+
+## 41. Library — lick persistence + drill
+
 ### Goal
 
-Persist licks from Review, browse, re-open AlphaTab + audio clip.
+Persist licks from Review, browse, filter, transpose client-side, and re-open AlphaTab via session routes.
 
 ### Scope
 
-* `app/library.tsx` + SQLite `licks` CRUD
-* `Drill this` reuses session routes with lick payload
+* `app/library.tsx` + SQLite `licks` read paths (`getLicks`) and Review save (`insertLickRow`)
+* **Drill** hydrates `lessonStore` with a minimal `LessonJSON` shape from the lick row and navigates to `/session/study`
+* Filter chips by song title and technique tags; per-lick transpose semitones applied via `transposition_semitones` on the synthetic section
 
 ### Implementation Notes
 
 * Store `tab_gp5_base64` and optional `audio_segment_path` from stem slice later; v1 can omit clip if too heavy
+* Synthetic `job_id` `lick-<id>` avoids colliding with analyzed songs
 
 ### Acceptance Criteria
 
 * [x] Save from Review appears in list after relaunch
-* [x] Drill opens Study/Play subset with same tab
+* [x] Drill opens Study with the saved tab payload
+* [x] Transpose and filters affect the drilled tab
 
 ### Out of Scope
 
-* Transposition UI
+* Server-side `POST /transpose`; fuzzy search across licks
+
+### ✅ Status: COMPLETE
+
+### Completion Notes
+
+* `app/library.tsx` implements list, song/technique filters, transpose controls per row, and `drill()` → `saveLesson` + `router.push('/session/study')`.
+* Aligns with README **Lick Library** + **Drill mode** bullets.
 
 ---
 
@@ -1475,6 +1490,136 @@ Single document walks a new dev from cold start to full session on all platforms
 ### Out of Scope
 
 * CI pipeline setup
+
+---
+
+## 42. Onboarding results — README-aligned error UI
+
+### Goal
+
+Placement results screen must not show raw exception text when `commitPlacementOnboarding` or related DB work fails (parity with [README.md](README.md) error table and [§39](#39-error-states--copy-parity--browser-mic-blocked-handling)).
+
+### Scope
+
+* `app/onboarding/results.tsx` — replace `seedError` plain `Text` with `ErrorBanner` + `toErrorBannerProps` / small mapper (warm copy, **Dismiss** / **Retry** as appropriate)
+* Optional: reuse `README_ERROR_COPY` pattern or a dedicated `mapOnboardingPersistError`
+
+### Acceptance Criteria
+
+* [ ] Forced DB failure shows user-safe message only (no SQL / stack)
+* [ ] Success path unchanged
+
+### Out of Scope
+
+* Redesign of results radial layout
+
+---
+
+## 43. Phase 0 optional QA — design-preview + harness (greenfield machine)
+
+### Goal
+
+Close the remaining **optional** acceptance rows in [Appendix 0.6](#06-shared-feedback-layer-animatedpressable-loadingskeleton-emptystate-errorbanner-toast) when validating a fresh clone.
+
+### Scope
+
+* Run `npx expo start` — Home + **Design** tab (`__DEV__`): tokens, stubs, `API_BASE_URL`, backing-track smoke
+* Optional: backend `GET /health`; serve `assets/alphatab-harness/` over HTTP and confirm `ready` / `setScore` with real GP5 Base64
+
+### Acceptance Criteria
+
+* [ ] Rows documented in Appendix 0.6 marked complete in this file (or waived with issue link)
+* [ ] Short note added to `docs/E2E_DEMO.md` if harness steps differ on web vs native
+
+### Out of Scope
+
+* Automated E2E in CI
+
+---
+
+## 44. Review phrasing visualizer — beat-grid-aligned overlay
+
+### Goal
+
+README **V1 Scope** promises a **beat-grid-anchored phrasing visualizer** on Review; today `PhrasingVisualizerStub` uses static beat lines and placeholder curves ([`components/ReviewSessionPanel.tsx`](components/ReviewSessionPanel.tsx)).
+
+### Scope
+
+* Drive overlay from `lesson.beat_grid` / `bar_timestamps` + score payload (reference vs user timing)
+* Replace or progressively enhance stub: scroll/zoom optional; v1 minimum = correct bar alignment + one comparable series from `ScoreResult` / session buffers
+
+### Acceptance Criteria
+
+* [ ] Visualizer x-axis aligns to session beat grid (not arbitrary12 columns)
+* [ ] Copy no longer claims “static” lines when live data is wired
+* [ ] Archived review replay (`app/review-archive/*`) stays in sync if it shares the component
+
+### Out of Scope
+
+* Pixel-perfect parity with external DAW phrasing tools
+
+---
+
+## Open follow-ups (post-commit 41)
+
+| Track | Status | Where |
+|--------|--------|--------|
+| **§17** human gate | Protocol shipped; **one acceptance row remains `[ ]`** until two reviewers or reviewer + recording complete [docs/PITCH_QA.md](docs/PITCH_QA.md) | [§17](#17-kill-switch--pitch-accuracy-protocol) |
+| **§41 Library** | **Complete** — was orphaned in doc; now numbered | [§41](#41-library--lick-persistence--drill) |
+| **§42–§44** | **Backlog** — README / UX parity | [§42](#42-onboarding-results--readme-aligned-error-ui) · [§43](#43-phase-0-optional-qa--design-preview--harness-greenfield-machine) · [§44](#44-review-phrasing-visualizer--beat-grid-aligned-overlay) |
+| **v1 tag** | Use [docs/E2E_DEMO.md](docs/E2E_DEMO.md) §10 go/no-go after closing gates you care about | [§40](#40-kill-switch--end-to-end-demo-script--release-checklist) |
+
+---
+
+## Appendix — Roadmap completion index (commits 1-41)
+
+Single-page index: **implementation is in repo** for each row unless your checkout is incomplete. Full specs remain in sections above.
+
+| # | Title | Phase |
+|---|--------|--------|
+| 1 | Notebook proof pipeline | 1 |
+| 2 | Stem separation quality gate | 1 |
+| 3 | FastAPI skeleton analyze | 1 |
+| 4 | Async job runner | 1 |
+| 5 | Upload + YouTube → WAV | 1 |
+| 6 | Demucs in job | 1 |
+| 7 | librosa analysis | 1 |
+| 8 | Whisper lyrics | 1 |
+| 9 | basic-pitch → GP5 + confidence | 1 |
+| 10 | Analysis cache | 1 |
+| 11 | Claude coach strings | 1 |
+| 12 | Expo audio scaffold | 2 |
+| 13 | Playback matrix doc | 2 |
+| 14 | Multi-stem mixer | 2 |
+| 15 | Mic + pitch web | 2 |
+| 16 | Mic + pitch native | 2 |
+| 17 | Pitch QA protocol | 2 |
+| 18 | API client + lesson store | 2 |
+| 19 | Session router 5 steps | 2 |
+| 20 | Listen step | 2 |
+| 21 | AlphaTab WebView | 2 |
+| 22 | AlphaTab web DOM | 2 |
+| 23 | SmartScroll | 2 |
+| 24 | Study step | 2 |
+| 25 | Slow & loop | 2 |
+| 26 | Play step | 2 |
+| 27 | Review step | 2 |
+| 28 | POST /score | 3 |
+| 29 | SQLite schema | 3 |
+| 30 | SM-2 scheduler | 3 |
+| 31 | Home suggestion | 3 |
+| 32 | Onboarding placement | 3 |
+| 33 | Add Song | 4 |
+| 34 | Transpose lick + filters | 4 |
+| 35 | Progress screen | 4 |
+| 36 | Jam mode | 4 |
+| 37 | Settings | 4 |
+| 38 | IndexedDB web + cache | 4 |
+| 39 | Error copy + mic blocked | 4 |
+| 40 | E2E demo + release checklist | 4 |
+| 41 | Library + drill | 4 |
+
+**Follow-up engineering (not in index):** [§42–§44](#open-follow-ups-post-commit-41).
 
 ---
 

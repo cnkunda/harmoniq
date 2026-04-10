@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import { ApiError, pollAnalyzeJob, submitAnalyzeJob } from '@/src/api/analyze'
+import { clearCachedLessonIfWeb, persistCachedLessonIfWeb } from '@/src/db/persistCachedLesson'
 import type { AnalyzeJobStatus, LessonJSON } from '@/src/types'
 
 /** Idle / in-flight UI states plus server-reported job status from `AnalyzeJob`. */
@@ -18,7 +19,11 @@ export interface LessonStoreState {
   analyzeFromUrl: (url: string) => Promise<void>
   /** Starts file upload analyze; cancels any in-flight poll from a previous call. */
   analyzeFromFile: (file: Blob, filename?: string) => Promise<void>
+  /** Persist a resolved lesson payload in store for downstream session screens. */
+  saveLesson: (lesson: LessonJSON) => void
   clearError: () => void
+  /** Clears in-memory lesson (e.g. after “clear all practice data”). */
+  resetLesson: () => void
 }
 
 let pollGeneration = 0
@@ -46,6 +51,14 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
     set({ lessonSectionIndex: Math.max(0, Math.floor(index)) }),
 
   clearError: () => set({ error: null }),
+  resetLesson: () => {
+    set({ lesson: null, jobId: null, status: 'idle', error: null, lessonSectionIndex: 0 })
+    void clearCachedLessonIfWeb().catch(() => {})
+  },
+  saveLesson: (lesson: LessonJSON) => {
+    set({ lesson, status: 'complete', error: null })
+    void persistCachedLessonIfWeb(lesson).catch(() => {})
+  },
 
   analyzeFromUrl: async (url: string) => {
     const gen = ++pollGeneration

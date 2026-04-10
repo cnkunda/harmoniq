@@ -77,7 +77,7 @@ function mergeResources(theme?: Partial<TabThemeColors>): Record<string, string>
 }
 
 export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
-  function AlphaTabWeb({ gp5Base64, theme, style, onReady, onError }, ref) {
+  function AlphaTabWeb({ gp5Base64, transposeSemitones = 0, theme, style, onReady, onError }, ref) {
     const hostRef = useRef<HTMLDivElement | null>(null)
     const apiRef = useRef<AlphaTabApiLike | null>(null)
     const readyPostedRef = useRef(false)
@@ -138,6 +138,14 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       api.updateSettings()
     }, [])
 
+    const applyTranspose = useCallback((api: AlphaTabApiLike, semitones: number) => {
+      const value = Math.max(-12, Math.min(12, Math.round(semitones)))
+      const settings = api.settings as unknown as { notation?: { transpositionPitches?: number[] } }
+      if (!settings.notation) settings.notation = {}
+      settings.notation.transpositionPitches = [value]
+      api.updateSettings()
+    }, [])
+
     useImperativeHandle(
       ref,
       () => ({
@@ -149,8 +157,12 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           const api = apiRef.current
           if (api) applyThemePartial(api, colors)
         },
+        setTranspose: (semitones: number) => {
+          const api = apiRef.current
+          if (api) applyTranspose(api, semitones)
+        },
       }),
-      [applyThemePartial, scrollToBarIndex],
+      [applyThemePartial, applyTranspose, scrollToBarIndex],
     )
 
     useEffect(() => {
@@ -218,6 +230,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
               resources,
               scale: 1.1,
             },
+            notation: {
+              transpositionPitches: [Math.max(-12, Math.min(12, Math.round(transposeSemitones)))],
+            },
             player: { enablePlayer: false },
           }
           const api = new AlphaTabApi(el, apiOptions)
@@ -277,7 +292,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         }
         el.replaceChildren()
       }
-    }, [mounted, onError, onReady, reloadKey, themeKey])
+    }, [mounted, onError, onReady, reloadKey, themeKey, transposeSemitones])
 
     useEffect(() => {
       if (!engineReady) return
@@ -294,6 +309,13 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         onError?.(msg)
       }
     }, [engineReady, gp5Base64, onError])
+
+    useEffect(() => {
+      if (!engineReady) return
+      const api = apiRef.current
+      if (!api) return
+      applyTranspose(api, transposeSemitones)
+    }, [applyTranspose, engineReady, transposeSemitones])
 
     const onRetry = useCallback(() => {
       setBootError(null)

@@ -44,6 +44,10 @@ export function SessionStemAndTab({
   const section = lesson?.sections?.[lessonSectionIndex]
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
   const gp5Base64 = tabs.full ?? tabs.skeleton ?? null
+  const transposeSemitones =
+    section && typeof section === 'object' && typeof (section as Record<string, unknown>).transposition_semitones === 'number'
+      ? ((section as Record<string, unknown>).transposition_semitones as number)
+      : 0
 
   const [scrollReset, setScrollReset] = useState(0)
   const [skewGen, setSkewGen] = useState(0)
@@ -87,7 +91,12 @@ export function SessionStemAndTab({
       ) : null}
       {/* Fixed height: parent is in ScrollView (unbounded flex); flex-1 would collapse. */}
       <View className="mt-3 h-[320px] w-full">
-        <TabViewport ref={tabRef} gp5Base64={gp5Base64} style={{ flex: 1, height: '100%', width: '100%' }} />
+        <TabViewport
+          ref={tabRef}
+          gp5Base64={gp5Base64}
+          transposeSemitones={transposeSemitones}
+          style={{ flex: 1, height: '100%', width: '100%' }}
+        />
       </View>
     </>
   )
