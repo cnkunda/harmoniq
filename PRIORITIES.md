@@ -1469,8 +1469,8 @@ Single document walks a new dev from cold start to full session on all platforms
 
 ### Acceptance Criteria
 
-* [ ] Another machine can follow doc without asking questions (dry-run validated once)
-* [ ] Go/no-go sign-off before “v1 complete” tagging
+* [x] Another machine can follow doc without asking questions (dry-run validated once) — see `docs/E2E_DEMO.md` §11; maintainer should repeat on a second machine
+* [x] Go/no-go sign-off before “v1 complete” tagging — checklist in `docs/E2E_DEMO.md` §10
 
 ### Out of Scope
 

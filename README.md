@@ -46,6 +46,8 @@ The target player: intermediate guitarist drawn to John Mayer, Tommy Emmanuel, a
 
 Implementation order, phase groupings, and acceptance criteria live in **`PRIORITIES.md`**. **Phase 0** (Expo scaffold, design tokens, harness, env, shared UI feedback, typed analyze client) is complete; **Phase 1** onward is active work.
 
+**Cold start / release:** [docs/E2E_DEMO.md](docs/E2E_DEMO.md) walks a new machine from backend + app env through a full session and includes a v1 go/no-go checklist.
+
 ### Frontend
 - **Framework:**
   - React Native (Expo SDK 54, managed workflow) for iOS + Android
