@@ -15,6 +15,7 @@ import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
+import type { NoteEventMessage } from '@/types/tabMessage'
 import { getAppPref } from '@/src/db/client'
 import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
@@ -78,6 +79,8 @@ export default function StudyScreen() {
   const sectionNotes = notesBySection[sectionKey] ?? {}
 
   const [variant, setVariant] = useState<TabVariant>('full')
+  const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
+  const [fretPulseKey, setFretPulseKey] = useState(0)
   const [preferSimplerTabs, setPreferSimplerTabs] = useState(false)
   const [lowConfBannerDismissed, setLowConfBannerDismissed] = useState(false)
 
@@ -171,7 +174,13 @@ export default function StudyScreen() {
         />
       ) : null}
 
-      <FretboardDiagram keyLabel={keyLabel} positionLabel={positionLabel} capoText={capoText} />
+      <FretboardDiagram
+        keyLabel={keyLabel}
+        positionLabel={positionLabel}
+        capoText={capoText}
+        selectedNote={selectedNote}
+        pulseKey={fretPulseKey}
+      />
 
       <LyricsStrip words={lyricWords} playbackSec={tick.positionSec} />
 
@@ -207,11 +216,11 @@ export default function StudyScreen() {
         {variantButton('skeleton', 'Skeleton')}
         {tabs.alt ? variantButton('alt', 'Alt position') : null}
         <Pressable
-          onPress={() => tabRef.current?.scrollToBar(0)}
+          onPress={() => tabRef.current?.seekTo(0)}
           className="rounded-full border border-wood-600/50 bg-cream-dark/50 px-3 py-1.5"
           accessibilityRole="button"
         >
-          <Text className="font-sans text-xs text-wood-900">Scroll to bar 0</Text>
+          <Text className="font-sans text-xs text-wood-900">Seek to start</Text>
         </Pressable>
       </View>
 
@@ -220,6 +229,10 @@ export default function StudyScreen() {
           ref={tabRef}
           gp5Base64={gp5Base64}
           transposeSemitones={transposeSemitones}
+          onNoteEvent={(evt: NoteEventMessage) => {
+            setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
+            setFretPulseKey((k) => k + 1)
+          }}
           style={{ flex: 1, height: '100%', width: '100%' }}
         />
       </View>

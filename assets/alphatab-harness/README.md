@@ -1,6 +1,11 @@
 # AlphaTab harness (`index.html`)
 
-Self-contained page loaded inside **React Native `WebView`** (mobile) or embedded in **web** (iframe / `postMessage`). **AlphaTab** is loaded from jsDelivr — **pinned** to `@coderline/alphatab@1.3.1` (do not switch to `@latest` in production without testing).
+Self-contained page loaded inside **React Native `WebView`** (mobile) or embedded in **web** (iframe / `postMessage`). **AlphaTab** is loaded from jsDelivr — **pinned** to `@coderline/alphatab@1.6.1` (do not switch to `@latest` in production without testing).
+
+SoundFont setup in this harness:
+
+- SoundFont URL is currently pinned to `GeneralUser.sf2` (see `assets/soundfonts/SOURCES.md`)
+- Harness emits `soundFontLoad` status messages so app surfaces can show loading feedback
 
 ## Visual defaults (Harmoniq README)
 
@@ -24,17 +29,37 @@ Load a Guitar Pro 5 (binary) file from Base64 (standard base64, no `data:` prefi
 
 Invalid base64 or corrupt GP data produces an outbound **`error`** message.
 
-### `scrollToBar`
-
-Scroll the notation so the given **master bar** is in view. Index is **0-based** (first bar = `0`), consistent with `LessonJSON` bar indexing used for SmartScroll in the app spec.
+### `setAudioSrc`
 
 ```json
-{ "type": "scrollToBar", "barIndex": 4 }
+{ "type": "setAudioSrc", "audioSrc": "http://<lan-host>:8000/lesson-file?rel=data%2Fjobs%2F...%2Fguitar.wav" }
 ```
 
-If the score is not rendered yet (`boundsLookup` not ready), the harness posts **`error`** with a short reason. If the index does not exist, it posts **`error`**.
+Sets the external media source used as the canonical playback timeline for cursor sync.
 
-Implementation note: uses `boundsLookup.findMasterBarByIndex` and `uiFacade.scrollToY` (alphaTab 1.3.1).
+### `setPlaybackRate`
+
+```json
+{ "type": "setPlaybackRate", "playbackRate": 0.65 }
+```
+
+Updates external audio playback rate and immediately refreshes AlphaTab position.
+
+### `seekTo`
+
+```json
+{ "type": "seekTo", "positionMs": 12500 }
+```
+
+Seeks external audio to millisecond position and immediately calls `updatePosition`.
+
+### `getPosition`
+
+```json
+{ "type": "getPosition" }
+```
+
+Requests current external audio position in milliseconds.
 
 ### `setTheme`
 
@@ -63,7 +88,10 @@ JSON string messages. Parse with **`decodeTabMessage`** from `types/tabMessage.t
 | `type` | Fields | When |
 |--------|--------|------|
 | `ready` | — | Once, after the **first** `renderFinished` event (initial layout; score may still be empty until `setScore`). |
-| `error` | `message: string` | AlphaTab errors, bad `setScore`, invalid `scrollToBar`, etc. |
+| `error` | `message: string` | AlphaTab errors, bad `setScore`, media handler errors, etc. |
+| `position` | `positionMs: number` | Response to `getPosition`. |
+| `noteEvent` | `midi: number`, `beat: number`, optional `fret`, `string` | Forwarded from AlphaTab MIDI playback events (debounced to <= 33Hz). |
+| `soundFontLoad` | `status: loading \| loaded \| error`, optional `message` | Lifecycle signal from harness SoundFont preload path. |
 
 ### Native (`WebView`)
 
@@ -82,7 +110,7 @@ The script uses `window.parent.postMessage(data, '*')` when `parent !== window`.
    window.addEventListener('message', (e) => console.log('harness →', e.data))
    ```
 4. Paste a real `setScore` payload with valid GP5 base64 (generate from your pipeline or export a small `.gp5`).
-5. Call `scrollToBar` with an index that exists in that score.
+5. Call `setAudioSrc` and verify the cursor follows external media timeline.
 
 ## Security / UX
 

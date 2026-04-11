@@ -3,9 +3,10 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { ActivityIndicator, Platform, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 
+import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import colors from '@/src/constants/colors'
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
-import type { AlphaTabSurfaceRef, TabInboundMessage, TabThemeColors } from '@/types/tabMessage'
+import type { AlphaTabSurfaceRef, NoteEventMessage, TabInboundMessage, TabThemeColors } from '@/types/tabMessage'
 import { decodeTabMessage, encodeTabMessage } from '@/types/tabMessage'
 
 /** @deprecated Use `AlphaTabSurfaceRef` from `@/types/tabMessage`. */
@@ -15,10 +16,12 @@ const HARNESS_HTML = require('../assets/alphatab-harness/index.html') as number
 
 export type AlphaTabWebViewProps = {
   gp5Base64?: string | null
+  audioSrc?: string | null
   transposeSemitones?: number
   style?: StyleProp<ViewStyle>
   onReady?: () => void
   onHarnessError?: (message: string) => void
+  onNoteEvent?: (evt: NoteEventMessage) => void
 }
 
 function isAllowedNavigationUrl(url: string): boolean {
@@ -34,15 +37,17 @@ function isAllowedNavigationUrl(url: string): boolean {
 }
 
 export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewProps>(
-  function AlphaTabWebView({ gp5Base64, transposeSemitones = 0, style, onReady, onHarnessError }, ref) {
+  function AlphaTabWebView({ gp5Base64, audioSrc, transposeSemitones = 0, style, onReady, onHarnessError, onNoteEvent }, ref) {
     const webRef = useRef<WebView>(null)
     const themeSentRef = useRef(false)
+    const getPositionResolverRef = useRef<((ms: number | null) => void) | null>(null)
 
     const [reloadKey, setReloadKey] = useState(0)
     const [harnessUri, setHarnessUri] = useState<string | null>(null)
     const [assetError, setAssetError] = useState<string | null>(null)
     const [harnessError, setHarnessError] = useState<string | null>(null)
     const [harnessReady, setHarnessReady] = useState(false)
+    const [soundFontReady, setSoundFontReady] = useState(false)
 
     const postInbound = useCallback((msg: TabInboundMessage) => {
       webRef.current?.postMessage(encodeTabMessage(msg))
@@ -51,11 +56,28 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
     useImperativeHandle(
       ref,
       () => ({
-        scrollToBar: (barIndex: number) => {
-          postInbound({ type: 'scrollToBar', barIndex })
+        setAudioSrc: (nextAudioSrc: string) => {
+          postInbound({ type: 'setAudioSrc', audioSrc: nextAudioSrc })
         },
-        setTheme: (colors: Partial<TabThemeColors>) => {
-          postInbound({ type: 'setTheme', colors })
+        setPlaybackRate: (playbackRate: number) => {
+          postInbound({ type: 'setPlaybackRate', playbackRate: Number.isFinite(playbackRate) ? playbackRate : 1 })
+        },
+        seekTo: (positionMs: number) => {
+          postInbound({ type: 'seekTo', positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs) : 0 })
+        },
+        getPosition: () =>
+          new Promise<number | null>((resolve) => {
+            getPositionResolverRef.current = resolve
+            postInbound({ type: 'getPosition' })
+            setTimeout(() => {
+              if (getPositionResolverRef.current === resolve) {
+                getPositionResolverRef.current = null
+                resolve(null)
+              }
+            }, 800)
+          }),
+        setTheme: (nextColors: Partial<TabThemeColors>) => {
+          postInbound({ type: 'setTheme', colors: nextColors })
         },
         setTranspose: (semitones: number) => {
           postInbound({ type: 'setTranspose', semitones: Math.max(-12, Math.min(12, Math.round(semitones))) })
@@ -96,12 +118,20 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
       const raw = gp5Base64?.trim()
       if (raw) {
         postInbound({ type: 'setScore', gp5Base64: raw })
+        const stemSrc = audioSrc?.trim()
+        if (stemSrc) {
+          // Score first, then wire external media source for cursor sync.
+          setTimeout(() => {
+            postInbound({ type: 'setAudioSrc', audioSrc: stemSrc })
+          }, 0)
+        }
       }
-    }, [harnessReady, gp5Base64, postInbound, transposeSemitones])
+    }, [audioSrc, harnessReady, gp5Base64, postInbound, transposeSemitones])
 
     const onRetry = useCallback(() => {
       themeSentRef.current = false
       setHarnessReady(false)
+      setSoundFontReady(false)
       setHarnessError(null)
       setAssetError(null)
       setReloadKey((k) => k + 1)
@@ -116,12 +146,31 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           onReady?.()
           return
         }
+        if (msg.type === 'position') {
+          getPositionResolverRef.current?.(msg.positionMs)
+          getPositionResolverRef.current = null
+          return
+        }
+        if (msg.type === 'noteEvent') {
+          onNoteEvent?.(msg)
+          return
+        }
+        if (msg.type === 'soundFontLoad') {
+          if (msg.status === 'loaded') setSoundFontReady(true)
+          if (msg.status === 'error') {
+            setSoundFontReady(true)
+            if (msg.message) {
+              setHarnessError(`SoundFont: ${msg.message}`)
+            }
+          }
+          return
+        }
         if (msg.type === 'error') {
           setHarnessError(msg.message)
           onHarnessError?.(msg.message)
         }
       },
-      [onHarnessError, onReady],
+      [onHarnessError, onNoteEvent, onReady],
     )
 
     if (Platform.OS === 'web') {
@@ -194,6 +243,12 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           setSupportMultipleWindows={false}
           style={{ flex: 1, backgroundColor: '#2B1D0E' }}
         />
+        {!soundFontReady ? (
+          <View className="absolute left-3 right-3 top-3 rounded-lg border border-wood-600/45 bg-wood-800/70 p-3">
+            <Text className="mb-2 font-sans text-[11px] text-cream">Loading guitar soundfont…</Text>
+            <LoadingSkeleton height={10} borderRadius={6} />
+          </View>
+        ) : null}
         {!gp5Base64?.trim() ? (
           <View
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"

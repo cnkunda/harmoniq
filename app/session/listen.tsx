@@ -27,7 +27,7 @@ export default function ListenScreen() {
   return (
     <SessionStepScreen
       title="Listen"
-      subtitle="Stems + tab + SmartScroll (bar_timestamps ↔ playback). Skew demo while playing."
+      subtitle="Stems + tab with AlphaTab external-media sync (audio timeline drives cursor)."
       showBack
       backLabel="Close"
       onBack={exitSession}

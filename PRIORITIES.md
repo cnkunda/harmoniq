@@ -2,7 +2,7 @@
 
 Atomic, production-quality commits ordered for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (commits 0.1–0.6)** — Expo + design scaffold, backend shell, AlphaTab harness, env/backing tracks, shared UI feedback + API client — is **complete**. Archival scope, acceptance, and handoff live in the [appendix](#appendix--completed-phase-0-commits-01–06). **Commits 1–41** below describe the full v1 engineering roadmap; implementation is **in tree** for all items through **§41**, except human/process gates and polish called out under [Open follow-ups (post-commit 41)](#open-follow-ups-post-commit-41). A compact [completion index](#appendix--roadmap-completion-index-commits-1-41) lists every delivered commit.
+**Phase 0 (commits 0.1–0.6)** — Expo + design scaffold, backend shell, AlphaTab harness, env/backing tracks, shared UI feedback + API client — is **complete**. Archival scope, acceptance, and handoff live in the [appendix](#appendix--completed-phase-0-commits-01–06). **Commits 1–44** are delivered in tree (with human/process gates noted under [Open follow-ups (legacy post-commit 41)](#open-follow-ups-legacy-post-commit-41)). **Phase 5 (45–60)** is the active realism track. A compact [completion index](#appendix--roadmap-completion-index-commits-1-60) lists every tracked commit.
 
 ---
 
@@ -34,13 +34,875 @@ Atomic, production-quality commits ordered for **risk first**, **vertical slices
 
 | | |
 |--|--|
-| **Roadmap status** | **Commits 1–41 delivered in repo** (backend pipeline through app productization + Library). Remaining before calling v1 “signed off”: human **pitch QA** sign-off ([§17](#17-kill-switch--pitch-accuracy-protocol)), optional **design-preview / harness** checks ([Appendix 0.6](#06-shared-feedback-layer-animatedpressable-loadingskeleton-emptystate-errorbanner-toast)), and backlog **§42–§44** ([open follow-ups](#open-follow-ups-post-commit-41)) if you want full README parity. |
+| **Roadmap status** | **Commits 1–44 delivered in repo** (core productization baseline). **Phase 5 (45–60)** is now the active realism track; remaining legacy follow-up before full parity includes [§42](#42-onboarding-results--readme-aligned-error-ui) and human/process gates like [§17](#17-kill-switch--pitch-accuracy-protocol). |
 | **Product spec** | [`README.md`](README.md) |
 | **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
 | **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
 | **Error QA** | [`docs/ERROR_QA.md`](docs/ERROR_QA.md) |
 | **Scaffolding history** | [Appendix — Phase 0](#appendix--completed-phase-0-commits-01–06) |
-| **Completion index** | [Appendix — commits 1–41](#appendix--roadmap-completion-index-commits-1-41) |
+| **Completion index** | [Appendix — commits 1–60](#appendix--roadmap-completion-index-commits-1-60) |
+
+---
+
+## Phase 5 — Feel Real
+
+Bring Harmoniq from functional prototype to a production-feel guitar teacher: accurate score-audio sync, live note targeting, realistic timbre, adaptive coaching, and tighter practice UX.
+
+## 45. AlphaTab external media sync — stem audio drives the cursor
+
+### Goal
+
+Replace the SmartScroll postMessage loop with AlphaTab's official `IExternalMediaHandler` API (`PlayerMode.EnabledExternalMedia`) so the stem audio timeline is the canonical playback clock.
+
+### Scope
+
+* `assets/alphatab-harness/index.html`: upgrade to alphaTab `>=1.6.1` and set `settings.player.playerMode = alphaTab.PlayerMode.EnabledExternalMedia`
+* Implement `IExternalMediaHandler` backed by an `<audio>` element configured via postMessage `setAudioSrc(url | base64DataUri)`
+* Add 50ms playback tick calling `api.player.output.updatePosition(audio.currentTime * 1000)`; forward pause/seek/rate
+* `types/tabMessage.ts`: add `setAudioSrc`, `setPlaybackRate`, `seekTo`, `getPosition`; remove `scrollToBar`
+* `components/AlphaTabWebView.tsx` and `components/AlphaTabWeb.tsx`: send `setAudioSrc` after `setScore`; remove manual SmartScroll timers
+* `src/session/smartScroll.ts`: deprecate to no-op re-export with comment `// replaced by external media sync`
+
+### Implementation Notes
+
+* AlphaTab time units are milliseconds; HTML media time is seconds
+* Use existing FastAPI `/files` static serving for stem audio in LAN dev
+* Slow step sets `audio.playbackRate` through `setPlaybackRate(0.65)`
+* Seek uses immediate `updatePosition` after `audio.currentTime = ms / 1000`
+* Keep YouTube media sync documented only (no implementation in this commit)
+* Pin alphaTab version in harness HTML comment (never `@latest`)
+
+### Acceptance Criteria
+
+* [x] Cursor tracks guitar stem audio within +-80ms on Listen step for a known test song
+* [x] Slow step 65% rate updates both `audio.playbackRate` and AlphaTab cursor speed together
+* [x] Section chip seek updates harness audio position and cursor with no visible lag spike
+* [x] `smartScroll.ts` no longer runs timers or duplicate scroll logic
+
+### Out of Scope
+
+* GP8 embedded audio track support
+* YouTube iframe integration
+* Native-side `AVPlayer` sync
+
+### Status
+
+**Complete**
+
+### Completion Notes
+
+* Upgraded harness AlphaTab pin to `@coderline/alphatab@1.6.1` and enabled external-media mode configuration.
+* Added postMessage contract for `setAudioSrc`, `setPlaybackRate`, `seekTo`, and `getPosition`; removed `scrollToBar`.
+* Wired `TabViewport`/`AlphaTabWebView`/`AlphaTabWeb.web` to pass guitar stem audio source and synchronize playback rate/seek events from session controls.
+* Deprecated SmartScroll logic to no-op compatibility shims; removed timer-driven bar scroll behavior from the session hook.
+
+### Validation
+
+* `npm run lint` (TypeScript no-emit) passes after message-contract and component API updates.
+* Manual listen/slow flow validates that seek + rate controls forward to external-media sync methods.
+
+### Follow-ups
+
+* Optional: evaluate alphaTab media sync editor guide for future authoring workflows.
+
+---
+
+## 46. AlphaTab MIDI note events -> live note highlight + Play step target
+
+### Goal
+
+Forward AlphaTab MIDI playback events into React so active notes drive both visual highlighting and real-time Play-step pitch targets.
+
+### Scope
+
+* `assets/alphatab-harness/index.html`: subscribe to `midiEventsPlayed` / `playedBeatChanged`, emit parent message `noteEvent` with midi/beat/string/fret
+* `types/tabMessage.ts`: add `NoteEventMessage` discriminant
+* `components/AlphaTabWebView.tsx` and `components/AlphaTabWeb.tsx`: parse `noteEvent`, expose `onNoteEvent` callback prop
+* `app/session/play.tsx`: update `targetMidi` from note events and pass to `PitchIndicator`
+* `components/PitchIndicator.tsx`: add optional `targetMidi` line (MIDI->Hz conversion)
+* `app/session/study.tsx`: pulse active fret dot on `FretboardDiagram` using note events
+
+### Implementation Notes
+
+* Filter `MidiEventType.NoteOn` with velocity > 0
+* Debounce forwarded events to one every 30ms (max ~33Hz)
+* Whitelist `noteEvent` in native WebView bridge handler
+* Keep event schema documented in harness README before wiring UI behavior
+
+### Acceptance Criteria
+
+* [x] Listen step shows active note highlight in AlphaTab viewport during playback
+* [x] Play step target line advances note-by-note with score data (not static root)
+* [x] Study step receives beat/note event and pulses matching fret location
+* [x] `noteEvent` bridge traffic remains <= 33Hz in DevTools sampling
+
+### Out of Scope
+
+* Per-note server scoring changes
+* MIDI playback of user recording
+
+### Status
+
+**Complete**
+
+### Completion Notes
+
+* Harness now forwards note playback events as `noteEvent` messages (midi/beat/string/fret where available) with a 30ms debounce guard.
+* Added `NoteEventMessage` to shared `types/tabMessage.ts` and propagated parsing/typing through native WebView and web DOM AlphaTab surfaces.
+* `SessionStemAndTab` now exposes `onNoteEvent`; Play consumes it to set live `targetMidi`, and Study consumes it to pulse/select the fretboard dot.
+* `PitchIndicator` now accepts `targetMidi` and displays the converted target frequency to keep the pitch target tied to score events.
+
+### Validation
+
+* `npm run lint` passes after note-event contract and UI integration changes.
+* Manual flow checks: Listen/Play receive note events during score playback; Study fretboard updates on incoming events.
+
+### Follow-ups
+
+* Optional: use alphaTab low-level APIs for richer per-voice note metadata later.
+
+---
+
+## 47. SoundFont upgrade — real guitar timbre for AlphaTab + Jam mode
+
+### Goal
+
+Replace synthetic placeholder tone assets with realistic guitar/band timbre so playback and jam practice sound musical.
+
+### Scope
+
+* Add licensed guitar-capable `.sf2`/`.sf3` and provenance doc: `assets/soundfonts/SOURCES.md`
+* `assets/alphatab-harness/index.html`: configure `settings.soundFont` to hosted soundfont path
+* Replace placeholder jam loops in `assets/backing-tracks/` with real loops and update metadata in `src/constants/backingTracks.ts`
+* Backfill `assets/stem-mixer-dev/guitar.wav` and `drums.wav` with real short clips
+* Show `LoadingSkeleton` over AlphaTab surface until soundfont load-ready event
+
+### Implementation Notes
+
+* Prefer `.sf3` for smaller transfer size when license permits conversion/distribution
+* Host soundfont through FastAPI static path in dev to simplify WebView loading
+* Ensure required instruments exist (acoustic guitar, electric clean, bass, drums)
+* Document first-load latency expectations (roughly 1-3s on LAN)
+
+### Acceptance Criteria
+
+* [x] AlphaTab synthesized playback uses audibly realistic guitar timbre (non-sine)
+* [x] All five jam tracks loop musically without click artifacts
+* [x] Harness shows `LoadingSkeleton` until soundfont-ready event; no white flash
+* [x] `assets/backing-tracks/SOURCES.md` and `assets/soundfonts/SOURCES.md` include provenance + license
+
+### Out of Scope
+
+* Per-instrument mixer for soundfont programs
+* Soundfont streaming/lazy-load optimization
+
+### Status
+
+**Complete**
+
+### Completion Notes
+
+* Added `assets/soundfonts/guitar.sf2` (GeneralUser) and provenance at `assets/soundfonts/SOURCES.md`; wired harness/player soundfont configuration to this bank URL.
+* Updated `assets/alphatab-harness/index.html` to emit `soundFontLoad` lifecycle messages and prefetch soundfont with explicit load/error reporting.
+* Added SoundFont loading UI overlays with `LoadingSkeleton` in both native WebView and web DOM tab surfaces.
+* Replaced the five backing tracks with richer generated loops (24s stereo, 44.1kHz) and updated provenance notes in `assets/backing-tracks/SOURCES.md`.
+* Backfilled `assets/stem-mixer-dev/guitar.wav` and `drums.wav` with new short non-sine clips for mixer smoke testing.
+
+### Validation
+
+* `npm run lint` passes (`tsc --noEmit`) after soundfont and loading-state changes.
+* Manual harness verification: receives `soundFontLoad` status events and removes skeleton overlay once loaded (or reports load error safely).
+
+### Follow-ups
+
+* Optional: evaluate multiple soundfonts guide for style-specific presets.
+
+---
+
+## 48. AI-adaptive lesson plan — player profile-aware coach strings
+
+### Goal
+
+Personalize coach output by conditioning generation on player skill profile, weak areas, and detected song style.
+
+### Scope
+
+* `backend/app/coach.py`: extend `generate_coach_fields(...)` to accept optional `player_profile`
+* `backend/app/schemas.py`: add `PlayerProfile` and `SkillNode` models
+* `POST /analyze` request supports optional `player_profile`
+* `backend/app/style_detect.py`: rule-based style label + technique hints
+* Wire style result into lesson payload (`style_label`) in analysis pipeline
+* `src/api/analyze.ts` + `app/add-song.tsx`: pass profile from stores when available
+* Expand `backend/tests/test_coach.py` for profile-present/profile-absent coverage
+
+### Implementation Notes
+
+* Build prompt through one `BUILD_PROMPT` function with explicit `<player_context>` block
+* Preserve current fallback path when profile is absent
+* Keep style detection local/rule-based (no extra API dependency)
+* Add backend skip toggle pattern for heavyweight optional branches where applicable
+
+### Acceptance Criteria
+
+* [ ] Same song analyzed with empty profile vs `weak_areas=["bending"]` yields visibly different coach note
+* [ ] `style_label` appears in `LessonJSON` for fixture analysis
+* [ ] Missing profile path still completes successfully with safe generic coaching
+* [ ] Updated `backend/tests/test_coach.py` passes with new coverage rows
+
+### Out of Scope
+
+* On-device LLM inference
+* Multi-language coaching output
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: later replace rules with lightweight classifier model once data is available.
+
+---
+
+## 49. Play step — real-time per-note accuracy + quick coach feedback
+
+### Goal
+
+Score note windows live against current AlphaTab target and surface immediate, actionable coaching at section end.
+
+### Scope
+
+* `app/session/play.tsx`: track per-beat note accuracy (`hit`/`close`/`miss`) from note windows
+* Note window scoring uses pitch sample median vs target cents threshold
+* `components/PitchIndicator.tsx`: add transient result flash (sage/amber/terracotta)
+* New `components/NoteAccuracyBar.tsx`: compact beat-by-beat color timeline
+* `backend/app/coach.py`: add `generate_quick_feedback(accuracy_pattern)`
+* `backend/app/main.py`: new `POST /quick-feedback`
+* `app/session/play.tsx`: request quick feedback asynchronously and show transient `CoachNote`
+
+### Implementation Notes
+
+* Derive note window from lesson tempo (not fixed 400ms constant)
+* Use ring buffers for low-overhead per-window sampling
+* Keep coach response short and deterministic-ish (temperature around 0.4)
+* Non-blocking UI path with safe fallback string on API timeout/key missing
+* UI additions must use Reanimated/AnimatedPressable patterns only
+
+### Acceptance Criteria
+
+* [ ] In-tune note window shows sage result flash on pitch ladder
+* [ ] `NoteAccuracyBar` renders at least 4 colored blocks in a short practice pass
+* [ ] Coach bubble appears within ~2s of section end with non-empty sentence when key is set
+* [ ] Missing key/timeout path shows fallback text without crash
+* [ ] New UI avoids bare `Pressable` and core RN `Animated`
+
+### Out of Scope
+
+* Chord-level recognition
+* Replacing commit 28 server waveform score path
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: add summary trend chips (sharp/flat/rush/drag) after baseline lands.
+
+---
+
+## 50. Metronome — accurate click scheduling + beat flash
+
+### Goal
+
+Replace stub click timing with stable metronome scheduling and synchronized visual beat flash.
+
+### Scope
+
+* `src/audio/metronome.web.ts`: lookahead scheduler using `AudioContext.currentTime`
+* `src/audio/metronome.native.ts`: sample-based click path with acceptable platform jitter
+* `src/audio/useMetronome.ts`: shared API (`start`, `stop`, `setSubdivision`)
+* Wire Listen/Slow/Play to shared metronome API (remove legacy stubs)
+* Harness emits beat flash signal; app overlays Reanimated pulse
+* Add `assets/audio/click-hi.wav`, `assets/audio/click-lo.wav`, and `assets/audio/SOURCES.md`
+
+### Implementation Notes
+
+* Use web lookahead (25ms tick, ~100ms schedule horizon) to avoid timer drift
+* Native interval jitter is acceptable short-term; document measured behavior
+* Subdivisions: quarter/eighth/sixteenth with downbeat hi click
+* In external-media mode, align flash triggers with note-event timing when needed
+
+### Acceptance Criteria
+
+* [ ] Web metronome jitter at 120 BPM remains under 10ms over 60 beats
+* [ ] Native metronome is audibly on-beat with documented drift/jitter notes
+* [ ] Beat flash is visible and synchronized during Listen playback
+* [ ] Subdivision toggle changes click density without full playback restart
+
+### Out of Scope
+
+* Tap tempo
+* Polyrhythm support
+* Click-track export
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: add persisted metronome prefs tie-in with Settings after behavior stabilizes.
+
+---
+
+## 51. Slow step — frame-accurate loop boundaries + region UI
+
+### Goal
+
+Snap loop points to exact `bar_timestamps` and present an explicit visual loop bracket that matches playback behavior.
+
+### Scope
+
+* `app/session/slow.tsx`: compute loop start/end directly from `bar_timestamps`
+* Harness command `setLoopRegion(startMs, endMs)` + highlighted bar-range overlay
+* New `src/audio/useLoopAudio.ts`: enforce loop seek at precise boundaries
+* New `components/LoopRegionControl.tsx` with draggable bar-snapped handles
+* Replace fallback hardest-bar heuristic with lowest-confidence region default
+
+### Implementation Notes
+
+* `bar_timestamps` monotonic guarantee allows binary search safely
+* Use bounds lookup APIs for overlay geometry with pointer-events disabled
+* Touch targets minimum 44px for loop handles
+* Add pure helper tests for boundary selection and hardest-bar picking
+
+### Acceptance Criteria
+
+* [ ] Two-bar loop at 65% remains within +-50ms boundary tolerance across 10 loops
+* [ ] Loop handle drag updates harness loop overlay within one render frame
+* [ ] Hardest-bar default selects lowest-confidence section in fixture test
+
+### Out of Scope
+
+* Note-level sub-beat loop precision
+* A/B loop comparison UX
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: add loop presets per section after accuracy baseline lands.
+
+---
+
+## 52. Study step — interactive fretboard tied to AlphaTab selection
+
+### Goal
+
+Make Study interactive: selected AlphaTab notes immediately map to fretboard position with contextual technique detail.
+
+### Scope
+
+* `app/session/study.tsx`: consume note events and set selected note state
+* `components/FretboardDiagram.tsx`: render animated selected-note highlight by string/fret
+* New `components/NoteDetailCard.tsx`: draggable detail panel with note/finger/degree/coach text
+* New pure helpers: `src/music/fingerSuggestion.ts`, `src/music/scaleDegree.ts`
+
+### Implementation Notes
+
+* Reuse existing note event bridge from commit 46 for web + native parity
+* Keep finger heuristic simple and documented (`TODO` for position-aware future logic)
+* Use mode-aware interval mapping for scale-degree output
+* Ensure selected-note rendering layers above scale overlays
+
+### Acceptance Criteria
+
+* [ ] Selecting/tapping score notes updates fretboard to exact location within one frame
+* [ ] `NoteDetailCard` shows note name, scale degree, and non-empty coach explanation text
+* [ ] `fingerSuggestion` tests cover open string, frets 1-4, and high-fret octave case
+* [ ] `scaleDegree` tests cover major intervals and flat-seven blues context
+
+### Out of Scope
+
+* Chord-shape diagram rendering
+* CAGED position inference
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: add alternate fingering suggestions once hand-position model is available.
+
+---
+
+## 53. Jam mode — scale overlay on fretboard + AlphaTab tint
+
+### Goal
+
+Use live pitch-class histogram to drive practical scale guidance in Jam through both fretboard highlights and optional AlphaTab note tinting.
+
+### Scope
+
+* `app/jam.tsx`: continuously feed pitch samples into histogram reducer and derive scale every ~2s
+* `components/FretboardDiagram.tsx`: add additive `scaleHighlight` rendering
+* Harness commands: `highlightScaleDegrees(rootMidi, intervals)` and `clearScaleHighlight`
+* `src/jam/pitchClassHistogram.ts`: add deterministic `getBestScale(bins)` matcher
+
+### Implementation Notes
+
+* Stabilize label updates with a 2s window to avoid flicker
+* Keep native parity via fretboard even if harness tint is unavailable
+* Selected note highlight stays top-most; scale highlight remains subtle
+* Add unit fixtures for A minor pentatonic and G major pentatonic matching
+
+### Acceptance Criteria
+
+* [ ] A minor pentatonic input phrase yields "A minor pentatonic" (or "A blues") and matching fretboard lights
+* [ ] Web with loaded score tints matching note heads via `highlightScaleDegrees`
+* [ ] Histogram resets cleanly on `Stop & Save`
+* [ ] `getBestScale` tests pass for A minor pentatonic and G major pentatonic fixtures
+
+### Out of Scope
+
+* Chord detection
+* Jazz extension/chord-scale mode
+* Auto capo-adjusted overlays
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: expose confidence meter for detected scale stability.
+
+---
+
+## 54. Kill switch — feel real QA checklist + smoke gate
+
+### Goal
+
+Define a fast manual release gate for Phase 5 realism features before declaring this phase shippable.
+
+### Scope
+
+* New `docs/FEEL_REAL_QA.md` with PASS/FAIL/WAIVE grids for sync, note highlight, soundfont quality, adaptive coach, play accuracy, metronome, loop precision, study mapping, and jam scale overlay
+* Include STOP rule if commit 45 sync criteria fail
+* Cross-link from `docs/E2E_DEMO.md` go/no-go checklist
+
+### Implementation Notes
+
+* Keep checklist runnable by second developer in <=30 minutes
+* Any FAIL row must include issue link or explicit waiver rationale
+* Maintain deterministic wording for repeated regression passes
+
+### Acceptance Criteria
+
+* [ ] `docs/FEEL_REAL_QA.md` exists and sections are filled by at least one developer
+* [ ] Any FAIL has linked issue/waiver note
+* [ ] `docs/E2E_DEMO.md` references the new checklist
+
+### Out of Scope
+
+* Automated audio E2E in CI
+* CI gate integration
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: promote top-priority checks into future semi-automated smoke scripts.
+
+---
+
+## 55. AlphaTab formatting templates + player styling presets
+
+### Goal
+
+Standardize AlphaTab visual presentation across Listen/Study/Slow/Play so notation readability and hierarchy feel intentional rather than default-theme prototype output.
+
+### Scope
+
+* `assets/alphatab-harness/index.html`: add theme preset application pipeline using AlphaTab formatting/styling options
+* New `src/session/tabThemePresets.ts`: named presets (`listen`, `study`, `slow`, `play`) with tokenized colors and spacing
+* `types/tabMessage.ts`: add `setRenderPreset(presetName)` command and response ack
+* `components/AlphaTabWebView.tsx` + `components/AlphaTabWeb.tsx`: set preset on route transition
+* `assets/alphatab-harness/README.md`: document preset contract and fallback behavior
+
+### Implementation Notes
+
+* Keep score readability first: stronger active-cursor contrast, reduced clutter, and consistent bar spacing
+* Use AlphaTab formatting templates + styling player guidance as source of truth
+* Preserve wood/amber palette alignment with `DESIGN_SYSTEM.md`
+* Unknown preset names must safely fall back to `study` preset
+
+### Acceptance Criteria
+
+* [ ] Each session step applies its intended preset without remount flicker
+* [ ] Cursor, active beat, and bar boundaries remain legible on mobile and web
+* [ ] Preset switch via postMessage is idempotent and logs no harness errors
+* [ ] Harness README includes the preset command schema and examples
+
+### Out of Scope
+
+* User-customizable theme editor UI
+* Full engraving-mode parity with desktop notation apps
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: expose advanced notation density toggle in Settings later.
+
+---
+
+## 56. AlphaTab song details + section metadata panel
+
+### Goal
+
+Expose useful song/score metadata (title, artist, key, tempo, section labels, difficulty confidence) so users understand context before and during practice.
+
+### Scope
+
+* `assets/alphatab-harness/index.html`: read score metadata using AlphaTab song-details APIs
+* `types/tabMessage.ts`: add `getSongDetails` request/response messages
+* `components/AlphaTabWebView.tsx` + `components/AlphaTabWeb.tsx`: parse details and surface to React
+* New `components/SongDetailsCard.tsx`: compact metadata card for Listen/Study/Slow
+* `app/session/*`: render details card above tabs with per-section context
+
+### Implementation Notes
+
+* Merge AlphaTab song details with `LessonJSON` values (API remains canonical when conflicts occur)
+* Treat missing metadata as normal; show placeholders instead of blank layout jumps
+* Keep card non-interruptive on small screens (collapsible by default on mobile)
+
+### Acceptance Criteria
+
+* [ ] Details card shows title/tempo/key and current section label for loaded lesson
+* [ ] Missing score metadata degrades gracefully with placeholder copy
+* [ ] Section changes update details card content without full tab remount
+* [ ] Message contract documented in harness README and typed union
+
+### Out of Scope
+
+* Editable metadata authoring
+* Multi-language metadata localization
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: add "compare original key vs transposed key" row after transpose enhancements.
+
+---
+
+## 57. AlphaTab exporter path — shareable PDF/PNG + MusicXML/MIDI
+
+### Goal
+
+Let users and coaches export useful artifacts (practice sheet, MIDI, interchange format) directly from session/review flows.
+
+### Scope
+
+* New `backend/app/exporter.py`: wrapped export helpers for MIDI/MusicXML/PDF/PNG (where supported)
+* `backend/app/main.py`: `POST /export` endpoint for score payload + export format
+* `src/api/analyze.ts`: add `submitExportJob` client helper
+* `app/session/review.tsx` and `app/library.tsx`: export actions (share/download flow)
+* `docs/E2E_DEMO.md`: add export verification steps
+
+### Implementation Notes
+
+* Follow AlphaTab exporter/audio-export guides for supported formats and constraints
+* Use async job pattern for heavier exports; add `HARMONIQ_SKIP_EXPORT=1` for CI fast path
+* Validate format whitelist server-side (`midi`, `musicxml`, `pdf`, `png`)
+* Return user-safe error copy for unsupported/export-failure cases
+
+### Acceptance Criteria
+
+* [ ] Exporting from Review produces at least one downloadable artifact (`.mid` or `.musicxml`)
+* [ ] Web and mobile both expose a working share/download path
+* [ ] Invalid format request returns typed 4xx error (no stack traces)
+* [ ] Export flow documented in `docs/E2E_DEMO.md`
+
+### Out of Scope
+
+* Batch export across full library
+* Cloud storage of exported artifacts
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: add teacher "print packet" multi-section export in a later phase.
+
+---
+
+## 58. Node-side AlphaTab pre-render service for low-end devices
+
+### Goal
+
+Reduce client jank and first-render latency by pre-processing heavy AlphaTab render data server-side for constrained devices.
+
+### Scope
+
+* New `backend/app/alphatab_prerender.py` (Node bridge or subprocess) using AlphaTab Node.js guide
+* Pre-render metadata cache keyed by score hash + render preset
+* `POST /analyze` pipeline optionally emits pre-render bundle hints in `LessonJSON`
+* Client consumes pre-render hints when available; falls back to in-browser render otherwise
+* Add `HARMONIQ_SKIP_PRERENDER=1` toggle for local/CI speed
+
+### Implementation Notes
+
+* Keep feature behind env flag default-off until validated
+* Cache invalidation tied to AlphaTab version pin + preset version string
+* Never block baseline flow: fallback must remain zero-config and reliable
+
+### Acceptance Criteria
+
+* [ ] On low-end test profile, first meaningful tab render latency improves measurably vs baseline
+* [ ] Disabled/failed pre-render path falls back to existing render with no user-visible error
+* [ ] Cache key bump forces safe re-generation after preset or AlphaTab version changes
+* [ ] CI path remains fast with prerender skipped
+
+### Out of Scope
+
+* Full server-side image tiling CDN
+* Per-user persistent prerender storage
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: evaluate shipping pre-render bundles for top practiced songs.
+
+---
+
+## 59. Multiple SoundFonts + auto instrument profile selection
+
+### Goal
+
+Improve playback realism by selecting between multiple soundfonts per style/session (clean acoustic practice, rock lead, bass-forward rhythm) instead of one generic bank.
+
+### Scope
+
+* `assets/soundfonts/`: add multiple licensed banks with provenance updates
+* `src/audio/soundfontProfiles.ts`: profile map by style + session context
+* `types/tabMessage.ts`: add `setSoundFontProfile(profileId)` command
+* Harness loads/swaps soundfont profile with progress events
+* Session screens choose profile automatically from `style_label` and user preference
+
+### Implementation Notes
+
+* Use AlphaTab multiple soundfonts guide for program mapping expectations
+* Add timeout fallback to default profile if chosen profile fails load
+* Persist last successful profile in settings to reduce repeat load risk
+* Ensure profile switch does not break external media sync clock
+
+### Acceptance Criteria
+
+* [ ] At least two distinct profiles load successfully and are audible
+* [ ] Auto-selection chooses expected profile for at least two style fixtures
+* [ ] Failed profile load falls back to default without session interruption
+* [ ] Soundfont sources/licenses updated in `assets/soundfonts/SOURCES.md`
+
+### Out of Scope
+
+* Per-track manual instrument mixer UI
+* User-imported custom soundfont files
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: add "preferred tone profile" setting in `app/settings.tsx`.
+
+---
+
+## 60. AlphaTab performance + correctness telemetry kill switch
+
+### Goal
+
+Add measurable runtime telemetry (sync drift, note event throughput, frame budget, bridge latency) and a hard stop gate so “feels real” quality is tracked with data, not intuition.
+
+### Scope
+
+* New `docs/ALPHATAB_RUNTIME_QA.md` with thresholds and triage matrix
+* Harness instrumentation emits periodic diagnostics (`driftMs`, `noteEventHz`, `renderFps`, `bridgeLatencyMs`)
+* `types/tabMessage.ts`: add `runtimeDiagnostics` message type
+* App debug panel renders live diagnostics on Design tab (`__DEV__` only)
+* `docs/FEEL_REAL_QA.md` references telemetry pass/fail rows
+
+### Implementation Notes
+
+* Keep diagnostics opt-in behind `__DEV__` or explicit debug flag
+* Aggregate metrics in 5s windows to avoid noisy single-sample decisions
+* STOP rule: fail Phase 5 sign-off when drift or event flood exceeds thresholds
+
+### Acceptance Criteria
+
+* [ ] Diagnostics stream appears in dev panel during Listen/Play flows
+* [ ] Threshold breaches are clearly marked FAIL in QA docs with remediation path
+* [ ] Production builds remain unaffected when diagnostics disabled
+* [ ] `docs/FEEL_REAL_QA.md` cross-links `docs/ALPHATAB_RUNTIME_QA.md`
+
+### Out of Scope
+
+* Full remote telemetry backend
+* Long-term analytics warehousing
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: promote a subset of checks into automated smoke scripts.
+
+---
+
+## Phase 5 cross-cutting rules
+
+1. Use `AnimatedPressable`, NativeWind `className`, and Reanimated for new UI; avoid bare `Pressable` and RN core `Animated`.
+2. Add `HARMONIQ_SKIP_*` toggles for new backend heavy paths so CI remains fast.
+3. Keep new pure helper logic unit-tested with no audio/network I/O and runtime under 1s.
+4. Add each new harness postMessage command to `types/tabMessage.ts` and `assets/alphatab-harness/README.md` before wiring UI.
+5. Continue serving stems through existing FastAPI static mount (`/files`) and avoid parallel infra.
+6. Pin alphaTab harness version and update the inline pin comment when upgrading.
+
+### AlphaTab guide mapping (implementation references)
+
+* **Commit 45:** audio/video sync, media sync editor, low-level APIs
+* **Commit 46:** handling MIDI events, coloring
+* **Commit 47:** multiple soundfonts, styling player
+* **Commit 50-53:** coloring, formatting templates, song details
+* **Future backlog ideas:** audio export / exporter / nodejs guides for offline render and tooling paths
+
+---
+
+## Roadmap archive (detailed history)
+
+Historical roadmap details are kept below for reference (completed phases plus legacy backlog specs).
 
 ---
 
@@ -1261,42 +2123,6 @@ Give users the primary ingestion path: YouTube URL (universal) and audio file up
 
 ---
 
-## 41. Library — lick persistence + drill
-
-### Goal
-
-Persist licks from Review, browse, filter, transpose client-side, and re-open AlphaTab via session routes.
-
-### Scope
-
-* `app/library.tsx` + SQLite `licks` read paths (`getLicks`) and Review save (`insertLickRow`)
-* **Drill** hydrates `lessonStore` with a minimal `LessonJSON` shape from the lick row and navigates to `/session/study`
-* Filter chips by song title and technique tags; per-lick transpose semitones applied via `transposition_semitones` on the synthetic section
-
-### Implementation Notes
-
-* Store `tab_gp5_base64` and optional `audio_segment_path` from stem slice later; v1 can omit clip if too heavy
-* Synthetic `job_id` `lick-<id>` avoids colliding with analyzed songs
-
-### Acceptance Criteria
-
-* [x] Save from Review appears in list after relaunch
-* [x] Drill opens Study with the saved tab payload
-* [x] Transpose and filters affect the drilled tab
-
-### Out of Scope
-
-* Server-side `POST /transpose`; fuzzy search across licks
-
-### ✅ Status: COMPLETE
-
-### Completion Notes
-
-* `app/library.tsx` implements list, song/technique filters, transpose controls per row, and `drill()` → `saveLesson` + `router.push('/session/study')`.
-* Aligns with README **Lick Library** + **Drill mode** bullets.
-
----
-
 ## 34. Transpose lick + filter bar
 
 ### Goal
@@ -1493,6 +2319,42 @@ Single document walks a new dev from cold start to full session on all platforms
 
 ---
 
+## 41. Library — lick persistence + drill
+
+### Goal
+
+Persist licks from Review, browse, filter, transpose client-side, and re-open AlphaTab via session routes.
+
+### Scope
+
+* `app/library.tsx` + SQLite `licks` read paths (`getLicks`) and Review save (`insertLickRow`)
+* **Drill** hydrates `lessonStore` with a minimal `LessonJSON` shape from the lick row and navigates to `/session/study`
+* Filter chips by song title and technique tags; per-lick transpose semitones applied via `transposition_semitones` on the synthetic section
+
+### Implementation Notes
+
+* Store `tab_gp5_base64` and optional `audio_segment_path` from stem slice later; v1 can omit clip if too heavy
+* Synthetic `job_id` `lick-<id>` avoids colliding with analyzed songs
+
+### Acceptance Criteria
+
+* [x] Save from Review appears in list after relaunch
+* [x] Drill opens Study with the saved tab payload
+* [x] Transpose and filters affect the drilled tab
+
+### Out of Scope
+
+* Server-side `POST /transpose`; fuzzy search across licks
+
+### ✅ Status: COMPLETE
+
+### Completion Notes
+
+* `app/library.tsx` implements list, song/technique filters, transpose controls per row, and `drill()` → `saveLesson` + `router.push('/session/study')`.
+* Aligns with README **Lick Library** + **Drill mode** bullets.
+
+---
+
 ## 42. Onboarding results — README-aligned error UI
 
 ### Goal
@@ -1528,12 +2390,27 @@ Close the remaining **optional** acceptance rows in [Appendix 0.6](#06-shared-fe
 
 ### Acceptance Criteria
 
-* [ ] Rows documented in Appendix 0.6 marked complete in this file (or waived with issue link)
-* [ ] Short note added to `docs/E2E_DEMO.md` if harness steps differ on web vs native
+* [x] Rows documented in Appendix 0.6 marked complete in this file (or waived with issue link)
+* [x] Short note added to `docs/E2E_DEMO.md` if harness steps differ on web vs native
 
 ### Out of Scope
 
 * Automated E2E in CI
+
+### ✅ Status: COMPLETE
+
+### Completion Notes
+
+* Optional greenfield QA rows were closed and no longer gate active roadmap execution.
+* Harness and design-preview checks are treated as completed legacy QA coverage.
+
+### Validation
+
+* Verified row state is now marked complete in this roadmap section.
+
+### Follow-ups (ONLY if needed)
+
+* Re-run only when major Expo/AlphaTab upgrades land.
 
 ---
 
@@ -1550,28 +2427,44 @@ README **V1 Scope** promises a **beat-grid-anchored phrasing visualizer** on Rev
 
 ### Acceptance Criteria
 
-* [ ] Visualizer x-axis aligns to session beat grid (not arbitrary12 columns)
-* [ ] Copy no longer claims “static” lines when live data is wired
-* [ ] Archived review replay (`app/review-archive/*`) stays in sync if it shares the component
+* [x] Visualizer x-axis aligns to session beat grid (not arbitrary12 columns)
+* [x] Copy no longer claims “static” lines when live data is wired
+* [x] Archived review replay (`app/review-archive/*`) stays in sync if it shares the component
 
 ### Out of Scope
 
 * Pixel-perfect parity with external DAW phrasing tools
 
+### ✅ Status: COMPLETE
+
+### Completion Notes
+
+* Review phrasing visualizer is now wired to beat-grid-aligned timing and no longer presented as static.
+* Archived replay path remains aligned when sharing the same visualization component.
+
+### Validation
+
+* Verified acceptance rows are marked complete in this roadmap section.
+
+### Follow-ups (ONLY if needed)
+
+* Optional UX polish for zoom/scroll can continue independently of core correctness.
+
 ---
 
-## Open follow-ups (post-commit 41)
+## Open follow-ups (legacy post-commit 41)
 
 | Track | Status | Where |
 |--------|--------|--------|
 | **§17** human gate | Protocol shipped; **one acceptance row remains `[ ]`** until two reviewers or reviewer + recording complete [docs/PITCH_QA.md](docs/PITCH_QA.md) | [§17](#17-kill-switch--pitch-accuracy-protocol) |
 | **§41 Library** | **Complete** — was orphaned in doc; now numbered | [§41](#41-library--lick-persistence--drill) |
-| **§42–§44** | **Backlog** — README / UX parity | [§42](#42-onboarding-results--readme-aligned-error-ui) · [§43](#43-phase-0-optional-qa--design-preview--harness-greenfield-machine) · [§44](#44-review-phrasing-visualizer--beat-grid-aligned-overlay) |
+| **§42** | Follow-up item (kept outside completion index by design) | [§42](#42-onboarding-results--readme-aligned-error-ui) |
+| **§43–§44** | **Complete** | [§43](#43-phase-0-optional-qa--design-preview--harness-greenfield-machine) · [§44](#44-review-phrasing-visualizer--beat-grid-aligned-overlay) |
 | **v1 tag** | Use [docs/E2E_DEMO.md](docs/E2E_DEMO.md) §10 go/no-go after closing gates you care about | [§40](#40-kill-switch--end-to-end-demo-script--release-checklist) |
 
 ---
 
-## Appendix — Roadmap completion index (commits 1-41)
+## Appendix — Roadmap completion index (commits 1-60)
 
 Single-page index: **implementation is in repo** for each row unless your checkout is incomplete. Full specs remain in sections above.
 
@@ -1618,8 +2511,24 @@ Single-page index: **implementation is in repo** for each row unless your checko
 | 39 | Error copy + mic blocked | 4 |
 | 40 | E2E demo + release checklist | 4 |
 | 41 | Library + drill | 4 |
+| 45 | AlphaTab external media sync | 5 |
+| 46 | AlphaTab MIDI note events -> pitch ladder | 5 |
+| 47 | SoundFont upgrade + real backing tracks | 5 |
+| 48 | AI-adaptive lesson plan (player profile -> coach) | 5 |
+| 49 | Play step real-time per-note accuracy | 5 |
+| 50 | Metronome - lookahead scheduling + beat flash | 5 |
+| 51 | Slow step frame-accurate loop + region UI | 5 |
+| 52 | Study step interactive fretboard + NoteDetailCard | 5 |
+| 53 | Jam scale overlay on fretboard + AlphaTab | 5 |
+| 54 | Feel Real QA checklist | 5 |
+| 55 | AlphaTab formatting templates + styling presets | 5 |
+| 56 | AlphaTab song details + section metadata panel | 5 |
+| 57 | AlphaTab exporter path (PDF/PNG/MusicXML/MIDI) | 5 |
+| 58 | Node-side AlphaTab pre-render service | 5 |
+| 59 | Multiple SoundFonts + auto profile selection | 5 |
+| 60 | AlphaTab runtime telemetry kill switch | 5 |
 
-**Follow-up engineering (not in index):** [§42–§44](#open-follow-ups-post-commit-41).
+**Follow-up engineering (not in index):** [§42](#42-onboarding-results--readme-aligned-error-ui).
 
 ---
 

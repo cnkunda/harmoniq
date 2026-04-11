@@ -2,12 +2,7 @@ import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
 
-import {
-  barIndexForPlaybackSeconds,
-  decideSmartScroll,
-  normalizeBarTimestamps,
-  type SmartScrollSample,
-} from './smartScroll'
+import type { SmartScrollSample } from './smartScroll'
 
 export type PlaybackTickContext = {
   positionSec: number
@@ -29,81 +24,42 @@ export type UseSessionSmartScrollOptions = {
 }
 
 /**
- * While audio plays, maps `lesson.bar_timestamps` + mixer clock → `scrollToBar`.
+ * Deprecated in commit 45. AlphaTab external media sync now drives cursor internally.
  */
 export function useSessionSmartScroll({
-  tabRef,
+  tabRef: _tabRef,
   barTimestamps,
-  tickRef,
+  tickRef: _tickRef,
   resetKey = 0,
-  pollIntervalMs = 200,
+  pollIntervalMs: _pollIntervalMs = 200,
   skewDemoGeneration = 0,
 }: UseSessionSmartScrollOptions): void {
-  const lastEmittedBar = useRef<number | null>(null)
+  const _lastEmittedBar = useRef<number | null>(null)
   const lastSample = useRef<SmartScrollSample | null>(null)
-  const tsRef = useRef<readonly number[]>([])
-  const skewPhase = useRef<'idle' | 'wrong' | 'truth'>('idle')
+  const _tsRef = useRef<readonly number[]>([])
+  const _skewPhase = useRef<'idle' | 'wrong' | 'truth'>('idle')
   const lastSkewGen = useRef(0)
 
   useEffect(() => {
-    tsRef.current = barTimestamps ?? []
+    _tsRef.current = barTimestamps ?? []
   }, [barTimestamps])
 
   useEffect(() => {
-    lastEmittedBar.current = null
+    _lastEmittedBar.current = null
     lastSample.current = null
-    skewPhase.current = 'idle'
+    _skewPhase.current = 'idle'
   }, [resetKey])
 
   useEffect(() => {
     if (skewDemoGeneration !== lastSkewGen.current && skewDemoGeneration > 0) {
       lastSkewGen.current = skewDemoGeneration
-      skewPhase.current = 'wrong'
+      _skewPhase.current = 'wrong'
     }
   }, [skewDemoGeneration])
 
+  // External media mode keeps AlphaTab in sync with real audio timeline.
+  // This hook intentionally does not schedule timers or post bar-scroll commands anymore.
   useEffect(() => {
-    const id = setInterval(() => {
-      const ctx = tickRef.current
-      if (!ctx.ready || !ctx.playing) return
-
-      const ts = normalizeBarTimestamps(tsRef.current)
-      if (ts.length === 0) return
-
-      const tab = tabRef.current
-      if (!tab) return
-
-      if (skewPhase.current === 'wrong') {
-        const wrongBar = barIndexForPlaybackSeconds(ts, ctx.positionSec + 0.18)
-        tab.scrollToBar(wrongBar)
-        skewPhase.current = 'truth'
-        return
-      }
-
-      if (skewPhase.current === 'truth') {
-        const truthBar = barIndexForPlaybackSeconds(ts, ctx.positionSec)
-        tab.scrollToBar(truthBar)
-        lastEmittedBar.current = truthBar
-        lastSample.current = { wallTimeMs: Date.now(), playbackSeconds: ctx.positionSec }
-        skewPhase.current = 'idle'
-        return
-      }
-
-      const d = decideSmartScroll({
-        barTimestamps: ts,
-        playbackSeconds: ctx.positionSec,
-        playbackRate: ctx.rate,
-        lastEmittedBarIndex: lastEmittedBar.current,
-        lastSample: lastSample.current,
-      })
-
-      if (d.shouldScroll) {
-        tab.scrollToBar(d.barIndex)
-        lastEmittedBar.current = d.barIndex
-        lastSample.current = d.nextSample
-      }
-    }, pollIntervalMs)
-
-    return () => clearInterval(id)
-  }, [pollIntervalMs, tabRef, tickRef])
+    return () => {}
+  }, [])
 }

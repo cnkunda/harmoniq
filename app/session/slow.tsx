@@ -143,7 +143,7 @@ export default function SlowScreen() {
   return (
     <SessionStepScreen
       title="Slow"
-      subtitle="Starts at 65% speed, pre-loops the hardest detected target (with chorus fallback), and keeps SmartScroll active."
+      subtitle="Starts at 65% speed, pre-loops the hardest detected target, and keeps cursor synced to slowed audio."
       showBack
       onBack={() => router.back()}
       showNext
@@ -159,7 +159,6 @@ export default function SlowScreen() {
         </View>
       ) : null}
       <SessionStemAndTab
-        showSkewDemoButton={false}
         initialRate={0.65}
         initialMetronomeOn={initialMetronomeOn}
         autoLoopRegion={loopRegion ? { startSec: loopRegion.startSec, endSec: loopRegion.endSec, label: loopRegion.label } : null}

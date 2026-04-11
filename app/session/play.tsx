@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 
 import { ErrorBanner } from '@/components/ErrorBanner'
+import { PitchIndicator } from '@/components/PitchIndicator'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
@@ -16,6 +17,7 @@ import { usePitchStream } from '@/src/pitch/usePitchStream'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapMicPermissionDenied, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
+import type { NoteEventMessage } from '@/types/tabMessage'
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 const PITCH_COLORS = {
@@ -67,6 +69,7 @@ export default function PlayScreen() {
   const [take, setTake] = useState<RecordedTake | null>(null)
   const [status, setStatus] = useState('Idle')
   const [targetLabel, setTargetLabel] = useState(targetLadder[0]?.label ?? 'A')
+  const [targetMidi, setTargetMidi] = useState<number>(targetLadder[0]?.midi ?? 69)
   const [centsFromTarget, setCentsFromTarget] = useState<number | null>(null)
   const [micError, setMicError] = useState<MappedUiError | null>(null)
   const [autostopTriggered, setAutostopTriggered] = useState(false)
@@ -78,20 +81,7 @@ export default function PlayScreen() {
     await start((reading) => {
       lastPitchAtRef.current = Date.now()
       const midi = hzToMidiFloat(reading.hz)
-      let best = targetLadder[0]
-      let bestCents = Number.POSITIVE_INFINITY
-      for (const cand of targetLadder) {
-        for (const octave of [-12, 0, 12]) {
-          const targetMidi = cand.midi + octave
-          const cents = (midi - targetMidi) * 100
-          const abs = Math.abs(cents)
-          if (abs < Math.abs(bestCents)) {
-            bestCents = cents
-            best = cand
-          }
-        }
-      }
-      setTargetLabel(best.label)
+      const bestCents = (midi - targetMidi) * 100
       setCentsFromTarget(bestCents)
     })
     setTake(null)
@@ -168,6 +158,9 @@ export default function PlayScreen() {
         <Text className="mt-1 font-mono text-xs text-muted-brown">
           Target note: {targetLabel} {centsFromTarget != null ? `(${centsFromTarget >= 0 ? '+' : ''}${Math.round(centsFromTarget)}c)` : ''}
         </Text>
+        <View className="mt-2">
+          <PitchIndicator note={targetLabel} cents={centsFromTarget ?? undefined} isActive={recording} targetMidi={targetMidi} />
+        </View>
         <View className="mt-2 flex-row items-end gap-1">
           {targetLadder.map((n) => {
             const active = n.label === targetLabel
@@ -227,11 +220,16 @@ export default function PlayScreen() {
       ) : null}
 
       <SessionStemAndTab
-        showSkewDemoButton={false}
         initialMetronomeOn={initialMetronomeOn}
         initialStemMuteById={{ guitar: true, bass: false, drums: false, vocals: true, piano: true, other: true }}
         onPlaybackTick={(ctx) => {
           tickRef.current = ctx
+        }}
+        onNoteEvent={(evt: NoteEventMessage) => {
+          const midi = Math.round(evt.midi)
+          setTargetMidi(midi)
+          const pc = ((midi % 12) + 12) % 12
+          setTargetLabel(NOTE_NAMES[pc] ?? 'A')
         }}
       />
       {section ? (

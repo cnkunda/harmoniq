@@ -37,6 +37,10 @@ export type ListenStemPanelProps = {
   onPlaybackTick?: (ctx: PlaybackTickContext) => void
   /** Fired after a section chip seek completes. */
   onSeek?: () => void
+  /** Fired with exact seek target in seconds after a seek completes. */
+  onSeekSeconds?: (seconds: number) => void
+  /** Fired when playback rate changes. */
+  onRateChange?: (rate: number) => void
   /** Optional initial speed (e.g. 0.65 for Slow step). */
   initialRate?: number
   /** Optional initial metronome state. */
@@ -61,6 +65,8 @@ function clampPlaybackRate(value: number): number {
 export function ListenStemPanel({
   onPlaybackTick,
   onSeek,
+  onSeekSeconds,
+  onRateChange,
   initialRate = 1,
   initialMetronomeOn = false,
   autoLoopRegion = null,
@@ -100,6 +106,10 @@ export function ListenStemPanel({
   onPlaybackTickRef.current = onPlaybackTick
   const onSeekRef = useRef(onSeek)
   onSeekRef.current = onSeek
+  const onSeekSecondsRef = useRef(onSeekSeconds)
+  onSeekSecondsRef.current = onSeekSeconds
+  const onRateChangeRef = useRef(onRateChange)
+  onRateChangeRef.current = onRateChange
 
   useEffect(() => {
     setRate(clampPlaybackRate(initialRate))
@@ -257,6 +267,7 @@ export function ListenStemPanel({
           void m.seek(startSec).then(() => {
             setPositionSec(startSec)
             onSeekRef.current?.()
+            onSeekSecondsRef.current?.(startSec)
           })
         }
       })
@@ -291,6 +302,7 @@ export function ListenStemPanel({
 
   const onSeekRate = async (value: number) => {
     setRate(value)
+    onRateChangeRef.current?.(value)
     const m = mixerRef.current
     if (m && ready) {
       await m.setPlaybackRate(value).catch(() => {})
@@ -307,6 +319,7 @@ export function ListenStemPanel({
       await m.seek(t)
       setPositionSec(t)
       onSeekRef.current?.()
+      onSeekSecondsRef.current?.(t)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Seek failed')
     }

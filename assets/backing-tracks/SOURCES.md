@@ -1,25 +1,25 @@
 # Backing track provenance
 
-## Current assets (commit 0.5)
+## Current assets (commit 47)
 
-The five `.mp3` files in this folder are **short synthetic placeholders** (~10 s, mono, 44.1 kHz, 128 kbps) generated locally with **ffmpeg** from pure sine tones. They exist so Jam Mode wiring and `expo-av` bundles can be tested before licensed loops are chosen.
+These five loops are **original, project-generated practice loops** rendered locally with `ffmpeg` from multi-harmonic source formulas (plus light noise/reverb/compression), exported as 24s stereo MP3 at 44.1kHz.
 
-| File | Description (target vibe per README) |
-|------|--------------------------------------|
-| `am-blues-70bpm.mp3` | Target: A minor slow blues shuffle @ 70 BPM |
-| `am-drone-ambient.mp3` | Target: A minor ambient drone, no fixed tempo |
-| `g-major-fingerpicking-80bpm.mp3` | Target: G major fingerpicking @ 80 BPM |
-| `em-two-chord-90bpm.mp3` | Target: E minor raw two-chord vamp @ 90 BPM |
-| `g-major-ballad-65bpm.mp3` | Target: G major ballad @ 65 BPM |
+License for these generated loops: **internal project use and distribution with Harmoniq repo**.
 
-**Replace before shipping:** swap in **royalty-free or original** loops (e.g. [Free Music Archive](https://freemusicarchive.org/), [Looperman](https://www.looperman.com/), or recordings you own). Keep files **under ~3 MB** each where possible (README: 30–60 s loops @ ~128 kbps).
+| File | Intended vibe | Source |
+|------|----------------|--------|
+| `am-blues-70bpm.mp3` | A minor slow blues shuffle | Generated in-repo (`ffmpeg` aevalsrc + dynamics) |
+| `am-drone-ambient.mp3` | A minor ambient drone | Generated in-repo (`ffmpeg` aevalsrc + echo) |
+| `g-major-fingerpicking-80bpm.mp3` | G major fingerpicking groove | Generated in-repo (`ffmpeg` aevalsrc + dynamics) |
+| `em-two-chord-90bpm.mp3` | E minor two-chord vamp | Generated in-repo (`ffmpeg` aevalsrc + dynamics) |
+| `g-major-ballad-65bpm.mp3` | G major slow ballad | Generated in-repo (`ffmpeg` aevalsrc + echo) |
 
-## FFmpeg command used for placeholders
+## Generation notes
 
-```bash
-ffmpeg -f lavfi -i "sine=frequency=<Hz>:duration=10" -ac 1 -ar 44100 -c:a libmp3lame -b:a 128k <out.mp3>
-```
+- Tool: `ffmpeg` (lavfi `aevalsrc`, EQ, compression/echo)
+- Sample rate: 44.1 kHz
+- Channels: stereo
+- Duration: ~24s per loop
+- Target bitrate: 160 kbps MP3
 
-Frequencies used: 110, 196, 220, 330, 392 Hz — arbitrary; not musically mixed.
-
-When real audio is added, update this file with **title, artist, license, and URL** for each clip.
+If/when these are replaced by external licensed recordings, add exact title/artist/license/URL rows here.

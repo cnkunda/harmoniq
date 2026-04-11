@@ -17,8 +17,8 @@
 </head>
 <body>
   <div id="alphatab"></div>
-  <!-- Pinned — never use @latest (PRIORITIES 0.4) -->
-  <script src="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.3.1/dist/alphaTab.min.js"></script>
+  <!-- Pinned — never use @latest (PRIORITIES 45): @coderline/alphatab@1.6.1 -->
+  <script src="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.6.1/dist/alphaTab.min.js"></script>
   <script>
     (function () {
       'use strict'
@@ -46,11 +46,16 @@
         return
       }
 
+      var externalAudio = new Audio()
+      externalAudio.preload = 'auto'
+      externalAudio.crossOrigin = 'anonymous'
+      var SOUNDFONT_URL = 'https://raw.githubusercontent.com/ad-si/GeneralUser/master/GeneralUser.sf2'
+
       var api = new alphaTab.AlphaTabApi(container, {
         core: {
           useWorkers: false,
           enableLazyLoading: false,
-          scriptFile: 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.3.1/dist/alphaTab.min.js',
+          scriptFile: 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.6.1/dist/alphaTab.min.js',
         },
         display: {
           resources: {
@@ -63,9 +68,16 @@
           },
           scale: 1.1,
         },
-        player: { enablePlayer: false },
+        soundFont: SOUNDFONT_URL,
+        player: {
+          enablePlayer: true,
+          playerMode: alphaTab.PlayerMode.EnabledExternalMedia,
+          soundFont: SOUNDFONT_URL,
+        },
       })
       var currentTranspose = 0
+      var syncTimer = null
+      var lastNoteEventAt = 0
 
       function postOut(msg) {
         try {
@@ -94,24 +106,109 @@
         return null
       }
 
-      function scrollToBarIndex(barIndex) {
-        var lookup = api.boundsLookup
-        if (!lookup || !lookup.isFinished) {
-          postOut({ type: 'error', message: 'scrollToBar: bounds not ready yet' })
-          return
+      function updatePositionFromAudio() {
+        var ms = externalAudio.currentTime * 1000
+        try {
+          if (api.player && api.player.output && typeof api.player.output.updatePosition === 'function') {
+            api.player.output.updatePosition(ms)
+          }
+        } catch (e) {
+          postOut({ type: 'error', message: (e && e.message) ? e.message : 'updatePosition failed' })
         }
-        var mb = lookup.findMasterBarByIndex(barIndex)
-        if (!mb) {
-          postOut({ type: 'error', message: 'scrollToBar: unknown bar index ' + barIndex })
-          return
+      }
+
+      function wireExternalMediaHandler() {
+        var handler = {
+          get playbackRate() { return externalAudio.playbackRate || 1 },
+          set playbackRate(v) { externalAudio.playbackRate = Number.isFinite(v) ? v : 1 },
+          get currentTime() { return externalAudio.currentTime || 0 },
+          set currentTime(v) { externalAudio.currentTime = Math.max(0, Number(v) || 0) },
+          get duration() { return Number.isFinite(externalAudio.duration) ? externalAudio.duration : 0 },
+          play: function () { return externalAudio.play() },
+          pause: function () { externalAudio.pause() },
+          seekTo: function (ms) {
+            externalAudio.currentTime = Math.max(0, Number(ms) / 1000 || 0)
+            updatePositionFromAudio()
+          },
         }
         try {
-          var scrollEl = api.uiFacade.getScrollContainer()
-          var y = mb.visualBounds.y
-          api.uiFacade.scrollToY(scrollEl, Math.max(0, y - 24), 200)
+          // alphaTab versions expose different attachment points; try known candidates.
+          if (api.player && typeof api.player.setExternalMediaHandler === 'function') {
+            api.player.setExternalMediaHandler(handler)
+            return
+          }
+          if (api.player && api.player.output && typeof api.player.output.setExternalMediaHandler === 'function') {
+            api.player.output.setExternalMediaHandler(handler)
+            return
+          }
         } catch (e) {
-          postOut({ type: 'error', message: (e && e.message) ? e.message : 'scrollToBar failed' })
+          postOut({ type: 'error', message: (e && e.message) ? e.message : 'external media handler failed' })
         }
+      }
+
+      function preloadSoundFont() {
+        postOut({ type: 'soundFontLoad', status: 'loading' })
+        fetch(SOUNDFONT_URL)
+          .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status)
+            return res.arrayBuffer()
+          })
+          .then(function () {
+            postOut({ type: 'soundFontLoad', status: 'loaded' })
+          })
+          .catch(function (err) {
+            postOut({
+              type: 'soundFontLoad',
+              status: 'error',
+              message: (err && err.message) ? err.message : 'SoundFont load failed',
+            })
+          })
+      }
+
+      function emitNoteEventFromMidiEvent(evt) {
+        if (Array.isArray(evt)) {
+          for (var i = 0; i < evt.length; i += 1) emitNoteEventFromMidiEvent(evt[i])
+          return
+        }
+        if (!evt || typeof evt !== 'object') return
+        var now = Date.now()
+        if (now - lastNoteEventAt < 30) return
+
+        var velocity = typeof evt.velocity === 'number' ? evt.velocity : 1
+        if (velocity <= 0) return
+
+        var typeName = ''
+        if (typeof evt.type === 'number') {
+          typeName = String(evt.type)
+        } else if (typeof evt.eventType === 'number') {
+          typeName = String(evt.eventType)
+        }
+        // Keep permissive but try to avoid non-note events when type markers exist.
+        if (typeName && typeName !== '9' && typeName !== 'NoteOn') {
+          // 9 is common MIDI NoteOn enum value
+        }
+
+        var midi = null
+        if (typeof evt.noteValue === 'number') midi = evt.noteValue
+        else if (typeof evt.noteNumber === 'number') midi = evt.noteNumber
+        else if (typeof evt.note === 'number') midi = evt.note
+        if (!Number.isFinite(midi)) return
+
+        var beat = 0
+        if (typeof evt.beat === 'number') beat = evt.beat
+        else if (evt.beat && typeof evt.beat.index === 'number') beat = evt.beat.index
+        else if (evt.masterBar && typeof evt.masterBar.index === 'number') beat = evt.masterBar.index
+
+        var payload = {
+          type: 'noteEvent',
+          midi: midi,
+          beat: beat,
+        }
+        if (typeof evt.fret === 'number') payload.fret = evt.fret
+        if (typeof evt.string === 'number') payload.string = evt.string
+
+        lastNoteEventAt = now
+        postOut(payload)
       }
 
       function applyTheme(colors) {
@@ -151,8 +248,27 @@
           return
         }
 
-        if (msg.type === 'scrollToBar' && typeof msg.barIndex === 'number') {
-          scrollToBarIndex(msg.barIndex)
+        if (msg.type === 'setAudioSrc' && typeof msg.audioSrc === 'string') {
+          externalAudio.src = msg.audioSrc
+          externalAudio.load()
+          updatePositionFromAudio()
+          return
+        }
+
+        if (msg.type === 'setPlaybackRate' && typeof msg.playbackRate === 'number') {
+          externalAudio.playbackRate = Number.isFinite(msg.playbackRate) ? Math.max(0.5, Math.min(1.25, msg.playbackRate)) : 1
+          updatePositionFromAudio()
+          return
+        }
+
+        if (msg.type === 'seekTo' && typeof msg.positionMs === 'number') {
+          externalAudio.currentTime = Math.max(0, msg.positionMs / 1000)
+          updatePositionFromAudio()
+          return
+        }
+
+        if (msg.type === 'getPosition') {
+          postOut({ type: 'position', positionMs: externalAudio.currentTime * 1000 })
           return
         }
 
@@ -174,10 +290,27 @@
         postOut({ type: 'error', message: m || 'AlphaTab error' })
       })
 
+      var midiHook = null
+      if (api.player && api.player.midiEventsPlayed && typeof api.player.midiEventsPlayed.on === 'function') {
+        midiHook = api.player.midiEventsPlayed.on
+      } else if (api.midiEventsPlayed && typeof api.midiEventsPlayed.on === 'function') {
+        midiHook = api.midiEventsPlayed.on
+      }
+      if (midiHook) {
+        midiHook(function (evt) {
+          emitNoteEventFromMidiEvent(evt)
+        })
+      }
+
       /** First completed render — includes initial empty layout; later re-renders do not re-send. */
       var readyPosted = false
       api.renderFinished.on(function () {
+        if (!syncTimer) {
+          syncTimer = window.setInterval(updatePositionFromAudio, 50)
+        }
         if (readyPosted) return
+        wireExternalMediaHandler()
+        preloadSoundFont()
         readyPosted = true
         postOut({ type: 'ready' })
       })

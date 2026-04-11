@@ -15,7 +15,10 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     useImperativeHandle(
       ref,
       () => ({
-        scrollToBar: () => {},
+        setAudioSrc: () => {},
+        setPlaybackRate: () => {},
+        seekTo: () => {},
+        getPosition: async () => null,
         setTheme: () => {},
         setTranspose: () => {},
       }),

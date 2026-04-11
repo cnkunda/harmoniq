@@ -6,7 +6,7 @@ You are implementing **one commit** from `PRIORITIES.md` using the structured wo
 
 ## 🎯 Target Commit
 Use the commit at:
-[Commit #]
+[Commit 47]
 
 Work strictly within this commit.
 
