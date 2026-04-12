@@ -488,7 +488,7 @@ export default function DesignPreviewScreen() {
               Component stubs
             </Text>
             <View className="gap-3">
-              <CoachNote />
+              <CoachNote text="Preview: coach copy uses the warm wood panel and amber accent rail." />
               <SessionStepper />
               <WaveformVisualizer />
               <StemMixer />

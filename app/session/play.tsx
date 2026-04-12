@@ -1,16 +1,28 @@
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Platform, Pressable, Text, View } from 'react-native'
+import { Platform, Text, View } from 'react-native'
+import Animated, { FadeIn } from 'react-native-reanimated'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { CoachNote } from '@/components/CoachNote'
 import { ErrorBanner } from '@/components/ErrorBanner'
+import { NoteAccuracyBar } from '@/components/NoteAccuracyBar'
 import { PitchIndicator } from '@/components/PitchIndicator'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { createSessionRecorder } from '@/src/audio/recordSession'
+import { submitQuickFeedback } from '@/src/api/analyze'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import type { RecordedTake } from '@/src/audio/recordSession.types'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import {
+  beatDurationSecFromTempo,
+  beatIndexFromClocks,
+  CentSampleRing,
+  classifyMedianCents,
+  type AccuracyLabel,
+} from '@/src/session/noteAccuracyBeats'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
@@ -64,6 +76,13 @@ export default function PlayScreen() {
   const recorderRef = useRef(createSessionRecorder())
   const lastPitchAtRef = useRef<number>(0)
   const tickRef = useRef<PlaybackTickContext | null>(null)
+  const recordingRef = useRef(false)
+  const centRingRef = useRef(new CentSampleRing())
+  const activeBeatRef = useRef(-1)
+  const recordStartMsRef = useRef(0)
+  const anchorPosRef = useRef(0)
+  const patternRef = useRef<AccuracyLabel[]>([])
+
   const [pitchRunning, setPitchRunning] = useState(false)
   const [recording, setRecording] = useState(false)
   const [take, setTake] = useState<RecordedTake | null>(null)
@@ -73,33 +92,86 @@ export default function PlayScreen() {
   const [centsFromTarget, setCentsFromTarget] = useState<number | null>(null)
   const [micError, setMicError] = useState<MappedUiError | null>(null)
   const [autostopTriggered, setAutostopTriggered] = useState(false)
+  const [accuracyBeats, setAccuracyBeats] = useState<AccuracyLabel[]>([])
+  const [lastWindowResult, setLastWindowResult] = useState<AccuracyLabel | null>(null)
+  const [windowFlashToken, setWindowFlashToken] = useState(0)
+  const [quickCoachText, setQuickCoachText] = useState<string | null>(null)
+  const aliveRef = useRef(true)
+
+  useEffect(() => {
+    recordingRef.current = recording
+  }, [recording])
+
+  useEffect(() => {
+    return () => {
+      aliveRef.current = false
+    }
+  }, [])
+
+  const resetAccuracyTracking = useCallback(() => {
+    patternRef.current = []
+    setAccuracyBeats([])
+    activeBeatRef.current = -1
+    centRingRef.current.clear()
+    setLastWindowResult(null)
+    setWindowFlashToken(0)
+  }, [])
 
   const startCapture = useCallback(async () => {
     setStatus('Starting mic + recorder…')
     setMicError(null)
+    setQuickCoachText(null)
+    resetAccuracyTracking()
+    recordStartMsRef.current = Date.now()
+    anchorPosRef.current = tickRef.current?.positionSec ?? 0
     await recorderRef.current.start()
     await start((reading) => {
       lastPitchAtRef.current = Date.now()
       const midi = hzToMidiFloat(reading.hz)
       const bestCents = (midi - targetMidi) * 100
       setCentsFromTarget(bestCents)
+      if (recordingRef.current) {
+        centRingRef.current.push(bestCents)
+      }
     })
     setTake(null)
     setRecording(true)
     setPitchRunning(true)
     setStatus('Capturing performance')
-  }, [start, targetLadder])
+  }, [resetAccuracyTracking, start, targetMidi])
 
-  const stopCapture = useCallback(async (reason: 'done' | 'silence') => {
-    if (!recording && !pitchRunning) return
-    const rec = await recorderRef.current.stop()
-    await stop()
-    setRecording(false)
-    setPitchRunning(false)
-    setTake(rec)
-    setLatestTake(rec)
-    setStatus(reason === 'silence' ? 'Auto-stopped after 5s silence' : 'Capture stopped')
-  }, [pitchRunning, recording, setLatestTake, stop])
+  const stopCapture = useCallback(
+    async (reason: 'done' | 'silence') => {
+      if (!recording && !pitchRunning) return
+      const patternSnapshot = [...patternRef.current]
+      if (centRingRef.current.hasSamples()) {
+        const label = classifyMedianCents(centRingRef.current.medianAbs())
+        centRingRef.current.clear()
+        patternSnapshot.push(label)
+        patternRef.current = patternSnapshot
+        setAccuracyBeats([...patternSnapshot])
+        setLastWindowResult(label)
+        setWindowFlashToken((t) => t + 1)
+      }
+      activeBeatRef.current = -1
+
+      const rec = await recorderRef.current.stop()
+      await stop()
+      setRecording(false)
+      setPitchRunning(false)
+      setTake(rec)
+      setLatestTake(rec)
+      setStatus(reason === 'silence' ? 'Auto-stopped after 5s silence' : 'Capture stopped')
+
+      if (patternSnapshot.length > 0) {
+        void submitQuickFeedback({ accuracy_pattern: patternSnapshot }).then(({ message }) => {
+          if (!aliveRef.current) return
+          setQuickCoachText(message)
+        })
+      }
+    },
+    [pitchRunning, recording, setLatestTake, stop],
+  )
 
   useEffect(() => {
     return () => {
@@ -107,6 +179,36 @@ export default function PlayScreen() {
       void recorderRef.current.stop().catch(() => {})
     }
   }, [stop])
+
+  useEffect(() => {
+    if (!recording) return
+    const beatSec = beatDurationSecFromTempo(lesson?.tempo)
+    const id = setInterval(() => {
+      const ctx = tickRef.current
+      if (!ctx) return
+      const idx = beatIndexFromClocks({
+        playing: ctx.playing,
+        positionSec: ctx.positionSec,
+        anchorPosSec: anchorPosRef.current,
+        recordStartMs: recordStartMsRef.current,
+        beatSec,
+      })
+      if (activeBeatRef.current < 0) {
+        activeBeatRef.current = idx
+        return
+      }
+      while (activeBeatRef.current < idx) {
+        const label = classifyMedianCents(centRingRef.current.medianAbs())
+        centRingRef.current.clear()
+        patternRef.current.push(label)
+        setAccuracyBeats([...patternRef.current])
+        setLastWindowResult(label)
+        setWindowFlashToken((t) => t + 1)
+        activeBeatRef.current += 1
+      }
+    }, 100)
+    return () => clearInterval(id)
+  }, [lesson?.tempo, recording])
 
   useEffect(() => {
     if (!recording) return
@@ -156,10 +258,22 @@ export default function PlayScreen() {
       <View className="mt-3 rounded-lg border border-wood-600/45 bg-cream-dark/40 px-3 py-3">
         <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Pitch ladder</Text>
         <Text className="mt-1 font-mono text-xs text-muted-brown">
-          Target note: {targetLabel} {centsFromTarget != null ? `(${centsFromTarget >= 0 ? '+' : ''}${Math.round(centsFromTarget)}c)` : ''}
+          Target note: {targetLabel}{' '}
+          {centsFromTarget != null ? `(${centsFromTarget >= 0 ? '+' : ''}${Math.round(centsFromTarget)}c)` : ''}
         </Text>
         <View className="mt-2">
-          <PitchIndicator note={targetLabel} cents={centsFromTarget ?? undefined} isActive={recording} targetMidi={targetMidi} />
+          <PitchIndicator
+            note={targetLabel}
+            cents={centsFromTarget ?? undefined}
+            isActive={recording}
+            targetMidi={targetMidi}
+            windowResult={lastWindowResult}
+            windowFlashToken={windowFlashToken}
+          />
+        </View>
+        <View className="mt-2">
+          <Text className="mb-1 font-sans text-[10px] uppercase tracking-wide text-muted-brown">Beat accuracy</Text>
+          <NoteAccuracyBar beats={accuracyBeats} />
         </View>
         <View className="mt-2 flex-row items-end gap-1">
           {targetLadder.map((n) => {
@@ -177,8 +291,14 @@ export default function PlayScreen() {
         </Text>
       </View>
 
+      {quickCoachText ? (
+        <Animated.View className="mt-3" entering={FadeIn.duration(320)}>
+          <CoachNote text={quickCoachText} />
+        </Animated.View>
+      ) : null}
+
       <View className="mt-3 flex-row flex-wrap items-center gap-2">
-        <Pressable
+        <AnimatedPressable
           onPress={() => {
             void (recording ? stopCapture('done') : startCapture()).catch((e) => {
               const message = e instanceof Error ? e.message : String(e)
@@ -192,7 +312,7 @@ export default function PlayScreen() {
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">{recording ? 'Done' : 'Start play capture'}</Text>
-        </Pressable>
+        </AnimatedPressable>
         <Text className="font-mono text-[11px] text-muted-brown">{status}</Text>
       </View>
       {micError ? (

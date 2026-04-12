@@ -2,7 +2,7 @@
 
 This document is the **kill switch** for v1: a new developer (or QA on a second machine) should be able to run the stack and complete a **Listen → Study → Slow → Play → Review** session without tribal knowledge.
 
-**Companion docs:** [backend/README.md](../backend/README.md), root [README.md](../README.md), [ERROR_QA.md](./ERROR_QA.md).
+**Companion docs:** [backend/README.md](../backend/README.md), root [README.md](../README.md), [ERROR_QA.md](./ERROR_QA.md), [FEEL_REAL_QA.md](./FEEL_REAL_QA.md) (Phase 5 realism gate).
 
 ---
 
@@ -217,6 +217,10 @@ Use this as a **sign-off gate** (product + engineering). All **must pass** for a
 | Add Song to lesson on Home / session | [ ] |
 | Session all five steps navigable | [ ] |
 | Review scoring works when backend up | [ ] |
+
+### 10.2a Phase 5 “Feel Real” manual gate
+
+Before declaring **Phase 5** realism shippable, complete the PASS/FAIL/WAIVE grids in **[FEEL_REAL_QA.md](./FEEL_REAL_QA.md)** (sync, notation highlight, soundfont, coach, play accuracy, metronome, loop precision, Study, Jam). **If Commit 45 sync checks fail without waiver, stop** — see the STOP rule at the top of that doc.
 
 ### 10.3 Product / design
 

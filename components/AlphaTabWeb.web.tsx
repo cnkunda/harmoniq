@@ -3,21 +3,36 @@ import { Pressable, Text, View } from 'react-native'
 
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
-import type { AlphaTabSurfaceRef, NoteEventMessage, TabThemeColors } from '@/types/tabMessage'
+import { applyScaleDegreeHighlight, clearScaleDegreeHighlight } from '@/src/jam/alphaTabScaleHighlight'
+import { base64ToUint8Array } from '@/src/utils/base64ToUint8Array'
+import type { AlphaTabSurfaceRef, NoteEventMessage, TabLoopBarRegion, TabThemeColors } from '@/types/tabMessage'
 
 import type { AlphaTabWebProps } from './AlphaTabWeb.types'
 
 export type { AlphaTabWebProps } from './AlphaTabWeb.types'
 
 /** Pinned — match `assets/alphatab-harness/index.html` (PRIORITIES 0.4). */
-const SCRIPT_SRC =
-  'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.6.1/dist/alphaTab.min.js'
-const SOUNDFONT_URL = 'https://raw.githubusercontent.com/ad-si/GeneralUser/master/GeneralUser.sf2'
+const ALPHATAB_PKG_VERSION = '1.6.1'
+const SCRIPT_SRC = `https://cdn.jsdelivr.net/npm/@coderline/alphatab@${ALPHATAB_PKG_VERSION}/dist/alphaTab.min.js`
+/** Same package/version as the script; avoids AlphaSynth/Tone init issues seen with remote GeneralUser.sf2. */
+const SOUNDFONT_URL = `https://cdn.jsdelivr.net/npm/@coderline/alphatab@${ALPHATAB_PKG_VERSION}/dist/soundfont/sonivox.sf2`
+
+type MasterBarBoundsLike = {
+  visualBounds?: { x: number; y: number; w: number; h: number }
+  realBounds?: { x: number; y: number; w: number; h: number }
+}
+
+type BoundsLookupLike = {
+  findMasterBarByIndex?: (index: number) => MasterBarBoundsLike | null
+}
 
 type AlphaTabApiLike = {
   load: (buffer: ArrayBuffer) => void
   updateSettings: () => void
   settings: { display: { resources: Record<string, string | undefined> } }
+  boundsLookup?: BoundsLookupLike | null
+  renderer?: { boundsLookup?: BoundsLookupLike | null }
+  score?: { masterBars?: unknown[] }
   player?: {
     output?: {
       updatePosition?: (positionMs: number) => void
@@ -84,6 +99,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const syncTimerRef = useRef<number | null>(null)
     const readyPostedRef = useRef(false)
+    const loopStateRef = useRef<TabLoopBarRegion | null>(null)
+    const loopBracketRef = useRef<HTMLDivElement | null>(null)
 
     const [mounted, setMounted] = useState(false)
     const [engineReady, setEngineReady] = useState(false)
@@ -92,6 +109,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const [soundFontReady, setSoundFontReady] = useState(false)
     const [reloadKey, setReloadKey] = useState(0)
     const lastNotePostMsRef = useRef(0)
+    const onNoteEventRef = useRef(onNoteEvent)
+    onNoteEventRef.current = onNoteEvent
 
     const themeKey = useMemo(() => JSON.stringify(theme ?? {}), [theme])
 
@@ -118,49 +137,123 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       api.player?.output?.updatePosition?.(audio.currentTime * 1000)
     }, [])
 
-    const emitNoteEvent = useCallback(
-      (evt: unknown) => {
-        if (!onNoteEvent) return
-        if (Array.isArray(evt)) {
-          for (const row of evt) emitNoteEvent(row)
+    const emitNoteEvent = useCallback((evt: unknown) => {
+      const onNote = onNoteEventRef.current
+      if (!onNote) return
+      if (Array.isArray(evt)) {
+        for (const row of evt) emitNoteEvent(row)
+        return
+      }
+      const now = Date.now()
+      if (now - lastNotePostMsRef.current < 30) return
+      const row = evt as {
+        eventType?: unknown
+        velocity?: unknown
+        note?: unknown
+        beat?: unknown
+        fret?: unknown
+        string?: unknown
+        noteValue?: unknown
+        noteNumber?: unknown
+      }
+      const velocity = typeof row.velocity === 'number' ? row.velocity : 1
+      if (velocity <= 0) return
+      const midi =
+        typeof row.noteValue === 'number'
+          ? row.noteValue
+          : typeof row.noteNumber === 'number'
+            ? row.noteNumber
+            : typeof row.note === 'number'
+              ? row.note
+              : null
+      if (midi == null) return
+      const beat = typeof row.beat === 'number' ? row.beat : 0
+      const fret = typeof row.fret === 'number' ? row.fret : undefined
+      const str = typeof row.string === 'number' ? row.string : undefined
+      const payload: NoteEventMessage = {
+        type: 'noteEvent',
+        midi,
+        beat,
+        fret,
+        string: str,
+        hasExplicitTabPosition: typeof fret === 'number' && typeof str === 'number' ? true : undefined,
+      }
+      lastNotePostMsRef.current = now
+      onNote(payload)
+    }, [])
+
+    const layoutLoopBracket = useCallback(() => {
+      const container = hostRef.current
+      const api = apiRef.current
+      if (!container || !api) return
+
+      const st = loopStateRef.current
+      let bracket = loopBracketRef.current
+      if (!st || st.startBarIndex >= st.endBarIndexExclusive) {
+        if (bracket) bracket.style.display = 'none'
+        return
+      }
+
+      if (!bracket) {
+        bracket = document.createElement('div')
+        bracket.setAttribute('aria-hidden', 'true')
+        bracket.style.cssText =
+          'display:none;position:absolute;pointer-events:none;z-index:50;border:2px solid rgba(240,222,180,0.92);border-radius:6px;background:rgba(240,222,180,0.06);box-sizing:border-box;'
+        container.appendChild(bracket)
+        loopBracketRef.current = bracket
+      }
+
+      const lookup = api.boundsLookup ?? api.renderer?.boundsLookup
+      const startIdx = st.startBarIndex
+      const endEx = st.endBarIndexExclusive
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      let any = false
+
+      if (lookup?.findMasterBarByIndex) {
+        for (let b = startIdx; b < endEx; b += 1) {
+          const mb = lookup.findMasterBarByIndex(b)
+          if (!mb) continue
+          const vb = mb.visualBounds ?? mb.realBounds
+          if (!vb || typeof vb.x !== 'number' || typeof vb.y !== 'number') continue
+          const w = typeof vb.w === 'number' ? vb.w : 0
+          const h = typeof vb.h === 'number' ? vb.h : 0
+          any = true
+          minX = Math.min(minX, vb.x)
+          minY = Math.min(minY, vb.y)
+          maxX = Math.max(maxX, vb.x + w)
+          maxY = Math.max(maxY, vb.y + h)
+        }
+      }
+
+      if (!any) {
+        const total = api.score?.masterBars?.length ?? 0
+        if (total <= 0) {
+          bracket.style.display = 'none'
           return
         }
-        const now = Date.now()
-        if (now - lastNotePostMsRef.current < 30) return
-        const row = evt as {
-          eventType?: unknown
-          velocity?: unknown
-          note?: unknown
-          beat?: unknown
-          fret?: unknown
-          string?: unknown
-          noteValue?: unknown
-          noteNumber?: unknown
-        }
-        const velocity = typeof row.velocity === 'number' ? row.velocity : 1
-        if (velocity <= 0) return
-        const midi =
-          typeof row.noteValue === 'number'
-            ? row.noteValue
-            : typeof row.noteNumber === 'number'
-              ? row.noteNumber
-              : typeof row.note === 'number'
-                ? row.note
-                : null
-        if (midi == null) return
-        const beat = typeof row.beat === 'number' ? row.beat : 0
-        const payload: NoteEventMessage = {
-          type: 'noteEvent',
-          midi,
-          beat,
-          fret: typeof row.fret === 'number' ? row.fret : undefined,
-          string: typeof row.string === 'number' ? row.string : undefined,
-        }
-        lastNotePostMsRef.current = now
-        onNoteEvent(payload)
-      },
-      [onNoteEvent],
-    )
+        const cw = container.clientWidth || 1
+        const ch = container.clientHeight || 120
+        const left = (startIdx / total) * cw
+        const width = Math.max(8, ((endEx - startIdx) / total) * cw)
+        bracket.style.left = `${left}px`
+        bracket.style.top = '8px'
+        bracket.style.width = `${width}px`
+        bracket.style.height = `${Math.max(48, ch - 16)}px`
+        bracket.style.display = 'block'
+        return
+      }
+
+      const sl = container.scrollLeft || 0
+      const stTop = container.scrollTop || 0
+      bracket.style.left = `${minX - sl}px`
+      bracket.style.top = `${minY - stTop}px`
+      bracket.style.width = `${Math.max(4, maxX - minX)}px`
+      bracket.style.height = `${Math.max(4, maxY - minY)}px`
+      bracket.style.display = 'block'
+    }, [])
 
     useImperativeHandle(
       ref,
@@ -182,6 +275,11 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           audio.currentTime = Math.max(0, positionMs / 1000)
           updatePositionFromAudio()
         },
+        syncPlaybackTimelineMs: (positionMs: number) => {
+          const api = apiRef.current
+          if (!api) return
+          api.player?.output?.updatePosition?.(Math.max(0, positionMs))
+        },
         getPosition: async () => {
           const audio = audioRef.current
           if (!audio) return null
@@ -195,8 +293,21 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           const api = apiRef.current
           if (api) applyTranspose(api, semitones)
         },
+        setLoopRegion: (region: TabLoopBarRegion | null) => {
+          loopStateRef.current = region
+          layoutLoopBracket()
+        },
+        highlightScaleDegrees: (rootMidi: number, intervals: readonly number[]) => {
+          const api = apiRef.current
+          const tabNs = (globalThis as { alphaTab?: unknown }).alphaTab
+          applyScaleDegreeHighlight(api as Record<string, unknown>, tabNs as Record<string, unknown>, rootMidi, intervals)
+        },
+        clearScaleHighlight: () => {
+          const api = apiRef.current
+          clearScaleDegreeHighlight(api as Record<string, unknown>)
+        },
       }),
-      [applyThemePartial, applyTranspose, updatePositionFromAudio],
+      [applyThemePartial, applyTranspose, layoutLoopBracket, updatePositionFromAudio],
     )
 
     useEffect(() => {
@@ -231,6 +342,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         },
         { capture: true, signal },
       )
+      el.addEventListener('scroll', layoutLoopBracket, { passive: true, signal })
 
       let cancelled = false
       readyPostedRef.current = false
@@ -244,12 +356,19 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           await loadAlphaTabScript()
           if (cancelled) return
 
-          const g = globalThis as {
-            alphaTab?: { AlphaTabApi: new (container: HTMLElement, options: unknown) => AlphaTabApiLike }
-          }
-          const AlphaTabApi = g.alphaTab?.AlphaTabApi
+          const tabNs = (globalThis as { alphaTab?: unknown }).alphaTab as
+            | {
+                AlphaTabApi: new (container: HTMLElement, options: unknown) => AlphaTabApiLike
+                PlayerMode?: { EnabledExternalMedia?: unknown }
+              }
+            | undefined
+          const AlphaTabApi = tabNs?.AlphaTabApi
           if (!AlphaTabApi) {
             throw new Error('AlphaTab global missing after script load')
+          }
+          const playerModeExternal = tabNs?.PlayerMode?.EnabledExternalMedia
+          if (playerModeExternal === undefined) {
+            throw new Error('AlphaTab PlayerMode.EnabledExternalMedia missing — check script version')
           }
 
           const resources = mergeResources(theme ?? {})
@@ -270,8 +389,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             },
             player: {
               enablePlayer: true,
-              playerMode: (globalThis as { alphaTab?: { PlayerMode?: { EnabledExternalMedia?: unknown } } }).alphaTab
-                ?.PlayerMode?.EnabledExternalMedia,
+              playerMode: playerModeExternal,
               soundFont: SOUNDFONT_URL,
             },
           }
@@ -292,16 +410,15 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             onError?.(msg)
           })
 
-          const midiHook =
-            api.player?.midiEventsPlayed?.on ??
-            api.midiEventsPlayed?.on
-          if (typeof midiHook === 'function') {
-            midiHook((evt: unknown) => {
+          const midiPlayed = api.player?.midiEventsPlayed ?? api.midiEventsPlayed
+          if (midiPlayed && typeof midiPlayed.on === 'function') {
+            midiPlayed.on((evt: unknown) => {
               emitNoteEvent(evt)
             })
           }
 
           api.renderFinished.on(() => {
+            layoutLoopBracket()
             if (!readyPostedRef.current) {
               readyPostedRef.current = true
               onReady?.()
@@ -363,9 +480,11 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             /* ignore */
           }
         }
+        loopBracketRef.current = null
+        loopStateRef.current = null
         el.replaceChildren()
       }
-    }, [emitNoteEvent, mounted, onError, onReady, reloadKey, themeKey, transposeSemitones])
+    }, [layoutLoopBracket, mounted, onError, onReady, reloadKey, themeKey, transposeSemitones])
 
     useEffect(() => {
       if (!engineReady) return
@@ -374,8 +493,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       const raw = gp5Base64?.trim()
       if (!raw) return
       try {
-        const bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0))
-        api.load(bytes.buffer)
+        const bytes = base64ToUint8Array(raw)
+        const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+        api.load(buf)
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Invalid GP5 base64'
         setEngineError(msg)
@@ -399,10 +519,10 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       }
       if (syncTimerRef.current != null) {
         window.clearInterval(syncTimerRef.current)
+        syncTimerRef.current = null
       }
-      syncTimerRef.current = window.setInterval(() => {
-        updatePositionFromAudio()
-      }, 50)
+      // Stems use Web Audio / expo-av; hidden `<audio>` is not advanced during play. Cursor is driven by
+      // `syncPlaybackTimelineMs` from the stem poll (Study, SessionStemAndTab) — no interval vs host sync.
       return () => {
         if (syncTimerRef.current != null) {
           window.clearInterval(syncTimerRef.current)
@@ -451,6 +571,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
               flex: 1,
               backgroundColor: '#2B1D0E',
               overflow: 'auto',
+              position: 'relative',
             }}
           />
         )}

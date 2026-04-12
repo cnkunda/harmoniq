@@ -3,10 +3,17 @@
 export type AnalyzeJobStatus = 'processing' | 'complete' | 'failed'
 
 /** Lesson payload from GET /analyze/{job_id} when status is complete — matches `backend/app/schemas.py` with extras allowed. */
+/** Optional payload for POST /analyze — matches `backend/app/schemas.py` `PlayerProfile`. */
+export interface PlayerProfilePayload {
+  weak_areas?: string[]
+  skill_nodes?: Array<{ id: string; label?: string | null; score?: number | null }>
+}
+
 export interface LessonJSON {
   job_id?: string | null
   song_title?: string | null
   artist?: string | null
+  style_label?: string | null
   key?: string | null
   key_confidence?: number | null
   tempo?: number | null

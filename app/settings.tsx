@@ -143,31 +143,33 @@ export default function SettingsScreen() {
     }
   }
 
+  const runClearPracticeData = () => {
+    void (async () => {
+      try {
+        await clearAllPracticeData()
+        resetLesson()
+        clearAnnotations()
+        await loadSkills()
+        toast.success('Local practice data cleared.')
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Clear failed')
+      }
+    })()
+  }
+
   const confirmClear = () => {
-    Alert.alert(
-      'Clear all practice data?',
-      'Sessions, licks, jam history, and skill progress will be removed. Section annotations and the loaded lesson are cleared. Settings on this screen are kept.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              try {
-                await clearAllPracticeData()
-                resetLesson()
-                clearAnnotations()
-                await loadSkills()
-                toast.success('Local practice data cleared.')
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : 'Clear failed')
-              }
-            })()
-          },
-        },
-      ],
-    )
+    const detail =
+      'Sessions, licks, jam history, and skill progress will be removed. Section annotations and the loaded lesson are cleared. Settings on this screen are kept.'
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(`Clear all practice data?\n\n${detail}`)) {
+        runClearPracticeData()
+      }
+      return
+    }
+    Alert.alert('Clear all practice data?', detail, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Clear', style: 'destructive', onPress: runClearPracticeData },
+    ])
   }
 
   return (

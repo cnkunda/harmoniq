@@ -15,7 +15,7 @@ import logging
 import threading
 import time
 
-from app.schemas import JobStatus, LessonJSON, LessonSectionStub
+from app.schemas import JobStatus, LessonJSON, LessonSectionStub, PlayerProfile
 
 from app.analyze_audio import build_lesson_json_from_librosa
 from app.cache import load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
@@ -91,6 +91,7 @@ def _process_analyze_job(
     *,
     youtube_url: str | None,
     upload_path: str | None,
+    player_profile: PlayerProfile | None = None,
 ) -> None:
     """Worker loop for one analyze job.
 
@@ -113,7 +114,7 @@ def _process_analyze_job(
             upload_path=upload_path,
         )
         wav_path = str(wav_path_obj)
-        cached_lesson = load_cached_lesson_for_wav(wav_path_obj)
+        cached_lesson = load_cached_lesson_for_wav(wav_path_obj, player_profile=player_profile)
         if cached_lesson is not None:
             reused = reuse_cached_artifacts_into_job(cached_lesson, job_id=job_id)
             if reused is not None:
@@ -139,8 +140,9 @@ def _process_analyze_job(
                 stems=stems,
                 wav_path=wav_path,
                 source_url=youtube_url,
+                player_profile=player_profile,
             )
-        save_cached_lesson_for_wav(wav_path_obj, result)
+        save_cached_lesson_for_wav(wav_path_obj, result, player_profile=player_profile)
         jobs[job_id] = JobStatus(status="complete", result=result, error=None)
         logger.info("worker complete job_id=%s", job_id)
     except YouTubeUrlInvalidError:
@@ -179,13 +181,25 @@ def enqueue_analyze_job(
     *,
     youtube_url: str | None,
     upload_path: str | None,
+    player_profile: PlayerProfile | None = None,
 ) -> None:
     """Mark job as processing and start the worker thread."""
     jobs[job_id] = JobStatus(status="processing", result=None, error=None)
-    logger.info("enqueue job_id=%s status=processing youtube_url=%r upload_path=%r", job_id, youtube_url, upload_path)
+    logger.info(
+        "enqueue job_id=%s status=processing youtube_url=%r upload_path=%r has_profile=%s",
+        job_id,
+        youtube_url,
+        upload_path,
+        player_profile is not None,
+    )
     t = threading.Thread(
         target=_process_analyze_job,
-        kwargs={"job_id": job_id, "youtube_url": youtube_url, "upload_path": upload_path},
+        kwargs={
+            "job_id": job_id,
+            "youtube_url": youtube_url,
+            "upload_path": upload_path,
+            "player_profile": player_profile,
+        },
         daemon=True,
     )
     t.start()

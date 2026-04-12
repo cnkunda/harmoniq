@@ -1,33 +1,34 @@
-import { DEFAULT_SKILL_NODES, PREF_ONBOARDING_COMPLETE } from '@/src/db/schema'
-import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import {
-  getHarmoniqIdbHandle,
-  idbClearPracticeStores,
-  idbLoadEverything,
-  idbPersistJams,
-  idbPersistLicks,
-  idbPersistPrefs,
-  idbPersistSessions,
-  idbPersistSkillNodes,
-  idbReadLessonCache,
-  openHarmoniqIdb,
-  setHarmoniqIdbHandle,
-  type IdbHydration,
+    getHarmoniqIdbHandle,
+    idbClearPracticeStores,
+    idbLoadEverything,
+    idbPersistJams,
+    idbPersistLicks,
+    idbPersistPrefs,
+    idbPersistSessions,
+    idbPersistSkillNodes,
+    idbReadLessonCache,
+    openHarmoniqIdb,
+    setHarmoniqIdbHandle,
+    type IdbHydration,
 } from '@/src/db/idbWeb'
+import { DEFAULT_SKILL_NODES, PREF_ONBOARDING_COMPLETE } from '@/src/db/schema'
+import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
 import type {
   HomeSuggestion,
-  JamSnapshotInsertInput,
-  JamSnapshotRow,
-  LickInsertInput,
-  LickRow,
-  LatestSessionSongRow,
-  NodeSessionSnippet,
-  ReviewSkillUpdateInput,
-  SessionArchiveRow,
-  SessionInsertInput,
-  SessionJournalRow,
-  SkillNodeRow,
+    JamSnapshotInsertInput,
+    JamSnapshotRow,
+    LatestSessionSongRow,
+    LickInsertInput,
+    LickRow,
+    NodeSessionSnippet,
+    ReviewSkillUpdateInput,
+    SessionArchiveRow,
+    SessionInsertInput,
+    SessionJournalRow,
+    SkillNodeRow,
 } from '@/src/db/types'
+import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
 
 const skillNodes = new Map<string, SkillNodeRow>()
@@ -327,10 +328,16 @@ export async function getLatestSessionWithSong(): Promise<LatestSessionSongRow |
 export async function getHomeSuggestion(): Promise<HomeSuggestion> {
   seedWebSkillNodes()
   const song = await getLatestSessionWithSong()
-  if (!song) return { kind: 'cold_start' }
+  if (!song) {
+    const lib = tryLibraryHomeSuggestion(await getLicks())
+    return lib ?? { kind: 'cold_start' }
+  }
   const nodes = await getAllSkillNodes()
   const node = pickEarliestDueSkillNode(nodes)
-  if (!node) return { kind: 'cold_start' }
+  if (!node) {
+    const lib = tryLibraryHomeSuggestion(await getLicks())
+    return lib ?? { kind: 'cold_start' }
+  }
   return { kind: 'ready', node, song }
 }
 
@@ -437,6 +444,19 @@ export async function insertLickRow(input: LickInsertInput): Promise<void> {
 
 export async function getLicks(): Promise<LickRow[]> {
   return [...licks].sort((a, b) => (a.date_saved < b.date_saved ? 1 : -1))
+}
+
+export async function getLickById(id: string): Promise<LickRow | null> {
+  seedWebSkillNodes()
+  return licks.find((x) => x.id === id) ?? null
+}
+
+export async function deleteLickById(id: string): Promise<void> {
+  seedWebSkillNodes()
+  const i = licks.findIndex((x) => x.id === id)
+  if (i < 0) return
+  licks.splice(i, 1)
+  await flushLicks()
 }
 
 /** After `initDb`, restore last `LessonJSON` from IDB if store is still empty (web reload). */

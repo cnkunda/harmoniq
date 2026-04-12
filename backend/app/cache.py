@@ -9,7 +9,7 @@ import shutil
 from pathlib import Path
 
 from app.ingest import get_data_dir, get_job_dir
-from app.schemas import LessonJSON
+from app.schemas import LessonJSON, PlayerProfile
 
 logger = logging.getLogger("harmoniq.cache")
 logger.setLevel(logging.INFO)
@@ -48,9 +48,28 @@ def cache_key_for_audio_hash(audio_hash: str) -> str:
     return f"{PIPELINE_VERSION}:{audio_hash}"
 
 
-def load_cached_lesson_for_wav(wav_path: Path) -> LessonJSON | None:
-    """Return cached lesson for this audio hash/version, or None."""
-    key = cache_key_for_audio_hash(audio_sha256(wav_path))
+def _profile_cache_suffix(profile: PlayerProfile | None) -> str:
+    """Differentiate cache entries when coach output is personalized by profile."""
+    if profile is None:
+        return ""
+    data = profile.model_dump(mode="json", exclude_none=True)
+    weak = data.get("weak_areas") or []
+    nodes = data.get("skill_nodes") or []
+    if not weak and not nodes:
+        return ""
+    canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    short = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+    return f"|p:{short}"
+
+
+def cache_key_for_wav_and_profile(wav_path: Path, profile: PlayerProfile | None) -> str:
+    base = cache_key_for_audio_hash(audio_sha256(wav_path))
+    return base + _profile_cache_suffix(profile)
+
+
+def load_cached_lesson_for_wav(wav_path: Path, *, player_profile: PlayerProfile | None = None) -> LessonJSON | None:
+    """Return cached lesson for this audio hash/version (and profile segment), or None."""
+    key = cache_key_for_wav_and_profile(wav_path, player_profile)
     p = _cache_path(key)
     if not p.exists():
         return None
@@ -65,8 +84,10 @@ def load_cached_lesson_for_wav(wav_path: Path) -> LessonJSON | None:
         return None
 
 
-def save_cached_lesson_for_wav(wav_path: Path, lesson: LessonJSON) -> None:
-    key = cache_key_for_audio_hash(audio_sha256(wav_path))
+def save_cached_lesson_for_wav(
+    wav_path: Path, lesson: LessonJSON, *, player_profile: PlayerProfile | None = None
+) -> None:
+    key = cache_key_for_wav_and_profile(wav_path, player_profile)
     p = _cache_path(key)
     payload = {
         "pipeline_version": PIPELINE_VERSION,

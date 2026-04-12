@@ -12,7 +12,7 @@
       -webkit-touch-callout: none;
       user-select: none;
     }
-    #alphatab { width: 100%; min-height: 100vh; }
+    #alphatab { position: relative; width: 100%; min-height: 100vh; }
   </style>
 </head>
 <body>
@@ -49,7 +49,7 @@
       var externalAudio = new Audio()
       externalAudio.preload = 'auto'
       externalAudio.crossOrigin = 'anonymous'
-      var SOUNDFONT_URL = 'https://raw.githubusercontent.com/ad-si/GeneralUser/master/GeneralUser.sf2'
+      var SOUNDFONT_URL = 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.6.1/dist/soundfont/sonivox.sf2'
 
       var api = new alphaTab.AlphaTabApi(container, {
         core: {
@@ -76,8 +76,88 @@
         },
       })
       var currentTranspose = 0
-      var syncTimer = null
       var lastNoteEventAt = 0
+      var loopBracketEl = null
+      var loopState = null
+
+      function ensureLoopBracket() {
+        if (loopBracketEl && loopBracketEl.parentNode === container) return
+        loopBracketEl = document.createElement('div')
+        loopBracketEl.id = 'harmoniq-loop-bracket'
+        loopBracketEl.setAttribute('aria-hidden', 'true')
+        loopBracketEl.style.cssText =
+          'display:none;position:absolute;pointer-events:none;z-index:50;border:2px solid rgba(240,222,180,0.92);border-radius:6px;background:rgba(240,222,180,0.06);box-sizing:border-box;'
+        container.appendChild(loopBracketEl)
+      }
+
+      function hideLoopBracket() {
+        loopState = null
+        if (loopBracketEl) loopBracketEl.style.display = 'none'
+      }
+
+      function layoutLoopBracket() {
+        if (!loopState || loopState.startBarIndex >= loopState.endBarIndexExclusive) {
+          hideLoopBracket()
+          return
+        }
+        ensureLoopBracket()
+        var lookup = api.boundsLookup || (api.renderer && api.renderer.boundsLookup)
+        var startIdx = loopState.startBarIndex
+        var endEx = loopState.endBarIndexExclusive
+        var minX = Infinity
+        var minY = Infinity
+        var maxX = -Infinity
+        var maxY = -Infinity
+        var any = false
+        if (lookup && typeof lookup.findMasterBarByIndex === 'function') {
+          for (var b = startIdx; b < endEx; b++) {
+            var mb = lookup.findMasterBarByIndex(b)
+            if (!mb) continue
+            var vb = mb.visualBounds || mb.realBounds
+            if (!vb || typeof vb.x !== 'number' || typeof vb.y !== 'number') continue
+            var w = typeof vb.w === 'number' ? vb.w : 0
+            var h = typeof vb.h === 'number' ? vb.h : 0
+            any = true
+            minX = Math.min(minX, vb.x)
+            minY = Math.min(minY, vb.y)
+            maxX = Math.max(maxX, vb.x + w)
+            maxY = Math.max(maxY, vb.y + h)
+          }
+        }
+        if (!any) {
+          var score = api.score
+          var total = score && score.masterBars && score.masterBars.length ? score.masterBars.length : 0
+          if (total <= 0 || !loopBracketEl) {
+            if (loopBracketEl) loopBracketEl.style.display = 'none'
+            return
+          }
+          var cw = container.clientWidth || 1
+          var ch = container.clientHeight || 120
+          var left = (startIdx / total) * cw
+          var width = Math.max(8, ((endEx - startIdx) / total) * cw)
+          loopBracketEl.style.left = left + 'px'
+          loopBracketEl.style.top = '8px'
+          loopBracketEl.style.width = width + 'px'
+          loopBracketEl.style.height = Math.max(48, ch - 16) + 'px'
+          loopBracketEl.style.display = 'block'
+          return
+        }
+        var sl = container.scrollLeft || 0
+        var st = container.scrollTop || 0
+        loopBracketEl.style.left = minX - sl + 'px'
+        loopBracketEl.style.top = minY - st + 'px'
+        loopBracketEl.style.width = Math.max(4, maxX - minX) + 'px'
+        loopBracketEl.style.height = Math.max(4, maxY - minY) + 'px'
+        loopBracketEl.style.display = 'block'
+      }
+
+      container.addEventListener(
+        'scroll',
+        function () {
+          layoutLoopBracket()
+        },
+        { passive: true },
+      )
 
       function postOut(msg) {
         try {
@@ -107,6 +187,7 @@
       }
 
       function updatePositionFromAudio() {
+        if (!externalAudio.src) return
         var ms = externalAudio.currentTime * 1000
         try {
           if (api.player && api.player.output && typeof api.player.output.updatePosition === 'function') {
@@ -206,6 +287,9 @@
         }
         if (typeof evt.fret === 'number') payload.fret = evt.fret
         if (typeof evt.string === 'number') payload.string = evt.string
+        if (typeof evt.fret === 'number' && typeof evt.string === 'number') {
+          payload.hasExplicitTabPosition = true
+        }
 
         lastNoteEventAt = now
         postOut(payload)
@@ -229,6 +313,95 @@
         if (!api.settings.notation) api.settings.notation = {}
         api.settings.notation.transpositionPitches = [val]
         api.updateSettings()
+      }
+
+      function harmoniqPitchClassSet(rootMidi, intervals) {
+        var set = {}
+        var rootPc = ((Math.round(rootMidi) % 12) + 12) % 12
+        if (!Array.isArray(intervals)) return set
+        for (var i = 0; i < intervals.length; i += 1) {
+          var off = intervals[i]
+          if (!Number.isFinite(off)) continue
+          var pc = (rootPc + off) % 12
+          if (pc < 0) pc += 12
+          set[pc] = true
+        }
+        return set
+      }
+
+      function harmoniqForEachNote(score, fn) {
+        if (!score || !Array.isArray(score.tracks)) return
+        for (var ti = 0; ti < score.tracks.length; ti += 1) {
+          var track = score.tracks[ti]
+          if (!track || !Array.isArray(track.bars)) continue
+          for (var bi = 0; bi < track.bars.length; bi += 1) {
+            var bar = track.bars[bi]
+            if (!bar || !Array.isArray(bar.voices)) continue
+            for (var vi = 0; vi < bar.voices.length; vi += 1) {
+              var voice = bar.voices[vi]
+              if (!voice || !Array.isArray(voice.beats)) continue
+              for (var bei = 0; bei < voice.beats.length; bei += 1) {
+                var beat = voice.beats[bei]
+                if (!beat || !Array.isArray(beat.notes)) continue
+                for (var ni = 0; ni < beat.notes.length; ni += 1) {
+                  fn(beat.notes[ni])
+                }
+              }
+            }
+          }
+        }
+      }
+
+      function harmoniqNoteMidi(note) {
+        if (!note) return null
+        if (typeof note.realValue === 'number' && Number.isFinite(note.realValue)) return Math.round(note.realValue)
+        if (typeof note.midi === 'number' && Number.isFinite(note.midi)) return Math.round(note.midi)
+        return null
+      }
+
+      function harmoniqTriggerRender() {
+        try {
+          if (api.renderer && typeof api.renderer.render === 'function') api.renderer.render()
+        } catch (e1) {
+          /* ignore */
+        }
+        try {
+          if (typeof api.updateSettings === 'function') api.updateSettings()
+        } catch (e2) {
+          /* ignore */
+        }
+      }
+
+      function harmoniqApplyScaleHighlight(rootMidi, intervals) {
+        var score = api.score
+        var model = typeof alphaTab !== 'undefined' ? alphaTab.model : null
+        if (!score || !model || !model.NoteStyle || !model.NoteSubElement || !model.Color) return
+        var NoteStyle = model.NoteStyle
+        var TabNum = model.NoteSubElement.GuitarTabFretNumber
+        var Head = model.NoteSubElement.StandardNotationNoteHead
+        if (TabNum == null || Head == null) return
+        var tint = model.Color.fromJson('#6EC88C')
+        var targets = harmoniqPitchClassSet(rootMidi, intervals)
+        harmoniqForEachNote(score, function (note) {
+          var md = harmoniqNoteMidi(note)
+          if (md == null) return
+          var pc = ((md % 12) + 12) % 12
+          if (!targets[pc]) return
+          var style = new NoteStyle()
+          style.colors.set(TabNum, tint)
+          style.colors.set(Head, tint)
+          note.style = style
+        })
+        harmoniqTriggerRender()
+      }
+
+      function harmoniqClearScaleHighlight() {
+        var score = api.score
+        if (!score) return
+        harmoniqForEachNote(score, function (note) {
+          note.style = null
+        })
+        harmoniqTriggerRender()
       }
 
       function onInboundMessage(event) {
@@ -267,6 +440,18 @@
           return
         }
 
+        if (msg.type === 'syncTimelineMs' && typeof msg.positionMs === 'number') {
+          var syncMs = Math.max(0, msg.positionMs)
+          try {
+            if (api.player && api.player.output && typeof api.player.output.updatePosition === 'function') {
+              api.player.output.updatePosition(syncMs)
+            }
+          } catch (e) {
+            postOut({ type: 'error', message: (e && e.message) ? e.message : 'syncTimelineMs failed' })
+          }
+          return
+        }
+
         if (msg.type === 'getPosition') {
           postOut({ type: 'position', positionMs: externalAudio.currentTime * 1000 })
           return
@@ -279,6 +464,35 @@
 
         if (msg.type === 'setTranspose') {
           applyTranspose(msg.semitones)
+          return
+        }
+
+        if (
+          msg.type === 'setLoopRegion' &&
+          typeof msg.startBarIndex === 'number' &&
+          typeof msg.endBarIndexExclusive === 'number'
+        ) {
+          loopState = {
+            startBarIndex: Math.max(0, Math.floor(msg.startBarIndex)),
+            endBarIndexExclusive: Math.max(0, Math.floor(msg.endBarIndexExclusive)),
+          }
+          layoutLoopBracket()
+          return
+        }
+
+        if (msg.type === 'clearLoopRegion') {
+          hideLoopBracket()
+          return
+        }
+
+        if (msg.type === 'highlightScaleDegrees' && typeof msg.rootMidi === 'number' && Array.isArray(msg.intervals)) {
+          harmoniqApplyScaleHighlight(msg.rootMidi, msg.intervals)
+          return
+        }
+
+        if (msg.type === 'clearScaleHighlight') {
+          harmoniqClearScaleHighlight()
+          return
         }
       }
 
@@ -290,14 +504,9 @@
         postOut({ type: 'error', message: m || 'AlphaTab error' })
       })
 
-      var midiHook = null
-      if (api.player && api.player.midiEventsPlayed && typeof api.player.midiEventsPlayed.on === 'function') {
-        midiHook = api.player.midiEventsPlayed.on
-      } else if (api.midiEventsPlayed && typeof api.midiEventsPlayed.on === 'function') {
-        midiHook = api.midiEventsPlayed.on
-      }
-      if (midiHook) {
-        midiHook(function (evt) {
+      var midiPlayed = (api.player && api.player.midiEventsPlayed) || api.midiEventsPlayed
+      if (midiPlayed && typeof midiPlayed.on === 'function') {
+        midiPlayed.on(function (evt) {
           emitNoteEventFromMidiEvent(evt)
         })
       }
@@ -305,9 +514,7 @@
       /** First completed render — includes initial empty layout; later re-renders do not re-send. */
       var readyPosted = false
       api.renderFinished.on(function () {
-        if (!syncTimer) {
-          syncTimer = window.setInterval(updatePositionFromAudio, 50)
-        }
+        layoutLoopBracket()
         if (readyPosted) return
         wireExternalMediaHandler()
         preloadSoundFont()

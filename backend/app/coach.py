@@ -7,13 +7,14 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
-from app.schemas import LessonSectionStub
+from app.schemas import LessonSectionStub, PlayerProfile
 
 logger = logging.getLogger("harmoniq.coach")
 logger.setLevel(logging.INFO)
 
 MODEL_ID = "claude-sonnet-4-20250514"
 COACH_TIMEOUT_SECONDS = 8.0
+QUICK_FEEDBACK_TIMEOUT_SECONDS = 5.0
 
 # README "AI Coach — Prompt Design" base prompt; keep this literal for reviewability.
 BASE_SYSTEM_PROMPT = """You are a warm, musical guitar coach — somewhere between a patient session musician
@@ -48,6 +49,80 @@ coach_explanation:
 
 Output only JSON."""
 
+
+def _player_context_block(profile: PlayerProfile | None) -> str:
+    if profile is None:
+        return ""
+    data = profile.model_dump(mode="json", exclude_none=True)
+    weak = data.get("weak_areas") or []
+    nodes = data.get("skill_nodes") or []
+    if not weak and not nodes:
+        return ""
+    lines = [
+        "<player_context>",
+        "The player has a known skill profile — bias coach_note and coach_explanation slightly toward their gaps.",
+    ]
+    if weak:
+        lines.append("Weak areas to emphasize (plain phrases): " + ", ".join(str(w) for w in weak))
+    if nodes:
+        parts: list[str] = []
+        for n in nodes[:12]:
+            if not isinstance(n, dict):
+                continue
+            nid = n.get("id", "")
+            sc = n.get("score")
+            if sc is not None:
+                try:
+                    sf = float(sc)
+                    parts.append(f"{nid} (score {sf:.2f})")
+                except (TypeError, ValueError):
+                    parts.append(str(nid))
+            else:
+                parts.append(str(nid))
+        if parts:
+            lines.append("Skill snapshot: " + "; ".join(parts))
+    lines.append("Do not quote this block verbatim in the JSON output.")
+    lines.append("</player_context>")
+    return "\n".join(lines) + "\n\n"
+
+
+def _song_style_block(style_label: str | None, technique_hints: list[str] | None) -> str:
+    label = (style_label or "").strip()
+    hints = [h for h in (technique_hints or []) if isinstance(h, str) and h.strip()]
+    if not label and not hints:
+        return ""
+    lines = [
+        "<song_context>",
+        f"Detected musical style label: {label or 'unknown'}.",
+    ]
+    if hints:
+        lines.append("Technique angles that often matter here: " + ", ".join(hints[:6]))
+    lines.append("Let this lightly shape the coaching tone, not a theory lecture.")
+    lines.append("</song_context>")
+    return "\n".join(lines) + "\n\n"
+
+
+def build_coach_user_prompt(
+    *,
+    section_label: str | None,
+    song_title: str | None,
+    artist: str | None,
+    key: str | None,
+    player_profile: PlayerProfile | None = None,
+    style_label: str | None = None,
+    technique_hints: list[str] | None = None,
+) -> str:
+    """Assemble the user message: optional context blocks + fixed JSON contract."""
+    prefix = _player_context_block(player_profile) + _song_style_block(style_label, technique_hints)
+    body = COACH_USER_PROMPT_TEMPLATE.format(
+        section_label=(section_label or "Section"),
+        song_title=(song_title or "Unknown song"),
+        artist=(artist or "Unknown artist"),
+        key=(key or "Unknown key"),
+    )
+    return prefix + body
+
+
 FALLBACK_COACH_NOTE = "Stay relaxed and sing each phrase before you play it, then match that shape on guitar."
 FALLBACK_COACH_EXPLANATION = (
     "This section sounds strong when you leave a little space between ideas. "
@@ -67,6 +142,18 @@ def _fallback_coach_fields() -> tuple[str, str]:
     return FALLBACK_COACH_NOTE, FALLBACK_COACH_EXPLANATION
 
 
+QUICK_FEEDBACK_USER_PROMPT = """Return valid JSON with exactly one string field "message".
+The guitarist just played along for several beats. Per-beat pitch accuracy (chronological, one label per beat): {pattern}
+
+Write one short sentence (max 28 words) — the single most useful thing to try on the next pass.
+Plain English. No markdown inside the string. Never start with "Great job" or "Nice work".
+Output only JSON."""
+
+FALLBACK_QUICK_FEEDBACK = (
+    "A few beats wandered wide — lighten the grip and aim to land the target pitch a hair earlier so it settles in tune."
+)
+
+
 def _extract_text_from_response(response: object) -> str:
     content = getattr(response, "content", None)
     if not isinstance(content, list):
@@ -79,13 +166,20 @@ def _extract_text_from_response(response: object) -> str:
     return "\n".join(chunks).strip()
 
 
-def _call_claude_text(*, api_key: str, user_prompt: str) -> str:
+def _call_claude_text(
+    *,
+    api_key: str,
+    user_prompt: str,
+    max_tokens: int = 220,
+    temperature: float = 1.0,
+) -> str:
     from anthropic import Anthropic
 
     client = Anthropic(api_key=api_key)
     response = client.messages.create(
         model=MODEL_ID,
-        max_tokens=220,
+        max_tokens=max_tokens,
+        temperature=temperature,
         system=BASE_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_prompt}],
     )
@@ -126,12 +220,84 @@ def _parse_coach_json(raw_text: str) -> tuple[str, str] | None:
     return note.strip(), explanation.strip()
 
 
+def _parse_quick_message_json(raw_text: str) -> str | None:
+    import json
+
+    raw = (raw_text or "").strip()
+    if not raw:
+        return None
+    fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", raw, flags=re.IGNORECASE | re.DOTALL)
+    if fenced:
+        raw = fenced.group(1).strip()
+    if not raw.startswith("{") or not raw.endswith("}"):
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            raw = raw[start : end + 1]
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    msg = data.get("message")
+    if not isinstance(msg, str) or not msg.strip():
+        return None
+    return msg.strip()
+
+
+def generate_quick_feedback(accuracy_pattern: list[str]) -> str:
+    """One-sentence coach from per-beat hit/close/miss pattern (Play step, PRIORITIES §49)."""
+    if not accuracy_pattern:
+        logger.info("quick_feedback fallback reason=empty_pattern")
+        return FALLBACK_QUICK_FEEDBACK
+
+    if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("HARMONIQ_ENABLE_COACH_IN_TESTS") != "1":
+        logger.info("quick_feedback fallback reason=pytest_mode")
+        return FALLBACK_QUICK_FEEDBACK
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        logger.warning("quick_feedback fallback reason=missing_api_key")
+        return FALLBACK_QUICK_FEEDBACK
+
+    pattern_csv = ", ".join(accuracy_pattern)
+    user_prompt = QUICK_FEEDBACK_USER_PROMPT.format(pattern=pattern_csv)
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(
+        _call_claude_text,
+        api_key=api_key,
+        user_prompt=user_prompt,
+        max_tokens=110,
+        temperature=0.4,
+    )
+    try:
+        raw_text = future.result(timeout=QUICK_FEEDBACK_TIMEOUT_SECONDS)
+        parsed = _parse_quick_message_json(raw_text)
+        if parsed is None:
+            logger.warning("quick_feedback fallback reason=unparseable_response")
+            return FALLBACK_QUICK_FEEDBACK
+        return parsed
+    except FutureTimeoutError:
+        future.cancel()
+        logger.warning("quick_feedback fallback reason=timeout")
+        return FALLBACK_QUICK_FEEDBACK
+    except Exception as exc:
+        logger.warning("quick_feedback fallback reason=api_error error=%s", exc.__class__.__name__)
+        return FALLBACK_QUICK_FEEDBACK
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
 def generate_coach_fields_for_section(
     *,
     section_label: str | None,
     song_title: str | None,
     artist: str | None,
     key: str | None,
+    player_profile: PlayerProfile | None = None,
+    style_label: str | None = None,
+    technique_hints: list[str] | None = None,
 ) -> tuple[str, str]:
     """Return coach_note + coach_explanation, with timeout and dev fallback."""
     # Keep test runs deterministic and fully offline even when a real key is present.
@@ -144,11 +310,14 @@ def generate_coach_fields_for_section(
         logger.warning("coach fallback reason=missing_api_key")
         return _fallback_coach_fields()
 
-    user_prompt = COACH_USER_PROMPT_TEMPLATE.format(
-        section_label=(section_label or "Section"),
-        song_title=(song_title or "Unknown song"),
-        artist=(artist or "Unknown artist"),
-        key=(key or "Unknown key"),
+    user_prompt = build_coach_user_prompt(
+        section_label=section_label,
+        song_title=song_title,
+        artist=artist,
+        key=key,
+        player_profile=player_profile,
+        style_label=style_label,
+        technique_hints=technique_hints,
     )
     pool = ThreadPoolExecutor(max_workers=1)
     future = pool.submit(_call_claude_text, api_key=api_key, user_prompt=user_prompt)
@@ -256,6 +425,9 @@ def merge_coach_copy_into_sections(
     song_title: str | None,
     artist: str | None,
     key: str | None,
+    player_profile: PlayerProfile | None = None,
+    style_label: str | None = None,
+    technique_hints: list[str] | None = None,
 ) -> list[LessonSectionStub]:
     """Populate coach fields on each section while preserving existing fields."""
     enriched: list[LessonSectionStub] = []
@@ -265,6 +437,9 @@ def merge_coach_copy_into_sections(
             song_title=song_title,
             artist=artist,
             key=key,
+            player_profile=player_profile,
+            style_label=style_label,
+            technique_hints=technique_hints,
         )
         payload = sec.model_dump(exclude_none=True)
         payload["coach_note"] = note

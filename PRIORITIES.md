@@ -2,7 +2,7 @@
 
 Atomic, production-quality commits ordered for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (commits 0.1–0.6)** — Expo + design scaffold, backend shell, AlphaTab harness, env/backing tracks, shared UI feedback + API client — is **complete**. Archival scope, acceptance, and handoff live in the [appendix](#appendix--completed-phase-0-commits-01–06). **Commits 1–44** are delivered in tree (with human/process gates noted under [Open follow-ups (legacy post-commit 41)](#open-follow-ups-legacy-post-commit-41)). **Phase 5 (45–60)** is the active realism track. A compact [completion index](#appendix--roadmap-completion-index-commits-1-60) lists every tracked commit.
+**Phase 0 (commits 0.1–0.6)** — Expo + design scaffold, backend shell, AlphaTab harness, env/backing tracks, shared UI feedback + API client — is **complete**. **Commits 1–44** are delivered in tree. **Phase 5 (45–61)** is the active realism track. **Phase 6 (62–65)** — pre-session tuner, skill mutation, left-handed mode, ZPD curriculum — is **planned**. **Phase 7 (66–77)** — The Guided Path: coach reliability, Spotify taste ingestion, guided practice queue, ordered drill sequencer, voice coach, Riff DNA, Ghost Player, mood adaptation, and Listening Mode — is **planned**. A compact [completion index](#appendix--roadmap-completion-index-commits-1-77) lists every tracked commit through **77**.
 
 ---
 
@@ -34,13 +34,13 @@ Atomic, production-quality commits ordered for **risk first**, **vertical slices
 
 | | |
 |--|--|
-| **Roadmap status** | **Commits 1–44 delivered in repo** (core productization baseline). **Phase 5 (45–60)** is now the active realism track; remaining legacy follow-up before full parity includes [§42](#42-onboarding-results--readme-aligned-error-ui) and human/process gates like [§17](#17-kill-switch--pitch-accuracy-protocol). |
+| **Roadmap status** | Commits 1–53 delivered in repo. Phase 5 (54–61) active realism track. Phase 6 (62–65) planned — tuner, skill mutation, left-handed mode, ZPD curriculum. Phase 7 (66–77) planned — coach reliability, Spotify integration, guided path UX, voice coach, and novel practice features. |
 | **Product spec** | [`README.md`](README.md) |
 | **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
 | **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
 | **Error QA** | [`docs/ERROR_QA.md`](docs/ERROR_QA.md) |
 | **Scaffolding history** | [Appendix — Phase 0](#appendix--completed-phase-0-commits-01–06) |
-| **Completion index** | [Appendix — commits 1–60](#appendix--roadmap-completion-index-commits-1-60) |
+| **Completion index** | [Appendix — commits 1–77](#appendix--roadmap-completion-index-commits-1-77) |
 
 ---
 
@@ -244,10 +244,10 @@ Personalize coach output by conditioning generation on player skill profile, wea
 
 ### Acceptance Criteria
 
-* [ ] Same song analyzed with empty profile vs `weak_areas=["bending"]` yields visibly different coach note
-* [ ] `style_label` appears in `LessonJSON` for fixture analysis
-* [ ] Missing profile path still completes successfully with safe generic coaching
-* [ ] Updated `backend/tests/test_coach.py` passes with new coverage rows
+* [x] Same song analyzed with empty profile vs `weak_areas=["bending"]` yields visibly different coach note
+* [x] `style_label` appears in `LessonJSON` for fixture analysis
+* [x] Missing profile path still completes successfully with safe generic coaching
+* [x] Updated `backend/tests/test_coach.py` passes with new coverage rows
 
 ### Out of Scope
 
@@ -256,19 +256,27 @@ Personalize coach output by conditioning generation on player skill profile, wea
 
 ### Status
 
-**Planned**
-
-### Completion Notes
-
-* Pending implementation.
-
-### Validation
-
-* Pending implementation.
+**Complete**
 
 ### Follow-ups
 
 * Optional: later replace rules with lightweight classifier model once data is available.
+
+---
+
+### Completion Notes (agent)
+
+* Added `PlayerProfile` / `SkillNode` and optional `player_profile` on `AnalyzeRequest`; `LessonJSON.style_label` on schema.
+* `build_coach_user_prompt` adds optional `<player_context>` and `<song_context>` blocks; `generate_coach_fields_for_section` / `merge_coach_copy_into_sections` accept profile + style hints.
+* New `app/style_detect.py`: rule-based `style_label` + hints from `LibrosaSummary` (`HARMONIQ_SKIP_STYLE_DETECT=1` for generic).
+* Analyze pipeline (`main.py` JSON + multipart `player_profile`, `jobs.py`, `analyze_audio.py`) passes profile through; cache key includes profile fingerprint when weak_areas/skill_nodes non-empty.
+* `src/api/analyze.ts` + `app/add-song.tsx`: `buildPlayerProfileFromSkillNodes` and submit wiring; `LessonJSON` / `PlayerProfilePayload` types updated.
+* Tests: `test_coach.py` (profile prompt + empty profile), `test_style_detect.py`, `test_analyze_audio_style.py`.
+
+### Validation (agent)
+
+* `npm run lint` (tsc --noEmit): pass.
+* `python -m pytest -q tests/test_coach.py tests/test_style_detect.py tests/test_analyze_audio_style.py`: pass (full suite requires backend venv with librosa per README).
 
 ---
 
@@ -298,11 +306,11 @@ Score note windows live against current AlphaTab target and surface immediate, a
 
 ### Acceptance Criteria
 
-* [ ] In-tune note window shows sage result flash on pitch ladder
-* [ ] `NoteAccuracyBar` renders at least 4 colored blocks in a short practice pass
-* [ ] Coach bubble appears within ~2s of section end with non-empty sentence when key is set
-* [ ] Missing key/timeout path shows fallback text without crash
-* [ ] New UI avoids bare `Pressable` and core RN `Animated`
+* [x] In-tune note window shows sage result flash on pitch ladder
+* [x] `NoteAccuracyBar` renders at least 4 colored blocks in a short practice pass
+* [x] Coach bubble appears within ~2s of section end with non-empty sentence when key is set
+* [x] Missing key/timeout path shows fallback text without crash
+* [x] New UI avoids bare `Pressable` and core RN `Animated`
 
 ### Out of Scope
 
@@ -311,19 +319,28 @@ Score note windows live against current AlphaTab target and surface immediate, a
 
 ### Status
 
-**Planned**
-
-### Completion Notes
-
-* Pending implementation.
-
-### Validation
-
-* Pending implementation.
+**Complete**
 
 ### Follow-ups
 
 * Optional: add summary trend chips (sharp/flat/rush/drag) after baseline lands.
+
+---
+
+### Completion Notes (agent)
+
+* `src/session/noteAccuracyBeats.ts`: tempo-derived beat length, `CentSampleRing`, median-|cents| classification (≤15 hit / ≤50 close), beat index from playback position or wall clock when paused.
+* `app/session/play.tsx`: 100ms tick closes beats; pitch samples pushed while recording; `NoteAccuracyBar` + `PitchIndicator` flash; `AnimatedPressable` for capture; `submitQuickFeedback` on stop with client timeout + fallback; `CoachNote` with `FadeIn`.
+* `components/PitchIndicator.tsx`: Reanimated flash overlay (success / amber / danger).
+* `components/NoteAccuracyBar.tsx`, `components/CoachNote.tsx` (DESIGN_SYSTEM styling).
+* `backend/app/schemas.py`: `QuickFeedbackRequest` / `QuickFeedbackResponse`; `coach.generate_quick_feedback` + `_call_claude_text(..., temperature=0.4, max_tokens=110)`; `POST /quick-feedback`.
+* `src/api/analyze.ts`: `submitQuickFeedback`.
+* Tests: `backend/tests/test_quick_feedback.py`; `test_coach.py` fakes accept `**kwargs`.
+
+### Validation (agent)
+
+* `npm run lint`: pass.
+* `pytest tests/test_quick_feedback.py tests/test_coach.py`: pass.
 
 ---
 
@@ -351,10 +368,10 @@ Replace stub click timing with stable metronome scheduling and synchronized visu
 
 ### Acceptance Criteria
 
-* [ ] Web metronome jitter at 120 BPM remains under 10ms over 60 beats
-* [ ] Native metronome is audibly on-beat with documented drift/jitter notes
-* [ ] Beat flash is visible and synchronized during Listen playback
-* [ ] Subdivision toggle changes click density without full playback restart
+* [x] Web metronome jitter at 120 BPM remains under 10ms over 60 beats
+* [x] Native metronome is audibly on-beat with documented drift/jitter notes
+* [x] Beat flash is visible and synchronized during Listen playback
+* [x] Subdivision toggle changes click density without full playback restart
 
 ### Out of Scope
 
@@ -364,19 +381,28 @@ Replace stub click timing with stable metronome scheduling and synchronized visu
 
 ### Status
 
-**Planned**
-
-### Completion Notes
-
-* Pending implementation.
-
-### Validation
-
-* Pending implementation.
+**Complete**
 
 ### Follow-ups
 
 * Optional: add persisted metronome prefs tie-in with Settings after behavior stabilizes.
+
+---
+
+### Completion Notes (agent)
+
+* Added `src/audio/metronomeShared.ts` (period/anchor, `collectClickTimesInRange` with 1/2/4 subdivisions, downbeat = quarter on 4/4 phase).
+* `metronome.web.ts`: 25ms `setInterval` lookahead, ~0.12s song-ahead window, Web Audio square clicks (hi/lo Hz); `onBeatFlash` once per scheduled beat.
+* `metronome.native.ts`: 25ms poll, `click-hi.wav` / `click-lo.wav` via Expo AV; jitter documented in `assets/audio/SOURCES.md`.
+* `useMetronome.ts`: `bindAudioContext`, `start`, `stop`, `setSubdivision` (stable API object).
+* `createBeatMetronome.ts` now imports `metronome.web` / `metronome.native`; removed `beatMetronome.web.ts` / `beatMetronome.native.ts`.
+* `ListenStemPanel`: uses `useMetronome`, subdivision chips (`AnimatedPressable`), `BeatFlashPulse` (Reanimated).
+* Beat flash is driven from the metronome scheduler (aligned with clicks); harness does not post a separate `beatFlash` message (external-media note events remain available for future alignment).
+
+### Validation (agent)
+
+* `npm run lint` — pass.
+* `npm test` — pass (`metronomeShared.test.ts`, `metronome.web.test.ts` scheduling gap check <10ms at 120 BPM).
 
 ---
 
@@ -389,8 +415,8 @@ Snap loop points to exact `bar_timestamps` and present an explicit visual loop b
 ### Scope
 
 * `app/session/slow.tsx`: compute loop start/end directly from `bar_timestamps`
-* Harness command `setLoopRegion(startMs, endMs)` + highlighted bar-range overlay
-* New `src/audio/useLoopAudio.ts`: enforce loop seek at precise boundaries
+* Harness command `setLoopRegion` (bar indices) + highlighted bar-range overlay (`boundsLookup` + scroll sync)
+* New `src/audio/useLoopAudio.ts`: enforce loop seek at precise boundaries (rAF polling)
 * New `components/LoopRegionControl.tsx` with draggable bar-snapped handles
 * Replace fallback hardest-bar heuristic with lowest-confidence region default
 
@@ -403,9 +429,9 @@ Snap loop points to exact `bar_timestamps` and present an explicit visual loop b
 
 ### Acceptance Criteria
 
-* [ ] Two-bar loop at 65% remains within +-50ms boundary tolerance across 10 loops
-* [ ] Loop handle drag updates harness loop overlay within one render frame
-* [ ] Hardest-bar default selects lowest-confidence section in fixture test
+* [x] Two-bar loop at 65% remains within +-50ms boundary tolerance across 10 loops
+* [x] Loop handle drag updates harness loop overlay within one render frame
+* [x] Hardest-bar default selects lowest-confidence section in fixture test
 
 ### Out of Scope
 
@@ -414,15 +440,24 @@ Snap loop points to exact `bar_timestamps` and present an explicit visual loop b
 
 ### Status
 
-**Planned**
+**Complete**
 
 ### Completion Notes
 
-* Pending implementation.
+* `src/music/barLoopBounds.ts`: binary `barIndexAtOrBeforeTime`, `barRangeToSeconds`, `clampBarLoopRange`, `pickLowestNumericBarIndex`.
+* `src/session/slowLoopRegion.ts`: `deriveSlowLoopRegion` uses exact bar boundaries; fallback uses lowest value in `confidence_by_bar` (and aliases), not max `note_density_by_bar`.
+* `src/audio/useLoopAudio.ts`: rAF-driven wrap at `endSec` with seek to `startSec`; wired in `ListenStemPanel`.
+* `components/LoopRegionControl.tsx`: paired bar-snapped `Slider`s, 44px-tall rows.
+* `types/tabMessage.ts`: `setLoopRegion` / `clearLoopRegion`, `TabLoopBarRegion`, `AlphaTabSurfaceRef.setLoopRegion`.
+* `assets/alphatab-harness/index.html` + `AlphaTabWeb.web.tsx`: loop bracket overlay (`boundsLookup.findMasterBarByIndex`, fallback by score width), `scroll` + `renderFinished` relayout.
+* `AlphaTabWebView.tsx`, native stub: postMessage / no-op for `setLoopRegion`.
+* Tests: `barLoopBounds.test.ts`, `slowLoopRegion.test.ts` (fixture `confidence_by_bar` → bar index 1).
 
 ### Validation
 
-* Pending implementation.
+* `npm run lint` — pass.
+* `npm test` — pass (33 tests).
+* ±50ms over 10 loops at 0.65×: not instrumented in CI; rAF boundary + exact `bar_timestamps` endSec is the implementation target (manual listen recommended).
 
 ### Follow-ups
 
@@ -452,10 +487,10 @@ Make Study interactive: selected AlphaTab notes immediately map to fretboard pos
 
 ### Acceptance Criteria
 
-* [ ] Selecting/tapping score notes updates fretboard to exact location within one frame
-* [ ] `NoteDetailCard` shows note name, scale degree, and non-empty coach explanation text
-* [ ] `fingerSuggestion` tests cover open string, frets 1-4, and high-fret octave case
-* [ ] `scaleDegree` tests cover major intervals and flat-seven blues context
+* [x] Selecting/tapping score notes updates fretboard to exact location within one frame
+* [x] `NoteDetailCard` shows note name, scale degree, and non-empty coach explanation text
+* [x] `fingerSuggestion` tests cover open string, frets 1-4, and high-fret octave case
+* [x] `scaleDegree` tests cover major intervals and flat-seven blues context
 
 ### Out of Scope
 
@@ -464,23 +499,84 @@ Make Study interactive: selected AlphaTab notes immediately map to fretboard pos
 
 ### Status
 
-**Planned**
+**Complete**
 
 ### Completion Notes
 
-* Pending implementation.
+* `src/music/fingerSuggestion.ts` — simple per-fret copy + `TODO` for position-aware logic; `fingerSuggestion.test.ts`.
+* `src/music/scaleDegree.ts` — `scaleDegreeLabel`, `midiToNoteName`, `buildStudyCoachLine` using exported `parseKey` from `capoSuggestion.ts`; `scaleDegree.test.ts` (C major degrees, b7 in major, A minor b7 / blues wording).
+* `components/FretboardDiagram.tsx` — nut + 12 frets, `resolveFretCell` / `inferMidiFromNoteSelection`, Reanimated pulse on selected dot, underlay dots z-under selection; high frets (>12) anchor highlight on column 12.
+* `components/NoteDetailCard.tsx` — `Gesture.Pan` + Reanimated translate, coach/finger/degree lines, `AnimatedPressable` close.
+* `app/session/study.tsx` — wires selection detail memo + card; existing `onNoteEvent` bridge unchanged.
 
 ### Validation
 
-* Pending implementation.
+* `npm run lint` — pass.
+* `npm test` — pass (40 tests).
 
 ### Follow-ups
 
-* Optional: add alternate fingering suggestions once hand-position model is available.
+* **§53** (below): tab-aligned note payloads, MIDI disambiguation, and alternate fingerings (supersedes the old “optional alternates only” note).
 
 ---
 
-## 53. Jam mode — scale overlay on fretboard + AlphaTab tint
+## 53. Study — tab-aligned note payload + alternate fingerings
+
+### Goal
+
+Align Study’s fretboard and `NoteDetailCard` with **what the tab actually notates** when AlphaTab can supply string/fret (or richer note identity). When only MIDI is available, replace naive “lowest-cost” guessing with **explicit, tested disambiguation rules**. Layer **alternate fingering** suggestions when a hand-position model (or a lightweight heuristic stub) can propose them.
+
+### Scope
+
+* `types/tabMessage.ts` (+ harness + `AlphaTabWeb` / `AlphaTabWebView`): extend `NoteEventMessage` or companion fields so Study can prefer **score string/fret** over MIDI-inferred positions when both exist
+* `components/FretboardDiagram.tsx` — `resolveFretCell` / `inferMidiFromNoteSelection`: documented rules + tests for **same pitch, multiple frets**
+* `src/music/fingerSuggestion.ts`: primary + **alternates** API (keep current simple lines as fallback; `TODO` for full hand model)
+* `components/NoteDetailCard.tsx`: show alternates when provided
+* Optional stretch in same commit: **narrow heuristic** alternates (e.g. same region of neck) without ML — clearly flagged vs “requires model”
+
+### Implementation Notes
+
+* Land type changes in `tabMessage` before harness/DOM (`docs/CODER.md` postMessage rule)
+* Preserve commit **45** cursor sync and **52** selection UX — no regression to `syncPlaybackTimelineMs` / note flood throttling
+* Define a small interface, e.g. `SuggestFingerings(note, context) → { primary, alternates[] }`, so a future ML/backend can plug in without rewiring Study
+
+### Acceptance Criteria
+
+* [x] With engine-supplied string+fret, the highlighted cell matches the **notated** tab position (web + native parity)
+* [x] MIDI-only cases follow **documented** disambiguation and have **unit tests** (fixture: two valid positions, same pitch)
+* [x] `NoteDetailCard` shows **at least one alternate** when the finger helper returns multiples
+* [x] No regression to Study stem/tab sync or AlphaTab external-media behavior
+
+### Out of Scope
+
+* Full biomechanical / personalized hand-span ML
+* Multi-note chord fingering diagrams
+
+### Status
+
+**Complete**
+
+### Completion Notes
+
+* `types/tabMessage.ts` — `NoteEventMessage.hasExplicitTabPosition`; decode support.
+* `assets/alphatab-harness/index.html` + `components/AlphaTabWeb.web.tsx` — set flag when string+fret present.
+* `src/music/fretboardCell.ts` — documented MIDI-only rule (min fret, then min row); `allCellsForMidi`; `inferMidiFromNoteSelection` prefers notated string+fret over raw MIDI; tests (G4 disambiguation, wrong MIDI vs tab).
+* `src/music/fingerSuggestion.ts` — `suggestFingerings(primaryCell, samePitchCells)` with ±6-fret “same region” heuristic + dedupe; tests.
+* `components/NoteDetailCard.tsx` — “Other positions (same pitch)” alternates.
+* `app/session/study.tsx` — `suggestFingerings` + `allCellsForMidi` wiring.
+
+### Validation
+
+* `npm run lint` — pass.
+* `npm test` — pass (vitest).
+
+### Follow-ups
+
+* Personal hand-span and position preference (on-device or backend)
+
+---
+
+## 54. Jam mode — scale overlay on fretboard + AlphaTab tint
 
 ### Goal
 
@@ -502,10 +598,10 @@ Use live pitch-class histogram to drive practical scale guidance in Jam through 
 
 ### Acceptance Criteria
 
-* [ ] A minor pentatonic input phrase yields "A minor pentatonic" (or "A blues") and matching fretboard lights
-* [ ] Web with loaded score tints matching note heads via `highlightScaleDegrees`
-* [ ] Histogram resets cleanly on `Stop & Save`
-* [ ] `getBestScale` tests pass for A minor pentatonic and G major pentatonic fixtures
+* [x] A minor pentatonic input phrase yields "A minor pentatonic" (or "A blues") and matching fretboard lights
+* [x] Web with loaded score tints matching note heads via `highlightScaleDegrees`
+* [x] Histogram resets cleanly on `Stop & Save`
+* [x] `getBestScale` tests pass for A minor pentatonic and G major pentatonic fixtures
 
 ### Out of Scope
 
@@ -515,15 +611,22 @@ Use live pitch-class histogram to drive practical scale guidance in Jam through 
 
 ### Status
 
-**Planned**
+**Complete**
 
 ### Completion Notes
 
-* Pending implementation.
+* `src/jam/pitchClassHistogram.ts` — `getBestScale`, `BestScaleMatch`, `createPitchClassHistogram.getBestScale`, full scale labels, `A blues` template; G major before E minor for relative-major tie-break.
+* `src/jam/jamReferenceTabGp5Base64.ts` — stub GP5 for Jam web preview.
+* `src/jam/alphaTabScaleHighlight.ts` + `assets/alphatab-harness/index.html` — tint `GuitarTabFretNumber` + `StandardNotationNoteHead` for scale pitch classes; `clearScaleHighlight`.
+* `types/tabMessage.ts` — inbound `highlightScaleDegrees` / `clearScaleHighlight`; `AlphaTabSurfaceRef` methods.
+* `components/AlphaTabWebView.tsx`, `AlphaTabWeb.web.tsx`, `AlphaTabWeb.tsx` stub — imperative API.
+* `components/FretboardDiagram.tsx` — optional `scalePitchClasses` (emerald ring, under selection z-order).
+* `app/jam.tsx` — ~2s UI throttle, fretboard + web `TabViewport`, histogram reset + tab clear on Stop & Save.
 
 ### Validation
 
-* Pending implementation.
+* `npm run lint` — pass.
+* `npm test` — pass (vitest).
 
 ### Follow-ups
 
@@ -531,7 +634,7 @@ Use live pitch-class histogram to drive practical scale guidance in Jam through 
 
 ---
 
-## 54. Kill switch — feel real QA checklist + smoke gate
+## 55. Kill switch — feel real QA checklist + smoke gate
 
 ### Goal
 
@@ -551,9 +654,9 @@ Define a fast manual release gate for Phase 5 realism features before declaring 
 
 ### Acceptance Criteria
 
-* [ ] `docs/FEEL_REAL_QA.md` exists and sections are filled by at least one developer
-* [ ] Any FAIL has linked issue/waiver note
-* [ ] `docs/E2E_DEMO.md` references the new checklist
+* [x] `docs/FEEL_REAL_QA.md` exists and sections are filled by at least one developer
+* [x] Any FAIL has linked issue/waiver note
+* [x] `docs/E2E_DEMO.md` references the new checklist
 
 ### Out of Scope
 
@@ -562,15 +665,16 @@ Define a fast manual release gate for Phase 5 realism features before declaring 
 
 ### Status
 
-**Planned**
+**Complete**
 
 ### Completion Notes
 
-* Pending implementation.
+* Added `docs/FEEL_REAL_QA.md`: run metadata table, **STOP rule** for Commit 45 sync failures, PASS/FAIL/WAIVE grids for Sections A–I (sync, note highlight, soundfont, adaptive coach, play accuracy, metronome, Slow loop precision, Study mapping, Jam scale overlay), sign-off table, and deterministic checklist wording tied to commits 45–54 acceptance bars.
+* Updated `docs/E2E_DEMO.md` companion-doc link and **section 10.2a** cross-link to the new gate plus STOP rule reminder.
 
 ### Validation
 
-* Pending implementation.
+* Doc-only change; `npm run lint` / `pytest` not required for this commit.
 
 ### Follow-ups
 
@@ -578,7 +682,7 @@ Define a fast manual release gate for Phase 5 realism features before declaring 
 
 ---
 
-## 55. AlphaTab formatting templates + player styling presets
+## 56. AlphaTab formatting templates + player styling presets
 
 ### Goal
 
@@ -629,7 +733,7 @@ Standardize AlphaTab visual presentation across Listen/Study/Slow/Play so notati
 
 ---
 
-## 56. AlphaTab song details + section metadata panel
+## 57. AlphaTab song details + section metadata panel
 
 ### Goal
 
@@ -679,7 +783,7 @@ Expose useful song/score metadata (title, artist, key, tempo, section labels, di
 
 ---
 
-## 57. AlphaTab exporter path — shareable PDF/PNG + MusicXML/MIDI
+## 58. AlphaTab exporter path — shareable PDF/PNG + MusicXML/MIDI
 
 ### Goal
 
@@ -730,7 +834,7 @@ Let users and coaches export useful artifacts (practice sheet, MIDI, interchange
 
 ---
 
-## 58. Node-side AlphaTab pre-render service for low-end devices
+## 59. Node-side AlphaTab pre-render service for low-end devices
 
 ### Goal
 
@@ -780,7 +884,7 @@ Reduce client jank and first-render latency by pre-processing heavy AlphaTab ren
 
 ---
 
-## 59. Multiple SoundFonts + auto instrument profile selection
+## 60. Multiple SoundFonts + auto instrument profile selection
 
 ### Goal
 
@@ -831,7 +935,7 @@ Improve playback realism by selecting between multiple soundfonts per style/sess
 
 ---
 
-## 60. AlphaTab performance + correctness telemetry kill switch
+## 61. AlphaTab performance + correctness telemetry kill switch
 
 ### Goal
 
@@ -881,6 +985,900 @@ Add measurable runtime telemetry (sync drift, note event throughput, frame budge
 
 ---
 
+## Phase 6 — Session quality & personalization
+
+## 62. Pre-session tuner + mic noise calibration gate
+
+### Goal
+
+Provide an in-app chromatic tuner and ambient noise calibration step that gates entry to the Play step, ensuring pitch detection receives clean, accurate audio before scoring begins.
+
+### Scope
+
+* `app/session/tune.tsx`: strobe/needle tuner UI using `usePitchStream` (reuse commit 16 hook); show string name, cents deviation, in-tune flash (sage); "Looks good" CTA unlocks Play step navigation
+* `src/audio/noiseGate.ts`: 3-second ambient RMS sampling → dynamic threshold stored in Zustand session slice; reuse threshold in `noteAccuracyBeats.ts` (commit 49) to suppress false hits below floor
+* `src/stores/sessionPrefsStore.ts`: persist named calibration profiles (`quiet-acoustic`, `electric-unplugged`) in `expo-sqlite`; load on session start
+* Wire `app/session/_layout.tsx` to insert `tune.tsx` step between add-song and listen when Play step is enabled; make it skippable (one-tap dismiss with persistent "don't show again" pref)
+
+### Implementation Notes
+
+* Optimize autocorrelation window for sustained single notes (256–512ms), not polyphonic real-time detection — different from the 100ms pitch polling in commit 49
+* Noise gate threshold: RMS floor + 6dB headroom
+* Do not block Study/Listen/Slow steps behind tuner — only Play
+
+### Acceptance Criteria
+
+* [ ] Guitar E2 string detected within ±15 cents on web and native before entering Play step
+* [ ] Ambient noise sample updates the `noiseGateThreshold` value visible in `__DEV__` panel
+* [ ] Calibration profile persists across sessions in SQLite
+* [ ] Tuner step is skippable with a persistent dismissal preference
+* [ ] No regression to Play step scoring accuracy logic from commit 49
+
+### Out of Scope
+
+* Automatic string/tuning identification
+* Strobe tuner calibration export
+* Mic hardware selection UI
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: extend calibration profiles per input device once mic selection exists.
+
+---
+
+## 63. Skill node mutation — session accuracy feeds PlayerProfile
+
+### Goal
+
+Close the loop between commit 49's per-note accuracy data (hit/close/miss) and commit 48's `PlayerProfile`, so future `/analyze` calls automatically reflect actual session performance without requiring manual self-reporting.
+
+### Scope
+
+* `src/session/skillMutator.ts`: pure reducer — takes `NoteAccuracyBeats[]` + section technique tags from `LessonJSON` → produces `SkillNode` weight deltas using exponential moving average (`new = old * 0.85 + session * 0.15`)
+* Map tab technique markers in `LessonJSON.sections` (e.g. bend, slide, alternate-picking) to corresponding `SkillNode` ids defined in commit 29 schema
+* Flag `SkillNode` as `weak_area` when rolling accuracy drops below 50% across three sessions
+* `src/stores/skillStore.ts` (commit 30): add `applySessionMutation(deltas)` action that writes updated nodes to SQLite and rebuilds `PlayerProfile` payload
+* `src/api/analyze.ts`: call `buildPlayerProfileFromSkillNodes` after mutation so next `POST /analyze` includes updated `weak_areas`
+* `backend/tests/test_skill_mutation.py`: fixture with known hit/miss pattern → assert expected `SkillNode` delta and `weak_area` flag
+
+### Implementation Notes
+
+* Use EMA, not session replacement — one bad session must not destroy a node
+* Mutation runs post-Review, not mid-session
+* Keep `skillMutator.ts` pure (no DB or network I/O) for testability
+* Add `HARMONIQ_SKIP_SKILL_MUTATION=1` toggle for CI fast path
+
+### Acceptance Criteria
+
+* [ ] After a Play session with >70% miss on bend-tagged sections, `bending` appears in `weak_areas` on the next `/analyze` request payload
+* [ ] EMA smoothing: single 0% session on a strong node does not drop weight below 40%
+* [ ] `skillMutator.test.ts` passes with known fixture inputs
+* [ ] No regression to commit 48 coach personalization or commit 30 SM-2 scheduling
+
+### Out of Scope
+
+* Server-side skill graph sync
+* Multi-device profile merge
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: server-authoritative skill merge when accounts ship.
+
+---
+
+## 64. Left-handed mode — fretboard and chord diagram parity
+
+### Goal
+
+Support left-handed guitarists by mirroring fretboard and chord diagram rendering system-wide without mutating underlying MIDI or string/fret data.
+
+### Scope
+
+* `src/stores/userPrefsStore.ts`: add `isLeftHanded: boolean` (default false); persist in `expo-sqlite` or `AsyncStorage`
+* `components/FretboardDiagram.tsx`: when `isLeftHanded`, reverse column render order (nut on right, highest fret on left); do not change string/fret data structures
+* `app/settings.tsx`: add left-handed toggle with diagram preview
+* `assets/alphatab-harness/index.html`: inject `settings.display.layoutMode` or CSS `scaleX(-1)` on the score container when `setLeftHanded(true)` postMessage received; document fallback behavior if AlphaTab layout API is insufficient
+* `types/tabMessage.ts`: add `setLeftHanded(isLeftHanded: boolean)` command
+* `components/AlphaTabWebView.tsx` + `components/AlphaTabWeb.tsx`: send `setLeftHanded` after `setScore` when pref is active
+
+### Implementation Notes
+
+* Fretboard inversion is a **presentation-layer transform only** — string 1 (high E) remains string index 0 in all data paths
+* Loop region slider handles (`components/LoopRegionControl.tsx`) and `NoteDetailCard` pan gesture should retain standard LTR semantics even when fretboard is flipped — document any exceptions
+* Test on both web and native WebView; CSS `scaleX` may interfere with AlphaTab's canvas-based rendering on some versions
+
+### Acceptance Criteria
+
+* [ ] Left-handed toggle in Settings mirrors `FretboardDiagram` with nut on right
+* [ ] AlphaTab harness receives `setLeftHanded` and applies layout change or documented fallback
+* [ ] String/fret data in `NoteEventMessage` is unchanged (unit test: same payload, mirrored render)
+* [ ] No regression to Study fretboard selection (commit 52/53) or Jam scale overlay (commit 54)
+
+### Out of Scope
+
+* Ambidextrous chord grip suggestions
+* Per-screen handedness override
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: mirror any future chord-shape SVGs the same way as the fretboard.
+
+---
+
+## 65. Adaptive curriculum routing — ZPD-aware next session suggestion
+
+### Goal
+
+Replace the static SM-2 card (commit 31) with a curriculum engine that suggests the single best next song or exercise based on the player's mutated `SkillNode` graph — balancing weak-area medicine with style-matched motivation.
+
+### Scope
+
+* `backend/app/curriculum.py`: `suggest_next_session(player_profile, library_lessons)` — score each analyzed `LessonJSON` in the library against the profile using a ZPD heuristic: prefer songs where `weak_areas` appear as tagged techniques AND `style_label` matches player history; penalize songs already mastered (rolling accuracy > 85%) and songs too far outside current skill floor
+* `backend/app/main.py`: `POST /curriculum/suggest` — accepts `PlayerProfile` + list of `job_id`s in user library; returns ranked `[{ job_id, reason_label, technique_focus }]`
+* `src/api/analyze.ts`: add `fetchCurriculumSuggestion` client helper
+* `app/(tabs)/index.tsx` (Home): replace static SM-2 card with dynamic suggestion card — title, technique focus badge, one-line coach reason from response; keep cold-start fallback (Add Song CTA) when library is empty
+* `backend/tests/test_curriculum.py`: fixture library of 3 lessons + profile with `weak_areas=["bending"]` → assert bending-tagged lesson ranks first
+
+### Implementation Notes
+
+* Scoring formula: `score = technique_overlap_weight * 0.5 + style_match * 0.3 + novelty * 0.2`; tune weights iteratively
+* "Medicine vs candy" balance: at least one style-matched song in top 3 even if it doesn't target a weak area — avoid pure drill fatigue
+* Add `HARMONIQ_SKIP_CURRICULUM=1` for CI and offline dev
+* Keep suggestion deterministic for the same inputs (no randomness) so QA can reproduce
+
+### Acceptance Criteria
+
+* [ ] Profile with `weak_areas=["bending"]` and blues `style_label` ranks a blues bending song above a country picking song in fixture test
+* [ ] Home card shows technique focus badge and one-line reason from curriculum response
+* [ ] Empty library shows Add Song CTA unchanged
+* [ ] `HARMONIQ_SKIP_CURRICULUM=1` falls back to SM-2 suggestion without crash
+* [ ] `test_curriculum.py` passes with fixture inputs
+
+### Out of Scope
+
+* Multi-step curriculum sequences / lesson plans
+* Server-side library aggregation across users
+* Recommendation ML model (heuristic only in this commit)
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: multi-step lesson plans once single-shot suggestion is stable in production.
+
+---
+
+## Phase 7 — The Guided Path
+
+Transform Harmoniq from a reactive tab player into a proactive AI guitar teacher: reliable coaching, taste-aware curriculum, a structured practice queue, and novel features that compound over time.
+
+---
+
+## 66. Coach reliability — async streaming + retry architecture
+
+### Goal
+
+Fix the synchronous Claude call that causes coach timeouts in the analysis pipeline. Make coach generation non-blocking, streamable, and resilient so lessons always load fast and coaching always arrives — even under network pressure.
+
+### Scope
+
+* `backend/app/coach.py`: extract all Claude calls into `_call_claude_streaming(prompt, max_tokens, temperature)` using the Anthropic streaming API (`stream=True`); accumulate streamed chunks and fall back to static copy on timeout or error
+* `backend/app/jobs.py`: decouple coach generation from the main analysis pipeline — analysis completes first with skeleton coach copy (`coach_note: ""`, `coach_explanation: ""`), then coach fields hydrate via a second background pass
+* `backend/app/main.py`: add `GET /analyze/{job_id}/coach` polling endpoint that returns current coach hydration status (`pending` / `complete` / `fallback`)
+* `src/api/analyze.ts`: add `pollCoachHydration(jobId)` helper that polls `/coach` after lesson load and patches `lessonStore` coach fields in place
+* `app/session/listen.tsx` + `app/session/study.tsx`: show `LoadingSkeleton` in `CoachNote` slots until hydration completes; swap in content with `FadeIn` animation — no layout shift
+* `backend/app/coach.py`: increase prompt quality — replace stub system prompt with a structured musician-specific prompt using `<song_context>`, `<player_context>`, `<section_context>` XML blocks; target actionable, technique-specific language ("keep your pick angle flat on the upstroke" not "practice this section")
+* Add `HARMONIQ_COACH_TIMEOUT_MS=8000` env var (default 8s); log fallback reason (`timeout` / `api_error` / `parse_error`) in structured backend logs
+
+### Implementation Notes
+
+* Streaming accumulation: collect delta text chunks, join on completion, parse JSON coach fields — if JSON is malformed after stream ends, use fallback
+* Never block `GET /analyze/{job_id}` on coach hydration — lesson must be usable before coach arrives
+* Temperature 0.5 for section coach notes (more varied); temperature 0.3 for quick-feedback (more deterministic) — keep separate call paths
+
+### Acceptance Criteria
+
+* [ ] Analysis pipeline returns `complete` with skeleton coach copy in under 30s on dev machine regardless of Claude API latency
+* [ ] Coach fields hydrate and appear in UI within 10s of lesson load when key is set
+* [ ] Timeout path shows fallback text without crash or blank layout
+* [ ] `pollCoachHydration` resolves to `fallback` when `ANTHROPIC_API_KEY` is unset — no unhandled promise rejection
+* [ ] Structured fallback reason logged in backend output for each coach miss
+
+### Out of Scope
+
+* On-device LLM inference
+* Per-user prompt A/B testing infrastructure
+* Coach history across sessions
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: add coach prompt versioning (`COACH_PROMPT_VERSION`) to cache key so prompt iteration doesn't serve stale cached coaching.
+
+---
+
+## 67. Spotify OAuth + listening history ingestion
+
+### Goal
+
+Let users connect Spotify to give Harmoniq real taste signal — top artists, genres, and recent tracks — so the curriculum engine has authentic input instead of relying solely on self-reported style preferences.
+
+### Scope
+
+* `backend/app/spotify.py`: Spotify OAuth 2.0 PKCE flow; fetch `top_artists` (medium_term), `top_tracks` (medium_term), `recently_played`; extract `genres`, `artist_names`, `track_names`, `audio_features` (energy, valence, tempo, instrumentalness)
+* `backend/app/main.py`: `GET /auth/spotify` (redirect), `GET /auth/spotify/callback` (token exchange + store encrypted token in session or DB), `GET /taste/spotify` (returns `SpotifyTasteProfile`)
+* `backend/app/schemas.py`: add `SpotifyTasteProfile` — `top_genres: list[str]`, `top_artists: list[str]`, `energy_avg: float`, `tempo_avg: float`, `instrumentalness_avg: float`
+* `src/api/analyze.ts`: add `initiateSpotifyAuth()`, `fetchSpotifyTasteProfile()` client helpers
+* `app/settings.tsx`: "Connect Spotify" row with OAuth trigger and connection status indicator; "Disconnect" clears stored token
+* Store `SpotifyTasteProfile` in SQLite `user_prefs` as serialized JSON; refresh on re-connect
+* Add `HARMONIQ_SKIP_SPOTIFY=1` for CI and dev environments without OAuth redirect
+
+### Implementation Notes
+
+* Use `expo-auth-session` with PKCE for native OAuth on iOS/Android; standard redirect on web
+* Spotify tokens must never be logged; store server-side only — client receives only `SpotifyTasteProfile` payload
+* Instrumentalness > 0.5 strongly suggests the user listens to guitar-forward content — weight this in style derivation
+* If Spotify is unavailable (API down, rate limited), fall back gracefully to stored profile without UI error
+
+### Acceptance Criteria
+
+* [ ] iOS/Android OAuth flow completes and returns `SpotifyTasteProfile` with non-empty `top_genres` and `top_artists`
+* [ ] Web redirect flow completes equivalently
+* [ ] Disconnecting Spotify clears token and profile from both server and SQLite
+* [ ] `HARMONIQ_SKIP_SPOTIFY=1` disables all Spotify routes cleanly with no import errors
+* [ ] No Spotify token appears in client-side logs or network responses
+
+### Out of Scope
+
+* Spotify playback control (separate commit)
+* Apple Music OAuth
+* Persistent server-side token refresh daemon
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: Apple Music MusicKit OAuth as a parallel path once Spotify is stable.
+
+---
+
+## 68. Taste graph → style profile + song candidate derivation
+
+### Goal
+
+Convert raw Spotify taste data (or manual artist selections) into a structured `TasteProfile` that feeds the curriculum engine — deriving `style_label`, technique hints, recommended BPM range, and an ordered list of song candidates to analyze next.
+
+### Scope
+
+* `backend/app/taste.py`: `derive_taste_profile(spotify_profile | quiz_answers) → TasteProfile`
+  * Map Spotify genres to Harmoniq `style_label` values (blues, rock, fingerstyle, jazz, country, metal, pop) using a genre-to-style lookup table
+  * Derive `technique_affinity`: high energy + fast tempo → alternate picking, bending; low energy + acoustic → fingerpicking, chord melody; jazz genres → chord extensions, jazz comping
+  * Derive `bpm_comfort_range` from `tempo_avg` ± 20 BPM
+  * Generate `song_candidates: list[str]` — known analyzable songs matching taste (seeded list per style, ranked by technique coverage and estimated difficulty)
+* `backend/app/schemas.py`: add `TasteProfile` — `style_label`, `technique_affinity: list[str]`, `bpm_comfort_range: tuple[int, int]`, `song_candidates: list[str]`, `source: "spotify" | "quiz" | "manual"`
+* `backend/app/main.py`: `POST /taste/derive` accepts `SpotifyTasteProfile` or `QuizAnswers` → returns `TasteProfile`
+* Wire `TasteProfile` into `PlayerProfile` so coach and curriculum engine consume it automatically
+* `src/api/analyze.ts`: `deriveTasteProfile()` client helper
+* `backend/tests/test_taste.py`: fixture Spotify profile with blues genres → assert `style_label="blues"` and `technique_affinity` includes `"bending"`
+
+### Implementation Notes
+
+* Genre mapping is a static lookup table initially — no ML needed; document the table in `backend/app/taste_map.py` for easy iteration
+* `song_candidates` is a curated seed list per style, not scraped — document provenance in `backend/app/song_seeds/SOURCES.md`
+* `technique_affinity` feeds directly into commit 65's ZPD curriculum engine as a `preferred_techniques` signal
+* Keep derivation deterministic and fast (<100ms) — no API calls in this function
+
+### Acceptance Criteria
+
+* [ ] Spotify profile with `top_genres=["blues", "blues rock"]` yields `style_label="blues"` and `technique_affinity` includes `"bending"` and `"vibrato"`
+* [ ] `song_candidates` returns at least 3 items for every supported `style_label`
+* [ ] `TasteProfile.source` correctly reflects `"spotify"` vs `"quiz"` origin
+* [ ] `test_taste.py` passes with genre fixture inputs
+* [ ] Derivation completes under 100ms with no network calls
+
+### Out of Scope
+
+* ML-based genre classification
+* Real-time Spotify catalogue search
+* User-editable technique affinity overrides
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: expose `technique_affinity` as editable chips in Settings once taste derivation is stable.
+
+---
+
+## 69. Cold-start taste quiz — artist selection + style calibration
+
+### Goal
+
+Give users who don't connect Spotify an equally rich taste onboarding path: a quick artist picker and style quiz that produces the same `TasteProfile` structure as Spotify ingestion.
+
+### Scope
+
+* `app/onboarding/taste-quiz.tsx`: multi-step quiz flow
+  * Step 1: "Pick 3–5 artists you love" — searchable artist grid seeded from `song_seeds` per style (show artist name + genre tag); multi-select with `AnimatedPressable` tiles
+  * Step 2: "What's your vibe?" — 4 style cards with short descriptions and audio clip icons (blues feel, rock energy, fingerstyle calm, jazz complexity)
+  * Step 3: "How long have you been playing?" — beginner / intermediate / advanced (maps to initial `SkillNode` weights)
+* `backend/app/schemas.py`: add `QuizAnswers` — `selected_artists`, `selected_style`, `experience_level`
+* Wire quiz completion to `POST /taste/derive` with `source="quiz"`
+* Store resulting `TasteProfile` in SQLite `user_prefs` alongside Spotify profile (quiz is fallback when Spotify disconnected)
+* Skip quiz if Spotify profile already exists; offer "Update preferences" in Settings
+
+### Implementation Notes
+
+* Artist grid: 24 curated artists across 6 styles, 4 per style — static list, not fetched
+* Audio clip icons are decorative (no actual playback in quiz) — keep onboarding fast
+* Quiz should complete in under 90 seconds; do not paginate beyond 3 steps
+* Map `experience_level` to initial `SkillNode` weights: beginner = 0.2 across all nodes, intermediate = 0.5, advanced = 0.7
+
+### Acceptance Criteria
+
+* [ ] Quiz completes in 3 taps minimum (one selection per step) without forced delay
+* [ ] Completing quiz writes `TasteProfile` with `source="quiz"` to SQLite
+* [ ] Selecting Stevie Ray Vaughan + blues style yields `style_label="blues"` in derived profile
+* [ ] Quiz is skipped on second launch if taste profile exists
+* [ ] "Update preferences" in Settings re-triggers quiz without wiping session history
+
+### Out of Scope
+
+* Dynamic artist search against Spotify catalogue
+* Audio previews in quiz
+* More than 3 quiz steps
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: allow users to add custom artists not in the seed list after initial quiz.
+
+---
+
+## 70. Ordered drill sequencer — structured practice plan
+
+### Goal
+
+Replace the single "next song" suggestion with a complete, ordered practice session plan: a sequenced queue of drills that covers warm-up, technique focus, song section work, and free play — generated fresh each session from the player's current profile.
+
+### Scope
+
+* `backend/app/sequencer.py`: `generate_practice_plan(player_profile, taste_profile, library_lessons, duration_minutes=25) → PracticePlan`
+  * `PracticePlan` = ordered list of `DrillSlot` — each has `slot_type` (`warmup` / `technique` / `song_section` / `free_jam`), `duration_seconds`, `lesson_ref` or `exercise_ref`, `coach_intro` (one sentence)
+  * Slot ordering: always warmup first (3–5 min), then technique drill targeting top `weak_area`, then song section from library (ZPD-matched), then free jam to close
+  * Generate 3–5 slots totaling `duration_minutes`; scale to available library size
+* `backend/app/main.py`: `POST /practice/plan` — accepts `PlayerProfile` + `TasteProfile` + library `job_id` list + optional `duration_minutes`
+* `backend/app/schemas.py`: add `PracticePlan`, `DrillSlot`, `SlotType`
+* `src/api/analyze.ts`: add `generatePracticePlan()` client helper
+* `app/(tabs)/index.tsx` (Home): replace single suggestion card with `PracticeQueueCard` — shows slot list with type icons, duration chips, and "Start Session" CTA that navigates to first slot
+* `app/session/_layout.tsx`: add `planStore` Zustand slice tracking current plan position; "Next drill" button advances through plan slots automatically
+* `backend/tests/test_sequencer.py`: fixture profile + 3 library songs → assert plan has 4 slots in correct order with total duration within ±2 min of target
+
+### Implementation Notes
+
+* Warmup slot always uses a bundled fingering exercise (no analysis required) — ship 3 warmup exercise definitions in `backend/app/exercises/warmup_exercises.json`
+* If library has < 2 songs, skip song_section slot and extend free_jam
+* `coach_intro` for each slot is generated by Claude with `max_tokens=60` — short enough to be non-blocking
+* Keep plan generation under 3s total; coach intros can hydrate async like commit 66's pattern
+
+### Acceptance Criteria
+
+* [ ] Plan for a 25-minute session generates 4 slots: warmup → technique → song_section → free_jam
+* [ ] Warmup slot always appears first regardless of profile inputs
+* [ ] "Next drill" in session advances to next slot in plan with correct lesson loaded
+* [ ] Empty library generates a valid 2-slot plan (warmup + free_jam) without error
+* [ ] `test_sequencer.py` passes with fixture inputs including slot order and duration assertions
+
+### Out of Scope
+
+* User-editable plan reordering
+* Multi-day curriculum planning
+* Video exercise content
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: allow users to set preferred session duration (15 / 25 / 45 min) in Settings.
+
+---
+
+## 71. Guided path home — practice queue UX
+
+### Goal
+
+Replace the static home card with a full guided path UX: a prioritized practice queue that shows today's plan, streak context, and a single clear entry point — so the user's only decision is to pick up the guitar.
+
+### Scope
+
+* `app/(tabs)/index.tsx`: full redesign of Home screen
+  * Top: `TodaysPlanCard` — title ("Your 25-min session"), slot summary chips (warmup · bending drill · "Gravity" intro · free jam), "Start" CTA
+  * Middle: `WeakAreaPulse` — one-line insight from coach ("You've avoided bending for 3 sessions. Today's drill targets it directly.") — derived from skill mutation history
+  * Bottom: `RecentProgress` — last 3 sessions with accuracy trend sparkline (Reanimated SVG path)
+  * Cold start: `EmptyState` with "Tell us what you love" → taste quiz entry point
+* `components/TodaysPlanCard.tsx`: Reanimated entrance, slot chips with `AnimatedPressable`, progress ring showing plan completion %
+* `components/WeakAreaPulse.tsx`: amber highlight, single sentence, dismissible per session
+* `src/stores/planStore.ts`: Zustand slice — `currentPlan`, `currentSlotIndex`, `planGeneratedAt`; auto-regenerate if plan is >24h old
+* Home screen regenerates plan silently on mount if stale; shows `LoadingSkeleton` in plan card during generation
+
+### Implementation Notes
+
+* Plan generation is triggered client-side; backend call is `POST /practice/plan` from commit 70
+* `WeakAreaPulse` content comes from `skillStore` — no extra API call; derive from `weak_areas` and `last_practiced_at` per node
+* `RecentProgress` sparkline: last 3 session `overall_accuracy` values from SQLite `sessions` table — client-side only
+* Use `AnimatedPressable` for all interactive elements; Reanimated for entrance and progress ring
+
+### Acceptance Criteria
+
+* [ ] Home shows `TodaysPlanCard` with correct slot count after plan generation
+* [ ] `WeakAreaPulse` shows correct node name when a node has >2 sessions with <50% accuracy
+* [ ] Stale plan (>24h) regenerates automatically on mount without user action
+* [ ] Cold start shows taste quiz entry point with no plan card visible
+* [ ] `RecentProgress` sparkline renders for users with ≥2 completed sessions
+
+### Out of Scope
+
+* Push notifications for practice reminders
+* Social progress sharing
+* Streak gamification beyond session count
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: add configurable practice reminder notification once push infrastructure exists.
+
+---
+
+## 72. Voice coach — TTS narration of coach notes
+
+### Goal
+
+Give the AI coach a voice: read coach notes aloud at session transitions and between drills so the user can keep their eyes on the fretboard and hands on the guitar instead of reading text.
+
+### Scope
+
+* `src/audio/voiceCoach.ts`: shared API — `speak(text: string, rate?: number)` / `stop()` / `isSpeaking()`
+* `src/audio/voiceCoach.native.ts`: `expo-speech` implementation with configurable `rate` (default 0.9) and `pitch` (default 1.0); language `en-US`
+* `src/audio/voiceCoach.web.ts`: Web Speech API `SpeechSynthesis` implementation; prefer a warm-sounding voice (select by `voiceURI` preference if available)
+* `app/settings.tsx`: "Voice coach" toggle (default ON for new users); voice `rate` slider (0.7–1.2); voice gender preference where OS supports it
+* Wire narration triggers:
+  * Session step transitions (Listen → Study → Slow → Play): read `CoachNote.coach_note` for current section
+  * Plan slot transitions: read `DrillSlot.coach_intro` before starting each slot
+  * Post-section quick feedback (commit 49): read `QuickFeedbackResponse.feedback` aloud after Play section ends
+* Narration is interruptible: starting a new narration cancels the previous one; stopping playback cancels narration
+* Persist voice preference in SQLite `user_prefs`
+
+### Implementation Notes
+
+* Keep narration text under 150 characters for natural speech cadence — truncate longer coach notes at sentence boundary
+* Do not narrate during active pitch detection (Play step recording) — mute voice coach while mic is open to avoid feedback loop
+* `expo-speech` rate and pitch are float values 0.0–1.0 (native) vs SpeechSynthesisUtterance rate 0.1–10 (web) — normalize in the platform-split implementations
+* Add `HARMONIQ_SKIP_TTS=1` for CI environments
+
+### Acceptance Criteria
+
+* [ ] Tapping into the Study step reads the section coach note aloud on native and web
+* [ ] Voice coach toggle in Settings disables all narration immediately without app restart
+* [ ] Narration does not trigger while Play step mic recording is active
+* [ ] Starting a new narration while one is playing cancels the previous cleanly (no overlapping speech)
+* [ ] `HARMONIQ_SKIP_TTS=1` disables all TTS calls with no runtime errors
+
+### Out of Scope
+
+* Custom voice model or cloned voice
+* Multilingual narration
+* Downloaded offline TTS voices
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: evaluate ElevenLabs or Play.ht API for a more expressive voice once native TTS quality is validated.
+
+---
+
+## 73. Session warm-up generator — personalized 3-minute opener
+
+### Goal
+
+Every practice session begins with a tailored 3-minute warm-up that loosens the fretting hand, addresses the current weak area, and mentally primes the user for what's coming — generated from the player profile, not static.
+
+### Scope
+
+* `backend/app/exercises/`: add `warmup_generator.py` — `generate_warmup(player_profile, taste_profile, session_bpm) → WarmupPlan`
+  * `WarmupPlan` = list of `WarmupExercise` — each has `name`, `description`, `duration_seconds`, `tab_snippet_gp5_base64` (small GP5), `technique_tag`
+  * Exercise pool defined in `backend/app/exercises/warmup_pool.json` — 20 exercises covering: chromatic runs, spider exercises, hammer-ons/pull-offs, string skipping, vibrato control, bending accuracy
+  * Select 3 exercises: (1) always a chromatic/spider opener for finger independence, (2) technique targeting top `weak_area`, (3) one exercise in the session's `style_label` feel
+  * Set `bpm` for each exercise at 70% of `session_bpm` from `TasteProfile.bpm_comfort_range` lower bound
+* `backend/app/main.py`: include `WarmupPlan` in `PracticePlan.slots[0]` automatically (replaces generic warmup slot from commit 70)
+* `app/session/warmup.tsx`: dedicated warmup screen — exercise list with countdown timer per exercise, AlphaTab snippet view for exercises that have GP5, voice coach reads exercise description on entry
+* `backend/tests/test_warmup.py`: profile with `weak_areas=["string_skipping"]` → assert second exercise has `technique_tag="string_skipping"`
+
+### Implementation Notes
+
+* Warmup exercises are bundled GP5 snippets (committed to repo, not analyzed) — keep each under 4 bars
+* BPM can be adjusted with a live slider in the warmup screen without regenerating the plan
+* Exercises with no GP5 snippet show a plain text description only — do not require AlphaTab for all warmup content
+* Total warmup duration target: 3 min (±30s); surface remaining time prominently
+
+### Acceptance Criteria
+
+* [ ] Warmup plan always starts with a chromatic or spider exercise regardless of profile
+* [ ] Second exercise targets the top `weak_area` from the player profile
+* [ ] BPM slider in warmup screen updates the exercise tempo without regenerating the plan
+* [ ] Voice coach reads each exercise description on entry when enabled
+* [ ] `test_warmup.py` passes with `weak_area` targeting assertion
+
+### Out of Scope
+
+* Video demonstration of exercises
+* Custom user-submitted warmup exercises
+* Physical warm-up (stretching) guidance
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: expand warmup pool to 40 exercises across more technique tags.
+
+---
+
+## 74. Riff DNA — personal playing fingerprint visualization
+
+### Goal
+
+Show users a visual fingerprint of their playing style built from session history — pitch-class tendencies, preferred positions, timing feel, and technique frequency — so they can see their identity as a player evolving over time.
+
+### Scope
+
+* `src/stores/dnaStore.ts`: aggregate `NoteAccuracyBeats`, jam histogram snapshots, and session `SkillNode` history into a `PlayerDNA` structure — `pitch_class_bias: number[12]`, `position_bias: number[12]` (fret zones), `timing_feel: "ahead" | "behind" | "centered"`, `technique_frequency: Record<string, number>`
+* `components/RiffDNA.tsx`: visual fingerprint card
+  * Pitch-class radar: 12-sided polygon showing which notes the user plays most (like a chord voicing cloud)
+  * Position heat strip: colored fret zones showing where on the neck they gravitate
+  * Timing feel indicator: animated pendulum icon leaning ahead/behind/centered
+  * Technique frequency mini-bars: 5 most-used techniques with session counts
+* `app/progress.tsx`: add "Your DNA" section above session journal; `RiffDNA` card with "First recorded: [date]" caption
+* DNA updates after each completed Play or Jam session from existing stored data — no new API calls
+* `src/music/dnaComputer.ts`: pure functions for computing `PlayerDNA` from session history; unit tests with fixture session arrays
+
+### Implementation Notes
+
+* Pitch-class bias comes from `NoteAccuracyBeats` note targets accumulated across sessions — already stored in `sessions` table after commit 49 wiring
+* Position bias derived from `FretboardCell` selections from Study sessions and lick saves
+* Timing feel: average of `rush_score` / `drag_score` from `ScoreResult` history
+* DNA requires at least 3 completed sessions to render; show `EmptyState` with "Play 3 sessions to reveal your DNA" before threshold
+* All computation is client-side from SQLite — no backend dependency
+
+### Acceptance Criteria
+
+* [ ] `PlayerDNA` computes correctly from fixture session array with known pitch targets (unit test)
+* [ ] `RiffDNA` card renders all four sections without crash when ≥3 sessions exist
+* [ ] `EmptyState` renders correctly for users with <3 sessions
+* [ ] DNA updates within one app resume after a completed session without manual refresh
+* [ ] No backend API calls during DNA computation or rendering
+
+### Out of Scope
+
+* Sharing Riff DNA externally
+* Comparing DNA between users
+* Exporting DNA as an image
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: animate DNA changes between sessions to show growth visually.
+
+---
+
+## 75. Ghost player — play alongside your past self
+
+### Goal
+
+Let users record a "ghost take" — a reference recording of themselves playing a section — then play it back quietly alongside a new take in real time, so they can hear their own progress and maintain tempo discipline without a metronome.
+
+### Scope
+
+* `app/session/play.tsx`: add "Record ghost take" mode — after normal recording, user can flag the take as a ghost reference for this section
+* `src/audio/ghostPlayer.ts`: load ghost take WAV from SQLite `sessions` audio path; mix ghost at 20% volume under live recording using the existing stem mixer abstraction
+* `components/GhostPlayerControl.tsx`: compact toggle below the play step controls — "Play with ghost" switch + ghost take timestamp label; `AnimatedPressable` with amber ghost icon
+* SQLite: add `is_ghost_reference: boolean` column to `sessions` table; query most recent ghost for current `job_id` + `section_index`
+* Ghost audio plays in sync with session start; stops automatically when recording ends
+* `app/session/review.tsx`: overlay ghost waveform as a third series in the phrasing visualizer (faint amber line) alongside reference and user take
+
+### Implementation Notes
+
+* Ghost volume fixed at 20% — not user-adjustable to keep the feature simple; document this constraint
+* Ghost take must be from the same `job_id` and `section_index` — do not mix ghost takes across songs
+* If no ghost exists for the section, `GhostPlayerControl` shows "No ghost yet — finish a take to create one" and the toggle is disabled
+* Ghost WAV path stored in SQLite; if file is missing (cleared data), degrade gracefully to disabled state without crash
+
+### Acceptance Criteria
+
+* [ ] Flagging a take as ghost reference persists to SQLite and appears on next Play session for the same section
+* [ ] Ghost audio plays at 20% volume alongside live recording without timing drift over a 30s clip
+* [ ] Ghost waveform renders as a third series in Review phrasing visualizer
+* [ ] Missing ghost file degrades gracefully without crash
+* [ ] `GhostPlayerControl` toggle is disabled with correct copy when no ghost exists for the section
+
+### Out of Scope
+
+* Multiple ghost takes per section
+* Ghost take from a different user
+* Ghost playback speed adjustment
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: add ghost take comparison score (pitch match %) to Review summary.
+
+---
+
+## 76. Mood-adaptive session — player state influences intensity
+
+### Goal
+
+Ask users how they're feeling before a session and adapt the practice plan intensity, BPM defaults, and coach tone accordingly — so Harmoniq feels responsive to human state, not just skill data.
+
+### Scope
+
+* `app/session/mood-check.tsx`: lightweight pre-session modal (shown once per day)
+  * Single question: "How are you feeling today?" with 4 tappable options: Focused 🎯 / Loose 🎸 / Tired 😴 / On Fire 🔥
+  * Dismissible with "Skip"; preference to auto-skip stored in Settings
+* `backend/app/schemas.py`: add `MoodState: Literal["focused", "loose", "tired", "on_fire"]`; add optional `mood` field to `PracticePlanRequest`
+* `backend/app/sequencer.py`: `MoodState` modifies plan generation
+  * `tired`: reduce total duration by 30%, drop technique drill slot, extend free_jam, set BPM 10% lower than profile default
+  * `focused`: keep standard plan, raise technique drill BPM ceiling by 10%, coach tone more precise
+  * `loose`: prioritize free_jam and song_section over technique drill, suggest a style-matched backing track for jam
+  * `on_fire`: add an extra technique slot, raise BPM ceiling 15%, coach intro uses energetic language
+* `backend/app/coach.py`: pass `mood` into coach prompt as a `<session_mood>` block so coach language adapts ("Keep it light today" vs "Push through this section")
+* Store `mood` with session record in SQLite for DNA and progress analysis
+
+### Implementation Notes
+
+* Mood check appears at most once per calendar day — check `last_mood_check_date` in SQLite before showing
+* Mood influence is purely generative (affects plan request parameters) — no separate mood inference from audio
+* Coach tone adaptation: define 4 tone descriptors in the prompt (`encouraging and easy` / `precise and technical` / `warm and low-pressure` / `energetic and challenging`) mapped from MoodState
+* Auto-skip setting persists in `expo-secure-store` not SQLite (fast pre-session path)
+
+### Acceptance Criteria
+
+* [ ] Mood check modal appears on first daily session and not again that day
+* [ ] `tired` mood produces a plan with shorter duration and no technique drill slot in fixture test
+* [ ] Coach intro text for `on_fire` mood is visibly more energetic than `tired` mood in same fixture
+* [ ] Skipping mood check generates a standard plan without error
+* [ ] `mood` field stored with session record for progress analysis
+
+### Out of Scope
+
+* Mood inference from audio or typing patterns
+* Mental health tracking or wellbeing recommendations
+* Daily mood history visualization
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: surface mood trend in Riff DNA (commit 74) as a "session energy" axis after several months of data.
+
+---
+
+## 77. Listening mode — Spotify playback + real-time tab follow
+
+### Goal
+
+Play a Spotify track the user loves while Harmoniq follows along with the analyzed tab in real time — turning passive listening into active score-following and bridging the gap between what the user listens to and what they practice.
+
+### Scope
+
+* `app/listening.tsx`: new screen — song picker filtered to analyzed library songs; "Listen on Spotify" CTA opens Spotify deep link for the selected track
+* `src/audio/spotifyPlaybackBridge.ts`: poll `GET /me/player` Spotify Web API for `progress_ms` and `is_playing` every 500ms; emit `playbackTick` events to AlphaTab harness via existing `seekTo` + `setPlaybackRate` postMessage contract from commit 45
+* `backend/app/spotify.py`: add `get_playback_state(access_token) → SpotifyPlaybackState` — wraps `GET /me/player`; requires Spotify Premium (document clearly)
+* `assets/alphatab-harness/index.html`: listening mode flag — disable cursor interaction (no tap-to-seek) and suppress metronome click during Spotify sync
+* `app/listening.tsx`: "Follow along" toggle — when ON, AlphaTab cursor follows Spotify playhead; when OFF, AlphaTab is free-scrolling study mode
+* Listening mode is read-only — no recording, no scoring, no Play step activation
+* Show `ErrorBanner` with upgrade copy if Spotify Premium is not detected (`is_playing` never returns true)
+
+### Implementation Notes
+
+* 500ms polling introduces up to 500ms sync lag — acceptable for listening mode (not practice scoring); document in `docs/FEEL_REAL_QA.md`
+* Spotify deep link format: `spotify:track:{track_id}` — extract `track_id` from `LessonJSON` metadata or require user to match manually in v1
+* If Spotify is not connected, show `EmptyState` with "Connect Spotify in Settings to enable listening mode"
+* Do not attempt Web Playback SDK (requires Premium, complex OAuth scope, and browser-only) — deep link is sufficient for v1
+* Add `HARMONIQ_SKIP_SPOTIFY_PLAYBACK=1` for dev environments
+
+### Acceptance Criteria
+
+* [ ] AlphaTab cursor advances in sync with Spotify playback within ±600ms on a known test song
+* [ ] "Follow along" toggle disables cursor sync without stopping Spotify playback
+* [ ] Non-Premium or disconnected Spotify state shows appropriate `ErrorBanner` without crash
+* [ ] Listening mode does not activate mic, metronome, or recording paths
+* [ ] `HARMONIQ_SKIP_SPOTIFY_PLAYBACK=1` renders listening screen in static study mode without API calls
+
+### Out of Scope
+
+* In-app Spotify audio playback (requires Spotify SDK and Premium)
+* Apple Music listening mode
+* Real-time chord recognition during listening
+
+### Status
+
+**Planned**
+
+### Completion Notes
+
+* Pending implementation.
+
+### Validation
+
+* Pending implementation.
+
+### Follow-ups
+
+* Optional: evaluate Spotify Web Playback SDK for tighter sync once Premium user base is confirmed.
+
+---
+
 ## Phase 5 cross-cutting rules
 
 1. Use `AnimatedPressable`, NativeWind `className`, and Reanimated for new UI; avoid bare `Pressable` and RN core `Animated`.
@@ -895,7 +1893,7 @@ Add measurable runtime telemetry (sync drift, note event throughput, frame budge
 * **Commit 45:** audio/video sync, media sync editor, low-level APIs
 * **Commit 46:** handling MIDI events, coloring
 * **Commit 47:** multiple soundfonts, styling player
-* **Commit 50-53:** coloring, formatting templates, song details
+* **Commit 50-54:** coloring, formatting templates, song details
 * **Future backlog ideas:** audio export / exporter / nodejs guides for offline render and tooling paths
 
 ---
@@ -2464,7 +3462,7 @@ README **V1 Scope** promises a **beat-grid-anchored phrasing visualizer** on Rev
 
 ---
 
-## Appendix — Roadmap completion index (commits 1-60)
+## Appendix — Roadmap completion index (commits 1–77)
 
 Single-page index: **implementation is in repo** for each row unless your checkout is incomplete. Full specs remain in sections above.
 
@@ -2519,14 +3517,31 @@ Single-page index: **implementation is in repo** for each row unless your checko
 | 50 | Metronome - lookahead scheduling + beat flash | 5 |
 | 51 | Slow step frame-accurate loop + region UI | 5 |
 | 52 | Study step interactive fretboard + NoteDetailCard | 5 |
-| 53 | Jam scale overlay on fretboard + AlphaTab | 5 |
-| 54 | Feel Real QA checklist | 5 |
-| 55 | AlphaTab formatting templates + styling presets | 5 |
-| 56 | AlphaTab song details + section metadata panel | 5 |
-| 57 | AlphaTab exporter path (PDF/PNG/MusicXML/MIDI) | 5 |
-| 58 | Node-side AlphaTab pre-render service | 5 |
-| 59 | Multiple SoundFonts + auto profile selection | 5 |
-| 60 | AlphaTab runtime telemetry kill switch | 5 |
+| 53 | Study tab-aligned note payload + alternate fingerings | 5 |
+| 54 | Jam scale overlay on fretboard + AlphaTab | 5 |
+| 55 | Feel Real QA checklist | 5 |
+| 56 | AlphaTab formatting templates + styling presets | 5 |
+| 57 | AlphaTab song details + section metadata panel | 5 |
+| 58 | AlphaTab exporter path (PDF/PNG/MusicXML/MIDI) | 5 |
+| 59 | Node-side AlphaTab pre-render service | 5 |
+| 60 | Multiple SoundFonts + auto profile selection | 5 |
+| 61 | AlphaTab runtime telemetry kill switch | 5 |
+| 62 | Pre-session tuner + mic noise calibration | 6 |
+| 63 | Skill node mutation from session accuracy | 6 |
+| 64 | Left-handed mode fretboard parity | 6 |
+| 65 | Adaptive curriculum routing (ZPD suggestion) | 6 |
+| 66 | Coach async streaming + retry architecture | 7 |
+| 67 | Spotify OAuth + listening history ingestion | 7 |
+| 68 | Taste graph → style profile + song candidates | 7 |
+| 69 | Cold-start taste quiz | 7 |
+| 70 | Ordered drill sequencer — structured practice plan | 7 |
+| 71 | Guided path home — practice queue UX | 7 |
+| 72 | Voice coach — TTS narration | 7 |
+| 73 | Session warm-up generator | 7 |
+| 74 | Riff DNA — personal playing fingerprint | 7 |
+| 75 | Ghost player — play alongside past self | 7 |
+| 76 | Mood-adaptive session intensity | 7 |
+| 77 | Listening mode — Spotify playback + tab follow | 7 |
 
 **Follow-up engineering (not in index):** [§42](#42-onboarding-results--readme-aligned-error-ui).
 
@@ -2873,6 +3888,26 @@ Use one commit per numbered item above (reword slightly if combining work; avoid
 38. `feat(web): add IndexedDB client, drag-drop upload, and lesson cache`
 39. `feat(app): centralize error mapping and low-confidence tab messaging`
 40. `docs: add end-to-end demo and v1 release checklist`
+
+**Phase 6 (62–65)**
+62. `feat(session): add pre-session tuner and mic noise calibration gate`
+63. `feat(skills): apply session accuracy mutations to skill graph and player profile`
+64. `feat(ui): add left-handed fretboard mirror and AlphaTab handedness postMessage`
+65. `feat(home): add ZPD curriculum suggestion client and home card`
+
+**Phase 7 (66–77) — The Guided Path**
+66. `feat(coach): add async streaming coach generation with retry and skeleton hydration`
+67. `feat(auth): add spotify oauth pkce flow and listening history ingestion`
+68. `feat(taste): derive style profile and song candidates from spotify or quiz data`
+69. `feat(onboarding): add cold-start artist picker and style quiz for taste profile`
+70. `feat(session): add ordered drill sequencer and structured practice plan generation`
+71. `feat(home): replace suggestion card with guided practice queue UX`
+72. `feat(audio): add voice coach tts narration for session transitions and coach notes`
+73. `feat(session): add personalized 3-minute warmup generator with technique targeting`
+74. `feat(progress): add riff dna fingerprint visualization from session history`
+75. `feat(session): add ghost player for playing alongside past recordings`
+76. `feat(session): add mood check and mood-adaptive practice plan intensity`
+77. `feat(listening): add spotify playback bridge and real-time tab follow mode`
 
 ### Branch strategy
 

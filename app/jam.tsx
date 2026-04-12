@@ -13,14 +13,20 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ErrorBanner } from '@/components/ErrorBanner'
+import { FretboardDiagram } from '@/components/FretboardDiagram'
+import { TabViewport } from '@/components/TabViewport'
 import { toast } from '@/components/ToastConfig'
 import { WoodGradient } from '@/components/WoodGradient'
 import { submitJamScore } from '@/src/api/analyze'
 import { mapBrowserMicBlockedForJam, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { BACKING_TRACKS, type BackingTrackId } from '@/src/constants/backingTracks'
 import { insertJamSnapshotRow } from '@/src/db/client'
+import { JAM_REFERENCE_TAB_GP5_BASE64 } from '@/src/jam/jamReferenceTabGp5Base64'
 import { createPitchClassHistogram } from '@/src/jam/pitchClassHistogram'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
+import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
+
+const SCALE_UI_INTERVAL_MS = 2000
 
 export default function JamScreen() {
   const router = useRouter()
@@ -29,6 +35,9 @@ export default function JamScreen() {
   const [isJamming, setIsJamming] = useState(false)
   const [selectedTrack, setSelectedTrack] = useState<BackingTrackId>(BACKING_TRACKS[0].id)
   const [scaleLabel, setScaleLabel] = useState('—')
+  const [scalePitchClasses, setScalePitchClasses] = useState<readonly number[] | null>(null)
+  const [scaleUiGeneration, setScaleUiGeneration] = useState(0)
+  const [jamTabReady, setJamTabReady] = useState(false)
   const [webMicBlocked, setWebMicBlocked] = useState(false)
   const [micBannerKey, setMicBannerKey] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -42,6 +51,9 @@ export default function JamScreen() {
   const soundRef = useRef<Audio.Sound | null>(null)
   const histogramRef = useRef(createPitchClassHistogram())
   const jamStartedAtRef = useRef<number | null>(null)
+  const tabRef = useRef<AlphaTabSurfaceRef>(null)
+  const lastScaleUiAtRef = useRef(0)
+  const lastScaleTintRef = useRef<{ rootMidi: number; intervals: readonly number[] } | null>(null)
 
   const stopPulse = useCallback(() => {
     cancelAnimation(pulse)
@@ -67,6 +79,20 @@ export default function JamScreen() {
     }
   }, [pulse, stopPitch])
 
+  useEffect(() => {
+    if (!isJamming) setJamTabReady(false)
+  }, [isJamming])
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !isJamming || !jamTabReady) return
+    const cmd = lastScaleTintRef.current
+    if (cmd) {
+      tabRef.current?.highlightScaleDegrees(cmd.rootMidi, [...cmd.intervals])
+    } else {
+      tabRef.current?.clearScaleHighlight()
+    }
+  }, [isJamming, jamTabReady, scaleUiGeneration])
+
   const beginJamAfterMic = useCallback(async () => {
     const track = BACKING_TRACKS.find((t) => t.id === selectedTrack) ?? BACKING_TRACKS[0]
     await Audio.setAudioModeAsync({
@@ -91,11 +117,29 @@ export default function JamScreen() {
     setWebMicBlocked(false)
     histogramRef.current = createPitchClassHistogram()
     setScaleLabel('—')
+    setScalePitchClasses(null)
+    lastScaleUiAtRef.current = 0
+    lastScaleTintRef.current = null
+    if (Platform.OS === 'web') {
+      tabRef.current?.clearScaleHighlight()
+    }
 
     try {
       await startPitch((reading) => {
         histogramRef.current.add(reading)
-        setScaleLabel(histogramRef.current.getBestLabel())
+        const now = Date.now()
+        if (now - lastScaleUiAtRef.current < SCALE_UI_INTERVAL_MS) return
+        lastScaleUiAtRef.current = now
+        const scale = histogramRef.current.getBestScale()
+        const label = scale ? scale.label : histogramRef.current.getBestLabel()
+        setScaleLabel(label)
+        setScalePitchClasses(scale?.pitchClasses ?? null)
+        if (scale) {
+          lastScaleTintRef.current = { rootMidi: scale.rootMidi, intervals: scale.intervals }
+        } else {
+          lastScaleTintRef.current = null
+        }
+        setScaleUiGeneration((g) => g + 1)
       })
     } catch (e) {
       if (Platform.OS === 'web') {
@@ -149,6 +193,13 @@ export default function JamScreen() {
     const hist = histogramRef.current
     const clientMap = hist.toScalePositionMap(durationSec)
     const inferred = hist.getBestLabel()
+    histogramRef.current = createPitchClassHistogram()
+    setScalePitchClasses(null)
+    lastScaleTintRef.current = null
+    lastScaleUiAtRef.current = 0
+    if (Platform.OS === 'web') {
+      tabRef.current?.clearScaleHighlight()
+    }
     const durationSeconds = Math.max(0, Math.floor(durationSec))
 
     let coachSummary: string
@@ -182,12 +233,14 @@ export default function JamScreen() {
       toast.error(e instanceof Error ? e.message : 'Could not save jam snapshot')
       setIsJamming(false)
       setScaleLabel('—')
+      setScalePitchClasses(null)
       setBusy(false)
       return
     }
 
     setIsJamming(false)
     setScaleLabel('—')
+    setScalePitchClasses(null)
     setBusy(false)
     toast.success('Jam saved.')
   }, [busy, isJamming, stopPitch, stopPulse])
@@ -258,18 +311,37 @@ export default function JamScreen() {
           )}
 
           {isJamming && (
-            <View className="min-h-[220px] flex-1 items-center justify-center gap-6">
-              <Animated.View
-                style={ringStyle}
-                className="h-36 w-36 items-center justify-center rounded-full border-2 border-amber-accent/60"
-              >
-                <View className="h-28 w-28 items-center justify-center rounded-full border border-amber-accent/30 bg-amber-accent/10">
-                  <Text className="text-center font-mono text-lg text-amber-accent" numberOfLines={2}>
-                    {scaleLabel}
-                  </Text>
+            <View className="min-h-[220px] flex-1 gap-5">
+              <View className="items-center gap-2">
+                <Animated.View
+                  style={ringStyle}
+                  className="h-36 w-36 items-center justify-center rounded-full border-2 border-amber-accent/60"
+                >
+                  <View className="h-28 w-28 items-center justify-center rounded-full border border-amber-accent/30 bg-amber-accent/10">
+                    <Text className="text-center font-mono text-lg text-amber-accent" numberOfLines={2}>
+                      {scaleLabel}
+                    </Text>
+                  </View>
+                </Animated.View>
+                <Text className="font-sans text-sm text-muted-brown">Listening… scale hint updates every ~2s</Text>
+              </View>
+              <FretboardDiagram
+                keyLabel="Jam"
+                positionLabel={scaleLabel}
+                capoText="Emerald outline = detected scale pitch classes"
+                scalePitchClasses={scalePitchClasses}
+              />
+              {Platform.OS === 'web' ? (
+                <View className="h-[200px] w-full overflow-hidden rounded-xl border border-wood-600/45 bg-ivory">
+                  <TabViewport
+                    ref={tabRef}
+                    gp5Base64={JAM_REFERENCE_TAB_GP5_BASE64}
+                    transposeSemitones={0}
+                    onReady={() => setJamTabReady(true)}
+                    style={{ flex: 1, height: '100%', width: '100%' }}
+                  />
                 </View>
-              </Animated.View>
-              <Text className="font-sans text-sm text-muted-brown">Listening…</Text>
+              ) : null}
             </View>
           )}
 

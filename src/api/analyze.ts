@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '@/src/config'
-import type { AnalyzeJob, JamResult, LessonJSON, ScoreResult } from '@/src/types'
+import type { AnalyzeJob, JamResult, LessonJSON, PlayerProfilePayload, ScoreResult } from '@/src/types'
+import type { SkillNodeRow } from '@/src/db/types'
 
 export class ApiError extends Error {
   constructor(
@@ -27,15 +28,42 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+const WEAK_AREA_BY_NODE_ID: Record<string, string> = {
+  bend_accuracy: 'bending',
+  pitch_accuracy: 'pitch',
+  phrasing: 'phrasing',
+  timing: 'timing',
+  vibrato_control: 'vibrato',
+}
+
+/** Build optional player profile for analyze from persisted skill rows (commit 48). */
+export function buildPlayerProfileFromSkillNodes(nodes: SkillNodeRow[]): PlayerProfilePayload | undefined {
+  if (nodes.length === 0) return undefined
+  const weakThreshold = 0.45
+  const weak_areas = nodes
+    .filter((n) => n.score < weakThreshold)
+    .map((n) => WEAK_AREA_BY_NODE_ID[n.id] ?? n.id)
+  const skill_nodes = nodes.map((n) => ({
+    id: n.id,
+    label: n.label,
+    score: n.score,
+  }))
+  return { weak_areas, skill_nodes }
+}
+
 /** YouTube or future multipart upload — `url` matches FastAPI `AnalyzeRequest`. */
 export async function submitAnalyzeJob(input: {
   youtube_url?: string
   file?: Blob
   filename?: string
+  player_profile?: PlayerProfilePayload
 }): Promise<string> {
   if (input.file != null) {
     const form = new FormData()
     form.append('file', input.file, input.filename ?? 'upload.mp3')
+    if (input.player_profile != null) {
+      form.append('player_profile', JSON.stringify(input.player_profile))
+    }
     const { job_id } = await request<{ job_id: string }>('/analyze', { method: 'POST', body: form })
     return job_id
   }
@@ -43,10 +71,14 @@ export async function submitAnalyzeJob(input: {
   if (!url) {
     throw new Error('Provide youtube_url or file')
   }
+  const body: { url: string; player_profile?: PlayerProfilePayload } = { url }
+  if (input.player_profile != null) {
+    body.player_profile = input.player_profile
+  }
   const { job_id } = await request<{ job_id: string }>('/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify(body),
   })
   return job_id
 }
@@ -153,6 +185,36 @@ export async function submitJamScore(payload: {
       inferred_scale_label: payload.inferred_scale_label ?? null,
     }),
   })
+}
+
+const QUICK_FEEDBACK_FALLBACK =
+  'A few beats drifted — stay lighter on the pick and let each target note settle before you slide to the next.'
+
+export async function submitQuickFeedback(
+  payload: { accuracy_pattern: Array<'hit' | 'close' | 'miss'> },
+  options?: { timeoutMs?: number },
+): Promise<{ message: string }> {
+  const timeoutMs = options?.timeoutMs ?? 3500
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    const res = await fetch(`${API_BASE_URL}/quick-feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    })
+    if (!res.ok) {
+      return { message: QUICK_FEEDBACK_FALLBACK }
+    }
+    const data = (await res.json()) as { message?: string }
+    const msg = typeof data.message === 'string' && data.message.trim() ? data.message.trim() : null
+    return { message: msg ?? QUICK_FEEDBACK_FALLBACK }
+  } catch {
+    return { message: QUICK_FEEDBACK_FALLBACK }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export async function fetchOnboardingPlacementCoach(payload: {

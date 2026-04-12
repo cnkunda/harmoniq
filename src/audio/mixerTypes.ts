@@ -39,6 +39,11 @@ export interface StemMixer {
   setPlaybackRate(rate: number): Promise<void>
   /** Current timeline position in seconds. */
   getPositionSeconds(): Promise<number>
+  /**
+   * Same axis as `getPositionSeconds` but synchronous (Web Audio clock).
+   * Used by the metronome scheduler; web implements, native omits.
+   */
+  getPositionSecondsNow?: () => number
   /** Longest stem duration after load; 0 before load. */
   getDurationSeconds(): number
   /** Web-only: shared clock for metronome (optional). */

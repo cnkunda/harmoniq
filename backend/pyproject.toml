@@ -9,6 +9,7 @@ description = "Harmoniq local analysis API (FastAPI scaffold)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "setuptools>=65.0",  # pkg_resources (resampy/librosa); often missing on py3.12+ minimal venvs
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "pydantic>=2.0",

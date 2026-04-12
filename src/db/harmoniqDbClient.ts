@@ -39,6 +39,8 @@ export interface HarmoniqDbClient {
   clearAllPracticeData(): Promise<void>
   insertLickRow(input: LickInsertInput): Promise<void>
   getLicks(): Promise<LickRow[]>
+  getLickById(id: string): Promise<LickRow | null>
+  deleteLickById(id: string): Promise<void>
   /** Web: hydrate Zustand from IDB lesson cache. Native: no-op. */
   hydrateWebLessonStore(): Promise<void>
 }

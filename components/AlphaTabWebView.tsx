@@ -6,7 +6,13 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import colors from '@/src/constants/colors'
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
-import type { AlphaTabSurfaceRef, NoteEventMessage, TabInboundMessage, TabThemeColors } from '@/types/tabMessage'
+import type {
+  AlphaTabSurfaceRef,
+  NoteEventMessage,
+  TabInboundMessage,
+  TabLoopBarRegion,
+  TabThemeColors,
+} from '@/types/tabMessage'
 import { decodeTabMessage, encodeTabMessage } from '@/types/tabMessage'
 
 /** @deprecated Use `AlphaTabSurfaceRef` from `@/types/tabMessage`. */
@@ -65,6 +71,12 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         seekTo: (positionMs: number) => {
           postInbound({ type: 'seekTo', positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs) : 0 })
         },
+        syncPlaybackTimelineMs: (positionMs: number) => {
+          postInbound({
+            type: 'syncTimelineMs',
+            positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs) : 0,
+          })
+        },
         getPosition: () =>
           new Promise<number | null>((resolve) => {
             getPositionResolverRef.current = resolve
@@ -81,6 +93,28 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         },
         setTranspose: (semitones: number) => {
           postInbound({ type: 'setTranspose', semitones: Math.max(-12, Math.min(12, Math.round(semitones))) })
+        },
+        setLoopRegion: (region: TabLoopBarRegion | null) => {
+          if (!region) {
+            postInbound({ type: 'clearLoopRegion' })
+            return
+          }
+          postInbound({
+            type: 'setLoopRegion',
+            startBarIndex: Math.max(0, Math.floor(region.startBarIndex)),
+            endBarIndexExclusive: Math.max(0, Math.floor(region.endBarIndexExclusive)),
+          })
+        },
+        highlightScaleDegrees: (rootMidi: number, intervals: readonly number[]) => {
+          const ints = [...intervals].map((n) => Math.round(n)).filter((n) => Number.isFinite(n))
+          postInbound({
+            type: 'highlightScaleDegrees',
+            rootMidi: ((Math.round(rootMidi) % 12) + 12) % 12,
+            intervals: ints,
+          })
+        },
+        clearScaleHighlight: () => {
+          postInbound({ type: 'clearScaleHighlight' })
         },
       }),
       [postInbound],

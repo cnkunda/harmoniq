@@ -72,6 +72,18 @@ export type LatestSessionSongRow = {
 /** Home suggestion card: cold start vs SM-2 + last song (PRIORITIES §31). */
 export type HomeSuggestion =
   | { kind: 'cold_start' }
+  | {
+      kind: 'library_saved'
+      lickCount: number
+      latest: {
+        id: string
+        song_title: string | null
+        artist: string | null
+        position: string | null
+        coach_oneliner: string | null
+        date_saved: string
+      }
+    }
   | { kind: 'ready'; node: SkillNodeRow; song: LatestSessionSongRow }
 
 export type LickInsertInput = {

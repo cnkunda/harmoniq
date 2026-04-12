@@ -1,12 +1,13 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { useRouter } from 'expo-router'
 import { useCallback, useMemo, useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { getLicks } from '@/src/db/client'
+import { deleteLickById, getLicks } from '@/src/db/client'
 import type { LickRow } from '@/src/db/types'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { lessonFromSavedLick } from '@/src/utils/lessonFromSavedLick'
 
 export default function LibraryScreen() {
   const router = useRouter()
@@ -34,28 +35,53 @@ export default function LibraryScreen() {
   const drill = useCallback(
     (lick: LickRow) => {
       const semitones = transposeById[lick.id] ?? 0
-      saveLesson({
-        job_id: `lick-${lick.id}`,
-        song_title: lick.song_title ?? 'Saved lick',
-        artist: lick.artist ?? undefined,
-        key: lick.key ?? undefined,
-        stems: {},
-        beat_grid: [],
-        bar_timestamps: [],
-        lyrics_aligned: [],
-        sections: [
-          {
-            label: lick.position ?? 'Lick',
-            primary_position: lick.position ?? undefined,
-            tab_full_gp5_base64: lick.tab_gp5_base64,
-            transposition_semitones: semitones,
-          },
-        ],
-      })
+      saveLesson(lessonFromSavedLick(lick, semitones))
       setLessonSectionIndex(0)
       router.push('/session/study')
     },
     [router, saveLesson, setLessonSectionIndex, transposeById],
+  )
+
+  const performRemoveLick = useCallback(async (lick: LickRow) => {
+    try {
+      setLoadError(null)
+      await deleteLickById(lick.id)
+      const { lesson, resetLesson } = useLessonStore.getState()
+      if (lesson?.job_id === `lick-${lick.id}`) resetLesson()
+      setTransposeById((prev) => {
+        const next = { ...prev }
+        delete next[lick.id]
+        return next
+      })
+      const rows = await getLicks()
+      setLicks(rows)
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Could not remove lick.')
+    }
+  }, [])
+
+  const confirmRemoveLick = useCallback(
+    (lick: LickRow) => {
+      const title = lick.song_title?.trim() || 'this lick'
+      const message = `Remove "${title}" from saved licks on this device? This cannot be undone.`
+
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.confirm(`Remove from library?\n\n${message}`)) {
+          void performRemoveLick(lick)
+        }
+        return
+      }
+
+      Alert.alert('Remove from library?', message, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => void performRemoveLick(lick),
+        },
+      ])
+    },
+    [performRemoveLick],
   )
 
   const songOptions = useMemo(() => {
@@ -92,7 +118,11 @@ export default function LibraryScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
-      <ScrollView className="flex-1 px-6 py-6" contentContainerStyle={{ paddingBottom: 28 }}>
+      <ScrollView
+        className="flex-1 px-6 py-6"
+        contentContainerStyle={{ paddingBottom: 28 }}
+        keyboardShouldPersistTaps="handled"
+      >
         <View className="flex-row items-center justify-between">
           <Text className="font-serif text-2xl text-cream">Library</Text>
           <Pressable onPress={() => router.back()} accessibilityRole="button">
@@ -100,7 +130,8 @@ export default function LibraryScreen() {
           </Pressable>
         </View>
         <Text className="mt-2 font-sans text-sm text-muted-brown">
-          Saved licks from Review. Drill opens directly in Study with the same tab payload.
+          Saved licks from Review. Drill opens directly in Study with the same tab payload. Remove deletes a save from this
+          device only.
         </Text>
 
         <View className="mt-4 gap-3">
@@ -197,13 +228,24 @@ export default function LibraryScreen() {
                 <Text className="font-sans text-xs text-muted-brown">Transpose (semitones)</Text>
               </View>
 
-              <Pressable
-                onPress={() => drill(lick)}
-                className="mt-3 self-start rounded-lg bg-amber-accent px-3 py-2"
-                accessibilityRole="button"
-              >
-                <Text className="font-sans-medium text-wood-900">Drill this</Text>
-              </Pressable>
+              <View className="mt-3 flex-row flex-wrap items-center gap-2">
+                <Pressable
+                  onPress={() => drill(lick)}
+                  className="rounded-lg bg-amber-accent px-3 py-2"
+                  accessibilityRole="button"
+                  accessibilityLabel="Drill this lick"
+                >
+                  <Text className="font-sans-medium text-wood-900">Drill this</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => confirmRemoveLick(lick)}
+                  className="rounded-lg border border-danger/45 bg-wood-900/50 px-3 py-2"
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove from library"
+                >
+                  <Text className="font-sans-medium text-danger">Remove</Text>
+                </Pressable>
+              </View>
             </View>
           ))}
         </View>

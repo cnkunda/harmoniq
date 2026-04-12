@@ -3,15 +3,27 @@
  * (WebView on native) or `AlphaTabWeb.web.tsx` (DOM on Expo web).
  */
 
+/** Bar-aligned loop highlight in the score (Slow step). */
+export type TabLoopBarRegion = {
+  startBarIndex: number
+  endBarIndexExclusive: number
+}
+
 /** Parent → harness */
 export type TabInboundMessage =
   | { type: 'setScore'; gp5Base64: string }
   | { type: 'setAudioSrc'; audioSrc: string }
   | { type: 'setPlaybackRate'; playbackRate: number }
   | { type: 'seekTo'; positionMs: number }
+  | { type: 'syncTimelineMs'; positionMs: number }
   | { type: 'getPosition' }
   | { type: 'setTranspose'; semitones: number }
   | { type: 'setTheme'; colors: Partial<TabThemeColors> }
+  | { type: 'setLoopRegion'; startBarIndex: number; endBarIndexExclusive: number }
+  | { type: 'clearLoopRegion' }
+  /** Jam: tint tab / notation for pitch classes in the detected scale (native WebView harness). */
+  | { type: 'highlightScaleDegrees'; rootMidi: number; intervals: number[] }
+  | { type: 'clearScaleHighlight' }
 
 export type NoteEventMessage = {
   type: 'noteEvent'
@@ -19,6 +31,8 @@ export type NoteEventMessage = {
   beat: number
   fret?: number
   string?: number
+  /** True when both string and fret came from the score engine (Study prefers this over MIDI alone). */
+  hasExplicitTabPosition?: boolean
 }
 
 /**
@@ -39,9 +53,16 @@ export type AlphaTabSurfaceRef = {
   setAudioSrc: (audioSrc: string) => void
   setPlaybackRate: (playbackRate: number) => void
   seekTo: (positionMs: number) => void
+  /** Drive cursor when audio comes from Web Audio (stems), not the tab reference audio element. */
+  syncPlaybackTimelineMs: (positionMs: number) => void
   getPosition: () => Promise<number | null>
   setTheme: (colors: Partial<TabThemeColors>) => void
   setTranspose: (semitones: number) => void
+  /** Highlight loop bars on the score (null clears). */
+  setLoopRegion: (region: TabLoopBarRegion | null) => void
+  /** Jam (web + native harness): tint note heads / tab numbers matching scale degrees. */
+  highlightScaleDegrees: (rootMidi: number, intervals: readonly number[]) => void
+  clearScaleHighlight: () => void
 }
 
 /** Harness → parent */
@@ -86,6 +107,7 @@ export function decodeTabMessage(raw: string): TabOutboundMessage | null {
       beat?: unknown
       fret?: unknown
       string?: unknown
+      hasExplicitTabPosition?: unknown
     }
     if (o.type === 'noteEvent' && typeof maybeNote.midi === 'number' && typeof maybeNote.beat === 'number') {
       return {
@@ -94,6 +116,7 @@ export function decodeTabMessage(raw: string): TabOutboundMessage | null {
         beat: maybeNote.beat,
         fret: typeof maybeNote.fret === 'number' ? maybeNote.fret : undefined,
         string: typeof maybeNote.string === 'number' ? maybeNote.string : undefined,
+        hasExplicitTabPosition: maybeNote.hasExplicitTabPosition === true ? true : undefined,
       }
     }
   } catch {

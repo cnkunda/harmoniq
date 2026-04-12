@@ -7,12 +7,18 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AudioDropzone } from '@/components/AudioDropzone'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
-import { AnalyzePollCancelledError, pollAnalyzeJobCancelable, submitAnalyzeJob } from '@/src/api/analyze'
+import {
+  AnalyzePollCancelledError,
+  buildPlayerProfileFromSkillNodes,
+  pollAnalyzeJobCancelable,
+  submitAnalyzeJob,
+} from '@/src/api/analyze'
 import colors from '@/src/constants/colors'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapAnalyzeFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { useSkillStore } from '@/src/stores/skillStore'
 import { useRouter } from 'expo-router'
 import { toast } from '@/components/ToastConfig'
 import type { AnalyzeJobStatus } from '@/src/types'
@@ -22,6 +28,8 @@ type AddSongState = 'idle' | 'analyzing' | 'done' | 'error'
 export default function AddSongScreen() {
   const router = useRouter()
   const saveLesson = useLessonStore((s) => s.saveLesson)
+  const skillNodes = useSkillStore((s) => s.nodes)
+  const loadSkillNodes = useSkillStore((s) => s.loadFromDb)
   const [url, setUrl] = useState('')
   const [uiState, setUiState] = useState<AddSongState>('idle')
   const [statusText, setStatusText] = useState('Waiting to start analysis…')
@@ -46,6 +54,10 @@ export default function AddSongScreen() {
   }, [])
 
   useEffect(() => {
+    void loadSkillNodes()
+  }, [loadSkillNodes])
+
+  useEffect(() => {
     return () => {
       aliveRef.current = false
       cancelInFlight()
@@ -60,7 +72,10 @@ export default function AddSongScreen() {
       setStatusText('Submitting audio for analysis…')
       startedAtRef.current = Date.now()
       try {
-        const jobId = await submitAnalyzeJob(input)
+        const player_profile = buildPlayerProfileFromSkillNodes(skillNodes)
+        const jobId = await submitAnalyzeJob(
+          player_profile != null ? { ...input, player_profile } : input,
+        )
         if (!aliveRef.current) return
         setStatusText(`Job queued (${jobId.slice(0, 8)}…)`)
         const poll = pollAnalyzeJobCancelable(jobId, (job) => {
@@ -103,7 +118,7 @@ export default function AddSongScreen() {
         cancelRef.current = null
       }
     },
-    [checkOpacity, checkScale, router, saveLesson],
+    [checkOpacity, checkScale, router, saveLesson, skillNodes],
   )
 
   const onClose = () => {

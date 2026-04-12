@@ -1,25 +1,29 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
+import { allCellsForMidi, inferMidiFromNoteSelection, resolveFretCell } from '@/src/music/fretboardCell'
+import { NoteDetailCard } from '@/components/NoteDetailCard'
 import { ListenStemPanel } from '@/components/ListenStemPanel'
 import { LyricsStrip } from '@/components/LyricsStrip'
-import { TabViewport } from '@/components/TabViewport'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { TabViewport } from '@/components/TabViewport'
 import { sessionHref } from '@/src/constants/sessionFlow'
-import { capoSuggestion } from '@/src/music/capoSuggestion'
-import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
-import { useLessonStore } from '@/src/stores/lessonStore'
-import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
-import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
-import type { NoteEventMessage } from '@/types/tabMessage'
 import { getAppPref } from '@/src/db/client'
-import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
+import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
+import { capoSuggestion } from '@/src/music/capoSuggestion'
+import { suggestFingerings } from '@/src/music/fingerSuggestion'
+import { buildStudyCoachLine, midiToNoteName, scaleDegreeLabel } from '@/src/music/scaleDegree'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import { useLessonStore } from '@/src/stores/lessonStore'
+import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
+import type { AlphaTabSurfaceRef, NoteEventMessage } from '@/types/tabMessage'
 
 type TabVariant = 'full' | 'skeleton' | 'alt'
 
@@ -60,6 +64,12 @@ export default function StudyScreen() {
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const [tick, setTick] = useState<PlaybackTickContext>(DEFAULT_TICK)
 
+  const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
+    setTick(ctx)
+    if (!ctx.ready) return
+    tabRef.current?.syncPlaybackTimelineMs(ctx.positionSec * 1000)
+  }, [])
+
   const section = lesson?.sections?.[lessonSectionIndex]
   const transposeSemitones =
     section && typeof section === 'object' && typeof (section as Record<string, unknown>).transposition_semitones === 'number'
@@ -73,6 +83,7 @@ export default function StudyScreen() {
     : 'Primary position unavailable'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
   const currentBar = useMemo(() => barIndexForTime(lesson?.bar_timestamps, tick.positionSec), [lesson?.bar_timestamps, tick.positionSec])
+
   const sectionKey = `${lesson?.job_id ?? 'no-job'}:${lessonSectionIndex}`
   const notesBySection = useSessionAnnotationsStore((s) => s.notesBySection)
   const setAnnotation = useSessionAnnotationsStore((s) => s.setNote)
@@ -83,6 +94,29 @@ export default function StudyScreen() {
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [preferSimplerTabs, setPreferSimplerTabs] = useState(false)
   const [lowConfBannerDismissed, setLowConfBannerDismissed] = useState(false)
+
+  const onTabNoteEvent = useCallback((evt: NoteEventMessage) => {
+    setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
+    setFretPulseKey((k) => k + 1)
+  }, [])
+
+  const selectionDetail = useMemo(() => {
+    if (!selectedNote) return null
+    const midi = inferMidiFromNoteSelection(selectedNote)
+    const cell = resolveFretCell(selectedNote)
+    if (midi == null) return null
+    const noteName = midiToNoteName(midi)
+    const degree = scaleDegreeLabel(keyLabel, midi)
+    if (!cell) return null
+    const { primary: fingerLine, alternates: alternateFingerLines } = suggestFingerings(cell, allCellsForMidi(midi))
+    const coach = buildStudyCoachLine({
+      noteName,
+      degreeLabel: degree,
+      fingerLine,
+      keyLabel,
+    })
+    return { noteName, degree, fingerLine, alternateFingerLines, coach }
+  }, [keyLabel, selectedNote])
 
   const transcriptionConfidence = lesson?.transcription_confidence
   const showLowTranscriptionBanner =
@@ -131,7 +165,8 @@ export default function StudyScreen() {
   const variantButton = (v: TabVariant, label: string) => {
     const disabled = v === 'full' ? !tabs.full : v === 'skeleton' ? !tabs.skeleton : !tabs.alt
     return (
-      <Pressable
+      <AnimatedPressable
+        haptic="light"
         onPress={() => setVariant(v)}
         disabled={disabled}
         className={`rounded-full border px-3 py-1.5 ${
@@ -145,21 +180,29 @@ export default function StudyScreen() {
         >
           {label}
         </Text>
-      </Pressable>
+      </AnimatedPressable>
     )
   }
 
   return (
     <SessionStepScreen
       title="Study"
-      subtitle="Pedagogy stack: stems + lyrics + capo hint + annotation stubs, with full/skeleton/alt GP5 compare."
+      subtitle="Stems, lyrics, capo hint, and an interactive fretboard. Scroll to the tab and tap a note for fingerings and scale context."
       showBack
       onBack={() => router.back()}
       showNext
       nextLabel="Next: Slow"
       onNext={() => router.push(sessionHref('slow'))}
     >
-      <ListenStemPanel onPlaybackTick={setTick} />
+      <ListenStemPanel
+        onPlaybackTick={handleStemPlaybackTick}
+        onSeekSeconds={(sec) => {
+          const ms = Math.max(0, sec) * 1000
+          tabRef.current?.seekTo(ms)
+          tabRef.current?.syncPlaybackTimelineMs(ms)
+        }}
+        onRateChange={(r) => tabRef.current?.setPlaybackRate(r)}
+      />
 
       {showLowTranscriptionBanner ? (
         <ErrorBanner
@@ -182,6 +225,19 @@ export default function StudyScreen() {
         pulseKey={fretPulseKey}
       />
 
+      {selectionDetail ? (
+        <View className="mt-3 w-full max-w-md self-center px-1">
+          <NoteDetailCard
+            noteName={selectionDetail.noteName}
+            scaleDegree={selectionDetail.degree}
+            fingerLine={selectionDetail.fingerLine}
+            alternateFingerLines={selectionDetail.alternateFingerLines}
+            coachText={selectionDetail.coach}
+            onDismiss={() => setSelectedNote(null)}
+          />
+        </View>
+      ) : null}
+
       <LyricsStrip words={lyricWords} playbackSec={tick.positionSec} />
 
       <View className="mt-2">
@@ -190,8 +246,9 @@ export default function StudyScreen() {
         </Text>
         <View className="flex-row flex-wrap gap-2">
           {[...Array(Math.max(1, Math.min(lesson?.bar_timestamps?.length ?? 0, 16))).keys()].map((bar) => (
-            <Pressable
+            <AnimatedPressable
               key={`bar-${bar}`}
+              haptic="none"
               onLongPress={() => {
                 const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
                 setAnnotation(sectionKey, bar, text)
@@ -199,11 +256,13 @@ export default function StudyScreen() {
               className={`rounded-full border px-2.5 py-1 ${
                 bar === currentBar ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/35'
               }`}
+              accessibilityRole="button"
+              accessibilityHint="Long press to save a practice note for this bar"
             >
               <Text className={`font-mono text-[10px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-brown'}`}>
                 bar {bar}
               </Text>
-            </Pressable>
+            </AnimatedPressable>
           ))}
         </View>
         <Text className="mt-1 font-sans text-[11px] text-muted-brown">
@@ -215,24 +274,25 @@ export default function StudyScreen() {
         {variantButton('full', 'Full tab')}
         {variantButton('skeleton', 'Skeleton')}
         {tabs.alt ? variantButton('alt', 'Alt position') : null}
-        <Pressable
+        <AnimatedPressable
+          haptic="light"
           onPress={() => tabRef.current?.seekTo(0)}
           className="rounded-full border border-wood-600/50 bg-cream-dark/50 px-3 py-1.5"
           accessibilityRole="button"
         >
           <Text className="font-sans text-xs text-wood-900">Seek to start</Text>
-        </Pressable>
+        </AnimatedPressable>
       </View>
 
-      <View className="mt-3 h-[320px] w-full">
+      <Text className="mt-2 font-sans text-[11px] text-muted-brown">
+        Tap the tablature to select a note — the fretboard and detail card update from the live score.
+      </Text>
+      <View className="mt-2 h-[320px] w-full">
         <TabViewport
           ref={tabRef}
           gp5Base64={gp5Base64}
           transposeSemitones={transposeSemitones}
-          onNoteEvent={(evt: NoteEventMessage) => {
-            setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
-            setFretPulseKey((k) => k + 1)
-          }}
+          onNoteEvent={onTabNoteEvent}
           style={{ flex: 1, height: '100%', width: '100%' }}
         />
       </View>

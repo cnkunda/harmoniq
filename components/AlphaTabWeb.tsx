@@ -18,9 +18,13 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         setAudioSrc: () => {},
         setPlaybackRate: () => {},
         seekTo: () => {},
+        syncPlaybackTimelineMs: () => {},
         getPosition: async () => null,
         setTheme: () => {},
         setTranspose: () => {},
+        setLoopRegion: () => {},
+        highlightScaleDegrees: () => {},
+        clearScaleHighlight: () => {},
       }),
       [],
     )

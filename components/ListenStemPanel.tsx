@@ -1,11 +1,15 @@
+import { useIsFocused } from '@react-navigation/native'
 import Slider from '@react-native-community/slider'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native'
 
-import { createBeatMetronome } from '@/src/audio/createBeatMetronome'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { BeatFlashPulse } from '@/components/BeatFlashPulse'
 import { createStemMixer } from '@/src/audio/Mixer'
-import type { BeatMetronome } from '@/src/audio/beatMetronome.types'
+import { useLoopAudio } from '@/src/audio/useLoopAudio'
+import { useMetronome } from '@/src/audio/useMetronome'
 import type { StemMixer } from '@/src/audio/mixerTypes'
+import type { MetronomeSubdivision } from '@/src/audio/metronomeShared'
 import colors from '@/src/constants/colors'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { LessonJSON } from '@/src/types'
@@ -18,6 +22,12 @@ const STEM_UI_ORDER = ['guitar', 'bass', 'drums', 'vocals', 'piano', 'other'] as
 const STEM_SWITCH_TRACK = { false: colors.wood[500], true: `${colors.amber.accent}80` } as const
 const STEM_SWITCH_THUMB_ON = colors.cream
 const STEM_SWITCH_THUMB_OFF = colors.wood[600]
+
+const METRO_SUBDIV_OPTIONS: { value: MetronomeSubdivision; label: string }[] = [
+  { value: 1, label: '1/4' },
+  { value: 2, label: '1/8' },
+  { value: 4, label: '1/16' },
+]
 
 function orderedStemIds(stems: Record<string, string>): string[] {
   const keys = Object.keys(stems)
@@ -75,9 +85,10 @@ export function ListenStemPanel({
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
+  const isScreenFocused = useIsFocused()
 
   const mixerRef = useRef<StemMixer | null>(null)
-  const metroRef = useRef<BeatMetronome | null>(null)
+  const metro = useMetronome()
 
   const [ready, setReady] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -87,6 +98,9 @@ export function ListenStemPanel({
   const [durationSec, setDurationSec] = useState(0)
   const [rate, setRate] = useState(clampPlaybackRate(initialRate))
   const [metronomeOn, setMetronomeOn] = useState(Boolean(initialMetronomeOn))
+  const [metroSubdivision, setMetroSubdivision] = useState<MetronomeSubdivision>(1)
+  const [beatFlashTick, setBeatFlashTick] = useState(0)
+  const [lastDownbeatFlash, setLastDownbeatFlash] = useState(true)
   const [stemMute, setStemMute] = useState<Record<string, boolean>>({})
   const [loopRegion, setLoopRegion] = useState<{ startSec: number; endSec: number; label?: string } | null>(autoLoopRegion)
 
@@ -99,8 +113,20 @@ export function ListenStemPanel({
   const rateRef = useRef(rate)
   rateRef.current = rate
 
+  useEffect(() => {
+    if (isScreenFocused) return
+    metro.stop()
+    const m = mixerRef.current
+    if (!m) {
+      setPlaying(false)
+      return
+    }
+    void m.pause().then(() => setPlaying(false)).catch(() => setPlaying(false))
+  }, [isScreenFocused, metro])
+
   const loadKey = lessonLoadKey(lesson)
   const beatGridKey = lesson?.beat_grid?.join(',') ?? ''
+  const barLineKey = lesson?.bar_timestamps?.join(',') ?? ''
 
   const onPlaybackTickRef = useRef(onPlaybackTick)
   onPlaybackTickRef.current = onPlaybackTick
@@ -123,6 +149,11 @@ export function ListenStemPanel({
     setLoopRegion(autoLoopRegion)
   }, [autoLoopRegion])
 
+  const onBeatFlash = useCallback((info: { isDownbeat: boolean }) => {
+    setLastDownbeatFlash(info.isDownbeat)
+    setBeatFlashTick((n) => n + 1)
+  }, [])
+
   const syncStemGains = useCallback(
     async (mixer: StemMixer, muteMap: Record<string, boolean>) => {
       const ids = Object.keys(muteMap)
@@ -141,6 +172,7 @@ export function ListenStemPanel({
       setPositionSec(0)
       setPlaying(false)
       mixerRef.current = null
+      metro.stop()
       return
     }
 
@@ -177,9 +209,9 @@ export function ListenStemPanel({
         setPositionSec(t0)
         setReady(true)
 
-        metroRef.current?.stop()
+        metro.stop()
         const ctx = mixer.getAudioContext?.() ?? null
-        metroRef.current = createBeatMetronome(ctx)
+        metro.bindAudioContext(ctx)
       } catch (e) {
         if (!cancelled) {
           setLoadError(e instanceof Error ? e.message : 'Could not load stems.')
@@ -193,12 +225,11 @@ export function ListenStemPanel({
 
     return () => {
       cancelled = true
-      metroRef.current?.stop()
-      metroRef.current = null
+      metro.stop()
       mixer.unload().catch(() => {})
       mixerRef.current = null
     }
-  }, [initialRate, initialStemMuteById, loadKey, lesson, syncStemGains])
+  }, [initialRate, initialStemMuteById, loadKey, lesson, metro, syncStemGains])
 
   useEffect(() => {
     if (!ready) return
@@ -223,57 +254,77 @@ export function ListenStemPanel({
       return
     }
 
+    const pollMs = metronomeOn ? 50 : 200
+
     const tick = () => {
       const m = mixerRef.current
       if (!m) return
+      if (m.getPositionSecondsNow) {
+        const p = m.getPositionSecondsNow()
+        setPositionSec(p)
+        emitTick(p)
+        return
+      }
       void m.getPositionSeconds().then((p) => {
         setPositionSec(p)
         emitTick(p)
       })
     }
     tick()
-    const id = setInterval(tick, 200)
+    const id = setInterval(tick, pollMs)
     return () => clearInterval(id)
-  }, [playing, ready])
+  }, [metronomeOn, playing, ready])
 
   useEffect(() => {
-    const m = metroRef.current
-    if (!m || !lesson || !ready) return
+    if (!lesson || !ready) return
     if (!metronomeOn || !playing) {
-      m.stop()
+      metro.stop()
       return
     }
     const beatGrid = lesson.beat_grid ?? []
+    const barTimestamps = lesson.bar_timestamps ?? []
     const tempoBpm = lesson.tempo != null && lesson.tempo > 0 ? lesson.tempo : 120
-    m.start({
+    metro.setSubdivision(metroSubdivision)
+    metro.start({
       beatGrid,
+      barTimestamps: barTimestamps.length > 0 ? barTimestamps : undefined,
       tempoBpm,
       getPlaybackRate: () => rateRef.current,
       getSongPositionSeconds: () => positionRef.current,
+      getSongPositionSecondsNow: () => {
+        const m = mixerRef.current
+        const p = m?.getPositionSecondsNow?.()
+        return typeof p === 'number' && Number.isFinite(p) ? p : positionRef.current
+      },
       isPlaying: () => playingRef.current,
+      subdivision: metroSubdivision,
+      onBeatFlash,
     })
-    return () => m.stop()
-  }, [metronomeOn, playing, ready, beatGridKey, lesson?.tempo, rate])
+    return () => metro.stop()
+  }, [
+    barLineKey,
+    beatGridKey,
+    lesson,
+    metronomeOn,
+    metro,
+    metroSubdivision,
+    onBeatFlash,
+    playing,
+    ready,
+    rate,
+  ])
 
-  useEffect(() => {
-    if (!ready || !playing || !loopRegion) return
-    const { startSec, endSec } = loopRegion
-    if (!Number.isFinite(startSec) || !Number.isFinite(endSec) || endSec <= startSec + 0.05) return
-    const id = setInterval(() => {
-      const m = mixerRef.current
-      if (!m || !playingRef.current) return
-      void m.getPositionSeconds().then((p) => {
-        if (p >= endSec - 0.02) {
-          void m.seek(startSec).then(() => {
-            setPositionSec(startSec)
-            onSeekRef.current?.()
-            onSeekSecondsRef.current?.(startSec)
-          })
-        }
-      })
-    }, 120)
-    return () => clearInterval(id)
-  }, [loopRegion, playing, ready])
+  useLoopAudio({
+    active: ready && playing && Boolean(loopRegion),
+    startSec: loopRegion?.startSec ?? 0,
+    endSec: loopRegion?.endSec ?? 0,
+    mixerRef,
+    onWrappedToLoopStart: (startSec) => {
+      setPositionSec(startSec)
+      onSeekRef.current?.()
+      onSeekSecondsRef.current?.(startSec)
+    },
+  })
 
   const toggleStem = (id: string) => {
     setStemMute((prev) => {
@@ -328,7 +379,7 @@ export function ListenStemPanel({
   if (!lesson) {
     return (
       <Text className="mt-2 font-sans text-sm text-muted-brown">
-        No lesson in memory — complete Analyze (debug) first, then open the session from there.
+        No lesson in memory — add a song from Home or open a session after analysis so stems can load.
       </Text>
     )
   }
@@ -401,8 +452,11 @@ export function ListenStemPanel({
         <Text className="font-mono text-xs text-muted-brown">{rate.toFixed(2)}×</Text>
       </View>
 
-      <View className="flex-row items-center justify-between">
-        <Text className="font-sans-medium text-sm text-wood-900">Metronome</Text>
+      <View className="flex-row flex-wrap items-center justify-between gap-2">
+        <View className="flex-row items-center gap-2">
+          <BeatFlashPulse flashTick={beatFlashTick} lastDownbeat={lastDownbeatFlash} />
+          <Text className="font-sans-medium text-sm text-wood-900">Metronome</Text>
+        </View>
         <Switch
           value={metronomeOn}
           onValueChange={setMetronomeOn}
@@ -411,11 +465,39 @@ export function ListenStemPanel({
           thumbColor={metronomeOn ? STEM_SWITCH_THUMB_ON : STEM_SWITCH_THUMB_OFF}
         />
       </View>
+      <View className="mt-2 flex-row flex-wrap items-center gap-2">
+        <Text className="font-sans text-xs text-muted-brown">Subdivide:</Text>
+        {METRO_SUBDIV_OPTIONS.map((opt) => {
+          const active = metroSubdivision === opt.value
+          return (
+            <AnimatedPressable
+              key={opt.value}
+              haptic="none"
+              disabled={!ready || loading}
+              onPress={() => setMetroSubdivision(opt.value)}
+              className={`rounded-md border px-2.5 py-1 ${
+                active ? 'border-amber-accent bg-amber-accent/25' : 'border-wood-600/50 bg-cream-dark/30'
+              } ${!ready || loading ? 'opacity-40' : ''}`}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <Text className={`font-mono text-[11px] ${active ? 'text-wood-900' : 'text-muted-brown'}`}>
+                {opt.label}
+              </Text>
+            </AnimatedPressable>
+          )
+        })}
+      </View>
       {Platform.OS !== 'web' ? (
         <Text className="font-sans text-[11px] text-muted-brown">
-          Metronome uses a short click sample; grid alignment is coarse on native (~40ms poll).
+          Native metronome uses hi/lo WAV clicks on a 25ms poll; typical alignment jitter is about 20–80ms vs the
+          stem transport (see assets/audio/SOURCES.md).
         </Text>
-      ) : null}
+      ) : (
+        <Text className="font-sans text-[11px] text-muted-brown">
+          Web metronome schedules clicks on the shared AudioContext clock (25ms lookahead, ~120ms horizon).
+        </Text>
+      )}
 
       {sections.length > 0 ? (
         <View>

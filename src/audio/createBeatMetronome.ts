@@ -1,7 +1,7 @@
 import { Platform } from 'react-native'
 
-import { createNativeBeatMetronome } from './beatMetronome.native'
-import { createWebBeatMetronome } from './beatMetronome.web'
+import { createNativeBeatMetronome } from './metronome.native'
+import { createWebBeatMetronome } from './metronome.web'
 import type { BeatMetronome } from './beatMetronome.types'
 
 const noopMetronome: BeatMetronome = {

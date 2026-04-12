@@ -7,10 +7,30 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class SkillNode(BaseModel):
+    """One skill row snapshot for personalized coach context (analyze)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    label: str | None = None
+    score: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class PlayerProfile(BaseModel):
+    """Optional client-provided profile for coach conditioning on POST /analyze."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    weak_areas: list[str] = Field(default_factory=list)
+    skill_nodes: list[SkillNode] = Field(default_factory=list)
+
+
 class AnalyzeRequest(BaseModel):
     """YouTube URL or omitted when sending multipart audio instead."""
 
     url: str | None = None
+    player_profile: PlayerProfile | None = None
 
 
 class AnalyzeJobCreated(BaseModel):
@@ -38,6 +58,7 @@ class LessonJSON(BaseModel):
     job_id: str | None = None
     song_title: str | None = None
     artist: str | None = None
+    style_label: str | None = None
     key: str | None = None
     key_confidence: float | None = None
     tempo: float | None = None
@@ -113,3 +134,16 @@ class JamScoreRequest(BaseModel):
 class JamScoreResult(BaseModel):
     coach_summary: str
     scale_position_map: dict[str, float] = Field(default_factory=dict)
+
+
+QuickAccuracyLabel = Literal["hit", "close", "miss"]
+
+
+class QuickFeedbackRequest(BaseModel):
+    """POST /quick-feedback — per-beat accuracy from Play step (PRIORITIES §49)."""
+
+    accuracy_pattern: list[QuickAccuracyLabel] = Field(default_factory=list, max_length=64)
+
+
+class QuickFeedbackResponse(BaseModel):
+    message: str

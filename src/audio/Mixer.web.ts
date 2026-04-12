@@ -219,7 +219,7 @@ class WebAudioStemMixer implements StemMixer {
     await this.play()
   }
 
-  async getPositionSeconds(): Promise<number> {
+  getPositionSecondsNow(): number {
     if (!this.ctx || this.stems.size === 0) {
       return this.pausedAt
     }
@@ -229,6 +229,10 @@ class WebAudioStemMixer implements StemMixer {
       return (this.pausedAt + elapsed) % d
     }
     return this.pausedAt
+  }
+
+  async getPositionSeconds(): Promise<number> {
+    return this.getPositionSecondsNow()
   }
 
   getDurationSeconds(): number {

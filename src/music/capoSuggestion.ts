@@ -18,7 +18,8 @@ const NOTE_TO_SEMITONE: Record<string, number> = {
   B: 11,
 }
 
-function parseKey(input: string | null | undefined): { tonic: string; semitone: number; mode: 'major' | 'minor' } | null {
+/** Shared by Study scale-degree and capo copy. */
+export function parseKey(input: string | null | undefined): { tonic: string; semitone: number; mode: 'major' | 'minor' } | null {
   const raw = input?.trim()
   if (!raw) return null
   const m = raw.match(/^([A-G](?:#|b)?)(?:\s+)?(major|minor)?/i)

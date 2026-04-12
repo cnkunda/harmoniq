@@ -1,11 +1,11 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
 
 import { ListenStemPanel } from '@/components/ListenStemPanel'
 import { TabViewport } from '@/components/TabViewport'
 import { useSessionSmartScroll, type PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useLessonStore } from '@/src/stores/lessonStore'
-import type { AlphaTabSurfaceRef, NoteEventMessage } from '@/types/tabMessage'
+import type { AlphaTabSurfaceRef, NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 import { lessonStemUrl } from '@/src/utils/lessonAudio'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 
@@ -20,6 +20,8 @@ type SessionStemAndTabProps = {
   initialRate?: number
   initialMetronomeOn?: boolean
   autoLoopRegion?: { startSec: number; endSec: number; label?: string } | null
+  /** Optional bar-range highlight on the score (Slow). */
+  loopHighlight?: TabLoopBarRegion | null
   initialStemMuteById?: Record<string, boolean>
   onPlaybackTick?: (ctx: PlaybackTickContext) => void
   onNoteEvent?: (evt: NoteEventMessage) => void
@@ -30,6 +32,7 @@ export function SessionStemAndTab({
   initialRate,
   initialMetronomeOn,
   autoLoopRegion,
+  loopHighlight = null,
   initialStemMuteById,
   onPlaybackTick,
   onNoteEvent,
@@ -63,6 +66,18 @@ export function SessionStemAndTab({
     skewDemoGeneration: skewGen,
   })
 
+  const gp5Key = gp5Base64?.slice(0, 24) ?? ''
+
+  useEffect(() => {
+    const tab = tabRef.current
+    if (!tab) return
+    if (!loopHighlight || loopHighlight.startBarIndex >= loopHighlight.endBarIndexExclusive) {
+      tab.setLoopRegion(null)
+      return
+    }
+    tab.setLoopRegion(loopHighlight)
+  }, [gp5Key, loopHighlight?.endBarIndexExclusive, loopHighlight?.startBarIndex])
+
   return (
     <>
       <ListenStemPanel
@@ -72,6 +87,9 @@ export function SessionStemAndTab({
         initialStemMuteById={initialStemMuteById}
         onPlaybackTick={(ctx) => {
           tickRef.current = ctx
+          if (ctx.ready) {
+            tabRef.current?.syncPlaybackTimelineMs(ctx.positionSec * 1000)
+          }
           onPlaybackTick?.(ctx)
         }}
         onSeek={() => setScrollReset((n) => n + 1)}

@@ -13,9 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from app.coach import merge_coach_copy_into_sections
-from app.pipeline_proof import librosa_summarize
+from app.pipeline_proof import LibrosaSummary, librosa_summarize
+from app.style_detect import infer_style_from_librosa_summary
 from app.transcribe import transcribe_vocals_to_lyrics_aligned
-from app.schemas import LessonJSON, LessonSectionStub
+from app.schemas import LessonJSON, LessonSectionStub, PlayerProfile
 from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidence, generate_tab_artifacts_for_guitar_stem
 
 logger = logging.getLogger("harmoniq.analyze_audio")
@@ -37,6 +38,7 @@ def _fallback_lesson(
     stems: dict[str, str],
     wav_path: str,
     guitar_stem_path: Path,
+    player_profile: PlayerProfile | None = None,
 ) -> LessonJSON:
     # Deterministic placeholder so API contract tests pass even when librosa
     # fails on tiny clips or in constrained environments.
@@ -56,16 +58,32 @@ def _fallback_lesson(
     except Exception:
         logger.exception("tabgen failed during fallback; returning empty tab base64")
         sections = [LessonSectionStub(label="Intro", confidence=derive_section_confidence(transcription_confidence))]
+    stub_summary = LibrosaSummary(
+        duration_s=12.0,
+        tempo_bpm=72.0,
+        beat_times_s=[0.0, 0.5],
+        key_name="G major",
+        mode="major",
+        segments=[{"label": "Intro", "start_s": 0.0}],
+        bar_timestamps_s=[0.0, 3.33],
+        key_confidence=0.5,
+        tempo_confidence=0.5,
+    )
+    style = infer_style_from_librosa_summary(stub_summary)
     sections = merge_coach_copy_into_sections(
         sections,
         song_title="Stub Song",
         artist="Stub Artist",
         key="G major",
+        player_profile=player_profile,
+        style_label=style.style_label,
+        technique_hints=style.technique_hints,
     )
     return LessonJSON(
         job_id=job_id,
         song_title="Stub Song",
         artist="Stub Artist",
+        style_label=style.style_label,
         key="G major",
         key_confidence=0.99,
         tempo=72.0,
@@ -88,6 +106,7 @@ def build_lesson_json_from_librosa(
     stems: dict[str, str],
     wav_path: str,
     source_url: str | None = None,
+    player_profile: PlayerProfile | None = None,
 ) -> LessonJSON:
     _ = source_url  # reserved for later ingest logging
 
@@ -95,7 +114,13 @@ def build_lesson_json_from_librosa(
         summary = librosa_summarize(guitar_stem_path)
     except Exception:
         logger.exception("librosa analysis failed for job_id=%s audio_path=%s", job_id, guitar_stem_path)
-        return _fallback_lesson(job_id, stems=stems, wav_path=wav_path, guitar_stem_path=guitar_stem_path)
+        return _fallback_lesson(
+            job_id,
+            stems=stems,
+            wav_path=wav_path,
+            guitar_stem_path=guitar_stem_path,
+            player_profile=player_profile,
+        )
 
     beat_grid = _sorted_unique_floats(summary.beat_times_s)
     if not beat_grid:
@@ -154,17 +179,22 @@ def build_lesson_json_from_librosa(
             )
             for sec in sections
         ]
+    style = infer_style_from_librosa_summary(summary)
     sections = merge_coach_copy_into_sections(
         sections,
         song_title="Librosa Lesson",
         artist="Stub Artist",
         key=summary.key_name,
+        player_profile=player_profile,
+        style_label=style.style_label,
+        technique_hints=style.technique_hints,
     )
 
     return LessonJSON(
         job_id=job_id,
         song_title="Librosa Lesson",
         artist="Stub Artist",
+        style_label=style.style_label,
         key=summary.key_name,
         key_confidence=summary.key_confidence,
         tempo=summary.tempo_bpm,

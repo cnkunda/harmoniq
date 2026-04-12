@@ -1,29 +1,30 @@
 import * as SQLite from 'expo-sqlite'
 
 import {
-  DB_NAME,
-  DEFAULT_SKILL_NODES,
-  MIGRATION_TABLE_SQL,
-  MIGRATION_V1,
-  MIGRATION_V3_APP_PREFS,
-  MIGRATION_V4_SESSIONS_REVIEW,
-  PREF_ONBOARDING_COMPLETE,
+    DB_NAME,
+    DEFAULT_SKILL_NODES,
+    MIGRATION_TABLE_SQL,
+    MIGRATION_V1,
+    MIGRATION_V3_APP_PREFS,
+    MIGRATION_V4_SESSIONS_REVIEW,
+    PREF_ONBOARDING_COMPLETE,
 } from '@/src/db/schema'
-import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
+import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
 import type {
   HomeSuggestion,
-  JamSnapshotInsertInput,
-  JamSnapshotRow,
-  LickInsertInput,
-  LickRow,
-  LatestSessionSongRow,
-  ReviewSkillUpdateInput,
-  NodeSessionSnippet,
-  SessionArchiveRow,
-  SessionInsertInput,
-  SessionJournalRow,
-  SkillNodeRow,
+    JamSnapshotInsertInput,
+    JamSnapshotRow,
+    LatestSessionSongRow,
+    LickInsertInput,
+    LickRow,
+    NodeSessionSnippet,
+    ReviewSkillUpdateInput,
+    SessionArchiveRow,
+    SessionInsertInput,
+    SessionJournalRow,
+    SkillNodeRow,
 } from '@/src/db/types'
+import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
 
 type DbHandle = Awaited<ReturnType<typeof SQLite.openDatabaseAsync>>
@@ -337,14 +338,20 @@ export async function getLatestSessionWithSong(): Promise<LatestSessionSongRow |
 export async function getHomeSuggestion(): Promise<HomeSuggestion> {
   await initDb()
   const song = await getLatestSessionWithSong()
-  if (!song) return { kind: 'cold_start' }
+  if (!song) {
+    const lib = tryLibraryHomeSuggestion(await getLicks())
+    return lib ?? { kind: 'cold_start' }
+  }
   const db = await getDb()
   const node = await db.getFirstAsync<SkillNodeRow>(
     `SELECT * FROM skill_nodes
      ORDER BY (next_review_date IS NULL) DESC, next_review_date ASC, id ASC
      LIMIT 1`,
   )
-  if (!node) return { kind: 'cold_start' }
+  if (!node) {
+    const lib = tryLibraryHomeSuggestion(await getLicks())
+    return lib ?? { kind: 'cold_start' }
+  }
   return { kind: 'ready', node, song }
 }
 
@@ -475,6 +482,46 @@ export async function insertLickRow(input: LickInsertInput): Promise<void> {
     JSON.stringify(input.user_annotations ?? []),
     input.date_saved,
   )
+}
+
+export async function deleteLickById(id: string): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  await db.runAsync('DELETE FROM licks WHERE id = ?', id)
+}
+
+export async function getLickById(id: string): Promise<LickRow | null> {
+  await initDb()
+  const db = await getDb()
+  const r = await db.getFirstAsync<{
+    id: string
+    song_title: string | null
+    artist: string | null
+    key: string | null
+    scale: string | null
+    position: string | null
+    tab_gp5_base64: string
+    audio_segment_path: string | null
+    coach_oneliner: string | null
+    technique_tags: string | null
+    user_annotations: string | null
+    date_saved: string
+  }>('SELECT * FROM licks WHERE id = ?', id)
+  if (!r) return null
+  return {
+    id: r.id,
+    song_title: r.song_title,
+    artist: r.artist,
+    key: r.key,
+    scale: r.scale,
+    position: r.position,
+    tab_gp5_base64: r.tab_gp5_base64,
+    audio_segment_path: r.audio_segment_path,
+    coach_oneliner: r.coach_oneliner,
+    technique_tags: parseJsonArray<string>(r.technique_tags),
+    user_annotations: parseJsonArray<{ bar: number; text: string }>(r.user_annotations),
+    date_saved: r.date_saved,
+  }
 }
 
 export async function getLicks(): Promise<LickRow[]> {

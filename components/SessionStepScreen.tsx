@@ -52,7 +52,7 @@ export function SessionStepScreen({
 
         <View className="mt-6 rounded-xl border border-wood-600/40 bg-cream-dark/50 p-4">
           <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
-            lessonStore
+            Current lesson
           </Text>
           <Text className="mt-1 font-sans text-sm text-wood-900">
             {songTitle ? (
@@ -60,13 +60,22 @@ export function SessionStepScreen({
                 Song: <Text className="font-sans-medium text-amber-accent">{songTitle}</Text>
               </>
             ) : (
-              <Text className="text-muted-brown">No lesson loaded yet — run Analyze (debug) first.</Text>
+              <Text className="text-muted-brown">
+                No lesson loaded yet — use Add Song to analyze audio, or open a save from your library.
+              </Text>
             )}
           </Text>
-          <Text className="mt-1 font-mono text-xs text-muted-brown">
-            lessonSectionIndex={lessonSectionIndex}
-            {sectionTotal > 0 ? ` · sections.length=${sectionTotal}` : ''}
-          </Text>
+          {songTitle && sectionTotal > 1 ? (
+            <Text className="mt-1 font-sans text-xs text-muted-brown">
+              Section {Math.min(lessonSectionIndex + 1, sectionTotal)} of {sectionTotal}
+            </Text>
+          ) : null}
+          {__DEV__ && lesson ? (
+            <Text className="mt-1 font-mono text-xs text-muted-brown">
+              lessonSectionIndex={lessonSectionIndex}
+              {sectionTotal > 0 ? ` · sections.length=${sectionTotal}` : ''}
+            </Text>
+          ) : null}
         </View>
 
         {children}
