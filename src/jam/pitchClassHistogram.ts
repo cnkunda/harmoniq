@@ -119,7 +119,8 @@ export function createPitchClassHistogram(): PitchClassHistogram {
 
   return {
     add(reading) {
-      if (!reading || !Number.isFinite(reading.hz) || reading.hz <= 0) return
+      const hz = reading?.hz
+      if (!reading || hz == null || !Number.isFinite(hz) || hz <= 0) return
       if (!Number.isFinite(reading.midi)) return
       const pc = ((Math.round(reading.midi) % 12) + 12) % 12
       bins[pc] += 1

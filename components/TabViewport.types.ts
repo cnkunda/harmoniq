@@ -9,4 +9,5 @@ export type TabViewportProps = {
   onReady?: () => void
   onError?: (message: string) => void
   onNoteEvent?: (evt: NoteEventMessage) => void
+  onScoreSeekMs?: (positionMs: number) => void
 }

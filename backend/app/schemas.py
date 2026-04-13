@@ -77,6 +77,16 @@ class JobStatus(BaseModel):
     status: Literal["processing", "complete", "failed"] = "processing"
     result: LessonJSON | None = None
     error: str | None = None
+    progress: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Approximate progress 0–1 while processing.",
+    )
+    stage_label: str | None = Field(
+        default=None,
+        description="Short stage label while processing.",
+    )
 
 
 class ScoreRequest(BaseModel):
@@ -136,7 +146,7 @@ class JamScoreResult(BaseModel):
     scale_position_map: dict[str, float] = Field(default_factory=dict)
 
 
-QuickAccuracyLabel = Literal["hit", "close", "miss"]
+QuickAccuracyLabel = Literal["hit", "close", "miss", "vibrato"]
 
 
 class QuickFeedbackRequest(BaseModel):

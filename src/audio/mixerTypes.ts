@@ -41,9 +41,14 @@ export interface StemMixer {
   getPositionSeconds(): Promise<number>
   /**
    * Same axis as `getPositionSeconds` but synchronous (Web Audio clock).
-   * Used by the metronome scheduler; web implements, native omits.
+   * Used by the metronome scheduler; web + native implement.
    */
   getPositionSecondsNow?: () => number
+  /**
+   * Web: song position in seconds at a specific `AudioContext.currentTime` (playing only).
+   * Keeps metronome scheduling tied to one clock sample.
+   */
+  getSongPositionAtContextTime?: (contextTime: number) => number
   /** Longest stem duration after load; 0 before load. */
   getDurationSeconds(): number
   /** Web-only: shared clock for metronome (optional). */

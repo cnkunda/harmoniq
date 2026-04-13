@@ -5,6 +5,7 @@ import {
   collectClickTimesInRange,
   gridAnchorSeconds,
   medianBeatIntervalSeconds,
+  syntheticPhaseAnchorSeconds,
 } from './metronomeShared'
 
 describe('metronomeShared', () => {
@@ -47,6 +48,21 @@ describe('metronomeShared', () => {
     expect(quarters.some((t) => Math.abs(t - 0) < 0.02)).toBe(true)
     expect(quarters.some((t) => Math.abs(t - 0.52) < 0.02)).toBe(true)
     expect(quarters.some((t) => Math.abs(t - 1.01) < 0.02)).toBe(true)
+  })
+
+  it('syntheticPhaseAnchor uses first bar when beat grid is empty', () => {
+    expect(syntheticPhaseAnchorSeconds([], [2.5])).toBeCloseTo(2.5, 5)
+  })
+
+  it('syntheticPhaseAnchor min of bar and sparse grid first beat', () => {
+    expect(syntheticPhaseAnchorSeconds([2.2], [2.0])).toBeCloseTo(2.0, 5)
+  })
+
+  it('empty beat_grid with bar_timestamps yields clicks from bar anchor', () => {
+    const c = collectClickTimesInRange([], 120, 2.0, 3.2, 1, { barTimestamps: [2.0] })
+    const times = c.map((x) => x.songTime)
+    expect(times.some((t) => Math.abs(t - 2.0) < 0.02)).toBe(true)
+    expect(times.some((t) => Math.abs(t - 2.5) < 0.02)).toBe(true)
   })
 
   it('uses bar_timestamps for downbeats when provided', () => {

@@ -13,13 +13,19 @@ class HarmoniqPitchDetectorProcessor extends AudioWorkletProcessor {
     this._throttle = 0
   }
 
-  _estimatePitch(samples, sampleRate) {
-    let rms = 0
+  _frameRms(samples) {
+    let sum = 0
+    let peak = 0
     for (let i = 0; i < samples.length; i += 1) {
       const value = samples[i]
-      rms += value * value
+      const a = value < 0 ? -value : value
+      if (a > peak) peak = a
+      sum += value * value
     }
-    rms = Math.sqrt(rms / samples.length)
+    return { rms: Math.sqrt(sum / samples.length), peakAbs: peak }
+  }
+
+  _estimatePitchHz(samples, sampleRate, rms) {
     if (rms < 0.01) return null
 
     const minFreq = 70
@@ -66,10 +72,9 @@ class HarmoniqPitchDetectorProcessor extends AudioWorkletProcessor {
     ordered.set(this._buffer.subarray(this._cursor), 0)
     ordered.set(this._buffer.subarray(0, this._cursor), tail)
 
-    const hz = this._estimatePitch(ordered, sampleRate)
-    if (hz) {
-      this.port.postMessage({ type: 'pitch', hz })
-    }
+    const { rms, peakAbs } = this._frameRms(ordered)
+    const hz = this._estimatePitchHz(ordered, sampleRate, rms)
+    this.port.postMessage({ type: 'pitch', hz: hz || null, rms, peakAbs })
     return true
   }
 }
@@ -88,15 +93,26 @@ function midiToNoteName(midi: number): string {
   return `${names[((rounded % 12) + 12) % 12]}${octave}`
 }
 
-function toReading(hz: number): PitchReading {
-  const midi = hzToMidi(hz)
-  const nearest = Math.round(midi)
-  const cents = Math.round((midi - nearest) * 100)
+function toReading(hz: number | null | undefined, rms: number, peakAbs?: number): PitchReading {
+  if (hz != null && Number.isFinite(hz) && hz > 0) {
+    const midi = hzToMidi(hz)
+    const nearest = Math.round(midi)
+    const cents = Math.round((midi - nearest) * 100)
+    return {
+      hz,
+      midi: nearest,
+      cents,
+      noteName: midiToNoteName(midi),
+      rms,
+      peakAbs,
+    }
+  }
   return {
-    hz,
-    midi: nearest,
-    cents,
-    noteName: midiToNoteName(midi),
+    midi: 0,
+    cents: 0,
+    noteName: '',
+    rms,
+    peakAbs,
   }
 }
 
@@ -151,9 +167,12 @@ class PitchStreamWeb implements PitchStream {
 
     this.sourceNode = this.context.createMediaStreamSource(this.stream)
     this.workletNode = new AudioWorkletNode(this.context, WORKLET_PROCESSOR_NAME, { numberOfOutputs: 0 })
-    this.workletNode.port.onmessage = (event: MessageEvent<{ type: string; hz: number }>) => {
+    this.workletNode.port.onmessage = (
+      event: MessageEvent<{ type: string; hz: number | null; rms: number; peakAbs?: number }>,
+    ) => {
       if (event.data?.type !== 'pitch') return
-      onPitch(toReading(event.data.hz))
+      const { hz, rms, peakAbs } = event.data
+      onPitch(toReading(hz ?? undefined, typeof rms === 'number' ? rms : 0, peakAbs))
     }
 
     this.sourceNode.connect(this.workletNode)

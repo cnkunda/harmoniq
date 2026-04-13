@@ -9,7 +9,10 @@ export type { TabViewportProps } from './TabViewport.types'
 
 /** Native: bundled HTML harness in WebView (commit 21). */
 export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
-  function TabViewport({ gp5Base64, audioSrc, transposeSemitones, style, onReady, onError, onNoteEvent }, ref) {
+  function TabViewport(
+    { gp5Base64, audioSrc, transposeSemitones, style, onReady, onError, onNoteEvent, onScoreSeekMs },
+    ref,
+  ) {
     return (
       <AlphaTabWebView
         ref={ref}
@@ -20,6 +23,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
         onReady={onReady}
         onHarnessError={onError}
         onNoteEvent={onNoteEvent}
+        onScoreSeekMs={onScoreSeekMs}
       />
     )
   },

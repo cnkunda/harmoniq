@@ -37,6 +37,18 @@ export function gridAnchorSeconds(grid: number[]): number {
   return sorted.length > 0 ? sorted[0]! : 0
 }
 
+/** Phase anchor for sparse / synthetic grids: align to first bar when beats are missing or few. */
+export function syntheticPhaseAnchorSeconds(grid: number[], barTimestamps: number[] | undefined): number {
+  const sorted = sortedBeatTimes(grid)
+  const ga = gridAnchorSeconds(grid)
+  const b0 =
+    barTimestamps && barTimestamps.length > 0 && Number.isFinite(barTimestamps[0]!) ? barTimestamps[0]! : null
+  if (b0 == null) return ga
+  if (sorted.length === 0) return Math.max(0, b0)
+  if (sorted.length < 4) return Math.min(b0, ga)
+  return ga
+}
+
 export type ScheduledClick = { songTime: number; isDownbeat: boolean }
 
 export type CollectClickOptions = {
@@ -148,10 +160,10 @@ function collectSyntheticGrid(
   toSong: number,
   subdivision: MetronomeSubdivision,
   barTimestamps: number[] | undefined,
+  anchor: number,
 ): ScheduledClick[] {
   const period = beatPeriodSeconds(grid, tempoBpm)
   const step = period / subdivision
-  const anchor = gridAnchorSeconds(grid)
   if (toSong < fromSong || step <= 0) return []
 
   const thr = downbeatThresholdSeconds(period)
@@ -197,5 +209,6 @@ export function collectClickTimesInRange(
   if (sorted.length >= 4) {
     return collectFromDetectedBeatGrid(sorted, tempoBpm, fromSong, toSong, subdivision, bars)
   }
-  return collectSyntheticGrid(grid, tempoBpm, fromSong, toSong, subdivision, bars)
+  const anchor = syntheticPhaseAnchorSeconds(grid, bars)
+  return collectSyntheticGrid(grid, tempoBpm, fromSong, toSong, subdivision, bars, anchor)
 }

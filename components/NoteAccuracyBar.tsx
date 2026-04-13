@@ -1,15 +1,17 @@
 import { View } from 'react-native'
 
-import type { AccuracyLabel } from '@/src/session/noteAccuracyBeats'
+import type { NoteResultLabel } from '@/src/session/noteAccuracyBeats'
 
-const BLOCK: Record<AccuracyLabel, string> = {
+const BLOCK: Record<NoteResultLabel, string> = {
   hit: 'bg-success',
   close: 'bg-amber-accent',
   miss: 'bg-danger',
+  vibrato: 'bg-amber-light',
+  ignored: 'bg-wood-600/35',
 }
 
 export interface NoteAccuracyBarProps {
-  beats: AccuracyLabel[]
+  beats: NoteResultLabel[]
   maxVisible?: number
 }
 

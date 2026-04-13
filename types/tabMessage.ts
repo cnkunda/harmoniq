@@ -16,6 +16,8 @@ export type TabInboundMessage =
   | { type: 'setPlaybackRate'; playbackRate: number }
   | { type: 'seekTo'; positionMs: number }
   | { type: 'syncTimelineMs'; positionMs: number }
+  /** Host stem transport play/pause — AlphaTab cursor needs player active (see player.enableCursor). */
+  | { type: 'setStemPlaybackActive'; active: boolean }
   | { type: 'getPosition' }
   | { type: 'setTranspose'; semitones: number }
   | { type: 'setTheme'; colors: Partial<TabThemeColors> }
@@ -24,6 +26,8 @@ export type TabInboundMessage =
   /** Jam: tint tab / notation for pitch classes in the detected scale (native WebView harness). */
   | { type: 'highlightScaleDegrees'; rootMidi: number; intervals: number[] }
   | { type: 'clearScaleHighlight' }
+  /** After a discrete seek, scroll the host so master bar index is visible (Study annotation chips). */
+  | { type: 'scrollMasterBarIntoView'; barIndex: number }
 
 export type NoteEventMessage = {
   type: 'noteEvent'
@@ -33,6 +37,8 @@ export type NoteEventMessage = {
   string?: number
   /** True when both string and fret came from the score engine (Study prefers this over MIDI alone). */
   hasExplicitTabPosition?: boolean
+  /** True only for direct score tap/click events (not playback stream). */
+  fromScoreTap?: boolean
 }
 
 /**
@@ -55,6 +61,8 @@ export type AlphaTabSurfaceRef = {
   seekTo: (positionMs: number) => void
   /** Drive cursor when audio comes from Web Audio (stems), not the tab reference audio element. */
   syncPlaybackTimelineMs: (positionMs: number) => void
+  /** Call when stem mixer play/pause toggles so AlphaTab shows the beat cursor during host-driven playback. */
+  setStemPlaybackActive: (active: boolean) => void
   getPosition: () => Promise<number | null>
   setTheme: (colors: Partial<TabThemeColors>) => void
   setTranspose: (semitones: number) => void
@@ -63,6 +71,8 @@ export type AlphaTabSurfaceRef = {
   /** Jam (web + native harness): tint note heads / tab numbers matching scale degrees. */
   highlightScaleDegrees: (rootMidi: number, intervals: readonly number[]) => void
   clearScaleHighlight: () => void
+  /** Horizontal scroll host so the given master bar is in view (e.g. after chip seek). */
+  scrollMasterBarIntoView: (barIndex: number) => void
 }
 
 /** Harness → parent */
@@ -70,6 +80,8 @@ export type TabOutboundMessage =
   | { type: 'ready' }
   | { type: 'error'; message: string }
   | { type: 'position'; positionMs: number }
+  /** User (or player) seeked via the score — host should move stem transport to this score time. */
+  | { type: 'scoreSeek'; positionMs: number }
   | NoteEventMessage
   | { type: 'soundFontLoad'; status: 'loading' | 'loaded' | 'error'; message?: string }
 
@@ -90,6 +102,9 @@ export function decodeTabMessage(raw: string): TabOutboundMessage | null {
     if (o.type === 'position' && typeof maybePosition.positionMs === 'number') {
       return { type: 'position', positionMs: maybePosition.positionMs }
     }
+    if (o.type === 'scoreSeek' && typeof maybePosition.positionMs === 'number') {
+      return { type: 'scoreSeek', positionMs: maybePosition.positionMs }
+    }
     const maybeSf = o as { type: unknown; status?: unknown; message?: unknown }
     if (
       o.type === 'soundFontLoad' &&
@@ -108,6 +123,7 @@ export function decodeTabMessage(raw: string): TabOutboundMessage | null {
       fret?: unknown
       string?: unknown
       hasExplicitTabPosition?: unknown
+      fromScoreTap?: unknown
     }
     if (o.type === 'noteEvent' && typeof maybeNote.midi === 'number' && typeof maybeNote.beat === 'number') {
       return {
@@ -117,6 +133,7 @@ export function decodeTabMessage(raw: string): TabOutboundMessage | null {
         fret: typeof maybeNote.fret === 'number' ? maybeNote.fret : undefined,
         string: typeof maybeNote.string === 'number' ? maybeNote.string : undefined,
         hasExplicitTabPosition: maybeNote.hasExplicitTabPosition === true ? true : undefined,
+        fromScoreTap: maybeNote.fromScoreTap === true ? true : undefined,
       }
     }
   } catch {

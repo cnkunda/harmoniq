@@ -95,6 +95,8 @@ export type LickInsertInput = {
   position: string | null
   tab_gp5_base64: string
   audio_segment_path: string | null
+  /** JSON.stringify(Record<string, string>) of non-empty stem rel paths from the lesson. */
+  stems_json: string | null
   coach_oneliner: string | null
   technique_tags: string[]
   user_annotations: Array<{ bar: number; text: string }>
@@ -129,6 +131,7 @@ export type LickRow = {
   position: string | null
   tab_gp5_base64: string
   audio_segment_path: string | null
+  stems_json: string | null
   coach_oneliner: string | null
   technique_tags: string[]
   user_annotations: Array<{ bar: number; text: string }>

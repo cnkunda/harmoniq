@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
-import { Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated'
 
 import { spring } from '@/src/constants/animations'
+import colors from '@/src/constants/colors'
 import { NUM_FRETS, OPEN_MIDI_BY_ROW, resolveFretCell } from '@/src/music/fretboardCell'
 
 export { inferMidiFromNoteSelection, resolveFretCell } from '@/src/music/fretboardCell'
@@ -19,23 +20,41 @@ type FretboardDiagramProps = {
   pulseKey?: number
   /** Pitch classes 0–11 to outline subtly (Jam scale overlay). */
   scalePitchClasses?: readonly number[] | null
+  /** Optional: tapping a map cell selects that note (used by Study/Play). */
+  onSelectNote?: (note: { string: number; fret: number; midi: number }) => void
 }
 
-function SelectedMarker({ pulseKey }: { pulseKey: number }) {
+/** Remount via `key={pulseKey}` from parent so each note hit replays the pulse. */
+function SelectedMarker() {
   const scale = useSharedValue(1)
 
   useEffect(() => {
+    scale.value = 1
     scale.value = withSequence(withSpring(1.45, spring.snappy), withSpring(1, spring.gentle))
-  }, [pulseKey, scale])
+  }, [scale])
 
-  const style = useAnimatedStyle(() => ({
+  const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }))
 
+  // Avoid NativeWind `className` on Animated.View — on web it can override `transform` and kill the pulse.
   return (
     <Animated.View
-      style={style}
-      className="absolute z-20 h-4 w-4 rounded-full border-2 border-amber-light bg-amber-accent shadow-md"
+      style={[
+        animatedStyle,
+        {
+          width: 16,
+          height: 16,
+          borderRadius: 8,
+          borderWidth: 2,
+          borderColor: colors.amber.light,
+          backgroundColor: colors.amber.accent,
+          shadowColor: '#000',
+          shadowOpacity: 0.22,
+          shadowRadius: 3,
+          shadowOffset: { width: 0, height: 1 },
+        },
+      ]}
     />
   )
 }
@@ -61,6 +80,7 @@ export function FretboardDiagram({
   selectedNote,
   pulseKey = 0,
   scalePitchClasses = null,
+  onSelectNote,
 }: FretboardDiagramProps) {
   const cell = selectedNote ? resolveFretCell(selectedNote) : null
 
@@ -93,8 +113,16 @@ export function FretboardDiagram({
                 cell.row === stringIdx &&
                 (cell.fret <= NUM_FRETS ? cell.fret === fret : fret === NUM_FRETS)
               const scaleOn = scaleHighlightActive(scalePitchClasses, stringIdx, fret)
+              const midi = OPEN_MIDI_BY_ROW[stringIdx]! + fret
               return (
-                <View key={`c-${stringIdx}-${col}`} className="relative flex-1 items-center justify-center py-0.5">
+                <Pressable
+                  key={`c-${stringIdx}-${col}`}
+                  onPress={() => onSelectNote?.({ string: stringIdx + 1, fret, midi })}
+                  disabled={!onSelectNote}
+                  className="relative flex-1 items-center justify-center py-0.5"
+                  accessibilityRole={onSelectNote ? 'button' : undefined}
+                  accessibilityLabel={onSelectNote ? `String ${stringIdx + 1}, fret ${fret}` : undefined}
+                >
                   {scaleOn && !selected ? (
                     <View className="absolute z-10 h-4 w-4 rounded-full border border-emerald-400/55 bg-emerald-500/15" />
                   ) : null}
@@ -103,10 +131,10 @@ export function FretboardDiagram({
                   />
                   {selected ? (
                     <View className="absolute inset-0 z-20 items-center justify-center">
-                      <SelectedMarker pulseKey={pulseKey} />
+                      <SelectedMarker key={pulseKey} />
                     </View>
                   ) : null}
-                </View>
+                </Pressable>
               )
             })}
           </View>

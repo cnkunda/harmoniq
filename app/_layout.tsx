@@ -74,10 +74,6 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="add-song" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="library" />
-            <Stack.Screen name="jam" />
-            <Stack.Screen name="settings" />
-            <Stack.Screen name="progress" />
             <Stack.Screen name="review-archive/[sessionId]" />
             <Stack.Screen name="session" />
           </Stack>

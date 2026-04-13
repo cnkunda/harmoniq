@@ -28,6 +28,7 @@ export type AlphaTabWebViewProps = {
   onReady?: () => void
   onHarnessError?: (message: string) => void
   onNoteEvent?: (evt: NoteEventMessage) => void
+  onScoreSeekMs?: (positionMs: number) => void
 }
 
 function isAllowedNavigationUrl(url: string): boolean {
@@ -43,7 +44,10 @@ function isAllowedNavigationUrl(url: string): boolean {
 }
 
 export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewProps>(
-  function AlphaTabWebView({ gp5Base64, audioSrc, transposeSemitones = 0, style, onReady, onHarnessError, onNoteEvent }, ref) {
+  function AlphaTabWebView(
+    { gp5Base64, audioSrc, transposeSemitones = 0, style, onReady, onHarnessError, onNoteEvent, onScoreSeekMs },
+    ref,
+  ) {
     const webRef = useRef<WebView>(null)
     const themeSentRef = useRef(false)
     const getPositionResolverRef = useRef<((ms: number | null) => void) | null>(null)
@@ -76,6 +80,9 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
             type: 'syncTimelineMs',
             positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs) : 0,
           })
+        },
+        setStemPlaybackActive: (active: boolean) => {
+          postInbound({ type: 'setStemPlaybackActive', active: Boolean(active) })
         },
         getPosition: () =>
           new Promise<number | null>((resolve) => {
@@ -115,6 +122,12 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         },
         clearScaleHighlight: () => {
           postInbound({ type: 'clearScaleHighlight' })
+        },
+        scrollMasterBarIntoView: (barIndex: number) => {
+          postInbound({
+            type: 'scrollMasterBarIntoView',
+            barIndex: Math.max(0, Math.floor(barIndex)),
+          })
         },
       }),
       [postInbound],
@@ -185,6 +198,10 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           getPositionResolverRef.current = null
           return
         }
+        if (msg.type === 'scoreSeek') {
+          onScoreSeekMs?.(msg.positionMs)
+          return
+        }
         if (msg.type === 'noteEvent') {
           onNoteEvent?.(msg)
           return
@@ -204,7 +221,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           onHarnessError?.(msg.message)
         }
       },
-      [onHarnessError, onNoteEvent, onReady],
+      [onHarnessError, onNoteEvent, onReady, onScoreSeekMs],
     )
 
     if (Platform.OS === 'web') {

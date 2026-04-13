@@ -8,6 +8,7 @@ import * as WebBrowser from 'expo-web-browser'
 
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { PhrasingVisualizerStub, ScoreSummaryCard } from '@/components/ReviewSessionPanel'
+import { SessionPitchReview } from '@/components/SessionPitchReview'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
 import { submitScore } from '@/src/api/analyze'
@@ -18,6 +19,9 @@ import { applyReviewSkillUpdates, getSessionCount, insertLickRow, insertSessionR
 import { useSkillStore } from '@/src/stores/skillStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
+import { useAppStore } from '@/src/stores/useAppStore'
+import { BPM_DRIFT_NOTE_MINIMUM } from '@/src/utils/practiceConfig'
+import { firstLessonStemRelPath, serializeLessonStemsJson } from '@/src/utils/lessonAudio'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { ScoreResult } from '@/src/types'
 
@@ -84,6 +88,7 @@ export default function ReviewScreen() {
   const section = lesson?.sections?.[sectionIndex]
   const latestTake = useSessionPlayStore((s) => s.latestTake)
   const clearLatestTake = useSessionPlayStore((s) => s.clearLatestTake)
+  const currentSession = useAppStore((s) => s.currentSession)
   const [busy, setBusy] = useState(false)
   const [score, setScore] = useState<ScoreResult | null>(null)
   const [reviewError, setReviewError] = useState<MappedUiError | null>(null)
@@ -243,7 +248,8 @@ export default function ReviewScreen() {
         scale: null,
         position: typeof sec.primary_position === 'string' ? sec.primary_position : typeof sec.label === 'string' ? sec.label : null,
         tab_gp5_base64: gp5,
-        audio_segment_path: null,
+        audio_segment_path: firstLessonStemRelPath(lesson?.stems),
+        stems_json: serializeLessonStemsJson(lesson?.stems),
         coach_oneliner: typeof sec.coach_note === 'string' ? sec.coach_note : null,
         technique_tags: [],
         user_annotations: [],
@@ -260,7 +266,7 @@ export default function ReviewScreen() {
     } finally {
       setSavingLick(false)
     }
-  }, [insertLickRow, lesson?.artist, lesson?.key, lesson?.song_title, section, tabs.alt, tabs.full, tabs.skeleton])
+  }, [insertLickRow, lesson?.artist, lesson?.key, lesson?.song_title, lesson?.stems, section, tabs.alt, tabs.full, tabs.skeleton])
 
   return (
     <SessionStepScreen
@@ -273,6 +279,28 @@ export default function ReviewScreen() {
       onNext={finish}
     >
       <PhrasingVisualizerStub />
+
+      {currentSession && currentSession.noteContours.length > 0 ? (
+        <View className="mt-3">
+          <SessionPitchReview
+            noteContours={currentSession.noteContours}
+            noteTargetMidis={currentSession.noteTargetMidis}
+            noteResults={currentSession.noteResults}
+          />
+          {currentSession.bpmDriftSampleCount >= BPM_DRIFT_NOTE_MINIMUM ? (
+            <Text className="mt-2 font-sans text-xs text-muted-brown">
+              Timing vs beat (mean): {currentSession.bpmDrift >= 0 ? '+' : ''}
+              {Math.round(currentSession.bpmDrift)} ms — {currentSession.bpmDrift >= 0 ? 'ahead of grid' : 'behind grid'}
+            </Text>
+          ) : null}
+          {currentSession.bestStreak > currentSession.bestStreakAtSessionStart ? (
+            <Text className="mt-1 font-sans text-xs text-muted-brown">
+              New high clean-streak this session: {currentSession.bestStreak} beats (previous best at start:{' '}
+              {currentSession.bestStreakAtSessionStart}).
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       <View className="mt-3 flex-row flex-wrap items-center gap-2">
         <Pressable

@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
-import { TabViewport } from '@/components/TabViewport'
+import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { toast } from '@/components/ToastConfig'
 import { WoodGradient } from '@/components/WoodGradient'
 import { submitJamScore } from '@/src/api/analyze'
@@ -24,7 +24,6 @@ import { insertJamSnapshotRow } from '@/src/db/client'
 import { JAM_REFERENCE_TAB_GP5_BASE64 } from '@/src/jam/jamReferenceTabGp5Base64'
 import { createPitchClassHistogram } from '@/src/jam/pitchClassHistogram'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
-import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
 
 const SCALE_UI_INTERVAL_MS = 2000
 
@@ -51,7 +50,7 @@ export default function JamScreen() {
   const soundRef = useRef<Audio.Sound | null>(null)
   const histogramRef = useRef(createPitchClassHistogram())
   const jamStartedAtRef = useRef<number | null>(null)
-  const tabRef = useRef<AlphaTabSurfaceRef>(null)
+  const jamStemTabRef = useRef<SessionStemAndTabHandle>(null)
   const lastScaleUiAtRef = useRef(0)
   const lastScaleTintRef = useRef<{ rootMidi: number; intervals: readonly number[] } | null>(null)
 
@@ -85,11 +84,12 @@ export default function JamScreen() {
 
   useEffect(() => {
     if (Platform.OS !== 'web' || !isJamming || !jamTabReady) return
+    const tab = jamStemTabRef.current?.getTabSurface()
     const cmd = lastScaleTintRef.current
     if (cmd) {
-      tabRef.current?.highlightScaleDegrees(cmd.rootMidi, [...cmd.intervals])
+      tab?.highlightScaleDegrees(cmd.rootMidi, [...cmd.intervals])
     } else {
-      tabRef.current?.clearScaleHighlight()
+      tab?.clearScaleHighlight()
     }
   }, [isJamming, jamTabReady, scaleUiGeneration])
 
@@ -121,7 +121,7 @@ export default function JamScreen() {
     lastScaleUiAtRef.current = 0
     lastScaleTintRef.current = null
     if (Platform.OS === 'web') {
-      tabRef.current?.clearScaleHighlight()
+      jamStemTabRef.current?.getTabSurface()?.clearScaleHighlight()
     }
 
     try {
@@ -198,7 +198,7 @@ export default function JamScreen() {
     lastScaleTintRef.current = null
     lastScaleUiAtRef.current = 0
     if (Platform.OS === 'web') {
-      tabRef.current?.clearScaleHighlight()
+      jamStemTabRef.current?.getTabSurface()?.clearScaleHighlight()
     }
     const durationSeconds = Math.max(0, Math.floor(durationSec))
 
@@ -332,15 +332,14 @@ export default function JamScreen() {
                 scalePitchClasses={scalePitchClasses}
               />
               {Platform.OS === 'web' ? (
-                <View className="h-[200px] w-full overflow-hidden rounded-xl border border-wood-600/45 bg-ivory">
-                  <TabViewport
-                    ref={tabRef}
-                    gp5Base64={JAM_REFERENCE_TAB_GP5_BASE64}
-                    transposeSemitones={0}
-                    onReady={() => setJamTabReady(true)}
-                    style={{ flex: 1, height: '100%', width: '100%' }}
-                  />
-                </View>
+                <SessionStemAndTab
+                  ref={jamStemTabRef}
+                  showStemPanel={false}
+                  gp5Base64Override={JAM_REFERENCE_TAB_GP5_BASE64}
+                  transposeSemitonesOverride={0}
+                  onTabReady={() => setJamTabReady(true)}
+                  tabFrameClassName="h-[200px] w-full overflow-hidden rounded-xl border border-wood-600/45 bg-ivory px-2"
+                />
               ) : null}
             </View>
           )}

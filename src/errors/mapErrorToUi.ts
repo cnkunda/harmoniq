@@ -20,7 +20,7 @@ export const README_ERROR_COPY = {
   noGuitarStem:
     "Couldn't isolate a clear guitar track from this recording. Try a different version of the song.",
   lowTranscriptionConfidence:
-    'This part is a rough approximation — use it as a guide, not a rule.',
+    "Transcription confidence is limited here — use your ears and this tab as a helpful sketch.",
   browserMicBlocked:
     'Your browser is blocking mic access — click the lock icon to enable it.',
 } as const

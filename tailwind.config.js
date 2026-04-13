@@ -39,6 +39,10 @@ module.exports = {
         'sans-medium': ['DMSans-Medium'],
         mono: ['JetBrainsMono-Regular'],
       },
+      boxShadow: {
+        'soft-wood': '0 12px 40px rgba(44, 24, 16, 0.42)',
+        'inner-wood': 'inset 0 2px 10px rgba(0, 0, 0, 0.28)',
+      },
     },
   },
   plugins: [],

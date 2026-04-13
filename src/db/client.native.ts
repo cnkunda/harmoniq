@@ -7,6 +7,7 @@ import {
     MIGRATION_V1,
     MIGRATION_V3_APP_PREFS,
     MIGRATION_V4_SESSIONS_REVIEW,
+    MIGRATION_V5_LICKS_STEMS_JSON,
     PREF_ONBOARDING_COMPLETE,
 } from '@/src/db/schema'
 import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
@@ -112,6 +113,18 @@ async function applyMigrations(): Promise<void> {
     await db.runAsync(
       'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
       4,
+      new Date().toISOString(),
+    )
+  }
+  if (current < 5) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(licks)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    if (!names.has('stems_json')) {
+      await db.execAsync(MIGRATION_V5_LICKS_STEMS_JSON)
+    }
+    await db.runAsync(
+      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+      5,
       new Date().toISOString(),
     )
   }
@@ -467,8 +480,8 @@ export async function insertLickRow(input: LickInsertInput): Promise<void> {
   const db = await getDb()
   await db.runAsync(
     `INSERT OR REPLACE INTO licks
-     (id, song_title, artist, key, scale, position, tab_gp5_base64, audio_segment_path, coach_oneliner, technique_tags, user_annotations, date_saved)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (id, song_title, artist, key, scale, position, tab_gp5_base64, audio_segment_path, stems_json, coach_oneliner, technique_tags, user_annotations, date_saved)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.id,
     input.song_title,
     input.artist,
@@ -477,6 +490,7 @@ export async function insertLickRow(input: LickInsertInput): Promise<void> {
     input.position,
     input.tab_gp5_base64,
     input.audio_segment_path,
+    input.stems_json,
     input.coach_oneliner,
     JSON.stringify(input.technique_tags ?? []),
     JSON.stringify(input.user_annotations ?? []),
@@ -502,6 +516,7 @@ export async function getLickById(id: string): Promise<LickRow | null> {
     position: string | null
     tab_gp5_base64: string
     audio_segment_path: string | null
+    stems_json: string | null
     coach_oneliner: string | null
     technique_tags: string | null
     user_annotations: string | null
@@ -517,6 +532,7 @@ export async function getLickById(id: string): Promise<LickRow | null> {
     position: r.position,
     tab_gp5_base64: r.tab_gp5_base64,
     audio_segment_path: r.audio_segment_path,
+    stems_json: r.stems_json ?? null,
     coach_oneliner: r.coach_oneliner,
     technique_tags: parseJsonArray<string>(r.technique_tags),
     user_annotations: parseJsonArray<{ bar: number; text: string }>(r.user_annotations),
@@ -536,6 +552,7 @@ export async function getLicks(): Promise<LickRow[]> {
     position: string | null
     tab_gp5_base64: string
     audio_segment_path: string | null
+    stems_json: string | null
     coach_oneliner: string | null
     technique_tags: string | null
     user_annotations: string | null
@@ -550,6 +567,7 @@ export async function getLicks(): Promise<LickRow[]> {
     position: r.position,
     tab_gp5_base64: r.tab_gp5_base64,
     audio_segment_path: r.audio_segment_path,
+    stems_json: r.stems_json ?? null,
     coach_oneliner: r.coach_oneliner,
     technique_tags: parseJsonArray<string>(r.technique_tags),
     user_annotations: parseJsonArray<{ bar: number; text: string }>(r.user_annotations),

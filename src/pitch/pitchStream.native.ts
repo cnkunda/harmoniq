@@ -61,7 +61,7 @@ function midiToNoteName(midi: number): string {
   return `${names[((rounded % 12) + 12) % 12]}${octave}`
 }
 
-function toReading(hz: number): PitchReading {
+function toReading(hz: number, rms: number, peakAbs: number): PitchReading {
   const midi = hzToMidi(hz)
   const nearest = Math.round(midi)
   const cents = Math.round((midi - nearest) * 100)
@@ -70,6 +70,8 @@ function toReading(hz: number): PitchReading {
     midi: nearest,
     cents,
     noteName: midiToNoteName(midi),
+    rms,
+    peakAbs,
   }
 }
 
@@ -150,7 +152,7 @@ class PitchStreamNative implements PitchStream {
               `[PitchStream.native] pitch hit #${this.emittedPitchCount}: ${hz.toFixed(2)}Hz (rms=${rms.toFixed(5)}, peak=${peakAbs.toFixed(5)})`,
             )
           }
-          this.onPitchUser(toReading(hz))
+          this.onPitchUser(toReading(hz, rms, peakAbs))
         } else if (this.callbackCount % 20 === 0) {
           console.log(
             `[PitchStream.native] no pitch (rms=${rms.toFixed(5)} < ${MIN_RMS_FOR_PITCH.toFixed(3)} or weak correlation)`,

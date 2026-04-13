@@ -43,21 +43,17 @@ def _fallback_lesson(
     # Deterministic placeholder so API contract tests pass even when librosa
     # fails on tiny clips or in constrained environments.
     transcription_confidence = 0.1
-    bpm = 72.0
-    try:
-        tab_artifacts = generate_tab_artifacts_for_guitar_stem(
-            guitar_stem_path,
-            bpm=bpm,
-            transcription_confidence=transcription_confidence,
+    logger.warning(
+        "analyze_audio_fallback_lesson job_id=%s — librosa failed; omitting auto-tabs "
+        "(no reliable beat grid / BPM for Basic Pitch alignment)",
+        job_id,
+    )
+    sections = [
+        LessonSectionStub(
+            label="Intro",
+            confidence=derive_section_confidence(transcription_confidence),
         )
-        sections = apply_tab_artifacts_to_sections(
-            [LessonSectionStub(label="Intro", confidence=derive_section_confidence(transcription_confidence))],
-            transcription_confidence=transcription_confidence,
-            tab_artifacts=tab_artifacts,
-        )
-    except Exception:
-        logger.exception("tabgen failed during fallback; returning empty tab base64")
-        sections = [LessonSectionStub(label="Intro", confidence=derive_section_confidence(transcription_confidence))]
+    ]
     stub_summary = LibrosaSummary(
         duration_s=12.0,
         tempo_bpm=72.0,
@@ -162,6 +158,7 @@ def build_lesson_json_from_librosa(
             guitar_stem_path,
             bpm=summary.tempo_bpm,
             transcription_confidence=transcription_confidence,
+            beat_times_s=beat_grid,
         )
         sections = apply_tab_artifacts_to_sections(
             sections,

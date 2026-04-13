@@ -37,10 +37,10 @@ Leave blank cells only before the run; every row must be filled before sign-off.
 
 | # | Check | Result | Issue link or waiver (if FAIL/WAIVE) |
 |---|--------|--------|----------------------------------------|
-| A1 | **Listen:** Tab cursor tracks **guitar stem** within **±80 ms** vs audible note attacks on a known test song | | |
-| A2 | **Slow:** Playback at **~65%** speed: stem rate and AlphaTab cursor stay **locked** (no drifting separation) | | |
-| A3 | **Seek:** Section chip (or equivalent seek) updates **both** harness audio position and cursor **without** a visible lag spike | | |
-| A4 | No duplicate scroll/sync timers: `smartScroll`-style path is **not** fighting external-media position updates | | |
+| A1 | **Listen:** Tab cursor tracks **guitar stem** within **±80 ms** vs audible note attacks on a known test song | PASS | Scroller is working and following the notes |
+| A2 | **Slow:** Playback at **~65%** speed: stem rate and AlphaTab cursor stay **locked** (no drifting separation) | PASS | Small lag on slow speeds and animation speeds up a little in between bars |
+| A3 | **Seek:** Section chip (or equivalent seek) updates **both** harness audio position and cursor **without** a visible lag spike | PASS | Seeking works as intented when you click a section or use the bar buttons |
+| A4 | No duplicate scroll/sync timers: `smartScroll`-style path is **not** fighting external-media position updates | PASS | Scrolling works even on seek |
 
 ---
 
@@ -48,7 +48,7 @@ Leave blank cells only before the run; every row must be filled before sign-off.
 
 | # | Check | Result | Issue link or waiver (if FAIL/WAIVE) |
 |---|--------|--------|----------------------------------------|
-| B1 | **Listen:** Active note highlight visible in AlphaTab during stem-driven playback | | |
+| B1 | **Listen:** Active note highlight visible in AlphaTab during stem-driven playback | PASS | Highlight works on first loop. Subsequent loops act a bit different though |
 | B2 | **Play:** Pitch target advances **note-by-note** with score (not a static single target) | | |
 | B3 | **Study:** Fretboard dot pulses/updates from note events in sync with perception | | |
 | B4 | Bridge `noteEvent` traffic stays **≤ ~33 Hz** (spot-check in dev tools if web) | | |

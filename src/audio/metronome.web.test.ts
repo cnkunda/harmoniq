@@ -65,4 +65,5 @@ describe('createWebBeatMetronome', () => {
     expect(maxGap - target).toBeLessThan(0.01)
     expect(target - minGap).toBeLessThan(0.01)
   })
+
 })

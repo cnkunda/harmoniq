@@ -106,7 +106,12 @@ function applyHydration(h: IdbHydration): void {
     skillNodes.clear()
   }
   licks.length = 0
-  licks.push(...h.licks)
+  licks.push(
+    ...h.licks.map((row) => ({
+      ...row,
+      stems_json: row.stems_json ?? null,
+    })),
+  )
   jamSnapshots.length = 0
   const jamsSorted = [...h.jams].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   jamSnapshots.push(...jamsSorted)
@@ -431,6 +436,7 @@ export async function insertLickRow(input: LickInsertInput): Promise<void> {
     position: input.position,
     tab_gp5_base64: input.tab_gp5_base64,
     audio_segment_path: input.audio_segment_path,
+    stems_json: input.stems_json,
     coach_oneliner: input.coach_oneliner,
     technique_tags: input.technique_tags ?? [],
     user_annotations: input.user_annotations ?? [],

@@ -43,13 +43,13 @@ describe('getBestScale', () => {
 describe('createPitchClassHistogram', () => {
   it('does not emit map under 10s', () => {
     const h = createPitchClassHistogram()
-    for (let i = 0; i < 50; i += 1) h.add({ hz: 440, midi: 69, cents: 0, noteName: 'A4' })
+    for (let i = 0; i < 50; i += 1) h.add({ hz: 440, midi: 69, cents: 0, noteName: 'A4', rms: 0.02 })
     expect(h.toScalePositionMap(9)).toEqual({})
   })
 
   it('emits non-empty map when duration and hits thresholds met', () => {
     const h = createPitchClassHistogram()
-    for (let i = 0; i < 30; i += 1) h.add({ hz: 440, midi: 69, cents: 0, noteName: 'A4' })
+    for (let i = 0; i < 30; i += 1) h.add({ hz: 440, midi: 69, cents: 0, noteName: 'A4', rms: 0.02 })
     const m = h.toScalePositionMap(10.5)
     expect(Object.keys(m).length).toBeGreaterThan(0)
     expect(m.pc_A).toBeCloseTo(1, 5)
@@ -58,11 +58,11 @@ describe('createPitchClassHistogram', () => {
   it('getBestScale reads live bins', () => {
     const h = createPitchClassHistogram()
     for (let i = 0; i < 40; i += 1) {
-      h.add({ hz: 392, midi: 67, cents: 0, noteName: 'G4' })
-      h.add({ hz: 440, midi: 69, cents: 0, noteName: 'A4' })
-      h.add({ hz: 493.88, midi: 71, cents: 0, noteName: 'B4' })
-      h.add({ hz: 587.33, midi: 74, cents: 0, noteName: 'D5' })
-      h.add({ hz: 659.25, midi: 76, cents: 0, noteName: 'E5' })
+      h.add({ hz: 392, midi: 67, cents: 0, noteName: 'G4', rms: 0.02 })
+      h.add({ hz: 440, midi: 69, cents: 0, noteName: 'A4', rms: 0.02 })
+      h.add({ hz: 493.88, midi: 71, cents: 0, noteName: 'B4', rms: 0.02 })
+      h.add({ hz: 587.33, midi: 74, cents: 0, noteName: 'D5', rms: 0.02 })
+      h.add({ hz: 659.25, midi: 76, cents: 0, noteName: 'E5', rms: 0.02 })
     }
     const m = h.getBestScale()
     expect(m?.label).toBe('G major pentatonic')

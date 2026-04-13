@@ -12,4 +12,6 @@ export type AlphaTabWebProps = {
   onReady?: () => void
   onError?: (message: string) => void
   onNoteEvent?: (evt: NoteEventMessage) => void
+  /** AlphaTab player seeked the score (e.g. bar click) — move stem/Web Audio transport to this time. */
+  onScoreSeekMs?: (positionMs: number) => void
 }

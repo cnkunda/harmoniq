@@ -8,6 +8,7 @@ import pytest
 
 from app.pipeline_proof import (
     NoteEvent,
+    beat_slot_index_for_time,
     build_gp5_from_note_events,
     cli_equivalents_doc,
     demucs_separate_command,
@@ -81,6 +82,13 @@ def test_cli_equivalents_doc_lists_demucs_and_ffmpeg():
     assert "yt-dlp" in doc
     assert "demucs" in doc
     assert "htdemucs_6s" in doc
+
+
+def test_beat_slot_index_for_time_irregular_grid():
+    grid = [0.0, 0.35, 0.9, 1.5]
+    assert beat_slot_index_for_time(0.1, grid, bpm=120) == 0
+    assert beat_slot_index_for_time(0.5, grid, bpm=120) == 1
+    assert beat_slot_index_for_time(1.0, grid, bpm=120) == 2
 
 
 def test_build_gp5_from_note_events_roundtrip(tmp_path: Path):

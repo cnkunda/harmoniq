@@ -1,0 +1,19 @@
+{"sessionId":"03d7f5","location":"client.web.ts:getHomeSuggestion","message":"inputs","data":{"hypothesisId":"H1","hasLatestSessionSong":true,"latestSessionTitle":"Librosa Lesson","lickCount":0},"timestamp":1776057465605}
+{"sessionId":"03d7f5","location":"client.web.ts:getHomeSuggestion","message":"result","data":{"hypothesisId":"H1","branch":"ready","kind":"ready","nodeId":"bend_accuracy","nodeLabel":"Bend accuracy","songTitle":"Librosa Lesson"},"timestamp":1776057465606}
+{"sessionId":"03d7f5","location":"index.tsx:refresh","message":"home suggestion applied","data":{"hypothesisId":"H2","kind":"ready"},"timestamp":1776057465608}
+{"sessionId":"03d7f5","location":"listen.tsx:mount","message":"Listen screen lesson state","data":{"hypothesisId":"H3","hasLesson":true,"jobId":"aa8c81eb-4aac-49d0-8cf7-dd211303b87b"},"timestamp":1776057491332}
+{"sessionId":"03d7f5","location":"client.web.ts:getHomeSuggestion","message":"result","data":{"hypothesisId":"H1","branch":"ready","kind":"ready","nodeId":"bend_accuracy","nodeLabel":"Bend accuracy","songTitle":"Librosa Lesson"},"timestamp":1776057602608}
+{"sessionId":"03d7f5","location":"client.web.ts:getHomeSuggestion","message":"inputs","data":{"hypothesisId":"H1","hasLatestSessionSong":true,"latestSessionTitle":"Librosa Lesson","lickCount":1},"timestamp":1776057602607}
+{"sessionId":"03d7f5","location":"index.tsx:refresh","message":"home suggestion applied","data":{"hypothesisId":"H2","kind":"ready"},"timestamp":1776057602609}
+{"sessionId":"03d7f5","location":"library.tsx:performRemoveLick","message":"after delete lick","data":{"hypothesisId":"H1","removedLickId":"76d7d825-9033-49b0-a876-b41343670018","remainingLickCount":0},"timestamp":1776057607426}
+{"sessionId":"03d7f5","runId":"post-fix","location":"library.tsx:performRemoveLick","message":"library empty — cleared sessions/skills/jam + lesson","data":{"hypothesisId":"H1"},"timestamp":1776057607453}
+{"sessionId":"03d7f5","location":"client.web.ts:getHomeSuggestion","message":"inputs","data":{"hypothesisId":"H1","hasLatestSessionSong":false,"latestSessionTitle":null,"lickCount":0},"timestamp":1776057609375}
+{"sessionId":"03d7f5","location":"client.web.ts:getHomeSuggestion","message":"result","data":{"hypothesisId":"H1","branch":"no_session_song","kind":"cold_start"},"timestamp":1776057609376}
+{"sessionId":"03d7f5","location":"index.tsx:refresh","message":"home suggestion applied","data":{"hypothesisId":"H2","kind":"cold_start"},"timestamp":1776057609376}
+{"sessionId":"03d7f5","location":"client.web.ts:getHomeSuggestion","message":"inputs","data":{"hypothesisId":"H1","hasLatestSessionSong":false,"latestSessionTitle":null,"lickCount":0},"timestamp":1776057647532}
+{"sessionId":"03d7f5","location":"client.web.ts:getHomeSuggestion","message":"result","data":{"hypothesisId":"H1","branch":"no_session_song","kind":"cold_start"},"timestamp":1776057647532}
+{"sessionId":"03d7f5","location":"index.tsx:refresh","message":"home suggestion applied","data":{"hypothesisId":"H2","kind":"cold_start"},"timestamp":1776057647533}
+{"sessionId":"03d7f5","location":"index.tsx:refresh","message":"home suggestion applied","data":{"hypothesisId":"H2","kind":"cold_start"},"timestamp":1776057656192}
+{"sessionId":"03d7f5","location":"client.web.ts:getHomeSuggestion","message":"inputs","data":{"hypothesisId":"H1","hasLatestSessionSong":false,"latestSessionTitle":null,"lickCount":0},"timestamp":1776057656191}
+{"sessionId":"03d7f5","location":"client.web.ts:getHomeSuggestion","message":"result","data":{"hypothesisId":"H1","branch":"no_session_song","kind":"cold_start"},"timestamp":1776057656191}
+{"sessionId":"03d7f5","location":"index.tsx:refresh","message":"home suggestion applied","data":{"hypothesisId":"H2","kind":"cold_start"},"timestamp":1776057658571}

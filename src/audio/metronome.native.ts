@@ -1,7 +1,7 @@
 import { Audio } from 'expo-av'
 
 import type { BeatMetronome, BeatMetronomeParams } from './beatMetronome.types'
-import { collectClickTimesInRange, type MetronomeSubdivision } from './metronomeShared'
+import { beatPeriodSeconds, collectClickTimesInRange, type MetronomeSubdivision } from './metronomeShared'
 
 /**
  * Native metronome: 25ms poll + short hi/lo WAV samples.
@@ -49,19 +49,23 @@ export function createNativeBeatMetronome(): BeatMetronome {
   const tick = () => {
     void (async () => {
       if (!params || !params.isPlaying()) return
-      const pos = params.getSongPositionSecondsNow?.() ?? params.getSongPositionSeconds()
+      const posRaw = params.getSongPositionSecondsNow?.() ?? params.getSongPositionSeconds()
+      const alignOff = params.beatAlignOffsetSec ?? 0
+      const pos = posRaw - alignOff
       if (lastPos >= 0 && Math.abs(pos - lastPos) > 0.35) {
         firedSongMs.clear()
       }
       lastPos = pos
 
-      const grid = params.beatGrid
-      if (grid.length === 0) return
-
+      const grid = params.beatGrid ?? []
+      const rate = Math.max(0.05, params.getPlaybackRate())
       const tempo = params.tempoBpm > 0 ? params.tempoBpm : 120
       const subdiv = (params.subdivision ?? 1) as MetronomeSubdivision
-      const from = pos - NATIVE_WINDOW_BEFORE
-      const to = pos + NATIVE_WINDOW_AFTER
+      const stretch = Math.max(1, Math.sqrt(1 / Math.min(rate, 1)))
+      const quarterPeriod = beatPeriodSeconds(grid, tempo)
+      const minAfter = quarterPeriod / Math.max(1, subdiv)
+      const from = pos - NATIVE_WINDOW_BEFORE * stretch
+      const to = pos + Math.max(NATIVE_WINDOW_AFTER * stretch, minAfter)
       const clicks = collectClickTimesInRange(grid, tempo, from, to, subdiv, {
         barTimestamps: params.barTimestamps,
       })
@@ -69,7 +73,9 @@ export function createNativeBeatMetronome(): BeatMetronome {
       let sounds: { hi: Audio.Sound; lo: Audio.Sound } | null = null
       for (const { songTime, isDownbeat } of clicks) {
         const delta = songTime - pos
-        if (delta < -0.045 || delta > 0.07) continue
+        const late = 0.045 * stretch
+        const early = 0.07 * stretch
+        if (delta < -late || delta > early) continue
         const key = Math.round(songTime * 1000)
         if (firedSongMs.has(key)) continue
         firedSongMs.add(key)

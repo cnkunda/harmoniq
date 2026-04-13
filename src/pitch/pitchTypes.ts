@@ -1,8 +1,12 @@
 export interface PitchReading {
-  hz: number
+  /** Present when a fundamental was estimated; omit on sub-threshold frames (web). */
+  hz?: number
   midi: number
   cents: number
   noteName: string
+  /** RMS level of the analysis frame (amplitude proxy for dynamics / ghost gating). */
+  rms: number
+  peakAbs?: number
 }
 
 export interface PitchStream {

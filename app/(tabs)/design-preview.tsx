@@ -256,7 +256,7 @@ function PitchWorkletDevSection() {
     try {
       await start((reading: PitchReading) => {
         setNote(reading.noteName)
-        setHz(reading.hz)
+        setHz(reading.hz ?? null)
         setCents(reading.cents)
       })
       setActive(true)

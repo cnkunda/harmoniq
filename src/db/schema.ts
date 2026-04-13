@@ -91,6 +91,9 @@ export type CoachVoiceId = (typeof COACH_VOICE_OPTIONS)[number]
 /** Below this `transcription_confidence`, analysis is treated as “uncertain” for tab defaults. */
 export const TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX = 0.72
 
+/** v5: Library licks — full stem map JSON (guitar, bass, drums, …). */
+export const MIGRATION_V5_LICKS_STEMS_JSON = 'ALTER TABLE licks ADD COLUMN stems_json TEXT'
+
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },
   { id: 'phrasing', label: 'Phrasing' },

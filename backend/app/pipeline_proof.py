@@ -454,6 +454,39 @@ def basic_pitch_predict_events(
 # --- MIDI-like → Guitar Pro 5 ---------------------------------------------------
 
 
+def beat_slot_index_for_time(
+    start_s: float,
+    beat_times: Sequence[float] | None,
+    *,
+    bpm: float,
+) -> int:
+    """
+    Map wall-clock seconds to a monotonically increasing beat slot index.
+
+    When ``beat_times`` has at least two finite samples (e.g. librosa beat grid),
+    assign each note to the beat interval ``[t[i], t[i+1])`` containing ``start_s``,
+    and extrapolate linearly past the last beat using the final inter-beat spacing.
+    Otherwise fall back to uniform quarter spacing from ``bpm``.
+    """
+    s = float(start_s)
+    if not math.isfinite(s) or s < 0:
+        return 0
+    if beat_times is None:
+        beat_times = []
+    t_sorted = sorted(float(x) for x in beat_times if math.isfinite(float(x)))
+    if len(t_sorted) < 2:
+        spq = 60.0 / max(bpm, 1.0)
+        return max(0, int(s / spq))
+    if s <= t_sorted[0]:
+        return 0
+    for i in range(len(t_sorted) - 1):
+        if t_sorted[i] <= s < t_sorted[i + 1]:
+            return i
+    span = max(t_sorted[-1] - t_sorted[-2], 1e-3)
+    extra = max(0, int((s - t_sorted[-1]) / span))
+    return len(t_sorted) - 1 + extra
+
+
 def _best_tab_slot(midi_pitch: int, track_strings: Sequence[Any]) -> tuple[int, int] | None:
     """
     Pick (string_number 1..6, fret) for ``midi_pitch`` given ``track.strings``.
@@ -479,25 +512,36 @@ def build_gp5_from_note_events(
     *,
     title: str = "Harmoniq proof",
     artist: str = "",
+    beat_times_s: Sequence[float] | None = None,
 ) -> None:
     """
-    Map note events onto quarter-note slots (floor beat index from ``start_s``) and
-    write a monophonic/tab GP5. Rests fill empty quarter slots in each 4/4 bar.
+    Map note events onto quarter-note slots and write a monophonic/tab GP5.
+    Rests fill empty quarter slots in each 4/4 bar.
+
+    When ``beat_times_s`` is provided (e.g. librosa ``beat_grid``), each note is
+    quantized to the detected beat interval instead of a uniform ``60/bpm`` grid.
+    Multiple notes in the same slot: keep the one with highest ``amplitude``, then
+    highest MIDI as tie-breaker.
 
     This is intentionally simple (proof-of-concept); a production pipeline would carry
     durations from Basic Pitch and respect tuplets / pickup bars.
     """
     import guitarpro as gp
 
-    seconds_per_quarter = 60.0 / max(bpm, 1.0)
-    by_beat: dict[int, list[int]] = defaultdict(list)
+    by_slot: dict[int, list[NoteEvent]] = defaultdict(list)
     for ev in events:
-        b_idx = int(ev.start_s / seconds_per_quarter)
-        by_beat[b_idx].append(ev.pitch_midi)
-    # One pitch per beat (monophonic lead); Basic Pitch can emit polyphony on guitar stem.
-    for k in list(by_beat.keys()):
-        uniq = sorted(set(by_beat[k]))
-        by_beat[k] = [uniq[-1]] if uniq else []
+        b_idx = beat_slot_index_for_time(float(ev.start_s), beat_times_s, bpm=bpm)
+        by_slot[b_idx].append(ev)
+    # One pitch per beat slot: prefer strongest amplitude (Basic Pitch polyphony).
+    by_beat: dict[int, list[int]] = {}
+    for k, evs in by_slot.items():
+        if not evs:
+            continue
+        best = max(
+            evs,
+            key=lambda e: (float(e.amplitude), int(e.pitch_midi)),
+        )
+        by_beat[k] = [int(best.pitch_midi)]
 
     max_beat = max(by_beat, default=-1)
     n_measures = max_beat // 4 + 1 if max_beat >= 0 else 1

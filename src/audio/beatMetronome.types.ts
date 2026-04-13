@@ -14,6 +14,14 @@ export type BeatMetronomeParams = {
    * AudioContext clock as stems. Falls back to `getSongPositionSeconds` if omitted.
    */
   getSongPositionSecondsNow?: () => number
+  /**
+   * Web: read transport at a fixed AudioContext time (same instant as scheduling `nowCtx`).
+   */
+  getSongPositionAtContextTime?: (contextTime: number) => number
+  /**
+   * Positive values delay metronome vs stem transport (seconds): effective position for beat math is `pos - offset`.
+   */
+  beatAlignOffsetSec?: number
   isPlaying: () => boolean
   /** 1 = quarters, 2 = eighths, 4 = sixteenths (relative to quarter period). */
   subdivision?: MetronomeSubdivision

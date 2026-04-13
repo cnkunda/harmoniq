@@ -2,15 +2,19 @@ import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 import { Text, View } from 'react-native'
 
+import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { LoopRegionControl } from '@/components/LoopRegionControl'
+import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { barRangeToSeconds } from '@/src/music/barLoopBounds'
+import { capoSuggestion } from '@/src/music/capoSuggestion'
+import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { deriveSlowLoopRegion } from '@/src/session/slowLoopRegion'
 import { useLessonStore } from '@/src/stores/lessonStore'
-import type { TabLoopBarRegion } from '@/types/tabMessage'
+import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
 export default function SlowScreen() {
   const router = useRouter()
@@ -20,6 +24,12 @@ export default function SlowScreen() {
 
   const sections = (lesson?.sections ?? []) as Array<Record<string, unknown>>
   const section = sections[lessonSectionIndex]
+  const keyLabel = (lesson?.key ?? 'Unknown key').toString()
+  const positionLabel =
+    section && typeof section.primary_position === 'string'
+      ? section.primary_position
+      : 'Tap a note to infer position'
+  const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
   const barTimestamps = lesson?.bar_timestamps ?? []
   const beatSec = lesson?.tempo && lesson.tempo > 0 ? 60 / lesson.tempo : 0.5
 
@@ -29,6 +39,10 @@ export default function SlowScreen() {
   )
 
   const [loopBars, setLoopBars] = useState<TabLoopBarRegion | null>(null)
+  const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
+  const [fretPulseKey, setFretPulseKey] = useState(0)
+  const [noteModalOpen, setNoteModalOpen] = useState(false)
+  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
 
   useEffect(() => {
     if (!derived) {
@@ -94,11 +108,36 @@ export default function SlowScreen() {
         />
       ) : null}
 
+      <FretboardDiagram
+        keyLabel={keyLabel}
+        positionLabel={positionLabel}
+        capoText={capoText}
+        selectedNote={selectedNote}
+        pulseKey={fretPulseKey}
+        onSelectNote={(note) => {
+          setSelectedNote(note)
+          setFretPulseKey((k) => k + 1)
+          setNoteModalOpen(true)
+        }}
+      />
+
       <SessionStemAndTab
         initialRate={0.65}
         initialMetronomeOn={initialMetronomeOn}
         autoLoopRegion={playbackLoop}
         loopHighlight={loopHighlight}
+        onNoteEvent={(evt: NoteEventMessage) => {
+          setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
+          setFretPulseKey((k) => k + 1)
+          if (evt.fromScoreTap) {
+            setNoteModalOpen(true)
+          }
+        }}
+      />
+      <SessionNoteDetailModal
+        detail={selectionDetail}
+        visible={noteModalOpen}
+        onClose={() => setNoteModalOpen(false)}
       />
     </SessionStepScreen>
   )

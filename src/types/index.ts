@@ -20,6 +20,8 @@ export interface LessonJSON {
   tempo_confidence?: number | null
   transcription_confidence?: number | null
   beat_grid?: number[]
+  /** Positive: delay metronome vs stems (seconds). Optional backend / manual calibration. */
+  beat_align_offset_sec?: number | null
   bar_timestamps?: number[]
   stems?: Record<string, string>
   lyrics_aligned?: Array<Record<string, unknown>>
@@ -30,6 +32,9 @@ export interface AnalyzeJob {
   status: AnalyzeJobStatus
   result: LessonJSON | null
   error: string | null
+  /** 0–1 while processing; from GET /analyze/{id} when backend reports it. */
+  progress?: number | null
+  stage_label?: string | null
 }
 
 /** POST /score response — see README.md */

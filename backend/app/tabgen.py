@@ -131,19 +131,28 @@ def basic_pitch_predict_events_safe(
     Run Spotify Basic Pitch if available; otherwise return deterministic stub events.
     """
     if os.getenv("PYTEST_CURRENT_TEST") or os.getenv("HARMONIQ_SKIP_BASIC_PITCH") == "1":
+        logger.info(
+            "tabgen_stub_note_events reason=env bpm=%.2f stem=%s",
+            bpm,
+            guitar_stem_path,
+        )
         return _stub_note_events(bpm=bpm)
 
     try:
         return _basic_pitch_predict_events(guitar_stem_path, midi_tempo=bpm)
     except ImportError:
         logger.warning(
-            "basic-pitch not installed; using stub note events (bpm=%.2f, stem=%s)",
+            "tabgen_stub_note_events reason=no_basic_pitch bpm=%.2f stem=%s",
             bpm,
             guitar_stem_path,
         )
         return _stub_note_events(bpm=bpm)
     except Exception:
-        logger.exception("Basic Pitch failed; using stub note events (bpm=%.2f)", bpm)
+        logger.exception(
+            "tabgen_stub_note_events reason=basic_pitch_error bpm=%.2f stem=%s",
+            bpm,
+            guitar_stem_path,
+        )
         return _stub_note_events(bpm=bpm)
 
 
@@ -193,12 +202,19 @@ def _build_gp5_base64_from_events(
     *,
     bpm: float,
     title: str,
+    beat_times_s: list[float] | None = None,
 ) -> str:
     import uuid
 
     with tempfile.TemporaryDirectory() as td:
         out_gp5 = Path(td) / f"{uuid.uuid4().hex}.gp5"
-        _build_gp5_from_note_events(events, bpm=bpm, output_gp5=out_gp5, title=title)
+        _build_gp5_from_note_events(
+            events,
+            bpm=bpm,
+            output_gp5=out_gp5,
+            title=title,
+            beat_times_s=beat_times_s,
+        )
         return _read_file_b64(out_gp5)
 
 
@@ -208,18 +224,25 @@ def generate_tab_artifacts_from_note_events(
     bpm: float,
     transcription_confidence: float,
     alt_confidence_threshold: float = TAB_ALT_CONFIDENCE_THRESHOLD,
+    beat_times_s: list[float] | None = None,
 ) -> dict[str, str]:
     """
     Return GP5 base64 artifacts for a section (full + skeleton, optional alt).
     """
     try:
-        tab_full = _build_gp5_base64_from_events(events, bpm=bpm, title="Harmoniq tab (full)")
+        tab_full = _build_gp5_base64_from_events(
+            events,
+            bpm=bpm,
+            title="Harmoniq tab (full)",
+            beat_times_s=beat_times_s,
+        )
 
         skeleton_events = filter_ornaments_for_skeleton(events, bpm=bpm)
         tab_skeleton = _build_gp5_base64_from_events(
             skeleton_events,
             bpm=bpm,
             title="Harmoniq tab (skeleton)",
+            beat_times_s=beat_times_s,
         )
     except Exception:
         logger.exception("GP5 generation failed; using stub tab base64 artifacts")
@@ -239,6 +262,7 @@ def generate_tab_artifacts_from_note_events(
                 events,
                 bpm=bpm,
                 title="Harmoniq tab (alt position)",
+                beat_times_s=beat_times_s,
             )
         except Exception:
             out["tab_alt_position_gp5_base64"] = STUB_TAB_ALT_POSITION_GP5_BASE64
@@ -281,6 +305,7 @@ def generate_tab_artifacts_for_guitar_stem(
     bpm: float,
     transcription_confidence: float,
     alt_confidence_threshold: float = TAB_ALT_CONFIDENCE_THRESHOLD,
+    beat_times_s: list[float] | None = None,
 ) -> dict[str, str]:
     events = basic_pitch_predict_events_safe(guitar_stem_path, bpm=bpm)
     return generate_tab_artifacts_from_note_events(
@@ -288,5 +313,6 @@ def generate_tab_artifacts_for_guitar_stem(
         bpm=bpm,
         transcription_confidence=transcription_confidence,
         alt_confidence_threshold=alt_confidence_threshold,
+        beat_times_s=beat_times_s,
     )
 

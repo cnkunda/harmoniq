@@ -2,7 +2,7 @@ import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
 
-import type { SmartScrollSample } from './smartScroll'
+import { barIndexForPlaybackSeconds } from './smartScroll'
 
 export type PlaybackTickContext = {
   positionSec: number
@@ -19,47 +19,40 @@ export type UseSessionSmartScrollOptions = {
   /** Increment after seek / section jump to clear bar latch. */
   resetKey?: number
   pollIntervalMs?: number
-  /** Increment (e.g. dev button) to run one wrong-bar scroll then correct (skew demo). */
-  skewDemoGeneration?: number
+  /** When false (e.g. tab-only Jam), do not auto-scroll from stem ticks. */
+  enabled?: boolean
 }
 
 /**
- * Deprecated in commit 45. AlphaTab external media sync now drives cursor internally.
+ * AlphaTab cursor follows external media via `syncPlaybackTimelineMs`, but horizontal
+ * overflow still needs explicit scroll when the active bar leaves the viewport.
  */
 export function useSessionSmartScroll({
-  tabRef: _tabRef,
+  tabRef,
   barTimestamps,
-  tickRef: _tickRef,
+  tickRef,
   resetKey = 0,
-  pollIntervalMs: _pollIntervalMs = 200,
-  skewDemoGeneration = 0,
+  pollIntervalMs = 200,
+  enabled = true,
 }: UseSessionSmartScrollOptions): void {
-  const _lastEmittedBar = useRef<number | null>(null)
-  const lastSample = useRef<SmartScrollSample | null>(null)
-  const _tsRef = useRef<readonly number[]>([])
-  const _skewPhase = useRef<'idle' | 'wrong' | 'truth'>('idle')
-  const lastSkewGen = useRef(0)
+  const lastEmittedBar = useRef<number | null>(null)
 
   useEffect(() => {
-    _tsRef.current = barTimestamps ?? []
-  }, [barTimestamps])
-
-  useEffect(() => {
-    _lastEmittedBar.current = null
-    lastSample.current = null
-    _skewPhase.current = 'idle'
+    lastEmittedBar.current = null
   }, [resetKey])
 
   useEffect(() => {
-    if (skewDemoGeneration !== lastSkewGen.current && skewDemoGeneration > 0) {
-      lastSkewGen.current = skewDemoGeneration
-      _skewPhase.current = 'wrong'
-    }
-  }, [skewDemoGeneration])
-
-  // External media mode keeps AlphaTab in sync with real audio timeline.
-  // This hook intentionally does not schedule timers or post bar-scroll commands anymore.
-  useEffect(() => {
-    return () => {}
-  }, [])
+    if (!enabled) return
+    if (typeof setInterval === 'undefined') return
+    const ts = barTimestamps ?? []
+    const id = setInterval(() => {
+      const tick = tickRef.current
+      if (!tick.ready || !tick.playing || ts.length === 0) return
+      const bar = barIndexForPlaybackSeconds(ts, tick.positionSec)
+      if (lastEmittedBar.current === bar) return
+      lastEmittedBar.current = bar
+      tabRef.current?.scrollMasterBarIntoView(bar)
+    }, pollIntervalMs)
+    return () => clearInterval(id)
+  }, [barTimestamps, enabled, pollIntervalMs, resetKey, tabRef, tickRef])
 }

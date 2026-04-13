@@ -2,6 +2,8 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { Pressable, Text, View } from 'react-native'
 
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
+import { ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS } from '@/src/constants/alphaTabBridge'
+import { ALPHATAB_WEB_SURFACE_CSS } from '@/src/constants/alphaTabPlayerUi'
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
 import { applyScaleDegreeHighlight, clearScaleDegreeHighlight } from '@/src/jam/alphaTabScaleHighlight'
 import { base64ToUint8Array } from '@/src/utils/base64ToUint8Array'
@@ -27,15 +29,21 @@ type BoundsLookupLike = {
 }
 
 type AlphaTabApiLike = {
+  /** Must match stem `playbackRate` for follow-scroll / cursor timing (see alphaTab audio-video sync guide). */
+  playbackSpeed?: number
   load: (buffer: ArrayBuffer) => void
   updateSettings: () => void
+  play?: () => boolean | void
+  pause?: () => void
   settings: { display: { resources: Record<string, string | undefined> } }
   boundsLookup?: BoundsLookupLike | null
   renderer?: { boundsLookup?: BoundsLookupLike | null }
   score?: { masterBars?: unknown[] }
   player?: {
+    setExternalMediaHandler?: (handler: unknown) => void
     output?: {
       updatePosition?: (positionMs: number) => void
+      setExternalMediaHandler?: (handler: unknown) => void
     }
     midiEventsPlayed?: { on?: (cb: (evt: unknown) => void) => void }
   }
@@ -83,6 +91,20 @@ function loadAlphaTabScript(): Promise<void> {
   return w.__harmoniqAlphaTabScript
 }
 
+function clampStemPlaybackRate(rate: number): number {
+  if (!Number.isFinite(rate)) return 1
+  return Math.max(0.5, Math.min(1.25, rate))
+}
+
+function applyStemPlaybackSpeed(api: AlphaTabApiLike, rate: number): void {
+  const clamped = clampStemPlaybackRate(rate)
+  try {
+    api.playbackSpeed = clamped
+  } catch {
+    /* ignore */
+  }
+}
+
 function mergeResources(theme?: Partial<TabThemeColors>): Record<string, string> {
   const out: Record<string, string> = {}
   const base = { ...TAB_HARNESS_THEME, ...theme }
@@ -93,7 +115,10 @@ function mergeResources(theme?: Partial<TabThemeColors>): Record<string, string>
 }
 
 export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
-  function AlphaTabWeb({ gp5Base64, audioSrc, transposeSemitones = 0, theme, style, onReady, onError, onNoteEvent }, ref) {
+  function AlphaTabWeb(
+    { gp5Base64, audioSrc, transposeSemitones = 0, theme, style, onReady, onError, onNoteEvent, onScoreSeekMs },
+    ref,
+  ) {
     const hostRef = useRef<HTMLDivElement | null>(null)
     const apiRef = useRef<AlphaTabApiLike | null>(null)
     const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -109,8 +134,12 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const [soundFontReady, setSoundFontReady] = useState(false)
     const [reloadKey, setReloadKey] = useState(0)
     const lastNotePostMsRef = useRef(0)
+    /** Mirrors ListenStemPanel / mixer rate so AlphaTab scroll + cursor use the same speed factor. */
+    const stemPlaybackRateRef = useRef(1)
     const onNoteEventRef = useRef(onNoteEvent)
     onNoteEventRef.current = onNoteEvent
+    const onScoreSeekMsRef = useRef(onScoreSeekMs)
+    onScoreSeekMsRef.current = onScoreSeekMs
 
     const themeKey = useMemo(() => JSON.stringify(theme ?? {}), [theme])
 
@@ -130,13 +159,6 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       api.updateSettings()
     }, [])
 
-    const updatePositionFromAudio = useCallback(() => {
-      const api = apiRef.current
-      const audio = audioRef.current
-      if (!api || !audio) return
-      api.player?.output?.updatePosition?.(audio.currentTime * 1000)
-    }, [])
-
     const emitNoteEvent = useCallback((evt: unknown) => {
       const onNote = onNoteEventRef.current
       if (!onNote) return
@@ -145,7 +167,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         return
       }
       const now = Date.now()
-      if (now - lastNotePostMsRef.current < 30) return
+      if (now - lastNotePostMsRef.current < ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS) return
       const row = evt as {
         eventType?: unknown
         velocity?: unknown
@@ -180,6 +202,69 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       }
       lastNotePostMsRef.current = now
       onNote(payload)
+    }, [])
+
+    /** Score tap → fretboard (no midiEventsPlayed throttle — FEEL_REAL_QA B4 applies to playback stream only). */
+    const emitNoteTapFromScore = useCallback((clientX: number, clientY: number) => {
+      const onNote = onNoteEventRef.current
+      const api = apiRef.current
+      const el = hostRef.current
+      if (!onNote || !api || !el) return
+      const rect = el.getBoundingClientRect()
+      const x = clientX - rect.left + el.scrollLeft
+      const y = clientY - rect.top + el.scrollTop
+      const lookup = api.boundsLookup ?? api.renderer?.boundsLookup
+      if (!lookup || typeof lookup !== 'object') return
+      const lu = lookup as Record<string, unknown>
+      const tryNames = ['getBeatAtPos', 'getBeatAtPosition', 'findBeatAt', 'getBeat'] as const
+      for (const name of tryNames) {
+        const fn = lu[name]
+        if (typeof fn !== 'function') continue
+        try {
+          const res = (fn as (a: number, b: number) => unknown).call(lookup, x, y)
+          if (!res || typeof res !== 'object') continue
+          const beatObj = res as Record<string, unknown>
+          const beatIdx =
+            typeof beatObj.index === 'number'
+              ? beatObj.index
+              : typeof beatObj.globalBeatIndex === 'number'
+                ? beatObj.globalBeatIndex
+                : 0
+          const notes = beatObj.notes
+          if (!Array.isArray(notes) || notes.length === 0) continue
+          const n0 = notes[0]
+          if (!n0 || typeof n0 !== 'object') continue
+          const row = n0 as Record<string, unknown>
+          const midiRaw =
+            typeof row.noteValue === 'number'
+              ? row.noteValue
+              : typeof row.noteNumber === 'number'
+                ? row.noteNumber
+                : typeof row.realValue === 'number'
+                  ? row.realValue
+                  : typeof row.midi === 'number'
+                    ? row.midi
+                : typeof row.note === 'number'
+                  ? row.note
+                  : null
+          if (midiRaw == null) continue
+          const midi = Math.round(midiRaw)
+          const fret = typeof row.fret === 'number' ? row.fret : undefined
+          const str = typeof row.string === 'number' ? row.string : undefined
+          onNote({
+            type: 'noteEvent',
+            midi,
+            beat: beatIdx,
+            fret,
+            string: str,
+            hasExplicitTabPosition: typeof fret === 'number' && typeof str === 'number' ? true : undefined,
+            fromScoreTap: true,
+          })
+          return
+        } catch {
+          /* try next API name */
+        }
+      }
     }, [])
 
     const layoutLoopBracket = useCallback(() => {
@@ -255,6 +340,42 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       bracket.style.display = 'block'
     }, [])
 
+    const scrollMasterBarIntoViewImpl = useCallback(
+      (barIndex: number, attempt: number) => {
+        const container = hostRef.current
+        const api = apiRef.current
+        if (!container || !api) return
+        const idx = Math.max(0, Math.floor(barIndex))
+        const lookup = api.boundsLookup ?? api.renderer?.boundsLookup
+        const mb = lookup?.findMasterBarByIndex?.(idx)
+        const vb = mb?.visualBounds ?? mb?.realBounds
+        const cw = container.clientWidth || 0
+        if (cw <= 0 && attempt < 6) {
+          requestAnimationFrame(() => scrollMasterBarIntoViewImpl(barIndex, attempt + 1))
+          return
+        }
+        if (!vb || typeof vb.x !== 'number') {
+          return
+        }
+        const w = typeof vb.w === 'number' ? vb.w : 0
+        const barLeft = vb.x
+        const barRight = vb.x + w
+        const sl = container.scrollLeft
+        const viewRight = sl + cw
+        const margin = 32
+        let next = sl
+        if (barLeft < sl + margin) {
+          next = Math.max(0, barLeft - margin)
+        } else if (barRight > viewRight - margin) {
+          const maxScroll = Math.max(0, container.scrollWidth - cw)
+          next = Math.min(maxScroll, barRight - cw + margin)
+        }
+        container.scrollLeft = next
+        layoutLoopBracket()
+      },
+      [layoutLoopBracket],
+    )
+
     useImperativeHandle(
       ref,
       () => ({
@@ -265,20 +386,45 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           audio.load()
         },
         setPlaybackRate: (playbackRate: number) => {
+          const c = clampStemPlaybackRate(Number.isFinite(playbackRate) ? playbackRate : 1)
+          stemPlaybackRateRef.current = c
           const audio = audioRef.current
-          if (!audio) return
-          audio.playbackRate = Number.isFinite(playbackRate) ? Math.max(0.5, Math.min(1.25, playbackRate)) : 1
+          if (audio) audio.playbackRate = c
+          const apiNow = apiRef.current
+          if (apiNow) applyStemPlaybackSpeed(apiNow, c)
         },
         seekTo: (positionMs: number) => {
+          const ms = Math.max(0, Number.isFinite(positionMs) ? positionMs : 0)
           const audio = audioRef.current
-          if (!audio) return
-          audio.currentTime = Math.max(0, positionMs / 1000)
-          updatePositionFromAudio()
+          const api = apiRef.current
+          const pr = stemPlaybackRateRef.current
+          if (audio) audio.currentTime = (ms * pr) / 1000
+          api?.player?.output?.updatePosition?.(ms)
+          layoutLoopBracket()
+        },
+        scrollMasterBarIntoView: (barIndex: number) => {
+          if (typeof window === 'undefined') {
+            scrollMasterBarIntoViewImpl(barIndex, 0)
+            return
+          }
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => scrollMasterBarIntoViewImpl(barIndex, 0))
+          })
         },
         syncPlaybackTimelineMs: (positionMs: number) => {
           const api = apiRef.current
           if (!api) return
           api.player?.output?.updatePosition?.(Math.max(0, positionMs))
+        },
+        setStemPlaybackActive: (active: boolean) => {
+          const api = apiRef.current
+          if (!api) return
+          try {
+            if (active) api.play?.()
+            else api.pause?.()
+          } catch {
+            /* ignore */
+          }
         },
         getPosition: async () => {
           const audio = audioRef.current
@@ -307,11 +453,23 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           clearScaleDegreeHighlight(api as Record<string, unknown>)
         },
       }),
-      [applyThemePartial, applyTranspose, layoutLoopBracket, updatePositionFromAudio],
+      [applyThemePartial, applyTranspose, layoutLoopBracket, scrollMasterBarIntoViewImpl],
     )
 
     useEffect(() => {
       setMounted(true)
+      if (typeof document !== 'undefined') {
+        const id = 'harmoniq-alphatab-player-cursor'
+        const existing = document.getElementById(id)
+        if (existing) {
+          existing.textContent = ALPHATAB_WEB_SURFACE_CSS
+        } else {
+          const el = document.createElement('style')
+          el.id = id
+          el.textContent = ALPHATAB_WEB_SURFACE_CSS
+          document.head.appendChild(el)
+        }
+      }
     }, [])
 
     useEffect(() => {
@@ -342,6 +500,14 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         },
         { capture: true, signal },
       )
+      el.addEventListener(
+        'pointerdown',
+        (e: PointerEvent) => {
+          if (e.button !== 0) return
+          emitNoteTapFromScore(e.clientX, e.clientY)
+        },
+        { signal },
+      )
       el.addEventListener('scroll', layoutLoopBracket, { passive: true, signal })
 
       let cancelled = false
@@ -350,6 +516,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       setEngineError(null)
       setEngineReady(false)
       setSoundFontReady(false)
+
+      let highlightDebugObs: MutationObserver | null = null
 
       const run = async () => {
         try {
@@ -360,6 +528,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             | {
                 AlphaTabApi: new (container: HTMLElement, options: unknown) => AlphaTabApiLike
                 PlayerMode?: { EnabledExternalMedia?: unknown }
+                LayoutMode?: { Horizontal?: number }
+                ScrollMode?: { OffScreen?: number }
               }
             | undefined
           const AlphaTabApi = tabNs?.AlphaTabApi
@@ -370,6 +540,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           if (playerModeExternal === undefined) {
             throw new Error('AlphaTab PlayerMode.EnabledExternalMedia missing — check script version')
           }
+          const layoutHorizontal = tabNs?.LayoutMode?.Horizontal ?? 1
+          const scrollFollow = tabNs?.ScrollMode?.OffScreen ?? 2
 
           const resources = mergeResources(theme ?? {})
           // Expo web / Metro: worker script URL resolution breaks (Invalid base URL) — render on main thread.
@@ -382,6 +554,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             display: {
               resources,
               scale: 1.1,
+              layoutMode: layoutHorizontal,
+              stretchForce: 1,
             },
             soundFont: SOUNDFONT_URL,
             notation: {
@@ -389,8 +563,16 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             },
             player: {
               enablePlayer: true,
+              enableCursor: true,
+              enableElementHighlighting: true,
               playerMode: playerModeExternal,
               soundFont: SOUNDFONT_URL,
+              scrollMode: scrollFollow,
+              // Native smooth scroll ignores `scrollSpeed` and stays ~wall-clock — desyncs at 65% stem rate.
+              nativeBrowserSmoothScroll: false,
+              scrollSpeed: 0,
+              // https://alphatab.net/docs/reference/settings/player/scrollelement — default html/body cannot scroll here.
+              scrollElement: el,
             },
           }
           const api = new AlphaTabApi(el, apiOptions)
@@ -400,6 +582,179 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           }
           apiRef.current = api
 
+          // #region agent log
+          {
+            let lastDbgLog = 0
+            const dbgEndpoint = 'http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77'
+            const dbgSession = 'f54fec'
+            const sampleHighlightDom = (reason: string) => {
+              const now = Date.now()
+              if (now - lastDbgLog < 350) return
+              lastDbgLog = now
+              const highlighted = Array.from(el.querySelectorAll('.at-highlight'))
+              const sampleNodes = highlighted.slice(0, 8).map((node) => {
+                const elt = node as unknown as Element
+                const counts: Record<string, number> = {}
+                elt.querySelectorAll('*').forEach((c) => {
+                  const t = c.tagName.toLowerCase()
+                  counts[t] = (counts[t] ?? 0) + 1
+                })
+                const lineSample = Array.from(elt.querySelectorAll('line')).slice(0, 3).map((l) => {
+                  const cs = getComputedStyle(l)
+                  return {
+                    strokeAttr: l.getAttribute('stroke'),
+                    strokeComputed: cs.stroke,
+                    swAttr: l.getAttribute('stroke-width'),
+                  }
+                })
+                const pathSample = Array.from(elt.querySelectorAll('path')).slice(0, 4).map((p) => {
+                  const cs = getComputedStyle(p)
+                  return {
+                    fillAttr: p.getAttribute('fill'),
+                    strokeAttr: p.getAttribute('stroke'),
+                    fillComputed: cs.fill,
+                    strokeComputed: cs.stroke,
+                  }
+                })
+                const parent = elt.parentElement
+                const siblings =
+                  parent?.children?.length != null
+                    ? Array.from(parent.children).map((c) => {
+                        const ce = c as Element
+                        return {
+                          tag: ce.tagName,
+                          cls: ce.getAttribute('class') ?? '',
+                          line: ce.querySelectorAll('line').length,
+                          path: ce.querySelectorAll('path').length,
+                          hasHl: ce.classList.contains('at-highlight'),
+                        }
+                      })
+                    : []
+                return {
+                  tag: elt.tagName,
+                  className: elt.getAttribute('class') ?? '',
+                  counts,
+                  lineSample,
+                  pathSample,
+                  siblings,
+                }
+              })
+              const linesInHost = el.querySelectorAll('line').length
+              const pathsInHost = el.querySelectorAll('path').length
+              const rectsInHost = el.querySelectorAll('rect').length
+              const linesOutsideHl = Array.from(el.querySelectorAll('line')).filter((l) => !l.closest('.at-highlight'))
+                .length
+              let beatWrapPathStroke: string | null = null
+              try {
+                const wrap = el.querySelector('svg g:has(> .at-highlight)')
+                const pw = wrap?.querySelector('path')
+                if (pw) beatWrapPathStroke = getComputedStyle(pw).stroke
+              } catch {
+                beatWrapPathStroke = 'query-failed'
+              }
+              void fetch(dbgEndpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': dbgSession },
+                body: JSON.stringify({
+                  sessionId: dbgSession,
+                  hypothesisId: 'verify-wrap',
+                  location: 'AlphaTabWeb.web.tsx:highlightDomSample',
+                  message: reason,
+                  data: {
+                    nHighlights: highlighted.length,
+                    linesInHost,
+                    pathsInHost,
+                    rectsInHost,
+                    linesOutsideHl,
+                    beatWrapPathStroke,
+                    sampleNodes,
+                  },
+                  timestamp: now,
+                  runId: 'post-fix',
+                }),
+              }).catch(() => {})
+            }
+            highlightDebugObs = new MutationObserver(() => sampleHighlightDom('mutation'))
+            highlightDebugObs.observe(el, { subtree: true, attributes: true, attributeFilter: ['class'] })
+            window.setTimeout(() => sampleHighlightDom('delayed'), 1500)
+          }
+          // #endregion
+
+          /** https://alphatab.net/docs/guides/audio-video-sync — host pushes syncTimelineMs; play() no-op avoids double stem. */
+          const getAudioEl = () => audioRef.current
+          const wireWebExternalStemHandler = () => {
+            const p = api.player as
+              | {
+                  setExternalMediaHandler?: (h: unknown) => void
+                  output?: {
+                    handler?: unknown
+                    setExternalMediaHandler?: (h: unknown) => void
+                    updatePosition?: (ms: number) => void
+                  }
+                }
+              | undefined
+            const out = p?.output
+            const handler = {
+              get backingTrackDuration() {
+                const a = getAudioEl()
+                const d = a?.duration
+                return d != null && Number.isFinite(d) ? d * 1000 : 0
+              },
+              get playbackRate() {
+                return getAudioEl()?.playbackRate ?? stemPlaybackRateRef.current
+              },
+              set playbackRate(v: number) {
+                const a = getAudioEl()
+                const next = Number.isFinite(v) ? v : 1
+                stemPlaybackRateRef.current = clampStemPlaybackRate(next)
+                if (a) a.playbackRate = stemPlaybackRateRef.current
+                applyStemPlaybackSpeed(api, stemPlaybackRateRef.current)
+              },
+              get masterVolume() {
+                return getAudioEl()?.volume ?? 1
+              },
+              set masterVolume(v: number) {
+                const a = getAudioEl()
+                if (a) a.volume = Number.isFinite(v) ? v : 1
+              },
+              seekTo: (timeMs: number) => {
+                const a = getAudioEl()
+                if (!a) return
+                const ms = Math.max(0, Number(timeMs))
+                const pr = stemPlaybackRateRef.current
+                a.currentTime = (ms * pr) / 1000
+                out?.updatePosition?.(ms)
+                onScoreSeekMsRef.current?.(ms)
+              },
+              play: () => Promise.resolve(),
+              pause: () => {
+                try {
+                  getAudioEl()?.pause()
+                } catch {
+                  /* ignore */
+                }
+              },
+            }
+            try {
+              if (out) {
+                try {
+                  out.handler = handler
+                  return
+                } catch {
+                  /* fall through */
+                }
+              }
+              if (p && typeof p.setExternalMediaHandler === 'function') {
+                p.setExternalMediaHandler(handler)
+              } else if (out && typeof out.setExternalMediaHandler === 'function') {
+                out.setExternalMediaHandler(handler)
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+
+          let externalStemWired = false
           api.error.on((err: unknown) => {
             const m =
               err && typeof err === 'object' && 'message' in err
@@ -419,6 +774,11 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
           api.renderFinished.on(() => {
             layoutLoopBracket()
+            if (!externalStemWired) {
+              externalStemWired = true
+              wireWebExternalStemHandler()
+              applyStemPlaybackSpeed(api, stemPlaybackRateRef.current)
+            }
             if (!readyPostedRef.current) {
               readyPostedRef.current = true
               onReady?.()
@@ -454,6 +814,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
       return () => {
         cancelled = true
+        highlightDebugObs?.disconnect()
+        highlightDebugObs = null
         uiGuard.abort()
         setEngineReady(false)
         if (syncTimerRef.current != null) {
@@ -484,7 +846,16 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         loopStateRef.current = null
         el.replaceChildren()
       }
-    }, [layoutLoopBracket, mounted, onError, onReady, reloadKey, themeKey, transposeSemitones])
+    }, [
+      emitNoteTapFromScore,
+      layoutLoopBracket,
+      mounted,
+      onError,
+      onReady,
+      reloadKey,
+      themeKey,
+      transposeSemitones,
+    ])
 
     useEffect(() => {
       if (!engineReady) return
@@ -510,6 +881,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         audioRef.current = new Audio()
         audioRef.current.preload = 'auto'
         audioRef.current.crossOrigin = 'anonymous'
+        audioRef.current.playbackRate = stemPlaybackRateRef.current
       }
       const audio = audioRef.current
       const nextSrc = audioSrc?.trim()
@@ -529,7 +901,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           syncTimerRef.current = null
         }
       }
-    }, [audioSrc, engineReady, updatePositionFromAudio])
+    }, [audioSrc, engineReady])
 
     useEffect(() => {
       if (!engineReady) return
@@ -546,7 +918,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
     return (
       <View
-        className="min-h-[220px] flex-1 overflow-hidden rounded-xl border border-wood-600/45 bg-ivory"
+        className="min-h-[220px] flex flex-1 flex-col overflow-hidden rounded-xl border border-wood-600/45 bg-ivory"
         style={style}
       >
         {(bootError || engineError) && (
@@ -564,16 +936,42 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         ) : (
           <div
             key={reloadKey}
-            ref={hostRef}
             style={{
-              width: '100%',
-              minHeight: 240,
+              display: 'flex',
+              flexDirection: 'column',
               flex: 1,
-              backgroundColor: '#2B1D0E',
-              overflow: 'auto',
-              position: 'relative',
+              minHeight: 0,
+              width: '100%',
+              height: '100%',
             }}
-          />
+          >
+            {/*
+              Scroll host = AlphaTab container + scrollElement only.
+              Bottom strip is a sibling so inset isn’t drawn under the horizontal scrollbar track.
+            */}
+            <div
+              ref={hostRef}
+              className="harmoniq-alphatab-scroll"
+              style={{
+                flex: 1,
+                minHeight: 0,
+                width: '100%',
+                backgroundColor: '#2B1D0E',
+                overflowX: 'auto',
+                overflowY: 'hidden',
+                position: 'relative',
+              }}
+            />
+            <div
+              aria-hidden
+              style={{
+                height: 20,
+                flexShrink: 0,
+                width: '100%',
+                backgroundColor: '#2B1D0E',
+              }}
+            />
+          </div>
         )}
         {mounted && !soundFontReady ? (
           <View className="absolute left-3 right-3 top-3 rounded-lg border border-wood-600/45 bg-wood-800/70 p-3">

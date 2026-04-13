@@ -22,6 +22,11 @@ class ExpoParallelStemMixer implements StemMixer {
   private stems = new Map<string, { sound: Audio.Sound; gain: number }>()
   private durationSec = 0
   private playbackRate = 1
+  /** Best-effort sync sample for `getPositionSecondsNow` (extrapolated between polls). */
+  private lastSampleSec = 0
+  private lastSampleWallMs = 0
+  private sampleIsPlaying = false
+  private sampleInterval: ReturnType<typeof setInterval> | null = null
 
   async load(stems: StemDefinition[]): Promise<void> {
     assertStemDefinitions(stems)
@@ -65,6 +70,9 @@ class ExpoParallelStemMixer implements StemMixer {
       }
       this.durationSec = maxDur
       this.playbackRate = 1
+      this.lastSampleSec = 0
+      this.lastSampleWallMs = performance.now()
+      this.sampleIsPlaying = false
       console.info(`${LOG} load OK duration≈${this.durationSec.toFixed(2)}s`)
     } catch (e) {
       console.error(`${LOG} load failed, unloading partial`, e)
@@ -73,6 +81,38 @@ class ExpoParallelStemMixer implements StemMixer {
       }
       this.stems.clear()
       throw e
+    }
+  }
+
+  private stopSampleLoop(): void {
+    if (this.sampleInterval) {
+      clearInterval(this.sampleInterval)
+      this.sampleInterval = null
+    }
+  }
+
+  private startSampleLoop(): void {
+    this.stopSampleLoop()
+    this.sampleInterval = setInterval(() => {
+      void this.refreshSampleFromNative()
+    }, 80)
+  }
+
+  private applySample(sec: number, playing: boolean): void {
+    this.lastSampleSec = sec
+    this.lastSampleWallMs = performance.now()
+    this.sampleIsPlaying = playing
+  }
+
+  private async refreshSampleFromNative(): Promise<void> {
+    const first = [...this.stems.values()][0]
+    if (!first) return
+    try {
+      const st = await first.sound.getStatusAsync()
+      if (!st.isLoaded || st.positionMillis == null) return
+      this.applySample(st.positionMillis / 1000, st.isPlaying === true)
+    } catch {
+      /* ignore */
     }
   }
 
@@ -88,6 +128,8 @@ class ExpoParallelStemMixer implements StemMixer {
         await sound.playAsync()
       }),
     )
+    await this.refreshSampleFromNative()
+    this.startSampleLoop()
   }
 
   async pause(): Promise<void> {
@@ -95,7 +137,9 @@ class ExpoParallelStemMixer implements StemMixer {
       throw new Error(`${LOG} pause() called before load()`)
     }
     console.info(`${LOG} pause`)
+    this.stopSampleLoop()
     await Promise.all([...this.stems.values()].map(({ sound }) => sound.pauseAsync()))
+    await this.refreshSampleFromNative()
   }
 
   async seek(positionSeconds: number): Promise<void> {
@@ -106,6 +150,7 @@ class ExpoParallelStemMixer implements StemMixer {
     await Promise.all(
       [...this.stems.values()].map(({ sound }) => sound.setPositionAsync(ms)),
     )
+    this.applySample(wrapped, false)
   }
 
   async setPlaybackRate(rate: number): Promise<void> {
@@ -115,6 +160,20 @@ class ExpoParallelStemMixer implements StemMixer {
         sound.setRateAsync(this.playbackRate, true, Audio.PitchCorrectionQuality.Medium),
       ),
     )
+    void this.refreshSampleFromNative()
+  }
+
+  getPositionSecondsNow(): number {
+    if (this.stems.size === 0) return 0
+    const d = this.durationSec || 1
+    let pos: number
+    if (this.sampleIsPlaying) {
+      const dt = (performance.now() - this.lastSampleWallMs) / 1000
+      pos = this.lastSampleSec + dt * this.playbackRate
+    } else {
+      pos = this.lastSampleSec
+    }
+    return ((pos % d) + d) % d
   }
 
   async getPositionSeconds(): Promise<number> {
@@ -122,7 +181,9 @@ class ExpoParallelStemMixer implements StemMixer {
     if (!first) return 0
     const st = await first.sound.getStatusAsync()
     if (!st.isLoaded || st.positionMillis == null) return 0
-    return st.positionMillis / 1000
+    const p = st.positionMillis / 1000
+    this.applySample(p, st.isPlaying === true)
+    return p
   }
 
   getDurationSeconds(): number {
@@ -141,6 +202,7 @@ class ExpoParallelStemMixer implements StemMixer {
   }
 
   async unload(): Promise<void> {
+    this.stopSampleLoop()
     if (this.stems.size === 0) {
       console.info(`${LOG} unload (no-op, empty)`)
       return
@@ -155,6 +217,8 @@ class ExpoParallelStemMixer implements StemMixer {
     )
     this.stems.clear()
     this.durationSec = 0
+    this.lastSampleSec = 0
+    this.sampleIsPlaying = false
   }
 }
 

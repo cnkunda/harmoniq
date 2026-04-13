@@ -7,16 +7,112 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
+      height: 100%;
+      margin: 0;
       background: #2B1D0E;
-      overflow-x: hidden;
+      overflow: hidden;
       -webkit-touch-callout: none;
       user-select: none;
     }
-    #alphatab { position: relative; width: 100%; min-height: 100vh; }
+    /*
+     * Column: scroll row (#alphatab = scrollElement) + bottom strip below the scrollbar.
+     * Keep scrollbar rules in sync with src/constants/alphaTabPlayerUi.ts (ALPHATAB_SCROLLBAR_CSS).
+     */
+    #alphatab-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
+      min-height: 240px;
+      box-sizing: border-box;
+    }
+    #alphatab {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: #d4a574 rgba(61, 35, 23, 0.92);
+    }
+    #alphatab::-webkit-scrollbar {
+      height: 10px;
+    }
+    #alphatab::-webkit-scrollbar-track {
+      background: rgba(61, 35, 23, 0.92);
+      border-radius: 5px;
+    }
+    #alphatab::-webkit-scrollbar-thumb {
+      background: #d4a574;
+      border-radius: 5px;
+      border: 2px solid rgba(61, 35, 23, 0.92);
+    }
+    #alphatab::-webkit-scrollbar-thumb:hover {
+      background: #e8b86d;
+    }
+    .alphatab-bottom-inset {
+      height: 20px;
+      flex-shrink: 0;
+      width: 100%;
+      background: #2b1d0e;
+    }
+    /*
+     * Player cursors — https://alphatab.net/docs/guides/styling-player
+     * Colors: keep in sync with src/constants/alphaTabPlayerUi.ts (wood/amber harness).
+     */
+    .at-cursor-bar {
+      background: rgba(212, 165, 116, 0.22);
+    }
+    .at-cursor-beat {
+      background: #E8B86D;
+      width: 3px;
+      box-shadow: 0 0 2px rgba(44, 24, 16, 0.45);
+    }
+    /* Theme success — heads, stems, flags, <use> glyphs; keep in sync with src/constants/alphaTabPlayerUi.ts */
+    path.at-highlight,
+    polygon.at-highlight,
+    circle.at-highlight,
+    ellipse.at-highlight,
+    rect.at-highlight,
+    use.at-highlight,
+    text.at-highlight,
+    tspan.at-highlight,
+    .at-highlight path,
+    .at-highlight polygon,
+    .at-highlight circle,
+    .at-highlight ellipse,
+    .at-highlight rect,
+    .at-highlight use,
+    .at-highlight text,
+    .at-highlight tspan {
+      fill: #7A9B6D;
+      stroke: #7A9B6D;
+      stroke-width: 1.8px;
+    }
+    line.at-highlight,
+    polyline.at-highlight,
+    .at-highlight line,
+    .at-highlight polyline {
+      stroke: #7A9B6D;
+    }
+    svg g:has(> .at-highlight) :is(path, line, polyline, use, text, tspan) {
+      fill: #7A9B6D !important;
+      stroke: #7A9B6D !important;
+      stroke-width: 1.8px;
+    }
+    svg g:has(> .at-highlight) line,
+    svg g:has(> .at-highlight) polyline {
+      fill: none !important;
+    }
   </style>
 </head>
 <body>
-  <div id="alphatab"></div>
+  <div id="alphatab-shell">
+    <div id="alphatab"></div>
+    <div class="alphatab-bottom-inset" aria-hidden="true"></div>
+  </div>
   <!-- Pinned — never use @latest (PRIORITIES 45): @coderline/alphatab@1.6.1 -->
   <script src="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.6.1/dist/alphaTab.min.js"></script>
   <script>
@@ -49,7 +145,18 @@
       var externalAudio = new Audio()
       externalAudio.preload = 'auto'
       externalAudio.crossOrigin = 'anonymous'
+      /** Mirrors RN stem mixer rate — AlphaTab `playbackSpeed` must match for follow-scroll at slow speeds. */
+      var stemPlaybackRate = 1
       var SOUNDFONT_URL = 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.6.1/dist/soundfont/sonivox.sf2'
+
+      var layoutHorizontal =
+        alphaTab.LayoutMode && alphaTab.LayoutMode.Horizontal !== undefined
+          ? alphaTab.LayoutMode.Horizontal
+          : 1
+      var scrollFollow =
+        alphaTab.ScrollMode && alphaTab.ScrollMode.OffScreen !== undefined
+          ? alphaTab.ScrollMode.OffScreen
+          : 2
 
       var api = new alphaTab.AlphaTabApi(container, {
         core: {
@@ -67,12 +174,21 @@
             barNumberColor: '#8B7D6B',
           },
           scale: 1.1,
+          layoutMode: layoutHorizontal,
+          stretchForce: 1,
         },
         soundFont: SOUNDFONT_URL,
         player: {
           enablePlayer: true,
+          enableCursor: true,
+          enableElementHighlighting: true,
           playerMode: alphaTab.PlayerMode.EnabledExternalMedia,
           soundFont: SOUNDFONT_URL,
+          scrollMode: scrollFollow,
+          nativeBrowserSmoothScroll: false,
+          scrollSpeed: 0,
+          // Default is html,body — we hide body overflow; scroll the wide score inside #alphatab instead.
+          scrollElement: container,
         },
       })
       var currentTranspose = 0
@@ -151,6 +267,37 @@
         loopBracketEl.style.display = 'block'
       }
 
+      function scrollMasterBarIntoViewBar(barIndex, attempt) {
+        var idx = Math.max(0, Math.floor(barIndex))
+        var att = typeof attempt === 'number' ? attempt : 0
+        var lookup = api.boundsLookup || (api.renderer && api.renderer.boundsLookup)
+        var mb = lookup && typeof lookup.findMasterBarByIndex === 'function' ? lookup.findMasterBarByIndex(idx) : null
+        var vb = mb ? mb.visualBounds || mb.realBounds : null
+        var cw = container.clientWidth || 0
+        if (cw <= 0 && att < 6) {
+          requestAnimationFrame(function () {
+            scrollMasterBarIntoViewBar(barIndex, att + 1)
+          })
+          return
+        }
+        if (!vb || typeof vb.x !== 'number') return
+        var bw = typeof vb.w === 'number' ? vb.w : 0
+        var barLeft = vb.x
+        var barRight = vb.x + bw
+        var sl = container.scrollLeft
+        var viewRight = sl + cw
+        var margin = 32
+        var next = sl
+        if (barLeft < sl + margin) {
+          next = Math.max(0, barLeft - margin)
+        } else if (barRight > viewRight - margin) {
+          var maxScroll = Math.max(0, container.scrollWidth - cw)
+          next = Math.min(maxScroll, barRight - cw + margin)
+        }
+        container.scrollLeft = next
+        layoutLoopBracket()
+      }
+
       container.addEventListener(
         'scroll',
         function () {
@@ -186,9 +333,23 @@
         return null
       }
 
+      /**
+       * External media sync — see https://alphatab.net/docs/guides/audio-video-sync (Custom External Media Player).
+       * Harmoniq: audible stems run in RN (mixer); timeline is pushed via syncTimelineMs (~50–200ms).
+       * Handler matches the doc's IExternalMediaHandler shape; play() is a no-op so we do not double guitar vs stems.
+       */
+      function applyStemPlaybackSpeedToApi() {
+        try {
+          api.playbackSpeed = stemPlaybackRate
+        } catch (e) {
+          /* ignore */
+        }
+      }
+
       function updatePositionFromAudio() {
         if (!externalAudio.src) return
-        var ms = externalAudio.currentTime * 1000
+        var pr = externalAudio.playbackRate || 1
+        var ms = (externalAudio.currentTime / pr) * 1000
         try {
           if (api.player && api.player.output && typeof api.player.output.updatePosition === 'function') {
             api.player.output.updatePosition(ms)
@@ -200,26 +361,65 @@
 
       function wireExternalMediaHandler() {
         var handler = {
-          get playbackRate() { return externalAudio.playbackRate || 1 },
-          set playbackRate(v) { externalAudio.playbackRate = Number.isFinite(v) ? v : 1 },
-          get currentTime() { return externalAudio.currentTime || 0 },
-          set currentTime(v) { externalAudio.currentTime = Math.max(0, Number(v) || 0) },
-          get duration() { return Number.isFinite(externalAudio.duration) ? externalAudio.duration : 0 },
-          play: function () { return externalAudio.play() },
-          pause: function () { externalAudio.pause() },
-          seekTo: function (ms) {
-            externalAudio.currentTime = Math.max(0, Number(ms) / 1000 || 0)
-            updatePositionFromAudio()
+          get backingTrackDuration() {
+            var d = externalAudio.duration
+            return Number.isFinite(d) ? d * 1000 : 0
+          },
+          get playbackRate() {
+            return externalAudio.playbackRate || stemPlaybackRate
+          },
+          set playbackRate(v) {
+            stemPlaybackRate = Number.isFinite(v) ? Math.max(0.5, Math.min(1.25, v)) : 1
+            externalAudio.playbackRate = stemPlaybackRate
+            applyStemPlaybackSpeedToApi()
+          },
+          get masterVolume() {
+            return externalAudio.volume
+          },
+          set masterVolume(v) {
+            externalAudio.volume = Number.isFinite(v) ? v : 1
+          },
+          seekTo: function (timeMs) {
+            var ms = Math.max(0, Number(timeMs))
+            var pr = stemPlaybackRate
+            externalAudio.currentTime = (ms * pr) / 1000
+            try {
+              if (api.player && api.player.output && typeof api.player.output.updatePosition === 'function') {
+                api.player.output.updatePosition(ms)
+              }
+            } catch (e) {
+              postOut({ type: 'error', message: (e && e.message) ? e.message : 'handler seekTo failed' })
+            }
+            postOut({ type: 'scoreSeek', positionMs: ms })
+          },
+          // Host calls api.play()/pause via setStemPlaybackActive; real audio is the stem mixer, not this element.
+          play: function () {
+            return Promise.resolve()
+          },
+          pause: function () {
+            try {
+              externalAudio.pause()
+            } catch (e) {
+              /* ignore */
+            }
           },
         }
         try {
-          // alphaTab versions expose different attachment points; try known candidates.
+          var out = api.player && api.player.output
+          if (out) {
+            try {
+              out.handler = handler
+              return
+            } catch (eAssign) {
+              /* fall through */
+            }
+          }
           if (api.player && typeof api.player.setExternalMediaHandler === 'function') {
             api.player.setExternalMediaHandler(handler)
             return
           }
-          if (api.player && api.player.output && typeof api.player.output.setExternalMediaHandler === 'function') {
-            api.player.output.setExternalMediaHandler(handler)
+          if (out && typeof out.setExternalMediaHandler === 'function') {
+            out.setExternalMediaHandler(handler)
             return
           }
         } catch (e) {
@@ -253,7 +453,8 @@
         }
         if (!evt || typeof evt !== 'object') return
         var now = Date.now()
-        if (now - lastNoteEventAt < 30) return
+        /* 31ms min gap — FEEL_REAL_QA B4; keep in sync with src/constants/alphaTabBridge.ts */
+        if (now - lastNoteEventAt < 31) return
 
         var velocity = typeof evt.velocity === 'number' ? evt.velocity : 1
         if (velocity <= 0) return
@@ -294,6 +495,63 @@
         lastNoteEventAt = now
         postOut(payload)
       }
+
+      /** Score tap — no 31ms throttle (B4 applies to midiEventsPlayed only). Mirrors AlphaTabWeb.web.tsx. */
+      function emitNoteEventFromScoreTap(clientX, clientY) {
+        try {
+          var rect = container.getBoundingClientRect()
+          var x = clientX - rect.left + container.scrollLeft
+          var y = clientY - rect.top + container.scrollTop
+          var lookup = api.boundsLookup || (api.renderer && api.renderer.boundsLookup)
+          if (!lookup || typeof lookup !== 'object') return
+          var names = ['getBeatAtPos', 'getBeatAtPosition', 'findBeatAt', 'getBeat']
+          for (var ni = 0; ni < names.length; ni++) {
+            var fn = lookup[names[ni]]
+            if (typeof fn !== 'function') continue
+            try {
+              var beat = fn.call(lookup, x, y)
+              if (!beat || typeof beat !== 'object') continue
+              var beatIdx =
+                typeof beat.index === 'number'
+                  ? beat.index
+                  : typeof beat.globalBeatIndex === 'number'
+                    ? beat.globalBeatIndex
+                    : 0
+              var notes = beat.notes
+              if (!Array.isArray(notes) || notes.length === 0) continue
+              var n0 = notes[0]
+              if (!n0 || typeof n0 !== 'object') continue
+              var midi = null
+              if (typeof n0.noteValue === 'number') midi = n0.noteValue
+              else if (typeof n0.noteNumber === 'number') midi = n0.noteNumber
+              else if (typeof n0.note === 'number') midi = n0.note
+              if (!Number.isFinite(midi)) continue
+              var payload = {
+                type: 'noteEvent',
+                midi: Math.round(midi),
+                beat: beatIdx,
+                fromScoreTap: true,
+              }
+              if (typeof n0.fret === 'number') payload.fret = n0.fret
+              if (typeof n0.string === 'number') payload.string = n0.string
+              if (typeof n0.fret === 'number' && typeof n0.string === 'number') {
+                payload.hasExplicitTabPosition = true
+              }
+              postOut(payload)
+              return
+            } catch (eTap) {
+              /* try next */
+            }
+          }
+        } catch (e0) {
+          /* ignore */
+        }
+      }
+
+      container.addEventListener('pointerdown', function (ev) {
+        if (ev.button !== 0) return
+        emitNoteEventFromScoreTap(ev.clientX, ev.clientY)
+      })
 
       function applyTheme(colors) {
         if (!colors || typeof colors !== 'object') return
@@ -429,14 +687,33 @@
         }
 
         if (msg.type === 'setPlaybackRate' && typeof msg.playbackRate === 'number') {
-          externalAudio.playbackRate = Number.isFinite(msg.playbackRate) ? Math.max(0.5, Math.min(1.25, msg.playbackRate)) : 1
+          stemPlaybackRate = Number.isFinite(msg.playbackRate) ? Math.max(0.5, Math.min(1.25, msg.playbackRate)) : 1
+          externalAudio.playbackRate = stemPlaybackRate
+          applyStemPlaybackSpeedToApi()
           updatePositionFromAudio()
           return
         }
 
         if (msg.type === 'seekTo' && typeof msg.positionMs === 'number') {
-          externalAudio.currentTime = Math.max(0, msg.positionMs / 1000)
-          updatePositionFromAudio()
+          var seekMs = Math.max(0, msg.positionMs)
+          var prSeek = stemPlaybackRate
+          externalAudio.currentTime = (seekMs * prSeek) / 1000
+          try {
+            if (api.player && api.player.output && typeof api.player.output.updatePosition === 'function') {
+              api.player.output.updatePosition(seekMs)
+            }
+          } catch (e) {
+            postOut({ type: 'error', message: (e && e.message) ? e.message : 'seekTo failed' })
+          }
+          return
+        }
+
+        if (msg.type === 'scrollMasterBarIntoView' && typeof msg.barIndex === 'number') {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              scrollMasterBarIntoViewBar(msg.barIndex, 0)
+            })
+          })
           return
         }
 
@@ -448,6 +725,19 @@
             }
           } catch (e) {
             postOut({ type: 'error', message: (e && e.message) ? e.message : 'syncTimelineMs failed' })
+          }
+          return
+        }
+
+        if (msg.type === 'setStemPlaybackActive' && typeof msg.active === 'boolean') {
+          try {
+            if (msg.active) {
+              if (typeof api.play === 'function') api.play()
+            } else {
+              if (typeof api.pause === 'function') api.pause()
+            }
+          } catch (e) {
+            postOut({ type: 'error', message: (e && e.message) ? e.message : 'setStemPlaybackActive failed' })
           }
           return
         }
@@ -517,6 +807,7 @@
         layoutLoopBracket()
         if (readyPosted) return
         wireExternalMediaHandler()
+        applyStemPlaybackSpeedToApi()
         preloadSoundFont()
         readyPosted = true
         postOut({ type: 'ready' })

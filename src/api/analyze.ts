@@ -1,6 +1,6 @@
 import { API_BASE_URL } from '@/src/config'
-import type { AnalyzeJob, JamResult, LessonJSON, PlayerProfilePayload, ScoreResult } from '@/src/types'
 import type { SkillNodeRow } from '@/src/db/types'
+import type { AnalyzeJob, JamResult, LessonJSON, PlayerProfilePayload, ScoreResult } from '@/src/types'
 
 export class ApiError extends Error {
   constructor(
@@ -191,10 +191,11 @@ const QUICK_FEEDBACK_FALLBACK =
   'A few beats drifted — stay lighter on the pick and let each target note settle before you slide to the next.'
 
 export async function submitQuickFeedback(
-  payload: { accuracy_pattern: Array<'hit' | 'close' | 'miss'> },
+  payload: { accuracy_pattern: Array<'hit' | 'close' | 'miss' | 'vibrato'> },
   options?: { timeoutMs?: number },
 ): Promise<{ message: string }> {
-  const timeoutMs = options?.timeoutMs ?? 3500
+  /** Server uses QUICK_FEEDBACK_TIMEOUT_SECONDS = 5; stay above that so we do not abort first. */
+  const timeoutMs = options?.timeoutMs ?? 5500
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {

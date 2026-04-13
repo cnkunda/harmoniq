@@ -1,13 +1,15 @@
-// replaced by external media sync (PRIORITIES §45)
-// Keep exported symbols as no-op compatibility shims for existing imports.
-
 export const DEFAULT_SMART_SCROLL_DRIFT_SEC = 0.1
 
 export function normalizeBarTimestamps(raw: readonly number[] | undefined | null): number[] {
   return raw ? [...raw] : []
 }
 
-export function barIndexForPlaybackSeconds(_barTimestamps: readonly number[], _playbackSeconds: number): number {
+export function barIndexForPlaybackSeconds(barTimestamps: readonly number[], playbackSeconds: number): number {
+  if (!barTimestamps.length) return 0
+  const t = Number.isFinite(playbackSeconds) ? playbackSeconds : 0
+  for (let i = barTimestamps.length - 1; i >= 0; i -= 1) {
+    if (t >= barTimestamps[i]!) return i
+  }
   return 0
 }
 
@@ -31,10 +33,13 @@ export type SmartScrollDecision = {
   nextSample: SmartScrollSample
 }
 
+/** Used by tests / tooling; session UI polls via `useSessionSmartScroll` instead. */
 export function decideSmartScroll(input: SmartScrollDecisionInput): SmartScrollDecision {
+  const bar = barIndexForPlaybackSeconds(input.barTimestamps, input.playbackSeconds)
+  const shouldScroll = input.barTimestamps.length > 0 && bar !== input.lastEmittedBarIndex
   return {
-    shouldScroll: false,
-    barIndex: input.lastEmittedBarIndex ?? 0,
+    shouldScroll,
+    barIndex: bar,
     nextSample: { wallTimeMs: Date.now(), playbackSeconds: input.playbackSeconds || 0 },
   }
 }

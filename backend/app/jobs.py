@@ -30,6 +30,20 @@ logger.setLevel(logging.INFO)
 jobs: dict[str, JobStatus] = {}
 
 
+def _set_job_processing_progress(job_id: str, progress: float, stage_label: str) -> None:
+    """Update progress for an in-flight job; no-op if missing or not processing."""
+    current = jobs.get(job_id)
+    if current is None or current.status != "processing":
+        return
+    jobs[job_id] = JobStatus(
+        status="processing",
+        result=None,
+        error=None,
+        progress=max(0.0, min(1.0, float(progress))),
+        stage_label=stage_label,
+    )
+
+
 # Used by tests / smoke forcing.
 FORCED_EXCEPTION_INPUT = "force_error"
 
@@ -108,12 +122,14 @@ def _process_analyze_job(
 
         from app.ingest import ingest_youtube_or_upload_to_wav
 
+        _set_job_processing_progress(job_id, 0.12, "Preparing audio…")
         wav_path_obj = ingest_youtube_or_upload_to_wav(
             job_id,
             youtube_url=youtube_url,
             upload_path=upload_path,
         )
         wav_path = str(wav_path_obj)
+        _set_job_processing_progress(job_id, 0.28, "Audio ready")
         cached_lesson = load_cached_lesson_for_wav(wav_path_obj, player_profile=player_profile)
         if cached_lesson is not None:
             reused = reuse_cached_artifacts_into_job(cached_lesson, job_id=job_id)
@@ -123,13 +139,16 @@ def _process_analyze_job(
                 return
 
         job_dir = get_job_dir(job_id)
+        _set_job_processing_progress(job_id, 0.4, "Separating stems…")
         stems = separate_song_to_stems(wav_path_obj, job_dir)
+        _set_job_processing_progress(job_id, 0.62, "Stems ready")
         guitar_rel_path = stems.get("guitar")
         vocals_rel_path = stems.get("vocals")
         if not guitar_rel_path:
             # Separation contract should always return a guitar stem; fall back to stub.
             result = _stub_lesson(job_id, youtube_url, wav_path=wav_path, stems=stems)
         else:
+            _set_job_processing_progress(job_id, 0.78, "Analyzing structure & tabs…")
             backend_root = get_data_dir().parent
             guitar_stem_path = backend_root / guitar_rel_path
             vocals_stem_path = backend_root / vocals_rel_path if vocals_rel_path else None
@@ -184,7 +203,13 @@ def enqueue_analyze_job(
     player_profile: PlayerProfile | None = None,
 ) -> None:
     """Mark job as processing and start the worker thread."""
-    jobs[job_id] = JobStatus(status="processing", result=None, error=None)
+    jobs[job_id] = JobStatus(
+        status="processing",
+        result=None,
+        error=None,
+        progress=0.05,
+        stage_label="Queued…",
+    )
     logger.info(
         "enqueue job_id=%s status=processing youtube_url=%r upload_path=%r has_profile=%s",
         job_id,

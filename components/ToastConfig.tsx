@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Text, View } from 'react-native'
 import Toast, { type BaseToastProps } from 'react-native-toast-message'
-import { AlertTriangle, Check } from 'lucide-react-native'
+import { AlertTriangle, Check, Info } from 'lucide-react-native'
 
 import colors from '@/src/constants/colors'
 
@@ -24,6 +24,9 @@ export const toastConfig = {
   error: (props: BaseToastProps) => (
     <WoodToast {...props} icon={<AlertTriangle color={colors.danger} size={18} />} />
   ),
+  info: (props: BaseToastProps) => (
+    <WoodToast {...props} icon={<Info color={colors.amber.accent} size={18} />} />
+  ),
 }
 
 export const toast = {
@@ -39,6 +42,13 @@ export const toast = {
       type: 'error',
       text1: text,
       visibilityTime: 3500,
+      position: 'bottom',
+    }),
+  info: (text: string) =>
+    Toast.show({
+      type: 'info',
+      text1: text,
+      visibilityTime: 2200,
       position: 'bottom',
     }),
 }

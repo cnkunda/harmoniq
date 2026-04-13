@@ -223,9 +223,16 @@ class WebAudioStemMixer implements StemMixer {
     if (!this.ctx || this.stems.size === 0) {
       return this.pausedAt
     }
+    return this.getSongPositionAtContextTime(this.ctx.currentTime)
+  }
+
+  getSongPositionAtContextTime(contextTime: number): number {
+    if (!this.ctx || this.stems.size === 0) {
+      return this.pausedAt
+    }
     const d = this.durationSec || 1
     if (this.playing) {
-      const elapsed = (this.ctx.currentTime - this.playStartCtxTime) * this.playbackRate
+      const elapsed = (contextTime - this.playStartCtxTime) * this.playbackRate
       return (this.pausedAt + elapsed) % d
     }
     return this.pausedAt

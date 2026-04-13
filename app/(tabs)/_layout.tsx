@@ -1,5 +1,13 @@
 import { Tabs } from 'expo-router'
-import { FlaskConical, Home, Palette } from 'lucide-react-native'
+import {
+  BarChart3,
+  FlaskConical,
+  Home,
+  Library,
+  Music,
+  Palette,
+  Settings,
+} from 'lucide-react-native'
 
 import colors from '@/src/constants/colors'
 
@@ -28,6 +36,34 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, size }) => <Home color={color} size={size} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="library"
+        options={{
+          title: 'Library',
+          tabBarIcon: ({ color, size }) => <Library color={color} size={size} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="progress"
+        options={{
+          title: 'Progress',
+          tabBarIcon: ({ color, size }) => <BarChart3 color={color} size={size} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="jam"
+        options={{
+          title: 'Jam Mode',
+          tabBarIcon: ({ color, size }) => <Music color={color} size={size} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color, size }) => <Settings color={color} size={size} strokeWidth={2} />,
         }}
       />
       <Tabs.Screen

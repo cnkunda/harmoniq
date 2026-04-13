@@ -10,7 +10,10 @@ export type { TabViewportProps } from './TabViewport.types'
 
 /** Web: DOM AlphaTab — no `react-native-webview` in this bundle graph (PRIORITIES §22). */
 export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
-  function TabViewport({ gp5Base64, audioSrc, transposeSemitones, style, onReady, onError, onNoteEvent }, ref) {
+  function TabViewport(
+    { gp5Base64, audioSrc, transposeSemitones, style, onReady, onError, onNoteEvent, onScoreSeekMs },
+    ref,
+  ) {
     return (
       <AlphaTabWeb
         ref={ref}
@@ -22,6 +25,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
         onReady={onReady}
         onError={onError}
         onNoteEvent={onNoteEvent}
+        onScoreSeekMs={onScoreSeekMs}
       />
     )
   },
