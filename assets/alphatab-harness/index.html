@@ -147,7 +147,9 @@
       externalAudio.crossOrigin = 'anonymous'
       /** Mirrors RN stem mixer rate — AlphaTab `playbackSpeed` must match for follow-scroll at slow speeds. */
       var stemPlaybackRate = 1
-      var SOUNDFONT_URL = 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.6.1/dist/soundfont/sonivox.sf2'
+      /** GeneralUser — pinned jsDelivr; same upstream as `assets/soundfonts/guitar.sf2` (SOURCES.md, Commit 47). */
+      var SOUNDFONT_URL =
+        'https://cdn.jsdelivr.net/gh/ad-si/GeneralUser@f553a9866915130d5fffaa01e457ad53c60bef82/GeneralUser.sf2'
 
       var layoutHorizontal =
         alphaTab.LayoutMode && alphaTab.LayoutMode.Horizontal !== undefined
@@ -703,15 +705,57 @@
         harmoniqTriggerRender()
       }
 
+      function decodeBase64Strict(raw) {
+        var normalized = String(raw || '')
+          .replace(/\s/g, '')
+          .replace(/-/g, '+')
+          .replace(/_/g, '/')
+        if (!normalized) return new Uint8Array(0)
+        if (/[^A-Za-z0-9+/=]/.test(normalized)) throw new Error('setScore: invalid base64 character')
+
+        var firstEq = normalized.indexOf('=')
+        if (firstEq >= 0) {
+          if (firstEq < normalized.length - 2) throw new Error('setScore: "=" must be at end')
+          if (!/^=+$/.test(normalized.slice(firstEq))) throw new Error('setScore: malformed "=" padding')
+        }
+
+        var rem = normalized.length % 4
+        if (rem === 1) throw new Error('setScore: invalid base64 length')
+        if (firstEq >= 0 && rem !== 0) throw new Error('setScore: padded base64 has invalid length')
+
+        var padded = normalized
+        if (rem === 2) padded += '=='
+        else if (rem === 3) padded += '='
+
+        var bin = atob(padded)
+        var out = new Uint8Array(bin.length)
+        for (var i = 0; i < bin.length; i += 1) {
+          out[i] = bin.charCodeAt(i)
+        }
+        return out
+      }
+
+      function assertLikelyGpPayload(bytes) {
+        if (!bytes || bytes.length < 24) throw new Error('setScore: GP payload too small')
+        var preview = ''
+        var n = Math.min(bytes.length, 96)
+        for (var i = 0; i < n; i += 1) {
+          var b = bytes[i]
+          preview += b >= 32 && b <= 126 ? String.fromCharCode(b) : ' '
+        }
+        if (preview.indexOf('FICHIER GUITAR PRO') === -1) {
+          throw new Error('setScore: GP payload header mismatch')
+        }
+      }
+
       function onInboundMessage(event) {
         var msg = parseInbound(event.data)
         if (!msg || !msg.type) return
 
         if (msg.type === 'setScore' && msg.gp5Base64) {
           try {
-            var bytes = Uint8Array.from(atob(msg.gp5Base64), function (c) {
-              return c.charCodeAt(0)
-            })
+            var bytes = decodeBase64Strict(msg.gp5Base64)
+            assertLikelyGpPayload(bytes)
             api.load(bytes.buffer)
             applyTranspose(currentTranspose)
           } catch (e) {

@@ -24,6 +24,7 @@ import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useAppStore } from '@/src/stores/useAppStore'
 import { usePlayCapture } from '@/src/session/usePlayCapture'
+import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import { hitInnerThresholdCents } from '@/src/session/noteAccuracyBeats'
 import type { NoteEventMessage } from '@/types/tabMessage'
@@ -71,6 +72,7 @@ export default function PlayScreen() {
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
+  const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner({ disableWhen: recording })
 
   const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
 
@@ -84,6 +86,16 @@ export default function PlayScreen() {
       // status is managed inside the hook; surface permission UX here
       if (message !== 'MIC_PERMISSION_DENIED') {
         setMicError(null)
+      }
+    })
+  }
+
+  const toggleFretboardTuner = () => {
+    if (recording) return
+    void toggleTuner().catch((e) => {
+      const message = e instanceof Error ? e.message : String(e)
+      if (message === 'MIC_PERMISSION_DENIED') {
+        setMicError(mapMicPermissionDenied(Platform.OS))
       }
     })
   }
@@ -135,6 +147,14 @@ export default function PlayScreen() {
           selectedNote={selectedNote}
           pulseKey={fretPulseKey}
           lastCellResult={lastFretResult}
+          enableKeyboardInput
+          showTuneControl
+          tuneActive={tunerState.active}
+          tuneDisabled={recording}
+          tuneCalibrating={tunerState.calibrating}
+          onToggleTune={toggleFretboardTuner}
+          onCalibrateTune={startCalibration}
+          tunerState={tunerState}
           onSelectNote={(note) => {
             setSelectedNote(note)
             setFretPulseKey((k) => k + 1)

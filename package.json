@@ -9,7 +9,17 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:ui": "playwright test --config=playwright.config.ts --grep-invert @visual",
+    "test:visual": "playwright test --config=playwright.config.ts --grep @visual",
+    "test:visual:update": "playwright test --config=playwright.config.ts --grep @visual --update-snapshots",
+    "detox:build:android": "detox build --configuration android.emu.debug",
+    "detox:build:ios": "detox build --configuration ios.sim.debug",
+    "test:mobile": "detox test --configuration android.emu.debug --take-screenshots all",
+    "test:mobile:android": "detox test --configuration android.emu.debug --take-screenshots all",
+    "test:mobile:ios": "detox test --configuration ios.sim.debug --take-screenshots all",
+    "audit:inventory": "node scripts/audit/generate-inventory.mjs",
+    "audit:platform": "node scripts/audit/generate-platform-audit.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
@@ -53,7 +63,11 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/react": "~19.1.0",
+    "detox": "^20.50.1",
+    "jest": "^30.3.0",
+    "jest-circus": "^30.3.0",
     "react-test-renderer": "19.1.0",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.9.2",

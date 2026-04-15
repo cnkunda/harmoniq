@@ -49,12 +49,40 @@ export interface ScoreResult {
     user_wav_base64: string
     reference_wav_base64: string
   }
+  diagnostics?: {
+    signal_quality: number
+    voiced_ratio: number
+    harmonic_ratio: number
+    timing_residual_p50_ms: number
+    timing_residual_p95_ms: number
+    reliability_flags: string[]
+  }
+  reliability?: {
+    score_contract_version: string
+    confidence: 'low' | 'medium' | 'high'
+    signal_quality: number
+    reliability_flags: string[]
+  }
 }
 
 /** POST /jam-score response */
 export interface JamResult {
   coach_summary: string
+  /** Legacy alias during migration. */
   scale_position_map: Record<string, number>
+  pitch_class_weight_map: Record<string, number>
+  position_weight_map: Record<string, number>
+  inferred_scale_label?: string | null
+  inference_confidence?: 'low' | 'medium' | 'high' | null
+  focus_pitch_class_key?: string | null
+  focus_pitch_class_weight?: number | null
+  reliability_tags?: string[]
+  reliability?: {
+    score_contract_version: string
+    confidence: 'low' | 'medium' | 'high'
+    signal_quality: number
+    reliability_flags: string[]
+  }
 }
 
 export interface Annotation {

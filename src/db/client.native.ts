@@ -8,8 +8,11 @@ import {
     MIGRATION_V3_APP_PREFS,
     MIGRATION_V4_SESSIONS_REVIEW,
     MIGRATION_V5_LICKS_STEMS_JSON,
+    MIGRATION_V6_JAM_SNAPSHOT_CONTEXT,
+    MIGRATION_V7_JAM_SNAPSHOT_RELIABILITY,
     PREF_ONBOARDING_COMPLETE,
 } from '@/src/db/schema'
+import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
 import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
 import type {
   HomeSuggestion,
@@ -61,6 +64,16 @@ function parseJsonNumberRecord(raw: string | null | undefined): Record<string, n
   } catch {
     return {}
   }
+}
+
+function parseInferenceConfidence(raw: string | null | undefined): 'low' | 'medium' | 'high' | null {
+  if (raw === 'low' || raw === 'medium' || raw === 'high') return raw
+  return null
+}
+
+function parseProgressConfidence(raw: string | null | undefined): 'low' | 'medium' | 'high' | null {
+  if (raw === 'low' || raw === 'medium' || raw === 'high') return raw
+  return null
 }
 
 async function applyMigrations(): Promise<void> {
@@ -125,6 +138,40 @@ async function applyMigrations(): Promise<void> {
     await db.runAsync(
       'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
       5,
+      new Date().toISOString(),
+    )
+  }
+  if (current < 6) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(jam_snapshots)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    for (const stmt of MIGRATION_V6_JAM_SNAPSHOT_CONTEXT) {
+      const col = stmt.split(' ADD COLUMN ')[1]?.split(' ')[0]
+      if (!col) continue
+      if (!names.has(col)) {
+        await db.execAsync(stmt)
+        names.add(col)
+      }
+    }
+    await db.runAsync(
+      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+      6,
+      new Date().toISOString(),
+    )
+  }
+  if (current < 7) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(jam_snapshots)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    for (const stmt of MIGRATION_V7_JAM_SNAPSHOT_RELIABILITY) {
+      const col = stmt.split(' ADD COLUMN ')[1]?.split(' ')[0]
+      if (!col) continue
+      if (!names.has(col)) {
+        await db.execAsync(stmt)
+        names.add(col)
+      }
+    }
+    await db.runAsync(
+      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+      7,
       new Date().toISOString(),
     )
   }
@@ -352,8 +399,13 @@ export async function getHomeSuggestion(): Promise<HomeSuggestion> {
   await initDb()
   const song = await getLatestSessionWithSong()
   if (!song) {
-    const lib = tryLibraryHomeSuggestion(await getLicks())
-    return lib ?? { kind: 'cold_start' }
+    const licks = await getLicks()
+    const lib = tryLibraryHomeSuggestion(licks)
+    if (lib) return lib
+    const { useLessonStore } = await import('@/src/stores/lessonStore')
+    const active = tryHomeSuggestionFromLesson(useLessonStore.getState().lesson)
+    if (active) return active
+    return { kind: 'cold_start' }
   }
   const db = await getDb()
   const node = await db.getFirstAsync<SkillNodeRow>(
@@ -362,8 +414,13 @@ export async function getHomeSuggestion(): Promise<HomeSuggestion> {
      LIMIT 1`,
   )
   if (!node) {
-    const lib = tryLibraryHomeSuggestion(await getLicks())
-    return lib ?? { kind: 'cold_start' }
+    const licks = await getLicks()
+    const lib = tryLibraryHomeSuggestion(licks)
+    if (lib) return lib
+    const { useLessonStore } = await import('@/src/stores/lessonStore')
+    const active = tryHomeSuggestionFromLesson(useLessonStore.getState().lesson)
+    if (active) return active
+    return { kind: 'cold_start' }
   }
   return { kind: 'ready', node, song }
 }
@@ -385,6 +442,8 @@ export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Pr
     if (!row) continue
     const sessionScore = input.node_scores[id]
     if (typeof sessionScore !== 'number' || !Number.isFinite(sessionScore)) continue
+    const confidence = input.node_confidence_map?.[id]
+    const reliability = input.node_reliability_map?.[id]
     const u = deriveSkillNodeAfterSession(
       {
         score: row.score ?? 0,
@@ -394,6 +453,13 @@ export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Pr
         sessions_count: row.sessions_count ?? 0,
       },
       sessionScore,
+      {
+        accuracyScore01: sessionScore,
+        timingStability01: sessionScore,
+        reliabilityScore01: typeof reliability === 'number' ? reliability : undefined,
+        confidence: confidence === 'low' || confidence === 'medium' || confidence === 'high' ? confidence : undefined,
+        reliabilityFlags: input.reliability_flags ?? [],
+      },
     )
     await db.runAsync(
       `UPDATE skill_nodes SET score = ?, easiness_factor = ?, interval_days = ?, sm2_repetitions = ?,
@@ -413,14 +479,30 @@ export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Pr
 export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promise<void> {
   await initDb()
   const db = await getDb()
+  const pitchMap = input.pitch_class_weight_map ?? input.scale_position_map ?? {}
+  const positionMap = input.position_weight_map ?? {}
   await db.runAsync(
     `INSERT OR REPLACE INTO jam_snapshots
-     (id, date, duration_seconds, scale_position_map, recurring_gestures, coach_summary)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+     (id, date, duration_seconds, scale_position_map, pitch_class_weight_map, position_weight_map,
+      inferred_scale_label, inference_confidence, track_id, track_label, track_key, track_bpm,
+      reliability_tags, reliability_confidence, reliability_signal_quality,
+      recurring_gestures, coach_summary)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.id,
     input.date,
     input.duration_seconds,
-    JSON.stringify(input.scale_position_map ?? {}),
+    JSON.stringify(pitchMap),
+    JSON.stringify(pitchMap),
+    JSON.stringify(positionMap),
+    input.inferred_scale_label ?? null,
+    input.inference_confidence ?? null,
+    input.track_id ?? null,
+    input.track_label ?? null,
+    input.track_key ?? null,
+    input.track_bpm ?? null,
+    JSON.stringify(input.reliability_tags ?? []),
+    input.reliability_confidence ?? null,
+    input.reliability_signal_quality ?? null,
     JSON.stringify(input.recurring_gestures ?? []),
     input.coach_summary,
   )
@@ -434,6 +516,17 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
     date: string
     duration_seconds: number
     scale_position_map: string | null
+    pitch_class_weight_map: string | null
+    position_weight_map: string | null
+    inferred_scale_label: string | null
+    inference_confidence: string | null
+    track_id: string | null
+    track_label: string | null
+    track_key: string | null
+    track_bpm: number | null
+    reliability_tags: string | null
+    reliability_confidence: string | null
+    reliability_signal_quality: number | null
     recurring_gestures: string | null
     coach_summary: string | null
   }>('SELECT * FROM jam_snapshots ORDER BY date DESC')
@@ -441,7 +534,21 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
     id: r.id,
     date: r.date,
     duration_seconds: r.duration_seconds,
-    scale_position_map: parseJsonNumberRecord(r.scale_position_map),
+    scale_position_map: parseJsonNumberRecord(r.pitch_class_weight_map ?? r.scale_position_map),
+    pitch_class_weight_map: parseJsonNumberRecord(r.pitch_class_weight_map ?? r.scale_position_map),
+    position_weight_map: parseJsonNumberRecord(r.position_weight_map),
+    inferred_scale_label: r.inferred_scale_label ?? null,
+    inference_confidence: parseInferenceConfidence(r.inference_confidence),
+    track_id: r.track_id ?? null,
+    track_label: r.track_label ?? null,
+    track_key: r.track_key ?? null,
+    track_bpm: typeof r.track_bpm === 'number' ? r.track_bpm : null,
+    reliability_tags: parseJsonArray<string>(r.reliability_tags),
+    reliability_confidence: parseProgressConfidence(r.reliability_confidence),
+    reliability_signal_quality:
+      typeof r.reliability_signal_quality === 'number' && Number.isFinite(r.reliability_signal_quality)
+        ? r.reliability_signal_quality
+        : null,
     recurring_gestures: parseJsonArray<string>(r.recurring_gestures),
     coach_summary: r.coach_summary ?? '',
   }))

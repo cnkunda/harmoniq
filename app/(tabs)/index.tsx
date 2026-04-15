@@ -193,6 +193,41 @@ export default function HomeScreen() {
                 ) : (
                   <Text className="font-sans text-sm text-cream">Loading suggestion…</Text>
                 )
+              ) : suggestion.kind === 'active_lesson' ? (
+                <>
+                  <View className="mb-6 flex-row items-start justify-between">
+                    <View className="flex-1 pr-3">
+                      <Text className="mb-1 font-serif text-2xl text-cream">{suggestion.song.song_title}</Text>
+                      {suggestion.song.artist ? (
+                        <Text className="font-sans text-sm text-amber-light/80">{suggestion.song.artist}</Text>
+                      ) : null}
+                      {suggestion.song.section_label ? (
+                        <Text className="mt-1 font-sans text-xs text-muted-brown">
+                          Section: {suggestion.song.section_label}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {durationBadge}
+                  </View>
+                  <View className="mb-6 rounded-xl border border-wood-700 bg-wood-800/60 p-4 shadow-inner-wood">
+                    <Text className="font-sans text-sm italic leading-relaxed text-cream/90">
+                      &ldquo;This song is ready in your workspace — start with Listen, then Study and Play when you&apos;re
+                      warmed up.&rdquo;
+                    </Text>
+                  </View>
+                  <Text className="mb-4 font-sans text-xs leading-5 text-muted-brown">
+                    Full loop: Listen → Study → Slow → Play → Review (with stems). Use Library tab for saved licks only.
+                  </Text>
+                  <Pressable
+                    onPress={goSession}
+                    className="flex-row items-center justify-center gap-2 self-stretch rounded-xl bg-amber-accent px-8 py-3.5 shadow-md sm:self-start"
+                    accessibilityRole="button"
+                    accessibilityLabel="Start session at Listen"
+                  >
+                    <Play color="#2C1810" size={20} fill="#2C1810" strokeWidth={0} />
+                    <Text className="font-sans-medium text-base text-wood-900">Start session</Text>
+                  </Pressable>
+                </>
               ) : suggestion.kind === 'cold_start' ? (
                 <>
                   <View className="mb-6">

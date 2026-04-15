@@ -163,6 +163,11 @@ export default function ReviewScreen() {
       await applyReviewSkillUpdates({
         node_scores: result.node_scores,
         targeted_node_ids: targeted,
+        node_confidence_map: Object.fromEntries(targeted.map((id) => [id, result.reliability?.confidence ?? 'medium'])),
+        node_reliability_map: Object.fromEntries(
+          targeted.map((id) => [id, result.reliability?.signal_quality ?? result.diagnostics?.signal_quality ?? 0.7]),
+        ),
+        reliability_flags: result.reliability?.reliability_flags ?? result.diagnostics?.reliability_flags ?? [],
       })
       await useSkillStore.getState().loadFromDb()
       if (__DEV__) {

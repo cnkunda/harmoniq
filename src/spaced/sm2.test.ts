@@ -73,8 +73,36 @@ describe('deriveSkillNodeAfterSession', () => {
       1.0,
     )
     expect(u.sessions_count).toBe(3)
-    expect(u.score).toBeCloseTo(0.6, 5)
+    expect(u.score).toBeCloseTo(0.572, 5)
     expect(u.last_session_date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(u.next_review_date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(['low', 'medium', 'high']).toContain(u.progress_confidence)
+    expect(typeof u.progress_note).toBe('string')
+  })
+
+  it('applies reliability-aware damping for low-confidence runs', () => {
+    const hi = deriveSkillNodeAfterSession(
+      {
+        score: 0.5,
+        easiness_factor: 2.5,
+        interval_days: 1,
+        sm2_repetitions: 0,
+        sessions_count: 0,
+      },
+      0.95,
+      { confidence: 'high', reliabilityScore01: 0.95 },
+    )
+    const lo = deriveSkillNodeAfterSession(
+      {
+        score: 0.5,
+        easiness_factor: 2.5,
+        interval_days: 1,
+        sm2_repetitions: 0,
+        sessions_count: 0,
+      },
+      0.95,
+      { confidence: 'low', reliabilityScore01: 0.2 },
+    )
+    expect(hi.score).toBeGreaterThan(lo.score)
   })
 })

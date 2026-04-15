@@ -45,10 +45,20 @@ export function formatJournalPlainText(input: {
   else {
     for (const j of input.jams) {
       lines.push(`- ${j.date} · ${j.duration_seconds}s`)
+      const trackBits = [j.track_label, j.track_key, j.track_bpm != null ? `${j.track_bpm} BPM` : null].filter(Boolean)
+      if (trackBits.length > 0) lines.push(`  track: ${trackBits.join(' · ')}`)
+      if (j.inferred_scale_label) {
+        const conf = j.inference_confidence ? ` (${j.inference_confidence})` : ''
+        lines.push(`  inferred scale: ${j.inferred_scale_label}${conf}`)
+      }
       lines.push(`  ${j.coach_summary.replace(/\s+/g, ' ').trim()}`)
-      const keys = Object.keys(j.scale_position_map)
+      const keys = Object.keys(j.pitch_class_weight_map)
       if (keys.length > 0) {
-        lines.push(`  map: ${keys.slice(0, 8).join(', ')}${keys.length > 8 ? '…' : ''}`)
+        lines.push(`  pitch map: ${keys.slice(0, 8).join(', ')}${keys.length > 8 ? '…' : ''}`)
+      }
+      const posKeys = Object.keys(j.position_weight_map)
+      if (posKeys.length > 0) {
+        lines.push(`  position map: ${posKeys.slice(0, 8).join(', ')}${posKeys.length > 8 ? '…' : ''}`)
       }
     }
   }

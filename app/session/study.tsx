@@ -10,16 +10,23 @@ import { LyricsStrip } from '@/components/LyricsStrip'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { toast } from '@/components/ToastConfig'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { getAppPref } from '@/src/db/client'
 import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
 import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
-import { capoSuggestion } from '@/src/music/capoSuggestion'
+import { capoSuggestion, parseKey } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
+import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
+import {
+  buildFretboardShareUrl,
+  readFretboardShareStateFromLocation,
+  type FretboardOverlayMode,
+} from '@/src/utils/fretboardShareState'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { NoteEventMessage } from '@/types/tabMessage'
 
@@ -69,6 +76,7 @@ export default function StudyScreen() {
     ? ((section as Record<string, unknown>).primary_position as string)
     : 'Tap a note to infer position'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
+  const degreeRootPitchClass = useMemo(() => parseKey(keyLabel)?.semitone ?? null, [keyLabel])
   const currentBar = useMemo(
     () => barIndexForPlaybackSeconds(lesson?.bar_timestamps ?? [], tick.positionSec),
     [lesson?.bar_timestamps, tick.positionSec],
@@ -83,8 +91,10 @@ export default function StudyScreen() {
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
+  const [overlayMode, setOverlayMode] = useState<FretboardOverlayMode>('off')
   const [preferSimplerTabs, setPreferSimplerTabs] = useState(false)
   const [lowConfBannerDismissed, setLowConfBannerDismissed] = useState(false)
+  const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
 
   const onTabNoteEvent = useCallback((evt: NoteEventMessage) => {
     setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
@@ -111,6 +121,22 @@ export default function StudyScreen() {
   useEffect(() => {
     setLowConfBannerDismissed(false)
   }, [lesson?.job_id, lessonSectionIndex])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const shared = readFretboardShareStateFromLocation()
+    if (!shared) return
+    setOverlayMode(shared.overlay)
+    if (shared.selected) {
+      const note = {
+        string: shared.selected.string,
+        fret: shared.selected.fret,
+        midi: Number.NaN,
+      }
+      setSelectedNote(note)
+      setFretPulseKey((k) => k + 1)
+    }
+  }, [])
 
   useEffect(() => {
     const conf = lesson?.transcription_confidence
@@ -156,6 +182,40 @@ export default function StudyScreen() {
     )
   }
 
+  const copyShareLink = () => {
+    if (typeof window === 'undefined') {
+      toast.error('Share links are available on web.')
+      return
+    }
+    const url = buildFretboardShareUrl({
+      version: 1,
+      overlay: overlayMode,
+      selected:
+        selectedNote?.string != null && selectedNote?.fret != null
+          ? { string: Math.round(selectedNote.string), fret: Math.max(0, Math.round(selectedNote.fret)) }
+          : null,
+      scalePitchClasses: null,
+      rootPitchClass: degreeRootPitchClass,
+    })
+    if (!url) {
+      toast.error('Could not build share link.')
+      return
+    }
+    const writer = globalThis.navigator?.clipboard?.writeText?.bind(globalThis.navigator.clipboard)
+    if (!writer) {
+      toast.error('Clipboard not available in this browser.')
+      return
+    }
+    void writer(url).then(() => toast.success('Study fretboard link copied.'), () => toast.error('Clipboard access blocked.'))
+  }
+
+  const toggleFretboardTuner = useCallback(() => {
+    void toggleTuner().catch((e) => {
+      const message = e instanceof Error ? e.message : String(e)
+      toast.error(message === 'MIC_PERMISSION_DENIED' ? 'Microphone permission is required for tuning.' : message)
+    })
+  }, [toggleTuner])
+
   return (
     <SessionStepScreen
       title="Study"
@@ -193,6 +253,19 @@ export default function StudyScreen() {
               capoText={capoText}
               selectedNote={selectedNote}
               pulseKey={fretPulseKey}
+              overlayMode={overlayMode}
+              showOverlayControls
+              onOverlayModeChange={setOverlayMode}
+              showCopyShare
+              onCopyShareLink={copyShareLink}
+              degreeRootPitchClass={degreeRootPitchClass}
+              enableKeyboardInput
+              showTuneControl
+              tuneActive={tunerState.active}
+              tuneCalibrating={tunerState.calibrating}
+              onToggleTune={toggleFretboardTuner}
+              onCalibrateTune={startCalibration}
+              tunerState={tunerState}
               onSelectNote={(note) => {
                 setSelectedNote(note)
                 setFretPulseKey((k) => k + 1)

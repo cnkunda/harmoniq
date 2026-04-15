@@ -88,6 +88,16 @@ export type SkillNodeSessionUpdate = {
   next_review_date: string
   sessions_count: number
   last_session_date: string
+  progress_confidence: 'low' | 'medium' | 'high'
+  progress_note: string
+}
+
+export type ProgressSignals = {
+  accuracyScore01?: number
+  timingStability01?: number
+  reliabilityScore01?: number
+  confidence?: 'low' | 'medium' | 'high'
+  reliabilityFlags?: string[]
 }
 
 export function deriveSkillNodeAfterSession(
@@ -99,9 +109,16 @@ export function deriveSkillNodeAfterSession(
     sessions_count: number
   },
   sessionScore01: number,
+  signals?: ProgressSignals,
 ): SkillNodeSessionUpdate {
-  const newScore = weightedSkillScore(current.score, sessionScore01)
-  const q = sessionScoreToQuality(sessionScore01)
+  const reliabilityScore = Math.max(0, Math.min(1, signals?.reliabilityScore01 ?? 0.75))
+  const timingScore = Math.max(0, Math.min(1, signals?.timingStability01 ?? sessionScore01))
+  const accuracyScore = Math.max(0, Math.min(1, signals?.accuracyScore01 ?? sessionScore01))
+  const confidence = signals?.confidence ?? (reliabilityScore >= 0.8 ? 'high' : reliabilityScore >= 0.58 ? 'medium' : 'low')
+  const reliabilityPenalty = confidence === 'low' ? 0.65 : confidence === 'medium' ? 0.86 : 1
+  const composite = Math.max(0, Math.min(1, (accuracyScore * 0.5 + timingScore * 0.25 + sessionScore01 * 0.25) * reliabilityPenalty))
+  const newScore = weightedSkillScore(current.score, composite)
+  const q = sessionScoreToQuality(composite)
   const sm2 = sm2Step(
     {
       easinessFactor: current.easiness_factor,
@@ -119,5 +136,12 @@ export function deriveSkillNodeAfterSession(
     next_review_date: nextReviewDateIso(sm2.intervalDays, today),
     sessions_count: current.sessions_count + 1,
     last_session_date: today,
+    progress_confidence: confidence,
+    progress_note:
+      confidence === 'low'
+        ? 'Muted update due to low capture confidence.'
+        : confidence === 'medium'
+          ? 'Applied confidence-weighted update.'
+          : 'Applied full-confidence update.',
   }
 }

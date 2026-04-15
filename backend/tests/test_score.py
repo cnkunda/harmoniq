@@ -6,10 +6,14 @@ import time
 import wave
 
 import numpy as np
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.schemas import ScoreRequest
+
+pytest.importorskip("librosa")
+
 from app.score import score_recording
 
 client = TestClient(app)
@@ -86,6 +90,9 @@ def test_score_response_shape_is_render_safe() -> None:
     assert isinstance(res.note_duration_deltas, list)
     assert isinstance(res.node_scores, dict)
     assert isinstance(res.waveform_comparison.user_wav_base64, str)
+    assert res.reliability.score_contract_version == "v2"
+    assert 0.0 <= res.reliability.signal_quality <= 1.0
+    assert isinstance(res.diagnostics.reliability_flags, list)
 
 
 def test_score_http_contract_and_latency_under_ten_seconds() -> None:
@@ -113,4 +120,18 @@ def test_score_http_contract_and_latency_under_ten_seconds() -> None:
     assert "rushing_score" in body
     assert "node_scores" in body and isinstance(body["node_scores"], dict)
     assert "waveform_comparison" in body and "user_wav_base64" in body["waveform_comparison"]
+    assert "reliability" in body and body["reliability"]["score_contract_version"] == "v2"
     assert elapsed < 10.0
+
+
+def test_score_low_signal_sets_reliability_flags() -> None:
+    sr = 22050
+    quiet = np.full(int(sr * 2.0), 1e-6, dtype=np.float32)
+    req = ScoreRequest(
+        recording_wav_base64=_wav_b64_from_signal(quiet, sr),
+        recording_mime_type="audio/wav",
+        section={"tempo": 80.0, "key": "A minor"},
+        skill_nodes=["pitch_accuracy"],
+    )
+    res = score_recording(req)
+    assert "signal_low" in res.reliability.reliability_flags or "signal_near_silence" in res.reliability.reliability_flags

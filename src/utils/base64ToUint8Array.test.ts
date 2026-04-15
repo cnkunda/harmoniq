@@ -21,4 +21,11 @@ describe('base64ToUint8Array', () => {
     expect(Buffer.from(base64ToUint8Array('Zm8=')).toString('utf8')).toBe('fo')
     expect(Buffer.from(base64ToUint8Array('Zm9v')).toString('utf8')).toBe('foo')
   })
+
+  it('rejects malformed padding that could produce negative output length', () => {
+    expect(() => base64ToUint8Array('=')).toThrow(/base64/i)
+    expect(() => base64ToUint8Array('====')).toThrow(/base64/i)
+    expect(() => base64ToUint8Array('AA=A')).toThrow(/base64/i)
+    expect(() => base64ToUint8Array('A')).toThrow(/mod 4/i)
+  })
 })

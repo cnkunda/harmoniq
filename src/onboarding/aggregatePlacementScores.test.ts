@@ -44,5 +44,7 @@ describe('aggregatePlacementCoachMetrics', () => {
     expect(m.phrasing_avg).toBe(0.5)
     expect(m.timing_avg).toBe(0.5)
     expect(m.bend_error_cents_avg).toBe(20)
+    expect(['low', 'medium', 'high']).toContain(m.placement_confidence)
+    expect(Array.isArray(m.reliability_flags)).toBe(true)
   })
 })

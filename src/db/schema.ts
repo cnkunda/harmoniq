@@ -94,6 +94,25 @@ export const TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX = 0.72
 /** v5: Library licks — full stem map JSON (guitar, bass, drums, …). */
 export const MIGRATION_V5_LICKS_STEMS_JSON = 'ALTER TABLE licks ADD COLUMN stems_json TEXT'
 
+/** v6: jam snapshots — canonical pitch/position maps + track/inference context. */
+export const MIGRATION_V6_JAM_SNAPSHOT_CONTEXT = [
+  'ALTER TABLE jam_snapshots ADD COLUMN pitch_class_weight_map TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN position_weight_map TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN inferred_scale_label TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN inference_confidence TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN track_id TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN track_label TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN track_key TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN track_bpm INTEGER',
+] as const
+
+/** v7: jam snapshots — reliability tags + confidence envelope fields. */
+export const MIGRATION_V7_JAM_SNAPSHOT_RELIABILITY = [
+  'ALTER TABLE jam_snapshots ADD COLUMN reliability_tags TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN reliability_confidence TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN reliability_signal_quality REAL',
+] as const
+
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },
   { id: 'phrasing', label: 'Phrasing' },

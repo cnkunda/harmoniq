@@ -13,6 +13,7 @@ import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { deriveSlowLoopRegion } from '@/src/session/slowLoopRegion'
+import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
@@ -43,6 +44,7 @@ export default function SlowScreen() {
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
+  const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
 
   useEffect(() => {
     if (!derived) {
@@ -79,6 +81,10 @@ export default function SlowScreen() {
   const loopHighlight: TabLoopBarRegion | null =
     loopBars && barTimestamps.length > 0 ? loopBars : null
 
+  const toggleFretboardTuner = () => {
+    void toggleTuner().catch(() => {})
+  }
+
   return (
     <SessionStepScreen
       title="Slow"
@@ -114,6 +120,13 @@ export default function SlowScreen() {
         capoText={capoText}
         selectedNote={selectedNote}
         pulseKey={fretPulseKey}
+        enableKeyboardInput
+        showTuneControl
+        tuneActive={tunerState.active}
+        tuneCalibrating={tunerState.calibrating}
+        onToggleTune={toggleFretboardTuner}
+        onCalibrateTune={startCalibration}
+        tunerState={tunerState}
         onSelectNote={(note) => {
           setSelectedNote(note)
           setFretPulseKey((k) => k + 1)

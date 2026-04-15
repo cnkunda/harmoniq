@@ -3,14 +3,41 @@
  * Expo / Metro web can error on bare `atob` (lazy window binding); GP5 payloads are binary-safe ASCII base64.
  */
 export function base64ToUint8Array(base64: string): Uint8Array {
-  const str = base64.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/')
-  if (str.length === 0) return new Uint8Array(0)
+  const normalized = base64.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/')
+  if (normalized.length === 0) return new Uint8Array(0)
+  if (/[^A-Za-z0-9+/=]/.test(normalized)) {
+    throw new Error('Invalid base64 data: unsupported character')
+  }
 
-  const pad = str.length % 4
-  const padded = pad ? str + '==='.slice(0, 4 - pad) : str
+  const firstEq = normalized.indexOf('=')
+  if (firstEq >= 0) {
+    if (firstEq < normalized.length - 2) {
+      throw new Error('Invalid base64 data: "=" must be at the end')
+    }
+    if (!/^=+$/.test(normalized.slice(firstEq))) {
+      throw new Error('Invalid base64 data: malformed padding')
+    }
+  }
+
+  const remainder = normalized.length % 4
+  if (remainder === 1) {
+    throw new Error('Invalid base64 data: length mod 4 cannot equal 1')
+  }
+  if (firstEq >= 0 && remainder !== 0) {
+    throw new Error('Invalid base64 data: padded input has invalid length')
+  }
+
+  const padded =
+    remainder === 0
+      ? normalized
+      : `${normalized}${remainder === 2 ? '==' : '='}`
+
   const L = padded.length
-  const paddingChars = (padded.match(/=/g) ?? []).length
+  const paddingChars = padded.endsWith('==') ? 2 : padded.endsWith('=') ? 1 : 0
   const outLen = (L / 4) * 3 - paddingChars
+  if (outLen < 0) {
+    throw new Error('Invalid base64 data: negative output length')
+  }
   const out = new Uint8Array(outLen)
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'

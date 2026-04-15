@@ -1,3 +1,4 @@
+import { Asset } from 'expo-asset'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
@@ -16,8 +17,16 @@ export type { AlphaTabWebProps } from './AlphaTabWeb.types'
 /** Pinned — match `assets/alphatab-harness/index.html` (PRIORITIES 0.4). */
 const ALPHATAB_PKG_VERSION = '1.6.1'
 const SCRIPT_SRC = `https://cdn.jsdelivr.net/npm/@coderline/alphatab@${ALPHATAB_PKG_VERSION}/dist/alphaTab.min.js`
-/** Same package/version as the script; avoids AlphaSynth/Tone init issues seen with remote GeneralUser.sf2. */
-const SOUNDFONT_URL = `https://cdn.jsdelivr.net/npm/@coderline/alphatab@${ALPHATAB_PKG_VERSION}/dist/soundfont/sonivox.sf2`
+/** GeneralUser — same file as `assets/soundfonts/guitar.sf2` / `assets/soundfonts/SOURCES.md` (Commit 47). */
+const GENERAL_USER_SOUNDFONT = require('../assets/soundfonts/guitar.sf2') as number
+
+async function resolveGeneralUserSoundFontUrl(): Promise<string> {
+  const asset = Asset.fromModule(GENERAL_USER_SOUNDFONT)
+  await asset.downloadAsync()
+  const uri = asset.localUri ?? asset.uri
+  if (!uri) throw new Error('SoundFont asset has no URI')
+  return uri
+}
 
 type MasterBarBoundsLike = {
   visualBounds?: { x: number; y: number; w: number; h: number }
@@ -112,6 +121,26 @@ function mergeResources(theme?: Partial<TabThemeColors>): Record<string, string>
     if (v) out[k] = v
   }
   return out
+}
+
+function bytesToAsciiPreview(bytes: Uint8Array, limit = 96): string {
+  let out = ''
+  const n = Math.min(limit, bytes.length)
+  for (let i = 0; i < n; i += 1) {
+    const b = bytes[i] ?? 0
+    out += b >= 32 && b <= 126 ? String.fromCharCode(b) : ' '
+  }
+  return out
+}
+
+function assertLikelyGpPayload(bytes: Uint8Array): void {
+  if (bytes.byteLength < 24) {
+    throw new Error(`GP payload too small (${bytes.byteLength} bytes)`)
+  }
+  const preview = bytesToAsciiPreview(bytes)
+  if (!preview.includes('FICHIER GUITAR PRO')) {
+    throw new Error('GP payload header mismatch (expected Guitar Pro signature)')
+  }
 }
 
 export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
@@ -616,6 +645,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           const layoutHorizontal = tabNs?.LayoutMode?.Horizontal ?? 1
           const scrollFollow = tabNs?.ScrollMode?.OffScreen ?? 2
 
+          const soundFontUrl = await resolveGeneralUserSoundFontUrl()
+          if (cancelled) return
+
           const resources = mergeResources(theme ?? {})
           // Expo web / Metro: worker script URL resolution breaks (Invalid base URL) — render on main thread.
           const apiOptions = {
@@ -630,7 +662,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
               layoutMode: layoutHorizontal,
               stretchForce: 1,
             },
-            soundFont: SOUNDFONT_URL,
+            soundFont: soundFontUrl,
             notation: {
               transpositionPitches: [Math.max(-12, Math.min(12, Math.round(transposeSemitones)))],
             },
@@ -639,7 +671,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
               enableCursor: true,
               enableElementHighlighting: true,
               playerMode: playerModeExternal,
-              soundFont: SOUNDFONT_URL,
+              soundFont: soundFontUrl,
               scrollMode: scrollFollow,
               // Native smooth scroll ignores `scrollSpeed` and stays ~wall-clock — desyncs at 65% stem rate.
               nativeBrowserSmoothScroll: false,
@@ -761,7 +793,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           })
 
           setEngineReady(true)
-          void fetch(SOUNDFONT_URL)
+          void fetch(soundFontUrl)
             .then((res) => {
               if (!res.ok) throw new Error(`HTTP ${res.status}`)
               return res.arrayBuffer()
@@ -849,10 +881,11 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       if (!raw) return
       try {
         const bytes = base64ToUint8Array(raw)
+        assertLikelyGpPayload(bytes)
         const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
         api.load(buf)
       } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Invalid GP5 base64'
+        const msg = e instanceof Error ? e.message : 'Invalid GP5 payload'
         setEngineError(msg)
         onError?.(msg)
       }

@@ -172,17 +172,33 @@ export async function submitScore(payload: {
 export async function submitJamScore(payload: {
   recording_wav_base64?: string
   duration_seconds: number
+  /** Legacy alias: accepted for compatibility, mapped to pitch-class weights. */
   scale_position_map?: Record<string, number>
+  pitch_class_weight_map?: Record<string, number>
+  position_weight_map?: Record<string, number>
   inferred_scale_label?: string | null
+  inference_confidence?: 'low' | 'medium' | 'high' | null
+  track_id?: string | null
+  track_label?: string | null
+  track_key?: string | null
+  track_bpm?: number | null
 }): Promise<JamResult> {
+  const pitchMap = payload.pitch_class_weight_map ?? payload.scale_position_map ?? {}
   return request<JamResult>('/jam-score', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       recording_wav_base64: payload.recording_wav_base64 ?? '',
       duration_seconds: payload.duration_seconds,
-      scale_position_map: payload.scale_position_map ?? {},
+      scale_position_map: pitchMap,
+      pitch_class_weight_map: pitchMap,
+      position_weight_map: payload.position_weight_map ?? {},
       inferred_scale_label: payload.inferred_scale_label ?? null,
+      inference_confidence: payload.inference_confidence ?? null,
+      track_id: payload.track_id ?? null,
+      track_label: payload.track_label ?? null,
+      track_key: payload.track_key ?? null,
+      track_bpm: payload.track_bpm ?? null,
     }),
   })
 }
@@ -223,10 +239,16 @@ export async function fetchOnboardingPlacementCoach(payload: {
   phrasing_avg: number
   timing_avg: number
   bend_error_cents_avg: number
-}): Promise<{ coach_paragraph: string }> {
-  return request<{ coach_paragraph: string }>('/onboarding-placement', {
+  placement_confidence?: 'low' | 'medium' | 'high' | null
+  reliability_flags?: string[]
+}): Promise<{ coach_paragraph: string; confidence_note?: string | null }> {
+  return request<{ coach_paragraph: string; confidence_note?: string | null }>('/onboarding-placement', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      placement_confidence: payload.placement_confidence ?? null,
+      reliability_flags: payload.reliability_flags ?? [],
+    }),
   })
 }

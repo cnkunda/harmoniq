@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import inspect
+import math
+import re
 from pathlib import Path
 import uuid
 
@@ -32,10 +34,13 @@ from app.coach import (
     generate_onboarding_placement_summary,
     generate_quick_feedback,
 )
-from app.score import score_recording
+from app.scoring_constants import RELIABILITY_BANDS, SCORE_CONTRACT_VERSION, clamp01
 
 logger = logging.getLogger("harmoniq.api")
 logger.setLevel(logging.INFO)
+
+PITCH_CLASS_KEY_RE = re.compile(r"^pc_(C|C#|D|D#|E|F|F#|G|G#|A|A#|B)$")
+GENERIC_MAP_KEY_RE = re.compile(r"^[A-Za-z0-9_:#\-/+(). ]{1,64}$")
 
 
 def _parse_player_profile_field(raw: object) -> PlayerProfile | None:
@@ -256,7 +261,15 @@ async def analyze_status(job_id: str) -> JobStatus:
 )
 async def score(payload: ScoreRequest) -> ScoreResult:
     try:
+        # Lazy import keeps /jam-score and lightweight tests runnable without full DSP stack.
+        from app.score import score_recording
+
         return score_recording(payload)
+    except ModuleNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Score pipeline dependency missing: {exc.name}",
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -274,7 +287,12 @@ async def onboarding_placement(payload: OnboardingPlacementRequest) -> Onboardin
         timing_avg=payload.timing_avg,
         bend_error_cents_avg=payload.bend_error_cents_avg,
     )
-    return OnboardingPlacementResponse(coach_paragraph=paragraph)
+    note: str | None = None
+    if payload.placement_confidence == "low":
+        note = "Some placement samples had lower reliability, so this baseline will tighten after a few normal sessions."
+    elif payload.reliability_flags:
+        note = "Baseline includes signal-quality guards and may be refined as cleaner phrase captures arrive."
+    return OnboardingPlacementResponse(coach_paragraph=paragraph, confidence_note=note)
 
 
 @app.post(
@@ -295,14 +313,81 @@ async def quick_feedback(payload: QuickFeedbackRequest) -> QuickFeedbackResponse
     summary="POST /jam-score — jam session summary (stub → incremental)",
 )
 async def jam_score(payload: JamScoreRequest) -> JamScoreResult:
-    client_map = {k: float(v) for k, v in (payload.scale_position_map or {}).items()}
+    def _normalize_pitch_class_map(raw: dict[str, float]) -> dict[str, float]:
+        clean: dict[str, float] = {}
+        for k, v in (raw or {}).items():
+            if not isinstance(k, str) or not PITCH_CLASS_KEY_RE.match(k):
+                raise HTTPException(status_code=422, detail=f"Invalid pitch-class key: {k!r}")
+            n = float(v)
+            if not math.isfinite(n) or n < 0:
+                raise HTTPException(status_code=422, detail=f"Invalid pitch-class value for {k!r}")
+            clean[k] = n
+        if not clean:
+            return {}
+        total = sum(clean.values())
+        if total <= 0:
+            return {}
+        return {k: (val / total) for k, val in clean.items()}
+
+    def _normalize_generic_weight_map(raw: dict[str, float]) -> dict[str, float]:
+        clean: dict[str, float] = {}
+        for k, v in (raw or {}).items():
+            if not isinstance(k, str) or not GENERIC_MAP_KEY_RE.match(k):
+                raise HTTPException(status_code=422, detail=f"Invalid position-map key: {k!r}")
+            n = float(v)
+            if not math.isfinite(n) or n < 0:
+                raise HTTPException(status_code=422, detail=f"Invalid position-map value for {k!r}")
+            clean[k] = n
+        if not clean:
+            return {}
+        total = sum(clean.values())
+        if total <= 0:
+            return {}
+        return {k: (val / total) for k, val in clean.items()}
+
+    pitch_raw = payload.pitch_class_weight_map or payload.scale_position_map or {}
+    pitch_map = _normalize_pitch_class_map(pitch_raw)
+    position_map = _normalize_generic_weight_map(payload.position_weight_map or {})
     coach = generate_jam_coach_summary(
         duration_seconds=int(payload.duration_seconds),
         inferred_scale_label=payload.inferred_scale_label,
-        scale_position_map=client_map,
+        pitch_class_weight_map=pitch_map,
     )
-    merged = dict(client_map)
-    if int(payload.duration_seconds) >= 10 and client_map:
-        top = max(client_map.items(), key=lambda kv: kv[1])
-        merged["focus_pitch_class"] = float(top[1])
-    return JamScoreResult(coach_summary=coach, scale_position_map=merged)
+    focus_key: str | None = None
+    focus_weight: float | None = None
+    reliability_tags: list[str] = []
+    if int(payload.duration_seconds) >= 10 and pitch_map:
+        top = max(pitch_map.items(), key=lambda kv: kv[1])
+        focus_key = top[0]
+        focus_weight = float(top[1])
+    if int(payload.duration_seconds) < 10:
+        reliability_tags.append("signal_short_window")
+    if len(pitch_map) < 3 and int(payload.duration_seconds) >= 10:
+        reliability_tags.append("map_sparse")
+    if payload.inference_confidence == "high" and focus_weight is not None and focus_weight >= 0.34:
+        reliability_tags.append("high_confidence_scale_match")
+
+    signal_quality = clamp01((len(pitch_map) / 6.0) + (0.25 if int(payload.duration_seconds) >= 10 else 0.0))
+    if signal_quality <= RELIABILITY_BANDS.low_max:
+        confidence = "low"
+    elif signal_quality >= RELIABILITY_BANDS.medium_max and "high_confidence_scale_match" in reliability_tags:
+        confidence = "high"
+    else:
+        confidence = "medium"
+    return JamScoreResult(
+        coach_summary=coach,
+        scale_position_map=pitch_map,
+        pitch_class_weight_map=pitch_map,
+        position_weight_map=position_map,
+        inferred_scale_label=payload.inferred_scale_label,
+        inference_confidence=payload.inference_confidence,
+        focus_pitch_class_key=focus_key,
+        focus_pitch_class_weight=focus_weight,
+        reliability_tags=reliability_tags,
+        reliability={
+            "score_contract_version": SCORE_CONTRACT_VERSION,
+            "confidence": confidence,
+            "signal_quality": round(signal_quality, 3),
+            "reliability_flags": reliability_tags,
+        },
+    )

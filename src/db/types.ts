@@ -59,6 +59,9 @@ export type SkillNodeRow = {
 export type ReviewSkillUpdateInput = {
   node_scores: Record<string, number>
   targeted_node_ids: string[]
+  node_confidence_map?: Partial<Record<string, 'low' | 'medium' | 'high'>>
+  node_reliability_map?: Partial<Record<string, number>>
+  reliability_flags?: string[]
 }
 
 /** Latest persisted session that includes a song title (library proxy). */
@@ -72,6 +75,7 @@ export type LatestSessionSongRow = {
 /** Home suggestion card: cold start vs SM-2 + last song (PRIORITIES §31). */
 export type HomeSuggestion =
   | { kind: 'cold_start' }
+  | { kind: 'active_lesson'; song: LatestSessionSongRow }
   | {
       kind: 'library_saved'
       lickCount: number
@@ -108,7 +112,21 @@ export type JamSnapshotRow = {
   id: string
   date: string
   duration_seconds: number
+  /** Legacy alias; kept for backward compatibility during migration. */
   scale_position_map: Record<string, number>
+  /** Canonical weighted usage map for pitch classes (`pc_C`..`pc_B`). */
+  pitch_class_weight_map: Record<string, number>
+  /** Optional future map for physical fretboard positions. */
+  position_weight_map: Record<string, number>
+  inferred_scale_label: string | null
+  inference_confidence: 'low' | 'medium' | 'high' | null
+  track_id: string | null
+  track_label: string | null
+  track_key: string | null
+  track_bpm: number | null
+  reliability_tags: string[]
+  reliability_confidence: 'low' | 'medium' | 'high' | null
+  reliability_signal_quality: number | null
   recurring_gestures: string[]
   coach_summary: string
 }
@@ -117,7 +135,19 @@ export type JamSnapshotInsertInput = {
   id: string
   date: string
   duration_seconds: number
+  /** Legacy alias; mirrored from `pitch_class_weight_map` while old exports migrate. */
   scale_position_map: Record<string, number>
+  pitch_class_weight_map: Record<string, number>
+  position_weight_map?: Record<string, number> | null
+  inferred_scale_label?: string | null
+  inference_confidence?: 'low' | 'medium' | 'high' | null
+  track_id?: string | null
+  track_label?: string | null
+  track_key?: string | null
+  track_bpm?: number | null
+  reliability_tags?: string[] | null
+  reliability_confidence?: 'low' | 'medium' | 'high' | null
+  reliability_signal_quality?: number | null
   recurring_gestures: string[]
   coach_summary: string
 }

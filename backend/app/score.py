@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 import tempfile
 import wave
 from pathlib import Path
@@ -12,10 +13,29 @@ from typing import Any
 import librosa
 import numpy as np
 
-from app.schemas import ScoreRequest, ScoreResult, ScoreWaveformComparison
+from app.schemas import (
+    ReliabilityEnvelope,
+    ScoreDiagnostics,
+    ScoreRequest,
+    ScoreResult,
+    ScoreWaveformComparison,
+)
+from app.scoring_constants import (
+    HIGH_CONFIDENCE_HARMONIC_RATIO,
+    HIGH_CONFIDENCE_VOICED_RATIO,
+    LOW_SIGNAL_RMS,
+    LOW_SIGNAL_VOICED_RATIO,
+    MAX_ABS_NOTE_DELTA_SECONDS,
+    MAX_BEND_ERROR_CENTS,
+    MIN_VALID_RMS,
+    RELIABILITY_BANDS,
+    SCORE_CONTRACT_VERSION,
+    clamp01,
+)
 
 
 TARGET_SR = 22050
+logger = logging.getLogger("harmoniq.score")
 
 
 def _decode_recording(request: ScoreRequest) -> tuple[np.ndarray, int]:
@@ -59,16 +79,16 @@ def _pc_from_note_name(name: str | None) -> int | None:
         return None
 
 
-def _score_pitch(y: np.ndarray, sr: int, section: dict[str, Any]) -> tuple[float, float]:
+def _score_pitch(y: np.ndarray, sr: int, section: dict[str, Any]) -> tuple[float, float, float, float, float]:
     # Harmonicity proxy (noise suppressor): harmonic / total RMS.
     y_harm, _ = librosa.effects.hpss(y)
     total_rms = float(np.sqrt(np.mean(np.square(y))) + 1e-8)
     harm_rms = float(np.sqrt(np.mean(np.square(y_harm))) + 1e-8)
-    harmonic_ratio = max(0.0, min(1.0, harm_rms / total_rms))
+    harmonic_ratio = clamp01(harm_rms / total_rms)
 
     f0 = librosa.yin(y, fmin=65.0, fmax=1100.0, sr=sr, frame_length=2048, hop_length=256)
     voiced = np.isfinite(f0) & (f0 > 0)
-    voiced_ratio = float(np.mean(voiced)) if voiced.size else 0.0
+    voiced_ratio = clamp01(float(np.mean(voiced)) if voiced.size else 0.0)
 
     key_pc = _pc_from_note_name(str(section.get("key") or ""))
     if key_pc is None:
@@ -95,23 +115,25 @@ def _score_pitch(y: np.ndarray, sr: int, section: dict[str, Any]) -> tuple[float
         in_key_ratio = 0.0
 
     mean_cents = float(np.mean(cents_errors)) if cents_errors else 100.0
-    cents_score = max(0.0, 1.0 - (mean_cents / 80.0))
+    cents_score = clamp01(1.0 - (mean_cents / 80.0))
 
-    pitch_accuracy = max(
-        0.0,
-        min(1.0, 0.45 * voiced_ratio + 0.25 * harmonic_ratio + 0.30 * (0.6 * in_key_ratio + 0.4 * cents_score)),
+    pitch_accuracy = clamp01(
+        0.45 * voiced_ratio + 0.25 * harmonic_ratio + 0.30 * (0.6 * in_key_ratio + 0.4 * cents_score),
     )
 
-    bend_error_cents = float(min(120.0, max(0.0, mean_cents)))
-    return pitch_accuracy, bend_error_cents
+    bend_error_cents = float(min(MAX_BEND_ERROR_CENTS, max(0.0, mean_cents)))
+    signal_quality = clamp01((0.45 * harmonic_ratio) + (0.35 * voiced_ratio) + (0.2 * min(1.0, total_rms / 0.03)))
+    return pitch_accuracy, bend_error_cents, voiced_ratio, harmonic_ratio, signal_quality
 
 
-def _score_timing(y: np.ndarray, sr: int, section: dict[str, Any]) -> tuple[float, float, list[float]]:
+def _score_timing(
+    y: np.ndarray, sr: int, section: dict[str, Any]
+) -> tuple[float, float, list[float], float, float]:
     onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=256)
     onset_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=256, units="frames")
     onset_times = librosa.frames_to_time(onset_frames, sr=sr, hop_length=256)
     if onset_times.size < 2:
-        return 0.25, 0.25, []
+        return 0.25, 0.25, [], 0.0, 0.0
 
     iois = np.diff(onset_times)
     tempo = section.get("tempo")
@@ -124,13 +146,27 @@ def _score_timing(y: np.ndarray, sr: int, section: dict[str, Any]) -> tuple[floa
     residual = iois - nearest_grid
 
     abs_resid = np.abs(residual)
-    phrasing_score = max(0.0, min(1.0, 1.0 - float(np.mean(abs_resid)) / max(0.08, beat_sec * 0.35)))
+    phrasing_score = clamp01(1.0 - float(np.mean(abs_resid)) / max(0.08, beat_sec * 0.35))
     rushing_ratio = float(np.mean(residual < 0))
-    rushing_score = max(0.0, min(1.0, 1.0 - rushing_ratio))
+    rushing_score = clamp01(1.0 - rushing_ratio)
 
-    clipped = np.clip(residual, -0.25, 0.25)
+    clipped = np.clip(residual, -MAX_ABS_NOTE_DELTA_SECONDS, MAX_ABS_NOTE_DELTA_SECONDS)
     deltas = [float(round(v, 4)) for v in clipped[:32].tolist()]
-    return phrasing_score, rushing_score, deltas
+    p50_ms = float(np.quantile(abs_resid, 0.5) * 1000.0) if abs_resid.size else 0.0
+    p95_ms = float(np.quantile(abs_resid, 0.95) * 1000.0) if abs_resid.size else 0.0
+    return phrasing_score, rushing_score, deltas, p50_ms, p95_ms
+
+
+def _confidence_from_signal(signal_quality: float, voiced_ratio: float, harmonic_ratio: float) -> str:
+    if signal_quality <= RELIABILITY_BANDS.low_max:
+        return "low"
+    if (
+        signal_quality >= RELIABILITY_BANDS.medium_max
+        and voiced_ratio >= HIGH_CONFIDENCE_VOICED_RATIO
+        and harmonic_ratio >= HIGH_CONFIDENCE_HARMONIC_RATIO
+    ):
+        return "high"
+    return "medium"
 
 
 def _waveform_preview_b64(y: np.ndarray, sr: int) -> str:
@@ -173,8 +209,27 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
     y, sr = _decode_recording(payload)
     section = payload.section if isinstance(payload.section, dict) else {}
 
-    pitch_accuracy, bend_error_cents = _score_pitch(y, sr, section)
-    phrasing_score, rushing_score, note_duration_deltas = _score_timing(y, sr, section)
+    pitch_accuracy, bend_error_cents, voiced_ratio, harmonic_ratio, signal_quality = _score_pitch(y, sr, section)
+    phrasing_score, rushing_score, note_duration_deltas, timing_p50_ms, timing_p95_ms = _score_timing(y, sr, section)
+    reliability_flags: list[str] = []
+    rms = float(np.sqrt(np.mean(np.square(y)))) if y.size else 0.0
+    if rms < MIN_VALID_RMS:
+        reliability_flags.append("signal_near_silence")
+    if rms < LOW_SIGNAL_RMS:
+        reliability_flags.append("signal_low")
+    if voiced_ratio < LOW_SIGNAL_VOICED_RATIO:
+        reliability_flags.append("voiced_sparse")
+    if timing_p95_ms > 185:
+        reliability_flags.append("timing_unstable")
+    confidence = _confidence_from_signal(signal_quality, voiced_ratio, harmonic_ratio)
+    if reliability_flags:
+        logger.info(
+            "score.reliability flags=%s confidence=%s signal_quality=%.3f voiced_ratio=%.3f",
+            ",".join(reliability_flags),
+            confidence,
+            signal_quality,
+            voiced_ratio,
+        )
 
     # Slightly favor phrasing in overall technique nodes for this stage.
     node_scores = {
@@ -197,5 +252,19 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
         waveform_comparison=ScoreWaveformComparison(
             user_wav_base64=_waveform_preview_b64(y, sr),
             reference_wav_base64=_reference_click_b64(section, duration_s=len(y) / sr, sr=sr),
+        ),
+        diagnostics=ScoreDiagnostics(
+            signal_quality=round(signal_quality, 3),
+            voiced_ratio=round(voiced_ratio, 3),
+            harmonic_ratio=round(harmonic_ratio, 3),
+            timing_residual_p50_ms=round(timing_p50_ms, 1),
+            timing_residual_p95_ms=round(timing_p95_ms, 1),
+            reliability_flags=reliability_flags,
+        ),
+        reliability=ReliabilityEnvelope(
+            score_contract_version=SCORE_CONTRACT_VERSION,
+            confidence=confidence,
+            signal_quality=round(signal_quality, 3),
+            reliability_flags=reliability_flags,
         ),
     )

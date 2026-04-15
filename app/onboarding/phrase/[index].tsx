@@ -6,13 +6,16 @@ import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { ErrorBanner } from '@/components/ErrorBanner'
+import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
+import { WoodGradient } from '@/components/WoodGradient'
 import { submitScore } from '@/src/api/analyze'
-import type { MappedUiError } from '@/src/errors/mapErrorToUi'
-import { mapMicPermissionDenied, mapScoreFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
-import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { createSessionRecorder } from '@/src/audio/recordSession'
 import type { RecordedTake } from '@/src/audio/recordSession.types'
 import { BACKING_TRACKS } from '@/src/constants/backingTracks'
+import colors from '@/src/constants/colors'
+import type { MappedUiError } from '@/src/errors/mapErrorToUi'
+import { mapMicPermissionDenied, mapScoreFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
+import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { PLACEMENT_PHRASES, PLACEMENT_SKILL_NODES } from '@/src/onboarding/placementPhrases'
 import { useOnboardingPlacementStore } from '@/src/stores/onboardingPlacementStore'
 
@@ -173,54 +176,60 @@ export default function OnboardingPhraseScreen() {
 
   if (!phrase || phraseIndex < 0) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-wood-900">
-        <ActivityIndicator color="#E8A54B" />
-      </SafeAreaView>
+      <WoodGradient variant="background" className="flex-1">
+        <SafeAreaView className="flex-1 items-center justify-center" edges={['top', 'right', 'bottom', 'left']}>
+          <ActivityIndicator color={colors.amber.light} />
+        </SafeAreaView>
+      </WoodGradient>
     )
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
-      <View className="flex-1 px-6 py-6">
-        <Text className="font-mono text-xs text-muted-brown">
+    <OnboardingScreenShell
+      currentStep={3 + phraseIndex}
+      showBack
+      onBack={() => router.back()}
+      scrollable
+    >
+      <View className="items-center">
+        <Text className="text-center font-mono text-xs text-muted-brown">
           Phrase {phraseIndex + 1} / {PLACEMENT_PHRASES.length}
         </Text>
-        <Text className="mt-2 font-serif text-2xl text-cream">{phrase.title}</Text>
-        <Text className="mt-3 font-sans text-sm leading-6 text-muted-brown">{phrase.instruction}</Text>
+        <Text className="mt-2 text-center font-serif text-2xl text-cream">{phrase.title}</Text>
+        <Text className="mt-3 text-center font-sans text-sm leading-6 text-muted-brown">{phrase.instruction}</Text>
 
-        <View className="mt-6 flex-row flex-wrap gap-2">
+        <View className="mt-6 w-full gap-3">
           <Pressable
             onPress={() => void toggleReference()}
             disabled={!soundReady}
-            className="rounded-lg border border-wood-600/50 bg-wood-800/80 px-4 py-2 disabled:opacity-40"
+            className="w-full rounded-lg border border-wood-600/50 bg-wood-800/80 px-4 py-3 disabled:opacity-40"
             accessibilityRole="button"
           >
-            <Text className="font-sans-medium text-cream">{refPlaying ? 'Pause reference' : 'Play reference'}</Text>
+            <Text className="text-center font-sans-medium text-cream">
+              {refPlaying ? 'Pause reference' : 'Play reference'}
+            </Text>
           </Pressable>
-        </View>
-
-        <View className="mt-8 flex-row flex-wrap gap-2">
           <Pressable
             onPress={() => void startRecord()}
             disabled={recording || busy}
-            className="rounded-lg bg-amber-accent px-4 py-3 disabled:opacity-40"
+            className="w-full rounded-lg bg-amber-accent px-4 py-3 disabled:opacity-40"
             accessibilityRole="button"
           >
-            <Text className="font-sans-medium text-wood-900">{recording ? 'Recording…' : 'Record take'}</Text>
+            <Text className="text-center font-sans-medium text-wood-900">{recording ? 'Recording…' : 'Record take'}</Text>
           </Pressable>
           <Pressable
             onPress={() => void stopAndScore()}
             disabled={!recording || busy}
-            className="rounded-lg border border-amber-accent/60 px-4 py-3 disabled:opacity-40"
+            className="w-full rounded-lg border border-amber-accent/60 px-4 py-3 disabled:opacity-40"
             accessibilityRole="button"
           >
-            <Text className="font-sans-medium text-amber-light">{busy ? 'Scoring…' : 'Stop & score'}</Text>
+            <Text className="text-center font-sans-medium text-amber-light">{busy ? 'Scoring…' : 'Stop & score'}</Text>
           </Pressable>
         </View>
 
         {phraseError ? (
           <ErrorBanner
-            className="mt-4"
+            className="mt-4 w-full"
             {...toErrorBannerProps(phraseError, {
               onRetry: () => {
                 const take = lastScorableTakeRef.current
@@ -243,11 +252,7 @@ export default function OnboardingPhraseScreen() {
             })}
           />
         ) : null}
-
-        <Pressable onPress={() => router.back()} className="mt-10 self-start py-2" accessibilityRole="button">
-          <Text className="font-sans text-sm text-muted-brown">Back</Text>
-        </Pressable>
       </View>
-    </SafeAreaView>
+    </OnboardingScreenShell>
   )
 }

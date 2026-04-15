@@ -102,10 +102,10 @@ function clampPlaybackRate(value: number): number {
 }
 
 const SPEED_PRESETS = [
-  { label: '25%', value: 0.25 },
-  { label: '50%', value: 0.5 },
-  { label: '75%', value: 0.75 },
-  { label: '100%', value: 1.0 },
+  { label: '0.5×', value: 0.5 },
+  { label: '0.75×', value: 0.75 },
+  { label: '1.0×', value: 1.0 },
+  { label: '1.25×', value: 1.25 },
 ] as const
 
 const RATE_MATCH_EPS = 0.02
@@ -473,6 +473,16 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
     const sec = Math.floor(s % 60)
     return `${m}:${sec.toString().padStart(2, '0')}`
   }
+  const songTitle = lesson.song_title?.trim() || 'Untitled lesson'
+  const sectionTotal = Math.max(sections.length, 1)
+  const sectionDisplay = Math.min(lessonSectionIndex + 1, sectionTotal)
+
+  const nextSectionIndex = lessonSectionIndex + 1
+  const hasUpNext = nextSectionIndex < sections.length
+  const currentSectionLabel =
+    sections[lessonSectionIndex] != null
+      ? parseSectionRecord(sections[lessonSectionIndex] as Record<string, unknown>).label
+      : null
 
   /** Cream panel, wood border — compact padding; `md:flex-1` for equal row heights. */
   const playbackCardClass =
@@ -508,13 +518,21 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       ) : null}
 
       <View className="flex-col gap-2.5 md:flex-row md:items-stretch">
-        {/* Playback + timeline + speed */}
+        {/* Playback + lesson context + timeline + speed + up next */}
         <View className={playbackCardClass}>
           <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
-            Playback
+            Current lesson
+          </Text>
+          <Text className="font-sans-medium text-base text-wood-900">{songTitle}</Text>
+          <Text className="mt-1 font-sans text-xs text-muted-brown">
+            {sections.length > 0
+              ? `Section ${sectionDisplay} of ${sections.length}${
+                  currentSectionLabel ? `: ${currentSectionLabel}` : ''
+                }`
+              : `Section ${sectionDisplay} of ${sectionTotal}`}
           </Text>
 
-          <View className="flex-row items-center gap-2.5">
+          <View className="mt-4 flex-row items-center gap-2.5">
             <View className="w-12 shrink-0 items-center">
               <Pressable
                 onPress={() => void togglePlay()}
@@ -537,7 +555,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                   {loading ? '…' : ready ? fmt(scrubTimelineSec ?? positionSec) : '—'}
                 </Text>
                 <Text className="font-mono text-[13px] leading-none tracking-tight text-muted-brown">
-                  {loading ? '' : ready ? `/ ${fmt(durationSec)}` : ''}
+                  {loading ? '' : ready ? fmt(durationSec) : ''}
                 </Text>
               </View>
               <View className="-mt-0.5">
@@ -565,21 +583,10 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             <View className="mb-2 flex-row items-baseline justify-between gap-3">
               <Text className="font-sans-medium text-sm text-wood-900">Speed</Text>
               <Text className="font-mono text-[13px] tabular-nums tracking-tight text-muted-brown">
-                {rate.toFixed(2)}×
+                {rate.toFixed(1)}×
               </Text>
             </View>
-            <Slider
-              minimumValue={0.25}
-              maximumValue={1.25}
-              step={0.05}
-              value={rate}
-              onValueChange={(v) => void onSeekRate(v)}
-              minimumTrackTintColor={colors.amber.accent}
-              maximumTrackTintColor={colors.muted.brown}
-              thumbTintColor={colors.amber.light}
-              disabled={!ready || loading}
-            />
-            <View className="mt-2 flex-row gap-1.5">
+            <View className="mt-1 flex-row gap-1.5">
               {SPEED_PRESETS.map(({ label, value }) => {
                 const active = Math.abs(rate - value) < RATE_MATCH_EPS
                 return (
@@ -600,11 +607,18 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
               })}
             </View>
           </View>
+
+          {hasUpNext ? (
+            <View className="mt-3 border-t border-wood-600/20 pt-3">
+              <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Up next</Text>
+              <Text className="mt-1 font-sans text-sm text-muted-brown">{`Section ${nextSectionIndex + 1}`}</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Metronome */}
         <View className={playbackCardClass}>
-          <View className="mb-2 flex-row items-center justify-between gap-2">
+          <View className="mb-2 shrink-0 flex-row items-center justify-between gap-2">
             <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Metronome</Text>
             <Switch
               value={metronomeOn}
@@ -615,16 +629,23 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             />
           </View>
 
-          <MetronomeArcReadout
-            effectiveBpm={effectiveMetroBpm}
-            baseTempoBpm={baseTempoBpm}
-            flashTick={beatFlashTick}
-            lastDownbeat={lastDownbeatFlash}
-            metronomeActive={metronomeOn && playing}
-            subdivision={metroSubdivision}
-          />
+          <View className="min-h-0 flex-1 items-center justify-center">
+            <MetronomeArcReadout
+              effectiveBpm={effectiveMetroBpm}
+              baseTempoBpm={baseTempoBpm}
+              flashTick={beatFlashTick}
+              lastDownbeat={lastDownbeatFlash}
+              metronomeActive={metronomeOn && playing}
+              subdivision={metroSubdivision}
+              showBpm={false}
+            />
+          </View>
 
-          <View className="mt-3 border-t border-wood-600/15 pt-3">
+          <View className="mt-2 shrink-0 border-t border-wood-600/15 pt-3">
+            <View className="mb-3 flex-row items-baseline justify-center gap-1.5">
+              <Text className="font-serif text-3xl leading-none text-wood-900 tabular-nums">{effectiveMetroBpm}</Text>
+              <Text className="pb-1 font-sans text-sm text-muted-brown">BPM</Text>
+            </View>
             <Text className="mb-2 font-sans-medium text-sm text-wood-900">Subdivide</Text>
             <View className="flex-row flex-wrap gap-1.5">
               {METRO_SUBDIV_OPTIONS.map((opt) => {
@@ -682,6 +703,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           ) : null}
 
           <View className={sections.length > 0 ? 'border-t border-wood-600/15 pt-3' : ''}>
+            <Text className="mb-2 font-sans-medium text-sm text-wood-900">Mixer</Text>
             <View className="flex-row flex-wrap gap-x-1 gap-y-1.5">
               {STEM_UI_ORDER.map((id) => {
                 const hasStem = Boolean((lesson.stems as Record<string, string>)?.[id])

@@ -24,6 +24,7 @@ web-build/
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+.cursor/debug-*
 
 # macOS
 .DS_Store
@@ -43,6 +44,9 @@ ENV/
 
 # Stem smoke spectrograms / scratch outputs (STEM_QUALITY_CHECKLIST.md)
 artifacts/
+playwright/.cache/
+test-results/
+.detox/
 
 # Backend / analysis artifacts (see PRIORITIES 0.5)
 backend/data/

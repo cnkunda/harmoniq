@@ -1,0 +1,69 @@
+name: UI Audit
+
+on:
+  pull_request:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  ui-audit:
+    name: Playwright UI + Visual Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate inventories
+        run: npm run audit:inventory
+
+      - name: Generate platform audit report
+        run: npm run audit:platform
+
+      - name: Run structural UI tests
+        env:
+          CI: "1"
+          PLAYWRIGHT_PORT: "8081"
+        run: npm run test:ui
+
+      - name: Run visual regression tests
+        env:
+          CI: "1"
+          PLAYWRIGHT_PORT: "8081"
+        run: npm run test:visual
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            artifacts/playwright/**
+            test-results/**
+            tests/ui/__snapshots__/**
+          if-no-files-found: warn
+
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-artifacts
+          path: |
+            docs/audit/**/*.json
+            docs/audit/platform-audit.md
+          if-no-files-found: warn
+

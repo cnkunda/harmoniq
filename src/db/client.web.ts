@@ -13,6 +13,7 @@ import {
     type IdbHydration,
 } from '@/src/db/idbWeb'
 import { DEFAULT_SKILL_NODES, PREF_ONBOARDING_COMPLETE } from '@/src/db/schema'
+import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
 import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
 import type {
   HomeSuggestion,
@@ -331,17 +332,35 @@ export async function getLatestSessionWithSong(): Promise<LatestSessionSongRow |
 }
 
 export async function getHomeSuggestion(): Promise<HomeSuggestion> {
-  seedWebSkillNodes()
+  await initDb()
   const song = await getLatestSessionWithSong()
   if (!song) {
-    const lib = tryLibraryHomeSuggestion(await getLicks())
-    return lib ?? { kind: 'cold_start' }
+    const licks = await getLicks()
+    const lib = tryLibraryHomeSuggestion(licks)
+    if (lib) return lib
+    const { useLessonStore } = await import('@/src/stores/lessonStore')
+    let lesson = useLessonStore.getState().lesson
+    if (!lesson) {
+      lesson = await idbReadLessonCache(getHarmoniqIdbHandle())
+    }
+    const active = tryHomeSuggestionFromLesson(lesson)
+    if (active) return active
+    return { kind: 'cold_start' }
   }
   const nodes = await getAllSkillNodes()
   const node = pickEarliestDueSkillNode(nodes)
   if (!node) {
-    const lib = tryLibraryHomeSuggestion(await getLicks())
-    return lib ?? { kind: 'cold_start' }
+    const licks = await getLicks()
+    const lib = tryLibraryHomeSuggestion(licks)
+    if (lib) return lib
+    const { useLessonStore } = await import('@/src/stores/lessonStore')
+    let lesson = useLessonStore.getState().lesson
+    if (!lesson) {
+      lesson = await idbReadLessonCache(getHarmoniqIdbHandle())
+    }
+    const active = tryHomeSuggestionFromLesson(lesson)
+    if (active) return active
+    return { kind: 'cold_start' }
   }
   return { kind: 'ready', node, song }
 }
@@ -353,6 +372,8 @@ export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Pr
     if (!row) continue
     const sessionScore = input.node_scores[id]
     if (typeof sessionScore !== 'number' || !Number.isFinite(sessionScore)) continue
+    const confidence = input.node_confidence_map?.[id]
+    const reliability = input.node_reliability_map?.[id]
     const u = deriveSkillNodeAfterSession(
       {
         score: row.score,
@@ -362,6 +383,13 @@ export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Pr
         sessions_count: row.sessions_count,
       },
       sessionScore,
+      {
+        accuracyScore01: sessionScore,
+        timingStability01: sessionScore,
+        reliabilityScore01: typeof reliability === 'number' ? reliability : undefined,
+        confidence: confidence === 'low' || confidence === 'medium' || confidence === 'high' ? confidence : undefined,
+        reliabilityFlags: input.reliability_flags ?? [],
+      },
     )
     skillNodes.set(id, {
       ...row,
@@ -379,7 +407,22 @@ export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Pr
 
 export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promise<void> {
   seedWebSkillNodes()
-  jamSnapshots.unshift({ ...input })
+  const pitchMap = input.pitch_class_weight_map ?? input.scale_position_map ?? {}
+  jamSnapshots.unshift({
+    ...input,
+    scale_position_map: { ...pitchMap },
+    pitch_class_weight_map: { ...pitchMap },
+    position_weight_map: { ...(input.position_weight_map ?? {}) },
+    inferred_scale_label: input.inferred_scale_label ?? null,
+    inference_confidence: input.inference_confidence ?? null,
+    track_id: input.track_id ?? null,
+    track_label: input.track_label ?? null,
+    track_key: input.track_key ?? null,
+    track_bpm: input.track_bpm ?? null,
+    reliability_tags: [...(input.reliability_tags ?? [])],
+    reliability_confidence: input.reliability_confidence ?? null,
+    reliability_signal_quality: input.reliability_signal_quality ?? null,
+  })
   await flushJams()
 }
 
@@ -391,7 +434,18 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
       id: j.id,
       date: j.date,
       duration_seconds: j.duration_seconds,
-      scale_position_map: { ...j.scale_position_map },
+      scale_position_map: { ...(j.pitch_class_weight_map ?? j.scale_position_map ?? {}) },
+      pitch_class_weight_map: { ...(j.pitch_class_weight_map ?? j.scale_position_map ?? {}) },
+      position_weight_map: { ...(j.position_weight_map ?? {}) },
+      inferred_scale_label: j.inferred_scale_label ?? null,
+      inference_confidence: j.inference_confidence ?? null,
+      track_id: j.track_id ?? null,
+      track_label: j.track_label ?? null,
+      track_key: j.track_key ?? null,
+      track_bpm: j.track_bpm ?? null,
+      reliability_tags: [...(j.reliability_tags ?? [])],
+      reliability_confidence: j.reliability_confidence ?? null,
+      reliability_signal_quality: typeof j.reliability_signal_quality === 'number' ? j.reliability_signal_quality : null,
       recurring_gestures: [...j.recurring_gestures],
       coach_summary: j.coach_summary,
     }))

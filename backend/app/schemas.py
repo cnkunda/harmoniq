@@ -105,6 +105,22 @@ class ScoreWaveformComparison(BaseModel):
     reference_wav_base64: str = ""
 
 
+class ScoreDiagnostics(BaseModel):
+    signal_quality: float = Field(ge=0.0, le=1.0, default=0.0)
+    voiced_ratio: float = Field(ge=0.0, le=1.0, default=0.0)
+    harmonic_ratio: float = Field(ge=0.0, le=1.0, default=0.0)
+    timing_residual_p50_ms: float = 0.0
+    timing_residual_p95_ms: float = 0.0
+    reliability_flags: list[str] = Field(default_factory=list)
+
+
+class ReliabilityEnvelope(BaseModel):
+    score_contract_version: str = "v2"
+    confidence: Literal["low", "medium", "high"] = "low"
+    signal_quality: float = Field(ge=0.0, le=1.0, default=0.0)
+    reliability_flags: list[str] = Field(default_factory=list)
+
+
 class ScoreResult(BaseModel):
     """POST /score response payload."""
 
@@ -115,6 +131,8 @@ class ScoreResult(BaseModel):
     rushing_score: float
     node_scores: dict[str, float] = Field(default_factory=list)
     waveform_comparison: ScoreWaveformComparison
+    diagnostics: ScoreDiagnostics = Field(default_factory=ScoreDiagnostics)
+    reliability: ReliabilityEnvelope = Field(default_factory=ReliabilityEnvelope)
 
 
 class OnboardingPlacementRequest(BaseModel):
@@ -124,10 +142,13 @@ class OnboardingPlacementRequest(BaseModel):
     phrasing_avg: float = Field(ge=0.0, le=1.0)
     timing_avg: float = Field(ge=0.0, le=1.0)
     bend_error_cents_avg: float = Field(ge=0.0)
+    placement_confidence: Literal["low", "medium", "high"] | None = None
+    reliability_flags: list[str] = Field(default_factory=list)
 
 
 class OnboardingPlacementResponse(BaseModel):
     coach_paragraph: str
+    confidence_note: str | None = None
 
 
 class JamScoreRequest(BaseModel):
@@ -137,13 +158,30 @@ class JamScoreRequest(BaseModel):
 
     recording_wav_base64: str = ""
     duration_seconds: int = Field(ge=0, default=0)
+    # Legacy alias; kept while app migrates to explicit pitch map naming.
     scale_position_map: dict[str, float] = Field(default_factory=dict)
+    pitch_class_weight_map: dict[str, float] = Field(default_factory=dict)
+    position_weight_map: dict[str, float] = Field(default_factory=dict)
     inferred_scale_label: str | None = None
+    inference_confidence: Literal["low", "medium", "high"] | None = None
+    track_id: str | None = None
+    track_label: str | None = None
+    track_key: str | None = None
+    track_bpm: int | None = Field(default=None, ge=0)
 
 
 class JamScoreResult(BaseModel):
     coach_summary: str
+    # Legacy alias for older clients.
     scale_position_map: dict[str, float] = Field(default_factory=dict)
+    pitch_class_weight_map: dict[str, float] = Field(default_factory=dict)
+    position_weight_map: dict[str, float] = Field(default_factory=dict)
+    inferred_scale_label: str | None = None
+    inference_confidence: Literal["low", "medium", "high"] | None = None
+    focus_pitch_class_key: str | None = None
+    focus_pitch_class_weight: float | None = None
+    reliability_tags: list[str] = Field(default_factory=list)
+    reliability: ReliabilityEnvelope = Field(default_factory=ReliabilityEnvelope)
 
 
 QuickAccuracyLabel = Literal["hit", "close", "miss", "vibrato"]

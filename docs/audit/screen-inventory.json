@@ -1,0 +1,793 @@
+{
+  "generatedAt": "2026-04-15T19:41:20.809Z",
+  "totalScreens": 19,
+  "screens": [
+    {
+      "route": "/",
+      "screenPath": "app/index.tsx",
+      "visibleElements": [
+        "ActivityIndicator",
+        "boolean",
+        "Redirect",
+        "View"
+      ],
+      "primitiveElements": [
+        "ActivityIndicator",
+        "View"
+      ],
+      "customComponents": [
+        "Redirect"
+      ],
+      "stateCoverage": {
+        "loading": true,
+        "empty": false,
+        "error": false,
+        "modal": false
+      },
+      "missingStates": [
+        "empty",
+        "error",
+        "modal"
+      ]
+    },
+    {
+      "route": "/",
+      "screenPath": "app/(tabs)/index.tsx",
+      "visibleElements": [
+        "Clock",
+        "HomeSuggestion",
+        "LibraryIcon",
+        "LinearGradient",
+        "Play",
+        "Plus",
+        "Pressable",
+        "SafeAreaView",
+        "ScrollView",
+        "SessionJournalRow",
+        "string",
+        "Text",
+        "View"
+      ],
+      "primitiveElements": [
+        "Pressable",
+        "SafeAreaView",
+        "ScrollView",
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "Clock",
+        "HomeSuggestion",
+        "LibraryIcon",
+        "LinearGradient",
+        "Play",
+        "Plus",
+        "SessionJournalRow"
+      ],
+      "stateCoverage": {
+        "loading": true,
+        "empty": false,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "empty",
+        "modal"
+      ]
+    },
+    {
+      "route": "/add-song",
+      "screenPath": "app/add-song.tsx",
+      "visibleElements": [
+        "ActivityIndicator",
+        "AddSongState",
+        "AnalyzeJobStatus",
+        "Animated",
+        "AudioDropzone",
+        "Check",
+        "ErrorBanner",
+        "LoadingSkeleton",
+        "MappedUiError",
+        "Pressable",
+        "SafeAreaView",
+        "Text",
+        "TextInput",
+        "View",
+        "X"
+      ],
+      "primitiveElements": [
+        "ActivityIndicator",
+        "Pressable",
+        "SafeAreaView",
+        "Text",
+        "TextInput",
+        "View"
+      ],
+      "customComponents": [
+        "AddSongState",
+        "AnalyzeJobStatus",
+        "Animated",
+        "AudioDropzone",
+        "Check",
+        "ErrorBanner",
+        "LoadingSkeleton",
+        "MappedUiError",
+        "X"
+      ],
+      "stateCoverage": {
+        "loading": true,
+        "empty": false,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "empty",
+        "modal"
+      ]
+    },
+    {
+      "route": "/analyze-debug",
+      "screenPath": "app/(tabs)/analyze-debug.tsx",
+      "visibleElements": [
+        "AudioDropzone",
+        "ErrorBanner",
+        "LoadingSkeleton",
+        "Pressable",
+        "SafeAreaView",
+        "ScrollView",
+        "string",
+        "Text",
+        "TextInput",
+        "View"
+      ],
+      "primitiveElements": [
+        "Pressable",
+        "SafeAreaView",
+        "ScrollView",
+        "Text",
+        "TextInput",
+        "View"
+      ],
+      "customComponents": [
+        "AudioDropzone",
+        "ErrorBanner",
+        "LoadingSkeleton"
+      ],
+      "stateCoverage": {
+        "loading": true,
+        "empty": false,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "empty",
+        "modal"
+      ]
+    },
+    {
+      "route": "/design-preview",
+      "screenPath": "app/(tabs)/design-preview.tsx",
+      "visibleElements": [
+        "AnimatedPressable",
+        "BackingTrackDevSection",
+        "CoachNote",
+        "EmptyState",
+        "ErrorBanner",
+        "FeedbackLayerDevSection",
+        "LickCard",
+        "LoadingSkeleton",
+        "number",
+        "PitchIndicator",
+        "PitchWorkletDevSection",
+        "Pressable",
+        "ReturnType",
+        "SafeAreaView",
+        "ScrollView",
+        "SessionStepper",
+        "SkillGraph",
+        "StemMixer",
+        "StemMixerDevSection",
+        "string",
+        "Swatch",
+        "Switch",
+        "TabView",
+        "Text",
+        "typeof",
+        "View",
+        "WaveformVisualizer",
+        "WoodGradient"
+      ],
+      "primitiveElements": [
+        "Pressable",
+        "SafeAreaView",
+        "ScrollView",
+        "Switch",
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "AnimatedPressable",
+        "BackingTrackDevSection",
+        "CoachNote",
+        "EmptyState",
+        "ErrorBanner",
+        "FeedbackLayerDevSection",
+        "LickCard",
+        "LoadingSkeleton",
+        "PitchIndicator",
+        "PitchWorkletDevSection",
+        "ReturnType",
+        "SessionStepper",
+        "SkillGraph",
+        "StemMixer",
+        "StemMixerDevSection",
+        "Swatch",
+        "TabView",
+        "WaveformVisualizer",
+        "WoodGradient"
+      ],
+      "stateCoverage": {
+        "loading": true,
+        "empty": true,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "modal"
+      ]
+    },
+    {
+      "route": "/jam",
+      "screenPath": "app/(tabs)/jam.tsx",
+      "visibleElements": [
+        "Animated",
+        "AnimatedPressable",
+        "Audio",
+        "BackingTrackId",
+        "ErrorBanner",
+        "FretboardDiagram",
+        "FretboardOverlayMode",
+        "number",
+        "readonly",
+        "SafeAreaView",
+        "ScrollView",
+        "SessionStemAndTab",
+        "SessionStemAndTabHandle",
+        "string",
+        "Text",
+        "View",
+        "WoodGradient"
+      ],
+      "primitiveElements": [
+        "SafeAreaView",
+        "ScrollView",
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "Animated",
+        "AnimatedPressable",
+        "Audio",
+        "BackingTrackId",
+        "ErrorBanner",
+        "FretboardDiagram",
+        "FretboardOverlayMode",
+        "SessionStemAndTab",
+        "SessionStemAndTabHandle",
+        "WoodGradient"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "loading",
+        "empty",
+        "modal"
+      ]
+    },
+    {
+      "route": "/library",
+      "screenPath": "app/(tabs)/library.tsx",
+      "visibleElements": [
+        "Filter",
+        "LickRow",
+        "Pressable",
+        "Record",
+        "SafeAreaView",
+        "ScrollView",
+        "Search",
+        "string",
+        "Text",
+        "TextInput",
+        "View",
+        "WoodGradient"
+      ],
+      "primitiveElements": [
+        "Pressable",
+        "SafeAreaView",
+        "ScrollView",
+        "Text",
+        "TextInput",
+        "View"
+      ],
+      "customComponents": [
+        "Filter",
+        "LickRow",
+        "Record",
+        "Search",
+        "WoodGradient"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": true,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "loading",
+        "modal"
+      ]
+    },
+    {
+      "route": "/onboarding",
+      "screenPath": "app/onboarding/index.tsx",
+      "visibleElements": [
+        "Music",
+        "OnboardingScreenShell",
+        "Pressable",
+        "Text",
+        "View"
+      ],
+      "primitiveElements": [
+        "Pressable",
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "Music",
+        "OnboardingScreenShell"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": false,
+        "modal": false
+      },
+      "missingStates": [
+        "loading",
+        "empty",
+        "error",
+        "modal"
+      ]
+    },
+    {
+      "route": "/onboarding/mic",
+      "screenPath": "app/onboarding/mic.tsx",
+      "visibleElements": [
+        "OnboardingScreenShell",
+        "Pressable",
+        "Text",
+        "View"
+      ],
+      "primitiveElements": [
+        "Pressable",
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "OnboardingScreenShell"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": false,
+        "modal": false
+      },
+      "missingStates": [
+        "loading",
+        "empty",
+        "error",
+        "modal"
+      ]
+    },
+    {
+      "route": "/onboarding/phrase/:index",
+      "screenPath": "app/onboarding/phrase/[index].tsx",
+      "visibleElements": [
+        "ActivityIndicator",
+        "Audio",
+        "ErrorBanner",
+        "MappedUiError",
+        "OnboardingScreenShell",
+        "Pressable",
+        "RecordedTake",
+        "SafeAreaView",
+        "Text",
+        "View",
+        "WoodGradient"
+      ],
+      "primitiveElements": [
+        "ActivityIndicator",
+        "Pressable",
+        "SafeAreaView",
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "Audio",
+        "ErrorBanner",
+        "MappedUiError",
+        "OnboardingScreenShell",
+        "RecordedTake",
+        "WoodGradient"
+      ],
+      "stateCoverage": {
+        "loading": true,
+        "empty": false,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "empty",
+        "modal"
+      ]
+    },
+    {
+      "route": "/onboarding/results",
+      "screenPath": "app/onboarding/results.tsx",
+      "visibleElements": [
+        "ErrorBanner",
+        "MappedUiError",
+        "OnboardingScreenShell",
+        "Pressable",
+        "string",
+        "Text",
+        "View"
+      ],
+      "primitiveElements": [
+        "Pressable",
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "ErrorBanner",
+        "MappedUiError",
+        "OnboardingScreenShell"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "loading",
+        "empty",
+        "modal"
+      ]
+    },
+    {
+      "route": "/progress",
+      "screenPath": "app/(tabs)/progress.tsx",
+      "visibleElements": [
+        "CoachNote",
+        "SafeAreaView",
+        "ScrollView",
+        "SessionJournalRow",
+        "SkillGraph",
+        "Text",
+        "View",
+        "WoodGradient"
+      ],
+      "primitiveElements": [
+        "SafeAreaView",
+        "ScrollView",
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "CoachNote",
+        "SessionJournalRow",
+        "SkillGraph",
+        "WoodGradient"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": false,
+        "modal": false
+      },
+      "missingStates": [
+        "loading",
+        "empty",
+        "error",
+        "modal"
+      ]
+    },
+    {
+      "route": "/review-archive/:sessionId",
+      "screenPath": "app/review-archive/[sessionId].tsx",
+      "visibleElements": [
+        "PhrasingVisualizerStub",
+        "Pressable",
+        "SafeAreaView",
+        "ScoreSummaryCard",
+        "ScrollView",
+        "SessionArchiveRow",
+        "string",
+        "Text",
+        "View",
+        "WaveformPlaybackActions"
+      ],
+      "primitiveElements": [
+        "Pressable",
+        "SafeAreaView",
+        "ScrollView",
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "PhrasingVisualizerStub",
+        "ScoreSummaryCard",
+        "SessionArchiveRow",
+        "WaveformPlaybackActions"
+      ],
+      "stateCoverage": {
+        "loading": true,
+        "empty": false,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "empty",
+        "modal"
+      ]
+    },
+    {
+      "route": "/session/listen",
+      "screenPath": "app/session/listen.tsx",
+      "visibleElements": [
+        "SessionStemAndTab",
+        "SessionStemAndTabHandle",
+        "SessionStepScreen"
+      ],
+      "primitiveElements": [],
+      "customComponents": [
+        "SessionStemAndTab",
+        "SessionStemAndTabHandle",
+        "SessionStepScreen"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": false,
+        "modal": false
+      },
+      "missingStates": [
+        "loading",
+        "empty",
+        "error",
+        "modal"
+      ]
+    },
+    {
+      "route": "/session/play",
+      "screenPath": "app/session/play.tsx",
+      "visibleElements": [
+        "Animated",
+        "CoachNote",
+        "ErrorBanner",
+        "FretboardDiagram",
+        "MappedUiError",
+        "PlayBeatAccuracyPanel",
+        "PlayCaptureControls",
+        "PlayPitchLadderVertical",
+        "PlayTargetNoteQueue",
+        "SessionNoteDetailModal",
+        "SessionStemAndTab",
+        "SessionStepScreen",
+        "string",
+        "Text",
+        "View"
+      ],
+      "primitiveElements": [
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "Animated",
+        "CoachNote",
+        "ErrorBanner",
+        "FretboardDiagram",
+        "MappedUiError",
+        "PlayBeatAccuracyPanel",
+        "PlayCaptureControls",
+        "PlayPitchLadderVertical",
+        "PlayTargetNoteQueue",
+        "SessionNoteDetailModal",
+        "SessionStemAndTab",
+        "SessionStepScreen"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": true,
+        "modal": true
+      },
+      "missingStates": [
+        "loading",
+        "empty"
+      ]
+    },
+    {
+      "route": "/session/review",
+      "screenPath": "app/session/review.tsx",
+      "visibleElements": [
+        "ErrorBanner",
+        "MappedUiError",
+        "number",
+        "PhrasingVisualizerStub",
+        "Pressable",
+        "ScoreResult",
+        "ScoreSummaryCard",
+        "SessionPitchReview",
+        "SessionStepScreen",
+        "string",
+        "Text",
+        "View"
+      ],
+      "primitiveElements": [
+        "Pressable",
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "ErrorBanner",
+        "MappedUiError",
+        "PhrasingVisualizerStub",
+        "ScoreResult",
+        "ScoreSummaryCard",
+        "SessionPitchReview",
+        "SessionStepScreen"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "loading",
+        "empty",
+        "modal"
+      ]
+    },
+    {
+      "route": "/session/slow",
+      "screenPath": "app/session/slow.tsx",
+      "visibleElements": [
+        "FretboardDiagram",
+        "LoopRegionControl",
+        "Record",
+        "SessionNoteDetailModal",
+        "SessionStemAndTab",
+        "SessionStepScreen",
+        "string",
+        "TabLoopBarRegion",
+        "Text",
+        "View"
+      ],
+      "primitiveElements": [
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "FretboardDiagram",
+        "LoopRegionControl",
+        "Record",
+        "SessionNoteDetailModal",
+        "SessionStemAndTab",
+        "SessionStepScreen",
+        "TabLoopBarRegion"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": false,
+        "modal": true
+      },
+      "missingStates": [
+        "loading",
+        "empty",
+        "error"
+      ]
+    },
+    {
+      "route": "/session/study",
+      "screenPath": "app/session/study.tsx",
+      "visibleElements": [
+        "AnimatedPressable",
+        "ErrorBanner",
+        "FretboardDiagram",
+        "FretboardOverlayMode",
+        "LyricsStrip",
+        "PlaybackTickContext",
+        "SessionNoteDetailModal",
+        "SessionStemAndTab",
+        "SessionStemAndTabHandle",
+        "SessionStepScreen",
+        "string",
+        "TabVariant",
+        "Text",
+        "View"
+      ],
+      "primitiveElements": [
+        "Text",
+        "View"
+      ],
+      "customComponents": [
+        "AnimatedPressable",
+        "ErrorBanner",
+        "FretboardDiagram",
+        "FretboardOverlayMode",
+        "LyricsStrip",
+        "PlaybackTickContext",
+        "SessionNoteDetailModal",
+        "SessionStemAndTab",
+        "SessionStemAndTabHandle",
+        "SessionStepScreen",
+        "TabVariant"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": true,
+        "modal": true
+      },
+      "missingStates": [
+        "loading",
+        "empty"
+      ]
+    },
+    {
+      "route": "/settings",
+      "screenPath": "app/(tabs)/settings.tsx",
+      "visibleElements": [
+        "CoachVoiceId",
+        "Pressable",
+        "SafeAreaView",
+        "ScrollView",
+        "Switch",
+        "Text",
+        "TextInput",
+        "View"
+      ],
+      "primitiveElements": [
+        "Pressable",
+        "SafeAreaView",
+        "ScrollView",
+        "Switch",
+        "Text",
+        "TextInput",
+        "View"
+      ],
+      "customComponents": [
+        "CoachVoiceId"
+      ],
+      "stateCoverage": {
+        "loading": false,
+        "empty": false,
+        "error": true,
+        "modal": false
+      },
+      "missingStates": [
+        "loading",
+        "empty",
+        "modal"
+      ]
+    }
+  ]
+}

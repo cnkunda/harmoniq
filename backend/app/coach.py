@@ -391,7 +391,7 @@ Never start with "Great job" or "Nice work"."""
 def generate_jam_coach_summary(
     duration_seconds: int,
     inferred_scale_label: str | None,
-    scale_position_map: dict[str, float],
+    pitch_class_weight_map: dict[str, float],
 ) -> str:
     """Local jam summary (PRIORITIES §36 — incremental; no LLM yet)."""
     if duration_seconds < 10:
@@ -405,8 +405,8 @@ def generate_jam_coach_summary(
             label = f"{label}."
         lead = f"You were leaning toward {label} "
 
-    if scale_position_map:
-        top_key, top_val = max(scale_position_map.items(), key=lambda kv: kv[1])
+    if pitch_class_weight_map:
+        top_key, top_val = max(pitch_class_weight_map.items(), key=lambda kv: kv[1])
         note = top_key.replace("pc_", "").replace("_", "")
         rest = (
             f"Strongest pitch-class weight: {note} ({top_val:.0%} of hits). "

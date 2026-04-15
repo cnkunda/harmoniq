@@ -1,0 +1,1378 @@
+{
+  "generatedAt": "2026-04-15T19:41:20.743Z",
+  "totalComponents": 155,
+  "duplicateComponentNames": [
+    "index"
+  ],
+  "componentsByCategory": {
+    "screen-level": 140,
+    "shared": 11,
+    "ui-primitives": 4
+  },
+  "components": [
+    {
+      "name": "StyledText-test",
+      "path": "components/__tests__/StyledText-test.js",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "AlphaTabWeb",
+      "path": "components/AlphaTabWeb.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "AlphaTabWeb.types",
+      "path": "components/AlphaTabWeb.types.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "AlphaTabWeb.web",
+      "path": "components/AlphaTabWeb.web.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "AlphaTabWebView",
+      "path": "components/AlphaTabWebView.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "AnimatedPressable",
+      "path": "components/AnimatedPressable.tsx",
+      "usageCount": 3,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        },
+        {
+          "route": "/jam",
+          "screenPath": "app/(tabs)/jam.tsx"
+        },
+        {
+          "route": "/session/study",
+          "screenPath": "app/session/study.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "AudioDropzone",
+      "path": "components/AudioDropzone.tsx",
+      "usageCount": 2,
+      "usedByScreens": [
+        {
+          "route": "/add-song",
+          "screenPath": "app/add-song.tsx"
+        },
+        {
+          "route": "/analyze-debug",
+          "screenPath": "app/(tabs)/analyze-debug.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "AudioDropzone.web",
+      "path": "components/AudioDropzone.web.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "BeatFlashPulse",
+      "path": "components/BeatFlashPulse.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "CoachNote",
+      "path": "components/CoachNote.tsx",
+      "usageCount": 3,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        },
+        {
+          "route": "/progress",
+          "screenPath": "app/(tabs)/progress.tsx"
+        },
+        {
+          "route": "/session/play",
+          "screenPath": "app/session/play.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "EditScreenInfo",
+      "path": "components/EditScreenInfo.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "EmptyState",
+      "path": "components/EmptyState.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "ErrorBanner",
+      "path": "components/ErrorBanner.tsx",
+      "usageCount": 9,
+      "usedByScreens": [
+        {
+          "route": "/add-song",
+          "screenPath": "app/add-song.tsx"
+        },
+        {
+          "route": "/analyze-debug",
+          "screenPath": "app/(tabs)/analyze-debug.tsx"
+        },
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        },
+        {
+          "route": "/jam",
+          "screenPath": "app/(tabs)/jam.tsx"
+        },
+        {
+          "route": "/onboarding/phrase/:index",
+          "screenPath": "app/onboarding/phrase/[index].tsx"
+        },
+        {
+          "route": "/onboarding/results",
+          "screenPath": "app/onboarding/results.tsx"
+        },
+        {
+          "route": "/session/play",
+          "screenPath": "app/session/play.tsx"
+        },
+        {
+          "route": "/session/review",
+          "screenPath": "app/session/review.tsx"
+        },
+        {
+          "route": "/session/study",
+          "screenPath": "app/session/study.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "ExternalLink",
+      "path": "components/ExternalLink.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "FretboardDiagram",
+      "path": "components/FretboardDiagram.tsx",
+      "usageCount": 4,
+      "usedByScreens": [
+        {
+          "route": "/jam",
+          "screenPath": "app/(tabs)/jam.tsx"
+        },
+        {
+          "route": "/session/play",
+          "screenPath": "app/session/play.tsx"
+        },
+        {
+          "route": "/session/slow",
+          "screenPath": "app/session/slow.tsx"
+        },
+        {
+          "route": "/session/study",
+          "screenPath": "app/session/study.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "LickCard",
+      "path": "components/LickCard.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        }
+      ],
+      "category": "ui-primitives"
+    },
+    {
+      "name": "ListenStemPanel",
+      "path": "components/ListenStemPanel.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "LoadingSkeleton",
+      "path": "components/LoadingSkeleton.tsx",
+      "usageCount": 3,
+      "usedByScreens": [
+        {
+          "route": "/add-song",
+          "screenPath": "app/add-song.tsx"
+        },
+        {
+          "route": "/analyze-debug",
+          "screenPath": "app/(tabs)/analyze-debug.tsx"
+        },
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "LoopRegionControl",
+      "path": "components/LoopRegionControl.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/session/slow",
+          "screenPath": "app/session/slow.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "LyricsStrip",
+      "path": "components/LyricsStrip.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/session/study",
+          "screenPath": "app/session/study.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "MetronomeArcReadout",
+      "path": "components/MetronomeArcReadout.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "NoiseOverlay.native",
+      "path": "components/NoiseOverlay.native.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "NoiseOverlay",
+      "path": "components/NoiseOverlay.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "NoiseOverlay.web",
+      "path": "components/NoiseOverlay.web.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "NoteAccuracyBar",
+      "path": "components/NoteAccuracyBar.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "NoteDetailCard",
+      "path": "components/NoteDetailCard.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "ui-primitives"
+    },
+    {
+      "name": "OnboardingProgress",
+      "path": "components/onboarding/OnboardingProgress.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "OnboardingScreenShell",
+      "path": "components/onboarding/OnboardingScreenShell.tsx",
+      "usageCount": 4,
+      "usedByScreens": [
+        {
+          "route": "/onboarding",
+          "screenPath": "app/onboarding/index.tsx"
+        },
+        {
+          "route": "/onboarding/mic",
+          "screenPath": "app/onboarding/mic.tsx"
+        },
+        {
+          "route": "/onboarding/phrase/:index",
+          "screenPath": "app/onboarding/phrase/[index].tsx"
+        },
+        {
+          "route": "/onboarding/results",
+          "screenPath": "app/onboarding/results.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "PitchIndicator",
+      "path": "components/PitchIndicator.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "index",
+      "path": "components/play/index.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "PlayBeatAccuracyPanel",
+      "path": "components/play/PlayBeatAccuracyPanel.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/session/play",
+          "screenPath": "app/session/play.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "PlayCaptureControls",
+      "path": "components/play/PlayCaptureControls.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/session/play",
+          "screenPath": "app/session/play.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "PlayPitchLadderVertical",
+      "path": "components/play/PlayPitchLadderVertical.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/session/play",
+          "screenPath": "app/session/play.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "PlayTargetNoteQueue",
+      "path": "components/play/PlayTargetNoteQueue.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/session/play",
+          "screenPath": "app/session/play.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "ReviewSessionPanel",
+      "path": "components/ReviewSessionPanel.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "SessionNoteDetailModal",
+      "path": "components/SessionNoteDetailModal.tsx",
+      "usageCount": 3,
+      "usedByScreens": [
+        {
+          "route": "/session/play",
+          "screenPath": "app/session/play.tsx"
+        },
+        {
+          "route": "/session/slow",
+          "screenPath": "app/session/slow.tsx"
+        },
+        {
+          "route": "/session/study",
+          "screenPath": "app/session/study.tsx"
+        }
+      ],
+      "category": "ui-primitives"
+    },
+    {
+      "name": "SessionPitchReview",
+      "path": "components/SessionPitchReview.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/session/review",
+          "screenPath": "app/session/review.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "SessionStemAndTab",
+      "path": "components/SessionStemAndTab.tsx",
+      "usageCount": 5,
+      "usedByScreens": [
+        {
+          "route": "/jam",
+          "screenPath": "app/(tabs)/jam.tsx"
+        },
+        {
+          "route": "/session/listen",
+          "screenPath": "app/session/listen.tsx"
+        },
+        {
+          "route": "/session/play",
+          "screenPath": "app/session/play.tsx"
+        },
+        {
+          "route": "/session/slow",
+          "screenPath": "app/session/slow.tsx"
+        },
+        {
+          "route": "/session/study",
+          "screenPath": "app/session/study.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "SessionStepIndicator",
+      "path": "components/SessionStepIndicator.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "SessionStepper",
+      "path": "components/SessionStepper.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "SessionStepScreen",
+      "path": "components/SessionStepScreen.tsx",
+      "usageCount": 5,
+      "usedByScreens": [
+        {
+          "route": "/session/listen",
+          "screenPath": "app/session/listen.tsx"
+        },
+        {
+          "route": "/session/play",
+          "screenPath": "app/session/play.tsx"
+        },
+        {
+          "route": "/session/review",
+          "screenPath": "app/session/review.tsx"
+        },
+        {
+          "route": "/session/slow",
+          "screenPath": "app/session/slow.tsx"
+        },
+        {
+          "route": "/session/study",
+          "screenPath": "app/session/study.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "SkillGraph",
+      "path": "components/SkillGraph.tsx",
+      "usageCount": 2,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        },
+        {
+          "route": "/progress",
+          "screenPath": "app/(tabs)/progress.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "StemMixer",
+      "path": "components/StemMixer.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "StyledText",
+      "path": "components/StyledText.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "ui-primitives"
+    },
+    {
+      "name": "TabView",
+      "path": "components/TabView.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "TabViewport",
+      "path": "components/TabViewport.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "TabViewport.types",
+      "path": "components/TabViewport.types.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "TabViewport.web",
+      "path": "components/TabViewport.web.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "Themed",
+      "path": "components/Themed.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "ToastConfig",
+      "path": "components/ToastConfig.tsx",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "useClientOnlyValue",
+      "path": "components/useClientOnlyValue.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "useClientOnlyValue.web",
+      "path": "components/useClientOnlyValue.web.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "useColorScheme",
+      "path": "components/useColorScheme.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "useColorScheme.web",
+      "path": "components/useColorScheme.web.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "WaveformPlaybackActions",
+      "path": "components/WaveformPlaybackActions.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/review-archive/:sessionId",
+          "screenPath": "app/review-archive/[sessionId].tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "WaveformVisualizer",
+      "path": "components/WaveformVisualizer.tsx",
+      "usageCount": 1,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        }
+      ],
+      "category": "screen-level"
+    },
+    {
+      "name": "WoodGradient",
+      "path": "components/WoodGradient.tsx",
+      "usageCount": 5,
+      "usedByScreens": [
+        {
+          "route": "/design-preview",
+          "screenPath": "app/(tabs)/design-preview.tsx"
+        },
+        {
+          "route": "/jam",
+          "screenPath": "app/(tabs)/jam.tsx"
+        },
+        {
+          "route": "/library",
+          "screenPath": "app/(tabs)/library.tsx"
+        },
+        {
+          "route": "/onboarding/phrase/:index",
+          "screenPath": "app/onboarding/phrase/[index].tsx"
+        },
+        {
+          "route": "/progress",
+          "screenPath": "app/(tabs)/progress.tsx"
+        }
+      ],
+      "category": "shared"
+    },
+    {
+      "name": "analyze",
+      "path": "src/api/analyze.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "index",
+      "path": "src/api/index.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "beatMetronome.types",
+      "path": "src/audio/beatMetronome.types.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "createBeatMetronome",
+      "path": "src/audio/createBeatMetronome.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "metronome.native",
+      "path": "src/audio/metronome.native.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "metronome.web.test",
+      "path": "src/audio/metronome.web.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "metronome.web",
+      "path": "src/audio/metronome.web.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "metronomeShared.test",
+      "path": "src/audio/metronomeShared.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "metronomeShared",
+      "path": "src/audio/metronomeShared.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "Mixer.native",
+      "path": "src/audio/Mixer.native.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "Mixer",
+      "path": "src/audio/Mixer.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "Mixer.web",
+      "path": "src/audio/Mixer.web.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "mixerTypes",
+      "path": "src/audio/mixerTypes.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "recordSession.native",
+      "path": "src/audio/recordSession.native.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "recordSession",
+      "path": "src/audio/recordSession.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "recordSession.types",
+      "path": "src/audio/recordSession.types.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "recordSession.web",
+      "path": "src/audio/recordSession.web.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "useLoopAudio",
+      "path": "src/audio/useLoopAudio.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "useMetronome",
+      "path": "src/audio/useMetronome.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "config",
+      "path": "src/config.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "alphaTabBridge.test",
+      "path": "src/constants/alphaTabBridge.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "alphaTabBridge",
+      "path": "src/constants/alphaTabBridge.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "alphaTabPlayerUi",
+      "path": "src/constants/alphaTabPlayerUi.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "animations",
+      "path": "src/constants/animations.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "backingTracks",
+      "path": "src/constants/backingTracks.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "colors",
+      "path": "src/constants/colors.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "sessionFlow",
+      "path": "src/constants/sessionFlow.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "stemMixerDev",
+      "path": "src/constants/stemMixerDev.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "tabHarnessTheme",
+      "path": "src/constants/tabHarnessTheme.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "client.native",
+      "path": "src/db/client.native.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "client",
+      "path": "src/db/client.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "client.web",
+      "path": "src/db/client.web.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "harmoniqDbClient",
+      "path": "src/db/harmoniqDbClient.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "homeSuggestionFromLesson",
+      "path": "src/db/homeSuggestionFromLesson.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "homeSuggestionFromLicks",
+      "path": "src/db/homeSuggestionFromLicks.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "idbWeb",
+      "path": "src/db/idbWeb.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "persistCachedLesson",
+      "path": "src/db/persistCachedLesson.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "persistCachedLesson.web",
+      "path": "src/db/persistCachedLesson.web.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "schema",
+      "path": "src/db/schema.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "types",
+      "path": "src/db/types.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "mapErrorToUi.test",
+      "path": "src/errors/mapErrorToUi.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "mapErrorToUi",
+      "path": "src/errors/mapErrorToUi.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "openHarmoniqAppSettings",
+      "path": "src/errors/openHarmoniqAppSettings.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "alphaTabScaleHighlight",
+      "path": "src/jam/alphaTabScaleHighlight.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "jamReferenceTabGp5Base64",
+      "path": "src/jam/jamReferenceTabGp5Base64.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "pitchClassHistogram.test",
+      "path": "src/jam/pitchClassHistogram.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "pitchClassHistogram",
+      "path": "src/jam/pitchClassHistogram.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "barLoopBounds.test",
+      "path": "src/music/barLoopBounds.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "barLoopBounds",
+      "path": "src/music/barLoopBounds.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "capoSuggestion",
+      "path": "src/music/capoSuggestion.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "fingerSuggestion.test",
+      "path": "src/music/fingerSuggestion.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "fingerSuggestion",
+      "path": "src/music/fingerSuggestion.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "fretboardCell.test",
+      "path": "src/music/fretboardCell.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "fretboardCell",
+      "path": "src/music/fretboardCell.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "noteNames",
+      "path": "src/music/noteNames.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "noteSelectionDetail",
+      "path": "src/music/noteSelectionDetail.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "scaleDegree.test",
+      "path": "src/music/scaleDegree.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "scaleDegree",
+      "path": "src/music/scaleDegree.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "aggregatePlacementScores.test",
+      "path": "src/onboarding/aggregatePlacementScores.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "aggregatePlacementScores",
+      "path": "src/onboarding/aggregatePlacementScores.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "fallbackPlacementCoach",
+      "path": "src/onboarding/fallbackPlacementCoach.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "placementPhrases",
+      "path": "src/onboarding/placementPhrases.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "pitchStream.native",
+      "path": "src/pitch/pitchStream.native.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "pitchStream.web",
+      "path": "src/pitch/pitchStream.web.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "pitchTypes",
+      "path": "src/pitch/pitchTypes.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "usePitchStream.native",
+      "path": "src/pitch/usePitchStream.native.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "usePitchStream",
+      "path": "src/pitch/usePitchStream.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "usePitchStream.web",
+      "path": "src/pitch/usePitchStream.web.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "listenTransportDebug",
+      "path": "src/session/listenTransportDebug.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "noteAccuracyBeats",
+      "path": "src/session/noteAccuracyBeats.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "slowLoopRegion.test",
+      "path": "src/session/slowLoopRegion.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "slowLoopRegion",
+      "path": "src/session/slowLoopRegion.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "smartScroll",
+      "path": "src/session/smartScroll.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "useFretboardTuner",
+      "path": "src/session/useFretboardTuner.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "usePlayCapture",
+      "path": "src/session/usePlayCapture.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "useSessionSmartScroll",
+      "path": "src/session/useSessionSmartScroll.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "formatJournalExport.test",
+      "path": "src/settings/formatJournalExport.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "formatJournalExport",
+      "path": "src/settings/formatJournalExport.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "useMetronomeDefaultOn",
+      "path": "src/settings/useMetronomeDefaultOn.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "sm2.test",
+      "path": "src/spaced/sm2.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "sm2",
+      "path": "src/spaced/sm2.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "lessonStore",
+      "path": "src/stores/lessonStore.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "onboardingPlacementStore",
+      "path": "src/stores/onboardingPlacementStore.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "sessionAnnotationsStore",
+      "path": "src/stores/sessionAnnotationsStore.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "sessionPlayStore",
+      "path": "src/stores/sessionPlayStore.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "skillStore",
+      "path": "src/stores/skillStore.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "useAppStore",
+      "path": "src/stores/useAppStore.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "tabMessage.codec.test",
+      "path": "src/tabMessage.codec.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "index",
+      "path": "src/types/index.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "base64ToUint8Array.test",
+      "path": "src/utils/base64ToUint8Array.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "base64ToUint8Array",
+      "path": "src/utils/base64ToUint8Array.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "fretboardShareState",
+      "path": "src/utils/fretboardShareState.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "lessonAudio",
+      "path": "src/utils/lessonAudio.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "lessonFromSavedLick",
+      "path": "src/utils/lessonFromSavedLick.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "lessonTabs",
+      "path": "src/utils/lessonTabs.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "parseScoreSnapshot.test",
+      "path": "src/utils/parseScoreSnapshot.test.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "parseScoreSnapshot",
+      "path": "src/utils/parseScoreSnapshot.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    },
+    {
+      "name": "practiceConfig",
+      "path": "src/utils/practiceConfig.ts",
+      "usageCount": 0,
+      "usedByScreens": [],
+      "category": "screen-level"
+    }
+  ]
+}

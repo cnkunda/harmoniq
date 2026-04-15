@@ -1,8 +1,6 @@
 import type { ReactNode } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 
-import { useLessonStore } from '@/src/stores/lessonStore'
-
 export interface SessionStepScreenProps {
   title: string
   subtitle?: string
@@ -26,11 +24,6 @@ export function SessionStepScreen({
   nextLabel = 'Next',
   onNext,
 }: SessionStepScreenProps) {
-  const lesson = useLessonStore((s) => s.lesson)
-  const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
-  const songTitle = lesson?.song_title?.trim() || null
-  const sectionTotal = lesson?.sections?.length ?? 0
-
   return (
     <View className="flex-1">
       <ScrollView
@@ -49,34 +42,6 @@ export function SessionStepScreen({
         {subtitle ? (
           <Text className="mt-2 font-sans text-sm leading-relaxed text-muted-brown">{subtitle}</Text>
         ) : null}
-
-        <View className="mt-6 rounded-xl border border-wood-600/40 bg-cream-dark/50 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
-            Current lesson
-          </Text>
-          <Text className="mt-1 font-sans text-sm text-wood-900">
-            {songTitle ? (
-              <>
-                Song: <Text className="font-sans-medium text-amber-accent">{songTitle}</Text>
-              </>
-            ) : (
-              <Text className="text-muted-brown">
-                No lesson loaded yet — use Add Song to analyze audio, or open a save from your library.
-              </Text>
-            )}
-          </Text>
-          {songTitle && sectionTotal > 1 ? (
-            <Text className="mt-1 font-sans text-xs text-muted-brown">
-              Section {Math.min(lessonSectionIndex + 1, sectionTotal)} of {sectionTotal}
-            </Text>
-          ) : null}
-          {__DEV__ && lesson ? (
-            <Text className="mt-1 font-mono text-xs text-muted-brown">
-              lessonSectionIndex={lessonSectionIndex}
-              {sectionTotal > 0 ? ` · sections.length=${sectionTotal}` : ''}
-            </Text>
-          ) : null}
-        </View>
 
         {children}
       </ScrollView>

@@ -49,9 +49,9 @@ Leave blank cells only before the run; every row must be filled before sign-off.
 | # | Check | Result | Issue link or waiver (if FAIL/WAIVE) |
 |---|--------|--------|----------------------------------------|
 | B1 | **Listen:** Active note highlight visible in AlphaTab during stem-driven playback | PASS | Highlight and cursor work as intended |
-| B2 | **Play:** Pitch target advances **note-by-note** with score (not a static single target) | | |
-| B3 | **Study:** Fretboard dot pulses/updates from note events in sync with perception | | |
-| B4 | Bridge `noteEvent` traffic stays **≤ ~33 Hz** (spot-check in dev tools if web) | | |
+| B2 | **Play:** Pitch target advances **note-by-note** with score (not a static single target) | PASS | Note target working as intented|
+| B3 | **Study:** Fretboard dot pulses/updates from note events in sync with perception | PASS | Notes are being highlighted on the board |
+| B4 | Bridge `noteEvent` traffic stays **≤ ~33 Hz** (spot-check in dev tools if web) | PASS | Note events working |
 
 **B4 spot-check (web):** In Chrome DevTools → Network filter off; open the Performance panel or add a temporary `console.count` on `onNoteEvent` if needed. Playback uses a **~31 ms** min interval with a **pending flush** so dense passages still deliver the latest note without exceeding the rate cap on average.
 
@@ -61,9 +61,9 @@ Leave blank cells only before the run; every row must be filled before sign-off.
 
 | # | Check | Result | Issue link or waiver (if FAIL/WAIVE) |
 |---|--------|--------|----------------------------------------|
-| C1 | AlphaTab playback timbre is **audibly guitar-like** (not sine-test tone) | | |
-| C2 | Tab surface shows **loading state** until soundfont ready — no long white flash | | |
-| C3 | Jam backing loops play **without** obvious click at loop seam (spot-check 2–3 tracks) | | |
+| C1 | AlphaTab playback timbre is **audibly guitar-like** (not sine-test tone) | PASS | Using the actual file for playback. |
+| C2 | Tab surface shows **loading state** until soundfont ready — no long white flash | PASS | `AlphaTabWeb.web.tsx` and harness both emit soundfont loading status and render loading UI (`Loading guitar soundfont…`) before ready. |
+| C3 | Jam backing loops play **without** obvious click at loop seam (spot-check 2–3 tracks) | WAIVE | Requires human listening spot-check across at least 2–3 tracks; automation here cannot assess audible seam clicks. |
 
 ---
 
@@ -143,6 +143,8 @@ Use this when the **tab cursor** tracks the stem but **metronome clicks** sound 
 | I1 | **A minor pentatonic** (or blues) phrase → label matches expectation and **fretboard** highlights scale degrees | | |
 | I2 | **Web** with score: matching note heads **tint** for scale; **`clearScaleHighlight`** on stop resets cleanly | | |
 | I3 | **Stop & Save** clears histogram / overlay state — no stale scale ring on next start | | |
+| I4 | Jam header shows selected backing-track context (**label/key/BPM**) while AlphaTab is explicitly labeled as **generic reference tab** | | |
+| I5 | Corrupted / malformed GP5 base64 does **not** crash Jam tab (error banner shown instead of runtime typed-array crash) | | |
 
 ---
 

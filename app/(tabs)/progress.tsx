@@ -71,6 +71,9 @@ export default function ProgressScreen() {
             <View className="mb-8 mt-4">
               <Text className="mb-2 font-serif text-3xl text-cream">Your Progress</Text>
               <Text className="font-sans text-muted-brown">A slow-moving map of your musical feel.</Text>
+              <Text className="mt-2 font-sans text-xs text-muted-brown">
+                Node movement blends accuracy, timing stability, and capture confidence so low-signal takes do not cause jumps.
+              </Text>
             </View>
 
             <View className="mb-12 flex-col gap-8 md:flex-row md:items-stretch">

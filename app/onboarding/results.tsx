@@ -1,9 +1,9 @@
 import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { Pressable, Text, View } from 'react-native'
 
 import { ErrorBanner } from '@/components/ErrorBanner'
+import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 import { fetchOnboardingPlacementCoach } from '@/src/api/analyze'
 import { DEFAULT_SKILL_NODES } from '@/src/db/schema'
 import {
@@ -27,6 +27,7 @@ export default function OnboardingResultsScreen() {
   const loadSkills = useSkillStore((s) => s.loadFromDb)
 
   const [coachText, setCoachText] = useState<string | null>(null)
+  const [confidenceNote, setConfidenceNote] = useState<string | null>(null)
   const [seedError, setSeedError] = useState<MappedUiError | null>(null)
   const [retryToken, setRetryToken] = useState(0)
 
@@ -46,9 +47,19 @@ export default function OnboardingResultsScreen() {
         const metrics = aggregatePlacementCoachMetrics([a, b, c])
         try {
           const res = await fetchOnboardingPlacementCoach(metrics)
-          if (!cancelled) setCoachText(res.coach_paragraph)
+          if (!cancelled) {
+            setCoachText(res.coach_paragraph)
+            setConfidenceNote(res.confidence_note ?? null)
+          }
         } catch {
-          if (!cancelled) setCoachText(FALLBACK_PLACEMENT_COACH_COPY)
+          if (!cancelled) {
+            setCoachText(FALLBACK_PLACEMENT_COACH_COPY)
+            setConfidenceNote(
+              metrics.placement_confidence === 'low'
+                ? 'Your initial baseline used lower-confidence phrase captures and will adapt quickly with more takes.'
+                : null,
+            )
+          }
         }
       } catch {
         if (!cancelled) {
@@ -85,11 +96,12 @@ export default function OnboardingResultsScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
-      <ScrollView className="flex-1 px-6 py-6" contentContainerStyle={{ paddingBottom: 32 }}>
-        <Text className="font-serif text-2xl text-cream">Your baseline</Text>
-        <Text className="mt-2 font-sans text-sm text-muted-brown">
-          Five skill nodes are seeded from your three phrases. The coach note below is tailored to these averages (or an offline template if the server is unavailable).
+    <OnboardingScreenShell currentStep={5} showProgress={false} scrollable>
+      <View className="py-4">
+        <Text className="text-center font-serif text-2xl text-cream">Your baseline</Text>
+        <Text className="mt-2 text-center font-sans text-sm text-muted-brown">
+          Five skill nodes are seeded from your three phrases. The coach note below is tailored to these averages (or
+          an offline template if the server is unavailable).
         </Text>
 
         {seedError ? (
@@ -129,7 +141,10 @@ export default function OnboardingResultsScreen() {
           {coachText == null ? (
             <Text className="mt-2 font-sans text-sm text-muted-brown">Fetching coach note…</Text>
           ) : (
-            <Text className="mt-2 font-sans text-sm leading-6 text-cream">{coachText}</Text>
+            <>
+              <Text className="mt-2 font-sans text-sm leading-6 text-cream">{coachText}</Text>
+              {confidenceNote ? <Text className="mt-3 font-sans text-xs text-muted-brown">{confidenceNote}</Text> : null}
+            </>
           )}
         </View>
 
@@ -141,7 +156,7 @@ export default function OnboardingResultsScreen() {
         >
           <Text className="text-center font-sans-medium text-wood-900">Enter Harmoniq</Text>
         </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </OnboardingScreenShell>
   )
 }
