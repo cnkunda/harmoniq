@@ -35,7 +35,6 @@ export function createWebBeatMetronome(audioContext: AudioContext): BeatMetronom
   let timer: ReturnType<typeof setInterval> | null = null
   const firedSongMs = new Set<number>()
   let lastPos = -1
-  let debugScheduleLogs = 0
 
   const tick = () => {
     if (!params || !params.isPlaying()) return
@@ -65,37 +64,6 @@ export function createWebBeatMetronome(audioContext: AudioContext): BeatMetronom
     const clicks = collectClickTimesInRange(grid, tempo, pos - 1e-4, toSong, subdiv, {
       barTimestamps: params.barTimestamps,
     })
-    if (debugScheduleLogs < 3) {
-      // #region agent log
-      fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '046f07' },
-        body: JSON.stringify({
-          sessionId: '046f07',
-          runId: 'run1',
-          hypothesisId: 'H2_H3_H4',
-          location: 'src/audio/metronome.web.ts:tick.window',
-          message: 'tick scheduling window',
-          data: {
-            posRaw,
-            pos,
-            alignOff,
-            rate,
-            tempo,
-            nowCtx,
-            horizonSong,
-            minHorizonSong,
-            toSong,
-            clicksLen: clicks.length,
-            firstClick: clicks[0]?.songTime ?? null,
-            beatGridLen: grid.length,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
-      debugScheduleLogs += 1
-    }
     for (const { songTime, isDownbeat } of clicks) {
       const deltaSong = songTime - pos
       if (deltaSong < -0.02) continue
@@ -119,29 +87,6 @@ export function createWebBeatMetronome(audioContext: AudioContext): BeatMetronom
       params = p
       firedSongMs.clear()
       lastPos = -1
-      debugScheduleLogs = 0
-      // #region agent log
-      fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '046f07' },
-        body: JSON.stringify({
-          sessionId: '046f07',
-          runId: 'run1',
-          hypothesisId: 'H2_H3',
-          location: 'src/audio/metronome.web.ts:start',
-          message: 'metronome web start',
-          data: {
-            beatGridLen: p.beatGrid.length,
-            beatGrid0: p.beatGrid[0] ?? null,
-            bar0: p.barTimestamps?.[0] ?? null,
-            tempoBpm: p.tempoBpm,
-            subdivision: p.subdivision ?? 1,
-            beatAlignOffsetSec: p.beatAlignOffsetSec ?? 0,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
       if (timer) clearInterval(timer)
       timer = setInterval(tick, LOOKAHEAD_MS)
       tick()

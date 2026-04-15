@@ -1202,6 +1202,15 @@ export default function TabLayout() {
 
 ## Screens
 
+### Play session
+
+- **Layout:** In `app/session/play.tsx`: top row on wide screens is **~⅓ / ~⅔** — left column stacks **Pitch targets** then **Score · by beat**; right column is **Live pitch vs target** (+ streak line). Below that, **Position map** (`FretboardDiagram`) is **full width**. On narrow screens the column stacks (targets → score → ladder). The stem/tab block remains **`SessionStemAndTab`** below so the AlphaTab surface does not remount unnecessarily.
+- **Panel tokens (align with `SessionStepScreen` / Listen):** `rounded-xl border border-wood-600/40 bg-cream-dark/50` for cards; section titles `font-sans-medium text-xs uppercase tracking-wide text-amber-accent`; body `text-wood-900` / secondary `text-muted-brown` — **not** separate dark-wood “dashboard” panels so Play reads as the same session chrome as Listen/Study.
+- **B2 (targets):** The highlighted chip is always the **latest tab note** (`noteEvent`); the queue shows history so testers see targets advancing **note-by-note**, while beat scoring stays **per beat** against whatever target was in effect.
+- **Chips:** Reuse the ListenStemPanel inactive/active chip pattern (`border-wood-600/40 bg-wood-900/10` vs `border-amber-accent bg-amber-accent`) for the horizontal target strip.
+- **Motion:** `react-native-reanimated` only (see `PRIORITIES.md` — no `framer-motion`). Beat-close feedback on the fretboard uses a brief ring tint (success / amber / danger).
+- **QA cross-links:** Manual checks in `docs/FEEL_REAL_QA.md` (B2 rolling targets, E1 ladder); platform matrix in `docs/PLATFORM_QA_MATRIX.md`.
+
 ```app/(tabs)/index.tsx
 import { ScrollView, View, Text, Pressable } from 'react-native'
 import { useRouter } from 'expo-router'

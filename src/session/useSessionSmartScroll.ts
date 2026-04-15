@@ -32,7 +32,7 @@ export function useSessionSmartScroll({
   barTimestamps,
   tickRef,
   resetKey = 0,
-  pollIntervalMs = 200,
+  pollIntervalMs = 100,
   enabled = true,
 }: UseSessionSmartScrollOptions): void {
   const lastEmittedBar = useRef<number | null>(null)

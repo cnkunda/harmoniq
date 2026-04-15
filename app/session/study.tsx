@@ -16,6 +16,7 @@ import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from
 import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
+import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
@@ -46,14 +47,6 @@ function toLyricWords(input: unknown): Array<{ word: string; timeSec: number }> 
     .filter((x): x is { word: string; timeSec: number } => x != null)
 }
 
-function barIndexForTime(barTimestamps: number[] | undefined, t: number): number {
-  if (!barTimestamps || barTimestamps.length === 0) return 0
-  for (let i = barTimestamps.length - 1; i >= 0; i -= 1) {
-    if (t >= barTimestamps[i]) return i
-  }
-  return 0
-}
-
 /** Cap long songs — chips wrap; keep count reasonable for layout. */
 const STUDY_BAR_CHIP_MAX = 64
 
@@ -76,7 +69,10 @@ export default function StudyScreen() {
     ? ((section as Record<string, unknown>).primary_position as string)
     : 'Tap a note to infer position'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
-  const currentBar = useMemo(() => barIndexForTime(lesson?.bar_timestamps, tick.positionSec), [lesson?.bar_timestamps, tick.positionSec])
+  const currentBar = useMemo(
+    () => barIndexForPlaybackSeconds(lesson?.bar_timestamps ?? [], tick.positionSec),
+    [lesson?.bar_timestamps, tick.positionSec],
+  )
 
   const sectionKey = `${lesson?.job_id ?? 'no-job'}:${lessonSectionIndex}`
   const notesBySection = useSessionAnnotationsStore((s) => s.notesBySection)

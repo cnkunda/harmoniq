@@ -193,6 +193,10 @@
       })
       var currentTranspose = 0
       var lastNoteEventAt = 0
+      /** Keep equal to `ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS` in src/constants/alphaTabBridge.ts */
+      var NOTE_EVENT_MIN_MS = 31
+      var pendingNoteEventPayload = null
+      var pendingNoteEventTimer = null
       var loopBracketEl = null
       var loopState = null
 
@@ -280,7 +284,25 @@
           })
           return
         }
-        if (!vb || typeof vb.x !== 'number') return
+        var MAX_BOUNDS_ATTEMPTS = 18
+        if (!vb || typeof vb.x !== 'number') {
+          if (att < MAX_BOUNDS_ATTEMPTS) {
+            requestAnimationFrame(function () {
+              scrollMasterBarIntoViewBar(barIndex, att + 1)
+            })
+          } else {
+            try {
+              console.warn(
+                '[Harmoniq harness] scrollMasterBarIntoView: no bounds for master bar',
+                idx,
+                'after',
+                MAX_BOUNDS_ATTEMPTS,
+                'attempts',
+              )
+            } catch (e) {}
+          }
+          return
+        }
         var bw = typeof vb.w === 'number' ? vb.w : 0
         var barLeft = vb.x
         var barRight = vb.x + bw
@@ -369,7 +391,7 @@
             return externalAudio.playbackRate || stemPlaybackRate
           },
           set playbackRate(v) {
-            stemPlaybackRate = Number.isFinite(v) ? Math.max(0.5, Math.min(1.25, v)) : 1
+            stemPlaybackRate = Number.isFinite(v) ? Math.max(0.25, Math.min(1.25, v)) : 1
             externalAudio.playbackRate = stemPlaybackRate
             applyStemPlaybackSpeedToApi()
           },
@@ -446,15 +468,21 @@
           })
       }
 
+      function flushPendingNoteEventFromMidi() {
+        pendingNoteEventTimer = null
+        if (!pendingNoteEventPayload) return
+        var p = pendingNoteEventPayload
+        pendingNoteEventPayload = null
+        lastNoteEventAt = Date.now()
+        postOut(p)
+      }
+
       function emitNoteEventFromMidiEvent(evt) {
         if (Array.isArray(evt)) {
           for (var i = 0; i < evt.length; i += 1) emitNoteEventFromMidiEvent(evt[i])
           return
         }
         if (!evt || typeof evt !== 'object') return
-        var now = Date.now()
-        /* 31ms min gap — FEEL_REAL_QA B4; keep in sync with src/constants/alphaTabBridge.ts */
-        if (now - lastNoteEventAt < 31) return
 
         var velocity = typeof evt.velocity === 'number' ? evt.velocity : 1
         if (velocity <= 0) return
@@ -465,9 +493,7 @@
         } else if (typeof evt.eventType === 'number') {
           typeName = String(evt.eventType)
         }
-        // Keep permissive but try to avoid non-note events when type markers exist.
         if (typeName && typeName !== '9' && typeName !== 'NoteOn') {
-          // 9 is common MIDI NoteOn enum value
         }
 
         var midi = null
@@ -492,6 +518,21 @@
           payload.hasExplicitTabPosition = true
         }
 
+        var now = Date.now()
+        var elapsed = now - lastNoteEventAt
+        if (elapsed < NOTE_EVENT_MIN_MS) {
+          pendingNoteEventPayload = payload
+          if (!pendingNoteEventTimer) {
+            var wait = Math.max(1, NOTE_EVENT_MIN_MS - elapsed)
+            pendingNoteEventTimer = setTimeout(flushPendingNoteEventFromMidi, wait)
+          }
+          return
+        }
+        if (pendingNoteEventTimer) {
+          clearTimeout(pendingNoteEventTimer)
+          pendingNoteEventTimer = null
+        }
+        pendingNoteEventPayload = null
         lastNoteEventAt = now
         postOut(payload)
       }
@@ -687,7 +728,7 @@
         }
 
         if (msg.type === 'setPlaybackRate' && typeof msg.playbackRate === 'number') {
-          stemPlaybackRate = Number.isFinite(msg.playbackRate) ? Math.max(0.5, Math.min(1.25, msg.playbackRate)) : 1
+          stemPlaybackRate = Number.isFinite(msg.playbackRate) ? Math.max(0.25, Math.min(1.25, msg.playbackRate)) : 1
           externalAudio.playbackRate = stemPlaybackRate
           applyStemPlaybackSpeedToApi()
           updatePositionFromAudio()

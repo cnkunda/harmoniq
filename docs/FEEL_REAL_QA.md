@@ -48,10 +48,12 @@ Leave blank cells only before the run; every row must be filled before sign-off.
 
 | # | Check | Result | Issue link or waiver (if FAIL/WAIVE) |
 |---|--------|--------|----------------------------------------|
-| B1 | **Listen:** Active note highlight visible in AlphaTab during stem-driven playback | PASS | Highlight works on first loop. Subsequent loops act a bit different though |
+| B1 | **Listen:** Active note highlight visible in AlphaTab during stem-driven playback | PASS | Highlight and cursor work as intended |
 | B2 | **Play:** Pitch target advances **note-by-note** with score (not a static single target) | | |
 | B3 | **Study:** Fretboard dot pulses/updates from note events in sync with perception | | |
 | B4 | Bridge `noteEvent` traffic stays **≤ ~33 Hz** (spot-check in dev tools if web) | | |
+
+**B4 spot-check (web):** In Chrome DevTools → Network filter off; open the Performance panel or add a temporary `console.count` on `onNoteEvent` if needed. Playback uses a **~31 ms** min interval with a **pending flush** so dense passages still deliver the latest note without exceeding the rate cap on average.
 
 ---
 
@@ -85,6 +87,21 @@ Leave blank cells only before the run; every row must be filled before sign-off.
 
 ---
 
+## Timing data vs metronome (triage)
+
+Use this when the **tab cursor** tracks the stem but **metronome clicks** sound consistently early/late: the Web Audio transport is probably correct and the **lesson timing fields** need verification.
+
+| Field | Role |
+|-------|------|
+| `beat_grid` | Beat times (seconds) used for click scheduling |
+| `bar_timestamps` | Bar starts; anchors downbeats with `tempo` |
+| `tempo` | Nominal BPM when the grid is sparse |
+| `beat_align_offset_sec` | Shifts metronome vs stem clock (seconds; signed). Prefer backend calibration over ad-hoc client hacks. |
+
+**Listen / web checklist (manual):** full-file loop **lap 1 vs lap 2** with metronome on; optional bar loop + scrub; **1.0×** and **~0.65×**; subdivision toggles. In dev builds, a backward transport jump logs `[ListenTransport] position wrap/jump` to the console.
+
+---
+
 ## F. Metronome (Commit 50)
 
 | # | Check | Result | Issue link or waiver (if FAIL/WAIVE) |
@@ -93,6 +110,8 @@ Leave blank cells only before the run; every row must be filled before sign-off.
 | F2 | **Native:** Clicks **audibly on beat**; note any documented jitter in waiver if annoying | | |
 | F3 | **Beat flash** visible during Listen when metronome enabled | | |
 | F4 | **Subdivision** change alters click density **without** requiring full session restart | | |
+| F5 | **Listen (web):** Full-file loop — metronome vs stems on **lap 2** is **no worse** than lap 1 (no extra drift / double-click seam) | | |
+| F6 | **Listen:** Metronome on at **1.0×** and **~0.65×** — no useless **phase jump** when changing speed (rate applied via transport, not by restarting the scheduler) | | |
 
 ---
 

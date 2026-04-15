@@ -8,6 +8,7 @@ import Animated, {
 } from 'react-native-reanimated'
 
 import colors from '@/src/constants/colors'
+import { CHROMATIC_NOTE_NAMES } from '@/src/music/noteNames'
 import type { NoteResultLabel } from '@/src/session/noteAccuracyBeats'
 
 export interface PitchIndicatorProps {
@@ -33,9 +34,8 @@ function midiToHz(midi: number): number {
  */
 export function midiToScientificPitchName(midi: number): string {
   const rounded = Math.round(midi)
-  const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
   const octave = Math.floor(rounded / 12) - 1
-  return `${names[((rounded % 12) + 12) % 12]}${octave}`
+  return `${CHROMATIC_NOTE_NAMES[((rounded % 12) + 12) % 12]}${octave}`
 }
 
 const FLASH_BG: Partial<Record<NoteResultLabel, string>> = {

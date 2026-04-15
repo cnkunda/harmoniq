@@ -1,15 +1,19 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
-import { SessionStemAndTab } from '@/components/SessionStemAndTab'
+import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
 
 export default function ListenScreen() {
   const router = useRouter()
   const params = useLocalSearchParams<{ section?: string }>()
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
+  const lessonJobId = useLessonStore((s) => s.lesson?.job_id ?? '')
+  const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
+  const stemTabRef = useRef<SessionStemAndTabHandle>(null)
 
   useEffect(() => {
     const raw = params.section
@@ -19,6 +23,15 @@ export default function ListenScreen() {
     if (!Number.isNaN(n) && n >= 0) setLessonSectionIndex(n)
   }, [params.section, setLessonSectionIndex])
 
+  /** Keep stems + tab cursor aligned with the active section (URL param, chips, or initial index). */
+  useEffect(() => {
+    const l = useLessonStore.getState().lesson
+    if (!l) return
+    const idx = useLessonStore.getState().lessonSectionIndex
+    const t = sectionSeekSeconds(l, idx)
+    void stemTabRef.current?.seekTransportToSeconds(t)
+  }, [lessonJobId, lessonSectionIndex])
+
   const exitSession = () => {
     if (router.canGoBack()) router.back()
     else router.replace('/(tabs)')
@@ -27,7 +40,7 @@ export default function ListenScreen() {
   return (
     <SessionStepScreen
       title="Listen"
-      subtitle="Stems + tab with AlphaTab external-media sync (audio timeline drives cursor)."
+      subtitle="Familiarize yourself with the piece before playing"
       showBack
       backLabel="Close"
       onBack={exitSession}
@@ -35,7 +48,7 @@ export default function ListenScreen() {
       nextLabel="Next: Study"
       onNext={() => router.push(sessionHref('study'))}
     >
-      <SessionStemAndTab />
+      <SessionStemAndTab ref={stemTabRef} />
     </SessionStepScreen>
   )
 }

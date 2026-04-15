@@ -4,9 +4,11 @@ import { View } from 'react-native'
 
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import { TabViewport } from '@/components/TabViewport'
+import { logListenTransportWrap } from '@/src/session/listenTransportDebug'
+import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useSessionSmartScroll, type PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useLessonStore } from '@/src/stores/lessonStore'
-import { lessonStemUrl } from '@/src/utils/lessonAudio'
+import { lessonStemUrl, sectionSeekSeconds } from '@/src/utils/lessonAudio'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { AlphaTabSurfaceRef, NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
@@ -80,6 +82,11 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
   const lastTickPositionSecRef = useRef(0)
 
   const lesson = useLessonStore((s) => s.lesson)
+  const lessonJobId = lesson?.job_id ?? ''
+  const barTimestampsKey = useMemo(
+    () => lesson?.bar_timestamps?.join('\t') ?? '',
+    [lesson?.bar_timestamps],
+  )
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const section = lesson?.sections?.[lessonSectionIndex]
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
@@ -92,6 +99,8 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     if (tabVariant === 'alt') return tabs.alt ?? null
     return tabs.full ?? tabs.skeleton ?? null
   }, [gp5Base64Override, tabVariant, tabs])
+
+  const gp5Key = useMemo(() => gp5Base64?.slice(0, 24) ?? '', [gp5Base64])
 
   const audioSrc = useMemo(() => {
     if (audioSrcOverride !== undefined) return audioSrcOverride
@@ -115,11 +124,22 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     barTimestamps: lesson?.bar_timestamps ?? [],
     tickRef,
     resetKey: scrollReset,
-    pollIntervalMs: 200,
+    pollIntervalMs: 100,
     enabled: showStemPanel,
   })
 
-  const gp5Key = gp5Base64?.slice(0, 24) ?? ''
+  /** Section / tab payload change: scroll AlphaTab to the globally mapped bar (paused + after GP5 swap). */
+  useEffect(() => {
+    if (!showStemPanel) return
+    const l = useLessonStore.getState().lesson
+    if (!l) return
+    const idx = useLessonStore.getState().lessonSectionIndex
+    const stamps = l.bar_timestamps ?? []
+    const t = sectionSeekSeconds(l, idx)
+    const bar = barIndexForPlaybackSeconds(stamps, t)
+    tabRef.current?.scrollMasterBarIntoView(bar)
+    setScrollReset((n) => n + 1)
+  }, [lessonJobId, barTimestampsKey, lessonSectionIndex, gp5Key, showStemPanel])
 
   useEffect(() => {
     lastStemPlayingRef.current = false
@@ -165,6 +185,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
               // Detect loop-wrap jumps (position moving backwards while still playing) and
               // force AlphaTab timeline reset so cursor/highlight/scroll stay stable on lap 2+.
               if (ctx.playing && ctx.positionSec + 0.12 < prevPosSec) {
+                logListenTransportWrap(prevPosSec, ctx.positionSec)
                 const wrapMs = Math.max(0, ctx.positionSec) * 1000
                 setScrollReset((n) => n + 1)
                 tabRef.current?.seekTo(wrapMs)

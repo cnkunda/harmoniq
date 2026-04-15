@@ -93,7 +93,7 @@ function loadAlphaTabScript(): Promise<void> {
 
 function clampStemPlaybackRate(rate: number): number {
   if (!Number.isFinite(rate)) return 1
-  return Math.max(0.5, Math.min(1.25, rate))
+  return Math.max(0.25, Math.min(1.25, rate))
 }
 
 function applyStemPlaybackSpeed(api: AlphaTabApiLike, rate: number): void {
@@ -126,6 +126,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const readyPostedRef = useRef(false)
     const loopStateRef = useRef<TabLoopBarRegion | null>(null)
     const loopBracketRef = useRef<HTMLDivElement | null>(null)
+    /** Smooth horizontal scroll to target `scrollLeft` (SmartScroll bar follow). */
+    const scrollSmoothRafRef = useRef<number | null>(null)
+    const scrollTargetLeftRef = useRef<number | null>(null)
 
     const [mounted, setMounted] = useState(false)
     const [engineReady, setEngineReady] = useState(false)
@@ -134,6 +137,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const [soundFontReady, setSoundFontReady] = useState(false)
     const [reloadKey, setReloadKey] = useState(0)
     const lastNotePostMsRef = useRef(0)
+    const pendingNoteRef = useRef<NoteEventMessage | null>(null)
+    const noteFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     /** Mirrors ListenStemPanel / mixer rate so AlphaTab scroll + cursor use the same speed factor. */
     const stemPlaybackRateRef = useRef(1)
     const onNoteEventRef = useRef(onNoteEvent)
@@ -159,50 +164,79 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       api.updateSettings()
     }, [])
 
-    const emitNoteEvent = useCallback((evt: unknown) => {
+    const flushPendingNoteEvent = useCallback(() => {
+      noteFlushTimerRef.current = null
       const onNote = onNoteEventRef.current
-      if (!onNote) return
-      if (Array.isArray(evt)) {
-        for (const row of evt) emitNoteEvent(row)
-        return
-      }
-      const now = Date.now()
-      if (now - lastNotePostMsRef.current < ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS) return
-      const row = evt as {
-        eventType?: unknown
-        velocity?: unknown
-        note?: unknown
-        beat?: unknown
-        fret?: unknown
-        string?: unknown
-        noteValue?: unknown
-        noteNumber?: unknown
-      }
-      const velocity = typeof row.velocity === 'number' ? row.velocity : 1
-      if (velocity <= 0) return
-      const midi =
-        typeof row.noteValue === 'number'
-          ? row.noteValue
-          : typeof row.noteNumber === 'number'
-            ? row.noteNumber
-            : typeof row.note === 'number'
-              ? row.note
-              : null
-      if (midi == null) return
-      const beat = typeof row.beat === 'number' ? row.beat : 0
-      const fret = typeof row.fret === 'number' ? row.fret : undefined
-      const str = typeof row.string === 'number' ? row.string : undefined
-      const payload: NoteEventMessage = {
-        type: 'noteEvent',
-        midi,
-        beat,
-        fret,
-        string: str,
-        hasExplicitTabPosition: typeof fret === 'number' && typeof str === 'number' ? true : undefined,
-      }
-      lastNotePostMsRef.current = now
-      onNote(payload)
+      const p = pendingNoteRef.current
+      pendingNoteRef.current = null
+      if (!onNote || !p) return
+      lastNotePostMsRef.current = Date.now()
+      onNote(p)
     }, [])
+
+    const emitNoteEvent = useCallback(
+      (evt: unknown) => {
+        const onNote = onNoteEventRef.current
+        if (!onNote) return
+        if (Array.isArray(evt)) {
+          for (const row of evt) emitNoteEvent(row)
+          return
+        }
+        const row = evt as {
+          eventType?: unknown
+          velocity?: unknown
+          note?: unknown
+          beat?: unknown
+          fret?: unknown
+          string?: unknown
+          noteValue?: unknown
+          noteNumber?: unknown
+        }
+        const velocity = typeof row.velocity === 'number' ? row.velocity : 1
+        if (velocity <= 0) return
+        const midi =
+          typeof row.noteValue === 'number'
+            ? row.noteValue
+            : typeof row.noteNumber === 'number'
+              ? row.noteNumber
+              : typeof row.note === 'number'
+                ? row.note
+                : null
+        if (midi == null) return
+        const beat = typeof row.beat === 'number' ? row.beat : 0
+        const fret = typeof row.fret === 'number' ? row.fret : undefined
+        const str = typeof row.string === 'number' ? row.string : undefined
+        const payload: NoteEventMessage = {
+          type: 'noteEvent',
+          midi,
+          beat,
+          fret,
+          string: str,
+          hasExplicitTabPosition: typeof fret === 'number' && typeof str === 'number' ? true : undefined,
+        }
+
+        const now = Date.now()
+        const elapsed = now - lastNotePostMsRef.current
+        if (elapsed < ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS) {
+          pendingNoteRef.current = payload
+          if (noteFlushTimerRef.current == null) {
+            noteFlushTimerRef.current = setTimeout(
+              flushPendingNoteEvent,
+              Math.max(1, ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS - elapsed),
+            )
+          }
+          return
+        }
+        if (noteFlushTimerRef.current != null) {
+          clearTimeout(noteFlushTimerRef.current)
+          noteFlushTimerRef.current = null
+        }
+        pendingNoteRef.current = null
+        lastNotePostMsRef.current = now
+        onNote(payload)
+      },
+      [flushPendingNoteEvent],
+    )
 
     /** Score tap → fretboard (no midiEventsPlayed throttle — FEEL_REAL_QA B4 applies to playback stream only). */
     const emitNoteTapFromScore = useCallback((clientX: number, clientY: number) => {
@@ -354,7 +388,19 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           requestAnimationFrame(() => scrollMasterBarIntoViewImpl(barIndex, attempt + 1))
           return
         }
+        const MAX_BOUNDS_ATTEMPTS = 18
         if (!vb || typeof vb.x !== 'number') {
+          if (attempt < MAX_BOUNDS_ATTEMPTS) {
+            requestAnimationFrame(() => scrollMasterBarIntoViewImpl(barIndex, attempt + 1))
+          } else if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.warn(
+              '[AlphaTabWeb] scrollMasterBarIntoView: no bounds for master bar',
+              idx,
+              'after',
+              MAX_BOUNDS_ATTEMPTS,
+              'attempts (excerpt vs global bar index?)',
+            )
+          }
           return
         }
         const w = typeof vb.w === 'number' ? vb.w : 0
@@ -370,8 +416,34 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           const maxScroll = Math.max(0, container.scrollWidth - cw)
           next = Math.min(maxScroll, barRight - cw + margin)
         }
-        container.scrollLeft = next
-        layoutLoopBracket()
+        if (Math.abs(next - sl) < 0.5) {
+          layoutLoopBracket()
+          return
+        }
+        scrollTargetLeftRef.current = next
+        const stepScroll = () => {
+          const target = scrollTargetLeftRef.current
+          const host = hostRef.current
+          if (target == null || !host) {
+            scrollSmoothRafRef.current = null
+            return
+          }
+          const cur = host.scrollLeft
+          const delta = target - cur
+          if (Math.abs(delta) < 0.75) {
+            host.scrollLeft = target
+            scrollSmoothRafRef.current = null
+            layoutLoopBracket()
+            return
+          }
+          const stepPx = Math.sign(delta) * Math.min(Math.abs(delta), Math.max(6, Math.abs(delta) * 0.18))
+          host.scrollLeft = cur + stepPx
+          layoutLoopBracket()
+          scrollSmoothRafRef.current = requestAnimationFrame(stepScroll)
+        }
+        if (scrollSmoothRafRef.current == null) {
+          scrollSmoothRafRef.current = requestAnimationFrame(stepScroll)
+        }
       },
       [layoutLoopBracket],
     )
@@ -394,6 +466,11 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           if (apiNow) applyStemPlaybackSpeed(apiNow, c)
         },
         seekTo: (positionMs: number) => {
+          if (typeof window !== 'undefined' && scrollSmoothRafRef.current != null) {
+            window.cancelAnimationFrame(scrollSmoothRafRef.current)
+            scrollSmoothRafRef.current = null
+          }
+          scrollTargetLeftRef.current = null
           const ms = Math.max(0, Number.isFinite(positionMs) ? positionMs : 0)
           const audio = audioRef.current
           const api = apiRef.current
@@ -407,9 +484,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             scrollMasterBarIntoViewImpl(barIndex, 0)
             return
           }
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => scrollMasterBarIntoViewImpl(barIndex, 0))
-          })
+          requestAnimationFrame(() => scrollMasterBarIntoViewImpl(barIndex, 0))
         },
         syncPlaybackTimelineMs: (positionMs: number) => {
           const api = apiRef.current
@@ -517,8 +592,6 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       setEngineReady(false)
       setSoundFontReady(false)
 
-      let highlightDebugObs: MutationObserver | null = null
-
       const run = async () => {
         try {
           await loadAlphaTabScript()
@@ -581,104 +654,6 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             return
           }
           apiRef.current = api
-
-          // #region agent log
-          {
-            let lastDbgLog = 0
-            const dbgEndpoint = 'http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77'
-            const dbgSession = 'f54fec'
-            const sampleHighlightDom = (reason: string) => {
-              const now = Date.now()
-              if (now - lastDbgLog < 350) return
-              lastDbgLog = now
-              const highlighted = Array.from(el.querySelectorAll('.at-highlight'))
-              const sampleNodes = highlighted.slice(0, 8).map((node) => {
-                const elt = node as unknown as Element
-                const counts: Record<string, number> = {}
-                elt.querySelectorAll('*').forEach((c) => {
-                  const t = c.tagName.toLowerCase()
-                  counts[t] = (counts[t] ?? 0) + 1
-                })
-                const lineSample = Array.from(elt.querySelectorAll('line')).slice(0, 3).map((l) => {
-                  const cs = getComputedStyle(l)
-                  return {
-                    strokeAttr: l.getAttribute('stroke'),
-                    strokeComputed: cs.stroke,
-                    swAttr: l.getAttribute('stroke-width'),
-                  }
-                })
-                const pathSample = Array.from(elt.querySelectorAll('path')).slice(0, 4).map((p) => {
-                  const cs = getComputedStyle(p)
-                  return {
-                    fillAttr: p.getAttribute('fill'),
-                    strokeAttr: p.getAttribute('stroke'),
-                    fillComputed: cs.fill,
-                    strokeComputed: cs.stroke,
-                  }
-                })
-                const parent = elt.parentElement
-                const siblings =
-                  parent?.children?.length != null
-                    ? Array.from(parent.children).map((c) => {
-                        const ce = c as Element
-                        return {
-                          tag: ce.tagName,
-                          cls: ce.getAttribute('class') ?? '',
-                          line: ce.querySelectorAll('line').length,
-                          path: ce.querySelectorAll('path').length,
-                          hasHl: ce.classList.contains('at-highlight'),
-                        }
-                      })
-                    : []
-                return {
-                  tag: elt.tagName,
-                  className: elt.getAttribute('class') ?? '',
-                  counts,
-                  lineSample,
-                  pathSample,
-                  siblings,
-                }
-              })
-              const linesInHost = el.querySelectorAll('line').length
-              const pathsInHost = el.querySelectorAll('path').length
-              const rectsInHost = el.querySelectorAll('rect').length
-              const linesOutsideHl = Array.from(el.querySelectorAll('line')).filter((l) => !l.closest('.at-highlight'))
-                .length
-              let beatWrapPathStroke: string | null = null
-              try {
-                const wrap = el.querySelector('svg g:has(> .at-highlight)')
-                const pw = wrap?.querySelector('path')
-                if (pw) beatWrapPathStroke = getComputedStyle(pw).stroke
-              } catch {
-                beatWrapPathStroke = 'query-failed'
-              }
-              void fetch(dbgEndpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': dbgSession },
-                body: JSON.stringify({
-                  sessionId: dbgSession,
-                  hypothesisId: 'verify-wrap',
-                  location: 'AlphaTabWeb.web.tsx:highlightDomSample',
-                  message: reason,
-                  data: {
-                    nHighlights: highlighted.length,
-                    linesInHost,
-                    pathsInHost,
-                    rectsInHost,
-                    linesOutsideHl,
-                    beatWrapPathStroke,
-                    sampleNodes,
-                  },
-                  timestamp: now,
-                  runId: 'post-fix',
-                }),
-              }).catch(() => {})
-            }
-            highlightDebugObs = new MutationObserver(() => sampleHighlightDom('mutation'))
-            highlightDebugObs.observe(el, { subtree: true, attributes: true, attributeFilter: ['class'] })
-            window.setTimeout(() => sampleHighlightDom('delayed'), 1500)
-          }
-          // #endregion
 
           /** https://alphatab.net/docs/guides/audio-video-sync — host pushes syncTimelineMs; play() no-op avoids double stem. */
           const getAudioEl = () => audioRef.current
@@ -814,10 +789,18 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
       return () => {
         cancelled = true
-        highlightDebugObs?.disconnect()
-        highlightDebugObs = null
         uiGuard.abort()
         setEngineReady(false)
+        if (noteFlushTimerRef.current != null) {
+          clearTimeout(noteFlushTimerRef.current)
+          noteFlushTimerRef.current = null
+        }
+        pendingNoteRef.current = null
+        if (scrollSmoothRafRef.current != null) {
+          window.cancelAnimationFrame(scrollSmoothRafRef.current)
+          scrollSmoothRafRef.current = null
+        }
+        scrollTargetLeftRef.current = null
         if (syncTimerRef.current != null) {
           window.clearInterval(syncTimerRef.current)
           syncTimerRef.current = null
@@ -847,6 +830,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         el.replaceChildren()
       }
     }, [
+      emitNoteEvent,
       emitNoteTapFromScore,
       layoutLoopBracket,
       mounted,

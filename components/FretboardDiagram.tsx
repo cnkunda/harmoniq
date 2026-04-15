@@ -1,12 +1,27 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Pressable, Text, View } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated'
+import Animated, {
+  Easing,
+  interpolate,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated'
 
 import { spring } from '@/src/constants/animations'
 import colors from '@/src/constants/colors'
-import { NUM_FRETS, OPEN_MIDI_BY_ROW, resolveFretCell } from '@/src/music/fretboardCell'
+import { NUM_FRETS, OPEN_MIDI_BY_ROW, inferMidiFromNoteSelection, resolveFretCell } from '@/src/music/fretboardCell'
 
 export { inferMidiFromNoteSelection, resolveFretCell } from '@/src/music/fretboardCell'
+
+export type FretboardLastCellResult = {
+  row: number
+  fret: number
+  result: 'hit' | 'close' | 'miss'
+}
 
 type FretboardDiagramProps = {
   keyLabel: string
@@ -22,40 +37,79 @@ type FretboardDiagramProps = {
   scalePitchClasses?: readonly number[] | null
   /** Optional: tapping a map cell selects that note (used by Study/Play). */
   onSelectNote?: (note: { string: number; fret: number; midi: number }) => void
+  /** Last scored beat — brief tint on the matching string/fret cell (Play). */
+  lastCellResult?: FretboardLastCellResult | null
 }
 
-/** Remount via `key={pulseKey}` from parent so each note hit replays the pulse. */
-function SelectedMarker() {
+/** Warm HSL peak keyed by pitch class so each perception note reads as a distinct flash (Study B3). */
+function flashPeakColorForMidi(midi: number | null): string {
+  if (midi == null || !Number.isFinite(midi)) return '#F5ECD8'
+  const pc = ((Math.round(midi) % 12) + 12) % 12
+  const hue = 26 + pc * 2.2
+  return `hsl(${hue}, 76%, 76%)`
+}
+
+/**
+ * Remount via `key={pulseKey}` from parent so each `noteEvent` replays scale + color pulse in sync with playback.
+ */
+function SelectedMarker({ flashMidi }: { flashMidi: number | null }) {
   const scale = useSharedValue(1)
+  const colorPulse = useSharedValue(0)
+  const peakFill = useMemo(() => flashPeakColorForMidi(flashMidi), [flashMidi])
 
   useEffect(() => {
     scale.value = 1
+    colorPulse.value = 0
     scale.value = withSequence(withSpring(1.45, spring.snappy), withSpring(1, spring.gentle))
-  }, [scale])
+    colorPulse.value = withSequence(
+      withTiming(1, { duration: 100, easing: Easing.out(Easing.quad) }),
+      withTiming(0, { duration: 340, easing: Easing.in(Easing.quad) }),
+    )
+  }, [scale, colorPulse, peakFill])
 
-  const animatedStyle = useAnimatedStyle(() => ({
+  const dotStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
+    backgroundColor: interpolateColor(colorPulse.value, [0, 1], [colors.amber.accent, peakFill]),
+    borderColor: interpolateColor(colorPulse.value, [0, 1], [colors.amber.light, '#FFFAF0']),
+  }))
+
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(colorPulse.value, [0, 0.15, 1], [0, 0.55, 0.9]),
+    transform: [{ scale: interpolate(colorPulse.value, [0, 1], [0.85, 1.75]) }],
   }))
 
   // Avoid NativeWind `className` on Animated.View — on web it can override `transform` and kill the pulse.
   return (
-    <Animated.View
-      style={[
-        animatedStyle,
-        {
-          width: 16,
-          height: 16,
-          borderRadius: 8,
-          borderWidth: 2,
-          borderColor: colors.amber.light,
-          backgroundColor: colors.amber.accent,
-          shadowColor: '#000',
-          shadowOpacity: 0.22,
-          shadowRadius: 3,
-          shadowOffset: { width: 0, height: 1 },
-        },
-      ]}
-    />
+    <View style={{ alignItems: 'center', justifyContent: 'center', width: 28, height: 28 }}>
+      <Animated.View
+        style={[
+          ringStyle,
+          {
+            position: 'absolute',
+            width: 20,
+            height: 20,
+            borderRadius: 10,
+            borderWidth: 2,
+            borderColor: colors.amber.light,
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          dotStyle,
+          {
+            width: 16,
+            height: 16,
+            borderRadius: 8,
+            borderWidth: 2,
+            shadowColor: '#000',
+            shadowOpacity: 0.22,
+            shadowRadius: 3,
+            shadowOffset: { width: 0, height: 1 },
+          },
+        ]}
+      />
+    </View>
   )
 }
 
@@ -73,6 +127,13 @@ function scaleHighlightActive(
   return scalePitchClasses.includes(pc)
 }
 
+function cellMatchesDiagramCol(
+  cellFret: number,
+  col: number,
+): boolean {
+  return cellFret <= NUM_FRETS ? cellFret === col : col === NUM_FRETS
+}
+
 export function FretboardDiagram({
   keyLabel,
   positionLabel,
@@ -81,8 +142,10 @@ export function FretboardDiagram({
   pulseKey = 0,
   scalePitchClasses = null,
   onSelectNote,
+  lastCellResult = null,
 }: FretboardDiagramProps) {
   const cell = selectedNote ? resolveFretCell(selectedNote) : null
+  const flashMidi = selectedNote ? inferMidiFromNoteSelection(selectedNote) : null
 
   return (
     <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/45 p-3">
@@ -111,7 +174,19 @@ export function FretboardDiagram({
               const selected =
                 cell != null &&
                 cell.row === stringIdx &&
-                (cell.fret <= NUM_FRETS ? cell.fret === fret : fret === NUM_FRETS)
+                cellMatchesDiagramCol(cell.fret, fret)
+              const feedbackHere =
+                lastCellResult != null &&
+                lastCellResult.row === stringIdx &&
+                cellMatchesDiagramCol(lastCellResult.fret, fret)
+              const feedbackRing =
+                feedbackHere && lastCellResult
+                  ? lastCellResult.result === 'hit'
+                    ? 'border-success bg-success/35'
+                    : lastCellResult.result === 'close'
+                      ? 'border-amber-accent bg-amber-accent/30'
+                      : 'border-danger bg-danger/35'
+                  : ''
               const scaleOn = scaleHighlightActive(scalePitchClasses, stringIdx, fret)
               const midi = OPEN_MIDI_BY_ROW[stringIdx]! + fret
               return (
@@ -123,6 +198,9 @@ export function FretboardDiagram({
                   accessibilityRole={onSelectNote ? 'button' : undefined}
                   accessibilityLabel={onSelectNote ? `String ${stringIdx + 1}, fret ${fret}` : undefined}
                 >
+                  {feedbackHere && lastCellResult ? (
+                    <View className={`absolute z-[15] h-5 w-5 rounded-full border-2 ${feedbackRing}`} />
+                  ) : null}
                   {scaleOn && !selected ? (
                     <View className="absolute z-10 h-4 w-4 rounded-full border border-emerald-400/55 bg-emerald-500/15" />
                   ) : null}
@@ -131,7 +209,7 @@ export function FretboardDiagram({
                   />
                   {selected ? (
                     <View className="absolute inset-0 z-20 items-center justify-center">
-                      <SelectedMarker key={pulseKey} />
+                      <SelectedMarker key={pulseKey} flashMidi={flashMidi} />
                     </View>
                   ) : null}
                 </Pressable>

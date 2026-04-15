@@ -1,41 +1,33 @@
-import { memo, useEffect, useMemo } from 'react'
+import { LinearGradient } from 'expo-linear-gradient'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import { View, Text } from 'react-native'
-import Animated, {
-  useAnimatedProps,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated'
-import Svg, { Circle, Path } from 'react-native-svg'
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated'
+import Svg, { Path } from 'react-native-svg'
 
+import type { MetronomeSubdivision } from '@/src/audio/metronomeShared'
 import colors from '@/src/constants/colors'
 
-const AnimatedPath = Animated.createAnimatedComponent(Path)
+/** Reference: w-24 h-24 pendulum stage (96×96). */
+const STAGE = 96
+const PIVOT_BOTTOM = 24
+const ARM_H = 56
+const BOB = 16
+const PEND_H = ARM_H + BOB * 0.5
+const W_TICK = 3
+const H_TICK = 10
 
-const ARC_W = 152
-const ARC_H = 78
-const CX = ARC_W / 2
-const CY = ARC_H - 2
-const R = 60
-const STROKE = 1.75
-const KNOB_R = 6.5
-
-/** Pivot at bottom center of the gauge so the beat reads as a “kick” from the base. */
-const PIVOT_X = CX
-const PIVOT_Y = ARC_H
-
-/** Align readout to the half-circle base; nudge down from chord so it sits slightly below the cut line. */
-const BPM_BASE_INSET = ARC_H - CY - 6
+const ARC_R = 38
+const ARC_CX = STAGE / 2
+const ARC_CY = STAGE - PIVOT_BOTTOM
 
 function polar(cx: number, cy: number, r: number, angleRad: number) {
   return { x: cx + r * Math.cos(angleRad), y: cy - r * Math.sin(angleRad) }
 }
 
-function arcPathD(): string {
-  const start = polar(CX, CY, R, Math.PI)
-  const end = polar(CX, CY, R, 0)
-  return `M ${start.x} ${start.y} A ${R} ${R} 0 0 1 ${end.x} ${end.y}`
+function semicirclePathD(): string {
+  const start = polar(ARC_CX, ARC_CY, ARC_R, Math.PI)
+  const end = polar(ARC_CX, ARC_CY, ARC_R, 0)
+  return `M ${start.x} ${start.y} A ${ARC_R} ${ARC_R} 0 0 1 ${end.x} ${end.y}`
 }
 
 export type MetronomeArcReadoutProps = {
@@ -44,121 +36,171 @@ export type MetronomeArcReadoutProps = {
   flashTick: number
   lastDownbeat: boolean
   metronomeActive: boolean
+  subdivision: MetronomeSubdivision
 }
 
 function MetronomeArcReadoutInner({
   effectiveBpm,
-  baseTempoBpm,
   flashTick,
   lastDownbeat,
   metronomeActive,
+  subdivision,
 }: MetronomeArcReadoutProps) {
-  const d = useMemo(() => arcPathD(), [])
-
-  const knobAngle = useMemo(() => {
-    const base = baseTempoBpm > 0 ? baseTempoBpm : 120
-    const lo = base * 0.5
-    const hi = base * 1.25
-    const span = Math.max(1e-6, hi - lo)
-    const t = Math.min(1, Math.max(0, (effectiveBpm - lo) / span))
-    return Math.PI - t * Math.PI
-  }, [baseTempoBpm, effectiveBpm])
-
-  const knob = polar(CX, CY, R - STROKE * 0.5, knobAngle)
-
-  const pulse = useSharedValue(0)
+  const d = useMemo(() => semicirclePathD(), [])
+  const rotationDeg = useSharedValue(0)
+  const swingRightNext = useRef(true)
 
   useEffect(() => {
     if (!metronomeActive) {
-      pulse.value = 0
+      swingRightNext.current = true
+      rotationDeg.value = withTiming(0, { duration: 220 })
       return
     }
     if (flashTick <= 0) return
-    pulse.value = 0
-    const peak = lastDownbeat ? 1 : 0.55
-    pulse.value = withSequence(withTiming(peak, { duration: 45 }), withTiming(0, { duration: 220 }))
-  }, [flashTick, lastDownbeat, metronomeActive, pulse])
 
-  const arcMotionStyle = useAnimatedStyle(() => {
-    const s = 1 + pulse.value * 0.065
-    return {
-      transform: [
-        { translateX: -PIVOT_X },
-        { translateY: -PIVOT_Y },
-        { scale: s },
-        { translateX: PIVOT_X },
-        { translateY: PIVOT_Y },
-      ],
-    }
-  })
+    const bpm = Math.max(1, effectiveBpm)
+    const subdiv = Math.max(1, subdivision)
+    const beatPeriodMs = 60000 / bpm / subdiv
+    const strikeMs = Math.min(110, Math.max(36, beatPeriodMs * 0.11))
+    const relaxMs = Math.max(80, beatPeriodMs - strikeMs)
 
-  const accentArcProps = useAnimatedProps(() => ({
-    strokeOpacity: pulse.value * 0.88,
+    const mag = lastDownbeat ? 30 : 17
+    const dir = swingRightNext.current ? 1 : -1
+    swingRightNext.current = !swingRightNext.current
+    rotationDeg.value = withSequence(
+      withTiming(dir * mag, { duration: strikeMs }),
+      withTiming(0, { duration: relaxMs }),
+    )
+  }, [effectiveBpm, flashTick, lastDownbeat, metronomeActive, rotationDeg, subdivision])
+
+  const pendulumStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: 8 },
+      { translateY: PEND_H },
+      { rotate: `${rotationDeg.value}deg` },
+      { translateX: -8 },
+      { translateY: -PEND_H },
+    ],
   }))
 
+  const arcOpacity = metronomeActive ? 0.45 : 0.28
+  const tickOpacity = metronomeActive ? 0.85 : 0.45
+
   return (
-    <View className="items-center" style={{ width: ARC_W, height: ARC_H, alignSelf: 'center' }}>
-      <Animated.View style={[{ position: 'absolute', left: 0, top: 0, width: ARC_W, height: ARC_H }, arcMotionStyle]}>
-        <Svg width={ARC_W} height={ARC_H} accessibilityLabel={`Tempo gauge, ${effectiveBpm} BPM`}>
+    <View className="items-center" accessibilityLabel={`Metronome, ${effectiveBpm} BPM`}>
+      <View className="items-center justify-center py-2" style={{ width: STAGE, height: STAGE }}>
+        <Svg width={STAGE} height={STAGE} style={{ position: 'absolute', left: 0, top: 0 }} pointerEvents="none">
           <Path
             d={d}
             fill="none"
-            stroke={colors.muted.brown}
-            strokeWidth={STROKE}
-            strokeOpacity={0.45}
-            strokeDasharray="5 6"
+            stroke={colors.wood[600]}
+            strokeWidth={2}
+            strokeOpacity={arcOpacity}
+            strokeDasharray="6 5"
             strokeLinecap="round"
-          />
-          <AnimatedPath
-            animatedProps={accentArcProps}
-            d={d}
-            fill="none"
-            stroke={colors.amber.accent}
-            strokeWidth={STROKE + 1.25}
-            strokeDasharray="5 6"
-            strokeLinecap="round"
-          />
-          <Circle
-            cx={knob.x}
-            cy={knob.y}
-            r={KNOB_R}
-            fill={colors.ivory}
-            stroke={metronomeActive ? colors.amber.accent : colors.wood[600]}
-            strokeWidth={1.75}
           />
         </Svg>
-      </Animated.View>
 
-      <View
-        pointerEvents="none"
-        className="w-full flex-row items-baseline justify-center gap-1 px-1"
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: BPM_BASE_INSET,
-        }}
-      >
-        <Text
-          className="font-serif text-[26px] leading-none tabular-nums text-wood-900"
+        <View
+          pointerEvents="none"
+          className="absolute rounded-full bg-wood-600"
           style={{
-            textShadowColor: `${colors.ivory}E6`,
-            textShadowRadius: 3,
-            textShadowOffset: { width: 0, height: 0 },
+            width: W_TICK,
+            height: H_TICK,
+            left: ARC_CX - ARC_R - W_TICK * 0.25,
+            bottom: PIVOT_BOTTOM - 2,
+            transform: [{ rotate: '-32deg' }],
+            opacity: tickOpacity,
           }}
-        >
+        />
+        <View
+          pointerEvents="none"
+          className="absolute rounded-full bg-wood-600"
+          style={{
+            width: W_TICK,
+            height: H_TICK,
+            left: ARC_CX + ARC_R - W_TICK * 0.75,
+            bottom: PIVOT_BOTTOM - 2,
+            transform: [{ rotate: '32deg' }],
+            opacity: tickOpacity,
+          }}
+        />
+
+        <View
+          pointerEvents="none"
+          className="absolute rounded-full bg-amber-accent"
+          style={{
+            width: W_TICK,
+            height: H_TICK,
+            left: STAGE / 2 - W_TICK / 2,
+            bottom: PIVOT_BOTTOM + 10,
+            opacity: metronomeActive ? 0.65 : 0.35,
+          }}
+        />
+
+        <View style={{ position: 'absolute', left: STAGE / 2, bottom: PIVOT_BOTTOM, width: 0, height: 0 }}>
+          <Animated.View
+            style={[
+              {
+                position: 'absolute',
+                bottom: 0,
+                left: -8,
+                width: 16,
+                height: PEND_H,
+                alignItems: 'center',
+              },
+              pendulumStyle,
+            ]}
+          >
+            <LinearGradient
+              colors={[colors.amber.accent, colors.amber.light]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={{
+                position: 'absolute',
+                bottom: BOB - 2,
+                width: 2,
+                height: ARM_H,
+                borderRadius: 1,
+                marginLeft: -1,
+                left: '50%',
+                opacity: metronomeActive ? 1 : 0.55,
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                width: BOB,
+                height: BOB,
+                borderRadius: BOB / 2,
+                backgroundColor: colors.amber.accent,
+                borderWidth: 2,
+                borderColor: 'rgba(232, 184, 109, 0.35)',
+                opacity: metronomeActive ? 1 : 0.55,
+              }}
+            />
+          </Animated.View>
+        </View>
+
+        <View
+          pointerEvents="none"
+          className="absolute rounded-full border border-wood-500 bg-wood-600"
+          style={{
+            width: 8,
+            height: 8,
+            left: STAGE / 2 - 4,
+            bottom: PIVOT_BOTTOM - 4,
+            zIndex: 4,
+          }}
+        />
+      </View>
+
+      <View className="mt-0.5 flex-row items-baseline justify-center gap-1 px-1">
+        <Text className="font-mono text-2xl font-medium leading-none tabular-nums text-wood-900">
           {effectiveBpm}
         </Text>
-        <Text
-          className="font-sans-medium pb-0.5 text-[10px] uppercase tracking-wider text-muted-brown"
-          style={{
-            textShadowColor: `${colors.ivory}E6`,
-            textShadowRadius: 3,
-            textShadowOffset: { width: 0, height: 0 },
-          }}
-        >
-          BPM
-        </Text>
+        <Text className="pb-0.5 font-sans text-sm text-muted-brown">BPM</Text>
       </View>
     </View>
   )

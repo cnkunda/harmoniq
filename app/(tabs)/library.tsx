@@ -174,7 +174,7 @@ export default function LibraryScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Toggle filters"
               >
-                <Filter color={showFilters ? colors.cream.DEFAULT : colors.muted.brown} size={18} />
+                <Filter color={showFilters ? colors.cream : colors.muted.brown} size={18} />
                 <Text className={`font-sans text-sm ${showFilters ? 'text-cream' : 'text-muted-brown'}`}>
                   {showFilters ? 'Hide' : 'Filter'}
                 </Text>
