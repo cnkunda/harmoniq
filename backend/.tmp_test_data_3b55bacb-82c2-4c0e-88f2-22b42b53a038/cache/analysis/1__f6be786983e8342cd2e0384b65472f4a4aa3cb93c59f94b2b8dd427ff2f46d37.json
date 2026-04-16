@@ -1,0 +1,44 @@
+{
+  "pipeline_version": "1",
+  "audio_sha256": "f6be786983e8342cd2e0384b65472f4a4aa3cb93c59f94b2b8dd427ff2f46d37",
+  "lesson_json": {
+    "job_id": "c0d24c3c-4dcd-4a9b-8dff-6dd43c9d1fd3",
+    "song_title": "Uploaded track",
+    "artist": "Unknown artist",
+    "style_label": "slow ballad / expressive phrasing",
+    "key": "G major",
+    "key_confidence": 0.99,
+    "tempo": 72.0,
+    "tempo_confidence": 0.95,
+    "transcription_confidence": 0.1,
+    "beat_grid": [
+      0.0,
+      0.5,
+      1.0
+    ],
+    "bar_timestamps": [
+      0.0,
+      3.33,
+      6.66
+    ],
+    "stems": {
+      "guitar": ".tmp_test_data_3b55bacb-82c2-4c0e-88f2-22b42b53a038/jobs/c0d24c3c-4dcd-4a9b-8dff-6dd43c9d1fd3/stems/guitar.wav",
+      "bass": ".tmp_test_data_3b55bacb-82c2-4c0e-88f2-22b42b53a038/jobs/c0d24c3c-4dcd-4a9b-8dff-6dd43c9d1fd3/stems/bass.wav",
+      "drums": ".tmp_test_data_3b55bacb-82c2-4c0e-88f2-22b42b53a038/jobs/c0d24c3c-4dcd-4a9b-8dff-6dd43c9d1fd3/stems/drums.wav",
+      "vocals": ".tmp_test_data_3b55bacb-82c2-4c0e-88f2-22b42b53a038/jobs/c0d24c3c-4dcd-4a9b-8dff-6dd43c9d1fd3/stems/vocals.wav",
+      "piano": ".tmp_test_data_3b55bacb-82c2-4c0e-88f2-22b42b53a038/jobs/c0d24c3c-4dcd-4a9b-8dff-6dd43c9d1fd3/stems/piano.wav",
+      "other": ".tmp_test_data_3b55bacb-82c2-4c0e-88f2-22b42b53a038/jobs/c0d24c3c-4dcd-4a9b-8dff-6dd43c9d1fd3/stems/other.wav"
+    },
+    "lyrics_aligned": [],
+    "sections": [
+      {
+        "label": "Intro",
+        "confidence": 0.1,
+        "start_time_seconds": null,
+        "coach_note": "Stay relaxed and sing each phrase before you play it, then match that shape on guitar.",
+        "coach_explanation": "This section sounds strong when you leave a little space between ideas. The pause creates tension, and the next note feels more intentional when it lands. Think about phrasing like a short sentence with a clear breath."
+      }
+    ],
+    "wav_path": "C:\\workspace\\harmoniq\\backend\\.tmp_test_data_3b55bacb-82c2-4c0e-88f2-22b42b53a038\\jobs\\c0d24c3c-4dcd-4a9b-8dff-6dd43c9d1fd3\\song.wav"
+  }
+}

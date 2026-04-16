@@ -60,8 +60,9 @@ export function AudioDropzone({
       onClick={handleClick}
       style={{
         border: `2px dashed ${border}`,
-        borderRadius: 12,
-        padding: 32,
+        borderRadius: 16,
+        padding: '40px 28px',
+        minHeight: 132,
         textAlign: 'center',
         cursor: 'pointer',
         background: bg,
@@ -69,6 +70,7 @@ export function AudioDropzone({
         color: fg,
         fontFamily: '"DMSans-Regular", "DM Sans", sans-serif',
         fontSize: 14,
+        lineHeight: 1.5,
       }}
     >
       {isDragging

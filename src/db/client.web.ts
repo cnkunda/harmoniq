@@ -3,6 +3,7 @@ import {
     idbClearPracticeStores,
     idbLoadEverything,
     idbPersistJams,
+    idbPersistLessons,
     idbPersistLicks,
     idbPersistPrefs,
     idbPersistSessions,
@@ -17,18 +18,21 @@ import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
 import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
 import type {
   HomeSuggestion,
-    JamSnapshotInsertInput,
-    JamSnapshotRow,
-    LatestSessionSongRow,
-    LickInsertInput,
-    LickRow,
-    NodeSessionSnippet,
-    ReviewSkillUpdateInput,
-    SessionArchiveRow,
-    SessionInsertInput,
-    SessionJournalRow,
-    SkillNodeRow,
+  JamSnapshotInsertInput,
+  JamSnapshotRow,
+  LatestSessionSongRow,
+  LessonListRow,
+  LessonPersistRow,
+  LickInsertInput,
+  LickRow,
+  NodeSessionSnippet,
+  ReviewSkillUpdateInput,
+  SessionArchiveRow,
+  SessionInsertInput,
+  SessionJournalRow,
+  SkillNodeRow,
 } from '@/src/db/types'
+import type { LessonJSON } from '@/src/types'
 import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
 
@@ -38,6 +42,7 @@ const sessionLog: SessionArchiveRow[] = []
 const sessionSongLog: LatestSessionSongRow[] = []
 const appPrefs = new Map<string, string>()
 const licks: LickRow[] = []
+const lessonCatalog: LessonPersistRow[] = []
 const jamSnapshots: JamSnapshotInsertInput[] = []
 
 let initPromise: Promise<void> | null = null
@@ -116,6 +121,8 @@ function applyHydration(h: IdbHydration): void {
   jamSnapshots.length = 0
   const jamsSorted = [...h.jams].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   jamSnapshots.push(...jamsSorted)
+  lessonCatalog.length = 0
+  lessonCatalog.push(...(h.lessons ?? []).map((row) => ({ ...row })))
 }
 
 async function flushPrefs(): Promise<void> {
@@ -138,6 +145,10 @@ async function flushJams(): Promise<void> {
   await idbPersistJams(getHarmoniqIdbHandle(), jamSnapshots)
 }
 
+async function flushLessons(): Promise<void> {
+  await idbPersistLessons(getHarmoniqIdbHandle(), lessonCatalog)
+}
+
 /**
  * Web: IndexedDB mirrors practice tables + prefs; lesson JSON cached separately (PRIORITIES §38).
  */
@@ -150,6 +161,22 @@ export async function initDb(): Promise<void> {
         if (db) {
           const h = await idbLoadEverything(db)
           applyHydration(h)
+          if (lessonCatalog.length === 0 && h.lesson) {
+            const lesson = h.lesson
+            const id = typeof lesson.job_id === 'string' ? lesson.job_id.trim() : ''
+            if (id && !id.startsWith('lick-')) {
+              const sectionCount = Array.isArray(lesson.sections) ? lesson.sections.length : 0
+              lessonCatalog.push({
+                job_id: id,
+                lesson_json: JSON.stringify(lesson),
+                song_title: typeof lesson.song_title === 'string' ? lesson.song_title : null,
+                artist: typeof lesson.artist === 'string' ? lesson.artist : null,
+                analyzed_at: new Date().toISOString(),
+                section_count: sectionCount,
+              })
+              await flushLessons()
+            }
+          }
         }
       } catch (e) {
         if (__DEV__) console.warn('[db/web] IndexedDB init failed — using memory only', e)
@@ -472,6 +499,7 @@ export async function clearAllPracticeData(): Promise<void> {
   sessionLog.length = 0
   sessionSongLog.length = 0
   licks.length = 0
+  lessonCatalog.length = 0
   jamSnapshots.length = 0
   for (const n of DEFAULT_SKILL_NODES) {
     skillNodes.set(n.id, defaultSkillRow(n))
@@ -517,6 +545,62 @@ export async function deleteLickById(id: string): Promise<void> {
   if (i < 0) return
   licks.splice(i, 1)
   await flushLicks()
+}
+
+export async function upsertLessonFromAnalysis(lesson: LessonJSON): Promise<void> {
+  const id = typeof lesson.job_id === 'string' ? lesson.job_id.trim() : ''
+  if (!id || id.startsWith('lick-')) return
+  await initDb()
+  seedWebSkillNodes()
+  const sectionCount = Array.isArray(lesson.sections) ? lesson.sections.length : 0
+  const now = new Date().toISOString()
+  const i = lessonCatalog.findIndex((x) => x.job_id === id)
+  const row: LessonPersistRow = {
+    job_id: id,
+    lesson_json: JSON.stringify(lesson),
+    song_title: typeof lesson.song_title === 'string' ? lesson.song_title : null,
+    artist: typeof lesson.artist === 'string' ? lesson.artist : null,
+    analyzed_at: i >= 0 ? lessonCatalog[i]!.analyzed_at : now,
+    section_count: sectionCount,
+  }
+  if (i >= 0) lessonCatalog[i] = row
+  else lessonCatalog.push(row)
+  await flushLessons()
+}
+
+export async function listLessonsJournal(): Promise<LessonListRow[]> {
+  await initDb()
+  seedWebSkillNodes()
+  return [...lessonCatalog]
+    .sort((a, b) => (a.analyzed_at < b.analyzed_at ? 1 : a.analyzed_at > b.analyzed_at ? -1 : 0))
+    .map(({ job_id, song_title, artist, analyzed_at, section_count }) => ({
+      job_id,
+      song_title,
+      artist,
+      analyzed_at,
+      section_count,
+    }))
+}
+
+export async function getLessonByJobId(jobId: string): Promise<LessonJSON | null> {
+  await initDb()
+  seedWebSkillNodes()
+  const row = lessonCatalog.find((x) => x.job_id === jobId)
+  if (!row) return null
+  try {
+    return JSON.parse(row.lesson_json) as LessonJSON
+  } catch {
+    return null
+  }
+}
+
+export async function deleteLessonByJobId(jobId: string): Promise<void> {
+  await initDb()
+  seedWebSkillNodes()
+  const i = lessonCatalog.findIndex((x) => x.job_id === jobId)
+  if (i < 0) return
+  lessonCatalog.splice(i, 1)
+  await flushLessons()
 }
 
 /** After `initDb`, restore last `LessonJSON` from IDB if store is still empty (web reload). */

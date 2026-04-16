@@ -10,15 +10,17 @@ import {
     MIGRATION_V5_LICKS_STEMS_JSON,
     MIGRATION_V6_JAM_SNAPSHOT_CONTEXT,
     MIGRATION_V7_JAM_SNAPSHOT_RELIABILITY,
+    MIGRATION_V8_LESSONS,
     PREF_ONBOARDING_COMPLETE,
 } from '@/src/db/schema'
 import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
 import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
 import type {
-  HomeSuggestion,
+    HomeSuggestion,
     JamSnapshotInsertInput,
     JamSnapshotRow,
     LatestSessionSongRow,
+    LessonListRow,
     LickInsertInput,
     LickRow,
     NodeSessionSnippet,
@@ -28,6 +30,7 @@ import type {
     SessionJournalRow,
     SkillNodeRow,
 } from '@/src/db/types'
+import type { LessonJSON } from '@/src/types'
 import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
 
@@ -172,6 +175,14 @@ async function applyMigrations(): Promise<void> {
     await db.runAsync(
       'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
       7,
+      new Date().toISOString(),
+    )
+  }
+  if (current < 8) {
+    await db.execAsync(MIGRATION_V8_LESSONS)
+    await db.runAsync(
+      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+      8,
       new Date().toISOString(),
     )
   }
@@ -575,6 +586,7 @@ export async function clearAllPracticeData(): Promise<void> {
   const db = await getDb()
   await db.execAsync('DELETE FROM sessions')
   await db.execAsync('DELETE FROM licks')
+  await db.execAsync('DELETE FROM lessons')
   await db.execAsync('DELETE FROM jam_snapshots')
   await db.execAsync(
     `UPDATE skill_nodes SET score = 0, sessions_count = 0, last_session_date = NULL,
@@ -680,6 +692,67 @@ export async function getLicks(): Promise<LickRow[]> {
     user_annotations: parseJsonArray<{ bar: number; text: string }>(r.user_annotations),
     date_saved: r.date_saved,
   }))
+}
+
+export async function upsertLessonFromAnalysis(lesson: LessonJSON): Promise<void> {
+  const id = typeof lesson.job_id === 'string' ? lesson.job_id.trim() : ''
+  if (!id || id.startsWith('lick-')) return
+  await initDb()
+  const db = await getDb()
+  const sectionCount = Array.isArray(lesson.sections) ? lesson.sections.length : 0
+  const analyzedAt = new Date().toISOString()
+  await db.runAsync(
+    `INSERT INTO lessons (job_id, lesson_json, song_title, artist, analyzed_at, section_count)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(job_id) DO UPDATE SET
+       lesson_json = excluded.lesson_json,
+       song_title = excluded.song_title,
+       artist = excluded.artist,
+       section_count = excluded.section_count`,
+    id,
+    JSON.stringify(lesson),
+    typeof lesson.song_title === 'string' ? lesson.song_title : null,
+    typeof lesson.artist === 'string' ? lesson.artist : null,
+    analyzedAt,
+    sectionCount,
+  )
+}
+
+export async function listLessonsJournal(): Promise<LessonListRow[]> {
+  await initDb()
+  const db = await getDb()
+  const rows = await db.getAllAsync<{
+    job_id: string
+    song_title: string | null
+    artist: string | null
+    analyzed_at: string
+    section_count: number
+  }>('SELECT job_id, song_title, artist, analyzed_at, section_count FROM lessons ORDER BY analyzed_at DESC')
+  return (rows ?? []).map((r) => ({
+    job_id: r.job_id,
+    song_title: r.song_title,
+    artist: r.artist,
+    analyzed_at: r.analyzed_at,
+    section_count: typeof r.section_count === 'number' && Number.isFinite(r.section_count) ? r.section_count : 0,
+  }))
+}
+
+export async function getLessonByJobId(jobId: string): Promise<LessonJSON | null> {
+  await initDb()
+  const db = await getDb()
+  const r = await db.getFirstAsync<{ lesson_json: string }>('SELECT lesson_json FROM lessons WHERE job_id = ?', jobId)
+  if (!r?.lesson_json) return null
+  try {
+    return JSON.parse(r.lesson_json) as LessonJSON
+  } catch {
+    return null
+  }
+}
+
+export async function deleteLessonByJobId(jobId: string): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  await db.runAsync('DELETE FROM lessons WHERE job_id = ?', jobId)
 }
 
 /** No-op on native (lesson cache is web IDB only). */

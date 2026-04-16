@@ -29,7 +29,8 @@ def _cache_dir() -> Path:
 
 
 def _cache_path(cache_key: str) -> Path:
-    safe = cache_key.replace(":", "__")
+    # Keep human-readable cache files while remaining valid on Windows paths.
+    safe = cache_key.translate(str.maketrans({":": "__", "|": "__"}))
     return _cache_dir() / f"{safe}.json"
 
 
@@ -78,7 +79,10 @@ def load_cached_lesson_for_wav(wav_path: Path, *, player_profile: PlayerProfile 
         lesson_payload = payload.get("lesson_json")
         if not isinstance(lesson_payload, dict):
             return None
-        return LessonJSON.model_validate(lesson_payload)
+        lesson = LessonJSON.model_validate(lesson_payload)
+        if not (lesson.style_label or "").strip():
+            lesson = lesson.model_copy(update={"style_label": "general"})
+        return lesson
     except Exception:
         logger.exception("Failed to read analysis cache entry path=%s", p)
         return None

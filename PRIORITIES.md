@@ -40,7 +40,7 @@ Atomic, production-quality commits ordered for **risk first**, **vertical slices
 | **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
 | **Error QA** | [`docs/ERROR_QA.md`](docs/ERROR_QA.md) |
 | **Scaffolding history** | [Appendix — Phase 0](#appendix--completed-phase-0-commits-01–06) |
-| **Completion index** | [Appendix — commits 1–77](#appendix--roadmap-completion-index-commits-1-77) |
+| **Completion index** | [Appendix — commits 1–61](#appendix--roadmap-completion-index-commits-1-61) |
 
 ---
 

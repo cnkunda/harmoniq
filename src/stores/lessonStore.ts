@@ -58,6 +58,9 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
   saveLesson: (lesson: LessonJSON) => {
     set({ lesson, status: 'complete', error: null })
     void persistCachedLessonIfWeb(lesson).catch(() => {})
+    void import('@/src/db/client')
+      .then(({ upsertLessonFromAnalysis }) => upsertLessonFromAnalysis(lesson))
+      .catch(() => {})
   },
 
   analyzeFromUrl: async (url: string) => {

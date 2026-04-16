@@ -1,7 +1,10 @@
-import { Text, View } from 'react-native'
+import { useEffect } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated'
 
-import { midiToScientificPitchName } from '@/components/PitchIndicator'
-import { hitInnerThresholdCents } from '@/src/session/noteAccuracyBeats'
+import { midiToScientificPitchName, PITCH_WINDOW_FLASH_BG } from '@/components/PitchIndicator'
+import colors from '@/src/constants/colors'
+import { hitInnerThresholdCents, type NoteResultLabel } from '@/src/session/noteAccuracyBeats'
 
 type PlayPitchLadderVerticalProps = {
   /** Merged onto the root card (e.g. `flex-1` to match sibling column height). */
@@ -11,6 +14,9 @@ type PlayPitchLadderVerticalProps = {
   adaptedCentsTolerance: number
   targetMidi: number
   nextTargetMidi?: number | null
+  /** Latest closed beat — transient full-card flash (matches PitchIndicator). */
+  windowResult?: NoteResultLabel | null
+  windowFlashToken?: number
 }
 
 const TRACK_MIN_H = 160
@@ -25,7 +31,29 @@ export function PlayPitchLadderVertical({
   adaptedCentsTolerance,
   targetMidi,
   nextTargetMidi,
+  windowResult,
+  windowFlashToken = 0,
 }: PlayPitchLadderVerticalProps) {
+  const flashOpacity = useSharedValue(0)
+
+  useEffect(() => {
+    if (!windowResult || windowResult === 'ignored' || windowFlashToken <= 0) return
+    flashOpacity.value = 0
+    flashOpacity.value = withSequence(
+      withTiming(0.55, { duration: 70 }),
+      withTiming(0, { duration: 420 }),
+    )
+  }, [windowFlashToken, windowResult, flashOpacity])
+
+  const flashStyle = useAnimatedStyle(() => ({
+    opacity: flashOpacity.value,
+  }))
+
+  const flashColor =
+    windowResult && windowResult !== 'ignored'
+      ? (PITCH_WINDOW_FLASH_BG[windowResult] ?? colors.wood[600])
+      : colors.wood[600]
+
   const innerTol = hitInnerThresholdCents(adaptedCentsTolerance)
   const clamped =
     cents != null && Number.isFinite(cents) ? Math.max(-50, Math.min(50, cents)) : 0
@@ -59,7 +87,7 @@ export function PlayPitchLadderVertical({
   }
 
   const rootClass = [
-    'min-h-0 flex-col rounded-xl border border-wood-600/40 bg-cream-dark/50 p-4',
+    'relative min-h-0 flex-col overflow-hidden rounded-xl border border-wood-600/40 bg-cream-dark/50 p-4',
     className ?? '',
   ]
     .join(' ')
@@ -67,6 +95,16 @@ export function PlayPitchLadderVertical({
 
   return (
     <View className={rootClass}>
+      {windowResult && windowResult !== 'ignored' ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            { borderRadius: 12, backgroundColor: flashColor },
+            flashStyle,
+          ]}
+        />
+      ) : null}
       <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Live pitch vs target</Text>
       <Text className="mt-1 font-sans text-xs text-muted-brown">
         Cents are measured against the highlighted tab target above — it moves when the tab advances.

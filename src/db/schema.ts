@@ -113,6 +113,18 @@ export const MIGRATION_V7_JAM_SNAPSHOT_RELIABILITY = [
   'ALTER TABLE jam_snapshots ADD COLUMN reliability_signal_quality REAL',
 ] as const
 
+/** v8: Library — persisted full analyzed lessons (not lick drill payloads). */
+export const MIGRATION_V8_LESSONS = `
+CREATE TABLE IF NOT EXISTS lessons (
+  job_id TEXT PRIMARY KEY NOT NULL,
+  lesson_json TEXT NOT NULL,
+  song_title TEXT,
+  artist TEXT,
+  analyzed_at TEXT NOT NULL,
+  section_count INTEGER NOT NULL DEFAULT 0
+);
+`
+
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },
   { id: 'phrasing', label: 'Phrasing' },

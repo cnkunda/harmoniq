@@ -38,7 +38,8 @@ export function midiToScientificPitchName(midi: number): string {
   return `${CHROMATIC_NOTE_NAMES[((rounded % 12) + 12) % 12]}${octave}`
 }
 
-const FLASH_BG: Partial<Record<NoteResultLabel, string>> = {
+/** Sage / amber / terracotta flash per closed beat — shared with Play pitch ladder (PRIORITIES §49). */
+export const PITCH_WINDOW_FLASH_BG: Partial<Record<NoteResultLabel, string>> = {
   hit: colors.success,
   close: colors.amber.accent,
   miss: colors.danger,
@@ -72,7 +73,9 @@ export function PitchIndicator({
   }))
 
   const flashColor =
-    windowResult && windowResult !== 'ignored' ? (FLASH_BG[windowResult] ?? colors.wood[600]) : colors.wood[600]
+    windowResult && windowResult !== 'ignored'
+      ? (PITCH_WINDOW_FLASH_BG[windowResult] ?? colors.wood[600])
+      : colors.wood[600]
 
   const activeSci =
     typeof targetMidi === 'number' && Number.isFinite(targetMidi) ? midiToScientificPitchName(targetMidi) : null

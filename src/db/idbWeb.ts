@@ -7,10 +7,10 @@
 
 import type { LessonJSON } from '@/src/types'
 
-import type { JamSnapshotInsertInput, LickRow, SessionArchiveRow, SkillNodeRow } from '@/src/db/types'
+import type { JamSnapshotInsertInput, LessonPersistRow, LickRow, SessionArchiveRow, SkillNodeRow } from '@/src/db/types'
 
 const DB_NAME = 'harmoniq_web_v1'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 const S_PREFS = 'app_prefs'
 const S_SESSIONS = 'sessions'
@@ -18,6 +18,7 @@ const S_SKILL_NODES = 'skill_nodes'
 const S_LICKS = 'licks'
 const S_JAM = 'jam_snapshots'
 const S_LESSON = 'lesson_cache'
+const S_LESSONS = 'lessons'
 
 type PrefRow = { key: string; value: string }
 type LessonCacheRow = { id: 'latest'; lesson: LessonJSON; savedAt: string }
@@ -51,6 +52,9 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
       }
       if (!db.objectStoreNames.contains(S_LESSON)) {
         db.createObjectStore(S_LESSON, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(S_LESSONS)) {
+        db.createObjectStore(S_LESSONS, { keyPath: 'job_id' })
       }
     }
   })
@@ -116,16 +120,18 @@ export type IdbHydration = {
   licks: LickRow[]
   jams: JamSnapshotInsertInput[]
   lesson: LessonJSON | null
+  lessons: LessonPersistRow[]
 }
 
 export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> {
-  const [prefs, sessions, skillNodes, licks, jams, lessonRows] = await Promise.all([
+  const [prefs, sessions, skillNodes, licks, jams, lessonRows, lessonCatalog] = await Promise.all([
     getAllStore<PrefRow>(db, S_PREFS),
     getAllStore<SessionArchiveRow>(db, S_SESSIONS),
     getAllStore<SkillNodeRow>(db, S_SKILL_NODES),
     getAllStore<LickRow>(db, S_LICKS),
     getAllStore<JamSnapshotInsertInput>(db, S_JAM),
     getAllStore<LessonCacheRow>(db, S_LESSON),
+    db.objectStoreNames.contains(S_LESSONS) ? getAllStore<LessonPersistRow>(db, S_LESSONS) : Promise.resolve([]),
   ])
   const latest = lessonRows.find((r) => r.id === 'latest')
   return {
@@ -135,6 +141,7 @@ export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> 
     licks,
     jams,
     lesson: latest?.lesson ?? null,
+    lessons: lessonCatalog,
   }
 }
 
@@ -161,6 +168,23 @@ export async function idbPersistLicks(db: IDBDatabase | null, rows: LickRow[]): 
 export async function idbPersistJams(db: IDBDatabase | null, rows: JamSnapshotInsertInput[]): Promise<void> {
   if (!db) return
   await putAll(db, S_JAM, rows)
+}
+
+export async function idbPersistLessons(db: IDBDatabase | null, rows: LessonPersistRow[]): Promise<void> {
+  if (!db || !db.objectStoreNames.contains(S_LESSONS)) return
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(S_LESSONS, 'readwrite')
+    tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'))
+    tx.oncomplete = () => resolve()
+    const store = tx.objectStore(S_LESSONS)
+    const cr = store.clear()
+    cr.onerror = () => reject(cr.error ?? new Error('clear lessons failed'))
+    cr.onsuccess = () => {
+      for (const row of rows) {
+        store.put(JSON.parse(JSON.stringify(row)) as LessonPersistRow)
+      }
+    }
+  })
 }
 
 export async function idbWriteLessonCache(db: IDBDatabase | null, lesson: LessonJSON): Promise<void> {
@@ -198,13 +222,17 @@ export async function idbClearLessonCache(db: IDBDatabase | null): Promise<void>
   })
 }
 
-/** Clears practice tables in IDB; keeps `app_prefs` and `lesson_cache`. */
+/** Clears practice tables in IDB; keeps `app_prefs` only. Also clears lesson cache and lesson catalog. */
 export async function idbClearPracticeStores(db: IDBDatabase | null): Promise<void> {
   if (!db) return
   await clearStore(db, S_SESSIONS)
   await clearStore(db, S_LICKS)
   await clearStore(db, S_JAM)
   await clearStore(db, S_SKILL_NODES)
+  if (db.objectStoreNames.contains(S_LESSONS)) {
+    await clearStore(db, S_LESSONS)
+  }
+  await clearStore(db, S_LESSON)
 }
 
 let harmoniqIdbHandle: IDBDatabase | null = null

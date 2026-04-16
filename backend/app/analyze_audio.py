@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from app.coach import merge_coach_copy_into_sections
+from app.ingest import SourceMetadata, resolve_lesson_titles
 from app.pipeline_proof import LibrosaSummary, librosa_summarize
 from app.style_detect import infer_style_from_librosa_summary
 from app.transcribe import transcribe_vocals_to_lyrics_aligned
@@ -39,6 +40,8 @@ def _fallback_lesson(
     wav_path: str,
     guitar_stem_path: Path,
     player_profile: PlayerProfile | None = None,
+    source_metadata: SourceMetadata | None = None,
+    source_url: str | None = None,
 ) -> LessonJSON:
     # Deterministic placeholder so API contract tests pass even when librosa
     # fails on tiny clips or in constrained environments.
@@ -66,10 +69,11 @@ def _fallback_lesson(
         tempo_confidence=0.5,
     )
     style = infer_style_from_librosa_summary(stub_summary)
+    song_title, artist = resolve_lesson_titles(source_metadata, source_url=source_url)
     sections = merge_coach_copy_into_sections(
         sections,
-        song_title="Stub Song",
-        artist="Stub Artist",
+        song_title=song_title,
+        artist=artist,
         key="G major",
         player_profile=player_profile,
         style_label=style.style_label,
@@ -77,8 +81,8 @@ def _fallback_lesson(
     )
     return LessonJSON(
         job_id=job_id,
-        song_title="Stub Song",
-        artist="Stub Artist",
+        song_title=song_title,
+        artist=artist,
         style_label=style.style_label,
         key="G major",
         key_confidence=0.99,
@@ -103,8 +107,9 @@ def build_lesson_json_from_librosa(
     wav_path: str,
     source_url: str | None = None,
     player_profile: PlayerProfile | None = None,
+    source_metadata: SourceMetadata | None = None,
 ) -> LessonJSON:
-    _ = source_url  # reserved for later ingest logging
+    song_title, artist = resolve_lesson_titles(source_metadata, source_url=source_url)
 
     try:
         summary = librosa_summarize(guitar_stem_path)
@@ -116,6 +121,8 @@ def build_lesson_json_from_librosa(
             wav_path=wav_path,
             guitar_stem_path=guitar_stem_path,
             player_profile=player_profile,
+            source_metadata=source_metadata,
+            source_url=source_url,
         )
 
     beat_grid = _sorted_unique_floats(summary.beat_times_s)
@@ -179,8 +186,8 @@ def build_lesson_json_from_librosa(
     style = infer_style_from_librosa_summary(summary)
     sections = merge_coach_copy_into_sections(
         sections,
-        song_title="Librosa Lesson",
-        artist="Stub Artist",
+        song_title=song_title,
+        artist=artist,
         key=summary.key_name,
         player_profile=player_profile,
         style_label=style.style_label,
@@ -189,8 +196,8 @@ def build_lesson_json_from_librosa(
 
     return LessonJSON(
         job_id=job_id,
-        song_title="Librosa Lesson",
-        artist="Stub Artist",
+        song_title=song_title,
+        artist=artist,
         style_label=style.style_label,
         key=summary.key_name,
         key_confidence=summary.key_confidence,

@@ -5,6 +5,7 @@ import type {
   LickInsertInput,
   LickRow,
   LatestSessionSongRow,
+  LessonListRow,
   NodeSessionSnippet,
   ReviewSkillUpdateInput,
   SessionArchiveRow,
@@ -12,6 +13,7 @@ import type {
   SessionJournalRow,
   SkillNodeRow,
 } from '@/src/db/types'
+import type { LessonJSON } from '@/src/types'
 
 /**
  * Shared repository surface for `client.native` (SQLite) and `client.web` (IndexedDB + memory).
@@ -41,6 +43,10 @@ export interface HarmoniqDbClient {
   getLicks(): Promise<LickRow[]>
   getLickById(id: string): Promise<LickRow | null>
   deleteLickById(id: string): Promise<void>
+  upsertLessonFromAnalysis(lesson: LessonJSON): Promise<void>
+  listLessonsJournal(): Promise<LessonListRow[]>
+  getLessonByJobId(jobId: string): Promise<LessonJSON | null>
+  deleteLessonByJobId(jobId: string): Promise<void>
   /** Web: hydrate Zustand from IDB lesson cache. Native: no-op. */
   hydrateWebLessonStore(): Promise<void>
 }

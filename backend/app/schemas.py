@@ -195,3 +195,23 @@ class QuickFeedbackRequest(BaseModel):
 
 class QuickFeedbackResponse(BaseModel):
     message: str
+
+
+class JamBackingRequest(BaseModel):
+    """POST /jam/backing — instrumental practice bed via Gemini Lyria (fallback-capable)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    musical_key: str = Field(..., min_length=1, max_length=80)
+    bpm: int | None = Field(default=None, ge=40, le=240)
+    weak_areas: list[str] = Field(default_factory=list, max_length=24)
+    style_hint: str | None = Field(default=None, max_length=500)
+    model: str | None = Field(default=None, max_length=64)
+
+
+class JamBackingResponse(BaseModel):
+    audio_base64: str
+    mime_type: str = "audio/wav"
+    format: Literal["wav"] = "wav"
+    prompt_used: str
+    duration_ms: int | None = None

@@ -79,6 +79,7 @@ Runs locally during development. Deploy to Railway, Fly.io, or Render free tier 
 **Endpoints:**
 - `POST /analyze` — accepts `{ url: string }` (YouTube) or multipart audio file. Returns `{ job_id }` immediately. Processing is async.
 - `GET /analyze/{job_id}` — polling endpoint. Returns `{ status: "processing" | "complete" | "failed", result: LessonJSON | null, error: string | null }`
+- `GET /tabs/search?q=` — stub tab catalog for UI integration (`HARMONIQ_TAB_CATALOG`: `stub` default, or `none` for empty results). `GET /tabs/{id}/gp5` returns **501** until a licensed catalog API is wired.
 - `POST /score` — accepts recorded PCM buffer + target section metadata. Returns `ScoreResult`
 - `POST /jam-score` — accepts a jam session recording buffer. Returns `JamResult`
 
@@ -98,7 +99,9 @@ Runs locally during development. Deploy to Railway, Fly.io, or Render free tier 
 
 **Caching:** Cache analysis results by audio hash and pipeline version.
 
-**Source handling:** YouTube is convenience input only. Always support audio upload and a fallback path if extraction fails.
+**Source handling:** YouTube is convenience input only. Always support audio upload and a fallback path if extraction fails. **Metadata:** before download, the worker uses `yt-dlp`’s Python API (`extract_info` / `skip_download`) to populate `song_title` and `artist` when available; uploads default to **Uploaded track** / **Unknown artist** until the client edits on the Add Song screen.
+
+**Tab catalog:** The bundled implementation is a **stub** for development. Do not scrape third-party tab sites without a proper license; swap `app/tab_catalog/provider.py` for a partner API when available.
 
 **AI Coach:** Anthropic Claude API (`claude-sonnet-4-20250514`). Used for lesson copy generation, session review feedback, study step explanations, and jam session summaries. System prompt design is specified in the AI Coach section below.
 
@@ -326,7 +329,7 @@ Mic listens passively while the user noodles freely — over a backing track, a 
 
 **Web:** Requires HTTPS and mic permission.
 
-**Backing tracks** (bundled as MP3 loops in `/assets/backing-tracks/`, looped via `expo-av`):
+**Backing tracks** (bundled as MP3 loops in `/assets/backing-tracks/`, looped via `expo-av`): in-repo **multi-part** beds (bass, chords/arpeggio, light drums — not single-tone demos). Regenerate from source with `python scripts/generate_backing_tracks.py` (requires numpy + ffmpeg). See `assets/backing-tracks/SOURCES.md`. Optional richer **AI** instrumental via `POST /jam/backing` when `GEMINI_API_KEY` is set on the API (Gemini Lyria); route auto-falls back to bundled loops if AI generation is unavailable.
 - A minor, slow blues shuffle — 70 BPM
 - A minor, open drone — ambient, no tempo
 - G major, fingerpicking groove — 80 BPM (Tommy Emmanuel / acoustic)

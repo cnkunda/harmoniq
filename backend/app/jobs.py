@@ -19,7 +19,15 @@ from app.schemas import JobStatus, LessonJSON, LessonSectionStub, PlayerProfile
 
 from app.analyze_audio import build_lesson_json_from_librosa
 from app.cache import load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
-from app.ingest import IngestError, YouTubeUrlInvalidError, get_data_dir, get_job_dir
+from app.coach import merge_coach_copy_into_sections
+from app.ingest import (
+    IngestError,
+    SourceMetadata,
+    YouTubeUrlInvalidError,
+    get_data_dir,
+    get_job_dir,
+    resolve_lesson_titles,
+)
 
 from app.separate import SeparationError, separate_song_to_stems
 
@@ -74,16 +82,19 @@ def _stub_lesson(
     *,
     wav_path: str | None = None,
     stems: dict[str, str] | None = None,
+    source_metadata: SourceMetadata | None = None,
 ) -> LessonJSON:
     """Deterministic fake lesson for client contract tests; pipeline replaces this later."""
-    _ = source_url  # reserved for future ingest logging
+    song_title, artist = resolve_lesson_titles(source_metadata, source_url=source_url)
 
     # Note: LessonJSON allows extra fields (extra="allow"), so `wav_path` can be
     # carried forward without changing the public schema yet.
+    # No librosa pass here — match HARMONIQ_SKIP_STYLE_DETECT placeholder (D2 contract).
     return LessonJSON(
         job_id=job_id,
-        song_title="Stub Song",
-        artist="Stub Artist",
+        song_title=song_title,
+        artist=artist,
+        style_label="general",
         key="G major",
         key_confidence=0.99,
         tempo=72.0,
@@ -123,7 +134,7 @@ def _process_analyze_job(
         from app.ingest import ingest_youtube_or_upload_to_wav
 
         _set_job_processing_progress(job_id, 0.12, "Preparing audio…")
-        wav_path_obj = ingest_youtube_or_upload_to_wav(
+        wav_path_obj, source_metadata = ingest_youtube_or_upload_to_wav(
             job_id,
             youtube_url=youtube_url,
             upload_path=upload_path,
@@ -146,7 +157,23 @@ def _process_analyze_job(
         vocals_rel_path = stems.get("vocals")
         if not guitar_rel_path:
             # Separation contract should always return a guitar stem; fall back to stub.
-            result = _stub_lesson(job_id, youtube_url, wav_path=wav_path, stems=stems)
+            stub = _stub_lesson(
+                job_id,
+                youtube_url,
+                wav_path=wav_path,
+                stems=stems,
+                source_metadata=source_metadata,
+            )
+            enriched = merge_coach_copy_into_sections(
+                list(stub.sections),
+                song_title=stub.song_title,
+                artist=stub.artist,
+                key=stub.key,
+                player_profile=player_profile,
+                style_label=stub.style_label,
+                technique_hints=[],
+            )
+            result = stub.model_copy(update={"sections": enriched})
         else:
             _set_job_processing_progress(job_id, 0.78, "Analyzing structure & tabs…")
             backend_root = get_data_dir().parent
@@ -160,6 +187,7 @@ def _process_analyze_job(
                 wav_path=wav_path,
                 source_url=youtube_url,
                 player_profile=player_profile,
+                source_metadata=source_metadata,
             )
         save_cached_lesson_for_wav(wav_path_obj, result, player_profile=player_profile)
         jobs[job_id] = JobStatus(status="complete", result=result, error=None)

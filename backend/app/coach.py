@@ -15,6 +15,9 @@ logger.setLevel(logging.INFO)
 MODEL_ID = "claude-sonnet-4-20250514"
 COACH_TIMEOUT_SECONDS = 8.0
 QUICK_FEEDBACK_TIMEOUT_SECONDS = 5.0
+COACH_PROFILE_RETRY_LIMIT = 2
+COACH_PROFILE_TEMPERATURE_INITIAL = 0.5
+COACH_PROFILE_TEMPERATURE_RETRY = 0.3
 
 # README "AI Coach — Prompt Design" base prompt; keep this literal for reviewability.
 BASE_SYSTEM_PROMPT = """You are a warm, musical guitar coach — somewhere between a patient session musician
@@ -27,9 +30,10 @@ Keep responses under 4 sentences. Never start with "Great job," "Nice work,"
 or any generic praise opener. Lead with the observation.
 The encouragement, if any, comes last and must be specific — never generic."""
 
-COACH_USER_PROMPT_TEMPLATE = """Return valid JSON with exactly two string fields:
+COACH_USER_PROMPT_TEMPLATE = """Return valid JSON with exactly three string fields:
 - coach_note
 - coach_explanation
+- weak_focus
 
 Generate these for this lesson section:
 - section_label: {section_label}
@@ -47,7 +51,19 @@ coach_explanation:
 - explain why this phrase/section works musically (feel, tension, release, space)
 - plain English, no unexplained theory jargon
 
+weak_focus:
+- If weak areas are listed in the player context block, this must be exactly one weak-area phrase from that list.
+- If no weak areas were provided, output exactly "none".
+
 Output only JSON."""
+
+WEAK_AREA_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "bending": ("bend", "bends", "bent note", "intonation"),
+    "vibrato": ("vibrato control", "wobble", "pitch stability"),
+    "timing": ("rhythm", "time feel", "rushing", "behind the beat"),
+    "phrasing": ("phrase shape", "phrase ending", "musical sentence"),
+    "pitch": ("pitch control", "pitch center", "in tune", "intonation"),
+}
 
 
 def _player_context_block(profile: PlayerProfile | None) -> str:
@@ -60,7 +76,7 @@ def _player_context_block(profile: PlayerProfile | None) -> str:
         return ""
     lines = [
         "<player_context>",
-        "The player has a known skill profile — bias coach_note and coach_explanation slightly toward their gaps.",
+        "The player has a known skill profile — prioritize coach_note and coach_explanation toward their gaps.",
     ]
     if weak:
         lines.append("Weak areas to emphasize (plain phrases): " + ", ".join(str(w) for w in weak))
@@ -86,6 +102,32 @@ def _player_context_block(profile: PlayerProfile | None) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+def _profile_priority_directive(profile: PlayerProfile | None) -> str:
+    if profile is None:
+        return ""
+    data = profile.model_dump(mode="json", exclude_none=True)
+    weak = [str(w).strip() for w in (data.get("weak_areas") or []) if str(w).strip()]
+    nodes = data.get("skill_nodes") or []
+    if not weak and not nodes:
+        return ""
+    if weak:
+        joined = ", ".join(weak[:8])
+        focus_line = (
+            "Profile-priority requirement: make coach_note or the first sentence of coach_explanation "
+            f"explicitly reference at least one weak-area concept ({joined}) in plain language."
+        )
+    else:
+        focus_line = (
+            "Profile-priority requirement: make coach_note or the first sentence of coach_explanation "
+            "explicitly reference at least one low-confidence skill area from the profile in plain language."
+        )
+    return (
+        focus_line
+        + "\nKeep it section-specific and natural; do not output this requirement text in the JSON."
+        + "\n\n"
+    )
+
+
 def _song_style_block(style_label: str | None, technique_hints: list[str] | None) -> str:
     label = (style_label or "").strip()
     hints = [h for h in (technique_hints or []) if isinstance(h, str) and h.strip()]
@@ -102,6 +144,71 @@ def _song_style_block(style_label: str | None, technique_hints: list[str] | None
     return "\n".join(lines) + "\n\n"
 
 
+def _normalize_for_match(value: str) -> str:
+    lowered = value.lower()
+    collapsed = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return re.sub(r"\s+", " ", collapsed).strip()
+
+
+def _focus_term_variants(term: str) -> set[str]:
+    base = _normalize_for_match(term)
+    if not base:
+        return set()
+    variants = {base}
+    if not base.endswith("s"):
+        variants.add(f"{base}s")
+    if base.endswith("ing"):
+        variants.add(base[:-3])
+    synonyms = WEAK_AREA_SYNONYMS.get(base)
+    if synonyms:
+        variants.update(_normalize_for_match(s) for s in synonyms if s)
+    return {v for v in variants if v}
+
+
+def _profile_focus_terms(profile: PlayerProfile | None) -> list[str]:
+    if profile is None:
+        return []
+    weak = [str(w).strip() for w in profile.weak_areas if str(w).strip()]
+    if weak:
+        return weak[:8]
+    low_nodes = sorted(
+        [n for n in profile.skill_nodes if n.id and n.score is not None],
+        key=lambda n: float(n.score or 0.0),
+    )
+    out: list[str] = []
+    for node in low_nodes[:3]:
+        label = (node.label or node.id or "").strip()
+        if label:
+            out.append(label)
+    return out
+
+
+def _coach_hits_profile_focus(*, note: str, explanation: str, weak_focus: str, focus_terms: list[str]) -> bool:
+    if not focus_terms:
+        return True
+    combined = _normalize_for_match(f"{note} {explanation}")
+    weak_focus_norm = _normalize_for_match(weak_focus)
+    for term in focus_terms:
+        for variant in _focus_term_variants(term):
+            if variant and (variant in combined or variant == weak_focus_norm):
+                return True
+    return False
+
+
+def _profile_retry_tail(focus_terms: list[str]) -> str:
+    if not focus_terms:
+        return ""
+    joined = ", ".join(focus_terms)
+    return (
+        "\n\n<retry_requirement>"
+        "\nPrevious draft did not clearly mention the player weak-area terms."
+        f"\nRewrite so coach_note or the first sentence of coach_explanation explicitly names one of: {joined}."
+        "\nAlso set weak_focus to exactly the matching weak-area phrase."
+        "\nOutput only JSON."
+        "\n</retry_requirement>"
+    )
+
+
 def build_coach_user_prompt(
     *,
     section_label: str | None,
@@ -114,13 +221,14 @@ def build_coach_user_prompt(
 ) -> str:
     """Assemble the user message: optional context blocks + fixed JSON contract."""
     prefix = _player_context_block(player_profile) + _song_style_block(style_label, technique_hints)
+    profile_priority = _profile_priority_directive(player_profile)
     body = COACH_USER_PROMPT_TEMPLATE.format(
         section_label=(section_label or "Section"),
         song_title=(song_title or "Unknown song"),
         artist=(artist or "Unknown artist"),
         key=(key or "Unknown key"),
     )
-    return prefix + body
+    return prefix + profile_priority + body
 
 
 FALLBACK_COACH_NOTE = "Stay relaxed and sing each phrase before you play it, then match that shape on guitar."
@@ -186,7 +294,7 @@ def _call_claude_text(
     return _extract_text_from_response(response)
 
 
-def _parse_coach_json(raw_text: str) -> tuple[str, str] | None:
+def _parse_coach_json(raw_text: str) -> tuple[str, str, str] | None:
     import json
 
     raw = (raw_text or "").strip()
@@ -217,7 +325,10 @@ def _parse_coach_json(raw_text: str) -> tuple[str, str] | None:
         return None
     if not isinstance(explanation, str) or not explanation.strip():
         return None
-    return note.strip(), explanation.strip()
+    weak_focus = data.get("weak_focus")
+    if not isinstance(weak_focus, str) or not weak_focus.strip():
+        weak_focus = "none"
+    return note.strip(), explanation.strip(), weak_focus.strip()
 
 
 def _parse_quick_message_json(raw_text: str) -> str | None:
@@ -319,17 +430,53 @@ def generate_coach_fields_for_section(
         style_label=style_label,
         technique_hints=technique_hints,
     )
+    focus_terms = _profile_focus_terms(player_profile)
+    attempts = 1 + (COACH_PROFILE_RETRY_LIMIT if focus_terms else 0)
     pool = ThreadPoolExecutor(max_workers=1)
-    future = pool.submit(_call_claude_text, api_key=api_key, user_prompt=user_prompt)
     try:
-        raw_text = future.result(timeout=COACH_TIMEOUT_SECONDS)
-        parsed = _parse_coach_json(raw_text)
-        if parsed is None:
-            logger.warning("coach fallback reason=unparseable_response")
-            return _fallback_coach_fields()
-        return parsed
+        for attempt in range(attempts):
+            prompt = user_prompt
+            if attempt > 0:
+                prompt = user_prompt + _profile_retry_tail(focus_terms)
+            temperature = 1.0
+            if focus_terms:
+                temperature = (
+                    COACH_PROFILE_TEMPERATURE_INITIAL
+                    if attempt == 0
+                    else COACH_PROFILE_TEMPERATURE_RETRY
+                )
+            future = pool.submit(
+                _call_claude_text,
+                api_key=api_key,
+                user_prompt=prompt,
+                temperature=temperature,
+            )
+            raw_text = future.result(timeout=COACH_TIMEOUT_SECONDS)
+            parsed = _parse_coach_json(raw_text)
+            if parsed is None:
+                logger.warning(
+                    "coach unparseable_response attempt=%s/%s",
+                    attempt + 1,
+                    attempts,
+                )
+                continue
+            note, explanation, weak_focus = parsed
+            if _coach_hits_profile_focus(
+                note=note,
+                explanation=explanation,
+                weak_focus=weak_focus,
+                focus_terms=focus_terms,
+            ):
+                return note, explanation
+            logger.info(
+                "coach profile_focus_retry attempt=%s/%s weak_focus=%s",
+                attempt + 1,
+                attempts,
+                weak_focus,
+            )
+        logger.warning("coach fallback reason=profile_focus_not_met")
+        return _fallback_coach_fields()
     except FutureTimeoutError:
-        future.cancel()
         logger.warning("coach fallback reason=timeout")
         return _fallback_coach_fields()
     except Exception as exc:

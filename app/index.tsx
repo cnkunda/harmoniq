@@ -2,13 +2,24 @@ import { Redirect } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, View } from 'react-native'
 
-import { getOnboardingComplete } from '@/src/db/client'
+import { getLicks, getOnboardingComplete, initDb, listLessonsJournal } from '@/src/db/client'
+
+/** Enter main app if placement onboarding finished or user already has library content. */
+async function shouldEnterMainApp(): Promise<boolean> {
+  await initDb()
+  const [onboardingDone, lessons, licks] = await Promise.all([
+    getOnboardingComplete(),
+    listLessonsJournal(),
+    getLicks(),
+  ])
+  return onboardingDone || lessons.length > 0 || licks.length > 0
+}
 
 export default function EntryRedirect() {
   const [done, setDone] = useState<boolean | null>(null)
 
   useEffect(() => {
-    void getOnboardingComplete()
+    void shouldEnterMainApp()
       .then(setDone)
       .catch(() => setDone(false))
   }, [])

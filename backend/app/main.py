@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import inspect
@@ -10,12 +11,15 @@ import re
 from pathlib import Path
 import uuid
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.schemas import (
     AnalyzeJobCreated,
+    JamBackingRequest,
+    JamBackingResponse,
     JamScoreRequest,
     JamScoreResult,
     JobStatus,
@@ -35,6 +39,15 @@ from app.coach import (
     generate_quick_feedback,
 )
 from app.scoring_constants import RELIABILITY_BANDS, SCORE_CONTRACT_VERSION, clamp01
+from app.jam_backing import (
+    LyriaProviderError,
+    build_instrumental_prompt,
+    call_gemini_lyria_instrumental,
+    gemini_lyria_config,
+    load_bundled_track_wav,
+    select_bundled_track,
+)
+from app.tab_catalog.provider import TabSearchResponse, search_tabs
 
 logger = logging.getLogger("harmoniq.api")
 logger.setLevel(logging.INFO)
@@ -253,6 +266,29 @@ async def analyze_status(job_id: str) -> JobStatus:
     return job
 
 
+@app.get(
+    "/tabs/search",
+    response_model=TabSearchResponse,
+    tags=["Tabs"],
+    summary="Search tab catalog (stub until licensed provider)",
+)
+async def tabs_search(q: str = Query("", description="Free-text song search")) -> TabSearchResponse:
+    return search_tabs(q)
+
+
+@app.get(
+    "/tabs/{hit_id}/gp5",
+    tags=["Tabs"],
+    summary="Download Guitar Pro file for a catalog hit (not implemented)",
+)
+async def tabs_gp5_download(hit_id: str) -> None:
+    _ = hit_id
+    raise HTTPException(
+        status_code=501,
+        detail="GP5 download is not available yet. Configure a licensed tab provider (HARMONIQ_TAB_CATALOG).",
+    )
+
+
 @app.post(
     "/score",
     response_model=ScoreResult,
@@ -304,6 +340,59 @@ async def onboarding_placement(payload: OnboardingPlacementRequest) -> Onboardin
 async def quick_feedback(payload: QuickFeedbackRequest) -> QuickFeedbackResponse:
     message = generate_quick_feedback([str(x) for x in payload.accuracy_pattern])
     return QuickFeedbackResponse(message=message)
+
+
+@app.post(
+    "/jam/backing",
+    response_model=JamBackingResponse,
+    tags=["Jam"],
+    summary="POST /jam/backing — instrumental practice bed (Gemini Lyria + local fallback)",
+)
+async def jam_backing(payload: JamBackingRequest) -> JamBackingResponse:
+    api_key, base_url, default_model = gemini_lyria_config()
+    model = (payload.model or default_model).strip() or default_model
+    prompt = build_instrumental_prompt(
+        musical_key=payload.musical_key.strip(),
+        bpm=payload.bpm,
+        weak_areas=[str(x).strip() for x in payload.weak_areas if str(x).strip()],
+        style_hint=payload.style_hint,
+    )
+
+    raw: bytes | None = None
+    duration_ms: int | None = None
+    prompt_used = prompt
+    if api_key:
+        try:
+            raw, duration_ms = await call_gemini_lyria_instrumental(
+                prompt=prompt,
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+            )
+        except LyriaProviderError as exc:
+            logger.warning("jam_backing lyria provider error code=%s msg=%s", exc.code, exc)
+        except httpx.HTTPError as exc:
+            logger.warning("jam_backing lyria http error: %s", exc.__class__.__name__)
+    else:
+        logger.info("jam_backing no GEMINI_API_KEY; using bundled fallback")
+
+    if raw is None:
+        fallback = select_bundled_track(
+            musical_key=payload.musical_key.strip(),
+            bpm=payload.bpm,
+            style_hint=payload.style_hint,
+        )
+        raw, duration_ms = load_bundled_track_wav(fallback)
+        prompt_used = f"{prompt} [fallback_track={fallback.filename}]"
+
+    b64 = base64.b64encode(raw).decode("ascii")
+    return JamBackingResponse(
+        audio_base64=b64,
+        mime_type="audio/wav",
+        format="wav",
+        prompt_used=prompt_used,
+        duration_ms=duration_ms,
+    )
 
 
 @app.post(

@@ -11,11 +11,12 @@ import os
 import re
 import wave
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 from urllib.parse import parse_qs, urlparse
 
-from app.pipeline_proof import ffmpeg_normalize_wav, yt_dlp_download_wav
 from app.pipeline_proof import TARGET_SR as DEFAULT_TARGET_SR
+from app.pipeline_proof import ffmpeg_normalize_wav, yt_dlp_download_wav
+from app.youtube_meta import extract_youtube_metadata
 
 logger = logging.getLogger("harmoniq.ingest")
 logger.setLevel(logging.INFO)
@@ -27,6 +28,31 @@ class YouTubeUrlInvalidError(ValueError):
 
 class IngestError(RuntimeError):
     """Raised for ingest/normalization failures."""
+
+
+class SourceMetadata(TypedDict):
+    """Display metadata from ingest (YouTube); uploads omit this until client edits."""
+
+    song_title: str
+    artist: str | None
+
+
+def resolve_lesson_titles(
+    source_metadata: SourceMetadata | None,
+    *,
+    source_url: str | None,
+) -> tuple[str, str]:
+    """Default ``song_title`` / ``artist`` for ``LessonJSON`` when metadata is partial or missing."""
+    if source_metadata:
+        title = (source_metadata.get("song_title") or "").strip()
+        if not title:
+            title = "Unknown title"
+        ar = source_metadata.get("artist")
+        artist = ar.strip() if isinstance(ar, str) and ar.strip() else "Unknown artist"
+        return title, artist
+    if source_url:
+        return "YouTube video", "Unknown artist"
+    return "Uploaded track", "Unknown artist"
 
 
 def _backend_dir() -> Path:
@@ -114,13 +140,24 @@ def ingest_youtube_or_upload_to_wav(
     youtube_url: str | None,
     upload_path: str | None,
     target_sr: int = DEFAULT_TARGET_SR,
-) -> Path:
-    """Write normalized `song.wav` to the job dir and return its path."""
+) -> tuple[Path, SourceMetadata | None]:
+    """Write normalized ``song.wav`` to the job dir.
+
+    Returns ``(wav_path, source_metadata)``. For YouTube, ``source_metadata`` is set when
+    yt-dlp returns at least a title; for file uploads it is ``None``.
+    """
     job_dir = get_job_dir(job_id)
     song_wav_path = job_dir / "song.wav"
 
+    source_metadata: SourceMetadata | None = None
+
     if youtube_url:
         normalized = validate_youtube_url(youtube_url)
+        song_t, artist_t = extract_youtube_metadata(normalized)
+        if song_t:
+            source_metadata = {"song_title": song_t, "artist": artist_t}
+        elif artist_t:
+            source_metadata = {"song_title": "Unknown title", "artist": artist_t}
         downloads_dir = job_dir / "downloads"
         logger.info("Downloading YouTube audio for job_id=%s", job_id)
         try:
@@ -146,5 +183,5 @@ def ingest_youtube_or_upload_to_wav(
         raise IngestError("No youtube_url or upload file provided")
 
     _verify_wav_properties(song_wav_path, expected_sample_rate=target_sr, expected_channels=1)
-    return song_wav_path
+    return song_wav_path, source_metadata
 

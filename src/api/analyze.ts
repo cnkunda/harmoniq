@@ -37,17 +37,24 @@ const WEAK_AREA_BY_NODE_ID: Record<string, string> = {
 }
 
 /** Build optional player profile for analyze from persisted skill rows (commit 48). */
-export function buildPlayerProfileFromSkillNodes(nodes: SkillNodeRow[]): PlayerProfilePayload | undefined {
-  if (nodes.length === 0) return undefined
+export function buildPlayerProfileFromSkillNodes(
+  nodes?: SkillNodeRow[] | null,
+): PlayerProfilePayload | undefined {
+  const safeNodes = Array.isArray(nodes) ? nodes : []
+  if (safeNodes.length === 0) return undefined
   const weakThreshold = 0.45
-  const weak_areas = nodes
-    .filter((n) => n.score < weakThreshold)
+  const weak_areas = safeNodes
+    .filter((n) => Number.isFinite(n.score) && n.score < weakThreshold)
     .map((n) => WEAK_AREA_BY_NODE_ID[n.id] ?? n.id)
-  const skill_nodes = nodes.map((n) => ({
-    id: n.id,
-    label: n.label,
-    score: n.score,
-  }))
+  const skill_nodes = safeNodes.map((n) => {
+    const rawScore = Number(n.score)
+    const score = Number.isFinite(rawScore) ? Math.max(0, Math.min(1, rawScore)) : undefined
+    return {
+      id: n.id,
+      label: n.label,
+      ...(score != null ? { score } : {}),
+    }
+  })
   return { weak_areas, skill_nodes }
 }
 

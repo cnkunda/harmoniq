@@ -167,3 +167,17 @@ export type LickRow = {
   user_annotations: Array<{ bar: number; text: string }>
   date_saved: string
 }
+
+/** Library list row for analyzed full songs (metadata only). */
+export type LessonListRow = {
+  job_id: string
+  song_title: string | null
+  artist: string | null
+  analyzed_at: string
+  section_count: number
+}
+
+/** SQLite / IndexedDB row including serialized `LessonJSON`. */
+export type LessonPersistRow = LessonListRow & {
+  lesson_json: string
+}

@@ -62,6 +62,8 @@ export default function PlayScreen() {
     quickCoachText,
     tabNoteQueue,
     lastFretResult,
+    lastWindowResult,
+    windowFlashToken,
     startCapture,
     stopCapture,
     onNoteEvent: hookOnNoteEvent,
@@ -131,6 +133,8 @@ export default function PlayScreen() {
             adaptedCentsTolerance={adaptedCentsTolerance}
             targetMidi={targetMidi}
             nextTargetMidi={nextPreviewMidi}
+            windowResult={lastWindowResult}
+            windowFlashToken={windowFlashToken}
           />
           <Text className="mt-2 shrink-0 font-sans text-xs text-muted-brown">
             Clean streak: {currentStreak} beat{currentStreak === 1 ? '' : 's'} · Tolerance ±

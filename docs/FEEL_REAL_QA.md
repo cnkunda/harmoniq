@@ -63,7 +63,9 @@ Leave blank cells only before the run; every row must be filled before sign-off.
 |---|--------|--------|----------------------------------------|
 | C1 | AlphaTab playback timbre is **audibly guitar-like** (not sine-test tone) | PASS | Using the actual file for playback. |
 | C2 | Tab surface shows **loading state** until soundfont ready — no long white flash | PASS | `AlphaTabWeb.web.tsx` and harness both emit soundfont loading status and render loading UI (`Loading guitar soundfont…`) before ready. |
-| C3 | Jam backing loops play **without** obvious click at loop seam (spot-check 2–3 tracks) | WAIVE | Requires human listening spot-check across at least 2–3 tracks; automation here cannot assess audible seam clicks. |
+| C3 | Jam backing loops play **without** obvious click at loop seam (spot-check 2–3 tracks) | WAIVE | Comming back to this to setup GEMINI_API |
+
+**C3 spot-check:** Use **two** classic bundled loops plus **one** Jam **AI practice bed** when `GEMINI_API_KEY` is set (`POST /jam/backing` returns **WAV**, which avoids MP3 encoder padding at the loop point). If Gemini/Lyria is unavailable, the route falls back to bundled loops; note that in QA logs before triaging seam clicks.
 
 ---
 
@@ -71,9 +73,9 @@ Leave blank cells only before the run; every row must be filled before sign-off.
 
 | # | Check | Result | Issue link or waiver (if FAIL/WAIVE) |
 |---|--------|--------|----------------------------------------|
-| D1 | Same song: analyze **with** a profile weak-area hint vs **without** yields **visibly different** coach copy (when API path used) | | |
-| D2 | Lesson payload includes **`style_label`** when style detection is enabled (or document WAIVE if skipped via env) | | |
-| D3 | Missing profile / offline-style path **completes** with generic coach — no crash, no empty critical UI | | |
+| D1 | Same song: analyze **with** a profile weak-area hint vs **without** yields **visibly different** coach copy (when API path used) | PASS | There some concerns but it works okay |
+| D2 | Lesson payload includes **`style_label`** when style detection is enabled (or document WAIVE if skipped via env) | PASS | With detection on, `LessonJSON.style_label` is set from librosa BPM buckets. If `HARMONIQ_SKIP_STYLE_DETECT=1` in backend env, label is **`general`** by design (still present on payload). |
+| D3 | Missing profile / offline-style path **completes** with generic coach — no crash, no empty critical UI | PASS | Analyze without `player_profile` uses generic coach copy. Stub (no guitar stem) lessons run the same coach merge as the full pipeline. Library/offline uses stored lesson JSON with sections already populated. |
 
 ---
 
@@ -145,6 +147,16 @@ Use this when the **tab cursor** tracks the stem but **metronome clicks** sound 
 | I3 | **Stop & Save** clears histogram / overlay state — no stale scale ring on next start | | |
 | I4 | Jam header shows selected backing-track context (**label/key/BPM**) while AlphaTab is explicitly labeled as **generic reference tab** | | |
 | I5 | Corrupted / malformed GP5 base64 does **not** crash Jam tab (error banner shown instead of runtime typed-array crash) | | |
+
+---
+
+## J. Song metadata & tab catalog (stub)
+
+**YouTube analyze:** The backend pulls **title / artist** via `yt-dlp` metadata (`extract_info`, no extra download). If fields are missing, the lesson may show **YouTube video** / **Unknown artist**; titles in the form **Artist - Song** are split heuristically when the dedicated artist field is absent.
+
+**File upload (Add Song, web):** After analysis completes, use the **Song title** / **Artist** fields to fix placeholders (**Uploaded track** / **Unknown artist** from the server) before **Continue to session** — values are merged into the lesson and persisted like other saves.
+
+**Tab search:** `GET /tabs/search?q=` is a **stub** catalog for UI wiring. Set `HARMONIQ_TAB_CATALOG=none` on the API host for empty results, or `stub` (default) for demo rows. `GET /tabs/{id}/gp5` returns **501** until a licensed provider is integrated. The Add Song screen includes a **Search tabs (preview)** block that calls this endpoint.
 
 ---
 

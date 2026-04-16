@@ -6,7 +6,7 @@ export type AnalyzeJobStatus = 'processing' | 'complete' | 'failed'
 /** Optional payload for POST /analyze — matches `backend/app/schemas.py` `PlayerProfile`. */
 export interface PlayerProfilePayload {
   weak_areas?: string[]
-  skill_nodes?: Array<{ id: string; label?: string | null; score?: number | null }>
+  skill_nodes?: Array<{ id: string; label?: string | null; score?: number }>
 }
 
 export interface LessonJSON {

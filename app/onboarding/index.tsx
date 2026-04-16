@@ -1,5 +1,5 @@
-import { Music } from 'lucide-react-native'
 import { useRouter } from 'expo-router'
+import { Music } from 'lucide-react-native'
 import { Pressable, Text, View } from 'react-native'
 
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
@@ -21,9 +21,6 @@ export default function OnboardingWelcomeScreen() {
           {
             "Let's find out what you sound like. Three short phrases, your mic, and a quick baseline for your skill map — about five minutes, like tuning up before a gig."
           }
-        </Text>
-        <Text className="mt-4 text-center font-sans text-sm leading-6 text-muted-brown">
-          We need microphone access to score your takes. You can turn it off later in system settings.
         </Text>
         <Pressable
           onPress={() => {

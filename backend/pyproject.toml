@@ -12,6 +12,7 @@ dependencies = [
     "setuptools>=65.0",  # pkg_resources (resampy/librosa); often missing on py3.12+ minimal venvs
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
+    "httpx>=0.27.0",
     "pydantic>=2.0",
     "python-multipart>=0.0.9",
     "anthropic>=0.40.0",
