@@ -2,37 +2,69 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load `backend/.env` so SPOTIFY_CLIENT_ID and other local secrets apply when using `uvicorn`
+# (shell env still wins if already set).
+_backend_root = Path(__file__).resolve().parents[1]
+load_dotenv(_backend_root / ".env")
+
 import base64
+import binascii
 import json
 import logging
 import inspect
 import math
+import os
 import re
 from pathlib import Path
 import uuid
+from typing import Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 
+from app.exporter import (
+    ExportDisabledError,
+    ExportUnsupportedError,
+    export_gp5_base64,
+)
 from app.schemas import (
     AnalyzeJobCreated,
+    CoachHydrationStatus,
+    CurriculumSuggestRequest,
+    CurriculumSuggestResponse,
+    CurriculumSuggestionItem,
+    ExportRequest,
     JamBackingRequest,
     JamBackingResponse,
     JamScoreRequest,
     JamScoreResult,
     JobStatus,
+    LessonJSON,
     OnboardingPlacementRequest,
     OnboardingPlacementResponse,
     PlayerProfile,
+    PracticePlan,
+    PracticePlanRequest,
     QuickFeedbackRequest,
     QuickFeedbackResponse,
     ScoreRequest,
     ScoreResult,
+    SpotifyTasteProfile,
+    TasteDeriveRequest,
+    TasteProfile,
 )
+from app import spotify as spotify_api
+from app.curriculum import suggest_next_session
+from app.sequencer import generate_practice_plan
+from app.taste import derive_taste_profile
 from app.ingest import get_job_dir
-from app.jobs import ANALYSIS_FAILED_USER_MESSAGE, enqueue_analyze_job, jobs
+from app.jobs import ANALYSIS_FAILED_USER_MESSAGE, enqueue_analyze_job, get_coach_hydration, jobs
 from app.coach import (
     generate_jam_coach_summary,
     generate_onboarding_placement_summary,
@@ -89,14 +121,30 @@ app = FastAPI(
     version="0.1.0",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+
+def _cors_allow_origins() -> list[str]:
+    defaults = [
         "http://localhost:8081",
         "http://127.0.0.1:8081",
         "http://localhost:19006",
         "http://127.0.0.1:19006",
-    ],
+    ]
+    raw = os.getenv("HARMONIQ_CORS_ORIGINS", "").strip()
+    if not raw:
+        return defaults
+    extra = [o.strip() for o in raw.split(",") if o.strip()]
+    seen: set[str] = set()
+    out: list[str] = []
+    for o in defaults + extra:
+        if o not in seen:
+            seen.add(o)
+            out.append(o)
+    return out
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_allow_origins(),
     # Expo / Metro may use any port (e.g. `expo start --port 8082`); without this, OPTIONS preflight
     # returns 400 and the browser shows a network-style failure ("need a connection…").
     allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
@@ -136,6 +184,42 @@ async def lesson_file(
     suffix = candidate.suffix.lower()
     media = "audio/wav" if suffix == ".wav" else "application/octet-stream"
     return FileResponse(candidate, media_type=media, filename=candidate.name)
+
+
+@app.post(
+    "/export",
+    tags=["Export"],
+    summary="POST /export — GP5 to MIDI or MusicXML (PRIORITIES §58)",
+    responses={
+        422: {"description": "Invalid payload, bad base64, or format not available in this build"},
+        503: {"description": "Export disabled (HARMONIQ_SKIP_EXPORT=1)"},
+    },
+)
+async def export_tab(req: ExportRequest) -> Response:
+    """Convert base64-encoded GP5 to a downloadable artifact."""
+    try:
+        data, mime, ext, stem = export_gp5_base64(
+            req.gp5_base64,
+            req.export_format,
+            title_hint=req.title,
+        )
+    except ExportDisabledError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except ExportUnsupportedError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except binascii.Error:
+        raise HTTPException(status_code=422, detail="Invalid GP5 base64.") from None
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    filename = f"{stem}{ext}"
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
 
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # per README: max 50MB
@@ -264,6 +348,220 @@ async def analyze_status(job_id: str) -> JobStatus:
         raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
     logger.info("GET /analyze/%s status=%s", job_id, job.status)
     return job
+
+
+@app.get(
+    "/analyze/{job_id}/coach",
+    response_model=CoachHydrationStatus,
+    tags=["Analyze"],
+    summary="GET /analyze/{job_id}/coach — coach hydration status (commit 66)",
+)
+async def analyze_coach_status(job_id: str) -> CoachHydrationStatus:
+    job = jobs.get(job_id)
+    if job is None:
+        logger.warning("GET /analyze/%s/coach — unknown job_id (404)", job_id)
+        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
+    status = get_coach_hydration(job_id)
+    if status is None:
+        return CoachHydrationStatus(status="pending", sections=[], fallback_reason=None)
+    return status
+
+
+@app.post(
+    "/curriculum/suggest",
+    response_model=CurriculumSuggestResponse,
+    tags=["Curriculum"],
+    summary="POST /curriculum/suggest — ranked next-session suggestions (commit 65)",
+)
+async def curriculum_suggest(payload: CurriculumSuggestRequest) -> CurriculumSuggestResponse:
+    if os.getenv("HARMONIQ_SKIP_CURRICULUM", "").strip() == "1":
+        logger.info("curriculum_suggest skipped via HARMONIQ_SKIP_CURRICULUM=1")
+        return CurriculumSuggestResponse(ranked=[])
+
+    candidate_lessons = []
+    for job_id in payload.job_ids:
+        key = str(job_id).strip()
+        if not key:
+            continue
+        job = jobs.get(key)
+        if not job or job.status != "complete" or job.result is None:
+            continue
+        candidate_lessons.append(job.result)
+
+    ranked = suggest_next_session(payload.player_profile, candidate_lessons)
+    return CurriculumSuggestResponse(
+        ranked=[
+            CurriculumSuggestionItem(
+                job_id=item.job_id,
+                reason_label=item.reason_label,
+                technique_focus=item.technique_focus,
+            )
+            for item in ranked
+        ]
+    )
+
+
+@app.post(
+    "/practice/plan",
+    response_model=PracticePlan,
+    tags=["Practice"],
+    summary="POST /practice/plan — ordered drill queue from profile + library (commit 70)",
+)
+async def practice_plan(payload: PracticePlanRequest) -> PracticePlan:
+    skip_llm = os.getenv("HARMONIQ_SKIP_PRACTICE_PLAN", "").strip() == "1"
+    if skip_llm:
+        logger.info("practice_plan using template intros (HARMONIQ_SKIP_PRACTICE_PLAN=1)")
+
+    embedded_by_id: dict[str, LessonJSON] = {}
+    for lesson in payload.library_lessons:
+        jid = (lesson.job_id or "").strip()
+        if jid:
+            embedded_by_id[jid] = lesson
+
+    candidate_lessons: list[LessonJSON] = []
+    seen: set[str] = set()
+    for job_id in payload.job_ids:
+        key = str(job_id).strip()
+        if not key or key in seen:
+            continue
+        job = jobs.get(key)
+        chosen: LessonJSON | None = None
+        if job and job.status == "complete" and job.result is not None:
+            chosen = job.result
+        else:
+            chosen = embedded_by_id.get(key)
+        if chosen is not None:
+            candidate_lessons.append(chosen)
+            seen.add(key)
+
+    return generate_practice_plan(
+        player_profile=payload.player_profile,
+        library_lessons=candidate_lessons,
+        duration_minutes=payload.duration_minutes,
+        skip_llm=skip_llm,
+    )
+
+
+@app.post(
+    "/taste/derive",
+    response_model=TasteProfile,
+    tags=["Taste"],
+    summary="POST /taste/derive — deterministic TasteProfile from Spotify or quiz (commit 68)",
+)
+async def taste_derive(payload: TasteDeriveRequest) -> TasteProfile:
+    if os.getenv("HARMONIQ_SKIP_TASTE_DERIVE", "").strip() == "1":
+        raise HTTPException(
+            status_code=503,
+            detail="Taste derivation disabled (HARMONIQ_SKIP_TASTE_DERIVE=1).",
+        )
+    return derive_taste_profile(
+        spotify_profile=payload.spotify_profile,
+        quiz_answers=payload.quiz_answers,
+        taste_source=payload.taste_source,
+    )
+
+
+@app.get(
+    "/auth/spotify",
+    response_model=None,
+    tags=["Spotify"],
+    summary="GET /auth/spotify — start OAuth (redirect or JSON authorize URL) (commit 67)",
+)
+async def auth_spotify_start(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    format: str = Query("redirect", description="`redirect` (302 to Spotify) or `json`"),
+    platform: str = Query("web", description="`web` or `native` — controls post-login redirect target"),
+) -> RedirectResponse | dict[str, str]:
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).",
+        )
+    rp: Literal["native", "web"] = "native" if platform.strip().lower() == "native" else "web"
+    try:
+        _, authorize_url = spotify_api.begin_authorization(client_session, return_platform=rp)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    fmt = format.strip().lower()
+    if fmt == "json":
+        return {"authorize_url": authorize_url}
+    return RedirectResponse(url=authorize_url, status_code=302)
+
+
+@app.get(
+    "/auth/spotify/callback",
+    tags=["Spotify"],
+    summary="GET /auth/spotify/callback — Spotify OAuth redirect (commit 67)",
+)
+async def auth_spotify_callback(request: Request) -> RedirectResponse:
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).",
+        )
+    qp = request.query_params
+    err = qp.get("error")
+    state = (qp.get("state") or "").strip()
+    code = qp.get("code")
+    if err:
+        popped = spotify_api.pop_pending_for_state(state) if state else None
+        if popped:
+            cs, rp = popped
+            return RedirectResponse(spotify_api.oauth_failure_redirect(rp, cs))
+        return RedirectResponse(spotify_api.oauth_failure_redirect("web", ""))
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing code or state.")
+    try:
+        cs, plat = await spotify_api.exchange_code(str(code), state)
+    except ValueError as exc:
+        logger.warning("Spotify OAuth exchange failed: %s", exc)
+        popped = spotify_api.pop_pending_for_state(state)
+        if popped:
+            cs2, rp2 = popped
+            return RedirectResponse(spotify_api.oauth_failure_redirect(rp2, cs2))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse(url=spotify_api.post_login_redirect(plat, cs))
+
+
+@app.get(
+    "/taste/spotify",
+    response_model=SpotifyTasteProfile,
+    tags=["Spotify"],
+    summary="GET /taste/spotify — aggregated taste (commit 67)",
+)
+async def taste_spotify(
+    client_session: str = Query(..., min_length=1, max_length=256),
+) -> SpotifyTasteProfile:
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).",
+        )
+    try:
+        return await spotify_api.build_taste_profile(client_session)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.delete(
+    "/auth/spotify",
+    tags=["Spotify"],
+    summary="DELETE /auth/spotify — revoke server-side Spotify session (commit 67)",
+)
+async def auth_spotify_disconnect(
+    client_session: str = Query(..., min_length=1, max_length=256),
+) -> Response:
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).",
+        )
+    spotify_api.disconnect_client(client_session)
+    return Response(status_code=204)
 
 
 @app.get(

@@ -34,6 +34,15 @@ describe('metronomeShared', () => {
     expect(s.length).toBeGreaterThan(q.length)
   })
 
+  /** MANUAL_QA — subdivision changes click density without session restart. */
+  it('subdivision 2 doubles eighth-level clicks vs quarter-only in the same window', () => {
+    const grid = [0, 0.5]
+    const tempo = 120
+    const d1 = collectClickTimesInRange(grid, tempo, 0, 2.0, 1)
+    const d2 = collectClickTimesInRange(grid, tempo, 0, 2.0, 2)
+    expect(d2.length).toBeGreaterThanOrEqual(d1.length * 2 - 2)
+  })
+
   it('marks quarter boundaries as downbeat every four quarters from anchor', () => {
     const c = collectClickTimesInRange([0, 0.5], 120, 0, 2.5, 1)
     const down = c.filter((x) => x.isDownbeat).map((x) => x.songTime)

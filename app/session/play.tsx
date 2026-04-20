@@ -1,22 +1,22 @@
 import { useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
 
+import { speak, stop as stopVoiceCoach } from '@/src/audio/voiceCoach'
 import { CoachNote } from '@/components/CoachNote'
+import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
-import {
-  PlayBeatAccuracyPanel,
-  PlayCaptureControls,
-  PlayPitchLadderVertical,
-  PlayTargetNoteQueue,
-} from '@/components/play'
+import { PlayCaptureCard, PlayStemRowScoringCard } from '@/components/play'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
+import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
+import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { sessionHref } from '@/src/constants/sessionFlow'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { mapMicPermissionDenied, toErrorBannerProps, type MappedUiError } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { capoSuggestion } from '@/src/music/capoSuggestion'
@@ -24,13 +24,16 @@ import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useAppStore } from '@/src/stores/useAppStore'
 import { usePlayCapture } from '@/src/session/usePlayCapture'
+import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import { hitInnerThresholdCents } from '@/src/session/noteAccuracyBeats'
 import type { NoteEventMessage } from '@/types/tabMessage'
 
 export default function PlayScreen() {
+  const isDemo = useIsDemoLesson()
   const router = useRouter()
+  const recordingRef = useRef(false)
   const initialMetronomeOn = useMetronomeDefaultOn()
   const lesson = useLessonStore((s) => s.lesson)
   const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
@@ -51,6 +54,7 @@ export default function PlayScreen() {
   const {
     stemTabRef,
     recording,
+    recordingWallClockStartedAtMs,
     take,
     status,
     targetMidi,
@@ -70,11 +74,30 @@ export default function PlayScreen() {
     playbackTick,
   } = usePlayCapture(lesson?.tempo)
 
+  recordingRef.current = recording
+  useStepCoachNarration(() => recordingRef.current)
+
+  useEffect(() => {
+    if (recording) stopVoiceCoach()
+  }, [recording])
+
+  useEffect(() => {
+    if (!quickCoachText?.trim() || recording) return
+    speak(quickCoachText.trim())
+  }, [quickCoachText, recording])
+
   const [micError, setMicError] = useState<MappedUiError | null>(null)
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner({ disableWhen: recording })
+
+  const activeMicProfile = useSessionPrefsStore((s) => s.activeMicProfile)
+  const micNoiseGateRms = useSessionPrefsStore((s) => {
+    const id = s.activeMicProfile
+    const v = s.calibrationGateRmsByProfile[id]
+    return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
+  })
 
   const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
 
@@ -105,114 +128,125 @@ export default function PlayScreen() {
   return (
     <SessionStepScreen
       title="Play"
-      subtitle="Pitch targets follow the tab note-by-note; each beat scores your tuning against the current target. Guitar stem muted — capture an optional take."
+      subtitle={
+        isDemo
+          ? DEMO_TOUR_SUBTITLE.play
+          : 'Mute the guitar stem, follow the tab, and capture your take — scoring tracks pitch against each tab note and beat.'
+      }
       showBack
       onBack={() => router.back()}
       showNext
       nextLabel="Next: Review"
       onNext={() => router.push(sessionHref('review'))}
     >
-      <PlayCaptureControls
-        recording={recording}
-        status={status}
-        take={take}
-        autostopTriggered={autostopTriggered}
-        onToggleCapture={handleToggleCapture}
-      />
-
-      <View className="mt-4 flex-col gap-3 md:flex-row md:items-stretch">
-        <View className="w-full flex-col gap-3 md:w-1/3 md:min-w-0 md:flex-shrink-0">
-          <PlayTargetNoteQueue queue={tabNoteQueue} isActive={recording} />
-          <PlayBeatAccuracyPanel beats={accuracyBeats} noteLabels={beatNoteLabels} />
-        </View>
-        <View className="min-w-0 flex-1 flex-col md:min-h-0">
-          <PlayPitchLadderVertical
-            className="md:flex-1"
-            cents={centsFromTarget}
-            isActive={recording}
-            adaptedCentsTolerance={adaptedCentsTolerance}
-            targetMidi={targetMidi}
-            nextTargetMidi={nextPreviewMidi}
-            windowResult={lastWindowResult}
-            windowFlashToken={windowFlashToken}
-          />
-          <Text className="mt-2 shrink-0 font-sans text-xs text-muted-brown">
-            Clean streak: {currentStreak} beat{currentStreak === 1 ? '' : 's'} · Tolerance ±
-            {Math.round(adaptedCentsTolerance)}¢ (adapts) · inner ≤{Math.round(innerTol)}¢
+      <View className="gap-5">
+        {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
+        {typeof __DEV__ !== 'undefined' && __DEV__ ? (
+          <Text className="rounded-lg border border-dashed border-wood-600/35 bg-cream-dark/40 px-3 py-2 font-mono text-xs text-muted-brown">
+            noiseGateThresholdRms ({activeMicProfile}):{' '}
+            {micNoiseGateRms != null ? micNoiseGateRms.toFixed(4) : '—'} (Commit 62 calibration)
           </Text>
-        </View>
-      </View>
-
-      <View className="w-full">
-        <FretboardDiagram
-          keyLabel={keyLabel}
-          positionLabel={positionLabel}
-          capoText={capoText}
-          selectedNote={selectedNote}
-          pulseKey={fretPulseKey}
-          lastCellResult={lastFretResult}
-          enableKeyboardInput
-          showTuneControl
-          tuneActive={tunerState.active}
-          tuneDisabled={recording}
-          tuneCalibrating={tunerState.calibrating}
-          onToggleTune={toggleFretboardTuner}
-          onCalibrateTune={startCalibration}
-          tunerState={tunerState}
-          onSelectNote={(note) => {
-            setSelectedNote(note)
+        ) : null}
+        <SessionStemAndTab
+          ref={stemTabRef}
+          tabRenderPreset="play"
+          lessonPlaybackCardVariant="play"
+          captureRecording={recording}
+          playCaptureSlot={(ctx) => (
+            <PlayCaptureCard
+              {...ctx}
+              recording={recording}
+              status={status}
+              take={take}
+              autostopTriggered={autostopTriggered}
+              onToggleCapture={handleToggleCapture}
+              recordingWallClockStartedAtMs={recordingWallClockStartedAtMs}
+            />
+          )}
+          stemsColumnReplacement={
+            <PlayStemRowScoringCard
+              currentStreak={currentStreak}
+              adaptedCentsTolerance={adaptedCentsTolerance}
+              innerToleranceCents={innerTol}
+              queue={tabNoteQueue}
+              beats={accuracyBeats}
+              noteLabels={beatNoteLabels}
+              recording={recording}
+              centsFromTarget={centsFromTarget}
+              targetMidi={targetMidi}
+              nextPreviewMidi={nextPreviewMidi}
+              windowResult={lastWindowResult}
+              windowFlashToken={windowFlashToken}
+            />
+          }
+          initialMetronomeOn={initialMetronomeOn}
+          initialStemMuteById={{ guitar: true, bass: false, drums: false, vocals: true, piano: true, other: true }}
+          onPlaybackTick={playbackTick}
+          onNoteEvent={(evt: NoteEventMessage) => {
+            hookOnNoteEvent(evt)
+            setSelectedNote({ string: evt.string, fret: evt.fret, midi: Math.round(evt.midi) })
             setFretPulseKey((k) => k + 1)
-            setNoteModalOpen(true)
+            if (evt.fromScoreTap) {
+              setNoteModalOpen(true)
+            }
           }}
         />
-      </View>
 
-      {quickCoachText ? (
-        <Animated.View className="mt-3" entering={FadeIn.duration(320)}>
-          <CoachNote text={quickCoachText} />
-        </Animated.View>
-      ) : null}
+        <View className="w-full min-w-0">
+          <FretboardDiagram
+            keyLabel={keyLabel}
+            positionLabel={positionLabel}
+            capoText={capoText}
+            selectedNote={selectedNote}
+            pulseKey={fretPulseKey}
+            lastCellResult={lastFretResult}
+            enableKeyboardInput
+            showTuneControl
+            tuneActive={tunerState.active}
+            tuneDisabled={recording}
+            tuneCalibrating={tunerState.calibrating}
+            onToggleTune={toggleFretboardTuner}
+            onCalibrateTune={startCalibration}
+            tunerState={tunerState}
+            onSelectNote={(note) => {
+              setSelectedNote(note)
+              setFretPulseKey((k) => k + 1)
+              setNoteModalOpen(true)
+            }}
+          />
+        </View>
 
-      {micError ? (
-        <ErrorBanner
-          className="mt-2"
-          dismissible={false}
-          {...toErrorBannerProps(micError, {
-            onRetry: () => setMicError(null),
-            onDismiss: () => setMicError(null),
-            onOpenSettings: () => {
-              void openHarmoniqAppSettings()
-              setMicError(null)
-            },
-            onContinue: () => setMicError(null),
-          })}
+        {quickCoachText ? (
+          <Animated.View entering={FadeIn.duration(320)}>
+            <CoachNote text={quickCoachText} />
+          </Animated.View>
+        ) : null}
+
+        {micError ? (
+          <ErrorBanner
+            dismissible={false}
+            {...toErrorBannerProps(micError, {
+              onRetry: () => setMicError(null),
+              onDismiss: () => setMicError(null),
+              onOpenSettings: () => {
+                void openHarmoniqAppSettings()
+                setMicError(null)
+              },
+              onContinue: () => setMicError(null),
+            })}
+          />
+        ) : null}
+        <SessionNoteDetailModal
+          detail={selectionDetail}
+          visible={noteModalOpen}
+          onClose={() => setNoteModalOpen(false)}
         />
-      ) : null}
-
-      <SessionStemAndTab
-        ref={stemTabRef}
-        initialMetronomeOn={initialMetronomeOn}
-        initialStemMuteById={{ guitar: true, bass: false, drums: false, vocals: true, piano: true, other: true }}
-        onPlaybackTick={playbackTick}
-        onNoteEvent={(evt: NoteEventMessage) => {
-          hookOnNoteEvent(evt)
-          setSelectedNote({ string: evt.string, fret: evt.fret, midi: Math.round(evt.midi) })
-          setFretPulseKey((k) => k + 1)
-          if (evt.fromScoreTap) {
-            setNoteModalOpen(true)
-          }
-        }}
-      />
-      <SessionNoteDetailModal
-        detail={selectionDetail}
-        visible={noteModalOpen}
-        onClose={() => setNoteModalOpen(false)}
-      />
-      {section ? (
-        <Text className="mt-2 font-mono text-[10px] text-muted-brown">
-          Section: {String(section.label ?? 'Section')} {lesson?.key ? `| Key: ${lesson.key}` : ''}
-        </Text>
-      ) : null}
+        {section ? (
+          <Text className="font-mono text-[10px] text-muted-brown">
+            Section: {String(section.label ?? 'Section')} {lesson?.key ? `| Key: ${lesson.key}` : ''}
+          </Text>
+        ) : null}
+      </View>
     </SessionStepScreen>
   )
 }

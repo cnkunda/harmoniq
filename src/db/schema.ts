@@ -84,6 +84,31 @@ export const PREF_STYLE_FOCUS = 'style_focus'
 export const PREF_METRONOME_DEFAULT_ON = 'metronome_default_on'
 /** `warm` | `concise` | `technical` — API prompt variant later. */
 export const PREF_COACH_VOICE = 'coach_voice'
+/** Last SoundFont profile that AlphaTab loaded successfully (`general_user` | `fluid_r3_mono`). */
+export const PREF_LAST_SOUNDFONT_PROFILE = 'last_soundfont_profile'
+
+/** Commit 62: skip `/session/tune` when `"1"`. */
+export const PREF_SESSION_SKIP_TUNE = 'session_skip_tune'
+/** Commit 62: active mic calibration profile id (`quiet-acoustic` | `electric-unplugged`). */
+export const PREF_SESSION_MIC_PROFILE_ID = 'session_mic_profile_id'
+/** Commit 62: JSON map of profile id → calibrated RMS gate threshold (after +6 dB headroom). */
+export const PREF_SESSION_MIC_CALIBRATION_JSON = 'session_mic_calibration_json'
+
+/** Commit 67: opaque id for server-side Spotify token bucket (never log). */
+export const PREF_SPOTIFY_CLIENT_SESSION = 'spotify_client_session'
+/** Commit 67: cached `SpotifyTasteProfile` JSON from last successful sync. */
+export const PREF_SPOTIFY_TASTE_PROFILE_JSON = 'spotify_taste_profile_json'
+/** Commit 68: cached derived `TasteProfile` JSON for curriculum/coach. */
+export const PREF_TASTE_PROFILE_JSON = 'taste_profile_json'
+/** Taste quiz experience tier; also shown in Settings and merged into API `learning_context`. */
+export const PREF_EXPERIENCE_LEVEL = 'experience_level'
+
+/** Commit 72: TTS voice coach — unset or non-`0` = enabled. */
+export const PREF_VOICE_COACH_ENABLED = 'voice_coach_enabled'
+/** Commit 72: speech rate 0.7–1.2 (stored as string float, default 1). */
+export const PREF_VOICE_COACH_RATE = 'voice_coach_rate'
+/** Commit 72: `default` | `female` | `male` — OS voice selection hint. */
+export const PREF_VOICE_COACH_GENDER = 'voice_coach_gender'
 
 export const COACH_VOICE_OPTIONS = ['warm', 'concise', 'technical'] as const
 export type CoachVoiceId = (typeof COACH_VOICE_OPTIONS)[number]
@@ -124,6 +149,10 @@ CREATE TABLE IF NOT EXISTS lessons (
   section_count INTEGER NOT NULL DEFAULT 0
 );
 `
+
+/** v9: rolling technique-session history for skill mutation weak-area detection (commit 63). */
+export const MIGRATION_V9_SKILL_TECHNIQUE_ROLL =
+  'ALTER TABLE skill_nodes ADD COLUMN technique_roll_json TEXT'
 
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },

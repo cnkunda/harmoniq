@@ -19,7 +19,7 @@ def test_quick_feedback_parses_message_json(monkeypatch):
 
     def fake_call(*, api_key: str, user_prompt: str, **kwargs: object) -> str:
         assert "hit" in user_prompt or "close" in user_prompt
-        assert kwargs.get("temperature") == 0.4
+        assert kwargs.get("temperature") == 0.3
         return '{"message":"Lean on the clean beats and shorten pick motion."}'
 
     monkeypatch.setattr(coach, "_call_claude_text", fake_call)

@@ -15,3 +15,14 @@ export function readSectionTabPayloads(section: unknown): SectionTabPayloads {
     alt: str('tab_alt_position_gp5_base64'),
   }
 }
+
+/** First GP5 blob on any section (full → skeleton → alt), for server export from a saved lesson. */
+export function firstGp5Base64FromLessonSections(sections: unknown): string | null {
+  if (!Array.isArray(sections)) return null
+  for (const sec of sections) {
+    const p = readSectionTabPayloads(sec)
+    const gp = p.full ?? p.skeleton ?? p.alt
+    if (gp) return gp
+  }
+  return null
+}

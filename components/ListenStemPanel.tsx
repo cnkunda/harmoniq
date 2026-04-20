@@ -1,9 +1,11 @@
 import Slider from '@react-native-community/slider'
 import { useIsFocused } from '@react-navigation/native'
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react'
 import { Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
+import { PlayCaptureLessonCardBanner } from '@/components/play'
 import { MetronomeArcReadout } from '@/components/MetronomeArcReadout'
 import type { MetronomeSubdivision } from '@/src/audio/metronomeShared'
 import { createStemMixer } from '@/src/audio/Mixer'
@@ -12,9 +14,12 @@ import { useLoopAudio } from '@/src/audio/useLoopAudio'
 import { useMetronome } from '@/src/audio/useMetronome'
 import colors from '@/src/constants/colors'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import { SESSION_PLAYBACK_CARD_CLASS } from '@/src/constants/sessionPlaybackCard'
+import { logFirstAudioPlay } from '@/src/analytics/firstAudioPlay'
+import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { LessonJSON } from '@/src/types'
-import { lessonStemUrl, parseSectionRecord, sectionSeekSeconds } from '@/src/utils/lessonAudio'
+import { parseSectionRecord, sectionSeekSeconds, stemRelPathToDefinition } from '@/src/utils/lessonAudio'
 import type { LucideIcon } from 'lucide-react-native'
 import { AudioWaveform, Drum, Guitar, KeyboardMusic, Layers, Mic, Pause, Play } from 'lucide-react-native'
 
@@ -67,6 +72,10 @@ function orderedStemIds(stems: Record<string, string>): string[] {
 }
 
 export type ListenStemPanelProps = {
+  /** Rendered inside the “Current lesson” card (e.g. Play capture controls). */
+  lessonCardInsert?: ReactNode
+  /** When set, replaces the third “Stems” column (e.g. Play step scoring UI). */
+  stemsColumnReplacement?: ReactNode
   /** Fired on playback poll while playing, and once after pause when position is refreshed. */
   onPlaybackTick?: (ctx: PlaybackTickContext) => void
   /** Fired after a section chip seek completes. */
@@ -83,6 +92,14 @@ export type ListenStemPanelProps = {
   autoLoopRegion?: { startSec: number; endSec: number; label?: string } | null
   /** Optional per-stem initial mute defaults (true = muted). */
   initialStemMuteById?: Record<string, boolean>
+  /** Play session: reframe first card for capture + backing track. */
+  lessonPlaybackCardVariant?: 'default' | 'play'
+  /** When variant is `play`, reflects mic capture from `usePlayCapture`. */
+  captureRecording?: boolean
+  /** Play session: full capture card (backing state from this panel); supersedes title/banner/`lessonCardInsert`. */
+  playCaptureSlot?: (ctx: PlayLessonCaptureContext) => ReactNode
+  /** Bundled demo only: start playback once stems load (≤3 taps from Home). */
+  autoPlayOnReady?: boolean
 }
 
 export type ListenStemPanelHandle = {
@@ -113,6 +130,8 @@ const RATE_MATCH_EPS = 0.02
 export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanelProps>(
   function ListenStemPanel(
     {
+      lessonCardInsert,
+      stemsColumnReplacement,
       onPlaybackTick,
       onSeek,
       onSeekSeconds,
@@ -121,6 +140,10 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       initialMetronomeOn = false,
       autoLoopRegion = null,
       initialStemMuteById,
+      lessonPlaybackCardVariant = 'default',
+      captureRecording = false,
+      playCaptureSlot,
+      autoPlayOnReady = false,
     },
     ref,
   ) {
@@ -181,6 +204,8 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
   const onRateChangeRef = useRef(onRateChange)
   onRateChangeRef.current = onRateChange
 
+  const autoDemoPlayRef = useRef(false)
+
   const seekTransportToSeconds = useCallback(
     async (positionSec: number) => {
       const m = mixerRef.current
@@ -214,6 +239,10 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
 
   useEffect(() => {
     setScrubTimelineSec(null)
+  }, [loadKey])
+
+  useEffect(() => {
+    autoDemoPlayRef.current = false
   }, [loadKey])
 
   const onBeatFlash = useCallback((info: { isDownbeat: boolean }) => {
@@ -253,11 +282,9 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       setReady(false)
       try {
         const ids = orderedStemIds(lesson.stems as Record<string, string>)
-        const defs = ids.map((id) => ({
-          id,
-          label: id,
-          uri: lessonStemUrl((lesson.stems as Record<string, string>)[id]!),
-        }))
+        const defs = ids.map((id) =>
+          stemRelPathToDefinition(id, (lesson.stems as Record<string, string>)[id]!),
+        )
         await mixer.load(defs)
         if (cancelled) {
           await mixer.unload().catch(() => {})
@@ -276,6 +303,20 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
         setPositionSec(t0)
         setReady(true)
         onRateChangeRef.current?.(seededRate)
+
+        if (autoPlayOnReady && !autoDemoPlayRef.current) {
+          autoDemoPlayRef.current = true
+          try {
+            await mixer.play()
+            setPlaying(true)
+            logFirstAudioPlay({
+              source: 'demo_listen',
+              job_id: useLessonStore.getState().lesson?.job_id ?? null,
+            })
+          } catch {
+            autoDemoPlayRef.current = false
+          }
+        }
 
         metro.stop()
         const ctx = mixer.getAudioContext?.() ?? null
@@ -297,7 +338,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       mixer.unload().catch(() => {})
       mixerRef.current = null
     }
-  }, [initialRate, initialStemMuteById, loadKey, lesson, metro, syncStemGains])
+  }, [autoPlayOnReady, initialRate, initialStemMuteById, loadKey, lesson, metro, syncStemGains])
 
   useEffect(() => {
     if (!ready) return
@@ -426,6 +467,10 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       } else {
         await m.play()
         setPlaying(true)
+        logFirstAudioPlay({
+          source: lesson?.job_id === DEMO_LESSON_JOB_ID ? 'demo_listen' : 'lesson_listen',
+          job_id: lesson?.job_id ?? null,
+        })
       }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Playback error')
@@ -484,15 +529,21 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       ? parseSectionRecord(sections[lessonSectionIndex] as Record<string, unknown>).label
       : null
 
-  /** Cream panel, wood border — compact padding; `md:flex-1` for equal row heights. */
-  const playbackCardClass =
-    'flex flex-col rounded-xl border border-wood-600/40 bg-cream-dark/50 px-3.5 pb-3 pt-3 md:min-h-0 md:flex-1 md:min-w-[200px]'
+  const sectionLine =
+    sections.length > 0
+      ? `Section ${sectionDisplay} of ${sections.length}${currentSectionLabel ? `: ${currentSectionLabel}` : ''}`
+      : `Section ${sectionDisplay} of ${sectionTotal}`
+
+  const playbackCardClass = SESSION_PLAYBACK_CARD_CLASS
 
   const baseTempoBpm = lesson.tempo != null && lesson.tempo > 0 ? lesson.tempo : 120
   const effectiveMetroBpm = Math.max(1, Math.round(baseTempoBpm * rate))
 
   const timelineMax = Math.max(0.01, durationSec)
   const timelineValue = Math.min(Math.max(0, scrubTimelineSec ?? positionSec), durationSec)
+
+  const playLessonCard = lessonPlaybackCardVariant === 'play'
+  const showPlayCaptureShell = Boolean(playLessonCard && playCaptureSlot)
 
   return (
     <View className="mt-3 gap-3">
@@ -520,19 +571,53 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       <View className="flex-col gap-2.5 md:flex-row md:items-stretch">
         {/* Playback + lesson context + timeline + speed + up next */}
         <View className={playbackCardClass}>
-          <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
-            Current lesson
-          </Text>
-          <Text className="font-sans-medium text-base text-wood-900">{songTitle}</Text>
-          <Text className="mt-1 font-sans text-xs text-muted-brown">
-            {sections.length > 0
-              ? `Section ${sectionDisplay} of ${sections.length}${
-                  currentSectionLabel ? `: ${currentSectionLabel}` : ''
-                }`
-              : `Section ${sectionDisplay} of ${sectionTotal}`}
-          </Text>
+          {playLessonCard && playCaptureSlot ? (
+            playCaptureSlot({
+              songTitle,
+              sectionLine,
+              loading,
+              ready,
+              playing,
+            })
+          ) : (
+            <>
+              <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+                {playLessonCard ? 'Play capture' : 'Current lesson'}
+              </Text>
+              {playLessonCard ? (
+                <Text className="font-sans text-xs leading-snug text-muted-brown">
+                  Stems below are your backing track. Start capture when you are ready — Harmoniq scores pitch on each
+                  beat.
+                </Text>
+              ) : null}
+              <Text
+                className={`font-sans-medium text-wood-900 ${playLessonCard ? 'mt-2 text-sm' : 'text-base'}`}
+                numberOfLines={playLessonCard ? 2 : undefined}
+              >
+                {songTitle}
+              </Text>
+              <Text className="mt-1 font-sans text-xs text-muted-brown">{sectionLine}</Text>
 
-          <View className="mt-4 flex-row items-center gap-2.5">
+              {playLessonCard ? (
+                <PlayCaptureLessonCardBanner
+                  loading={loading}
+                  ready={ready}
+                  playing={playing}
+                  recording={captureRecording}
+                />
+              ) : null}
+
+              {lessonCardInsert != null ? (
+                <View className="mt-3 border-t border-wood-600/15 pt-3">{lessonCardInsert}</View>
+              ) : null}
+            </>
+          )}
+
+          <View
+            className={`${
+              showPlayCaptureShell ? 'mt-4' : lessonCardInsert != null ? 'mt-3' : 'mt-4'
+            } flex-row items-center gap-2.5`}
+          >
             <View className="w-12 shrink-0 items-center">
               <Pressable
                 onPress={() => void togglePlay()}
@@ -579,36 +664,38 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             </View>
           </View>
 
-          <View className="mt-3 border-t border-wood-600/15 pt-3">
-            <View className="mb-2 flex-row items-baseline justify-between gap-3">
-              <Text className="font-sans-medium text-sm text-wood-900">Speed</Text>
-              <Text className="font-mono text-[13px] tabular-nums tracking-tight text-muted-brown">
-                {rate.toFixed(1)}×
-              </Text>
+          {!playLessonCard ? (
+            <View className="mt-3 border-t border-wood-600/15 pt-3">
+              <View className="mb-2 flex-row items-baseline justify-between gap-3">
+                <Text className="font-sans-medium text-sm text-wood-900">Speed</Text>
+                <Text className="font-mono text-[13px] tabular-nums tracking-tight text-muted-brown">
+                  {rate.toFixed(1)}×
+                </Text>
+              </View>
+              <View className="mt-1 flex-row gap-1.5">
+                {SPEED_PRESETS.map(({ label, value }) => {
+                  const active = Math.abs(rate - value) < RATE_MATCH_EPS
+                  return (
+                    <Pressable
+                      key={label}
+                      onPress={() => void onSeekRate(value)}
+                      disabled={!ready || loading}
+                      className={`flex-1 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
+                        !ready || loading ? 'opacity-40' : ''
+                      }`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`Speed ${label}`}
+                    >
+                      <Text className={active ? CHOICE_LABEL_MONO_ON : CHOICE_LABEL_MONO_OFF}>{label}</Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
             </View>
-            <View className="mt-1 flex-row gap-1.5">
-              {SPEED_PRESETS.map(({ label, value }) => {
-                const active = Math.abs(rate - value) < RATE_MATCH_EPS
-                return (
-                  <Pressable
-                    key={label}
-                    onPress={() => void onSeekRate(value)}
-                    disabled={!ready || loading}
-                    className={`flex-1 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
-                      !ready || loading ? 'opacity-40' : ''
-                    }`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                    accessibilityLabel={`Speed ${label}`}
-                  >
-                    <Text className={active ? CHOICE_LABEL_MONO_ON : CHOICE_LABEL_MONO_OFF}>{label}</Text>
-                  </Pressable>
-                )
-              })}
-            </View>
-          </View>
+          ) : null}
 
-          {hasUpNext ? (
+          {!playLessonCard && hasUpNext ? (
             <View className="mt-3 border-t border-wood-600/20 pt-3">
               <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Up next</Text>
               <Text className="mt-1 font-sans text-sm text-muted-brown">{`Section ${nextSectionIndex + 1}`}</Text>
@@ -670,80 +757,84 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           </View>
         </View>
 
-        {/* Stems + optional sections */}
-        <View className={playbackCardClass}>
-          <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Stems</Text>
-          {sections.length > 0 ? (
-            <View className="mb-3">
-              <Text className="mb-2 font-sans-medium text-sm text-wood-900">Sections</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
-                <View className="flex-row flex-wrap gap-1.5 pb-1">
-                  {sections.map((raw, i) => {
-                    const sec = raw as Record<string, unknown>
-                    const { label } = parseSectionRecord(sec)
-                    const active = i === lessonSectionIndex
-                    return (
-                      <Pressable
-                        key={`${i}-${label}`}
-                        onPress={() => void onChip(i)}
-                        disabled={!ready || loading}
-                        className={`shrink-0 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
-                          !ready || loading ? 'opacity-40' : ''
-                        }`}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                      >
-                        <Text className={active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>{label}</Text>
-                      </Pressable>
-                    )
-                  })}
-                </View>
-              </ScrollView>
-            </View>
-          ) : null}
+        {stemsColumnReplacement != null ? (
+          stemsColumnReplacement
+        ) : (
+          /* Stems + optional sections */
+          <View className={playbackCardClass}>
+            <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Stems</Text>
+            {sections.length > 0 ? (
+              <View className="mb-3">
+                <Text className="mb-2 font-sans-medium text-sm text-wood-900">Sections</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+                  <View className="flex-row flex-wrap gap-1.5 pb-1">
+                    {sections.map((raw, i) => {
+                      const sec = raw as Record<string, unknown>
+                      const { label } = parseSectionRecord(sec)
+                      const active = i === lessonSectionIndex
+                      return (
+                        <Pressable
+                          key={`${i}-${label}`}
+                          onPress={() => void onChip(i)}
+                          disabled={!ready || loading}
+                          className={`shrink-0 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
+                            !ready || loading ? 'opacity-40' : ''
+                          }`}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                        >
+                          <Text className={active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>{label}</Text>
+                        </Pressable>
+                      )
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+            ) : null}
 
-          <View className={sections.length > 0 ? 'border-t border-wood-600/15 pt-3' : ''}>
-            <Text className="mb-2 font-sans-medium text-sm text-wood-900">Mixer</Text>
-            <View className="flex-row flex-wrap gap-x-1 gap-y-1.5">
-              {STEM_UI_ORDER.map((id) => {
-                const hasStem = Boolean((lesson.stems as Record<string, string>)?.[id])
-                const Icon = STEM_ICONS[id]
-                const unmuted = hasStem && !stemMute[id]
-                const label = id.charAt(0).toUpperCase() + id.slice(1)
-                const disabled = !ready || loading || !hasStem
-                const tileBusy = hasStem && (!ready || loading)
-                return (
-                  <Pressable
-                    key={id}
-                    onPress={() => toggleStem(id)}
-                    disabled={disabled}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${label} stem, ${unmuted ? 'on' : 'off'}`}
-                    accessibilityState={{ disabled }}
-                    className={`w-[32%] max-w-[32%] shrink-0 items-center rounded-lg border px-1.5 py-1.5 ${
-                      !hasStem
-                        ? 'border-wood-600/25 bg-cream-dark/20 opacity-45'
-                        : unmuted
-                          ? 'border-amber-accent bg-ivory/60'
-                          : 'border-wood-600/40 bg-wood-900/5'
-                    } ${tileBusy ? 'opacity-45' : ''}`}
-                  >
-                    <Icon
-                      size={20}
-                      color={!hasStem ? colors.muted.brown : unmuted ? colors.amber.accent : colors.muted.brown}
-                      strokeWidth={1.75}
-                    />
-                    <Text
-                      className={`mt-1 font-sans text-[10px] leading-tight ${unmuted && hasStem ? 'font-sans-medium text-wood-900' : 'text-muted-brown'}`}
+            <View className={sections.length > 0 ? 'border-t border-wood-600/15 pt-3' : ''}>
+              <Text className="mb-2 font-sans-medium text-sm text-wood-900">Mixer</Text>
+              <View className="flex-row flex-wrap gap-x-1 gap-y-1.5">
+                {STEM_UI_ORDER.map((id) => {
+                  const hasStem = Boolean((lesson.stems as Record<string, string>)?.[id])
+                  const Icon = STEM_ICONS[id]
+                  const unmuted = hasStem && !stemMute[id]
+                  const label = id.charAt(0).toUpperCase() + id.slice(1)
+                  const disabled = !ready || loading || !hasStem
+                  const tileBusy = hasStem && (!ready || loading)
+                  return (
+                    <Pressable
+                      key={id}
+                      onPress={() => toggleStem(id)}
+                      disabled={disabled}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${label} stem, ${unmuted ? 'on' : 'off'}`}
+                      accessibilityState={{ disabled }}
+                      className={`w-[32%] max-w-[32%] shrink-0 items-center rounded-lg border px-1.5 py-1.5 ${
+                        !hasStem
+                          ? 'border-wood-600/25 bg-cream-dark/20 opacity-45'
+                          : unmuted
+                            ? 'border-amber-accent bg-ivory/60'
+                            : 'border-wood-600/40 bg-wood-900/5'
+                      } ${tileBusy ? 'opacity-45' : ''}`}
                     >
-                      {label}
-                    </Text>
-                  </Pressable>
-                )
-              })}
+                      <Icon
+                        size={20}
+                        color={!hasStem ? colors.muted.brown : unmuted ? colors.amber.accent : colors.muted.brown}
+                        strokeWidth={1.75}
+                      />
+                      <Text
+                        className={`mt-1 font-sans text-[10px] leading-tight ${unmuted && hasStem ? 'font-sans-medium text-wood-900' : 'text-muted-brown'}`}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
             </View>
           </View>
-        </View>
+        )}
       </View>
     </View>
   )

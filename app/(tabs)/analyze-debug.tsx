@@ -9,7 +9,8 @@ import { ErrorBanner } from '@/components/ErrorBanner'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { API_BASE_URL } from '@/src/config'
 import colors from '@/src/constants/colors'
-import { sessionHref } from '@/src/constants/sessionFlow'
+import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 
 export default function AnalyzeDebugScreen() {
@@ -150,7 +151,7 @@ export default function AnalyzeDebugScreen() {
               Sections: <Text className="font-sans-medium">{sectionCount}</Text>
             </Text>
             <Pressable
-              onPress={() => router.push(sessionHref('listen'))}
+              onPress={() => router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))}
               className="mt-4 rounded-lg bg-amber-accent px-4 py-3"
               accessibilityRole="button"
             >

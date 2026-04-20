@@ -7,7 +7,9 @@ import colors from '@/src/constants/colors'
 import { hitInnerThresholdCents, type NoteResultLabel } from '@/src/session/noteAccuracyBeats'
 
 type PlayPitchLadderVerticalProps = {
-  /** Merged onto the root card (e.g. `flex-1` to match sibling column height). */
+  /** When true, no outer card chrome (sits inside playback strip scoring column). */
+  embedded?: boolean
+  /** Optional layout classes (e.g. max width on large screens). */
   className?: string
   cents: number | null | undefined
   isActive: boolean
@@ -19,12 +21,15 @@ type PlayPitchLadderVerticalProps = {
   windowFlashToken?: number
 }
 
-const TRACK_MIN_H = 160
+/** Short track so the card sits near the height of the sibling pitch/beat panel on md+ layouts. */
+const TRACK_H = 118
+const TRACK_W = 44
 
 /**
- * Vertical cents ladder (-50..+50) with status copy (Perfect / Close / Sharp / Flat).
+ * Vertical cents ladder (-50..+50) with compact status copy (Perfect / Close / Sharp / Flat).
  */
 export function PlayPitchLadderVertical({
+  embedded = false,
   className,
   cents,
   isActive,
@@ -86,12 +91,21 @@ export function PlayPitchLadderVertical({
     }
   }
 
-  const rootClass = [
-    'relative min-h-0 flex-col overflow-hidden rounded-xl border border-wood-600/40 bg-cream-dark/50 p-4',
-    className ?? '',
-  ]
-    .join(' ')
-    .trim()
+  const rootClass = embedded
+    ? [
+        'relative min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0 lg:ml-0.5 lg:min-w-[148px] lg:border-l lg:border-wood-600/20 lg:pl-3 lg:pt-0.5',
+        className ?? '',
+      ]
+        .join(' ')
+        .trim()
+    : [
+        'relative w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-wood-600/45 bg-cream-dark/55 p-3 md:max-w-md md:self-start',
+        className ?? '',
+      ]
+        .join(' ')
+        .trim()
+
+  const flashRadius = embedded ? 12 : 16
 
   return (
     <View className={rootClass}>
@@ -100,27 +114,41 @@ export function PlayPitchLadderVertical({
           pointerEvents="none"
           style={[
             StyleSheet.absoluteFillObject,
-            { borderRadius: 12, backgroundColor: flashColor },
+            { borderRadius: flashRadius, backgroundColor: flashColor },
             flashStyle,
           ]}
         />
       ) : null}
-      <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Live pitch vs target</Text>
-      <Text className="mt-1 font-sans text-xs text-muted-brown">
-        Cents are measured against the highlighted tab target above — it moves when the tab advances.
-      </Text>
-      <View className="mb-3 mt-3 shrink-0 flex-row items-center justify-between">
-        <Text className="font-sans text-[11px] text-wood-900">Instant readout</Text>
-        <Text className={`font-mono text-sm ${isActive && cents != null ? 'text-wood-900' : 'text-muted-brown'}`}>
-          {isActive && cents != null && Number.isFinite(cents)
-            ? `${cents >= 0 ? '+' : ''}${Math.round(cents)}¢`
-            : '—'}
-        </Text>
-      </View>
-      <View className="min-h-0 flex-1 flex-row items-stretch gap-3">
+      {embedded ? (
+        <View className="mb-1 flex-row items-center justify-end">
+          <Text className={`font-mono text-xs ${isActive && cents != null ? 'text-wood-900' : 'text-muted-brown'}`}>
+            {isActive && cents != null && Number.isFinite(cents)
+              ? `${cents >= 0 ? '+' : ''}${Math.round(cents)}¢`
+              : '—'}
+          </Text>
+        </View>
+      ) : (
+        <View className="flex-row items-center justify-between gap-2">
+          <Text className="shrink font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+            Live pitch vs target
+          </Text>
+          <Text className={`font-mono text-sm ${isActive && cents != null ? 'text-wood-900' : 'text-muted-brown'}`}>
+            {isActive && cents != null && Number.isFinite(cents)
+              ? `${cents >= 0 ? '+' : ''}${Math.round(cents)}¢`
+              : '—'}
+          </Text>
+        </View>
+      )}
+      <View
+        className={
+          embedded
+            ? 'mt-0 min-h-0 flex-1 flex-row items-stretch gap-2.5'
+            : 'mt-2.5 flex-row items-stretch gap-2.5'
+        }
+      >
         <View
-          style={{ width: 56, minHeight: TRACK_MIN_H }}
-          className="max-h-full self-stretch overflow-hidden rounded-lg border border-wood-600/35 bg-wood-900/10"
+          style={embedded ? { width: TRACK_W } : { width: TRACK_W, height: TRACK_H }}
+          className="shrink-0 self-stretch overflow-hidden rounded-lg border border-wood-600/35 bg-wood-900/10"
         >
           <View
             className="absolute left-0 right-0 bg-success/15"
@@ -137,13 +165,13 @@ export function PlayPitchLadderVertical({
             />
           ) : null}
         </View>
-        <View className="min-h-0 flex-1 justify-center">
-          <Text className="font-mono text-xs text-wood-900">Target · {targetSci}</Text>
+        <View className="min-w-0 flex-1 justify-center py-0.5">
+          <Text className="font-mono text-[11px] text-wood-900">Target · {targetSci}</Text>
           {nextSci ? (
-            <Text className="mt-0.5 font-mono text-[11px] text-muted-brown">Prior tab note · {nextSci}</Text>
+            <Text className="mt-0.5 font-mono text-[10px] text-muted-brown">Was · {nextSci}</Text>
           ) : null}
-          <Text className={`mt-3 font-sans text-2xl font-bold ${statusTone}`}>{statusTitle}</Text>
-          <Text className="mt-1 font-sans text-sm text-muted-brown">{statusSub}</Text>
+          <Text className={`mt-2 font-sans text-xl font-bold leading-tight ${statusTone}`}>{statusTitle}</Text>
+          <Text className="mt-0.5 font-sans text-xs leading-snug text-muted-brown">{statusSub}</Text>
         </View>
       </View>
     </View>

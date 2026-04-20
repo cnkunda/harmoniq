@@ -1,0 +1,45 @@
+{
+  "pipeline_version": "1",
+  "audio_sha256": "f6be786983e8342cd2e0384b65472f4a4aa3cb93c59f94b2b8dd427ff2f46d37",
+  "lesson_json": {
+    "job_id": "a5946808-f7ad-4a37-aaf0-4f43406d776a",
+    "song_title": "Uploaded track",
+    "artist": "Unknown artist",
+    "style_label": "slow ballad / expressive phrasing",
+    "key": "G major",
+    "key_confidence": 0.99,
+    "tempo": 72.0,
+    "tempo_confidence": 0.95,
+    "transcription_confidence": 0.1,
+    "beat_grid": [
+      0.0,
+      0.5,
+      1.0
+    ],
+    "bar_timestamps": [
+      0.0,
+      3.33,
+      6.66
+    ],
+    "stems": {
+      "guitar": ".tmp_test_data_71d5be43-4fff-40e5-9273-36a9336f0650/jobs/a5946808-f7ad-4a37-aaf0-4f43406d776a/stems/guitar.wav",
+      "bass": ".tmp_test_data_71d5be43-4fff-40e5-9273-36a9336f0650/jobs/a5946808-f7ad-4a37-aaf0-4f43406d776a/stems/bass.wav",
+      "drums": ".tmp_test_data_71d5be43-4fff-40e5-9273-36a9336f0650/jobs/a5946808-f7ad-4a37-aaf0-4f43406d776a/stems/drums.wav",
+      "vocals": ".tmp_test_data_71d5be43-4fff-40e5-9273-36a9336f0650/jobs/a5946808-f7ad-4a37-aaf0-4f43406d776a/stems/vocals.wav",
+      "piano": ".tmp_test_data_71d5be43-4fff-40e5-9273-36a9336f0650/jobs/a5946808-f7ad-4a37-aaf0-4f43406d776a/stems/piano.wav",
+      "other": ".tmp_test_data_71d5be43-4fff-40e5-9273-36a9336f0650/jobs/a5946808-f7ad-4a37-aaf0-4f43406d776a/stems/other.wav"
+    },
+    "lyrics_aligned": [],
+    "sections": [
+      {
+        "label": "Intro",
+        "confidence": 0.1,
+        "start_time_seconds": null,
+        "coach_note": "",
+        "coach_explanation": ""
+      }
+    ],
+    "alphatab_prerender_hints": null,
+    "wav_path": "C:\\workspace\\harmoniq\\backend\\.tmp_test_data_71d5be43-4fff-40e5-9273-36a9336f0650\\jobs\\a5946808-f7ad-4a37-aaf0-4f43406d776a\\song.wav"
+  }
+}

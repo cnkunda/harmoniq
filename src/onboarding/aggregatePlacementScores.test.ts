@@ -23,7 +23,7 @@ function mockResult(over: Partial<ScoreResult>): ScoreResult {
 }
 
 describe('aggregatePlacementNodeScores', () => {
-  it('averages each node across three takes', () => {
+  it('combines winsorized mean and confidence-weighted mean per node', () => {
     const r = aggregatePlacementNodeScores([
       mockResult({ node_scores: { pitch_accuracy: 0.8, phrasing: 0.2, timing: 0.9, bend_accuracy: 0.7, vibrato_control: 0.6 } }),
       mockResult({ node_scores: { pitch_accuracy: 0.4, phrasing: 0.4, timing: 0.5, bend_accuracy: 0.5, vibrato_control: 0.5 } }),
@@ -32,10 +32,28 @@ describe('aggregatePlacementNodeScores', () => {
     expect(r.pitch_accuracy).toBeCloseTo(0.6, 5)
     expect(r.phrasing).toBeCloseTo(0.4, 5)
   })
+
+  it('reduces impact of one catastrophic pitch_accuracy outlier vs naive mean', () => {
+    const hi = {
+      pitch_accuracy: 0.9,
+      phrasing: 0.55,
+      timing: 0.55,
+      bend_accuracy: 0.5,
+      vibrato_control: 0.5,
+    }
+    const outlier = { ...hi, pitch_accuracy: 0.05 }
+    const r = aggregatePlacementNodeScores([
+      mockResult({ node_scores: outlier }),
+      mockResult({ node_scores: hi }),
+      mockResult({ node_scores: { ...hi, pitch_accuracy: 0.88 } }),
+    ])
+    const naiveMean = (0.05 + 0.9 + 0.88) / 3
+    expect(r.pitch_accuracy).toBeGreaterThan(naiveMean + 0.08)
+  })
 })
 
 describe('aggregatePlacementCoachMetrics', () => {
-  it('averages top-level metrics', () => {
+  it('confidence-weights top-level metrics', () => {
     const m = aggregatePlacementCoachMetrics([
       mockResult({ pitch_accuracy: 1, phrasing_score: 0, rushing_score: 0.5, bend_pitch_error_cents: 10 }),
       mockResult({ pitch_accuracy: 0, phrasing_score: 1, rushing_score: 0.5, bend_pitch_error_cents: 30 }),

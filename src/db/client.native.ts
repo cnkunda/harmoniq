@@ -11,7 +11,10 @@ import {
     MIGRATION_V6_JAM_SNAPSHOT_CONTEXT,
     MIGRATION_V7_JAM_SNAPSHOT_RELIABILITY,
     MIGRATION_V8_LESSONS,
+    MIGRATION_V9_SKILL_TECHNIQUE_ROLL,
+    PREF_EXPERIENCE_LEVEL,
     PREF_ONBOARDING_COMPLETE,
+    PREF_TASTE_PROFILE_JSON,
 } from '@/src/db/schema'
 import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
 import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
@@ -29,8 +32,9 @@ import type {
     SessionInsertInput,
     SessionJournalRow,
     SkillNodeRow,
+    SkillSessionMutationRow,
 } from '@/src/db/types'
-import type { LessonJSON } from '@/src/types'
+import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
 
@@ -186,6 +190,18 @@ async function applyMigrations(): Promise<void> {
       new Date().toISOString(),
     )
   }
+  if (current < 9) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(skill_nodes)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    if (!names.has('technique_roll_json')) {
+      await db.execAsync(MIGRATION_V9_SKILL_TECHNIQUE_ROLL)
+    }
+    await db.runAsync(
+      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+      9,
+      new Date().toISOString(),
+    )
+  }
   for (const n of DEFAULT_SKILL_NODES) {
     await db.runAsync(
       `INSERT OR IGNORE INTO skill_nodes
@@ -276,6 +292,20 @@ export async function listSessionsJournal(): Promise<SessionJournalRow[]> {
   return (rows ?? []).map(mapSessionJournalRow)
 }
 
+export async function listSessionsArchive(): Promise<SessionArchiveRow[]> {
+  await initDb()
+  const db = await getDb()
+  const rows = await db.getAllAsync<SessionRowDb>(
+    `SELECT id, song_title, artist, section_label, date, coach_review, pitch_accuracy, phrasing_score, nodes_targeted,
+            review_snapshot, waveform_user_path, waveform_ref_path
+     FROM sessions ORDER BY date DESC`,
+  )
+  return (rows ?? []).map((r) => ({
+    ...mapSessionJournalRow(r),
+    review_snapshot: r.review_snapshot ?? null,
+  }))
+}
+
 export async function getSessionById(id: string): Promise<SessionArchiveRow | null> {
   await initDb()
   const db = await getDb()
@@ -352,6 +382,45 @@ export async function commitPlacementOnboarding(aggregatedNodeScores: Record<str
     await setOnboardingComplete()
   })
   await placementCommitChain
+}
+
+/** Commit 69: taste quiz completion — `TasteProfile` prefs + experience-mapped skill scores. */
+export async function commitTasteQuizProfile(
+  taste: TasteProfilePayload,
+  experienceLevel: 'beginner' | 'intermediate' | 'advanced',
+): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  const tier = experienceLevel === 'beginner' ? 0.2 : experienceLevel === 'advanced' ? 0.7 : 0.5
+  await setAppPref(PREF_TASTE_PROFILE_JSON, JSON.stringify(taste))
+  await setAppPref(PREF_EXPERIENCE_LEVEL, experienceLevel)
+  const rows = await getAllSkillNodes()
+  for (const n of DEFAULT_SKILL_NODES) {
+    const row = rows.find((r) => r.id === n.id)
+    if (!row) continue
+    const u = deriveSkillNodeAfterSession(
+      {
+        score: row.score,
+        easiness_factor: row.easiness_factor,
+        interval_days: row.interval_days,
+        sm2_repetitions: row.sm2_repetitions,
+        sessions_count: row.sessions_count,
+      },
+      tier,
+    )
+    await db.runAsync(
+      `UPDATE skill_nodes SET score = ?, easiness_factor = ?, interval_days = ?, sm2_repetitions = ?,
+       next_review_date = ?, sessions_count = ?, last_session_date = ? WHERE id = ?`,
+      u.score,
+      u.easiness_factor,
+      u.interval_days,
+      u.sm2_repetitions,
+      u.next_review_date,
+      u.sessions_count,
+      u.last_session_date,
+      n.id,
+    )
+  }
 }
 
 /**
@@ -436,6 +505,20 @@ export async function getHomeSuggestion(): Promise<HomeSuggestion> {
   return { kind: 'ready', node, song }
 }
 
+export async function applySessionMutation(updates: SkillSessionMutationRow[]): Promise<void> {
+  if (updates.length === 0) return
+  await initDb()
+  const db = await getDb()
+  for (const u of updates) {
+    await db.runAsync(
+      'UPDATE skill_nodes SET score = ?, technique_roll_json = ? WHERE id = ?',
+      u.score,
+      u.technique_roll_json,
+      u.id,
+    )
+  }
+}
+
 export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Promise<void> {
   await initDb()
   const db = await getDb()
@@ -465,8 +548,8 @@ export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Pr
       },
       sessionScore,
       {
-        accuracyScore01: sessionScore,
-        timingStability01: sessionScore,
+        accuracyScore01: input.session_accuracy01 ?? sessionScore,
+        timingStability01: input.session_timing_stability01 ?? sessionScore,
         reliabilityScore01: typeof reliability === 'number' ? reliability : undefined,
         confidence: confidence === 'low' || confidence === 'medium' || confidence === 'high' ? confidence : undefined,
         reliabilityFlags: input.reliability_flags ?? [],
@@ -590,7 +673,8 @@ export async function clearAllPracticeData(): Promise<void> {
   await db.execAsync('DELETE FROM jam_snapshots')
   await db.execAsync(
     `UPDATE skill_nodes SET score = 0, sessions_count = 0, last_session_date = NULL,
-     easiness_factor = 2.5, interval_days = 1, next_review_date = NULL, sm2_repetitions = 0`,
+     easiness_factor = 2.5, interval_days = 1, next_review_date = NULL, sm2_repetitions = 0,
+     technique_roll_json = NULL`,
   )
 }
 

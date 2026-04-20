@@ -5,14 +5,23 @@ import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import colors from '@/src/constants/colors'
-import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
+import { DEFAULT_TAB_RENDER_PRESET } from '@/src/session/tabThemePresets'
+import type { TabRenderPresetName } from '@/src/session/tabThemePresets'
 import type {
   AlphaTabSurfaceRef,
   NoteEventMessage,
+  SongScoreMeta,
   TabInboundMessage,
   TabLoopBarRegion,
   TabThemeColors,
 } from '@/types/tabMessage'
+import {
+  DEFAULT_SOUNDFONT_PROFILE_ID,
+  isSoundFontProfileId,
+  type SoundFontProfileId,
+} from '@/src/audio/soundfontProfiles'
+import { persistLastSuccessfulSoundFontProfile } from '@/src/audio/soundfontPersistence'
+import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
 import { decodeTabMessage, encodeTabMessage } from '@/types/tabMessage'
 
 /** @deprecated Use `AlphaTabSurfaceRef` from `@/types/tabMessage`. */
@@ -22,13 +31,21 @@ const HARNESS_HTML = require('../assets/alphatab-harness/index.html') as number
 
 export type AlphaTabWebViewProps = {
   gp5Base64?: string | null
+  /** Native harness does not consume server prerender JSON yet — prop exists for API parity with web. */
+  prerenderArtifactUrl?: string | null
   audioSrc?: string | null
   transposeSemitones?: number
+  /** Commit 60: AlphaTab synth bank (native harness mirrors web resolution). */
+  soundFontProfile?: SoundFontProfileId
+  renderPreset?: TabRenderPresetName
   style?: StyleProp<ViewStyle>
   onReady?: () => void
   onHarnessError?: (message: string) => void
   onNoteEvent?: (evt: NoteEventMessage) => void
   onScoreSeekMs?: (positionMs: number) => void
+  onSongDetails?: (score: SongScoreMeta) => void
+  onSongPlayback?: (payload: { masterBarIndex: number; sectionLabel: string | null }) => void
+  runtimeDiagnosticsEnabled?: boolean
 }
 
 function isAllowedNavigationUrl(url: string): boolean {
@@ -45,12 +62,30 @@ function isAllowedNavigationUrl(url: string): boolean {
 
 export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewProps>(
   function AlphaTabWebView(
-    { gp5Base64, audioSrc, transposeSemitones = 0, style, onReady, onHarnessError, onNoteEvent, onScoreSeekMs },
+    {
+      gp5Base64,
+      prerenderArtifactUrl: _prerenderArtifactUrl,
+      audioSrc,
+      transposeSemitones = 0,
+      soundFontProfile = DEFAULT_SOUNDFONT_PROFILE_ID,
+      renderPreset = DEFAULT_TAB_RENDER_PRESET,
+      style,
+      onReady,
+      onHarnessError,
+      onNoteEvent,
+      onScoreSeekMs,
+      onSongDetails,
+      onSongPlayback,
+      runtimeDiagnosticsEnabled = false,
+    },
     ref,
   ) {
     const webRef = useRef<WebView>(null)
-    const themeSentRef = useRef(false)
     const getPositionResolverRef = useRef<((ms: number | null) => void) | null>(null)
+    const songDetailsResolverRef = useRef<{
+      requestId: string
+      resolve: (v: SongScoreMeta | null) => void
+    } | null>(null)
 
     const [reloadKey, setReloadKey] = useState(0)
     const [harnessUri, setHarnessUri] = useState<string | null>(null)
@@ -98,8 +133,17 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         setTheme: (nextColors: Partial<TabThemeColors>) => {
           postInbound({ type: 'setTheme', colors: nextColors })
         },
+        setRenderPreset: (presetName: string) => {
+          postInbound({ type: 'setRenderPreset', presetName })
+        },
         setTranspose: (semitones: number) => {
           postInbound({ type: 'setTranspose', semitones: Math.max(-12, Math.min(12, Math.round(semitones))) })
+        },
+        setSoundFontProfile: (profileId: string) => {
+          postInbound({
+            type: 'setSoundFontProfile',
+            profileId: isSoundFontProfileId(profileId) ? profileId : DEFAULT_SOUNDFONT_PROFILE_ID,
+          })
         },
         setLoopRegion: (region: TabLoopBarRegion | null) => {
           if (!region) {
@@ -129,6 +173,18 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
             barIndex: Math.max(0, Math.floor(barIndex)),
           })
         },
+        getSongDetails: () =>
+          new Promise<SongScoreMeta | null>((resolve) => {
+            const requestId = `sd_${Date.now()}_${Math.random().toString(36).slice(2)}`
+            songDetailsResolverRef.current = { requestId, resolve }
+            postInbound({ type: 'getSongDetails', requestId })
+            setTimeout(() => {
+              if (songDetailsResolverRef.current?.resolve === resolve) {
+                songDetailsResolverRef.current = null
+                resolve(null)
+              }
+            }, 800)
+          }),
       }),
       [postInbound],
     )
@@ -157,10 +213,11 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
 
     useEffect(() => {
       if (!harnessReady) return
-      if (!themeSentRef.current) {
-        themeSentRef.current = true
-        postInbound({ type: 'setTheme', colors: TAB_HARNESS_THEME })
-      }
+      postInbound({
+        type: 'setSoundFontProfile',
+        profileId: soundFontProfile,
+      })
+      postInbound({ type: 'setRenderPreset', presetName: renderPreset })
       postInbound({ type: 'setTranspose', semitones: Math.max(-12, Math.min(12, Math.round(transposeSemitones))) })
       const raw = gp5Base64?.trim()
       if (raw) {
@@ -173,10 +230,29 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           }, 0)
         }
       }
-    }, [audioSrc, harnessReady, gp5Base64, postInbound, transposeSemitones])
+    }, [audioSrc, harnessReady, gp5Base64, postInbound, transposeSemitones, renderPreset, soundFontProfile])
+
+    useEffect(() => {
+      if (!harnessReady) return
+      postInbound({ type: 'setRuntimeDiagnosticsEnabled', enabled: runtimeDiagnosticsEnabled })
+      return () => {
+        postInbound({ type: 'setRuntimeDiagnosticsEnabled', enabled: false })
+      }
+    }, [harnessReady, runtimeDiagnosticsEnabled, postInbound])
+
+    useEffect(() => {
+      if (!harnessReady || !runtimeDiagnosticsEnabled) return
+      const id = setInterval(() => {
+        postInbound({
+          type: 'diagPing',
+          requestId: `dp_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          t0: Date.now(),
+        })
+      }, 5000)
+      return () => clearInterval(id)
+    }, [harnessReady, runtimeDiagnosticsEnabled, postInbound])
 
     const onRetry = useCallback(() => {
-      themeSentRef.current = false
       setHarnessReady(false)
       setSoundFontReady(false)
       setHarnessError(null)
@@ -206,8 +282,43 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           onNoteEvent?.(msg)
           return
         }
+        if (msg.type === 'songDetails') {
+          onSongDetails?.(msg.score)
+          const pend = songDetailsResolverRef.current
+          if (pend && msg.requestId === pend.requestId) {
+            pend.resolve(msg.score)
+            songDetailsResolverRef.current = null
+          }
+          return
+        }
+        if (msg.type === 'songPlayback') {
+          onSongPlayback?.(msg)
+          return
+        }
+        if (msg.type === 'runtimeDiagnostics') {
+          useAlphaTabRuntimeDiagStore.getState().ingestHarnessWindow({
+            windowMs: msg.windowMs,
+            driftMs: msg.driftMs,
+            noteEventHz: msg.noteEventHz,
+            renderFps: msg.renderFps,
+            breachFlags: msg.breachFlags ?? [],
+            source: 'harness',
+          })
+          return
+        }
+        if (msg.type === 'diagPong') {
+          useAlphaTabRuntimeDiagStore.getState().setBridgeLatencyMs(Date.now() - msg.t0)
+          return
+        }
         if (msg.type === 'soundFontLoad') {
-          if (msg.status === 'loaded') setSoundFontReady(true)
+          const pid =
+            typeof msg.profileId === 'string' && isSoundFontProfileId(msg.profileId)
+              ? msg.profileId
+              : DEFAULT_SOUNDFONT_PROFILE_ID
+          if (msg.status === 'loaded') {
+            setSoundFontReady(true)
+            void persistLastSuccessfulSoundFontProfile(pid)
+          }
           if (msg.status === 'error') {
             setSoundFontReady(true)
             if (msg.message) {
@@ -221,7 +332,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           onHarnessError?.(msg.message)
         }
       },
-      [onHarnessError, onNoteEvent, onReady, onScoreSeekMs],
+      [onHarnessError, onNoteEvent, onReady, onScoreSeekMs, onSongDetails, onSongPlayback],
     )
 
     if (Platform.OS === 'web') {

@@ -2,12 +2,17 @@ import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 import { Text, View } from 'react-native'
 
+import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { LoopRegionControl } from '@/components/LoopRegionControl'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { SongDetailsCard } from '@/components/SongDetailsCard'
+import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
+import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { sessionHref } from '@/src/constants/sessionFlow'
+import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { barRangeToSeconds } from '@/src/music/barLoopBounds'
 import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
@@ -15,9 +20,11 @@ import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { deriveSlowLoopRegion } from '@/src/session/slowLoopRegion'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useLessonStore } from '@/src/stores/lessonStore'
-import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
+import type { NoteEventMessage, SongScoreMeta, TabLoopBarRegion } from '@/types/tabMessage'
 
 export default function SlowScreen() {
+  useStepCoachNarration()
+  const isDemo = useIsDemoLesson()
   const router = useRouter()
   const initialMetronomeOn = useMetronomeDefaultOn()
   const lesson = useLessonStore((s) => s.lesson)
@@ -39,6 +46,11 @@ export default function SlowScreen() {
     [barTimestamps, lesson?.tempo, lessonSectionIndex, section, sections],
   )
 
+  const [scoreMeta, setScoreMeta] = useState<SongScoreMeta | null>(null)
+  const [songPlayback, setSongPlayback] = useState<{
+    masterBarIndex: number
+    sectionLabel: string | null
+  } | null>(null)
   const [loopBars, setLoopBars] = useState<TabLoopBarRegion | null>(null)
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
@@ -88,13 +100,18 @@ export default function SlowScreen() {
   return (
     <SessionStepScreen
       title="Slow"
-      subtitle="Starts at 65% speed, loops a bar-aligned region, and keeps the tab cursor synced to slowed stems."
+      subtitle={
+        isDemo
+          ? DEMO_TOUR_SUBTITLE.slow
+          : 'Starts at 65% speed, loops a bar-aligned region, and keeps the tab cursor synced to slowed stems.'
+      }
       showBack
       onBack={() => router.back()}
       showNext
       nextLabel="Next: Play"
       onNext={() => router.push(sessionHref('play'))}
     >
+      {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.slow}</DemoTourCallout> : null}
       {playbackLoop ? (
         <View className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-3 py-2">
           <Text className="font-sans text-xs text-wood-900">
@@ -135,10 +152,21 @@ export default function SlowScreen() {
       />
 
       <SessionStemAndTab
+        tabRenderPreset="slow"
         initialRate={0.65}
         initialMetronomeOn={initialMetronomeOn}
         autoLoopRegion={playbackLoop}
         loopHighlight={loopHighlight}
+        onTabSongDetails={setScoreMeta}
+        onTabSongPlayback={setSongPlayback}
+        detailsAboveTab={
+          <SongDetailsCard
+            lesson={lesson}
+            scoreMeta={scoreMeta}
+            playback={songPlayback}
+            lessonSectionIndex={lessonSectionIndex}
+          />
+        }
         onNoteEvent={(evt: NoteEventMessage) => {
           setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
           setFretPulseKey((k) => k + 1)

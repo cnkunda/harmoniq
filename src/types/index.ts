@@ -4,9 +4,115 @@ export type AnalyzeJobStatus = 'processing' | 'complete' | 'failed'
 
 /** Lesson payload from GET /analyze/{job_id} when status is complete — matches `backend/app/schemas.py` with extras allowed. */
 /** Optional payload for POST /analyze — matches `backend/app/schemas.py` `PlayerProfile`. */
+/** User-declared tier + optional focus notes — merged into POST `/analyze` and coach context. */
+export interface LearningContextPayload {
+  experience_level?: 'beginner' | 'intermediate' | 'advanced'
+  /** Mirrors Settings “Style focus” for coach conditioning. */
+  solo_focus_notes?: string
+}
+
 export interface PlayerProfilePayload {
   weak_areas?: string[]
   skill_nodes?: Array<{ id: string; label?: string | null; score?: number }>
+  taste_profile?: TasteProfilePayload
+  learning_context?: LearningContextPayload
+}
+
+export interface CurriculumSuggestion {
+  job_id: string
+  reason_label: string
+  technique_focus: string
+}
+
+export interface CurriculumSuggestResponse {
+  ranked: CurriculumSuggestion[]
+}
+
+/** POST /practice/plan (commit 70). */
+export type PracticeSlotType = 'warmup' | 'technique' | 'song_section' | 'free_jam'
+
+/** Matches `FretboardGuideCell` / pool `fretboard_guide.cells` (tab string 1 = high E). */
+export type WarmupFretboardGuideVariant = 'primary' | 'secondary'
+
+export interface WarmupFretboardGuideCellPayload {
+  string: number
+  fret: number
+  variant: WarmupFretboardGuideVariant
+}
+
+/** Curriculum-authored fretboard highlights (pool → POST /practice/plan). */
+export interface WarmupFretboardGuidePayload {
+  cells: WarmupFretboardGuideCellPayload[]
+  caption?: string | null
+}
+
+/** Commit 73 — nested warm-up steps on the first drill slot. */
+export interface WarmupExercisePayload {
+  name: string
+  description: string
+  duration_seconds: number
+  tab_snippet_gp5_base64?: string | null
+  technique_tag: string
+  bpm: number
+  fretboard_guide?: WarmupFretboardGuidePayload | null
+}
+
+export interface WarmupPlanPayload {
+  exercises: WarmupExercisePayload[]
+  total_duration_seconds: number
+}
+
+export interface DrillSlotPayload {
+  slot_type: PracticeSlotType
+  duration_seconds: number
+  title: string
+  coach_intro: string
+  lesson_ref?: string | null
+  exercise_ref?: string | null
+  technique_focus?: string | null
+  warmup_plan?: WarmupPlanPayload | null
+}
+
+export interface PracticePlanPayload {
+  slots: DrillSlotPayload[]
+  total_duration_seconds: number
+}
+
+/** GET /taste/spotify — commit 67 (no tokens). */
+export interface SpotifyTasteProfile {
+  top_genres: string[]
+  top_artists: string[]
+  energy_avg: number
+  tempo_avg: number
+  instrumentalness_avg: number
+}
+
+/** POST /taste/derive response — commit 68. */
+export interface TasteProfilePayload {
+  style_label: string
+  technique_affinity: string[]
+  bpm_comfort_range: [number, number]
+  song_candidates: string[]
+  source: 'spotify' | 'quiz' | 'manual'
+}
+
+/** POST /taste/derive quiz branch — commit 68 / 69. */
+export interface QuizAnswersPayload {
+  selected_artists: string[]
+  selected_style: string
+  experience_level: 'beginner' | 'intermediate' | 'advanced'
+}
+
+export interface CoachHydrationSectionPayload {
+  index: number
+  coach_note: string
+  coach_explanation: string
+}
+
+export interface CoachHydrationStatusPayload {
+  status: 'pending' | 'complete' | 'fallback'
+  sections: CoachHydrationSectionPayload[]
+  fallback_reason?: string | null
 }
 
 export interface LessonJSON {
@@ -26,6 +132,18 @@ export interface LessonJSON {
   stems?: Record<string, string>
   lyrics_aligned?: Array<Record<string, unknown>>
   sections?: Array<Record<string, unknown>>
+  /** Optional AlphaTab SVG prerender hints — see `backend/app/alphatab_prerender.py`. */
+  alphatab_prerender_hints?: {
+    alphatab_version?: string
+    preset_version?: string
+    score_sha256?: string
+    cache_key?: string
+    master_bar_count?: number
+    total_width?: number
+    total_height?: number
+    partial_count?: number
+    artifact_rel?: string | null
+  } | null
 }
 
 export interface AnalyzeJob {
@@ -35,6 +153,8 @@ export interface AnalyzeJob {
   /** 0–1 while processing; from GET /analyze/{id} when backend reports it. */
   progress?: number | null
   stage_label?: string | null
+  /** Unix seconds when processing began (server); optional for older backends. */
+  processing_started_at?: number | null
 }
 
 /** POST /score response — see README.md */

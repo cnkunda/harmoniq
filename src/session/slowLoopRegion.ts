@@ -116,22 +116,7 @@ export function deriveSlowLoopRegion(
   const sec = section ?? {}
   const bars = barTimestamps
 
-  const barKeys = ['hardest_bar_index', 'hardestBarIndex', 'hardest_bar', 'hardestBar', 'loop_bar', 'loopBar']
-  for (const key of barKeys) {
-    const n = asNumber(sec[key])
-    if (n != null) {
-      const bi = Math.floor(n)
-      const w = singleBarWindow(bars, bi, beatSec)
-      if (w) {
-        return {
-          ...w,
-          label: `Bar ${bi + 1}`,
-          source: `section.${key}`,
-        }
-      }
-    }
-  }
-
+  // Explicit multi-bar ranges from analysis first; then lowest-confidence bar when arrays exist (G3 / PRIORITIES); then single-bar hints.
   const rangeKeys: Array<[string, string]> = [
     ['loop_start_bar', 'loop_end_bar'],
     ['loopStartBar', 'loopEndBar'],
@@ -169,6 +154,22 @@ export function deriveSlowLoopRegion(
         ...w,
         label: `Bar ${idx + 1} (low confidence)`,
         source: `section.${key}`,
+      }
+    }
+  }
+
+  const barKeys = ['hardest_bar_index', 'hardestBarIndex', 'hardest_bar', 'hardestBar', 'loop_bar', 'loopBar']
+  for (const key of barKeys) {
+    const n = asNumber(sec[key])
+    if (n != null) {
+      const bi = Math.floor(n)
+      const w = singleBarWindow(bars, bi, beatSec)
+      if (w) {
+        return {
+          ...w,
+          label: `Bar ${bi + 1}`,
+          source: `section.${key}`,
+        }
       }
     }
   }

@@ -22,6 +22,18 @@ export function LoopRegionControl({ barCount, value, onChange, disabled }: LoopR
   const maxStart = barCount - 2
   const span = clamped.endBarIndexExclusive - clamped.startBarIndex
 
+  const applyStart = (raw: number) => {
+    const start = Math.round(raw)
+    let endEx = clamped.endBarIndexExclusive
+    if (endEx <= start) endEx = Math.min(barCount, start + 2)
+    onChange(clampBarLoopRange(start, endEx, barCount))
+  }
+
+  const applyEnd = (raw: number) => {
+    const endEx = Math.round(raw)
+    onChange(clampBarLoopRange(clamped.startBarIndex, endEx, barCount))
+  }
+
   return (
     <View className="mt-4 rounded-xl border border-wood-600/40 bg-cream-dark/40 p-3">
       <Text className="font-sans-medium text-sm text-wood-900">Loop region</Text>
@@ -36,12 +48,8 @@ export function LoopRegionControl({ barCount, value, onChange, disabled }: LoopR
           maximumValue={maxStart}
           step={1}
           value={clamped.startBarIndex}
-          onValueChange={(raw) => {
-            const start = Math.round(raw)
-            let endEx = clamped.endBarIndexExclusive
-            if (endEx <= start) endEx = Math.min(barCount, start + 2)
-            onChange(clampBarLoopRange(start, endEx, barCount))
-          }}
+          onValueChange={(raw) => applyStart(raw)}
+          onSlidingComplete={(raw) => applyStart(raw)}
           minimumTrackTintColor={colors.amber.accent}
           maximumTrackTintColor={colors.wood[600]}
           thumbTintColor={colors.amber.light}
@@ -56,10 +64,8 @@ export function LoopRegionControl({ barCount, value, onChange, disabled }: LoopR
           maximumValue={barCount}
           step={1}
           value={clamped.endBarIndexExclusive}
-          onValueChange={(raw) => {
-            const endEx = Math.round(raw)
-            onChange(clampBarLoopRange(clamped.startBarIndex, endEx, barCount))
-          }}
+          onValueChange={(raw) => applyEnd(raw)}
+          onSlidingComplete={(raw) => applyEnd(raw)}
           minimumTrackTintColor={colors.amber.accent}
           maximumTrackTintColor={colors.wood[600]}
           thumbTintColor={colors.amber.light}

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import { ApiError, pollAnalyzeJob, submitAnalyzeJob } from '@/src/api/analyze'
+import { ApiError, pollAnalyzeJob, pollCoachHydration, submitAnalyzeJob } from '@/src/api/analyze'
 import { clearCachedLessonIfWeb, persistCachedLessonIfWeb } from '@/src/db/persistCachedLesson'
 import type { AnalyzeJobStatus, LessonJSON } from '@/src/types'
 
@@ -63,6 +63,8 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
       .catch(() => {})
   },
 
+  // commit 66: coach hydration starts after lesson is available.
+
   analyzeFromUrl: async (url: string) => {
     const gen = ++pollGeneration
     set({ error: null, status: 'submitting', lesson: null })
@@ -76,6 +78,37 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
       })
       if (gen !== pollGeneration) return
       set({ lesson, status: 'complete', error: null })
+      void (async () => {
+        const { promise } = pollCoachHydration(
+          jobId,
+          (payload) => {
+            if (gen !== pollGeneration) return
+            const current = useLessonStore.getState().lesson
+            if (!current || !Array.isArray(current.sections) || current.sections.length === 0) return
+            const nextSections = current.sections.map((sec, idx) => {
+              const upd = payload.sections.find((s) => s.index === idx)
+              if (!upd) return sec
+              return {
+                ...(sec as Record<string, unknown>),
+                coach_note: upd.coach_note,
+                coach_explanation: upd.coach_explanation,
+              }
+            })
+            const patched = { ...current, sections: nextSections }
+            set({ lesson: patched })
+            void persistCachedLessonIfWeb(patched).catch(() => {})
+            void import('@/src/db/client')
+              .then(({ upsertLessonFromAnalysis }) => upsertLessonFromAnalysis(patched))
+              .catch(() => {})
+          },
+          1800,
+        )
+        await promise.catch(() => {
+          void import('@/components/ToastConfig').then(({ toast }) => {
+            toast.info('Coach tips could not refresh. Your lesson is still ready.')
+          })
+        })
+      })()
     } catch (e) {
       if (gen !== pollGeneration) return
       set({ status: 'failed', error: formatAnalyzeError(e) })
@@ -95,6 +128,37 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
       })
       if (gen !== pollGeneration) return
       set({ lesson, status: 'complete', error: null })
+      void (async () => {
+        const { promise } = pollCoachHydration(
+          jobId,
+          (payload) => {
+            if (gen !== pollGeneration) return
+            const current = useLessonStore.getState().lesson
+            if (!current || !Array.isArray(current.sections) || current.sections.length === 0) return
+            const nextSections = current.sections.map((sec, idx) => {
+              const upd = payload.sections.find((s) => s.index === idx)
+              if (!upd) return sec
+              return {
+                ...(sec as Record<string, unknown>),
+                coach_note: upd.coach_note,
+                coach_explanation: upd.coach_explanation,
+              }
+            })
+            const patched = { ...current, sections: nextSections }
+            set({ lesson: patched })
+            void persistCachedLessonIfWeb(patched).catch(() => {})
+            void import('@/src/db/client')
+              .then(({ upsertLessonFromAnalysis }) => upsertLessonFromAnalysis(patched))
+              .catch(() => {})
+          },
+          1800,
+        )
+        await promise.catch(() => {
+          void import('@/components/ToastConfig').then(({ toast }) => {
+            toast.info('Coach tips could not refresh. Your lesson is still ready.')
+          })
+        })
+      })()
     } catch (e) {
       if (gen !== pollGeneration) return
       set({ status: 'failed', error: formatAnalyzeError(e) })

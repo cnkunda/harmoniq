@@ -1,0 +1,62 @@
+name: Scoring tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  backend-scoring:
+    name: Backend pytest (jam + score)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend + dev deps
+        run: pip install -e ".[dev]"
+
+      - name: Run scoring tests
+        run: python -m pytest -q tests/test_jam_score.py tests/test_score.py
+
+  frontend-scoring:
+    name: Vitest (placement + SM-2 + progress signals)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run scoring unit tests
+        run: >
+          npx vitest run
+          src/onboarding/aggregatePlacementScores.test.ts
+          src/spaced/sm2.test.ts
+          src/session/scoreProgressSignals.test.ts

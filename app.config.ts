@@ -30,6 +30,7 @@ const audioApiPlugin: NonNullable<ExpoConfig['plugins']>[number] = [
 export default ({ config }: ConfigContext): ExpoConfig =>
   ({
     ...config,
+    scheme: 'harmoniq',
     plugins: [...(config.plugins ?? []), audioApiPlugin],
     extra: {
       ...config.extra,

@@ -4,11 +4,14 @@ import { ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { CoachNote } from '@/components/CoachNote'
+import { LearnerContextCard } from '@/components/LearnerContextCard'
+import { RiffDNA } from '@/components/RiffDNA'
 import { SkillGraph } from '@/components/SkillGraph'
 import { WoodGradient } from '@/components/WoodGradient'
 import { DEFAULT_SKILL_NODES } from '@/src/db/schema'
 import { listSessionsJournal } from '@/src/db/client'
 import type { SessionJournalRow } from '@/src/db/types'
+import { useDnaStore } from '@/src/stores/dnaStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 
 function formatRelativeSessionDate(value: string): string {
@@ -32,14 +35,17 @@ function focusLabel(sectionLabel: string | null): string {
 export default function ProgressScreen() {
   const loadSkills = useSkillStore((s) => s.loadFromDb)
   const nodes = useSkillStore((s) => s.nodes)
+  const dna = useDnaStore((s) => s.dna)
+  const refreshDna = useDnaStore((s) => s.refresh)
   const [journal, setJournal] = useState<SessionJournalRow[]>([])
 
   const refresh = useCallback(() => {
     void loadSkills()
+    void refreshDna()
     void listSessionsJournal()
       .then(setJournal)
       .catch(() => setJournal([]))
-  }, [loadSkills])
+  }, [loadSkills, refreshDna])
 
   useFocusEffect(
     useCallback(() => {
@@ -60,8 +66,8 @@ export default function ProgressScreen() {
   }, [nodes])
 
   const coachSummary =
-    journal[0]?.coach_review?.trim() ||
-    'Your pitch accuracy on bends has improved significantly over the last two weeks. The next frontier is dynamics: make the quiet notes whisper so the loud notes can scream.'
+    journal[0]?.coach_review?.trim() ??
+    'Finish a practice session through Review to capture a personalized coach summary here.'
 
   return (
     <WoodGradient className="flex-1">
@@ -76,6 +82,10 @@ export default function ProgressScreen() {
               </Text>
             </View>
 
+            <View className="mb-8">
+              <LearnerContextCard skillNodes={nodes} />
+            </View>
+
             <View className="mb-12 flex-col gap-8 md:flex-row md:items-stretch">
               <View className="md:flex-1">
                 <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Skill Map</Text>
@@ -88,6 +98,11 @@ export default function ProgressScreen() {
                 </Text>
                 <CoachNote text={coachSummary} className="h-full" />
               </View>
+            </View>
+
+            <View className="mb-12">
+              <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Your DNA</Text>
+              <RiffDNA dna={dna} />
             </View>
 
             <View>

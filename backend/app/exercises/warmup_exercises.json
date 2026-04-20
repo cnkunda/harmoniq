@@ -1,0 +1,17 @@
+[
+  {
+    "id": "warmup_chromatic_four",
+    "name": "Chromatic four-fret walk",
+    "summary": "Light chromatic fingering on adjacent frets to wake up both hands without tension."
+  },
+  {
+    "id": "warmup_diagonal_stretch",
+    "name": "Diagonal stretch pattern",
+    "summary": "Short diagonal finger pairs across two strings to open reach while keeping shoulders low."
+  },
+  {
+    "id": "warmup_string_crossing",
+    "name": "Adjacent-string crossings",
+    "summary": "Slow alternate picking across pairs of strings for clean attacks at a relaxed tempo."
+  }
+]

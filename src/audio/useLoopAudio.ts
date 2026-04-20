@@ -6,6 +6,9 @@ import type { StemMixer } from '@/src/audio/mixerTypes'
 /**
  * Stem loop boundary: seeks to `startSec` when position reaches `endSec`
  * (bar-aligned seconds from `bar_timestamps`). Uses `requestAnimationFrame` instead of coarse intervals.
+ *
+ * Prefers `getPositionSecondsNow` when implemented so wrap detection stays on the same clock as
+ * playback (MANUAL_QA loop precision); falls back to async `getPositionSeconds` only when sync API is absent.
  */
 export function useLoopAudio(deps: {
   active: boolean
@@ -32,7 +35,8 @@ export function useLoopAudio(deps: {
       if (wrapping) return
       const m = mixerRef.current
       if (!m) return
-      void m.getPositionSeconds().then((p) => {
+
+      const tryWrap = (p: number) => {
         if (cancelled || wrapping) return
         if (p >= endSec - 1e-4) {
           wrapping = true
@@ -48,6 +52,16 @@ export function useLoopAudio(deps: {
               wrapping = false
             })
         }
+      }
+
+      const pNow = m.getPositionSecondsNow?.()
+      if (typeof pNow === 'number' && Number.isFinite(pNow)) {
+        tryWrap(pNow)
+        return
+      }
+
+      void m.getPositionSeconds().then((p) => {
+        tryWrap(p)
       })
     }
 

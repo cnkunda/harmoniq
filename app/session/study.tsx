@@ -4,14 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { LyricsStrip } from '@/components/LyricsStrip'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { SongDetailsCard } from '@/components/SongDetailsCard'
 import { toast } from '@/components/ToastConfig'
+import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
+import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { sessionHref } from '@/src/constants/sessionFlow'
+import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { getAppPref } from '@/src/db/client'
 import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
 import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
@@ -28,7 +33,7 @@ import {
   type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
-import type { NoteEventMessage } from '@/types/tabMessage'
+import type { NoteEventMessage, SongScoreMeta } from '@/types/tabMessage'
 
 type TabVariant = 'full' | 'skeleton' | 'alt'
 
@@ -58,9 +63,16 @@ function toLyricWords(input: unknown): Array<{ word: string; timeSec: number }> 
 const STUDY_BAR_CHIP_MAX = 64
 
 export default function StudyScreen() {
+  useStepCoachNarration()
+  const isDemo = useIsDemoLesson()
   const router = useRouter()
   const sessionStemRef = useRef<SessionStemAndTabHandle>(null)
   const lesson = useLessonStore((s) => s.lesson)
+  const [scoreMeta, setScoreMeta] = useState<SongScoreMeta | null>(null)
+  const [songPlayback, setSongPlayback] = useState<{
+    masterBarIndex: number
+    sectionLabel: string | null
+  } | null>(null)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const [tick, setTick] = useState<PlaybackTickContext>(DEFAULT_TICK)
 
@@ -219,19 +231,35 @@ export default function StudyScreen() {
   return (
     <SessionStepScreen
       title="Study"
-      subtitle="Stems, lyrics, capo hint, and an interactive fretboard. Scroll to the tab and tap a note for fingerings and scale context."
+      subtitle={
+        isDemo
+          ? DEMO_TOUR_SUBTITLE.study
+          : 'Stems, lyrics, capo hint, and an interactive fretboard. Scroll to the tab and tap a note for fingerings and scale context.'
+      }
       showBack
       onBack={() => router.back()}
       showNext
       nextLabel="Next: Slow"
       onNext={() => router.push(sessionHref('slow'))}
     >
+      {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.study}</DemoTourCallout> : null}
       <SessionStemAndTab
         ref={sessionStemRef}
+        tabRenderPreset="study"
         tabVariant={variant}
         onPlaybackTick={handleStemPlaybackTick}
         onNoteEvent={onTabNoteEvent}
+        onTabSongDetails={setScoreMeta}
+        onTabSongPlayback={setSongPlayback}
         tabFrameClassName="mt-2 h-[328px] w-full px-2"
+        detailsAboveTab={
+          <SongDetailsCard
+            lesson={lesson}
+            scoreMeta={scoreMeta}
+            playback={songPlayback}
+            lessonSectionIndex={lessonSectionIndex}
+          />
+        }
         insertBetweenStemAndTab={
           <>
             {showLowTranscriptionBanner ? (

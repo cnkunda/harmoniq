@@ -21,7 +21,9 @@ import { WoodGradient } from '@/components/WoodGradient'
 import { createStemMixer } from '@/src/audio/Mixer'
 import { BACKING_TRACKS } from '@/src/constants/backingTracks'
 import { STEM_MIXER_DEV_STEMS } from '@/src/constants/stemMixerDev'
+import { RUNTIME_DIAG_THRESHOLDS } from '@/src/constants/alphaTabRuntimeDiag'
 import { API_BASE_URL } from '@/src/config'
+import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
 import type { PitchReading } from '@/src/pitch/pitchTypes'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
 
@@ -38,6 +40,55 @@ function Swatch({ label, className }: { label: string; className: string }) {
     <View className="mb-3 w-[48%]">
       <View className={`h-14 rounded-lg border border-wood-600 ${className}`} />
       <Text className="mt-1 font-mono text-[10px] text-cream/80">{label}</Text>
+    </View>
+  )
+}
+
+/** Commit 61 — live AlphaTab runtime diagnostics (`__DEV__` Design tab only). */
+function AlphaTabRuntimeDiagDevSection() {
+  const latest = useAlphaTabRuntimeDiagStore((s) => s.latest)
+  const clear = useAlphaTabRuntimeDiagStore((s) => s.clear)
+
+  return (
+    <View className="mb-6 rounded-xl border border-wood-600/60 bg-wood-900/40 p-4">
+      <Text className="mb-1 font-sans-medium text-xs uppercase tracking-wider text-amber-light">
+        AlphaTab runtime diagnostics (Commit 61)
+      </Text>
+      <Text className="mb-3 font-sans text-xs text-muted-brown">
+        Run Listen or Play with diagnostics enabled; values refresh every {5000 / 1000}s.         Thresholds in{' '}
+        <Text className="font-mono text-[11px] text-cream/90">docs/MANUAL_QA.md</Text> (AlphaTab runtime telemetry).
+      </Text>
+      {!latest ? (
+        <Text className="font-mono text-[11px] text-cream/70">No snapshot yet — open a session tab and play.</Text>
+      ) : (
+        <>
+          <Text className="mb-2 font-mono text-[11px] leading-5 text-cream/90" selectable>
+            driftMs: {latest.driftMs != null ? latest.driftMs.toFixed(1) : '—'} (fail &gt;{' '}
+            {RUNTIME_DIAG_THRESHOLDS.driftMsFail})
+            {'\n'}
+            noteEventHz: {(latest.noteEventHz ?? 0).toFixed(1)} (fail &gt; {RUNTIME_DIAG_THRESHOLDS.noteEventHzFail})
+            {'\n'}
+            renderFps: {(latest.renderFps ?? 0).toFixed(1)} (fail &gt; {RUNTIME_DIAG_THRESHOLDS.renderFpsFail})
+            {'\n'}
+            bridgeLatencyMs: {latest.bridgeLatencyMs != null ? latest.bridgeLatencyMs.toFixed(0) : '—'} (native RTT;
+            fail &gt; {RUNTIME_DIAG_THRESHOLDS.bridgeLatencyMsFail}){'\n'}
+            source: {latest.source} · window {latest.windowMs}ms{'\n'}
+            breachFlags: {latest.breachFlags.length ? latest.breachFlags.join(', ') : '(none)'}
+          </Text>
+          {latest.breachFlags.length ? (
+            <Text className="mb-2 font-sans-medium text-xs text-danger">
+              FAIL breach — see docs/MANUAL_QA.md (AlphaTab runtime telemetry → Thresholds).
+            </Text>
+          ) : null}
+        </>
+      )}
+      <Pressable
+        onPress={() => clear()}
+        className="mt-2 self-start rounded-lg border border-wood-600/60 bg-wood-800/80 px-3 py-2"
+        accessibilityRole="button"
+      >
+        <Text className="font-sans-medium text-xs text-cream">Clear snapshot</Text>
+      </Pressable>
     </View>
   )
 }
@@ -441,6 +492,7 @@ export default function DesignPreviewScreen() {
               Design tokens, env and backing tracks, shared feedback layer, and component stubs (Phase 0).
             </Text>
 
+            <AlphaTabRuntimeDiagDevSection />
             <FeedbackLayerDevSection />
             <PitchWorkletDevSection />
             <StemMixerDevSection />

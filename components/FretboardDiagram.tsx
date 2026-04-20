@@ -62,6 +62,10 @@ type FretboardDiagramProps = {
   onToggleTune?: () => void
   onCalibrateTune?: () => void
   tunerState?: FretboardTunerState | null
+  /** Warm-up / curriculum: highlight fixed cells (amber vs success rings). */
+  fretGuideCells?: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary' }> | null
+  /** When set, replaces default footer hint when nothing is selected. */
+  fretGuideFooterHint?: string | null
 }
 
 const SCALE_DEGREE_LABELS: Record<number, string> = {
@@ -187,6 +191,20 @@ function overlayLabelForCell(
   return SCALE_DEGREE_LABELS[iv] ?? null
 }
 
+function guideVariantAtCell(
+  fretGuideCells: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary' }> | null | undefined,
+  stringIdx: number,
+  diagramCol: number,
+): 'primary' | 'secondary' | null {
+  if (!fretGuideCells?.length) return null
+  for (const gc of fretGuideCells) {
+    if (gc.string === stringIdx + 1 && cellMatchesDiagramCol(gc.fret, diagramCol)) {
+      return gc.variant
+    }
+  }
+  return null
+}
+
 export function FretboardDiagram({
   keyLabel,
   positionLabel,
@@ -210,6 +228,8 @@ export function FretboardDiagram({
   onToggleTune,
   onCalibrateTune,
   tunerState = null,
+  fretGuideCells = null,
+  fretGuideFooterHint = null,
 }: FretboardDiagramProps) {
   const cell = selectedNote ? resolveFretCell(selectedNote) : null
   const flashMidi = selectedNote ? inferMidiFromNoteSelection(selectedNote) : null
@@ -219,6 +239,8 @@ export function FretboardDiagram({
     const handler = (evt: KeyboardEvent) => {
       const target = evt.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      // Do not steal browser shortcuts (Ctrl/Meta/Alt + key still reports the base character).
+      if (evt.ctrlKey || evt.metaKey || evt.altKey) return
       const key = evt.key.toLowerCase()
       let rowIndex = -1
       let fret = -1
@@ -365,6 +387,13 @@ export function FretboardDiagram({
               const scaleOn = scaleHighlightActive(scalePitchClasses, stringIdx, fret)
               const midi = OPEN_MIDI_BY_ROW[stringIdx]! + fret
               const overlayLabel = overlayLabelForCell(overlayMode, midi, degreeRootPitchClass)
+              const guideVariant = guideVariantAtCell(fretGuideCells, stringIdx, fret)
+              const guideRingClass =
+                guideVariant === 'primary'
+                  ? 'border-amber-accent bg-amber-accent/30'
+                  : guideVariant === 'secondary'
+                    ? 'border-success bg-success/35'
+                    : ''
               return (
                 <Pressable
                   key={`c-${stringIdx}-${col}`}
@@ -376,6 +405,9 @@ export function FretboardDiagram({
                 >
                   {feedbackHere && lastCellResult ? (
                     <View className={`absolute z-[15] h-5 w-5 rounded-full border-2 ${feedbackRing}`} />
+                  ) : null}
+                  {guideVariant && guideRingClass && !selected ? (
+                    <View className={`absolute z-[11] h-5 w-5 rounded-full border-2 ${guideRingClass}`} />
                   ) : null}
                   {scaleOn && !selected ? (
                     <View className="absolute z-10 h-4 w-4 rounded-full border border-emerald-400/55 bg-emerald-500/15" />
@@ -401,7 +433,7 @@ export function FretboardDiagram({
       <Text className="mt-2 font-mono text-[10px] text-muted-brown">
         {cell
           ? `Selected · string ${cell.row + 1} (tab) · fret ${cell.fret} · pulse #${pulseKey}`
-          : 'Tap a note in the score to highlight a fret.'}
+          : fretGuideFooterHint?.trim() || 'Tap a note in the score to highlight a fret.'}
       </Text>
       {enableKeyboardInput && Platform.OS === 'web' ? (
         <Text className="mt-1 font-sans text-[10px] text-muted-brown">

@@ -2,6 +2,7 @@
 
 # dependencies
 node_modules/
+backend/node_modules/
 
 # Expo
 .expo/
@@ -34,6 +35,13 @@ yarn-error.*
 .env
 .env*.local
 
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
 # Python virtual environments (never commit site-packages / editable installs)
 .venv/
 .venv-wsl/
@@ -42,7 +50,7 @@ env/
 ENV/
 .venv-ci/
 
-# Stem smoke spectrograms / scratch outputs (STEM_QUALITY_CHECKLIST.md)
+# Stem smoke spectrograms / scratch outputs (docs/MANUAL_QA.md stem gate)
 artifacts/
 playwright/.cache/
 test-results/
@@ -51,6 +59,7 @@ test-results/
 # Backend / analysis artifacts (see PRIORITIES 0.5)
 backend/data/
 *.wav
+!assets/demo-lesson/*.wav
 *.gp5
 
 # typescript

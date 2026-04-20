@@ -1,0 +1,10 @@
+{
+  "name": "harmoniq-backend-alphatab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node bridge for AlphaTab prerender (PRIORITIES §59) — use from `app/alphatab_prerender.py` only.",
+  "type": "module",
+  "dependencies": {
+    "@coderline/alphatab": "1.6.1"
+  }
+}

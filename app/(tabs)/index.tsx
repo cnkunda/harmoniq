@@ -1,15 +1,54 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter } from 'expo-router'
-import { Clock, Library as LibraryIcon, Play, Plus } from 'lucide-react-native'
-import { useCallback, useMemo, useState } from 'react'
+import {
+  ChevronRight,
+  ClipboardList,
+  Clock,
+  Library as LibraryIcon,
+  Link2,
+  Music,
+  Play,
+  Plus,
+} from 'lucide-react-native'
+import * as Linking from 'expo-linking'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { sessionHref } from '@/src/constants/sessionFlow'
-import { getHomeSuggestion, getLickById, listSessionsJournal } from '@/src/db/client'
+import {
+  buildPlayerProfileFromSkillNodes,
+  generatePracticePlan,
+  loadLearningContextFromPrefs,
+  parseTasteProfileJson,
+} from '@/src/api/analyze'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { RecentProgress } from '@/components/RecentProgress'
+import { TodaysPlanCard, TodaysPlanCardLoading } from '@/components/TodaysPlanCard'
+import { WeakAreaPulse } from '@/components/WeakAreaPulse'
+import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
+import { usePlanStore } from '@/src/stores/planStore'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
+import { useSkillStore } from '@/src/stores/skillStore'
+import {
+  getAllSkillNodes,
+  getAppPref,
+  getHomeSuggestion,
+  getLessonByJobId,
+  getLickById,
+  listLessonsJournal,
+  listSessionsJournal,
+} from '@/src/db/client'
+import { PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { HomeSuggestion, SessionJournalRow } from '@/src/db/types'
+import { startPracticePlanFromHome } from '@/src/session/practicePlanNavigation'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import type { PracticePlanPayload } from '@/src/types'
+import colors from '@/src/constants/colors'
+import { startDemoSession } from '@/src/demo/startDemoSession'
+import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
+import { spotifyTasteLooksPresent } from '@/src/taste/tasteQuizGate'
 import { lessonFromSavedLick } from '@/src/utils/lessonFromSavedLick'
 
 function getGreeting(name?: string | null): string {
@@ -58,25 +97,107 @@ export default function HomeScreen() {
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const lesson = useLessonStore((s) => s.lesson)
   const [suggestion, setSuggestion] = useState<HomeSuggestion | null>(null)
-  const [recentSessions, setRecentSessions] = useState<SessionJournalRow[]>([])
+  const [sessionsLog, setSessionsLog] = useState<SessionJournalRow[]>([])
   const [loadError, setLoadError] = useState(false)
   const [drillLatestError, setDrillLatestError] = useState<string | null>(null)
+  const [practicePlan, setPracticePlan] = useState<PracticePlanPayload | null>(null)
+  const [practicePlanLoading, setPracticePlanLoading] = useState(false)
+  const [practicePlanStartError, setPracticePlanStartError] = useState<string | null>(null)
+  const [planStartBusy, setPlanStartBusy] = useState(false)
+  const [demoBusy, setDemoBusy] = useState(false)
+  const [spotifyBusy, setSpotifyBusy] = useState(false)
+  const [tasteSongHints, setTasteSongHints] = useState<string[]>([])
+  const [spotifyLinked, setSpotifyLinked] = useState(false)
+
+  const skillNodes = useSkillStore((s) => s.nodes)
+  const loadSkills = useSkillStore((s) => s.loadFromDb)
+  const weakPulseNode = useMemo(() => pickWeakAreaPulseNode(skillNodes), [skillNodes])
+
+  const currentPlan = usePlanStore((s) => s.currentPlan)
+  const planSlotIndex = usePlanStore((s) => s.currentSlotIndex)
+
+  const planProgressFraction = useMemo(() => {
+    if (!practicePlan?.slots?.length || !currentPlan?.slots?.length) return 0
+    if (currentPlan.slots.length !== practicePlan.slots.length) return 0
+    const a = currentPlan.slots[0]?.lesson_ref ?? currentPlan.slots[0]?.title ?? ''
+    const b = practicePlan.slots[0]?.lesson_ref ?? practicePlan.slots[0]?.title ?? ''
+    if (a !== b) return 0
+    return Math.min(1, planSlotIndex / Math.max(1, currentPlan.slots.length))
+  }, [practicePlan, currentPlan, planSlotIndex])
 
   const refresh = useCallback(() => {
     setLoadError(false)
     setDrillLatestError(null)
-    void getHomeSuggestion()
-      .then((s) => {
-        setSuggestion(s)
+    setPracticePlanStartError(null)
+    setPracticePlanLoading(true)
+    void Promise.all([
+      getHomeSuggestion(),
+      listSessionsJournal(),
+      listLessonsJournal(),
+      getAllSkillNodes(),
+      getAppPref(PREF_TASTE_PROFILE_JSON),
+      getAppPref(PREF_SPOTIFY_TASTE_PROFILE_JSON),
+    ])
+      .then(async ([homeSuggestion, sessions, lessons, skillRows, tasteRaw, spotifyRaw]) => {
+        setSuggestion(homeSuggestion)
+        setSessionsLog(sessions)
         setLoadError(false)
+        setSpotifyLinked(spotifyTasteLooksPresent(spotifyRaw))
+
+        await useSkillStore.getState().loadFromDb()
+
+        if (homeSuggestion?.kind === 'cold_start') {
+          setPracticePlan(null)
+          setPracticePlanLoading(false)
+          return
+        }
+
+        const planState = usePlanStore.getState()
+        const cachedPreview = planState.homePreviewPlan
+        const hasMultiLessonLibrary = lessons.length >= 2
+        const cachedIsFullSequencerPlan = (cachedPreview?.slots?.length ?? 0) === 4
+        if (
+          cachedPreview?.slots?.length &&
+          !planState.isHomePreviewStale() &&
+          (!hasMultiLessonLibrary || cachedIsFullSequencerPlan)
+        ) {
+          setPracticePlan(cachedPreview)
+          setPracticePlanLoading(false)
+          return
+        }
+
+        try {
+          const taste = parseTasteProfileJson(tasteRaw)
+          const learningCtx = await loadLearningContextFromPrefs()
+          const profile = buildPlayerProfileFromSkillNodes(skillRows, taste, learningCtx)
+          const libraryLessons = (
+            await Promise.all(lessons.map((l) => getLessonByJobId(l.job_id)))
+          ).filter((row): row is NonNullable<typeof row> => row != null)
+          const plan = await generatePracticePlan({
+            player_profile: profile,
+            job_ids: lessons.map((l) => l.job_id),
+            duration_minutes: 25,
+            library_lessons: libraryLessons,
+          })
+          const next = plan.slots?.length ? plan : null
+          setPracticePlan(next)
+          if (next) {
+            usePlanStore.getState().setHomePreviewPlan(next)
+          }
+        } catch (e) {
+          console.warn('[home] practice plan unavailable', e)
+          setPracticePlan(null)
+        } finally {
+          setPracticePlanLoading(false)
+        }
       })
       .catch((e) => {
-        console.error('[home] getHomeSuggestion failed', e)
+        console.error('[home] refresh failed', e)
         setLoadError(true)
+        setSessionsLog([])
+        setPracticePlanLoading(false)
+        setSpotifyLinked(false)
       })
-    void listSessionsJournal()
-      .then((rows) => setRecentSessions(rows.slice(0, 2)))
-      .catch(() => setRecentSessions([]))
   }, [])
 
   useFocusEffect(
@@ -86,8 +207,40 @@ export default function HomeScreen() {
   )
 
   const goAnalyze = () => router.push('/add-song')
-  const goSession = () => router.push(sessionHref('listen'))
+  const goSession = () => router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))
   const goLibrary = () => router.push('/library')
+
+  const onStartDemoLesson = useCallback(() => {
+    if (demoBusy) return
+    setDemoBusy(true)
+    void startDemoSession(router, saveLesson, setLessonSectionIndex)
+      .then(() => refresh())
+      .catch((e) => console.warn('[home] demo session', e))
+      .finally(() => setDemoBusy(false))
+  }, [demoBusy, refresh, router, saveLesson, setLessonSectionIndex])
+
+  const onConnectSpotify = useCallback(() => {
+    if (spotifyBusy) return
+    setSpotifyBusy(true)
+    void runSpotifyConnect({
+      onProfile: () =>
+        void loadSkills().then(() => {
+          void refresh()
+        }),
+    }).finally(() => setSpotifyBusy(false))
+  }, [spotifyBusy, refresh, loadSkills])
+
+  useEffect(() => {
+    if (suggestion?.kind !== 'cold_start') {
+      setTasteSongHints([])
+      return
+    }
+    void getAppPref(PREF_TASTE_PROFILE_JSON).then((raw) => {
+      const t = parseTasteProfileJson(raw)
+      const list = t?.song_candidates?.filter((s) => typeof s === 'string' && s.trim()) ?? []
+      setTasteSongHints(list.slice(0, 8))
+    })
+  }, [suggestion])
 
   const recentItems = useMemo(() => {
     const out: Array<{
@@ -99,7 +252,9 @@ export default function HomeScreen() {
     }> = []
     const analyzedTitle = lesson?.song_title?.trim()
     if (analyzedTitle) {
-      const duplicate = recentSessions.some((s) => s.song_title?.trim().toLowerCase() === analyzedTitle.toLowerCase())
+      const duplicate = sessionsLog
+        .slice(0, 2)
+        .some((s) => s.song_title?.trim().toLowerCase() === analyzedTitle.toLowerCase())
       if (!duplicate) {
         out.push({
           id: `analysis-${lesson?.job_id ?? analyzedTitle}`,
@@ -115,7 +270,7 @@ export default function HomeScreen() {
         })
       }
     }
-    for (const session of recentSessions) {
+    for (const session of sessionsLog.slice(0, 2)) {
       if (out.length >= 2) break
       out.push({
         id: session.id,
@@ -126,7 +281,7 @@ export default function HomeScreen() {
       })
     }
     return out
-  }, [goSession, lesson?.job_id, lesson?.song_title, lesson?.style_label, recentSessions, router])
+  }, [goSession, lesson?.job_id, lesson?.song_title, lesson?.style_label, sessionsLog, router])
 
   const drillLatestSavedLick = useCallback(async () => {
     if (suggestion?.kind !== 'library_saved') return
@@ -145,12 +300,31 @@ export default function HomeScreen() {
     }
   }, [router, saveLesson, setLessonSectionIndex, suggestion])
 
+  const recommendedMinutes = useMemo(() => {
+    if (practicePlan?.total_duration_seconds) {
+      return Math.max(1, Math.round(practicePlan.total_duration_seconds / 60))
+    }
+    return 15
+  }, [practicePlan])
+
   const durationBadge = (
     <View className="flex-row items-center gap-1 rounded-lg border border-wood-700 bg-wood-800/50 px-3 py-1.5">
       <Clock color="#8B7D6B" size={16} strokeWidth={2} />
-      <Text className="font-sans text-sm text-muted-brown">~15 min</Text>
+      <Text className="font-sans text-sm text-muted-brown">~{recommendedMinutes} min</Text>
     </View>
   )
+
+  const onStartPracticePlan = useCallback(() => {
+    if (!practicePlan?.slots?.length) return
+    setPracticePlanStartError(null)
+    setPlanStartBusy(true)
+    void startPracticePlanFromHome(router, { saveLesson, setLessonSectionIndex }, practicePlan)
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : 'Could not start this plan.'
+        setPracticePlanStartError(msg)
+      })
+      .finally(() => setPlanStartBusy(false))
+  }, [practicePlan, router, saveLesson, setLessonSectionIndex])
 
   return (
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
@@ -166,13 +340,13 @@ export default function HomeScreen() {
             <Text className="font-sans text-base text-muted-brown">Ready to play?</Text>
           </View>
 
-          <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Recommended session</Text>
+          <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Your practice path</Text>
 
           <LinearGradient
             colors={['rgba(74, 55, 40, 0.98)', 'rgba(44, 24, 16, 0.99)']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            className="relative mb-12 overflow-hidden rounded-2xl border border-wood-600/50 shadow-soft-wood"
+            className="relative mb-6 overflow-hidden rounded-2xl border border-wood-600/50 shadow-soft-wood"
             style={{ elevation: 8 }}
           >
             <View className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-amber-accent/10" />
@@ -193,6 +367,131 @@ export default function HomeScreen() {
                 ) : (
                   <Text className="font-sans text-sm text-cream">Loading suggestion…</Text>
                 )
+              ) : suggestion.kind === 'cold_start' ? (
+                <View className="w-full max-w-md self-center">
+                  {/* Matches onboarding welcome: icon, headline scale, readable measure */}
+                  <View className="items-center">
+                    <View className="h-16 w-16 items-center justify-center rounded-full border border-amber-accent/50">
+                      <Music color={colors.amber.accent} size={28} strokeWidth={1.5} />
+                    </View>
+                    <Text className="mt-6 text-center font-serif text-2xl text-cream">Kick off your practice</Text>
+                    <Text className="mt-4 max-w-sm text-center font-sans text-base leading-7 text-muted-brown">
+                      Let's get your playing faster. Take a quick style quiz, try a demo session, add a song, or connect Spotify—whatever gets you playing first.
+                    </Text>
+                  </View>
+
+                  {/* {tasteSongHints.length > 0 ? (
+                    <View className="mt-6 w-full">
+                      <Text className="mb-2 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
+                        Ideas for your style (add as lessons)
+                      </Text>
+                      <View className="gap-2">
+                        {tasteSongHints.map((hint) => (
+                          <Pressable
+                            key={hint}
+                            onPress={() =>
+                              void Linking.openURL(
+                                `https://www.youtube.com/results?search_query=${encodeURIComponent(hint)}`,
+                              )
+                            }
+                            className="rounded-lg border border-wood-600/40 bg-wood-800/25 px-3 py-2.5 active:opacity-90"
+                            accessibilityRole="button"
+                            accessibilityLabel={`Search YouTube for ${hint}`}
+                          >
+                            <Text className="font-sans text-sm text-cream">{hint}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      <Text className="mt-2 font-sans text-xs leading-5 text-muted-brown">
+                        Pick a result, copy the link, then use Add song to turn it into tabs in Harmoniq.
+                      </Text>
+                    </View>
+                  ) : null} */}
+
+                  <View className="mt-8 w-full">
+                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
+                      Get started
+                    </Text>
+                    <View className="gap-3">
+                      <AnimatedPressable
+                        onPress={() => router.push('/onboarding/taste-quiz')}
+                        haptic="medium"
+                        className="w-full flex-row items-center justify-center gap-2 rounded-lg bg-amber-accent px-4 py-3.5"
+                        accessibilityRole="button"
+                        accessibilityLabel="Open style quiz"
+                      >
+                        <ClipboardList color="#2C1810" size={20} strokeWidth={2} />
+                        <Text className="font-sans-medium text-base text-wood-900">Style quiz</Text>
+                      </AnimatedPressable>
+                      <AnimatedPressable
+                        onPress={() => void onStartDemoLesson()}
+                        disabled={demoBusy}
+                        haptic="light"
+                        className="w-full flex-row items-center justify-center gap-2 rounded-lg border border-wood-600 bg-wood-800/60 px-4 py-3 disabled:opacity-50"
+                        accessibilityRole="button"
+                        accessibilityLabel="Play demo session"
+                      >
+                        <Play color={colors.amber.light} size={20} fill={colors.amber.light} strokeWidth={0} />
+                        <Text className="font-sans-medium text-sm text-cream">
+                          {demoBusy ? 'Opening…' : 'Play demo session'}
+                        </Text>
+                      </AnimatedPressable>
+                    </View>
+                  </View>
+
+                  <View className="mt-7 w-full border-t border-wood-600/45 pt-5">
+                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
+                      More ways to begin
+                    </Text>
+                    <View className="gap-2">
+                      <Pressable
+                        onPress={goAnalyze}
+                        className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
+                        accessibilityRole="button"
+                        accessibilityLabel="Add a song"
+                      >
+                        <Plus color={colors.amber.light} size={20} strokeWidth={2} />
+                        <Text className="flex-1 font-sans-medium text-sm text-cream">Add a song</Text>
+                      </Pressable>
+                      {spotifyLinked ? (
+                        <Pressable
+                          onPress={() => router.push('/(tabs)/settings')}
+                          className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
+                          accessibilityRole="button"
+                          accessibilityLabel="Spotify connected, open Settings"
+                        >
+                          <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
+                          <Text className="flex-1 font-sans-medium text-sm text-cream">Spotify · Connected</Text>
+                          <ChevronRight color={colors.amber.light} size={20} strokeWidth={2} />
+                        </Pressable>
+                      ) : (
+                        <Pressable
+                          onPress={onConnectSpotify}
+                          disabled={spotifyBusy}
+                          className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90 disabled:opacity-50"
+                          accessibilityRole="button"
+                          accessibilityLabel="Connect to Spotify"
+                        >
+                          <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
+                          <Text className="flex-1 font-sans-medium text-sm text-cream">
+                            {spotifyBusy ? 'Connecting…' : 'Connect to Spotify'}
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              ) : practicePlanLoading ? (
+                <TodaysPlanCardLoading />
+              ) : practicePlan?.slots?.length ? (
+                <TodaysPlanCard
+                  plan={practicePlan}
+                  sessionMinutes={recommendedMinutes}
+                  progressFraction={planProgressFraction}
+                  onStart={() => void onStartPracticePlan()}
+                  busy={planStartBusy}
+                  errorText={practicePlanStartError}
+                />
               ) : suggestion.kind === 'active_lesson' ? (
                 <>
                   <View className="mb-6 flex-row items-start justify-between">
@@ -218,30 +517,16 @@ export default function HomeScreen() {
                   <Text className="mb-4 font-sans text-xs leading-5 text-muted-brown">
                     Full loop: Listen → Study → Slow → Play → Review (with stems). Use Library tab for saved licks only.
                   </Text>
-                  <Pressable
+                  <AnimatedPressable
                     onPress={goSession}
+                    haptic="medium"
                     className="flex-row items-center justify-center gap-2 self-stretch rounded-xl bg-amber-accent px-8 py-3.5 shadow-md sm:self-start"
                     accessibilityRole="button"
                     accessibilityLabel="Start session at Listen"
                   >
                     <Play color="#2C1810" size={20} fill="#2C1810" strokeWidth={0} />
                     <Text className="font-sans-medium text-base text-wood-900">Start session</Text>
-                  </Pressable>
-                </>
-              ) : suggestion.kind === 'cold_start' ? (
-                <>
-                  <View className="mb-6">
-                    <Text className="font-serif text-2xl text-cream">Add your first song</Text>
-                  </View>
-                  <Pressable
-                    onPress={goAnalyze}
-                    className="flex-row items-center justify-center gap-2 self-stretch rounded-xl bg-amber-accent px-8 py-3.5 shadow-md sm:self-start"
-                    accessibilityRole="button"
-                    accessibilityLabel="Add a song"
-                  >
-                    <Plus color="#2C1810" size={20} strokeWidth={2} />
-                    <Text className="font-sans-medium text-base text-wood-900">Add Song</Text>
-                  </Pressable>
+                  </AnimatedPressable>
                 </>
               ) : suggestion.kind === 'library_saved' ? (
                 <>
@@ -267,15 +552,16 @@ export default function HomeScreen() {
                   {drillLatestError ? (
                     <Text className="mb-3 font-sans text-sm text-danger">{drillLatestError}</Text>
                   ) : null}
-                  <Pressable
+                  <AnimatedPressable
                     onPress={() => void drillLatestSavedLick()}
+                    haptic="medium"
                     className="mb-3 flex-row items-center justify-center gap-2 self-stretch rounded-xl bg-amber-accent px-8 py-3.5 shadow-md sm:self-start"
                     accessibilityRole="button"
                     accessibilityLabel="Drill latest saved lick"
                   >
                     <Play color="#2C1810" size={20} fill="#2C1810" strokeWidth={0} />
                     <Text className="font-sans-medium text-base text-wood-900">Start Session</Text>
-                  </Pressable>
+                  </AnimatedPressable>
                   {/* <Pressable
                     onPress={goAnalyze}
                     className="self-stretch rounded-xl border border-wood-600/50 bg-cream-dark/15 px-4 py-3 sm:self-start"
@@ -311,19 +597,27 @@ export default function HomeScreen() {
                   <Text className="mb-4 font-sans text-xs leading-5 text-muted-brown">
                     Full loop: Listen → Study → Slow → Play → Review (with stems). Use Library tab for saved licks only.
                   </Text>
-                  <Pressable
+                  <AnimatedPressable
                     onPress={goSession}
+                    haptic="medium"
                     className="flex-row items-center justify-center gap-2 self-stretch rounded-xl bg-amber-accent px-8 py-3.5 shadow-md sm:self-start"
                     accessibilityRole="button"
                     accessibilityLabel="Start session at Listen"
                   >
                     <Play color="#2C1810" size={20} fill="#2C1810" strokeWidth={0} />
                     <Text className="font-sans-medium text-base text-wood-900">Start session</Text>
-                  </Pressable>
+                  </AnimatedPressable>
                 </>
               )}
             </View>
           </LinearGradient>
+
+          {suggestion && suggestion.kind !== 'cold_start' && weakPulseNode ? <WeakAreaPulse node={weakPulseNode} /> : null}
+          {suggestion && suggestion.kind !== 'cold_start' ? (
+            <View className="mb-8">
+              <RecentProgress sessions={sessionsLog.slice(0, 3)} />
+            </View>
+          ) : null}
 
           <View className="flex-col gap-8">
             <View>

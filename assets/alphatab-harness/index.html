@@ -147,9 +147,21 @@
       externalAudio.crossOrigin = 'anonymous'
       /** Mirrors RN stem mixer rate — AlphaTab `playbackSpeed` must match for follow-scroll at slow speeds. */
       var stemPlaybackRate = 1
-      /** GeneralUser — pinned jsDelivr; same upstream as `assets/soundfonts/guitar.sf2` (SOURCES.md, Commit 47). */
-      var SOUNDFONT_URL =
-        'https://cdn.jsdelivr.net/gh/ad-si/GeneralUser@f553a9866915130d5fffaa01e457ad53c60bef82/GeneralUser.sf2'
+      /**
+       * Pinned banks — keep in sync with `src/audio/soundfontProfiles.ts` and `assets/soundfonts/SOURCES.md` (Commit 60).
+       * @type {Record<string, string>}
+       */
+      var SOUNDFONT_PROFILE_URLS = {
+        general_user:
+          'https://cdn.jsdelivr.net/gh/ad-si/GeneralUser@f553a9866915130d5fffaa01e457ad53c60bef82/GeneralUser.sf2',
+        fluid_r3_mono:
+          'https://cdn.jsdelivr.net/gh/musescore/MuseScore@master/share/sound/FluidR3Mono_GM.sf3',
+      }
+      var DEFAULT_SOUNDFONT_PROFILE_ID = 'general_user'
+      var SOUNDFONT_URL = SOUNDFONT_PROFILE_URLS[DEFAULT_SOUNDFONT_PROFILE_ID]
+      var currentSoundFontProfileId = DEFAULT_SOUNDFONT_PROFILE_ID
+      var pendingSoundFontTimeout = null
+      var soundFontCompletionProfileId = DEFAULT_SOUNDFONT_PROFILE_ID
 
       var layoutHorizontal =
         alphaTab.LayoutMode && alphaTab.LayoutMode.Horizontal !== undefined
@@ -193,6 +205,136 @@
           scrollElement: container,
         },
       })
+
+      function scheduleSoundFontFallback(reasonMsg) {
+        postOut({
+          type: 'soundFontLoad',
+          status: 'error',
+          profileId: soundFontCompletionProfileId,
+          message: reasonMsg ? reasonMsg : 'SoundFont load failed',
+        })
+        if (soundFontCompletionProfileId !== DEFAULT_SOUNDFONT_PROFILE_ID) {
+          applySoundFontProfile(DEFAULT_SOUNDFONT_PROFILE_ID, true)
+        }
+      }
+
+      function applySoundFontProfile(profileId, isQuietFallback) {
+        var url = SOUNDFONT_PROFILE_URLS[profileId]
+        if (!url) {
+          postOut({
+            type: 'soundFontLoad',
+            status: 'error',
+            profileId: profileId,
+            message: 'Unknown SoundFont profile',
+          })
+          return
+        }
+        soundFontCompletionProfileId = profileId
+        currentSoundFontProfileId = profileId
+        if (!isQuietFallback) {
+          postOut({ type: 'soundFontLoad', status: 'loading', profileId: profileId })
+        }
+        if (pendingSoundFontTimeout) clearTimeout(pendingSoundFontTimeout)
+        pendingSoundFontTimeout = setTimeout(function () {
+          pendingSoundFontTimeout = null
+          scheduleSoundFontFallback('SoundFont load timed out')
+        }, 25000)
+        try {
+          api.loadSoundFontFromUrl(url, false)
+        } catch (eSf) {
+          scheduleSoundFontFallback(eSf && eSf.message ? eSf.message : 'loadSoundFontFromUrl failed')
+        }
+      }
+
+      function wireHarnessSoundFontEvents() {
+        if (api.soundFontLoad && typeof api.soundFontLoad.on === 'function') {
+          api.soundFontLoad.on(function (e) {
+            postOut({
+              type: 'soundFontLoad',
+              status: 'loading',
+              profileId: soundFontCompletionProfileId,
+              loaded: typeof e.loaded === 'number' ? e.loaded : undefined,
+              total: typeof e.total === 'number' ? e.total : undefined,
+            })
+          })
+        }
+        if (api.soundFontLoaded && typeof api.soundFontLoaded.on === 'function') {
+          api.soundFontLoaded.on(function () {
+            if (pendingSoundFontTimeout) {
+              clearTimeout(pendingSoundFontTimeout)
+              pendingSoundFontTimeout = null
+            }
+            postOut({
+              type: 'soundFontLoad',
+              status: 'loaded',
+              profileId: soundFontCompletionProfileId,
+            })
+          })
+        }
+        if (api.soundFontLoadFailed && typeof api.soundFontLoadFailed.on === 'function') {
+          api.soundFontLoadFailed.on(function (err) {
+            var m = err && err.message ? err.message : 'SoundFont load failed'
+            scheduleSoundFontFallback(m)
+          })
+        }
+      }
+
+      wireHarnessSoundFontEvents()
+
+      /** Commit 61 — runtime diagnostics (5s windows); thresholds match docs/MANUAL_QA.md */
+      var runtimeDiagEnabled = false
+      var runtimeDiagInterval = null
+      var RD_WINDOW_MS = 5000
+      var rdWindowNote = 0
+      var rdWindowRender = 0
+      var rdDriftSum = 0
+      var rdDriftN = 0
+
+      function resetRuntimeDiagWindow() {
+        rdWindowNote = 0
+        rdWindowRender = 0
+        rdDriftSum = 0
+        rdDriftN = 0
+      }
+
+      function bumpRuntimeDiagNote() {
+        if (runtimeDiagEnabled) rdWindowNote += 1
+      }
+
+      function emitRuntimeDiagWindow() {
+        if (!runtimeDiagEnabled) return
+        var wMs = RD_WINDOW_MS
+        var sec = wMs / 1000
+        var hz = rdWindowNote / sec
+        var rps = rdWindowRender / sec
+        var drift = rdDriftN > 0 ? rdDriftSum / rdDriftN : null
+        var breaches = []
+        if (drift !== null && drift > 80) breaches.push('DRIFT_MS')
+        if (hz > 36) breaches.push('NOTE_EVENT_HZ')
+        if (rps > 90) breaches.push('RENDER_CHURN')
+        postOut({
+          type: 'runtimeDiagnostics',
+          windowMs: wMs,
+          driftMs: drift,
+          noteEventHz: hz,
+          renderFps: rps,
+          breachFlags: breaches,
+        })
+        resetRuntimeDiagWindow()
+      }
+
+      function setRuntimeDiagEnabled(on) {
+        runtimeDiagEnabled = !!on
+        if (runtimeDiagInterval) {
+          clearInterval(runtimeDiagInterval)
+          runtimeDiagInterval = null
+        }
+        if (runtimeDiagEnabled) {
+          resetRuntimeDiagWindow()
+          runtimeDiagInterval = setInterval(emitRuntimeDiagWindow, RD_WINDOW_MS)
+        }
+      }
+
       var currentTranspose = 0
       var lastNoteEventAt = 0
       /** Keep equal to `ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS` in src/constants/alphaTabBridge.ts */
@@ -201,6 +343,107 @@
       var pendingNoteEventTimer = null
       var loopBracketEl = null
       var loopState = null
+      /** Dedup static `songDetails` posts; reset on each `setScore`. */
+      var lastSongDetailsJson = ''
+      var lastSongPlaybackBar = -1
+      /** Sentinel so first real section compares unequal to initial. */
+      var lastSongPlaybackLabel = '\u0000'
+
+      function extractSongMeta(score) {
+        var out = {}
+        if (!score) return out
+        try {
+          if (typeof score.title === 'string' && score.title.trim()) out.title = score.title.trim()
+          if (typeof score.artist === 'string' && score.artist.trim()) out.artist = score.artist.trim()
+          if (typeof score.album === 'string' && score.album.trim()) out.album = score.album.trim()
+          if (typeof score.subTitle === 'string' && score.subTitle.trim()) out.subTitle = score.subTitle.trim()
+          if (typeof score.words === 'string' && score.words.trim()) out.words = score.words.trim()
+          if (typeof score.music === 'string' && score.music.trim()) out.music = score.music.trim()
+          if (typeof score.tab === 'string' && score.tab.trim()) out.tab = score.tab.trim()
+          if (typeof score.tempo === 'number' && Number.isFinite(score.tempo) && score.tempo > 0) {
+            out.tempoBpm = score.tempo
+          }
+          var mbs = score.masterBars
+          var markers = []
+          if (Array.isArray(mbs)) {
+            for (var bi = 0; bi < mbs.length; bi++) {
+              var mb = mbs[bi]
+              if (!mb || !mb.section) continue
+              var tx = mb.section.text
+              if (typeof tx === 'string' && tx.trim()) {
+                markers.push({ startMasterBarIndex: bi, label: tx.trim() })
+              }
+            }
+          }
+          if (markers.length) out.sectionMarkers = markers
+        } catch (eMeta) {}
+        return out
+      }
+
+      function resolveMasterBarIndexFromTick(tick) {
+        try {
+          var tc = api.tickCache
+          if (!tc || typeof tc.findBeat !== 'function') return null
+          var beat = tc.findBeat(tick)
+          if (!beat) return null
+          var voice = beat.voice
+          if (!voice || !voice.bar) return null
+          var mb = voice.bar.masterBar
+          if (!mb || typeof mb.index !== 'number') return null
+          return mb.index
+        } catch (e) {
+          return null
+        }
+      }
+
+      function sectionLabelAtBar(score, idx) {
+        var mbs = score.masterBars
+        if (!Array.isArray(mbs) || mbs.length === 0) return null
+        var cap = Math.min(Math.max(0, idx), mbs.length - 1)
+        var label = null
+        for (var i = 0; i <= cap; i++) {
+          var mb = mbs[i]
+          if (mb && mb.section && typeof mb.section.text === 'string') {
+            var t = mb.section.text.trim()
+            if (t) label = t
+          }
+        }
+        return label
+      }
+
+      function maybePostSongPlayback() {
+        var score = api.score
+        if (!score || !Array.isArray(score.masterBars)) return
+        var tick =
+          typeof api.tickPosition === 'number' && Number.isFinite(api.tickPosition) ? api.tickPosition : 0
+        var mbIdx = resolveMasterBarIndexFromTick(tick)
+        if (mbIdx === null || mbIdx < 0) mbIdx = 0
+        var label = sectionLabelAtBar(score, mbIdx)
+        var labStr = label == null ? '' : String(label)
+        if (mbIdx === lastSongPlaybackBar && labStr === lastSongPlaybackLabel) return
+        lastSongPlaybackBar = mbIdx
+        lastSongPlaybackLabel = labStr
+        postOut({ type: 'songPlayback', masterBarIndex: mbIdx, sectionLabel: label })
+      }
+
+      function postSongDetailsPayload(opt) {
+        var meta = extractSongMeta(api.score)
+        var force = opt && opt.requestId
+        try {
+          var js = JSON.stringify(meta)
+          if (!force && js === lastSongDetailsJson) return
+          lastSongDetailsJson = js
+        } catch (eJ) {}
+        var payload = { type: 'songDetails', score: meta }
+        if (opt && typeof opt.requestId === 'string' && opt.requestId) payload.requestId = opt.requestId
+        postOut(payload)
+      }
+
+      function resetSongMetaForNewScore() {
+        lastSongDetailsJson = ''
+        lastSongPlaybackBar = -1
+        lastSongPlaybackLabel = '\u0000'
+      }
 
       function ensureLoopBracket() {
         if (loopBracketEl && loopBracketEl.parentNode === container) return
@@ -381,6 +624,7 @@
         } catch (e) {
           postOut({ type: 'error', message: (e && e.message) ? e.message : 'updatePosition failed' })
         }
+        maybePostSongPlayback()
       }
 
       function wireExternalMediaHandler() {
@@ -414,6 +658,7 @@
             } catch (e) {
               postOut({ type: 'error', message: (e && e.message) ? e.message : 'handler seekTo failed' })
             }
+            maybePostSongPlayback()
             postOut({ type: 'scoreSeek', positionMs: ms })
           },
           // Host calls api.play()/pause via setStemPlaybackActive; real audio is the stem mixer, not this element.
@@ -451,25 +696,6 @@
         }
       }
 
-      function preloadSoundFont() {
-        postOut({ type: 'soundFontLoad', status: 'loading' })
-        fetch(SOUNDFONT_URL)
-          .then(function (res) {
-            if (!res.ok) throw new Error('HTTP ' + res.status)
-            return res.arrayBuffer()
-          })
-          .then(function () {
-            postOut({ type: 'soundFontLoad', status: 'loaded' })
-          })
-          .catch(function (err) {
-            postOut({
-              type: 'soundFontLoad',
-              status: 'error',
-              message: (err && err.message) ? err.message : 'SoundFont load failed',
-            })
-          })
-      }
-
       function flushPendingNoteEventFromMidi() {
         pendingNoteEventTimer = null
         if (!pendingNoteEventPayload) return
@@ -477,6 +703,7 @@
         pendingNoteEventPayload = null
         lastNoteEventAt = Date.now()
         postOut(p)
+        bumpRuntimeDiagNote()
       }
 
       function emitNoteEventFromMidiEvent(evt) {
@@ -537,6 +764,7 @@
         pendingNoteEventPayload = null
         lastNoteEventAt = now
         postOut(payload)
+        bumpRuntimeDiagNote()
       }
 
       /** Score tap — no 31ms throttle (B4 applies to midiEventsPlayed only). Mirrors AlphaTabWeb.web.tsx. */
@@ -581,6 +809,7 @@
                 payload.hasExplicitTabPosition = true
               }
               postOut(payload)
+              bumpRuntimeDiagNote()
               return
             } catch (eTap) {
               /* try next */
@@ -605,6 +834,89 @@
           }
         })
         api.updateSettings()
+      }
+
+      /**
+       * Keep in sync with `src/session/tabThemePresets.ts` (Commit 56).
+       * Unknown preset names fall back to `study` in `normalizeHarmoniqPresetName`.
+       */
+      var HARMONIQ_TAB_PRESETS = {
+        listen: {
+          scale: 1.1,
+          stretchForce: 1,
+          colors: {
+            mainGlyphColor: '#F0DEB4',
+            secondaryGlyphColor: '#D4A574',
+            barSeparatorColor: '#5C4535',
+            scoreInfoColor: '#A08060',
+            staffLineColor: '#5C4535',
+            barNumberColor: '#8B7D6B',
+          },
+        },
+        study: {
+          scale: 1.1,
+          stretchForce: 1,
+          colors: {
+            mainGlyphColor: '#F0DEB4',
+            secondaryGlyphColor: '#D4A574',
+            barSeparatorColor: '#5C4535',
+            scoreInfoColor: '#A08060',
+            staffLineColor: '#5C4535',
+            barNumberColor: '#8B7D6B',
+          },
+        },
+        slow: {
+          scale: 1.12,
+          stretchForce: 1.02,
+          colors: {
+            mainGlyphColor: '#F7ECD4',
+            secondaryGlyphColor: '#D4A574',
+            barSeparatorColor: '#6E5644',
+            scoreInfoColor: '#A08060',
+            staffLineColor: '#5C4535',
+            barNumberColor: '#8B7D6B',
+          },
+        },
+        play: {
+          scale: 1.08,
+          stretchForce: 1,
+          colors: {
+            mainGlyphColor: '#FFF6E0',
+            secondaryGlyphColor: '#E8B86D',
+            barSeparatorColor: '#5C4535',
+            scoreInfoColor: '#A08060',
+            staffLineColor: '#5C4535',
+            barNumberColor: '#8B7D6B',
+          },
+        },
+      }
+
+      function normalizeHarmoniqPresetName(name) {
+        var s = String(name == null ? '' : name)
+          .trim()
+          .toLowerCase()
+        if (s === 'listen' || s === 'study' || s === 'slow' || s === 'play') return s
+        return 'study'
+      }
+
+      function applyRenderPreset(rawName) {
+        var key = normalizeHarmoniqPresetName(rawName)
+        var p = HARMONIQ_TAB_PRESETS[key] || HARMONIQ_TAB_PRESETS.study
+        try {
+          var res = api.settings.display.resources
+          var cols = p.colors
+          Object.keys(cols).forEach(function (k) {
+            if (Object.prototype.hasOwnProperty.call(cols, k) && cols[k]) {
+              res[k] = cols[k]
+            }
+          })
+          api.settings.display.scale = p.scale
+          api.settings.display.stretchForce = p.stretchForce
+          api.updateSettings()
+          postOut({ type: 'renderPresetApplied', presetName: key })
+        } catch (e) {
+          postOut({ type: 'error', message: e && e.message ? e.message : 'setRenderPreset failed' })
+        }
       }
 
       function applyTranspose(semitones) {
@@ -754,6 +1066,7 @@
 
         if (msg.type === 'setScore' && msg.gp5Base64) {
           try {
+            resetSongMetaForNewScore()
             var bytes = decodeBase64Strict(msg.gp5Base64)
             assertLikelyGpPayload(bytes)
             api.load(bytes.buffer)
@@ -790,6 +1103,7 @@
           } catch (e) {
             postOut({ type: 'error', message: (e && e.message) ? e.message : 'seekTo failed' })
           }
+          maybePostSongPlayback()
           return
         }
 
@@ -811,6 +1125,28 @@
           } catch (e) {
             postOut({ type: 'error', message: (e && e.message) ? e.message : 'syncTimelineMs failed' })
           }
+          if (runtimeDiagEnabled) {
+            try {
+              var tp = api.timePosition
+              if (typeof tp === 'number' && Number.isFinite(tp)) {
+                rdDriftSum += Math.abs(syncMs - tp)
+                rdDriftN += 1
+              }
+            } catch (eR) {
+              /* ignore */
+            }
+          }
+          maybePostSongPlayback()
+          return
+        }
+
+        if (msg.type === 'setRuntimeDiagnosticsEnabled' && typeof msg.enabled === 'boolean') {
+          setRuntimeDiagEnabled(msg.enabled)
+          return
+        }
+
+        if (msg.type === 'diagPing' && typeof msg.requestId === 'string' && typeof msg.t0 === 'number') {
+          postOut({ type: 'diagPong', requestId: msg.requestId, t0: msg.t0 })
           return
         }
 
@@ -829,6 +1165,30 @@
 
         if (msg.type === 'getPosition') {
           postOut({ type: 'position', positionMs: externalAudio.currentTime * 1000 })
+          return
+        }
+
+        if (msg.type === 'getSongDetails') {
+          var ridSd = typeof msg.requestId === 'string' ? msg.requestId : undefined
+          postSongDetailsPayload(ridSd ? { requestId: ridSd } : undefined)
+          return
+        }
+
+        if (msg.type === 'setRenderPreset') {
+          applyRenderPreset(msg.presetName)
+          return
+        }
+
+        if (msg.type === 'setSoundFontProfile' && typeof msg.profileId === 'string') {
+          var pid =
+            msg.profileId === 'fluid_r3_mono' || msg.profileId === 'general_user'
+              ? msg.profileId
+              : DEFAULT_SOUNDFONT_PROFILE_ID
+          if (pid === currentSoundFontProfileId) {
+            postOut({ type: 'soundFontLoad', status: 'loaded', profileId: pid })
+          } else {
+            applySoundFontProfile(pid, false)
+          }
           return
         }
 
@@ -889,11 +1249,13 @@
       /** First completed render — includes initial empty layout; later re-renders do not re-send. */
       var readyPosted = false
       api.renderFinished.on(function () {
+        if (runtimeDiagEnabled) rdWindowRender += 1
         layoutLoopBracket()
+        postSongDetailsPayload(undefined)
+        maybePostSongPlayback()
         if (readyPosted) return
         wireExternalMediaHandler()
         applyStemPlaybackSpeedToApi()
-        preloadSoundFont()
         readyPosted = true
         postOut({ type: 'ready' })
       })

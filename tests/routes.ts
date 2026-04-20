@@ -24,6 +24,7 @@ const MANUAL_ROUTE_OVERRIDES: RouteDefinition[] = [
   { path: "/onboarding/mic", source: "manual" },
   { path: "/onboarding/phrase/0", source: "manual", enabled: true },
   { path: "/onboarding/results", source: "manual" },
+  { path: "/session/tune", source: "manual" },
   { path: "/session/listen", source: "manual" },
   { path: "/session/study", source: "manual" },
   { path: "/session/slow", source: "manual" },

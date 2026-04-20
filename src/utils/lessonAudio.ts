@@ -1,4 +1,8 @@
+import { Image } from 'react-native'
+
 import { API_BASE_URL } from '@/src/config'
+import type { StemDefinition } from '@/src/audio/mixerTypes'
+import { bundledStemRefOrNull } from '@/src/demo/bundledStemRegistry'
 import type { LessonJSON } from '@/src/types'
 
 /** Prefer guitar, then same ordering as `ListenStemPanel` stem UI. */
@@ -34,6 +38,27 @@ export function lessonStemUrl(relPath: string): string {
   const rel = relPath.replace(/\\/g, '/').replace(/^\//, '')
   const q = encodeURIComponent(rel)
   return `${API_BASE_URL}/lesson-file?rel=${q}`
+}
+
+/** One stem slot for `StemMixer`: bundled asset or `/lesson-file` URL. */
+export function stemRelPathToDefinition(stemId: string, relPath: string): StemDefinition {
+  const ref = bundledStemRefOrNull(relPath)
+  if (ref != null) {
+    if (typeof ref === 'number') {
+      return { id: stemId, label: stemId, source: ref }
+    }
+    return { id: stemId, label: stemId, uri: ref }
+  }
+  return { id: stemId, label: stemId, uri: lessonStemUrl(relPath) }
+}
+
+/** AlphaTab external-media URL for bundled stems (Listen tab sync); otherwise null. */
+export function stemRelPathToPlaybackUri(relPath: string): string | null {
+  const ref = bundledStemRefOrNull(relPath)
+  if (ref == null) return null
+  if (typeof ref === 'string') return ref
+  const r = Image.resolveAssetSource(ref)
+  return typeof r?.uri === 'string' && r.uri.length > 0 ? r.uri : null
 }
 
 export function parseSectionRecord(section: Record<string, unknown> | undefined): {

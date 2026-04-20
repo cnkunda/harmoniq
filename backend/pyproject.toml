@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "setuptools>=65.0",  # pkg_resources (resampy/librosa); often missing on py3.12+ minimal venvs
+    "python-dotenv>=1.0.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "httpx>=0.27.0",
@@ -26,6 +27,7 @@ dependencies = [
     "torch==2.5.1",
     "torchaudio==2.5.1",
     "demucs>=4.0.1",
+    "mido>=1.3.3",
 ]
 
 # basic-pitch is part of the Harmoniq stack (README / PRIORITIES) but pins TensorFlow in a way

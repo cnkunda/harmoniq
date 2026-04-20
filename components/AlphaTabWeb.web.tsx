@@ -1,4 +1,3 @@
-import { Asset } from 'expo-asset'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
@@ -6,9 +5,30 @@ import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS } from '@/src/constants/alphaTabBridge'
 import { ALPHATAB_WEB_SURFACE_CSS } from '@/src/constants/alphaTabPlayerUi'
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
+import {
+  DEFAULT_TAB_RENDER_PRESET,
+  getTabRenderPreset,
+  type TabRenderPreset,
+} from '@/src/session/tabThemePresets'
 import { applyScaleDegreeHighlight, clearScaleDegreeHighlight } from '@/src/jam/alphaTabScaleHighlight'
+import { resolveBundledSoundFontUrlForProfile } from '@/src/audio/soundfontBundled'
+import {
+  DEFAULT_SOUNDFONT_PROFILE_ID,
+  isSoundFontProfileId,
+  SOUNDFONT_PROFILE_LOAD_TIMEOUT_MS,
+  type SoundFontProfileId,
+} from '@/src/audio/soundfontProfiles'
+import { persistLastSuccessfulSoundFontProfile } from '@/src/audio/soundfontPersistence'
+import { RUNTIME_DIAG_THRESHOLDS, RUNTIME_DIAG_WINDOW_MS } from '@/src/constants/alphaTabRuntimeDiag'
+import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
 import { base64ToUint8Array } from '@/src/utils/base64ToUint8Array'
-import type { AlphaTabSurfaceRef, NoteEventMessage, TabLoopBarRegion, TabThemeColors } from '@/types/tabMessage'
+import {
+  extractSongMetaFromScore,
+  resolveMasterBarIndexFromTick,
+  sectionLabelAtMasterBar,
+  type TickLookupApi,
+} from '@/src/session/alphatabSongMeta'
+import type { AlphaTabSurfaceRef, NoteEventMessage, SongScoreMeta, TabLoopBarRegion, TabThemeColors } from '@/types/tabMessage'
 
 import type { AlphaTabWebProps } from './AlphaTabWeb.types'
 
@@ -17,17 +37,6 @@ export type { AlphaTabWebProps } from './AlphaTabWeb.types'
 /** Pinned — match `assets/alphatab-harness/index.html` (PRIORITIES 0.4). */
 const ALPHATAB_PKG_VERSION = '1.6.1'
 const SCRIPT_SRC = `https://cdn.jsdelivr.net/npm/@coderline/alphatab@${ALPHATAB_PKG_VERSION}/dist/alphaTab.min.js`
-/** GeneralUser — same file as `assets/soundfonts/guitar.sf2` / `assets/soundfonts/SOURCES.md` (Commit 47). */
-const GENERAL_USER_SOUNDFONT = require('../assets/soundfonts/guitar.sf2') as number
-
-async function resolveGeneralUserSoundFontUrl(): Promise<string> {
-  const asset = Asset.fromModule(GENERAL_USER_SOUNDFONT)
-  await asset.downloadAsync()
-  const uri = asset.localUri ?? asset.uri
-  if (!uri) throw new Error('SoundFont asset has no URI')
-  return uri
-}
-
 type MasterBarBoundsLike = {
   visualBounds?: { x: number; y: number; w: number; h: number }
   realBounds?: { x: number; y: number; w: number; h: number }
@@ -42,12 +51,20 @@ type AlphaTabApiLike = {
   playbackSpeed?: number
   load: (buffer: ArrayBuffer) => void
   updateSettings: () => void
+  score?: { masterBars?: unknown[] }
+  tickCache?: { findBeat?: (tick: number) => unknown } | null
+  tickPosition?: number
   play?: () => boolean | void
   pause?: () => void
-  settings: { display: { resources: Record<string, string | undefined> } }
+  settings: {
+    display: {
+      resources: Record<string, string | undefined>
+      scale?: number
+      stretchForce?: number
+    }
+  }
   boundsLookup?: BoundsLookupLike | null
   renderer?: { boundsLookup?: BoundsLookupLike | null }
-  score?: { masterBars?: unknown[] }
   player?: {
     setExternalMediaHandler?: (handler: unknown) => void
     output?: {
@@ -59,7 +76,12 @@ type AlphaTabApiLike = {
   midiEventsPlayed?: { on?: (cb: (evt: unknown) => void) => void }
   error: { on: (cb: (err: unknown) => void) => void }
   renderFinished: { on: (cb: () => void) => void }
+  loadSoundFontFromUrl?: (url: string, append: boolean) => void
+  soundFontLoaded?: { on?: (cb: () => void) => void }
+  soundFontLoadFailed?: { on?: (cb: (e: unknown) => void) => void }
   destroy?: () => void
+  /** Score playback timeline (ms) — used for drift samples vs stem sync (Commit 61). */
+  timePosition?: number
 }
 
 function loadAlphaTabScript(): Promise<void> {
@@ -114,13 +136,32 @@ function applyStemPlaybackSpeed(api: AlphaTabApiLike, rate: number): void {
   }
 }
 
-function mergeResources(theme?: Partial<TabThemeColors>): Record<string, string> {
+function mergeResources(...partials: (Partial<TabThemeColors> | undefined)[]): Record<string, string> {
+  const base: TabThemeColors = { ...TAB_HARNESS_THEME }
+  for (const p of partials) {
+    if (!p) continue
+    Object.assign(base, p)
+  }
   const out: Record<string, string> = {}
-  const base = { ...TAB_HARNESS_THEME, ...theme }
   for (const [k, v] of Object.entries(base)) {
     if (v) out[k] = v
   }
   return out
+}
+
+function applyRenderPresetToApi(
+  api: AlphaTabApiLike,
+  preset: TabRenderPreset,
+  themeExtra?: Partial<TabThemeColors>,
+): void {
+  const res = api.settings.display.resources
+  const mergedColors = { ...preset.colors, ...themeExtra }
+  for (const [k, v] of Object.entries(mergedColors)) {
+    if (v) res[k] = v
+  }
+  api.settings.display.scale = preset.scale
+  api.settings.display.stretchForce = preset.stretchForce
+  api.updateSettings()
 }
 
 function bytesToAsciiPreview(bytes: Uint8Array, limit = 96): string {
@@ -145,7 +186,23 @@ function assertLikelyGpPayload(bytes: Uint8Array): void {
 
 export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
   function AlphaTabWeb(
-    { gp5Base64, audioSrc, transposeSemitones = 0, theme, style, onReady, onError, onNoteEvent, onScoreSeekMs },
+    {
+      gp5Base64,
+      prerenderArtifactUrl,
+      audioSrc,
+      transposeSemitones = 0,
+      soundFontProfile: soundFontProfileProp = DEFAULT_SOUNDFONT_PROFILE_ID,
+      renderPreset = DEFAULT_TAB_RENDER_PRESET,
+      theme,
+      style,
+      onReady,
+      onError,
+      onNoteEvent,
+      onScoreSeekMs,
+      onSongDetails,
+      onSongPlayback,
+      runtimeDiagnosticsEnabled = false,
+    },
     ref,
   ) {
     const hostRef = useRef<HTMLDivElement | null>(null)
@@ -168,6 +225,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const [engineError, setEngineError] = useState<string | null>(null)
     const [soundFontReady, setSoundFontReady] = useState(false)
     const [reloadKey, setReloadKey] = useState(0)
+    /** Server SVG overlay hidden after first client layout pass. */
+    const [tabFullyPainted, setTabFullyPainted] = useState(false)
+    const [prerenderMarkup, setPrerenderMarkup] = useState<string | null>(null)
     const lastNotePostMsRef = useRef(0)
     const pendingNoteRef = useRef<NoteEventMessage | null>(null)
     const noteFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -177,8 +237,53 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     onNoteEventRef.current = onNoteEvent
     const onScoreSeekMsRef = useRef(onScoreSeekMs)
     onScoreSeekMsRef.current = onScoreSeekMs
+    const appliedSoundFontProfileRef = useRef<SoundFontProfileId | null>(null)
+    const activeSoundFontProfileRef = useRef<SoundFontProfileId>(DEFAULT_SOUNDFONT_PROFILE_ID)
+    const webRuntimeDiagOnRef = useRef(false)
+    const webDiagNoteRef = useRef(0)
+    const webDiagRenderRef = useRef(0)
+    const webDiagDriftSumRef = useRef(0)
+    const webDiagDriftNRef = useRef(0)
+    const webDiagIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     const themeKey = useMemo(() => JSON.stringify(theme ?? {}), [theme])
+    const soundFontProfileResolved: SoundFontProfileId = isSoundFontProfileId(soundFontProfileProp)
+      ? soundFontProfileProp
+      : DEFAULT_SOUNDFONT_PROFILE_ID
+
+    useEffect(() => {
+      webRuntimeDiagOnRef.current = runtimeDiagnosticsEnabled
+    }, [runtimeDiagnosticsEnabled])
+
+    useEffect(() => {
+      setTabFullyPainted(false)
+    }, [gp5Base64, reloadKey])
+
+    useEffect(() => {
+      let cancelled = false
+      const url = prerenderArtifactUrl?.trim()
+      if (!url) {
+        setPrerenderMarkup(null)
+        return
+      }
+      void fetch(url)
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          return res.json() as Promise<{ partials?: Array<{ svg?: string }> }>
+        })
+        .then((data) => {
+          const parts = data.partials ?? []
+          const merged = parts.map((p) => p.svg ?? '').join('')
+          if (!cancelled && merged.trim()) setPrerenderMarkup(merged)
+          else if (!cancelled) setPrerenderMarkup(null)
+        })
+        .catch(() => {
+          if (!cancelled) setPrerenderMarkup(null)
+        })
+      return () => {
+        cancelled = true
+      }
+    }, [prerenderArtifactUrl])
 
     const applyThemePartial = useCallback((api: AlphaTabApiLike, colors: Partial<TabThemeColors>) => {
       const res = api.settings.display.resources
@@ -204,6 +309,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       if (!onNote || !p) return
       lastNotePostMsRef.current = Date.now()
       onNote(p)
+      if (webRuntimeDiagOnRef.current) webDiagNoteRef.current += 1
     }, [])
 
     const emitNoteEvent = useCallback(
@@ -266,11 +372,12 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         pendingNoteRef.current = null
         lastNotePostMsRef.current = now
         onNote(payload)
+        if (webRuntimeDiagOnRef.current) webDiagNoteRef.current += 1
       },
       [flushPendingNoteEvent],
     )
 
-    /** Score tap → fretboard (no midiEventsPlayed throttle — FEEL_REAL_QA B4 applies to playback stream only). */
+    /** Score tap → fretboard (no midiEventsPlayed throttle — MANUAL_QA ~33 Hz cap applies to playback stream only). */
     const emitNoteTapFromScore = useCallback((clientX: number, clientY: number) => {
       const onNote = onNoteEventRef.current
       const api = apiRef.current
@@ -326,6 +433,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             hasExplicitTabPosition: typeof fret === 'number' && typeof str === 'number' ? true : undefined,
             fromScoreTap: true,
           })
+          if (webRuntimeDiagOnRef.current) webDiagNoteRef.current += 1
           return
         } catch {
           /* try next API name */
@@ -480,6 +588,50 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       [layoutLoopBracket],
     )
 
+    const lastSongDetailsJsonRef = useRef('')
+    const lastSongPlaybackBarRef = useRef(-1)
+    const lastSongPlaybackLabelRef = useRef('\u0000')
+
+    const onSongDetailsRef = useRef(onSongDetails)
+    onSongDetailsRef.current = onSongDetails
+    const onSongPlaybackRef = useRef(onSongPlayback)
+    onSongPlaybackRef.current = onSongPlayback
+
+    const resetSongMetaRefs = useCallback(() => {
+      lastSongDetailsJsonRef.current = ''
+      lastSongPlaybackBarRef.current = -1
+      lastSongPlaybackLabelRef.current = '\u0000'
+    }, [])
+
+    const emitSongDetailsSnap = useCallback((opts?: { force?: boolean }) => {
+      const api = apiRef.current as { score?: unknown } | null
+      if (!api) return
+      const meta = extractSongMetaFromScore(api.score ?? null)
+      try {
+        const js = JSON.stringify(meta)
+        if (!opts?.force && js === lastSongDetailsJsonRef.current) return
+        lastSongDetailsJsonRef.current = js
+      } catch {
+        /* ignore */
+      }
+      onSongDetailsRef.current?.(meta)
+    }, [])
+
+    const emitSongPlaybackMaybe = useCallback(() => {
+      const api = apiRef.current as TickLookupApi & { score?: unknown }
+      if (!api?.score) return
+      const tick =
+        typeof api.tickPosition === 'number' && Number.isFinite(api.tickPosition) ? api.tickPosition : 0
+      let mbIdx = resolveMasterBarIndexFromTick(api, tick)
+      if (mbIdx === null || mbIdx < 0) mbIdx = 0
+      const label = sectionLabelAtMasterBar(api.score, mbIdx)
+      const labStr = label ?? ''
+      if (mbIdx === lastSongPlaybackBarRef.current && labStr === lastSongPlaybackLabelRef.current) return
+      lastSongPlaybackBarRef.current = mbIdx
+      lastSongPlaybackLabelRef.current = labStr
+      onSongPlaybackRef.current?.({ masterBarIndex: mbIdx, sectionLabel: label })
+    }, [])
+
     useImperativeHandle(
       ref,
       () => ({
@@ -509,6 +661,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           const pr = stemPlaybackRateRef.current
           if (audio) audio.currentTime = (ms * pr) / 1000
           api?.player?.output?.updatePosition?.(ms)
+          emitSongPlaybackMaybe()
           layoutLoopBracket()
         },
         scrollMasterBarIntoView: (barIndex: number) => {
@@ -521,7 +674,16 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         syncPlaybackTimelineMs: (positionMs: number) => {
           const api = apiRef.current
           if (!api) return
-          api.player?.output?.updatePosition?.(Math.max(0, positionMs))
+          const syncMs = Math.max(0, positionMs)
+          api.player?.output?.updatePosition?.(syncMs)
+          if (webRuntimeDiagOnRef.current) {
+            const tp = api.timePosition
+            if (typeof tp === 'number' && Number.isFinite(tp)) {
+              webDiagDriftSumRef.current += Math.abs(syncMs - tp)
+              webDiagDriftNRef.current += 1
+            }
+          }
+          emitSongPlaybackMaybe()
         },
         setStemPlaybackActive: (active: boolean) => {
           const api = apiRef.current
@@ -542,9 +704,33 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           const api = apiRef.current
           if (api) applyThemePartial(api, colors)
         },
+        setRenderPreset: (presetName: string) => {
+          const api = apiRef.current
+          if (!api) return
+          applyRenderPresetToApi(api, getTabRenderPreset(presetName), theme)
+        },
         setTranspose: (semitones: number) => {
           const api = apiRef.current
           if (api) applyTranspose(api, semitones)
+        },
+        setSoundFontProfile: (profileId: string) => {
+          const apiNow = apiRef.current
+          if (!apiNow?.loadSoundFontFromUrl) return
+          const id: SoundFontProfileId = isSoundFontProfileId(profileId) ? profileId : DEFAULT_SOUNDFONT_PROFILE_ID
+          appliedSoundFontProfileRef.current = id
+          activeSoundFontProfileRef.current = id
+          setSoundFontReady(false)
+          void resolveBundledSoundFontUrlForProfile(id)
+            .then((url) => {
+              apiNow.loadSoundFontFromUrl?.(url, false)
+            })
+            .catch(() => {
+              void resolveBundledSoundFontUrlForProfile(DEFAULT_SOUNDFONT_PROFILE_ID).then((fallbackUrl) => {
+                appliedSoundFontProfileRef.current = DEFAULT_SOUNDFONT_PROFILE_ID
+                activeSoundFontProfileRef.current = DEFAULT_SOUNDFONT_PROFILE_ID
+                apiNow.loadSoundFontFromUrl?.(fallbackUrl, false)
+              })
+            })
         },
         setLoopRegion: (region: TabLoopBarRegion | null) => {
           loopStateRef.current = region
@@ -559,9 +745,113 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           const api = apiRef.current
           clearScaleDegreeHighlight(api as Record<string, unknown>)
         },
+        getSongDetails: async (): Promise<SongScoreMeta | null> => {
+          const api = apiRef.current as { score?: unknown } | null
+          if (!api?.score) return null
+          return extractSongMetaFromScore(api.score)
+        },
       }),
-      [applyThemePartial, applyTranspose, layoutLoopBracket, scrollMasterBarIntoViewImpl],
+      [
+        applyThemePartial,
+        applyTranspose,
+        emitSongPlaybackMaybe,
+        layoutLoopBracket,
+        scrollMasterBarIntoViewImpl,
+        theme,
+      ],
     )
+
+    useEffect(() => {
+      if (!engineReady || typeof window === 'undefined') return
+      const api = apiRef.current
+      if (!api?.loadSoundFontFromUrl) return
+      if (appliedSoundFontProfileRef.current === soundFontProfileResolved) return
+
+      appliedSoundFontProfileRef.current = soundFontProfileResolved
+      activeSoundFontProfileRef.current = soundFontProfileResolved
+
+      let cancelledLocal = false
+      const tid = window.setTimeout(() => {
+        if (cancelledLocal || soundFontProfileResolved === DEFAULT_SOUNDFONT_PROFILE_ID) return
+        void resolveBundledSoundFontUrlForProfile(DEFAULT_SOUNDFONT_PROFILE_ID).then((fallbackUrl) => {
+          if (cancelledLocal || !apiRef.current?.loadSoundFontFromUrl) return
+          appliedSoundFontProfileRef.current = DEFAULT_SOUNDFONT_PROFILE_ID
+          activeSoundFontProfileRef.current = DEFAULT_SOUNDFONT_PROFILE_ID
+          apiRef.current.loadSoundFontFromUrl(fallbackUrl, false)
+          setEngineError((prev) => prev ?? 'SoundFont: switched to general_user (timeout)')
+        })
+      }, SOUNDFONT_PROFILE_LOAD_TIMEOUT_MS)
+
+      setSoundFontReady(false)
+      void resolveBundledSoundFontUrlForProfile(soundFontProfileResolved)
+        .then((url) => {
+          const a = apiRef.current
+          if (cancelledLocal || !a?.loadSoundFontFromUrl) return
+          a.loadSoundFontFromUrl(url, false)
+        })
+        .catch(() => {
+          void resolveBundledSoundFontUrlForProfile(DEFAULT_SOUNDFONT_PROFILE_ID).then((fallbackUrl) => {
+            if (cancelledLocal || !apiRef.current?.loadSoundFontFromUrl) return
+            appliedSoundFontProfileRef.current = DEFAULT_SOUNDFONT_PROFILE_ID
+            activeSoundFontProfileRef.current = DEFAULT_SOUNDFONT_PROFILE_ID
+            apiRef.current.loadSoundFontFromUrl(fallbackUrl, false)
+            setEngineError((prev) => prev ?? 'SoundFont: switched to general_user')
+          })
+        })
+
+      return () => {
+        cancelledLocal = true
+        window.clearTimeout(tid)
+      }
+    }, [engineReady, soundFontProfileResolved])
+
+    useEffect(() => {
+      if (!engineReady || typeof window === 'undefined') return
+      if (!runtimeDiagnosticsEnabled) {
+        if (webDiagIntervalRef.current != null) {
+          clearInterval(webDiagIntervalRef.current)
+          webDiagIntervalRef.current = null
+        }
+        return
+      }
+      const w = RUNTIME_DIAG_WINDOW_MS
+      webDiagIntervalRef.current = window.setInterval(() => {
+        const sec = w / 1000
+        const hz = webDiagNoteRef.current / sec
+        const rps = webDiagRenderRef.current / sec
+        const n = webDiagDriftNRef.current
+        const drift = n > 0 ? webDiagDriftSumRef.current / n : null
+        const breachFlags: string[] = []
+        if (drift != null && drift > RUNTIME_DIAG_THRESHOLDS.driftMsFail) breachFlags.push('DRIFT_MS')
+        if (hz > RUNTIME_DIAG_THRESHOLDS.noteEventHzFail) breachFlags.push('NOTE_EVENT_HZ')
+        if (rps > RUNTIME_DIAG_THRESHOLDS.renderFpsFail) breachFlags.push('RENDER_CHURN')
+        useAlphaTabRuntimeDiagStore.getState().ingestHarnessWindow({
+          windowMs: w,
+          driftMs: drift,
+          noteEventHz: hz,
+          renderFps: rps,
+          breachFlags,
+          source: 'web-dom',
+        })
+        webDiagNoteRef.current = 0
+        webDiagRenderRef.current = 0
+        webDiagDriftSumRef.current = 0
+        webDiagDriftNRef.current = 0
+      }, w)
+      return () => {
+        if (webDiagIntervalRef.current != null) {
+          clearInterval(webDiagIntervalRef.current)
+          webDiagIntervalRef.current = null
+        }
+      }
+    }, [engineReady, runtimeDiagnosticsEnabled])
+
+    useEffect(() => {
+      if (!engineReady) return
+      const api = apiRef.current
+      if (!api) return
+      applyRenderPresetToApi(api, getTabRenderPreset(renderPreset), theme)
+    }, [engineReady, renderPreset, themeKey])
 
     useEffect(() => {
       setMounted(true)
@@ -648,10 +938,11 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           const layoutHorizontal = tabNs?.LayoutMode?.Horizontal ?? 1
           const scrollFollow = tabNs?.ScrollMode?.OffScreen ?? 2
 
-          const soundFontUrl = await resolveGeneralUserSoundFontUrl()
+          const soundFontUrl = await resolveBundledSoundFontUrlForProfile(soundFontProfileResolved)
           if (cancelled) return
 
-          const resources = mergeResources(theme ?? {})
+          const preset = getTabRenderPreset(renderPreset)
+          const resources = mergeResources(preset.colors, theme)
           // Expo web / Metro: worker script URL resolution breaks (Invalid base URL) — render on main thread.
           const apiOptions = {
             core: {
@@ -661,9 +952,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             },
             display: {
               resources,
-              scale: 1.1,
+              scale: preset.scale,
               layoutMode: layoutHorizontal,
-              stretchForce: 1,
+              stretchForce: preset.stretchForce,
             },
             soundFont: soundFontUrl,
             notation: {
@@ -689,6 +980,30 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             return
           }
           apiRef.current = api
+
+          activeSoundFontProfileRef.current = soundFontProfileResolved
+          appliedSoundFontProfileRef.current = soundFontProfileResolved
+          api.soundFontLoaded?.on?.(() => {
+            if (cancelled) return
+            setSoundFontReady(true)
+            void persistLastSuccessfulSoundFontProfile(activeSoundFontProfileRef.current)
+          })
+          api.soundFontLoadFailed?.on?.((sfErr: unknown) => {
+            if (cancelled) return
+            const m =
+              sfErr && typeof sfErr === 'object' && 'message' in sfErr
+                ? String((sfErr as { message: unknown }).message)
+                : String(sfErr)
+            setEngineError((prev) => prev ?? `SoundFont: ${m || 'load failed'}`)
+            if (soundFontProfileResolved !== DEFAULT_SOUNDFONT_PROFILE_ID) {
+              void resolveBundledSoundFontUrlForProfile(DEFAULT_SOUNDFONT_PROFILE_ID).then((fallbackUrl) => {
+                if (cancelled || !apiRef.current?.loadSoundFontFromUrl) return
+                activeSoundFontProfileRef.current = DEFAULT_SOUNDFONT_PROFILE_ID
+                appliedSoundFontProfileRef.current = DEFAULT_SOUNDFONT_PROFILE_ID
+                apiRef.current.loadSoundFontFromUrl(fallbackUrl, false)
+              })
+            }
+          })
 
           /** https://alphatab.net/docs/guides/audio-video-sync — host pushes syncTimelineMs; play() no-op avoids double stem. */
           const getAudioEl = () => audioRef.current
@@ -734,6 +1049,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
                 const pr = stemPlaybackRateRef.current
                 a.currentTime = (ms * pr) / 1000
                 out?.updatePosition?.(ms)
+                emitSongPlaybackMaybe()
                 onScoreSeekMsRef.current?.(ms)
               },
               play: () => Promise.resolve(),
@@ -804,6 +1120,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           }
 
           api.renderFinished.on(() => {
+            if (webRuntimeDiagOnRef.current) webDiagRenderRef.current += 1
             // #region agent log
             if (!dbgRenderFinishedOnceRef.current) {
               dbgRenderFinishedOnceRef.current = true
@@ -823,6 +1140,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             }
             // #endregion
             layoutLoopBracket()
+            emitSongDetailsSnap()
+            emitSongPlaybackMaybe()
             if (!externalStemWired) {
               externalStemWired = true
               wireWebExternalStemHandler()
@@ -832,24 +1151,15 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
               readyPostedRef.current = true
               onReady?.()
             }
+            setTabFullyPainted(true)
           })
 
           setEngineReady(true)
-          void fetch(soundFontUrl)
-            .then((res) => {
-              if (!res.ok) throw new Error(`HTTP ${res.status}`)
-              return res.arrayBuffer()
-            })
-            .then(() => {
+          if (typeof window !== 'undefined') {
+            window.setTimeout(() => {
               if (!cancelled) setSoundFontReady(true)
-            })
-            .catch((err: unknown) => {
-              if (!cancelled) {
-                setSoundFontReady(true)
-                const m = err instanceof Error ? err.message : 'SoundFont load failed'
-                setEngineError((prev) => prev ?? `SoundFont: ${m}`)
-              }
-            })
+            }, 16_000)
+          }
         } catch (e) {
           if (!cancelled) {
             const msg = e instanceof Error ? e.message : 'AlphaTab init failed'
@@ -904,11 +1214,14 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         }
         loopBracketRef.current = null
         loopStateRef.current = null
+        appliedSoundFontProfileRef.current = null
         el.replaceChildren()
       }
     }, [
       emitNoteEvent,
       emitNoteTapFromScore,
+      emitSongDetailsSnap,
+      emitSongPlaybackMaybe,
       layoutLoopBracket,
       mounted,
       onError,
@@ -950,6 +1263,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           }),
         }).catch(() => {})
         // #endregion
+        resetSongMetaRefs()
         api.load(buf)
         // #region agent log
         fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
@@ -986,7 +1300,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         setEngineError(msg)
         onError?.(msg)
       }
-    }, [engineReady, gp5Base64, onError])
+    }, [engineReady, gp5Base64, onError, resetSongMetaRefs])
 
     useEffect(() => {
       if (!engineReady) return
@@ -1064,18 +1378,47 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
               Bottom strip is a sibling so inset isn’t drawn under the horizontal scrollbar track.
             */}
             <div
-              ref={hostRef}
-              className="harmoniq-alphatab-scroll"
               style={{
                 flex: 1,
                 minHeight: 0,
                 width: '100%',
-                backgroundColor: '#2B1D0E',
-                overflowX: 'auto',
-                overflowY: 'hidden',
                 position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
               }}
-            />
+            >
+              <div
+                ref={hostRef}
+                className="harmoniq-alphatab-scroll"
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  width: '100%',
+                  backgroundColor: '#2B1D0E',
+                  overflowX: 'auto',
+                  overflowY: 'hidden',
+                  position: 'relative',
+                }}
+              />
+              {prerenderMarkup && !tabFullyPainted ? (
+                <div
+                  className="harmoniq-prerender-svg"
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    overflow: 'auto',
+                    zIndex: 6,
+                    backgroundColor: '#2B1D0E',
+                    pointerEvents: 'none',
+                  }}
+                  // Trusted lesson artifact from Harmoniq backend only.
+                  dangerouslySetInnerHTML={{ __html: prerenderMarkup }}
+                />
+              ) : null}
+            </div>
             <div
               aria-hidden
               style={{

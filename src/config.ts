@@ -16,3 +16,11 @@ export const API_BASE_URL: string = (() => {
   }
   return 'http://localhost:8000'
 })()
+
+/** Commit 63: skip technique EMA persistence (tests / CI fast path). */
+export function isHarmoniqSkillMutationSkipped(): boolean {
+  if (typeof process === 'undefined' || !process.env) return false
+  return (
+    process.env.EXPO_PUBLIC_HARMONIQ_SKIP_SKILL_MUTATION === '1' || process.env.HARMONIQ_SKIP_SKILL_MUTATION === '1'
+  )
+}

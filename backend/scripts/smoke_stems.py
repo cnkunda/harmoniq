@@ -271,7 +271,7 @@ Dependencies:
     if len(args.inputs) < 2:
         print(
             "smoke_stems: warning: this gate is intended for ≥2 mixes (one easy, one dense per "
-            "docs/STEM_QUALITY_CHECKLIST.md); single-file runs are for quick debug only.",
+            "docs/MANUAL_QA.md — Stem separation gate); single-file runs are for quick debug only.",
             file=sys.stderr,
         )
 

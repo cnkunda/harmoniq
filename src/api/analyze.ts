@@ -1,6 +1,23 @@
 import { API_BASE_URL } from '@/src/config'
+import { getAppPref } from '@/src/db/client'
+import { PREF_EXPERIENCE_LEVEL, PREF_STYLE_FOCUS } from '@/src/db/schema'
 import type { SkillNodeRow } from '@/src/db/types'
-import type { AnalyzeJob, JamResult, LessonJSON, PlayerProfilePayload, ScoreResult } from '@/src/types'
+import { parseTechniqueRollJson, rollingSessionsWeak } from '@/src/session/skillMutator'
+import type {
+  AnalyzeJob,
+  CoachHydrationStatusPayload,
+  CurriculumSuggestResponse,
+  CurriculumSuggestion,
+  JamResult,
+  LearningContextPayload,
+  LessonJSON,
+  PlayerProfilePayload,
+  PracticePlanPayload,
+  QuizAnswersPayload,
+  ScoreResult,
+  SpotifyTasteProfile,
+  TasteProfilePayload,
+} from '@/src/types'
 
 export class ApiError extends Error {
   constructor(
@@ -12,6 +29,63 @@ export class ApiError extends Error {
   }
 }
 
+/** FastAPI `{ "detail": "..." | [...] }` → single-line message for banners. */
+export function parseFastApiDetail(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return 'Request failed'
+  try {
+    const j = JSON.parse(trimmed) as { detail?: unknown }
+    const d = j.detail
+    if (typeof d === 'string') return d
+    if (Array.isArray(d)) {
+      return d
+        .map((item) => {
+          if (typeof item === 'string') return item
+          if (item && typeof item === 'object' && 'msg' in item) {
+            return String((item as { msg?: unknown }).msg ?? JSON.stringify(item))
+          }
+          return JSON.stringify(item)
+        })
+        .join('; ')
+    }
+  } catch {
+    // not JSON
+  }
+  return trimmed
+}
+
+export type ExportFormat = 'midi' | 'musicxml' | 'pdf' | 'png'
+
+/** POST /export — returns blob + headers for filenames and MIME. */
+export async function submitExportJob(payload: {
+  gp5_base64: string
+  format: ExportFormat
+  title?: string | null
+}): Promise<{ blob: Blob; mimeType: string; contentDisposition: string | null }> {
+  const body: Record<string, unknown> = {
+    gp5_base64: payload.gp5_base64,
+    format: payload.format,
+  }
+  const t = typeof payload.title === 'string' ? payload.title.trim() : ''
+  if (t) body.title = t
+
+  const res = await fetch(`${API_BASE_URL}/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+  const blob = await res.blob()
+  return {
+    blob,
+    mimeType: res.headers.get('Content-Type') ?? 'application/octet-stream',
+    contentDisposition: res.headers.get('Content-Disposition'),
+  }
+}
+
 export class AnalyzePollCancelledError extends Error {
   constructor() {
     super('Analyze polling was cancelled')
@@ -19,13 +93,61 @@ export class AnalyzePollCancelledError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, init)
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new ApiError(res.status, body || res.statusText)
+/** Default timeout for JSON GET/POST (status polls, small payloads). */
+const DEFAULT_REQUEST_TIMEOUT_MS = 45_000
+/** Large multipart uploads to POST /analyze need a longer window than polling. */
+const ANALYZE_UPLOAD_TIMEOUT_MS = 120_000
+
+async function request<T>(path: string, init?: RequestInit, timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS): Promise<T> {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new ApiError(res.status, parseFastApiDetail(body) || body || res.statusText)
+    }
+    return res.json() as Promise<T>
+  } catch (e) {
+    if (e instanceof ApiError) throw e
+    const name = e instanceof Error ? e.name : ''
+    const msg = e instanceof Error ? e.message : String(e)
+    if (name === 'AbortError' || msg.toLowerCase().includes('aborted')) {
+      throw new ApiError(408, 'Request timed out. Check your connection and try again.')
+    }
+    throw e
+  } finally {
+    clearTimeout(timeoutId)
   }
-  return res.json() as Promise<T>
+}
+
+/** True when a status poll failed for a likely-transient reason — retry with backoff instead of failing the whole job. */
+export function isRecoverableAnalyzePollError(e: unknown): boolean {
+  if (e instanceof TypeError) return true
+  if (e instanceof ApiError) {
+    if (e.status === 408 || e.status === 429) return true
+    if (e.status === 502 || e.status === 503 || e.status === 504) return true
+    return false
+  }
+  if (e instanceof Error) {
+    const m = e.message.toLowerCase()
+    return m.includes('network') || m.includes('fetch') || m.includes('failed to load')
+  }
+  return false
+}
+
+export type PollAnalyzeOptions = {
+  /** Called before scheduling a backoff retry after a transient poll failure. */
+  onRecoverablePollError?: (info: { attempt: number; delayMs: number }) => void
+}
+
+const MAX_POLL_NETWORK_RETRIES = 12
+
+function pollBackoffDelayMs(attempt: number): number {
+  return Math.min(28_000, Math.round(600 * 1.65 ** Math.max(0, attempt - 1)))
 }
 
 const WEAK_AREA_BY_NODE_ID: Record<string, string> = {
@@ -36,26 +158,108 @@ const WEAK_AREA_BY_NODE_ID: Record<string, string> = {
   vibrato_control: 'vibrato',
 }
 
-/** Build optional player profile for analyze from persisted skill rows (commit 48). */
+/** Parse persisted `TasteProfile` JSON from `user_prefs` (commit 68). */
+export function parseTasteProfileJson(raw: string | null): TasteProfilePayload | null {
+  if (!raw || !raw.trim()) return null
+  try {
+    const o = JSON.parse(raw) as unknown
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return null
+    const rec = o as Record<string, unknown>
+    const style_label = typeof rec.style_label === 'string' ? rec.style_label.trim() : ''
+    const technique_affinity = Array.isArray(rec.technique_affinity)
+      ? rec.technique_affinity.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      : []
+    const bpm = rec.bpm_comfort_range
+    let bpm_comfort_range: [number, number] = [80, 120]
+    if (Array.isArray(bpm) && bpm.length === 2) {
+      const a = Number(bpm[0])
+      const b = Number(bpm[1])
+      if (Number.isFinite(a) && Number.isFinite(b)) bpm_comfort_range = [Math.round(a), Math.round(b)]
+    }
+    const song_candidates = Array.isArray(rec.song_candidates)
+      ? rec.song_candidates.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      : []
+    const src = rec.source
+    const source: TasteProfilePayload['source'] =
+      src === 'quiz' || src === 'manual' || src === 'spotify' ? src : 'spotify'
+    if (!style_label) return null
+    return {
+      style_label,
+      technique_affinity,
+      bpm_comfort_range,
+      song_candidates,
+      source,
+    }
+  } catch {
+    return null
+  }
+}
+
+function parseExperienceLevel(raw: string | null): 'beginner' | 'intermediate' | 'advanced' | undefined {
+  const v = raw?.trim().toLowerCase()
+  if (v === 'beginner' || v === 'intermediate' || v === 'advanced') return v
+  return undefined
+}
+
+/** Loads declared experience + Settings style focus for `PlayerProfilePayload.learning_context`. */
+export async function loadLearningContextFromPrefs(): Promise<LearningContextPayload | undefined> {
+  const [expRaw, styleRaw] = await Promise.all([
+    getAppPref(PREF_EXPERIENCE_LEVEL),
+    getAppPref(PREF_STYLE_FOCUS),
+  ])
+  const experience_level = parseExperienceLevel(expRaw)
+  const solo_focus_notes = styleRaw?.trim() ? styleRaw.trim() : undefined
+  if (experience_level == null && solo_focus_notes == null) return undefined
+  const out: LearningContextPayload = {}
+  if (experience_level != null) out.experience_level = experience_level
+  if (solo_focus_notes != null) out.solo_focus_notes = solo_focus_notes
+  return out
+}
+
+/**
+ * Build optional player profile for analyze from persisted skill rows (commit 48).
+ * After commit 63 session mutations, reload skill nodes (e.g. `loadFromDb`) before calling so
+ * `weak_areas` reflects technique EMA and rolling three-session weak detection.
+ */
 export function buildPlayerProfileFromSkillNodes(
   nodes?: SkillNodeRow[] | null,
+  tasteProfile?: TasteProfilePayload | null,
+  learningContext?: LearningContextPayload | null,
 ): PlayerProfilePayload | undefined {
   const safeNodes = Array.isArray(nodes) ? nodes : []
-  if (safeNodes.length === 0) return undefined
-  const weakThreshold = 0.45
-  const weak_areas = safeNodes
-    .filter((n) => Number.isFinite(n.score) && n.score < weakThreshold)
-    .map((n) => WEAK_AREA_BY_NODE_ID[n.id] ?? n.id)
-  const skill_nodes = safeNodes.map((n) => {
-    const rawScore = Number(n.score)
-    const score = Number.isFinite(rawScore) ? Math.max(0, Math.min(1, rawScore)) : undefined
-    return {
-      id: n.id,
-      label: n.label,
-      ...(score != null ? { score } : {}),
+  let base: PlayerProfilePayload | undefined
+  if (safeNodes.length > 0) {
+    const weakThreshold = 0.45
+    const weakIds = new Set<string>()
+    for (const n of safeNodes) {
+      const byScore = Number.isFinite(n.score) && n.score < weakThreshold
+      const roll = parseTechniqueRollJson(n.technique_roll_json)
+      const byRoll = rollingSessionsWeak(roll)
+      if (byScore || byRoll) weakIds.add(WEAK_AREA_BY_NODE_ID[n.id] ?? n.id)
     }
-  })
-  return { weak_areas, skill_nodes }
+    const weak_areas = [...weakIds].sort()
+    const skill_nodes = safeNodes.map((n) => {
+      const rawScore = Number(n.score)
+      const score = Number.isFinite(rawScore) ? Math.max(0, Math.min(1, rawScore)) : undefined
+      return {
+        id: n.id,
+        label: n.label,
+        ...(score != null ? { score } : {}),
+      }
+    })
+    base = { weak_areas, skill_nodes }
+  }
+  let merged: PlayerProfilePayload | undefined = tasteProfile
+    ? base
+      ? { ...base, taste_profile: tasteProfile }
+      : { taste_profile: tasteProfile }
+    : base
+  if (learningContext != null && Object.keys(learningContext).length > 0) {
+    merged = merged
+      ? { ...merged, learning_context: learningContext }
+      : { learning_context: learningContext }
+  }
+  return merged
 }
 
 /** YouTube or future multipart upload — `url` matches FastAPI `AnalyzeRequest`. */
@@ -71,7 +275,11 @@ export async function submitAnalyzeJob(input: {
     if (input.player_profile != null) {
       form.append('player_profile', JSON.stringify(input.player_profile))
     }
-    const { job_id } = await request<{ job_id: string }>('/analyze', { method: 'POST', body: form })
+    const { job_id } = await request<{ job_id: string }>(
+      '/analyze',
+      { method: 'POST', body: form },
+      ANALYZE_UPLOAD_TIMEOUT_MS,
+    )
     return job_id
   }
   const url = input.youtube_url?.trim()
@@ -97,7 +305,7 @@ export async function getJobStatus(jobId: string): Promise<AnalyzeJob> {
 export function pollAnalyzeJob(
   jobId: string,
   onStatus: (job: AnalyzeJob) => void,
-  intervalMs = 3000,
+  intervalMs = 1100,
 ): Promise<LessonJSON> {
   return pollAnalyzeJobCancelable(jobId, onStatus, intervalMs).promise
 }
@@ -105,13 +313,93 @@ export function pollAnalyzeJob(
 export function pollAnalyzeJobCancelable(
   jobId: string,
   onStatus: (job: AnalyzeJob) => void,
-  intervalMs = 3000,
+  intervalMs = 1100,
+  options?: PollAnalyzeOptions,
 ): { promise: Promise<LessonJSON>; cancel: () => void } {
   let settled = false
   let rejectRef: ((reason?: unknown) => void) | null = null
   let stopRef: (() => void) | null = null
 
   const promise = new Promise<LessonJSON>((resolve, reject) => {
+    rejectRef = reject
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let pollNetworkFailures = 0
+
+    const stop = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer)
+        timer = undefined
+      }
+    }
+    stopRef = stop
+
+    const schedule = (delayMs: number) => {
+      stop()
+      timer = setTimeout(() => void tick(), delayMs)
+    }
+
+    const tick = async () => {
+      if (settled) return
+      try {
+        const job = await getJobStatus(jobId)
+        pollNetworkFailures = 0
+        onStatus(job)
+        if (job.status === 'complete') {
+          stop()
+          settled = true
+          if (job.result) resolve(job.result)
+          else reject(new ApiError(500, 'Analysis complete but no result'))
+          return
+        }
+        if (job.status === 'failed') {
+          stop()
+          settled = true
+          reject(new ApiError(500, job.error ?? 'Analysis failed'))
+          return
+        }
+        schedule(intervalMs)
+      } catch (e) {
+        if (settled) return
+        if (
+          isRecoverableAnalyzePollError(e) &&
+          pollNetworkFailures < MAX_POLL_NETWORK_RETRIES
+        ) {
+          pollNetworkFailures += 1
+          const delayMs = pollBackoffDelayMs(pollNetworkFailures)
+          options?.onRecoverablePollError?.({ attempt: pollNetworkFailures, delayMs })
+          schedule(delayMs)
+          return
+        }
+        stop()
+        settled = true
+        reject(e)
+      }
+    }
+
+    void tick()
+  })
+
+  return {
+    promise,
+    cancel: () => {
+      if (settled) return
+      settled = true
+      stopRef?.()
+      rejectRef?.(new AnalyzePollCancelledError())
+    },
+  }
+}
+
+export function pollCoachHydration(
+  jobId: string,
+  onUpdate: (payload: CoachHydrationStatusPayload) => void,
+  intervalMs = 2000,
+): { promise: Promise<'complete' | 'fallback'>; cancel: () => void } {
+  let settled = false
+  let rejectRef: ((reason?: unknown) => void) | null = null
+  let stopRef: (() => void) | null = null
+
+  const promise = new Promise<'complete' | 'fallback'>((resolve, reject) => {
     rejectRef = reject
     let intervalId: ReturnType<typeof setInterval> | undefined
 
@@ -125,19 +413,12 @@ export function pollAnalyzeJobCancelable(
 
     const tick = async () => {
       try {
-        const job = await getJobStatus(jobId)
-        onStatus(job)
-        if (job.status === 'complete') {
+        const payload = await request<CoachHydrationStatusPayload>(`/analyze/${encodeURIComponent(jobId)}/coach`)
+        onUpdate(payload)
+        if (payload.status === 'complete' || payload.status === 'fallback') {
           stop()
           settled = true
-          if (job.result) resolve(job.result)
-          else reject(new ApiError(500, 'Analysis complete but no result'))
-          return
-        }
-        if (job.status === 'failed') {
-          stop()
-          settled = true
-          reject(new ApiError(500, job.error ?? 'Analysis failed'))
+          resolve(payload.status)
         }
       } catch (e) {
         stop()
@@ -258,4 +539,97 @@ export async function fetchOnboardingPlacementCoach(payload: {
       reliability_flags: payload.reliability_flags ?? [],
     }),
   })
+}
+
+/** Commit 70: ordered practice plan from profile + analyzed library job ids. */
+export async function generatePracticePlan(payload: {
+  player_profile?: PlayerProfilePayload
+  job_ids: string[]
+  duration_minutes?: number
+  /** Device-persisted lessons when the API job store has no in-memory results. */
+  library_lessons?: LessonJSON[]
+}): Promise<PracticePlanPayload> {
+  return request<PracticePlanPayload>('/practice/plan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      player_profile: payload.player_profile ?? null,
+      job_ids: payload.job_ids,
+      duration_minutes: payload.duration_minutes ?? 25,
+      library_lessons: payload.library_lessons ?? [],
+    }),
+  })
+}
+
+/** Commit 65: backend-ranked next lesson suggestion from profile + library job ids. */
+export async function fetchCurriculumSuggestion(payload: {
+  player_profile?: PlayerProfilePayload
+  job_ids: string[]
+}): Promise<CurriculumSuggestion | null> {
+  const body = {
+    player_profile: payload.player_profile ?? null,
+    job_ids: payload.job_ids,
+  }
+  const res = await request<CurriculumSuggestResponse>('/curriculum/suggest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const ranked = Array.isArray(res.ranked) ? res.ranked : []
+  return ranked.length > 0 ? ranked[0]! : null
+}
+
+/** Commit 68: deterministic taste profile (no network on server). */
+export async function deriveTasteProfile(payload: {
+  spotify_profile?: SpotifyTasteProfile
+  quiz_answers?: QuizAnswersPayload
+  taste_source?: 'spotify' | 'manual'
+}): Promise<TasteProfilePayload> {
+  return request<TasteProfilePayload>('/taste/derive', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+/** Commit 67: JSON `authorize_url` for in-app browser / manual redirect. */
+export async function initiateSpotifyAuth(
+  clientSession: string,
+  platform: 'native' | 'web',
+): Promise<string> {
+  const res = await fetch(
+    `${API_BASE_URL}/auth/spotify?client_session=${encodeURIComponent(clientSession)}&format=json&platform=${platform}`,
+  )
+  const text = await res.text().catch(() => '')
+  if (!res.ok) {
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+  let data: { authorize_url?: string }
+  try {
+    data = JSON.parse(text) as { authorize_url?: string }
+  } catch {
+    throw new ApiError(502, 'Invalid Spotify start response')
+  }
+  const url = typeof data.authorize_url === 'string' ? data.authorize_url.trim() : ''
+  if (!url) {
+    throw new ApiError(502, 'Missing authorize_url from server')
+  }
+  return url
+}
+
+export async function fetchSpotifyTasteProfile(clientSession: string): Promise<SpotifyTasteProfile> {
+  return request<SpotifyTasteProfile>(
+    `/taste/spotify?client_session=${encodeURIComponent(clientSession)}`,
+  )
+}
+
+export async function disconnectSpotifyServer(clientSession: string): Promise<void> {
+  const res = await fetch(
+    `${API_BASE_URL}/auth/spotify?client_session=${encodeURIComponent(clientSession)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
 }

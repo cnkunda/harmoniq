@@ -1,0 +1,209 @@
+[
+  {
+    "id": "pool_chr_01",
+    "name": "Chromatic four-fret walk",
+    "description": "One finger per fret on four adjacent frets. Move up one fret at a time with tiny motions and an even pulse — no squeezing the neck.",
+    "duration_seconds": 58,
+    "technique_tag": "timing",
+    "opener_kind": "chromatic",
+    "style_tags": [],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_chr_02",
+    "name": "Single-string chromatic pairs",
+    "description": "On one string, play two notes per fret sliding the pair up the neck. Keep pick strokes small and alternate steadily.",
+    "duration_seconds": 56,
+    "technique_tag": "timing",
+    "opener_kind": "chromatic",
+    "style_tags": [],
+    "tab_snippet_gp5_base64": null,
+    "fretboard_guide": {
+      "cells": [
+        { "string": 3, "fret": 5, "variant": "primary" },
+        { "string": 3, "fret": 6, "variant": "secondary" }
+      ],
+      "caption": "First chromatic pair on the G string — slide this two-fret shape up the neck."
+    }
+  },
+  {
+    "id": "pool_chr_03",
+    "name": "Chromatic position hop",
+    "description": "Play a short chromatic cell, then shift the whole shape up one position. Focus on landing clean without rushing the shift.",
+    "duration_seconds": 60,
+    "technique_tag": "pitch",
+    "opener_kind": "chromatic",
+    "style_tags": [],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_spd_01",
+    "name": "Spider crawl — adjacent frets",
+    "description": "Spider pattern: each finger gets one fret on adjacent strings, walking up and back. Keep fingertips curved and shoulders relaxed.",
+    "duration_seconds": 62,
+    "technique_tag": "timing",
+    "opener_kind": "spider",
+    "style_tags": [],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_spd_02",
+    "name": "Spider — skip-a-string variant",
+    "description": "Same spider idea but leave one string silent between played pairs to wake up independent fingers.",
+    "duration_seconds": 58,
+    "technique_tag": "string_skipping",
+    "opener_kind": "spider",
+    "style_tags": [],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_skip_01",
+    "name": "Two-string skip arpeggio",
+    "description": "Pick a low note then a note two strings higher, alternating slowly. Aim for identical volume on each string.",
+    "duration_seconds": 60,
+    "technique_tag": "string_skipping",
+    "opener_kind": null,
+    "style_tags": ["general"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_bend_01",
+    "name": "Half-step bend and release",
+    "description": "Sustain a note, bend up a half step to pitch, release with control. Use ears first — match a reference tone if you can hum it.",
+    "duration_seconds": 64,
+    "technique_tag": "bending",
+    "opener_kind": null,
+    "style_tags": ["blues", "rock", "general"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_vib_01",
+    "name": "Long-tone vibrato",
+    "description": "Hold a comfortable note and add narrow vibrato from the wrist. Keep pitch center stable — motion is side to side, not wild.",
+    "duration_seconds": 55,
+    "technique_tag": "vibrato",
+    "opener_kind": null,
+    "style_tags": ["general"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_hp_01",
+    "name": "Hammer-on pull-off pairs",
+    "description": "Trill two frets on one string using only fretting hand. Start painfully slow; demand equal volume on each note.",
+    "duration_seconds": 58,
+    "technique_tag": "hammer_pull",
+    "opener_kind": null,
+    "style_tags": ["rock", "metal", "general"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_time_01",
+    "name": "Eighth-note grid tap",
+    "description": "Mute strings lightly and tap eighth notes on the click or a metronome. Expose rushing by exaggerating the downbeat mentally.",
+    "duration_seconds": 55,
+    "technique_tag": "timing",
+    "opener_kind": null,
+    "style_tags": ["general"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_phr_01",
+    "name": "Two-note call and response",
+    "description": "Play a short two-note question, answer it an octave or fifth away. Think singing phrases, not exercises.",
+    "duration_seconds": 52,
+    "technique_tag": "phrasing",
+    "opener_kind": null,
+    "style_tags": ["jazz", "blues", "general"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_pitch_01",
+    "name": "Unison intonation check",
+    "description": "Match the same pitch on two strings in different positions. Listen for beats — adjust until the wobble slows.",
+    "duration_seconds": 60,
+    "technique_tag": "pitch",
+    "opener_kind": null,
+    "style_tags": ["general"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_style_blues",
+    "name": "Blues shuffle limber",
+    "description": "Loose wrist, light shuffle subdivision on muted strings — feel the long-short pair without locking the elbow.",
+    "duration_seconds": 58,
+    "technique_tag": "phrasing",
+    "opener_kind": null,
+    "style_tags": ["blues"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_style_rock",
+    "name": "Rock downstroke accents",
+    "description": "Palm-muted eighths with accents on beats two and four. Keep the quiet notes truly quiet so accents pop.",
+    "duration_seconds": 56,
+    "technique_tag": "timing",
+    "opener_kind": null,
+    "style_tags": ["rock", "metal"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_style_jazz",
+    "name": "Shell voicing finger roll",
+    "description": "Roll through three-note shells on adjacent strings — no strum, just sequential pressure. Think piano voice-leading.",
+    "duration_seconds": 54,
+    "technique_tag": "phrasing",
+    "opener_kind": null,
+    "style_tags": ["jazz"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_style_metal",
+    "name": "Gallop primer",
+    "description": "Slow gallop rhythm: long-short-short picking on one note. Relax the picking shoulder; speed comes from small motion.",
+    "duration_seconds": 62,
+    "technique_tag": "timing",
+    "opener_kind": null,
+    "style_tags": ["metal"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_style_folk",
+    "name": "Travis picking open strings",
+    "description": "Thumb alternates bass strings while fingers pluck top strings on a steady grid. Keep thumb volume even.",
+    "duration_seconds": 60,
+    "technique_tag": "timing",
+    "opener_kind": null,
+    "style_tags": ["folk", "country"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_style_pop",
+    "name": "Even eighth pop groove",
+    "description": "Muted percussive eighths with a tiny dynamic swell into the downbeat of every other bar.",
+    "duration_seconds": 55,
+    "technique_tag": "timing",
+    "opener_kind": null,
+    "style_tags": ["pop", "general"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_neutral_legato",
+    "name": "Neutral legato glide",
+    "description": "Connect three notes on one string with hammer-ons only, then reverse with pull-offs. No pick after the first attack.",
+    "duration_seconds": 57,
+    "technique_tag": "hammer_pull",
+    "opener_kind": null,
+    "style_tags": ["general"],
+    "tab_snippet_gp5_base64": null
+  },
+  {
+    "id": "pool_neutral_stretch",
+    "name": "Comfort stretch — four frets",
+    "description": "One finger per fret on a comfortable stretch. Hold briefly, release tension between reps — never fight pain.",
+    "duration_seconds": 59,
+    "technique_tag": "pitch",
+    "opener_kind": null,
+    "style_tags": ["general"],
+    "tab_snippet_gp5_base64": null
+  }
+]

@@ -152,3 +152,35 @@ export function beatIndexFromClocks(args: {
   const elapsedSec = (Date.now() - recordStartMs) / 1000
   return Math.floor(Math.max(0, elapsedSec) / beatSec)
 }
+
+/** Minimal tick shape for capture beat indexing (avoids coupling hooks to full `PlaybackTickContext`). */
+export type CaptureTickLike = { playing: boolean; positionSec: number }
+
+/**
+ * Beat index during Play capture: transport-relative while playing when a tick exists;
+ * wall-clock elapsed when paused or before the first stem tick (MANUAL_QA Play accuracy).
+ */
+export function captureBeatIndexFromTick(args: {
+  tick: CaptureTickLike | null
+  anchorPosSec: number
+  recordStartMs: number
+  beatSec: number
+}): number {
+  const { tick, anchorPosSec, recordStartMs, beatSec } = args
+  if (tick) {
+    return beatIndexFromClocks({
+      playing: tick.playing,
+      positionSec: tick.positionSec,
+      anchorPosSec,
+      recordStartMs,
+      beatSec,
+    })
+  }
+  return beatIndexFromClocks({
+    playing: false,
+    positionSec: 0,
+    anchorPosSec,
+    recordStartMs,
+    beatSec,
+  })
+}

@@ -5,9 +5,15 @@ import { Filter, Search } from 'lucide-react-native'
 import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { WoodGradient } from '@/components/WoodGradient'
-import { sessionHref } from '@/src/constants/sessionFlow'
+import { ApiError, submitExportJob } from '@/src/api/analyze'
+import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import colors from '@/src/constants/colors'
+import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
+import { getDemoLesson } from '@/src/demo/demoLesson'
+import { startDemoSession } from '@/src/demo/startDemoSession'
 import {
   clearAllPracticeData,
   deleteLessonByJobId,
@@ -19,7 +25,9 @@ import {
 import type { LessonListRow, LickRow } from '@/src/db/types'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
+import { shareExportedBlob } from '@/src/utils/exportShare'
 import { lessonFromSavedLick } from '@/src/utils/lessonFromSavedLick'
+import { firstGp5Base64FromLessonSections } from '@/src/utils/lessonTabs'
 
 type LibraryTab = 'lessons' | 'licks'
 
@@ -53,6 +61,7 @@ export default function LibraryScreen() {
   const [songFilter, setSongFilter] = useState<string>('all')
   const [techniqueFilter, setTechniqueFilter] = useState<string>('all')
   const [transposeById, setTransposeById] = useState<Record<string, number>>({})
+  const [exportBusyJobId, setExportBusyJobId] = useState<string | null>(null)
 
   const refresh = useCallback(() => {
     setLoadError(null)
@@ -70,10 +79,56 @@ export default function LibraryScreen() {
     }, [refresh]),
   )
 
+  const exportLessonMidi = useCallback(async (row: LessonListRow) => {
+    setLoadError(null)
+    setExportBusyJobId(row.job_id)
+    try {
+      const full = await getLessonByJobId(row.job_id)
+      const gp = full ? firstGp5Base64FromLessonSections(full.sections) : null
+      if (!gp) {
+        setLoadError('This lesson has no GP5 tab data to export yet.')
+        return
+      }
+      const title = typeof full?.song_title === 'string' ? full.song_title.trim() : null
+      const fallbackBase =
+        typeof full?.song_title === 'string' && full.song_title.trim()
+          ? full.song_title.trim()
+          : row.song_title?.trim() || 'lesson'
+      const { blob, mimeType, contentDisposition } = await submitExportJob({
+        gp5_base64: gp,
+        format: 'midi',
+        title,
+      })
+      await shareExportedBlob({
+        blob,
+        mimeType,
+        contentDisposition,
+        fallbackBase,
+        dialogTitle: 'Export MIDI',
+      })
+    } catch (e) {
+      setLoadError(e instanceof ApiError ? e.message : 'Could not export MIDI.')
+    } finally {
+      setExportBusyJobId(null)
+    }
+  }, [])
+
   const openFullLesson = useCallback(
     async (row: LessonListRow) => {
       setLoadError(null)
       try {
+        if (row.job_id === DEMO_LESSON_JOB_ID) {
+          const existing = await getLessonByJobId(DEMO_LESSON_JOB_ID)
+          if (!existing) {
+            await startDemoSession(router, saveLesson, setLessonSectionIndex)
+            void listLessonsJournal().then(setLessons)
+            return
+          }
+          saveLesson(existing)
+          setLessonSectionIndex(0)
+          router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))
+          return
+        }
         const full = await getLessonByJobId(row.job_id)
         if (!full) {
           setLoadError('That lesson could not be loaded.')
@@ -81,7 +136,7 @@ export default function LibraryScreen() {
         }
         saveLesson(full)
         setLessonSectionIndex(0)
-        router.push(sessionHref('listen'))
+        router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))
       } catch {
         setLoadError('Could not open lesson.')
       }
@@ -143,7 +198,7 @@ export default function LibraryScreen() {
       const semitones = transposeById[lick.id] ?? 0
       saveLesson(lessonFromSavedLick(lick, semitones))
       setLessonSectionIndex(0)
-      router.push(sessionHref('listen'))
+      router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))
     },
     [router, saveLesson, setLessonSectionIndex, transposeById],
   )
@@ -216,15 +271,29 @@ export default function LibraryScreen() {
     return ['all', ...Array.from(set).sort((a, b) => a.localeCompare(b))]
   }, [licks])
 
+  const lessonsPool = useMemo(() => {
+    const hasDemo = lessons.some((l) => l.job_id === DEMO_LESSON_JOB_ID)
+    if (hasDemo) return lessons
+    const demoLesson = getDemoLesson()
+    const synthetic: LessonListRow = {
+      job_id: DEMO_LESSON_JOB_ID,
+      song_title: demoLesson.song_title ?? 'Reggae pocket (demo)',
+      artist: `${demoLesson.artist ?? 'Harmoniq'} · offline`,
+      analyzed_at: new Date(0).toISOString(),
+      section_count: Array.isArray(demoLesson.sections) ? demoLesson.sections.length : 1,
+    }
+    return [synthetic, ...lessons]
+  }, [lessons])
+
   const filteredLessons = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return lessons.filter((l) => {
+    return lessonsPool.filter((l) => {
       if (q.length === 0) return true
       const song = l.song_title?.toLowerCase() ?? ''
       const artist = l.artist?.toLowerCase() ?? ''
       return song.includes(q) || artist.includes(q)
     })
-  }, [lessons, search])
+  }, [lessonsPool, search])
 
   const filteredLicks = useMemo(
     () =>
@@ -403,6 +472,19 @@ export default function LibraryScreen() {
                         >
                           <Text className="text-center font-sans-medium text-sm text-amber-light">Listen</Text>
                         </Pressable>
+                        <AnimatedPressable
+                          onPress={() => void exportLessonMidi(row)}
+                          disabled={exportBusyJobId === row.job_id}
+                          className={`min-w-[120px] flex-1 rounded-lg border border-wood-600/45 bg-cream-dark/35 px-3 py-2 ${
+                            exportBusyJobId === row.job_id ? 'opacity-40' : ''
+                          }`}
+                          accessibilityRole="button"
+                          accessibilityLabel="Export lesson MIDI"
+                        >
+                          <Text className="text-center font-sans-medium text-sm text-wood-900">
+                            {exportBusyJobId === row.job_id ? 'Exporting…' : 'Export MIDI'}
+                          </Text>
+                        </AnimatedPressable>
                         <Pressable
                           onPress={() => confirmRemoveLesson(row)}
                           className="rounded-lg border border-danger/45 bg-wood-900/50 px-3 py-2"

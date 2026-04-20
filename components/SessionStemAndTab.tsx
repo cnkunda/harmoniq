@@ -1,16 +1,21 @@
 import type { ReactNode } from 'react'
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { View } from 'react-native'
 
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import { TabViewport } from '@/components/TabViewport'
+import { isAlphaTabRuntimeDiagEnabled } from '@/src/constants/alphaTabRuntimeDiag'
+import { useResolvedSoundFontProfile } from '@/src/audio/useResolvedSoundFontProfile'
 import { logListenTransportWrap } from '@/src/session/listenTransportDebug'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useSessionSmartScroll, type PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useLessonStore } from '@/src/stores/lessonStore'
-import { lessonStemUrl, sectionSeekSeconds } from '@/src/utils/lessonAudio'
+import { lessonStemUrl, sectionSeekSeconds, stemRelPathToPlaybackUri } from '@/src/utils/lessonAudio'
+import type { LessonJSON } from '@/src/types'
+import type { TabRenderPresetName } from '@/src/session/tabThemePresets'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
-import type { AlphaTabSurfaceRef, NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
+import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
+import type { AlphaTabSurfaceRef, NoteEventMessage, SongScoreMeta, TabLoopBarRegion } from '@/types/tabMessage'
 
 const DEFAULT_TICK: PlaybackTickContext = {
   positionSec: 0,
@@ -22,6 +27,10 @@ const DEFAULT_TICK: PlaybackTickContext = {
 export type SessionTabVariant = 'full' | 'skeleton' | 'alt'
 
 export type SessionStemAndTabProps = {
+  /** Inserted into ListenStemPanel “Current lesson” card (e.g. capture controls on Play). */
+  lessonCardInsert?: ReactNode
+  /** Replaces ListenStemPanel “Stems” column (e.g. Play scoring). */
+  stemsColumnReplacement?: ReactNode
   initialRate?: number
   initialMetronomeOn?: boolean
   autoLoopRegion?: { startSec: number; endSec: number; label?: string } | null
@@ -45,6 +54,19 @@ export type SessionStemAndTabProps = {
   onTabError?: (message: string) => void
   /** NativeWind classes for the tab wrapper. */
   tabFrameClassName?: string
+  /** Play step: reframes first playback card for capture + backing track. */
+  lessonPlaybackCardVariant?: 'default' | 'play'
+  captureRecording?: boolean
+  /** Play session: replaces default play card chrome with capture UI (`ListenStemPanel` supplies backing context). */
+  playCaptureSlot?: (ctx: PlayLessonCaptureContext) => ReactNode
+  /** AlphaTab display preset (Commit 56). */
+  tabRenderPreset?: TabRenderPresetName
+  /** Rendered directly above the tab viewport (Commit 57). */
+  detailsAboveTab?: ReactNode
+  onTabSongDetails?: (score: SongScoreMeta) => void
+  onTabSongPlayback?: (payload: { masterBarIndex: number; sectionLabel: string | null }) => void
+  /** Bundled demo: autoplay stems on Listen once loaded. */
+  autoPlayOnReady?: boolean
 }
 
 export type SessionStemAndTabHandle = {
@@ -56,6 +78,8 @@ export type SessionStemAndTabHandle = {
 /** Stems + GP tab with external-media cursor sync (commit 45). */
 export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStemAndTabProps>(function SessionStemAndTab(
   {
+    lessonCardInsert,
+    stemsColumnReplacement,
     initialRate,
     initialMetronomeOn,
     autoLoopRegion,
@@ -72,6 +96,14 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     onTabReady,
     onTabError,
     tabFrameClassName = 'mt-4 h-[328px] w-full px-2',
+    lessonPlaybackCardVariant = 'default',
+    captureRecording = false,
+    playCaptureSlot,
+    tabRenderPreset,
+    detailsAboveTab,
+    onTabSongDetails,
+    onTabSongPlayback,
+    autoPlayOnReady,
   },
   ref,
 ) {
@@ -82,6 +114,13 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
   const lastTickPositionSecRef = useRef(0)
 
   const lesson = useLessonStore((s) => s.lesson)
+  const prerenderArtifactUrl = useMemo(() => {
+    const hints = lesson?.alphatab_prerender_hints as LessonJSON['alphatab_prerender_hints']
+    const rel = hints?.artifact_rel
+    if (typeof rel !== 'string' || !rel.trim()) return null
+    return lessonStemUrl(rel.trim())
+  }, [lesson?.alphatab_prerender_hints])
+
   const lessonJobId = lesson?.job_id ?? ''
   const barTimestampsKey = useMemo(
     () => lesson?.bar_timestamps?.join('\t') ?? '',
@@ -107,6 +146,8 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     if (gp5Base64Override?.trim()) return null
     const rel = lesson?.stems?.guitar
     if (!rel || typeof rel !== 'string') return null
+    const bundled = stemRelPathToPlaybackUri(rel)
+    if (bundled) return bundled
     return lessonStemUrl(rel)
   }, [audioSrcOverride, gp5Base64Override, lesson?.stems?.guitar])
 
@@ -116,6 +157,8 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
       : section && typeof section === 'object' && typeof (section as Record<string, unknown>).transposition_semitones === 'number'
         ? ((section as Record<string, unknown>).transposition_semitones as number)
         : 0
+
+  const soundFontProfile = useResolvedSoundFontProfile(lesson?.style_label, tabRenderPreset)
 
   const [scrollReset, setScrollReset] = useState(0)
 
@@ -146,7 +189,8 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     lastTickPositionSecRef.current = 0
   }, [gp5Key])
 
-  useEffect(() => {
+  /** Slow loop overlay: layout before paint so bracket tracks sliders within one frame (MANUAL_QA Slow & loop). */
+  useLayoutEffect(() => {
     const tab = tabRef.current
     if (!tab) return
     if (!loopHighlight || loopHighlight.startBarIndex >= loopHighlight.endBarIndexExclusive) {
@@ -173,6 +217,11 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
       {showStemPanel ? (
         <ListenStemPanel
           ref={stemPanelRef}
+          lessonCardInsert={lessonCardInsert}
+          stemsColumnReplacement={stemsColumnReplacement}
+          lessonPlaybackCardVariant={lessonPlaybackCardVariant}
+          captureRecording={captureRecording}
+          playCaptureSlot={playCaptureSlot}
           initialRate={initialRate}
           initialMetronomeOn={initialMetronomeOn}
           autoLoopRegion={autoLoopRegion}
@@ -208,18 +257,26 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
           onRateChange={(rate) => {
             tabRef.current?.setPlaybackRate(rate)
           }}
+          autoPlayOnReady={autoPlayOnReady}
         />
       ) : null}
       {insertBetweenStemAndTab}
+      {detailsAboveTab}
       <View className={tabFrameClassName}>
         <TabViewport
           ref={tabRef}
           gp5Base64={gp5Base64}
+          prerenderArtifactUrl={prerenderArtifactUrl}
           audioSrc={audioSrc}
           transposeSemitones={transposeSemitones}
+          soundFontProfile={soundFontProfile}
+          renderPreset={tabRenderPreset}
+          runtimeDiagnosticsEnabled={isAlphaTabRuntimeDiagEnabled()}
           onReady={onTabReady}
           onError={onTabError}
           onNoteEvent={onNoteEvent}
+          onSongDetails={onTabSongDetails}
+          onSongPlayback={onTabSongPlayback}
           onScoreSeekMs={
             showStemPanel ? (ms) => void stemPanelRef.current?.seekTransportToSeconds(ms / 1000) : undefined
           }

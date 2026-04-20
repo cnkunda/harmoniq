@@ -18,11 +18,20 @@ import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { toast } from '@/components/ToastConfig'
 import { WoodGradient } from '@/components/WoodGradient'
-import { ApiError, buildPlayerProfileFromSkillNodes, submitJamScore } from '@/src/api/analyze'
+import { logFirstAudioPlay } from '@/src/analytics/firstAudioPlay'
+import {
+  ApiError,
+  buildPlayerProfileFromSkillNodes,
+  loadLearningContextFromPrefs,
+  parseTasteProfileJson,
+  submitJamScore,
+} from '@/src/api/analyze'
 import { requestJamBacking } from '@/src/api/jam'
 import { mapBrowserMicBlockedForJam, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { BACKING_TRACKS, type BackingTrackId } from '@/src/constants/backingTracks'
-import { getAllSkillNodes, insertJamSnapshotRow } from '@/src/db/client'
+import { getAllSkillNodes, getAppPref, insertJamSnapshotRow } from '@/src/db/client'
+import { useDnaStore } from '@/src/stores/dnaStore'
+import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import { coachFromPhraseFeatures } from '@/src/jam/jamPhraseCoach'
 import { phraseToFeatures } from '@/src/jam/jamPhraseFeatures'
 import { createJamPhraseSegmenter } from '@/src/jam/jamPhraseSegmenter'
@@ -126,9 +135,14 @@ export default function JamScreen() {
 
   useEffect(() => {
     let cancelled = false
-    void getAllSkillNodes().then((nodes) => {
+    void Promise.all([
+      getAllSkillNodes(),
+      getAppPref(PREF_TASTE_PROFILE_JSON),
+      loadLearningContextFromPrefs(),
+    ]).then(([nodes, tasteRaw, learningCtx]) => {
       if (cancelled) return
-      const profile = buildPlayerProfileFromSkillNodes(nodes)
+      const taste = parseTasteProfileJson(tasteRaw)
+      const profile = buildPlayerProfileFromSkillNodes(nodes, taste, learningCtx)
       const wa = profile?.weak_areas ?? []
       setWeakAreas(wa)
       setClassicTrackId(pickSuggestedClassicFromWeakAreas(wa))
@@ -595,6 +609,7 @@ export default function JamScreen() {
         recurring_gestures: [],
         coach_summary: coachSummary,
       })
+      void useDnaStore.getState().refresh()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not save jam snapshot')
       setIsJamming(false)
@@ -861,6 +876,7 @@ export default function JamScreen() {
                   </Text>
                   <SessionStemAndTab
                     ref={jamStemTabRef}
+                    tabRenderPreset="study"
                     showStemPanel={false}
                     gp5Base64Override={JAM_REFERENCE_TAB_GP5_BASE64}
                     audioSrcOverride={jamWebTabAudioSrc}

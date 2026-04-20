@@ -12,15 +12,20 @@ import { toast } from '@/components/ToastConfig'
 import {
     AnalyzePollCancelledError,
     buildPlayerProfileFromSkillNodes,
+    loadLearningContextFromPrefs,
+    parseTasteProfileJson,
     pollAnalyzeJobCancelable,
     submitAnalyzeJob,
 } from '@/src/api/analyze'
 import { searchTabs, type TabSearchHit } from '@/src/api/tabs'
 import colors from '@/src/constants/colors'
-import { sessionHref } from '@/src/constants/sessionFlow'
+import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapAnalyzeFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
+import { getAppPref } from '@/src/db/client'
+import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 import type { AnalyzeJob, AnalyzeJobStatus } from '@/src/types'
@@ -29,6 +34,13 @@ import { useRouter } from 'expo-router'
 type AddSongState = 'idle' | 'analyzing' | 'done' | 'error'
 
 type ImportTab = 'upload' | 'youtube' | 'search'
+
+function formatElapsedClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds))
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m}:${r.toString().padStart(2, '0')}`
+}
 
 export default function AddSongScreen() {
   const router = useRouter()
@@ -52,9 +64,18 @@ export default function AddSongScreen() {
   const [tabHits, setTabHits] = useState<TabSearchHit[]>([])
   const [tabSearchError, setTabSearchError] = useState<string | null>(null)
   const [importTab, setImportTab] = useState<ImportTab>(Platform.OS === 'web' ? 'upload' : 'youtube')
-  const [displayProgress, setDisplayProgress] = useState(0)
+  /** `null` = server has not reported numeric progress yet (indeterminate). */
+  const [progressPercent, setProgressPercent] = useState<number | null>(null)
+  const [elapsedTick, setElapsedTick] = useState(0)
+  const processingStartedClockRef = useRef<number | null>(null)
   const [pendingUploadFile, setPendingUploadFile] = useState<Blob | null>(null)
   const [pendingUploadFilename, setPendingUploadFilename] = useState('')
+
+  const elapsedAnalyzingSeconds = useMemo(() => {
+    if (uiState !== 'analyzing') return 0
+    const startSec = processingStartedClockRef.current ?? startedAtRef.current / 1000
+    return Math.max(0, Date.now() / 1000 - startSec)
+  }, [elapsedTick, uiState])
 
   const importTabOptions = useMemo(() => {
     const ordered: { id: ImportTab; label: string }[] = [
@@ -101,6 +122,12 @@ export default function AddSongScreen() {
   }, [cancelInFlight])
 
   useEffect(() => {
+    if (uiState !== 'analyzing') return
+    const id = setInterval(() => setElapsedTick((n) => n + 1), 500)
+    return () => clearInterval(id)
+  }, [uiState])
+
+  useEffect(() => {
     if (importTab !== 'upload') {
       setPendingUploadFile(null)
       setPendingUploadFilename('')
@@ -114,10 +141,16 @@ export default function AddSongScreen() {
       setUiState('analyzing')
       setStatusText('Submitting audio for analysis…')
       progressWidth.value = 0
-      setDisplayProgress(0)
+      setProgressPercent(null)
+      processingStartedClockRef.current = null
       startedAtRef.current = Date.now()
       try {
-        const player_profile = buildPlayerProfileFromSkillNodes(skillNodes)
+        const [tasteRaw, learningCtx] = await Promise.all([
+          getAppPref(PREF_TASTE_PROFILE_JSON),
+          loadLearningContextFromPrefs(),
+        ])
+        const taste = parseTasteProfileJson(tasteRaw)
+        const player_profile = buildPlayerProfileFromSkillNodes(skillNodes, taste, learningCtx)
         const jobId = await submitAnalyzeJob(
           player_profile != null ? { ...input, player_profile } : input,
         )
@@ -127,30 +160,52 @@ export default function AddSongScreen() {
           setPendingUploadFilename('')
         }
         setStatusText(`Job queued (${jobId.slice(0, 8)}…)`)
-        progressWidth.value = withTiming(0.12, { duration: 220 })
-        const poll = pollAnalyzeJobCancelable(jobId, (job: AnalyzeJob) => {
-          if (!aliveRef.current) return
-          const elapsed = Date.now() - startedAtRef.current
-          const clientEase = Math.min(0.9, elapsed / 150000)
-          const serverP =
-            job.status === 'processing' && typeof job.progress === 'number' && Number.isFinite(job.progress)
-              ? Math.max(0, Math.min(1, job.progress))
-              : null
-          const combined = serverP != null ? Math.max(serverP, Math.min(clientEase, serverP + 0.08)) : clientEase
-          const nextP = job.status === 'complete' ? 1 : combined
-          progressWidth.value = withTiming(nextP, { duration: 240 })
-          setDisplayProgress(Math.round(nextP * 100))
-          const stage =
-            job.status === 'processing' && typeof job.stage_label === 'string' && job.stage_label.trim()
-              ? job.stage_label.trim()
-              : null
-          const pretty: Record<AnalyzeJobStatus, string> = {
-            processing: 'Analyzing structure and timing…',
-            complete: 'Finishing lesson payload…',
-            failed: 'Analysis failed.',
-          }
-          setStatusText(stage ?? pretty[job.status] ?? `Status: ${job.status}`)
-        })
+        const poll = pollAnalyzeJobCancelable(
+          jobId,
+          (job: AnalyzeJob) => {
+            if (!aliveRef.current) return
+            if (
+              typeof job.processing_started_at === 'number' &&
+              Number.isFinite(job.processing_started_at) &&
+              job.processing_started_at > 0
+            ) {
+              processingStartedClockRef.current = job.processing_started_at
+            } else if (processingStartedClockRef.current === null) {
+              processingStartedClockRef.current = startedAtRef.current / 1000
+            }
+            const serverP =
+              job.status === 'processing' && typeof job.progress === 'number' && Number.isFinite(job.progress)
+                ? Math.max(0, Math.min(1, job.progress))
+                : null
+            if (job.status === 'complete') {
+              progressWidth.value = withTiming(1, { duration: 240 })
+              setProgressPercent(100)
+            } else if (serverP != null) {
+              progressWidth.value = withTiming(serverP, { duration: 240 })
+              setProgressPercent(Math.round(serverP * 100))
+            } else {
+              progressWidth.value = withTiming(0.06, { duration: 400 })
+              setProgressPercent(null)
+            }
+            const stage =
+              job.status === 'processing' && typeof job.stage_label === 'string' && job.stage_label.trim()
+                ? job.stage_label.trim()
+                : null
+            const pretty: Record<AnalyzeJobStatus, string> = {
+              processing: 'Working on your track…',
+              complete: 'Finishing lesson payload…',
+              failed: 'Analysis failed.',
+            }
+            setStatusText(stage ?? pretty[job.status] ?? `Status: ${job.status}`)
+          },
+          1100,
+          {
+            onRecoverablePollError: () => {
+              if (!aliveRef.current) return
+              setStatusText('Connection issue — retrying status check…')
+            },
+          },
+        )
         cancelRef.current = poll.cancel
         const lesson = await poll.promise
         if (!aliveRef.current) return
@@ -185,7 +240,7 @@ export default function AddSongScreen() {
         cancelRef.current = null
       }
     },
-    [checkOpacity, checkScale, progressWidth, router, saveLesson, skillNodes],
+    [checkOpacity, checkScale, progressWidth, saveLesson, skillNodes],
   )
 
   const onClose = () => {
@@ -209,7 +264,7 @@ export default function AddSongScreen() {
         artist: a.length > 0 ? a : lesson.artist,
       })
     }
-    router.push(sessionHref('listen'))
+    router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))
   }, [lesson, router, saveLesson, uploadDisplayArtist, uploadDisplayTitle])
 
   const subtitle =
@@ -435,10 +490,13 @@ export default function AddSongScreen() {
               <Text className="font-sans-medium text-sm text-cream">Analyzing…</Text>
             </View>
             <Text
-              className="text-center font-sans text-xs leading-5 text-muted-brown"
+              className="text-center font-sans-medium text-sm leading-6 text-cream"
               accessibilityLiveRegion="polite"
             >
               {statusText}
+            </Text>
+            <Text className="text-center font-mono text-xs text-amber-light/90">
+              Elapsed {formatElapsedClock(elapsedAnalyzingSeconds)}
             </Text>
             <View className="flex-row items-center gap-3">
               <View className="h-2.5 flex-1 overflow-hidden rounded-full bg-wood-800">
@@ -448,14 +506,17 @@ export default function AddSongScreen() {
                 />
               </View>
               <Text
-                className="min-w-[44px] text-right font-sans-medium tabular-nums text-xs text-amber-light"
-                accessibilityLabel={`Progress ${displayProgress} percent`}
+                className="min-w-[52px] text-right font-sans-medium tabular-nums text-xs text-amber-light"
+                accessibilityLabel={
+                  progressPercent != null ? `Progress ${progressPercent} percent` : 'Progress indeterminate'
+                }
               >
-                {displayProgress}%
+                {progressPercent != null ? `${progressPercent}%` : '—'}
               </Text>
             </View>
             <Text className="text-center font-sans text-[11px] leading-4 text-muted-brown">
-              Usually 1–4 minutes. Progress is an estimate until the server reports stages.
+              Usually 1–4 minutes. The bar fills when the practice server reports real stages — long separation or
+              transcription steps can take a few minutes without moving the percentage.
             </Text>
             <LoadingSkeleton width="100%" height={72} borderRadius={12} />
           </View>

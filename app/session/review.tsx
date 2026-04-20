@@ -6,23 +6,35 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { PhrasingVisualizerStub, ScoreSummaryCard } from '@/components/ReviewSessionPanel'
 import { SessionPitchReview } from '@/components/SessionPitchReview'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
-import { submitScore } from '@/src/api/analyze'
+import { ApiError, submitExportJob, submitScore } from '@/src/api/analyze'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapScoreFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
-import { applyReviewSkillUpdates, getSessionCount, insertLickRow, insertSessionRow } from '@/src/db/client'
+import { isHarmoniqSkillMutationSkipped } from '@/src/config'
+import { applyReviewSkillUpdates, getAllSkillNodes, getSessionCount, insertLickRow, insertSessionRow } from '@/src/db/client'
+import { computeSkillMutations } from '@/src/session/skillMutator'
+import { useDnaStore } from '@/src/stores/dnaStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { useAppStore } from '@/src/stores/useAppStore'
+import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
+import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { BPM_DRIFT_NOTE_MINIMUM } from '@/src/utils/practiceConfig'
 import { firstLessonStemRelPath, serializeLessonStemsJson } from '@/src/utils/lessonAudio'
+import { shareExportedBlob } from '@/src/utils/exportShare'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
+import {
+  sessionAccuracy01FromScoreResult,
+  timingStability01FromScoreResult,
+} from '@/src/session/scoreProgressSignals'
 import type { ScoreResult } from '@/src/types'
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -82,6 +94,7 @@ function buildFallbackMidiBase64(tempoBpm: number | null | undefined, key: strin
 }
 
 export default function ReviewScreen() {
+  const isDemo = useIsDemoLesson()
   const router = useRouter()
   const lesson = useLessonStore((s) => s.lesson)
   const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
@@ -97,6 +110,11 @@ export default function ReviewScreen() {
   const [savingLick, setSavingLick] = useState(false)
 
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
+  const gp5ForExport = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
+  const songTitleBase =
+    typeof lesson?.song_title === 'string' && lesson.song_title.trim()
+      ? lesson.song_title.trim()
+      : `section-${sectionIndex + 1}`
   const sectionMidiBase64 =
     section && typeof section === 'object' && typeof (section as Record<string, unknown>).midi_base64 === 'string'
       ? ((section as Record<string, unknown>).midi_base64 as string)
@@ -145,6 +163,17 @@ export default function ReviewScreen() {
       setScore(result)
       const targeted = ['pitch_accuracy', 'phrasing', 'timing']
       const targetedSet = new Set(targeted)
+      const cs = useAppStore.getState().currentSession
+      const harmoniq_dna_capture =
+        cs && (cs.noteTargetMidis.length > 0 || cs.bpmDriftSampleCount > 0)
+          ? {
+              note_target_midis: [...cs.noteTargetMidis],
+              note_results: [...cs.noteResults],
+              note_target_cells: cs.noteTargetCells.map((c) => (c ? { row: c.row, fret: c.fret } : null)),
+              bpm_drift_ms: cs.bpmDrift,
+              bpm_drift_sample_count: cs.bpmDriftSampleCount,
+            }
+          : undefined
       await insertSessionRow({
         id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         song_title: typeof lesson?.song_title === 'string' ? lesson.song_title : null,
@@ -158,8 +187,9 @@ export default function ReviewScreen() {
         pitch_accuracy: result.pitch_accuracy,
         phrasing_score: result.phrasing_score,
         nodes_targeted: targeted,
-        review_snapshot: JSON.stringify(result),
+        review_snapshot: JSON.stringify({ ...result, harmoniq_dna_capture }),
       })
+      void useDnaStore.getState().refresh()
       await applyReviewSkillUpdates({
         node_scores: result.node_scores,
         targeted_node_ids: targeted,
@@ -168,8 +198,23 @@ export default function ReviewScreen() {
           targeted.map((id) => [id, result.reliability?.signal_quality ?? result.diagnostics?.signal_quality ?? 0.7]),
         ),
         reliability_flags: result.reliability?.reliability_flags ?? result.diagnostics?.reliability_flags ?? [],
+        session_accuracy01: sessionAccuracy01FromScoreResult(result),
+        session_timing_stability01: timingStability01FromScoreResult(result),
       })
-      await useSkillStore.getState().loadFromDb()
+      let skillStoreRefreshed = false
+      if (!isHarmoniqSkillMutationSkipped()) {
+        const nodes = await getAllSkillNodes()
+        const nodesById = new Map(
+          nodes.map((n) => [n.id, { score: n.score, technique_roll_json: n.technique_roll_json ?? null }]),
+        )
+        const beats = useAppStore.getState().currentSession?.noteResults ?? []
+        const mutations = computeSkillMutations({ nodesById, beats, section })
+        if (mutations.length > 0) {
+          await useSkillStore.getState().applySessionMutation(mutations)
+          skillStoreRefreshed = true
+        }
+      }
+      if (!skillStoreRefreshed) await useSkillStore.getState().loadFromDb()
       if (__DEV__) {
         const refreshed = useSkillStore.getState().nodes
         console.log(
@@ -193,11 +238,38 @@ export default function ReviewScreen() {
   }, [])
 
   const exportMidi = useCallback(async () => {
+    if (gp5ForExport) {
+      try {
+        setExportState('Exporting MIDI…')
+        const { blob, mimeType, contentDisposition } = await submitExportJob({
+          gp5_base64: gp5ForExport,
+          format: 'midi',
+          title: songTitleBase,
+        })
+        await shareExportedBlob({
+          blob,
+          mimeType,
+          contentDisposition,
+          fallbackBase: songTitleBase,
+          dialogTitle: 'Export MIDI',
+        })
+        setExportState('MIDI exported.')
+        return
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 422) {
+          setExportState(`Export failed: ${e.message}`)
+          return
+        }
+        // Server off, 503, or network — fall back to local MIDI when available.
+      }
+    }
+
     if (!midiBase64) {
       setExportState('No MIDI/GP5 payload found for this section.')
       return
     }
     try {
+      setExportState(gp5ForExport ? 'Using offline MIDI…' : 'Exporting MIDI…')
       if (Platform.OS === 'web') {
         const dataUrl = `data:audio/midi;base64,${midiBase64}`
         const opened = await WebBrowser.openBrowserAsync(dataUrl)
@@ -215,7 +287,33 @@ export default function ReviewScreen() {
     } catch (e) {
       setExportState(`Export failed: ${e instanceof Error ? e.message : String(e)}`)
     }
-  }, [midiBase64, sectionIndex])
+  }, [gp5ForExport, midiBase64, sectionIndex, songTitleBase])
+
+  const exportMusicXml = useCallback(async () => {
+    if (!gp5ForExport) {
+      setExportState('No GP5 tab payload for MusicXML export.')
+      return
+    }
+    try {
+      setExportState('Exporting MusicXML…')
+      const { blob, mimeType, contentDisposition } = await submitExportJob({
+        gp5_base64: gp5ForExport,
+        format: 'musicxml',
+        title: songTitleBase,
+      })
+      await shareExportedBlob({
+        blob,
+        mimeType,
+        contentDisposition,
+        fallbackBase: songTitleBase,
+        dialogTitle: 'Export MusicXML',
+      })
+      setExportState('MusicXML exported.')
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
+      setExportState(`Export failed: ${msg}`)
+    }
+  }, [gp5ForExport, songTitleBase])
 
   const finish = () => {
     clearLatestTake()
@@ -276,13 +374,18 @@ export default function ReviewScreen() {
   return (
     <SessionStepScreen
       title="Review"
-      subtitle="Session scores, optional MIDI export, and a placeholder phrasing view until the visualizer ships."
+      subtitle={
+        isDemo
+          ? DEMO_TOUR_SUBTITLE.review
+          : 'Session scores, optional MIDI export, and a placeholder phrasing view until the visualizer ships.'
+      }
       showBack
       onBack={() => router.back()}
       showNext
       nextLabel="Done"
       onNext={finish}
     >
+      {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.review}</DemoTourCallout> : null}
       <PhrasingVisualizerStub />
 
       {currentSession && currentSession.noteContours.length > 0 ? (
@@ -316,13 +419,20 @@ export default function ReviewScreen() {
         >
           <Text className="font-sans-medium text-wood-900">{busy ? 'Scoring…' : 'Run score'}</Text>
         </Pressable>
-        <Pressable
+        <AnimatedPressable
           onPress={() => void exportMidi()}
           className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">Export MIDI</Text>
-        </Pressable>
+        </AnimatedPressable>
+        <AnimatedPressable
+          onPress={() => void exportMusicXml()}
+          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
+          accessibilityRole="button"
+        >
+          <Text className="font-sans-medium text-wood-900">Export MusicXML</Text>
+        </AnimatedPressable>
         <Pressable
           onPress={() => void saveLick()}
           disabled={savingLick}

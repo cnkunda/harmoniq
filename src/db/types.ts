@@ -54,6 +54,15 @@ export type SkillNodeRow = {
   interval_days: number
   next_review_date: string | null
   sm2_repetitions: number
+  /** JSON array (max 3) of raw session accuracy samples for technique mutation rolling weak-area (commit 63). */
+  technique_roll_json?: string | null
+}
+
+/** Persisted slice after pure skill mutation reducer (commit 63). */
+export type SkillSessionMutationRow = {
+  id: string
+  score: number
+  technique_roll_json: string | null
 }
 
 export type ReviewSkillUpdateInput = {
@@ -62,6 +71,10 @@ export type ReviewSkillUpdateInput = {
   node_confidence_map?: Partial<Record<string, 'low' | 'medium' | 'high'>>
   node_reliability_map?: Partial<Record<string, number>>
   reliability_flags?: string[]
+  /** Session-level pitch / accuracy (0–1) for SM-2 multisignal composite. */
+  session_accuracy01?: number
+  /** Session-level timing stability (0–1); from rushing_score + diagnostics. */
+  session_timing_stability01?: number
 }
 
 /** Latest persisted session that includes a song title (library proxy). */

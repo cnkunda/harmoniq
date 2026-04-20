@@ -12,12 +12,12 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.coach import merge_coach_copy_into_sections
 from app.ingest import SourceMetadata, resolve_lesson_titles
 from app.pipeline_proof import LibrosaSummary, librosa_summarize
 from app.style_detect import infer_style_from_librosa_summary
 from app.transcribe import transcribe_vocals_to_lyrics_aligned
 from app.schemas import LessonJSON, LessonSectionStub, PlayerProfile
+from app.alphatab_prerender import enrich_lesson_with_prerender_hints
 from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidence, generate_tab_artifacts_for_guitar_stem
 
 logger = logging.getLogger("harmoniq.analyze_audio")
@@ -70,15 +70,6 @@ def _fallback_lesson(
     )
     style = infer_style_from_librosa_summary(stub_summary)
     song_title, artist = resolve_lesson_titles(source_metadata, source_url=source_url)
-    sections = merge_coach_copy_into_sections(
-        sections,
-        song_title=song_title,
-        artist=artist,
-        key="G major",
-        player_profile=player_profile,
-        style_label=style.style_label,
-        technique_hints=style.technique_hints,
-    )
     return LessonJSON(
         job_id=job_id,
         song_title=song_title,
@@ -160,6 +151,7 @@ def build_lesson_json_from_librosa(
         vocals_stem_path, beat_grid=beat_grid, bar_timestamps=bar_timestamps
     )
 
+    tab_artifacts: dict[str, str] | None = None
     try:
         tab_artifacts = generate_tab_artifacts_for_guitar_stem(
             guitar_stem_path,
@@ -184,17 +176,7 @@ def build_lesson_json_from_librosa(
             for sec in sections
         ]
     style = infer_style_from_librosa_summary(summary)
-    sections = merge_coach_copy_into_sections(
-        sections,
-        song_title=song_title,
-        artist=artist,
-        key=summary.key_name,
-        player_profile=player_profile,
-        style_label=style.style_label,
-        technique_hints=style.technique_hints,
-    )
-
-    return LessonJSON(
+    lesson = LessonJSON(
         job_id=job_id,
         song_title=song_title,
         artist=artist,
@@ -211,4 +193,8 @@ def build_lesson_json_from_librosa(
         sections=sections,
         wav_path=wav_path,
     )
+    full_gp5 = tab_artifacts.get("tab_full_gp5_base64") if tab_artifacts else None
+    if isinstance(full_gp5, str) and full_gp5.strip():
+        lesson = enrich_lesson_with_prerender_hints(lesson, job_id=job_id, gp5_base64=full_gp5)
+    return lesson
 

@@ -56,7 +56,9 @@ def _profile_cache_suffix(profile: PlayerProfile | None) -> str:
     data = profile.model_dump(mode="json", exclude_none=True)
     weak = data.get("weak_areas") or []
     nodes = data.get("skill_nodes") or []
-    if not weak and not nodes:
+    taste = data.get("taste_profile")
+    lc = data.get("learning_context")
+    if not weak and not nodes and not taste and not lc:
         return ""
     canonical = json.dumps(data, sort_keys=True, separators=(",", ":"))
     short = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
@@ -164,4 +166,23 @@ def reuse_cached_artifacts_into_job(cached_lesson: LessonJSON, *, job_id: str) -
     lesson_payload["job_id"] = job_id
     lesson_payload["wav_path"] = str(target_wav.relative_to(backend_root).as_posix())
     lesson_payload["stems"] = remapped_stems
+
+    hints_raw = lesson_payload.get("alphatab_prerender_hints")
+    if isinstance(hints_raw, dict):
+        art_rel = hints_raw.get("artifact_rel")
+        if isinstance(art_rel, str) and art_rel.strip():
+            src_a = (backend_root / art_rel.replace("\\", "/")).resolve()
+            root_r = backend_root.resolve()
+            if str(src_a).startswith(str(root_r)) and src_a.is_file():
+                dst_a = job_dir / src_a.name
+                shutil.copyfile(src_a, dst_a)
+                lesson_payload["alphatab_prerender_hints"] = {
+                    **hints_raw,
+                    "artifact_rel": str(dst_a.relative_to(root_r).as_posix()),
+                }
+            else:
+                lesson_payload.pop("alphatab_prerender_hints", None)
+        else:
+            lesson_payload.pop("alphatab_prerender_hints", None)
+
     return LessonJSON.model_validate(lesson_payload)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SkillNode(BaseModel):
@@ -17,6 +17,37 @@ class SkillNode(BaseModel):
     score: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
+class QuizAnswers(BaseModel):
+    """Cold-start quiz payload (commit 69); commit 68 derives `TasteProfile` from it."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    selected_artists: list[str] = Field(default_factory=list)
+    selected_style: str = ""
+    experience_level: Literal["beginner", "intermediate", "advanced"] = "intermediate"
+
+
+class TasteProfile(BaseModel):
+    """Derived teaching taste — curriculum + coach read via `PlayerProfile.taste_profile` (commit 68)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    style_label: str = "pop"
+    technique_affinity: list[str] = Field(default_factory=list)
+    bpm_comfort_range: tuple[int, int] = (80, 120)
+    song_candidates: list[str] = Field(default_factory=list)
+    source: Literal["spotify", "quiz", "manual"] = "spotify"
+
+
+class LearningContext(BaseModel):
+    """User-declared tier + optional focus notes from app Settings / taste quiz."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    experience_level: Literal["beginner", "intermediate", "advanced"] | None = None
+    solo_focus_notes: str | None = Field(default=None, max_length=800)
+
+
 class PlayerProfile(BaseModel):
     """Optional client-provided profile for coach conditioning on POST /analyze."""
 
@@ -24,6 +55,145 @@ class PlayerProfile(BaseModel):
 
     weak_areas: list[str] = Field(default_factory=list)
     skill_nodes: list[SkillNode] = Field(default_factory=list)
+    taste_profile: TasteProfile | None = None
+    learning_context: LearningContext | None = None
+
+
+class CurriculumSuggestRequest(BaseModel):
+    """POST /curriculum/suggest payload (commit 65)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    player_profile: PlayerProfile | None = None
+    job_ids: list[str] = Field(default_factory=list)
+
+
+class CurriculumSuggestionItem(BaseModel):
+    job_id: str
+    reason_label: str
+    technique_focus: str
+
+
+class CurriculumSuggestResponse(BaseModel):
+    ranked: list[CurriculumSuggestionItem] = Field(default_factory=list)
+
+
+SlotType = Literal["warmup", "technique", "song_section", "free_jam"]
+
+FretboardGuideVariant = Literal["primary", "secondary"]
+
+
+class FretboardGuideCell(BaseModel):
+    """Tab string (1 = high E) + fret for warm-up fretboard highlights."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    string: int = Field(..., ge=1, le=6)
+    fret: int = Field(..., ge=0, le=12)
+    variant: FretboardGuideVariant = "primary"
+
+
+class FretboardGuide(BaseModel):
+    """Curriculum-authored cells + optional caption (pool → API → client)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    cells: list[FretboardGuideCell] = Field(default_factory=list)
+    caption: str | None = Field(default=None, max_length=500)
+
+
+class WarmupExercise(BaseModel):
+    """One step inside the session opener (commit 73)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    duration_seconds: int = Field(..., ge=30, le=300)
+    tab_snippet_gp5_base64: str | None = Field(default=None, max_length=2_000_000)
+    technique_tag: str = Field(..., min_length=1, max_length=80)
+    bpm: int = Field(..., ge=40, le=240)
+    fretboard_guide: FretboardGuide | None = None
+
+
+class WarmupPlan(BaseModel):
+    """Three-move personalized warm-up (~3 minutes)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    exercises: list[WarmupExercise] = Field(default_factory=list)
+    total_duration_seconds: int = Field(ge=0, default=0)
+
+
+class DrillSlot(BaseModel):
+    """One ordered step in a generated practice session (commit 70)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    slot_type: SlotType
+    duration_seconds: int = Field(..., ge=60, le=7200)
+    title: str = Field(..., min_length=1, max_length=200)
+    coach_intro: str = Field(default="", max_length=500)
+    lesson_ref: str | None = Field(default=None, max_length=80)
+    exercise_ref: str | None = Field(default=None, max_length=80)
+    technique_focus: str | None = Field(default=None, max_length=80)
+    warmup_plan: WarmupPlan | None = None
+
+
+class PracticePlan(BaseModel):
+    """Ordered drills for one sitting — client drives navigation + lesson load."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    slots: list[DrillSlot] = Field(default_factory=list)
+    total_duration_seconds: int = Field(ge=0, default=0)
+
+
+class PracticePlanRequest(BaseModel):
+    """POST /practice/plan payload (commit 70)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    player_profile: PlayerProfile | None = None
+    job_ids: list[str] = Field(default_factory=list)
+    duration_minutes: int = Field(default=25, ge=10, le=120)
+    library_lessons: list[LessonJSON] = Field(
+        default_factory=list,
+        description="Full LessonJSON from device when server job store has no completed result.",
+    )
+
+
+class SpotifyTasteProfile(BaseModel):
+    """Aggregated listening taste from Spotify Web API (commit 67) — no tokens."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    top_genres: list[str] = Field(default_factory=list)
+    top_artists: list[str] = Field(default_factory=list)
+    energy_avg: float = 0.0
+    tempo_avg: float = 0.0
+    instrumentalness_avg: float = 0.0
+
+
+class TasteDeriveRequest(BaseModel):
+    """POST /taste/derive — exactly one of Spotify-shaped taste or quiz answers."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    spotify_profile: SpotifyTasteProfile | None = None
+    quiz_answers: QuizAnswers | None = None
+    taste_source: Literal["spotify", "manual"] | None = Field(
+        default=None,
+        description="When using `spotify_profile`, set `manual` for curated non-Spotify taste payloads.",
+    )
+
+    @model_validator(mode="after")
+    def _exactly_one_input(self) -> TasteDeriveRequest:
+        has_spotify = self.spotify_profile is not None
+        has_quiz = self.quiz_answers is not None
+        if has_spotify == has_quiz:
+            raise ValueError("Provide exactly one of spotify_profile or quiz_answers.")
+        return self
 
 
 class AnalyzeRequest(BaseModel):
@@ -37,6 +207,51 @@ class AnalyzeJobCreated(BaseModel):
     """Immediate response from POST /analyze — processing is stubbed as complete in-memory."""
 
     job_id: str
+
+
+class AlphaTabPartialPrerender(BaseModel):
+    """One SVG fragment produced by AlphaTab ScoreRenderer (Node bridge)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = ""
+    x: float = 0.0
+    y: float = 0.0
+    width: float = 0.0
+    height: float = 0.0
+    svg: str = ""
+
+
+class AlphaTabPrerenderBundle(BaseModel):
+    """Disk artifact next to job outputs — fetched by the client for faster first paint."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ok: bool = True
+    alphatab_version: str = ""
+    preset_version: str = ""
+    score_sha256: str = ""
+    master_bar_count: int = 0
+    total_width: int = 0
+    total_height: int = 0
+    partial_count: int = 0
+    partials: list[AlphaTabPartialPrerender] = Field(default_factory=list)
+
+
+class AlphaTabPrerenderHints(BaseModel):
+    """Lesson-root pointers to prerender artifacts (small JSON)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    alphatab_version: str
+    preset_version: str
+    score_sha256: str
+    cache_key: str
+    master_bar_count: int
+    total_width: int
+    total_height: int
+    partial_count: int
+    artifact_rel: str | None = None
 
 
 class LessonSectionStub(BaseModel):
@@ -69,6 +284,7 @@ class LessonJSON(BaseModel):
     stems: dict[str, str] = Field(default_factory=dict)
     lyrics_aligned: list[dict[str, Any]] = Field(default_factory=list)
     sections: list[LessonSectionStub] = Field(default_factory=list)
+    alphatab_prerender_hints: AlphaTabPrerenderHints | None = None
 
 
 class JobStatus(BaseModel):
@@ -87,6 +303,24 @@ class JobStatus(BaseModel):
         default=None,
         description="Short stage label while processing.",
     )
+    processing_started_at: float | None = Field(
+        default=None,
+        description="Unix timestamp when processing began (server clock).",
+    )
+
+
+class CoachHydrationSection(BaseModel):
+    index: int
+    coach_note: str = ""
+    coach_explanation: str = ""
+
+
+class CoachHydrationStatus(BaseModel):
+    """GET /analyze/{job_id}/coach status payload (commit 66)."""
+
+    status: Literal["pending", "complete", "fallback"] = "pending"
+    sections: list[CoachHydrationSection] = Field(default_factory=list)
+    fallback_reason: str | None = None
 
 
 class ScoreRequest(BaseModel):
@@ -215,3 +449,17 @@ class JamBackingResponse(BaseModel):
     format: Literal["wav"] = "wav"
     prompt_used: str
     duration_ms: int | None = None
+
+
+class ExportRequest(BaseModel):
+    """POST /export — Guitar Pro 5 binary (base64) to MIDI or MusicXML (PRIORITIES §58)."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    gp5_base64: str = Field(..., min_length=8, max_length=40_000_000)
+    export_format: Literal["midi", "musicxml", "pdf", "png"] = Field(
+        ...,
+        alias="format",
+        description="Target export format; pdf/png may be rejected by the server build.",
+    )
+    title: str | None = Field(default=None, max_length=200, description="Optional filename stem hint.")

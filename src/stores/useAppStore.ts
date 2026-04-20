@@ -13,6 +13,8 @@ export type CurrentSessionState = {
   noteContours: NoteContourSample[][]
   /** Target MIDI per scored row (parallel to noteContours / noteResults). */
   noteTargetMidis: number[]
+  /** Resolved tab cell per scored beat (null = ignored / unknown) — commit 74 DNA. */
+  noteTargetCells: Array<{ row: number; fret: number } | null>
   noteResults: NoteResultLabel[]
   adaptedCentsTolerance: number
   /** Mean onset error in ms; positive = early vs grid (rushing). */
@@ -30,6 +32,7 @@ type AppState = {
     contour: NoteContourSample[]
     targetMidi: number
     driftMsContribution?: number | null
+    fretCell?: { row: number; fret: number } | null
   }) => void
   setAdaptedCentsTolerance: (cents: number) => void
   setBpmDrift: (ms: number, sampleCount: number) => void
@@ -43,6 +46,7 @@ function emptySession(baseBest: number): CurrentSessionState {
     bestStreakAtSessionStart: baseBest,
     noteContours: [],
     noteTargetMidis: [],
+    noteTargetCells: [],
     noteResults: [],
     adaptedCentsTolerance: CENTS_TOLERANCE,
     bpmDrift: 0,
@@ -62,12 +66,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { currentSession: emptySession(baseBest) }
     }),
 
-  pushScoredBeat: ({ result, contour, targetMidi, driftMsContribution }) =>
+  pushScoredBeat: ({ result, contour, targetMidi, driftMsContribution, fretCell = null }) =>
     set((state) => {
       const cs = state.currentSession
       if (!cs) return state
       const nextContours = [...cs.noteContours, contour]
       const nextTargets = [...cs.noteTargetMidis, targetMidi]
+      const nextCells = [...cs.noteTargetCells, fretCell]
       const nextResults = [...cs.noteResults, result]
       let nextDrift = cs.bpmDrift
       let nextCount = cs.bpmDriftSampleCount
@@ -81,6 +86,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...cs,
           noteContours: nextContours,
           noteTargetMidis: nextTargets,
+          noteTargetCells: nextCells,
           noteResults: nextResults,
           bpmDrift: nextDrift,
           bpmDriftSampleCount: nextCount,

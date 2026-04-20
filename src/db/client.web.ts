@@ -13,7 +13,12 @@ import {
     setHarmoniqIdbHandle,
     type IdbHydration,
 } from '@/src/db/idbWeb'
-import { DEFAULT_SKILL_NODES, PREF_ONBOARDING_COMPLETE } from '@/src/db/schema'
+import {
+  DEFAULT_SKILL_NODES,
+  PREF_EXPERIENCE_LEVEL,
+  PREF_ONBOARDING_COMPLETE,
+  PREF_TASTE_PROFILE_JSON,
+} from '@/src/db/schema'
 import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
 import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
 import type {
@@ -31,8 +36,9 @@ import type {
   SessionInsertInput,
   SessionJournalRow,
   SkillNodeRow,
+  SkillSessionMutationRow,
 } from '@/src/db/types'
-import type { LessonJSON } from '@/src/types'
+import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
 
@@ -58,6 +64,7 @@ function defaultSkillRow(def: { id: string; label: string }): SkillNodeRow {
     interval_days: 1,
     next_review_date: null,
     sm2_repetitions: 0,
+    technique_roll_json: null,
   }
 }
 
@@ -93,7 +100,16 @@ function applySkillNodesFromIdb(rows: SkillNodeRow[]): void {
   skillNodes.clear()
   const byId = new Map(rows.map((r) => [r.id, r]))
   for (const n of DEFAULT_SKILL_NODES) {
-    skillNodes.set(n.id, byId.get(n.id) ?? defaultSkillRow(n))
+    const existing = byId.get(n.id)
+    if (existing) {
+      skillNodes.set(n.id, {
+        ...defaultSkillRow(n),
+        ...existing,
+        technique_roll_json: existing.technique_roll_json ?? null,
+      })
+    } else {
+      skillNodes.set(n.id, defaultSkillRow(n))
+    }
   }
 }
 
@@ -248,6 +264,11 @@ export async function listSessionsJournal(): Promise<SessionJournalRow[]> {
     }))
 }
 
+export async function listSessionsArchive(): Promise<SessionArchiveRow[]> {
+  seedWebSkillNodes()
+  return [...sessionLog].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+
 export async function getSessionById(id: string): Promise<SessionArchiveRow | null> {
   seedWebSkillNodes()
   return sessionLog.find((x) => x.id === id) ?? null
@@ -349,6 +370,43 @@ export async function commitPlacementOnboarding(aggregatedNodeScores: Record<str
   await placementCommitChain
 }
 
+/** Commit 69: taste quiz completion — `TasteProfile` prefs + experience-mapped skill scores. */
+export async function commitTasteQuizProfile(
+  taste: TasteProfilePayload,
+  experienceLevel: 'beginner' | 'intermediate' | 'advanced',
+): Promise<void> {
+  seedWebSkillNodes()
+  const tier = experienceLevel === 'beginner' ? 0.2 : experienceLevel === 'advanced' ? 0.7 : 0.5
+  await setAppPref(PREF_TASTE_PROFILE_JSON, JSON.stringify(taste))
+  await setAppPref(PREF_EXPERIENCE_LEVEL, experienceLevel)
+  const rows = await getAllSkillNodes()
+  for (const n of DEFAULT_SKILL_NODES) {
+    const row = rows.find((r) => r.id === n.id)
+    if (!row) continue
+    const u = deriveSkillNodeAfterSession(
+      {
+        score: row.score,
+        easiness_factor: row.easiness_factor,
+        interval_days: row.interval_days,
+        sm2_repetitions: row.sm2_repetitions,
+        sessions_count: row.sessions_count,
+      },
+      tier,
+    )
+    skillNodes.set(n.id, {
+      ...row,
+      score: u.score,
+      easiness_factor: u.easiness_factor,
+      interval_days: u.interval_days,
+      sm2_repetitions: u.sm2_repetitions,
+      next_review_date: u.next_review_date,
+      sessions_count: u.sessions_count,
+      last_session_date: u.last_session_date,
+    })
+  }
+  await flushSkillNodes()
+}
+
 export async function getLatestSessionWithSong(): Promise<LatestSessionSongRow | null> {
   seedWebSkillNodes()
   for (let i = sessionSongLog.length - 1; i >= 0; i--) {
@@ -392,6 +450,21 @@ export async function getHomeSuggestion(): Promise<HomeSuggestion> {
   return { kind: 'ready', node, song }
 }
 
+export async function applySessionMutation(updates: SkillSessionMutationRow[]): Promise<void> {
+  if (updates.length === 0) return
+  seedWebSkillNodes()
+  for (const u of updates) {
+    const row = skillNodes.get(u.id)
+    if (!row) continue
+    skillNodes.set(u.id, {
+      ...row,
+      score: u.score,
+      technique_roll_json: u.technique_roll_json,
+    })
+  }
+  await flushSkillNodes()
+}
+
 export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Promise<void> {
   seedWebSkillNodes()
   for (const id of input.targeted_node_ids) {
@@ -411,8 +484,8 @@ export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Pr
       },
       sessionScore,
       {
-        accuracyScore01: sessionScore,
-        timingStability01: sessionScore,
+        accuracyScore01: input.session_accuracy01 ?? sessionScore,
+        timingStability01: input.session_timing_stability01 ?? sessionScore,
         reliabilityScore01: typeof reliability === 'number' ? reliability : undefined,
         confidence: confidence === 'low' || confidence === 'medium' || confidence === 'high' ? confidence : undefined,
         reliabilityFlags: input.reliability_flags ?? [],

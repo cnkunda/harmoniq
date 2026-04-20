@@ -15,11 +15,18 @@ import logging
 import threading
 import time
 
-from app.schemas import JobStatus, LessonJSON, LessonSectionStub, PlayerProfile
+from app.schemas import (
+    CoachHydrationSection,
+    CoachHydrationStatus,
+    JobStatus,
+    LessonJSON,
+    LessonSectionStub,
+    PlayerProfile,
+)
 
 from app.analyze_audio import build_lesson_json_from_librosa
 from app.cache import load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
-from app.coach import merge_coach_copy_into_sections
+from app.coach import hydrate_coach_copy_into_sections
 from app.ingest import (
     IngestError,
     SourceMetadata,
@@ -36,6 +43,7 @@ logger.setLevel(logging.INFO)
 
 # In-memory job store (single process).
 jobs: dict[str, JobStatus] = {}
+coach_hydration: dict[str, CoachHydrationStatus] = {}
 
 
 def _set_job_processing_progress(job_id: str, progress: float, stage_label: str) -> None:
@@ -43,13 +51,85 @@ def _set_job_processing_progress(job_id: str, progress: float, stage_label: str)
     current = jobs.get(job_id)
     if current is None or current.status != "processing":
         return
+    started = current.processing_started_at
+    if started is None:
+        started = time.time()
     jobs[job_id] = JobStatus(
         status="processing",
         result=None,
         error=None,
         progress=max(0.0, min(1.0, float(progress))),
         stage_label=stage_label,
+        processing_started_at=float(started),
     )
+
+
+def _lesson_with_skeleton_coach(lesson: LessonJSON) -> LessonJSON:
+    sections: list[LessonSectionStub] = []
+    for sec in lesson.sections:
+        payload = sec.model_dump(exclude_none=True)
+        payload["coach_note"] = ""
+        payload["coach_explanation"] = ""
+        sections.append(LessonSectionStub(**payload))
+    return lesson.model_copy(update={"sections": sections})
+
+
+def _set_coach_pending(job_id: str, section_count: int) -> None:
+    coach_hydration[job_id] = CoachHydrationStatus(
+        status="pending",
+        sections=[CoachHydrationSection(index=i, coach_note="", coach_explanation="") for i in range(max(0, section_count))],
+        fallback_reason=None,
+    )
+
+
+def _lesson_has_hydrated_coach(lesson: LessonJSON) -> bool:
+    for sec in lesson.sections:
+        payload = sec.model_dump(exclude_none=True)
+        note = payload.get("coach_note")
+        explanation = payload.get("coach_explanation")
+        if isinstance(note, str) and note.strip() and isinstance(explanation, str) and explanation.strip():
+            return True
+    return False
+
+
+def _hydrate_coach_copy_job(
+    job_id: str,
+    *,
+    player_profile: PlayerProfile | None,
+) -> None:
+    job = jobs.get(job_id)
+    if job is None or job.result is None:
+        return
+    lesson = job.result
+    sections = [LessonSectionStub(**s.model_dump(exclude_none=True)) for s in lesson.sections]
+    enriched, status, fallback_reason = hydrate_coach_copy_into_sections(
+        sections,
+        song_title=lesson.song_title,
+        artist=lesson.artist,
+        key=lesson.key,
+        player_profile=player_profile,
+        style_label=lesson.style_label,
+        technique_hints=[],
+    )
+    patched = lesson.model_copy(update={"sections": enriched})
+    jobs[job_id] = JobStatus(status="complete", result=patched, error=None)
+    coach_hydration[job_id] = CoachHydrationStatus(
+        status=status,
+        sections=[
+            CoachHydrationSection(
+                index=i,
+                coach_note=str(getattr(sec, "coach_note", "") or ""),
+                coach_explanation=str(getattr(sec, "coach_explanation", "") or ""),
+            )
+            for i, sec in enumerate(enriched)
+        ],
+        fallback_reason=fallback_reason,
+    )
+    logger.info("coach_hydration complete job_id=%s status=%s fallback_reason=%s", job_id, status, fallback_reason)
+
+
+def get_coach_hydration(job_id: str) -> CoachHydrationStatus | None:
+    return coach_hydration.get(job_id)
 
 
 # Used by tests / smoke forcing.
@@ -146,6 +226,27 @@ def _process_analyze_job(
             reused = reuse_cached_artifacts_into_job(cached_lesson, job_id=job_id)
             if reused is not None:
                 jobs[job_id] = JobStatus(status="complete", result=reused, error=None)
+                if _lesson_has_hydrated_coach(reused):
+                    coach_hydration[job_id] = CoachHydrationStatus(
+                        status="complete",
+                        sections=[
+                            CoachHydrationSection(
+                                index=i,
+                                coach_note=str((sec.model_dump(exclude_none=True).get("coach_note") or "")),
+                                coach_explanation=str((sec.model_dump(exclude_none=True).get("coach_explanation") or "")),
+                            )
+                            for i, sec in enumerate(reused.sections)
+                        ],
+                        fallback_reason=None,
+                    )
+                else:
+                    _set_coach_pending(job_id, len(reused.sections))
+                    coach_thread = threading.Thread(
+                        target=_hydrate_coach_copy_job,
+                        kwargs={"job_id": job_id, "player_profile": player_profile},
+                        daemon=True,
+                    )
+                    coach_thread.start()
                 logger.info("worker cache hit job_id=%s", job_id)
                 return
 
@@ -164,16 +265,7 @@ def _process_analyze_job(
                 stems=stems,
                 source_metadata=source_metadata,
             )
-            enriched = merge_coach_copy_into_sections(
-                list(stub.sections),
-                song_title=stub.song_title,
-                artist=stub.artist,
-                key=stub.key,
-                player_profile=player_profile,
-                style_label=stub.style_label,
-                technique_hints=[],
-            )
-            result = stub.model_copy(update={"sections": enriched})
+            result = stub
         else:
             _set_job_processing_progress(job_id, 0.78, "Analyzing structure & tabs…")
             backend_root = get_data_dir().parent
@@ -189,8 +281,16 @@ def _process_analyze_job(
                 player_profile=player_profile,
                 source_metadata=source_metadata,
             )
-        save_cached_lesson_for_wav(wav_path_obj, result, player_profile=player_profile)
-        jobs[job_id] = JobStatus(status="complete", result=result, error=None)
+        skeleton_result = _lesson_with_skeleton_coach(result)
+        save_cached_lesson_for_wav(wav_path_obj, skeleton_result, player_profile=player_profile)
+        jobs[job_id] = JobStatus(status="complete", result=skeleton_result, error=None)
+        _set_coach_pending(job_id, len(skeleton_result.sections))
+        coach_thread = threading.Thread(
+            target=_hydrate_coach_copy_job,
+            kwargs={"job_id": job_id, "player_profile": player_profile},
+            daemon=True,
+        )
+        coach_thread.start()
         logger.info("worker complete job_id=%s", job_id)
     except YouTubeUrlInvalidError:
         logger.warning("worker failed job_id=%s invalid youtube_url", job_id)
@@ -237,7 +337,9 @@ def enqueue_analyze_job(
         error=None,
         progress=0.05,
         stage_label="Queued…",
+        processing_started_at=time.time(),
     )
+    coach_hydration[job_id] = CoachHydrationStatus(status="pending", sections=[], fallback_reason=None)
     logger.info(
         "enqueue job_id=%s status=processing youtube_url=%r upload_path=%r has_profile=%s",
         job_id,

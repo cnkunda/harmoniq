@@ -9,9 +9,11 @@ import { useAppStore } from '@/src/stores/useAppStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import type { SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import { effectiveRmsSignalGate } from '@/src/audio/noiseGate'
 import {
   beatDurationSecFromTempo,
   beatIndexFromClocks,
+  captureBeatIndexFromTick,
   CentSampleRing,
   dynamicGhostRmsThreshold,
   peakRmsInWindow,
@@ -19,6 +21,7 @@ import {
   type NoteResultLabel,
   type RmsHistorySample,
 } from '@/src/session/noteAccuracyBeats'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import {
   ADAPT_CEILING_CENTS,
   ADAPT_FLOOR_CENTS,
@@ -90,6 +93,8 @@ export function usePlayCapture(tempo: number | null | undefined) {
 
   const [pitchRunning, setPitchRunning] = useState(false)
   const [recording, setRecording] = useState(false)
+  /** Wall time when capture session started (for mm:ss UI); cleared when capture ends. */
+  const [recordingWallClockStartedAtMs, setRecordingWallClockStartedAtMs] = useState<number | null>(null)
   const [take, setTake] = useState<RecordedTake | null>(null)
   const [status, setStatus] = useState('Idle')
   const [targetLabel, setTargetLabel] = useState('A')
@@ -140,7 +145,10 @@ export function usePlayCapture(tempo: number | null | undefined) {
       const beatMs = beatSec * 1000
 
       const peakRecent = peakRmsInWindow(rmsHistoryRef.current, now)
-      const ghostThresh = dynamicGhostRmsThreshold(peakRecent)
+      const ghostThresh = effectiveRmsSignalGate(
+        dynamicGhostRmsThreshold(peakRecent),
+        useSessionPrefsStore.getState().getActiveNoiseGateThresholdRms(),
+      )
       const beatMax = beatMaxRmsRef.current
       beatMaxRmsRef.current = 0
 
@@ -177,11 +185,14 @@ export function usePlayCapture(tempo: number | null | undefined) {
         }
 
         const contourForStore: NoteContourSample[] = contourScratch.map(({ hz, amp, t }) => ({ hz, amp, t }))
+        const tabPos = lastTabPositionRef.current
+        const resolvedCell = resolveFretCell({ ...(tabPos ?? {}), midi: targetMidiNow })
         storeApi.pushScoredBeat({
           result,
           contour: contourForStore,
           targetMidi: targetMidiNow,
           driftMsContribution: driftMs,
+          fretCell: resolvedCell,
         })
       }
 
@@ -330,10 +341,12 @@ export function usePlayCapture(tempo: number | null | undefined) {
       })
       setTake(null)
       setRecording(true)
+      setRecordingWallClockStartedAtMs(Date.now())
       setPitchRunning(true)
       setStatus('Capturing performance')
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
+      setRecordingWallClockStartedAtMs(null)
       setStatus(`Capture error: ${message}`)
       try {
         await recorderRef.current.stop()
@@ -376,6 +389,7 @@ export function usePlayCapture(tempo: number | null | undefined) {
         const rec = await recorderRef.current.stop()
         await stop()
         setRecording(false)
+        setRecordingWallClockStartedAtMs(null)
         setPitchRunning(false)
         setTake(rec)
         setLatestTake(rec)
@@ -410,10 +424,8 @@ export function usePlayCapture(tempo: number | null | undefined) {
     const id = setInterval(() => {
       if (stoppingCaptureRef.current) return
       const ctx = tickRef.current
-      if (!ctx) return
-      const idx = beatIndexFromClocks({
-        playing: ctx.playing,
-        positionSec: ctx.positionSec,
+      const idx = captureBeatIndexFromTick({
+        tick: ctx ? { playing: ctx.playing, positionSec: ctx.positionSec } : null,
         anchorPosSec: anchorPosRef.current,
         recordStartMs: recordStartMsRef.current,
         beatSec,
@@ -494,6 +506,7 @@ export function usePlayCapture(tempo: number | null | undefined) {
     stemTabRef,
     pitchRunning,
     recording,
+    recordingWallClockStartedAtMs,
     take,
     status,
     targetLabel,

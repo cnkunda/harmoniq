@@ -1209,7 +1209,7 @@ export default function TabLayout() {
 - **B2 (targets):** The highlighted chip is always the **latest tab note** (`noteEvent`); the queue shows history so testers see targets advancing **note-by-note**, while beat scoring stays **per beat** against whatever target was in effect.
 - **Chips:** Reuse the ListenStemPanel inactive/active chip pattern (`border-wood-600/40 bg-wood-900/10` vs `border-amber-accent bg-amber-accent`) for the horizontal target strip.
 - **Motion:** `react-native-reanimated` only (see `PRIORITIES.md` — no `framer-motion`). Beat-close feedback on the fretboard uses a brief ring tint (success / amber / danger).
-- **QA cross-links:** Manual checks in `docs/FEEL_REAL_QA.md` (B2 rolling targets, E1 ladder); platform matrix in `docs/PLATFORM_QA_MATRIX.md`.
+- **QA cross-links:** Play targets and pitch ladder checks live under Phase 5 / platform notes in [`docs/MANUAL_QA.md`](./MANUAL_QA.md).
 
 ```app/(tabs)/index.tsx
 import { ScrollView, View, Text, Pressable } from 'react-native'

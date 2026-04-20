@@ -4,6 +4,8 @@ import { Pressable, ScrollView, Text, View } from 'react-native'
 export interface SessionStepScreenProps {
   title: string
   subtitle?: string
+  /** Hide the scroll header block (warm-up uses inline section labels). */
+  hideTitle?: boolean
   children?: ReactNode
   showBack: boolean
   backLabel?: string
@@ -11,11 +13,16 @@ export interface SessionStepScreenProps {
   showNext: boolean
   nextLabel?: string
   onNext: () => void
+  /** Optional NativeWind classes for the fixed footer row (warm-up and other custom steps). */
+  footerContainerClassName?: string
+  backButtonClassName?: string
+  nextButtonClassName?: string
 }
 
 export function SessionStepScreen({
   title,
   subtitle,
+  hideTitle = false,
   children,
   showBack,
   backLabel = 'Back',
@@ -23,7 +30,14 @@ export function SessionStepScreen({
   showNext,
   nextLabel = 'Next',
   onNext,
+  footerContainerClassName,
+  backButtonClassName,
+  nextButtonClassName,
 }: SessionStepScreenProps) {
+  const footerRow = footerContainerClassName ?? 'flex-row gap-3 border-t border-wood-600/25 bg-ivory px-6 pb-8 pt-4'
+  const backClass = backButtonClassName ?? 'flex-1 rounded-lg border border-wood-600/55 bg-cream-dark/60 py-3'
+  const nextClass = nextButtonClassName ?? 'flex-1 rounded-lg bg-amber-accent/90 py-3'
+
   return (
     <View className="flex-1">
       <ScrollView
@@ -38,19 +52,23 @@ export function SessionStepScreen({
         nestedScrollEnabled
         showsVerticalScrollIndicator
       >
-        <Text className="text-3xl font-serif text-wood-900">{title}</Text>
-        {subtitle ? (
-          <Text className="mt-2 font-sans text-sm leading-relaxed text-muted-brown">{subtitle}</Text>
+        {!hideTitle ? (
+          <>
+            <Text className="text-3xl font-serif text-wood-900">{title}</Text>
+            {subtitle ? (
+              <Text className="mt-2 font-sans text-sm leading-relaxed text-muted-brown">{subtitle}</Text>
+            ) : null}
+          </>
         ) : null}
 
         {children}
       </ScrollView>
 
-      <View className="flex-row gap-3 border-t border-wood-600/25 bg-ivory px-6 pb-8 pt-4">
+      <View className={footerRow}>
         {showBack ? (
           <Pressable
             onPress={onBack}
-            className="flex-1 rounded-lg border border-wood-600/55 bg-cream-dark/60 py-3"
+            className={backClass}
             accessibilityRole="button"
           >
             <Text className="text-center font-sans-medium text-wood-900">{backLabel}</Text>
@@ -61,7 +79,7 @@ export function SessionStepScreen({
         {showNext ? (
           <Pressable
             onPress={onNext}
-            className="flex-1 rounded-lg bg-amber-accent/90 py-3"
+            className={nextClass}
             accessibilityRole="button"
           >
             <Text className="text-center font-sans-medium text-wood-900">{nextLabel}</Text>

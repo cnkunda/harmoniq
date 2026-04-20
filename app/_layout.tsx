@@ -23,7 +23,9 @@ import { NoiseOverlay } from '@/components/NoiseOverlay'
 import Toast from 'react-native-toast-message'
 
 import { toastConfig } from '@/components/ToastConfig'
+import { hydrateVoiceCoachPrefs } from '@/src/audio/hydrateVoiceCoachPrefs'
 import { hydrateWebLessonStore, initDb } from '@/src/db/client'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 
 cssInterop(LinearGradient, { className: 'style' })
 
@@ -51,6 +53,8 @@ export default function RootLayout() {
     void (async () => {
       try {
         await initDb()
+        await useSessionPrefsStore.getState().hydrate()
+        await hydrateVoiceCoachPrefs()
         if (Platform.OS === 'web') {
           await hydrateWebLessonStore()
         }

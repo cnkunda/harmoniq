@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 import { WoodGradient } from '@/components/WoodGradient'
+import { logFirstAudioPlay } from '@/src/analytics/firstAudioPlay'
 import { submitScore } from '@/src/api/analyze'
 import { createSessionRecorder } from '@/src/audio/recordSession'
 import type { RecordedTake } from '@/src/audio/recordSession.types'
@@ -41,6 +42,7 @@ export default function OnboardingPhraseScreen() {
   const recorderRef = useRef(createSessionRecorder())
   const soundRef = useRef<Audio.Sound | null>(null)
   const lastScorableTakeRef = useRef<RecordedTake | null>(null)
+  const onboardingRefAudioLoggedRef = useRef(false)
 
   const [refPlaying, setRefPlaying] = useState(false)
   const [soundReady, setSoundReady] = useState(false)
@@ -96,6 +98,10 @@ export default function OnboardingPhraseScreen() {
       await s.setPositionAsync(0)
       await s.playAsync()
       setRefPlaying(true)
+      if (!onboardingRefAudioLoggedRef.current) {
+        onboardingRefAudioLoggedRef.current = true
+        logFirstAudioPlay({ source: 'onboarding_reference', job_id: null })
+      }
     }
   }, [])
 
