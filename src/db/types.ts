@@ -29,6 +29,8 @@ export type SessionJournalRow = {
   has_review_snapshot: boolean
   waveform_user_path: string | null
   waveform_ref_path: string | null
+  /** Review session length in minutes when recorded (optional; not yet persisted on all paths). */
+  duration_min?: number | null
 }
 
 export type SessionArchiveRow = SessionJournalRow & {
@@ -142,6 +144,20 @@ export type JamSnapshotRow = {
   reliability_signal_quality: number | null
   recurring_gestures: string[]
   coach_summary: string
+}
+
+/** Row when the user finishes a practice plan from Jam (final step). */
+export type PracticePlanCompletionRow = {
+  id: string
+  completed_at: string
+  /** Serialized `PracticePlanPayload`. */
+  plan_json: string
+}
+
+export type PracticePlanCompletionInsertInput = {
+  id: string
+  completed_at: string
+  plan_json: string
 }
 
 export type JamSnapshotInsertInput = {

@@ -2,7 +2,7 @@
 
 Atomic, production-quality commits ordered for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **1–58**, **59–61**, **62–63**, **65**, **66–74** — **complete**. **64** — **skipped**. **75–77** — **planned** (next up). Index: [commits 1–77](#appendix--roadmap-completion-index-commits-1-77); order: [Planned → Complete → Skipped](#reading-order-pre-mvp).
+**Phase 0 (0.1–0.6)** — **complete**. **1–58**, **59–61**, **62–63**, **65**, **66–74** — **complete**. **64** — **skipped**. **75–87** — **planned** (next up). Index: [commits 1–87](#appendix--roadmap-completion-index-commits-1-87); order: [Planned → Complete → Skipped](#reading-order-pre-mvp).
 
 ---
 
@@ -34,14 +34,14 @@ Atomic, production-quality commits ordered for **risk first**, **vertical slices
 
 | | |
 |--|--|
-| **Roadmap status** | **Done:** through **74** (incl. taste, practice plan, voice coach, warmup, Riff DNA). **Next:** **75–77**. **Skipped:** **64**. |
+| **Roadmap status** | **Done:** through **74** (incl. taste, practice plan, voice coach, warmup, Riff DNA). **Next:** **75–87** (incl. Demucs/transcription pipeline, MusicXML + alphaTab, phased session UX, Lyria Orient/Jam/Apply). **Skipped:** **64**. |
 | **Product spec** | [`README.md`](README.md) |
 | **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
 | **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
 | **Manual QA** | [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) |
 | **Scoring** | [`docs/SCORING.md`](docs/SCORING.md) |
 | **Scaffolding history** | [Appendix — Phase 0](#appendix--completed-phase-0-commits-01–06) |
-| **Completion index** | [Appendix — commits 1–77](#appendix--roadmap-completion-index-commits-1-77) |
+| **Completion index** | [Appendix — commits 1–87](#appendix--roadmap-completion-index-commits-1-87) |
 
 ---
 
@@ -123,6 +123,381 @@ Play a Spotify track the user loves while Harmoniq follows along with the analyz
 * [ ] Non-Premium or disconnected Spotify state shows appropriate `ErrorBanner` without crash
 * [ ] Listening mode does not activate mic, metronome, or recording paths
 * [ ] `HARMONIQ_SKIP_SPOTIFY_PLAYBACK=1` renders listening screen in static study mode without API calls
+
+### Status
+
+**Planned**
+
+---
+
+## Phase 8 — Transcription pipeline, alphaTab charts & Lyria-backed pedagogy (planned)
+
+### Dependencies, sequencing, and reservations (commits 78–87)
+
+These commits establish a **Demucs → beat grid → TFLite chords + Basic Pitch solo → MusicXML → alphaTab** backend path; add **collaborative verification** when confidence is low; restructure the session into **Orient → Isolate → Apply → Reflect**; and layer **Lyria 3 Clip**, **theory annotations**, **Lyria RealTime** backing, and **adaptive steering** on top—without replacing stem-backed “truth” for the reference song.
+
+**Reservations (read before greenlighting heavy ML / Lyria paths):**
+
+* **GPU / runtime cost** — Demucs and torchaudio stacks are heavy; keep **`HARMONIQ_SKIP_*`** on CI and document Windows TorchCodec pitfalls (prefer standard torchaudio backends).
+* **Cost and pricing** — Lyria RealTime and Clip may be Pro-only; keep **`HARMONIQ_SKIP_LYRIA`** / **`HARMONIQ_SKIP_LYRIA_CLIP`** so free tier and offline builds always fall back to static backing tracks.
+* **API access** — Gemini/Lyria quotas and terms can gate shipping; ship integration with kill-switch fallbacks until stable.
+* **Pedagogical risk** — Histogram → Lyria weights must stay conservative; ship manual **Simplify band** override and silent failure modes for steer requests.
+
+**Suggested build order (numbers stay 78–87 for traceability):** **78 → 79 → 80** (pipeline spine); **81** once MusicXML exists; **82** after inference metadata is reliable; **83** (session phases) before or parallel with **84**–**85**; **86** before **87** (steering depends on live Lyria band).
+
+### Phase 8 — success metrics (targets)
+
+Lead-sheet PRD targets — validate first with **offline eval / labeled fixture tracks**; optional in-app telemetry later.
+
+* **Play-along success** — share of processed songs where users complete a guided play-through without abandoning over sync or unreadable score (north star; define cohort and threshold when instrumentation exists).
+* **Chord stability** — minimal symbol flicker; aim for **>90%** of chord changes on beat boundaries on the fixture set.
+* **Solo readability** — fewer micro-durations and orphans; compare mean note length and spurious short notes vs a human-edited reference on fixtures.
+
+---
+
+## 78. Audio Pipeline: Demucs Stems & Beat Grid Engine
+
+### Goal
+
+Establish the foundation for the new transcription pipeline by ingesting audio, separating stems via Demucs, and estimating a reliable beat/downbeat grid for quantization.
+
+### Scope
+
+* `backend/app/audio_processing.py` — ingest uploads / YouTube links into normalized waveforms; handle chunking for long tracks
+* `backend/app/demucs_engine.py` — run Demucs **`htdemucs_6s`** to produce **six** stems: `guitar`, `bass`, `drums`, `vocals`, `piano`, `other` (same checkpoint as [`pipeline_proof.py`](backend/app/pipeline_proof.py) / [`separate.py`](backend/app/separate.py))
+* `backend/app/beat_grid.py` — estimate BPM, beats, and downbeats using librosa; produce `BeatGrid.json` containing `bpm`, `beats` array, `downbeats` array, and time signature
+* `backend/app/schemas.py` — add `BeatGrid` schema
+* `backend/app/main.py` — `POST /transcription/prepare` (returns stems and `BeatGrid`)
+
+**Stem routing (downstream hooks for commit 79):** chord inference mixes **bass + other**; solo/melody picks the **most isolated melodic** stem — heuristic order **guitar** (lead isolation), then **vocals**, then remaining stems ranked by isolation (align with [`stem_quality.py`](backend/app/stem_quality.py)).
+
+### Implementation Notes
+
+* Demucs relies on torchaudio — use standard backends to avoid TorchCodec DLL issues on Windows.
+* Provide a mechanism for users to manually override **time signature**, which triggers recomputation of the most likely beats/downbeats.
+* Provide a mechanism for users to manually override **BPM** (detected tempo), which triggers **beat grid recomputation** and forces **re-run or invalidation** of downstream quantized artifacts (`chordTimeline`, `SoloNotes`, `Score.musicxml`) when overrides change.
+
+### Acceptance Criteria
+
+* [ ] Uploaded audio is separated into the **six** `htdemucs_6s` stems listed above
+* [ ] `BeatGrid.json` successfully maps beats and downbeats for a standard 4/4 track
+* [ ] Manual **time signature** overrides force a grid recomputation
+* [ ] Manual **BPM** overrides force beat grid recomputation and a documented refresh path for dependent transcription outputs
+* [ ] Endpoint functions asynchronously to prevent UI blocking
+
+### Out of Scope
+
+* Chord or solo note inference
+
+### Status
+
+**Planned**
+
+---
+
+## 79. ML Inference: TFLite Chords & Basic Pitch Solo
+
+### Goal
+
+Analyze the generated stems to extract a beat-aligned chord progression and a monophonic solo line.
+
+### Scope
+
+* `backend/app/chord_inference.py` — route other + bass stems into the TFLite chord estimator; smooth framewise predictions, align changes to the `BeatGrid`, and output `chordTimeline.json` (time segments + chord symbol + confidence)
+* `backend/app/solo_inference.py` — route the most isolated melodic stem (see commit **78** routing heuristic: prefer **guitar**, then **vocals**, else stem-quality ranking) into Basic Pitch; convert polyphonic output to a monophonic solo line by selecting salient notes and quantizing onsets/durations to the `BeatGrid`; output `SoloNotes.json`
+* `backend/app/schemas.py` — add `ChordTimeline` and `SoloNotes` schemas
+
+### Implementation Notes
+
+* Chord vocabulary MVP: maj, min, 7, maj7, min7, sus, dim, aug, and N (No chord); slash chords iteratively added.
+* Solo extraction must filter out micro-durations to ensure measure-level rhythmic sanity.
+
+### Acceptance Criteria
+
+* [ ] TFLite chord model outputs valid symbols aligned to beat boundaries
+* [ ] basic-pitch generates a cleaned, monophonic melody line without overlapping polyphony
+* [ ] `chordTimeline.json` and `SoloNotes.json` are successfully persisted for the job
+
+### Out of Scope
+
+* Full polyphonic, multi-instrument score transcription
+* Perfect jazz harmony coverage at launch
+
+### Status
+
+**Planned**
+
+---
+
+## 80. Score Assembly: MusicXML Generation
+
+### Goal
+
+Combine the generated JSON artifacts into a canonical **MusicXML (partwise)** lead sheet that alphaTab loads through its **MusicXML importer** (file/string → score model — not Guitar Pro conversion).
+
+### Scope
+
+* `backend/app/musicxml_builder.py` — assemble `Score.musicxml`; define measures, divisions, time signature, key, and clef based on the `BeatGrid`
+* Inject `chordTimeline.json` data into MusicXML `<harmony>` tags (root, kind, bass, degree)
+* Inject `SoloNotes.json` data into MusicXML `<note>` tags
+* Optionally inject chord diagrams using `<frame>` tags based on standard guitar voicings
+
+### Implementation Notes
+
+* Keep MusicXML output minimal and semantically consistent (durations, measures, harmony); alphaTab may ignore overly complex layout semantics.
+* **Rendering path:** consumers use alphaTab’s **built-in MusicXML import** so `<harmony>` and optional `<frame>` chord diagrams display in the notation view.
+
+### Acceptance Criteria
+
+* [ ] Valid MusicXML file is generated containing both `<harmony>` elements and a monophonic `<note>` line
+* [ ] Chord symbols match the timing of the measures defined by the beat grid
+* [ ] Slash chords (e.g. G6/D) are correctly structured with `<bass-step>`
+
+### Out of Scope
+
+* PDF export of the MusicXML chart
+
+### Status
+
+**Planned**
+
+---
+
+## 81. Frontend Rendering: alphaTab & Fretboard Sync
+
+### Goal
+
+Render the generated MusicXML in the React Native frontend via alphaTab (**MusicXML importer** → rendered score) and synchronize the proprietary fretboard UI to the playback cursor.
+
+### Scope
+
+* `components/ScoreViewer.tsx` — React Native WebView to load alphaTab and ingest `Score.musicxml` via the importer API
+* `types/tabMessage.ts` — define messaging contracts between RN and the alphaTab WebView for cursor position and beat events
+* `app/session/study.tsx` — sync the active fretboard to the current `<harmony>` chord and `<note>` solo event; highlight current chord shapes and scale degrees
+
+### Implementation Notes
+
+* alphaTab uses workers/worklets on the web; in React Native, ensure assets and scripts are correctly injected into the WebView.
+* Load the lead sheet through alphaTab’s **MusicXML import** path so chord symbols and optional diagrams from `<harmony>` / `<frame>` match the importer’s supported subset.
+* Show progressive results: if possible, render the chord grid early, then update with the refined solo line.
+
+### Acceptance Criteria
+
+* [ ] alphaTab successfully renders the MusicXML, visibly displaying beat-aligned chord symbols above the staff
+* [ ] As alphaTab plays, the React Native fretboard updates in real time to highlight the current chord and solo note
+* [ ] No UI blocking during alphaTab initialization
+
+### Out of Scope
+
+* Real-time editing of notes directly within the alphaTab canvas
+
+### Status
+
+**Planned**
+
+---
+
+## 82. Transcription Confidence & Collaborative Verification
+
+### Goal
+
+Handle sub-optimal audio transcription safely. When `transcription_confidence` drops below `TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX`, transition the UI from “Pure Automation” to “Collaborative Verification” to prevent hallucinated tabs.
+
+### Scope
+
+* `backend/app/transcription_validator.py` — post-process inference output to verify physical playability on a 6-string fretboard; flag impossible voicings or low SNR sections
+* Add metadata JSON field to the transcription DB schema tracking `model_version` and `flag_reason`
+* `app/session/study.tsx` — add a “Study Warning” hybrid UI: amber heatmap overlay over low-confidence measures; prompt: “We’re 60% sure about this lick. Want to slow it down to 50% speed and verify?”; UI manual overrides for stem routing (e.g. user picks a different stem for solo inference if bleed is too high)
+* `backend/app/main.py` — `POST /transcription/verify` to write user corrections to the DB
+
+### Implementation Notes
+
+* Display a modal only in **Focus Mode** (Isolate); in **Jam Mode** (Apply), show a non-intrusive warning icon.
+* `HARMONIQ_SKIP_TRANSCRIPTION_VERIFY=1` bypasses the user-assisted labeling endpoint.
+
+### Acceptance Criteria
+
+* [ ] Low SNR uploads trigger a pre-emptive warning before processing
+* [ ] Amber heatmap renders over uncertain measures in the alphaTab view
+* [ ] Users can manually re-route stems to fix bleed issues and trigger a re-render
+* [ ] Corrections are saved via the verify endpoint
+
+### Out of Scope
+
+* Dynamic Time Warping (DTW) for audio-to-score alignment
+
+### Status
+
+**Planned**
+
+---
+
+## 83. Session flow restructure: Orient → Isolate → Apply → Reflect
+
+### Goal
+
+Restructure the linear session into a 4-phase pedagogical model: **Orient** (hear the target) → **Isolate** (understand and break down) → **Apply** (play with a responsive band) → **Reflect** (honest specific feedback).
+
+### Scope
+
+* `app/session/_layout.tsx` — replace flat step list with phase-based navigation (groups containing steps)
+* `src/stores/sessionPhaseStore.ts` — Zustand slice tracking `currentPhase`, `currentStepWithinPhase`, and `phaseCompletion`
+* `components/PhaseIndicator.tsx` — replaces `SessionStepper`; 4 phase dots with labels
+* Voice coach (`src/audio/voiceCoach.ts`) — narrate phase transitions based on `src/constants/sessionPhases.ts`
+
+### Implementation Notes
+
+* The 5 existing session routes remain in the filesystem to avoid breaking deep links.
+* Non-linear navigation within a phase is allowed (toggle Study ↔ Slow freely); advancing requires the current phase’s minimum completion condition.
+
+### Acceptance Criteria
+
+* [ ] Home → session → all 4 phases reachable without regression
+* [ ] Non-linear navigation within Isolate works without resetting phase completion
+* [ ] Voice coach reads phase transition copy on each phase advance
+* [ ] Existing deep links (`/session/study`, `/session/play`, etc.) still resolve
+
+### Out of Scope
+
+* Custom phase ordering per user preference
+
+### Status
+
+**Planned**
+
+---
+
+## 84. Orient phase: Lyria 3 Clip technique examples
+
+### Goal
+
+Add a new first phase — **Orient** — that generates a 30-second audio example demonstrating the session’s target technique in context, using Lyria 3 Clip via the Gemini API.
+
+### Scope
+
+* `backend/app/lyria_clip.py` — `generate_orient_clip(style_label, technique, key, bpm)`; calls `lyria-3-pro-preview` via Gemini API; caches result as WAV
+* `backend/app/coach.py` — `generate_orient_annotation()` returns 2–3 sentences telling the user what to listen for
+* `backend/app/main.py` — `POST /session/orient-clip`
+* `app/session/orient.tsx` — new step rendered before Study; shows Lyria clip player and coach annotation
+
+### Implementation Notes
+
+* Use Gemini SDK (`google-genai`) with `GEMINI_API_KEY`.
+* Run async — client polls if generation is in progress.
+* `HARMONIQ_SKIP_LYRIA_CLIP=1` returns a static silent WAV placeholder and template annotation.
+
+### Acceptance Criteria
+
+* [ ] Orient step appears before Study
+* [ ] Lyria clip plays in full and loops cleanly
+* [ ] `HARMONIQ_SKIP_LYRIA_CLIP=1` renders placeholder audio without crashing
+
+### Out of Scope
+
+* User-requested clip regeneration with different style
+
+### Status
+
+**Planned**
+
+---
+
+## 85. Theory layer in Study step
+
+### Goal
+
+Add musical theory context to the Study step. Every bar in the tab gets a chord function label and scale degree annotation, plus a plain-language technique rationale from Claude.
+
+### Scope
+
+* `src/music/chordFunction.ts` — pure function `getChordFunction()` mapping I/IV/V/ii/vi/vii° with plain English (“Home base”, “Departure”)
+* `components/TheoryCard.tsx` — expandable card showing current chord name, function label, tension indicator, and Claude rationale
+* `backend/app/coach.py` — `generate_theory_annotation()`
+* `app/session/study.tsx` — wire `TheoryCard` below `NoteDetailCard`
+
+### Implementation Notes
+
+* Extract chord function dynamically from `LessonJSON.sections` (populated by the new MusicXML pipeline) or fallback to key heuristics.
+* `HARMONIQ_SKIP_THEORY_ANNOTATE=1` returns template fallback immediately.
+
+### Acceptance Criteria
+
+* [ ] Chord function label updates per bar during Study playback
+* [ ] `TheoryCard` shows rationale from Claude
+* [ ] `getChordFunction` unit tests pass for major and minor keys
+
+### Out of Scope
+
+* Jazz extensions (9ths, 11ths, 13ths) — stub with “extended harmony” label
+
+### Status
+
+**Planned**
+
+---
+
+## 86. Lyria RealTime backing band engine
+
+### Goal
+
+Replace static MP3 backing tracks in Jam and Apply phases with a live AI backing band powered by Google Lyria RealTime, generating a continuous 48 kHz stereo audio stream.
+
+### Scope
+
+* `backend/app/lyria.py` — WebSocket bridge to `models/lyria-realtime-exp` via Gemini API; accepts config and returns audio chunks via async generator
+* `src/audio/lyriaBackingBand.web.ts` & `.native.ts` — Web Audio API chunk queue and `expo-av` `Sound` buffer implementation
+* `app/jam.tsx` — replace static track picker with Lyria band config
+
+### Implementation Notes
+
+* Key enum: Lyria uses `C_MAJOR_A_MINOR` format — map from `LessonJSON.key`.
+* Client must buffer at least 2 chunks (~4 s) before playback starts to prevent underrun.
+* `HARMONIQ_SKIP_LYRIA=1` must fall back to static backing tracks silently.
+
+### Acceptance Criteria
+
+* [ ] Lyria stream starts within 3 s of entering Jam or Apply phase on web
+* [ ] `HARMONIQ_SKIP_LYRIA=1` falls back to static tracks with no toast or error shown
+* [ ] Free tier shows static tracks; Pro tier shows Lyria band
+
+### Out of Scope
+
+* Native audio chunk decoding optimization beyond documented jitter notes
+
+### Status
+
+**Planned**
+
+---
+
+## 87. Lyria adaptive band steering from live play
+
+### Goal
+
+Make the Lyria backing band in the Apply phase respond to what the player is actually playing using the pitch class histogram to drive real-time style prompt weight updates.
+
+### Scope
+
+* `src/jam/lyriaSteeringBridge.ts` — pure function mapping `pitchClassHistogram` to Lyria `WeightedPrompt[]` (e.g. confident minor pentatonic → increase “blues” weight)
+* `app/session/play.tsx` — mount steering update loop (every 2 s)
+* `src/api/analyze.ts` — add `steerLyriaSession` (fire-and-forget)
+* `components/LyriaSteeringControls.tsx` — live display in Apply phase with “Simplify band” override
+
+### Implementation Notes
+
+* Steering update interval must be 2 s to match Lyria’s guaranteed response latency.
+* “Simplify band” override sends a one-shot density `0.2` config that releases after 8 bars.
+
+### Acceptance Criteria
+
+* [ ] Playing A minor pentatonic for 6+ seconds audibly shifts Lyria band toward blues character
+* [ ] “Simplify band” disables auto-steering for 8 bars
+* [ ] Steer request failures are silent
+
+### Out of Scope
+
+* Steering based on rhythm / timing feel
+* Per-instrument Lyria mute controls
 
 ### Status
 
@@ -1912,7 +2287,7 @@ Support left-handed guitarists by mirroring fretboard and chord diagram renderin
 
 ---
 
-## Appendix — Roadmap completion index (commits 1–77)
+## Appendix — Roadmap completion index (commits 1–87)
 
 Single-page index: **implementation is in repo** for each row unless your checkout is incomplete. **Active** commit specs live under [Roadmap — Complete](#roadmap--complete); **next** work under [Roadmap — Planned](#roadmap--planned-next-up).
 
@@ -1921,7 +2296,7 @@ Single-page index: **implementation is in repo** for each row unless your checko
 
 | Group | Commits |
 |--------|---------|
-| **Planned** | 75 – 77 |
+| **Planned** | 75 – 87 |
 | **Complete** | 0.1–0.6, 1–58, 59–61, 62–63, 65–74 |
 | **Skipped** | 64 |
 
@@ -2001,6 +2376,16 @@ Single-page index: **implementation is in repo** for each row unless your checko
 | 75 | Ghost player — play alongside past self | 7 |
 | 76 | Mood-adaptive session intensity | 7 |
 | 77 | Listening mode — Spotify playback + tab follow | 7 |
+| 78 | Audio Pipeline: Demucs Stems & Beat Grid Engine | 8 |
+| 79 | ML Inference: TFLite Chords & Basic Pitch Solo | 8 |
+| 80 | Score Assembly: MusicXML Generation | 8 |
+| 81 | Frontend Rendering: alphaTab & Fretboard Sync | 8 |
+| 82 | Transcription Confidence & Collaborative Verification | 8 |
+| 83 | Session flow restructure: Orient → Isolate → Apply → Reflect | 8 |
+| 84 | Orient phase: Lyria 3 Clip technique examples | 8 |
+| 85 | Theory layer in Study step | 8 |
+| 86 | Lyria RealTime backing band engine | 8 |
+| 87 | Lyria adaptive band steering from live play | 8 |
 
 **Follow-up engineering (not in index):** [§42](#42-onboarding-results--readme-aligned-error-ui).
 

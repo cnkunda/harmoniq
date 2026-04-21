@@ -11,7 +11,6 @@ import { LyricsStrip } from '@/components/LyricsStrip'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
-import { SongDetailsCard } from '@/components/SongDetailsCard'
 import { toast } from '@/components/ToastConfig'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
@@ -33,7 +32,7 @@ import {
   type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
-import type { NoteEventMessage, SongScoreMeta } from '@/types/tabMessage'
+import type { NoteEventMessage } from '@/types/tabMessage'
 
 type TabVariant = 'full' | 'skeleton' | 'alt'
 
@@ -68,11 +67,6 @@ export default function StudyScreen() {
   const router = useRouter()
   const sessionStemRef = useRef<SessionStemAndTabHandle>(null)
   const lesson = useLessonStore((s) => s.lesson)
-  const [scoreMeta, setScoreMeta] = useState<SongScoreMeta | null>(null)
-  const [songPlayback, setSongPlayback] = useState<{
-    masterBarIndex: number
-    sectionLabel: string | null
-  } | null>(null)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const [tick, setTick] = useState<PlaybackTickContext>(DEFAULT_TICK)
 
@@ -249,17 +243,7 @@ export default function StudyScreen() {
         tabVariant={variant}
         onPlaybackTick={handleStemPlaybackTick}
         onNoteEvent={onTabNoteEvent}
-        onTabSongDetails={setScoreMeta}
-        onTabSongPlayback={setSongPlayback}
         tabFrameClassName="mt-2 h-[328px] w-full px-2"
-        detailsAboveTab={
-          <SongDetailsCard
-            lesson={lesson}
-            scoreMeta={scoreMeta}
-            playback={songPlayback}
-            lessonSectionIndex={lessonSectionIndex}
-          />
-        }
         insertBetweenStemAndTab={
           <>
             {showLowTranscriptionBanner ? (

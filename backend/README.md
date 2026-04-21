@@ -44,6 +44,10 @@ jupyter lab research/pipeline_proof.ipynb
 
 Set **`LOCAL_AUDIO`** or **`YOUTUBE_URL`** in the first code cell. Outputs go under `data/research_notebook/` (gitignored via `data/`).
 
+## Planned lead-sheet outputs (PRIORITIES 78–80)
+
+The roadmap adds a **MusicXML** builder (`musicxml_builder.py`) as the canonical chart: **`BeatGrid.json`**, **`chordTimeline.json`**, and **`SoloNotes.json`** assembled into **`Score.musicxml`** with `<harmony>` + solo `<note>` for alphaTab’s MusicXML importer. Until those commits land, production analysis may still expose **LessonJSON** with **GP5** from the existing Basic Pitch → pyguitarpro path; see repo-root [PRIORITIES.md](../PRIORITIES.md) and [README.md](../README.md) § Lead sheet roadmap.
+
 **Tests**
 
 ```bash

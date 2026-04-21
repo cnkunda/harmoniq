@@ -169,6 +169,12 @@ export default function WarmupScreen() {
     void navigateToPracticePlanSlot(router, { saveLesson, setLessonSectionIndex }, idx + 1)
   }
 
+  const stopExercise = () => {
+    if (!warmupStarted || completed) return
+    setWarmupStarted(false)
+    tabRef.current?.getTabSurface()?.setStemPlaybackActive(false)
+  }
+
   const skipExercise = () => {
     if (completed) return
     const isLast = exerciseIndex >= exercises.length - 1
@@ -263,6 +269,16 @@ export default function WarmupScreen() {
               accessibilityLabel="Start warm-up exercise timer"
             >
               <Text className="text-center font-sans-medium text-wood-900">Start exercise</Text>
+            </Pressable>
+          ) : null}
+          {!completed && warmupStarted ? (
+            <Pressable
+              onPress={stopExercise}
+              className="mt-6 w-full rounded-2xl border-2 border-wood-600/45 bg-cream-dark/50 py-3.5"
+              accessibilityRole="button"
+              accessibilityLabel="Stop warm-up exercise timer"
+            >
+              <Text className="text-center font-sans-medium text-wood-900">Stop exercise</Text>
             </Pressable>
           ) : null}
         </View>
@@ -374,21 +390,18 @@ export default function WarmupScreen() {
           }}
           fretGuideCells={fretGuideCellsForUi}
           fretGuideFooterHint={fretGuideFooterHint}
-        />
-      </View>
-
-      <View className="mt-4">
-        <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-muted-brown">
-          Example · pitch ladder (Play)
-        </Text>
-        <PitchIndicator
-          note="E"
-          cents={12}
-          isActive={false}
-          targetMidi={64}
-          nextTargetMidi={67}
-          windowResult="hit"
-          windowFlashToken={pitchDemoFlashToken}
+          pitchLadderDefaultExpanded
+          pitchLadderSlot={
+            <PitchIndicator
+              note="E"
+              cents={12}
+              isActive={false}
+              targetMidi={64}
+              nextTargetMidi={67}
+              windowResult="hit"
+              windowFlashToken={pitchDemoFlashToken}
+            />
+          }
         />
       </View>
 

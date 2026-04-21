@@ -6,6 +6,8 @@ export interface SessionStepScreenProps {
   subtitle?: string
   /** Hide the scroll header block (warm-up uses inline section labels). */
   hideTitle?: boolean
+  /** Hide the fixed bottom bar (e.g. tune step uses in-flow actions). */
+  hideFooter?: boolean
   children?: ReactNode
   showBack: boolean
   backLabel?: string
@@ -23,6 +25,7 @@ export function SessionStepScreen({
   title,
   subtitle,
   hideTitle = false,
+  hideFooter = false,
   children,
   showBack,
   backLabel = 'Back',
@@ -64,28 +67,30 @@ export function SessionStepScreen({
         {children}
       </ScrollView>
 
-      <View className={footerRow}>
-        {showBack ? (
-          <Pressable
-            onPress={onBack}
-            className={backClass}
-            accessibilityRole="button"
-          >
-            <Text className="text-center font-sans-medium text-wood-900">{backLabel}</Text>
-          </Pressable>
-        ) : (
-          <View className="flex-1" />
-        )}
-        {showNext ? (
-          <Pressable
-            onPress={onNext}
-            className={nextClass}
-            accessibilityRole="button"
-          >
-            <Text className="text-center font-sans-medium text-wood-900">{nextLabel}</Text>
-          </Pressable>
-        ) : null}
-      </View>
+      {hideFooter ? null : (
+        <View className={footerRow}>
+          {showBack ? (
+            <Pressable
+              onPress={onBack}
+              className={backClass}
+              accessibilityRole="button"
+            >
+              <Text className="text-center font-sans-medium text-wood-900">{backLabel}</Text>
+            </Pressable>
+          ) : (
+            <View className="flex-1" />
+          )}
+          {showNext ? (
+            <Pressable
+              onPress={onNext}
+              className={nextClass}
+              accessibilityRole="button"
+            >
+              <Text className="text-center font-sans-medium text-wood-900">{nextLabel}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      )}
     </View>
   )
 }

@@ -38,10 +38,11 @@ import {
   getLessonByJobId,
   getLickById,
   listLessonsJournal,
+  listPracticePlanCompletions,
   listSessionsJournal,
 } from '@/src/db/client'
 import { PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
-import type { HomeSuggestion, SessionJournalRow } from '@/src/db/types'
+import type { HomeSuggestion, PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
 import { startPracticePlanFromHome } from '@/src/session/practicePlanNavigation'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { PracticePlanPayload } from '@/src/types'
@@ -98,6 +99,7 @@ export default function HomeScreen() {
   const lesson = useLessonStore((s) => s.lesson)
   const [suggestion, setSuggestion] = useState<HomeSuggestion | null>(null)
   const [sessionsLog, setSessionsLog] = useState<SessionJournalRow[]>([])
+  const [latestPlanCompletion, setLatestPlanCompletion] = useState<PracticePlanCompletionRow | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [drillLatestError, setDrillLatestError] = useState<string | null>(null)
   const [practicePlan, setPracticePlan] = useState<PracticePlanPayload | null>(null)
@@ -137,10 +139,12 @@ export default function HomeScreen() {
       getAllSkillNodes(),
       getAppPref(PREF_TASTE_PROFILE_JSON),
       getAppPref(PREF_SPOTIFY_TASTE_PROFILE_JSON),
+      listPracticePlanCompletions(),
     ])
-      .then(async ([homeSuggestion, sessions, lessons, skillRows, tasteRaw, spotifyRaw]) => {
+      .then(async ([homeSuggestion, sessions, lessons, skillRows, tasteRaw, spotifyRaw, planCompletions]) => {
         setSuggestion(homeSuggestion)
         setSessionsLog(sessions)
+        setLatestPlanCompletion(planCompletions[0] ?? null)
         setLoadError(false)
         setSpotifyLinked(spotifyTasteLooksPresent(spotifyRaw))
 
@@ -195,6 +199,7 @@ export default function HomeScreen() {
         console.error('[home] refresh failed', e)
         setLoadError(true)
         setSessionsLog([])
+        setLatestPlanCompletion(null)
         setPracticePlanLoading(false)
         setSpotifyLinked(false)
       })
@@ -615,7 +620,7 @@ export default function HomeScreen() {
           {suggestion && suggestion.kind !== 'cold_start' && weakPulseNode ? <WeakAreaPulse node={weakPulseNode} /> : null}
           {suggestion && suggestion.kind !== 'cold_start' ? (
             <View className="mb-8">
-              <RecentProgress sessions={sessionsLog.slice(0, 3)} />
+              <RecentProgress sessions={sessionsLog.slice(0, 3)} lastPlanCompletion={latestPlanCompletion} />
             </View>
           ) : null}
 

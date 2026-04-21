@@ -8,7 +8,6 @@ import { LoopRegionControl } from '@/components/LoopRegionControl'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
-import { SongDetailsCard } from '@/components/SongDetailsCard'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { sessionHref } from '@/src/constants/sessionFlow'
@@ -20,7 +19,7 @@ import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { deriveSlowLoopRegion } from '@/src/session/slowLoopRegion'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useLessonStore } from '@/src/stores/lessonStore'
-import type { NoteEventMessage, SongScoreMeta, TabLoopBarRegion } from '@/types/tabMessage'
+import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
 export default function SlowScreen() {
   useStepCoachNarration()
@@ -46,11 +45,6 @@ export default function SlowScreen() {
     [barTimestamps, lesson?.tempo, lessonSectionIndex, section, sections],
   )
 
-  const [scoreMeta, setScoreMeta] = useState<SongScoreMeta | null>(null)
-  const [songPlayback, setSongPlayback] = useState<{
-    masterBarIndex: number
-    sectionLabel: string | null
-  } | null>(null)
   const [loopBars, setLoopBars] = useState<TabLoopBarRegion | null>(null)
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
@@ -157,16 +151,6 @@ export default function SlowScreen() {
         initialMetronomeOn={initialMetronomeOn}
         autoLoopRegion={playbackLoop}
         loopHighlight={loopHighlight}
-        onTabSongDetails={setScoreMeta}
-        onTabSongPlayback={setSongPlayback}
-        detailsAboveTab={
-          <SongDetailsCard
-            lesson={lesson}
-            scoreMeta={scoreMeta}
-            playback={songPlayback}
-            lessonSectionIndex={lessonSectionIndex}
-          />
-        }
         onNoteEvent={(evt: NoteEventMessage) => {
           setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
           setFretPulseKey((k) => k + 1)

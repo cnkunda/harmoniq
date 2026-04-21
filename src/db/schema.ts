@@ -154,6 +154,15 @@ CREATE TABLE IF NOT EXISTS lessons (
 export const MIGRATION_V9_SKILL_TECHNIQUE_ROLL =
   'ALTER TABLE skill_nodes ADD COLUMN technique_roll_json TEXT'
 
+/** v10: practice plan completion rows (Jam “Complete session”). */
+export const MIGRATION_V10_PRACTICE_PLAN_COMPLETIONS = `
+CREATE TABLE IF NOT EXISTS practice_plan_completions (
+  id TEXT PRIMARY KEY NOT NULL,
+  completed_at TEXT NOT NULL,
+  plan_json TEXT NOT NULL
+);
+`
+
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },
   { id: 'phrasing', label: 'Phrasing' },

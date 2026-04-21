@@ -17,7 +17,7 @@ logger = logging.getLogger("harmoniq.alphatab_prerender")
 logger.setLevel(logging.INFO)
 
 # Bump when preset dimensions change — invalidates disk cache independently of PIPELINE_VERSION.
-PRERENDER_PRESET_VERSION = "study-v1"
+PRERENDER_PRESET_VERSION = "study-v2-dark-resources"
 # Must match Harmoniq frontend `AlphaTabWeb.web.tsx` (`ALPHATAB_PKG_VERSION`).
 ALPHATAB_EXPECT_VERSION = "1.6.1"
 

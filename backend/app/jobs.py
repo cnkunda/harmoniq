@@ -28,6 +28,8 @@ from app.analyze_audio import build_lesson_json_from_librosa
 from app.cache import load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
 from app.coach import hydrate_coach_copy_into_sections
 from app.ingest import (
+    AUDIO_TOO_SHORT_USER_MESSAGE,
+    AudioTooShortError,
     IngestError,
     SourceMetadata,
     YouTubeUrlInvalidError,
@@ -37,9 +39,17 @@ from app.ingest import (
 )
 
 from app.separate import SeparationError, separate_song_to_stems
+from app.stem_quality import classify_stems_for_lesson
 
 logger = logging.getLogger("harmoniq.jobs")
 logger.setLevel(logging.INFO)
+
+# Stable `JobStatus.error_code` when status=failed — keep in sync with `mapAnalyzeFlowError` (client).
+ANALYZE_ERROR_YOUTUBE_INVALID = "youtube_invalid"
+ANALYZE_ERROR_AUDIO_TOO_SHORT = "audio_too_short"
+ANALYZE_ERROR_INGEST_FAILED = "ingest_failed"
+ANALYZE_ERROR_STEM_SEPARATION_FAILED = "stem_separation_failed"
+ANALYZE_ERROR_ANALYSIS_FAILED = "analysis_failed"
 
 # In-memory job store (single process).
 jobs: dict[str, JobStatus] = {}
@@ -254,6 +264,17 @@ def _process_analyze_job(
         _set_job_processing_progress(job_id, 0.4, "Separating stems…")
         stems = separate_song_to_stems(wav_path_obj, job_dir)
         _set_job_processing_progress(job_id, 0.62, "Stems ready")
+        backend_root = get_data_dir().parent
+        stem_abs_paths = {k: backend_root / rel for k, rel in stems.items()}
+        stem_classification = classify_stems_for_lesson(wav_path_obj, stem_abs_paths)
+        if stem_classification.flags:
+            logger.info(
+                "stem_quality job_id=%s flags=%s usable=%s role=%s",
+                job_id,
+                ",".join(stem_classification.flags),
+                stem_classification.guitar_stem_usable,
+                stem_classification.analysis_audio_role,
+            )
         guitar_rel_path = stems.get("guitar")
         vocals_rel_path = stems.get("vocals")
         if not guitar_rel_path:
@@ -268,9 +289,10 @@ def _process_analyze_job(
             result = stub
         else:
             _set_job_processing_progress(job_id, 0.78, "Analyzing structure & tabs…")
-            backend_root = get_data_dir().parent
             guitar_stem_path = backend_root / guitar_rel_path
             vocals_stem_path = backend_root / vocals_rel_path if vocals_rel_path else None
+            piano_rel = stems.get("piano")
+            piano_stem_path = (backend_root / piano_rel) if piano_rel else None
             result = build_lesson_json_from_librosa(
                 job_id,
                 guitar_stem_path=guitar_stem_path,
@@ -280,6 +302,9 @@ def _process_analyze_job(
                 source_url=youtube_url,
                 player_profile=player_profile,
                 source_metadata=source_metadata,
+                stem_classification=stem_classification,
+                mix_wav_path=wav_path_obj,
+                piano_stem_path=piano_stem_path,
             )
         skeleton_result = _lesson_with_skeleton_coach(result)
         save_cached_lesson_for_wav(wav_path_obj, skeleton_result, player_profile=player_profile)
@@ -298,6 +323,15 @@ def _process_analyze_job(
             status="failed",
             result=None,
             error=YOUTUBE_URL_INVALID_USER_MESSAGE,
+            error_code=ANALYZE_ERROR_YOUTUBE_INVALID,
+        )
+    except AudioTooShortError:
+        logger.warning("worker failed job_id=%s audio too short", job_id)
+        jobs[job_id] = JobStatus(
+            status="failed",
+            result=None,
+            error=AUDIO_TOO_SHORT_USER_MESSAGE,
+            error_code=ANALYZE_ERROR_AUDIO_TOO_SHORT,
         )
     except IngestError:
         logger.exception("worker failed job_id=%s ingest error", job_id)
@@ -305,6 +339,7 @@ def _process_analyze_job(
             status="failed",
             result=None,
             error=ANALYSIS_FAILED_USER_MESSAGE,
+            error_code=ANALYZE_ERROR_INGEST_FAILED,
         )
     except SeparationError:
         logger.exception("worker failed job_id=%s stem separation error", job_id)
@@ -312,6 +347,7 @@ def _process_analyze_job(
             status="failed",
             result=None,
             error=STEM_SEPARATION_FAILED_USER_MESSAGE,
+            error_code=ANALYZE_ERROR_STEM_SEPARATION_FAILED,
         )
     except Exception:
         # Fail loudly in logs; user sees a warm, safe message.
@@ -320,6 +356,7 @@ def _process_analyze_job(
             status="failed",
             result=None,
             error=ANALYSIS_FAILED_USER_MESSAGE,
+            error_code=ANALYZE_ERROR_ANALYSIS_FAILED,
         )
 
 

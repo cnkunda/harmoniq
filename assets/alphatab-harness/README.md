@@ -12,8 +12,10 @@ SoundFont setup in this harness:
 | Element | Hex |
 |--------|-----|
 | Page background | `#2B1D0E` |
-| Note heads / primary glyphs | `#F0DEB4` |
-| Staff lines | `#5C4535` (per `staffLineColor`; matches wood palette) |
+| Note heads / primary glyphs | `#FFFFFF` (`mainGlyphColor`; see `src/constants/tabHarnessTheme.ts`) |
+| Staff lines / bar separators | `#6E5644` (`staffLineColor` / `barSeparatorColor`; readable on dark chrome) |
+
+**Server SVG prerender:** `backend/scripts/alphatab_prerender.mjs` merges color overrides into the default `Settings().display.resources` (never replace the whole object — fonts are required). **Native WebView:** `TabViewport` may pass `prerenderArtifactUrl`, but the harness does not fetch or paint that overlay yet — prerender flash-free loading is **Expo web** only until native catches up.
 
 ## Parent → harness (`postMessage`)
 

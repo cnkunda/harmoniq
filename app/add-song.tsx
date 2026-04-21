@@ -1,15 +1,22 @@
 import { Check, X } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import Animated, {
+    cancelAnimation,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
+} from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AudioDropzone } from '@/components/AudioDropzone'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { WoodGradient } from '@/components/WoodGradient'
-import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { toast } from '@/components/ToastConfig'
 import {
+    ANALYZE_MAX_PROCESSING_WALL_MS,
     AnalyzePollCancelledError,
     buildPlayerProfileFromSkillNodes,
     loadLearningContextFromPrefs,
@@ -96,6 +103,10 @@ export default function AddSongScreen() {
 
   const progressBarStyle = useAnimatedStyle(() => ({
     width: `${Math.round(progressWidth.value * 100)}%`,
+    minWidth: 4,
+    height: '100%',
+    borderRadius: 9999,
+    backgroundColor: colors.amber.accent,
   }))
 
   const canStartFromUrl = useMemo(() => url.trim().length > 0 && uiState !== 'analyzing', [uiState, url])
@@ -133,6 +144,23 @@ export default function AddSongScreen() {
       setPendingUploadFilename('')
     }
   }, [importTab])
+
+  useEffect(() => {
+    if (uiState !== 'analyzing') {
+      cancelAnimation(progressWidth)
+      return
+    }
+    if (progressPercent != null) return
+    cancelAnimation(progressWidth)
+    progressWidth.value = withRepeat(
+      withSequence(
+        withTiming(0.24, { duration: 900 }),
+        withTiming(0.1, { duration: 900 }),
+      ),
+      -1,
+      true,
+    )
+  }, [uiState, progressPercent, progressWidth])
 
   const runAnalyze = useCallback(
     async (input: { youtube_url?: string; file?: Blob; filename?: string }) => {
@@ -178,13 +206,14 @@ export default function AddSongScreen() {
                 ? Math.max(0, Math.min(1, job.progress))
                 : null
             if (job.status === 'complete') {
+              cancelAnimation(progressWidth)
               progressWidth.value = withTiming(1, { duration: 240 })
               setProgressPercent(100)
             } else if (serverP != null) {
+              cancelAnimation(progressWidth)
               progressWidth.value = withTiming(serverP, { duration: 240 })
               setProgressPercent(Math.round(serverP * 100))
             } else {
-              progressWidth.value = withTiming(0.06, { duration: 400 })
               setProgressPercent(null)
             }
             const stage =
@@ -200,6 +229,8 @@ export default function AddSongScreen() {
           },
           1100,
           {
+            wallClockStartedAtMs: startedAtRef.current,
+            maxProcessingWallMs: ANALYZE_MAX_PROCESSING_WALL_MS,
             onRecoverablePollError: () => {
               if (!aliveRef.current) return
               setStatusText('Connection issue — retrying status check…')
@@ -500,10 +531,7 @@ export default function AddSongScreen() {
             </Text>
             <View className="flex-row items-center gap-3">
               <View className="h-2.5 flex-1 overflow-hidden rounded-full bg-wood-800">
-                <Animated.View
-                  style={[{ height: '100%', minWidth: 4 }, progressBarStyle]}
-                  className="rounded-full bg-amber-accent"
-                />
+                <Animated.View style={progressBarStyle} />
               </View>
               <Text
                 className="min-w-[52px] text-right font-sans-medium tabular-nums text-xs text-amber-light"
@@ -518,7 +546,6 @@ export default function AddSongScreen() {
               Usually 1–4 minutes. The bar fills when the practice server reports real stages — long separation or
               transcription steps can take a few minutes without moving the percentage.
             </Text>
-            <LoadingSkeleton width="100%" height={72} borderRadius={12} />
           </View>
         ) : null}
 
@@ -595,6 +622,10 @@ export default function AddSongScreen() {
         {uiState === 'error' && analyzeError ? (
           <ErrorBanner
             className="mt-6 w-full"
+            onDismissed={() => {
+              setAnalyzeError(null)
+              setUiState('idle')
+            }}
             {...toErrorBannerProps(analyzeError, {
               onRetry: () => {
                 setAnalyzeError(null)

@@ -90,6 +90,8 @@ def test_score_response_shape_is_render_safe() -> None:
     assert isinstance(res.note_duration_deltas, list)
     assert isinstance(res.node_scores, dict)
     assert isinstance(res.waveform_comparison.user_wav_base64, str)
+    assert isinstance(res.coach_paragraph, str)
+    assert res.coach_paragraph.strip() != ""
     assert res.reliability.score_contract_version == "v2"
     assert 0.0 <= res.reliability.signal_quality <= 1.0
     assert isinstance(res.diagnostics.reliability_flags, list)
@@ -121,6 +123,8 @@ def test_score_http_contract_and_latency_under_ten_seconds() -> None:
     assert "node_scores" in body and isinstance(body["node_scores"], dict)
     assert "waveform_comparison" in body and "user_wav_base64" in body["waveform_comparison"]
     assert "reliability" in body and body["reliability"]["score_contract_version"] == "v2"
+    assert isinstance(body.get("coach_paragraph"), str)
+    assert str(body.get("coach_paragraph", "")).strip() != ""
     assert elapsed < 10.0
 
 

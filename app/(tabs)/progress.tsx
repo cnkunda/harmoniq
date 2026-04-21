@@ -8,9 +8,10 @@ import { LearnerContextCard } from '@/components/LearnerContextCard'
 import { RiffDNA } from '@/components/RiffDNA'
 import { SkillGraph } from '@/components/SkillGraph'
 import { WoodGradient } from '@/components/WoodGradient'
+import { summaryFromPlanCompletionRow } from '@/src/home/planCompletionSummary'
 import { DEFAULT_SKILL_NODES } from '@/src/db/schema'
-import { listSessionsJournal } from '@/src/db/client'
-import type { SessionJournalRow } from '@/src/db/types'
+import { listJamSnapshots, listPracticePlanCompletions, listSessionsJournal } from '@/src/db/client'
+import { mergeProgressTimeline, type ProgressTimelineItem } from '@/src/progress/mergeProgressTimeline'
 import { useDnaStore } from '@/src/stores/dnaStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 
@@ -37,14 +38,16 @@ export default function ProgressScreen() {
   const nodes = useSkillStore((s) => s.nodes)
   const dna = useDnaStore((s) => s.dna)
   const refreshDna = useDnaStore((s) => s.refresh)
-  const [journal, setJournal] = useState<SessionJournalRow[]>([])
+  const [timeline, setTimeline] = useState<ProgressTimelineItem[]>([])
 
   const refresh = useCallback(() => {
     void loadSkills()
     void refreshDna()
-    void listSessionsJournal()
-      .then(setJournal)
-      .catch(() => setJournal([]))
+    void Promise.all([listSessionsJournal(), listJamSnapshots(), listPracticePlanCompletions()])
+      .then(([sessions, jams, completions]) => {
+        setTimeline(mergeProgressTimeline(sessions, jams, completions))
+      })
+      .catch(() => setTimeline([]))
   }, [loadSkills, refreshDna])
 
   useFocusEffect(
@@ -65,9 +68,11 @@ export default function ProgressScreen() {
     })
   }, [nodes])
 
-  const coachSummary =
-    journal[0]?.coach_review?.trim() ??
-    'Finish a practice session through Review to capture a personalized coach summary here.'
+  const coachSummary = useMemo(() => {
+    const hit = timeline.find((i) => i.kind === 'review_score' && i.session.coach_review?.trim())
+    if (hit?.kind === 'review_score') return hit.session.coach_review!.trim()
+    return 'Finish a practice session through Review to capture a personalized coach summary here.'
+  }, [timeline])
 
   return (
     <WoodGradient className="flex-1">
@@ -107,36 +112,114 @@ export default function ProgressScreen() {
 
             <View>
               <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Session History</Text>
-              {journal.length === 0 ? (
-                <Text className="font-sans text-sm text-muted-brown">No completed sessions yet.</Text>
+              <Text className="mb-3 font-sans text-xs text-muted-brown">
+                Review scores, saved jams, and completed practice plans in one timeline.
+              </Text>
+              {timeline.length === 0 ? (
+                <Text className="font-sans text-sm text-muted-brown">No history yet.</Text>
               ) : (
                 <View className="gap-4">
-                  {journal.map((session) => {
-                    const durationMin = (session as SessionJournalRow & { duration_min?: number | null }).duration_min
+                  {timeline.map((item) => {
+                    if (item.kind === 'review_score') {
+                      const session = item.session
+                      const durationMin = session.duration_min
+                      return (
+                        <View
+                          key={`r-${session.id}`}
+                          className="rounded-xl border border-wood-700/50 bg-wood-800/40 p-5 transition-colors"
+                        >
+                          <View className="mb-2 flex-row flex-wrap items-center gap-2">
+                            <Text className="rounded-full bg-amber-accent/15 px-2.5 py-0.5 font-sans-medium text-[11px] text-amber-light">
+                              Review
+                            </Text>
+                          </View>
+                          <View className="mb-3 flex-row items-start justify-between">
+                            <View className="flex-1 pr-3">
+                              <Text className="font-serif text-lg text-cream">
+                                {session.song_title?.trim() || 'Practice session'}
+                              </Text>
+                              <Text className="font-sans text-sm text-amber-light/80">
+                                Focus: {focusLabel(session.section_label)}
+                              </Text>
+                            </View>
+                            <View className="items-end">
+                              <Text className="font-sans text-sm text-muted-brown">
+                                {formatRelativeSessionDate(session.date)}
+                              </Text>
+                              {durationMin != null ? (
+                                <Text className="font-sans text-xs text-muted-brown">{durationMin} min</Text>
+                              ) : null}
+                            </View>
+                          </View>
+                          <Text className="border-t border-wood-700/50 pt-3 font-sans text-sm leading-relaxed text-cream/80">
+                            &ldquo;
+                            {session.coach_review?.trim() ||
+                              'Keep going. Your consistency is building musical confidence.'}
+                            &rdquo;
+                          </Text>
+                        </View>
+                      )
+                    }
+                    if (item.kind === 'jam_snapshot') {
+                      const jam = item.jam
+                      const title = jam.track_label?.trim() || 'Jam session'
+                      const durMin = jam.duration_seconds >= 60 ? Math.round(jam.duration_seconds / 60) : null
+                      const durLabel =
+                        durMin != null && durMin > 0 ? `${durMin} min` : `${Math.max(0, jam.duration_seconds)}s`
+                      return (
+                        <View
+                          key={`j-${jam.id}`}
+                          className="rounded-xl border border-wood-700/50 bg-wood-800/40 p-5 transition-colors"
+                        >
+                          <View className="mb-2 flex-row flex-wrap items-center gap-2">
+                            <Text className="rounded-full bg-cream/10 px-2.5 py-0.5 font-sans-medium text-[11px] text-cream/90">
+                              Jam
+                            </Text>
+                          </View>
+                          <View className="mb-3 flex-row items-start justify-between">
+                            <View className="flex-1 pr-3">
+                              <Text className="font-serif text-lg text-cream">{title}</Text>
+                              <Text className="font-sans text-sm text-amber-light/80">
+                                {jam.track_key?.trim() ? `${jam.track_key.trim()} · ` : ''}
+                                {durLabel}
+                                {jam.inferred_scale_label?.trim() ? ` · ${jam.inferred_scale_label.trim()}` : ''}
+                              </Text>
+                            </View>
+                            <Text className="font-sans text-sm text-muted-brown">{formatRelativeSessionDate(jam.date)}</Text>
+                          </View>
+                          <Text className="border-t border-wood-700/50 pt-3 font-sans text-sm leading-relaxed text-cream/80">
+                            &ldquo;{jam.coach_summary?.trim() || 'Jam snapshot saved.'}&rdquo;
+                          </Text>
+                        </View>
+                      )
+                    }
+                    const row = item.completion
+                    const { stepCount, firstTitle } = summaryFromPlanCompletionRow(row)
+                    const subtitle =
+                      stepCount > 0
+                        ? `${stepCount}-step plan${firstTitle ? ` · started with ${firstTitle}` : ''}`
+                        : 'Practice plan'
                     return (
                       <View
-                        key={session.id}
+                        key={`p-${row.id}`}
                         className="rounded-xl border border-wood-700/50 bg-wood-800/40 p-5 transition-colors"
                       >
+                        <View className="mb-2 flex-row flex-wrap items-center gap-2">
+                          <Text className="rounded-full bg-amber-accent/25 px-2.5 py-0.5 font-sans-medium text-[11px] text-wood-900">
+                            Plan
+                          </Text>
+                        </View>
                         <View className="mb-3 flex-row items-start justify-between">
                           <View className="flex-1 pr-3">
-                            <Text className="font-serif text-lg text-cream">
-                              {session.song_title?.trim() || 'Practice session'}
-                            </Text>
-                            <Text className="font-sans text-sm text-amber-light/80">
-                              Focus: {focusLabel(session.section_label)}
-                            </Text>
+                            <Text className="font-serif text-lg text-cream">Practice plan completed</Text>
+                            <Text className="font-sans text-sm text-amber-light/80">{subtitle}</Text>
                           </View>
-                          <View className="items-end">
-                            <Text className="font-sans text-sm text-muted-brown">{formatRelativeSessionDate(session.date)}</Text>
-                            {durationMin != null ? (
-                              <Text className="font-sans text-xs text-muted-brown">{durationMin} min</Text>
-                            ) : null}
-                          </View>
+                          <Text className="font-sans text-sm text-muted-brown">
+                            {formatRelativeSessionDate(row.completed_at)}
+                          </Text>
                         </View>
                         <Text className="border-t border-wood-700/50 pt-3 font-sans text-sm leading-relaxed text-cream/80">
-                          &ldquo;{session.coach_review?.trim() || 'Keep going. Your consistency is building musical confidence.'}
-                          &rdquo;
+                          &ldquo;Nice work closing the loop—this full plan is in the books.&rdquo;
                         </Text>
                       </View>
                     )

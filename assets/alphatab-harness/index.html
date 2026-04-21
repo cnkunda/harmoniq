@@ -180,11 +180,12 @@
         },
         display: {
           resources: {
-            mainGlyphColor: '#F0DEB4',
-            secondaryGlyphColor: '#D4A574',
-            barSeparatorColor: '#5C4535',
-            scoreInfoColor: '#A08060',
-            staffLineColor: '#5C4535',
+            /* Sync: src/constants/tabHarnessTheme.ts — DESIGN_SYSTEM theme white / amber.light / muted.brown */
+            mainGlyphColor: '#FFFFFF',
+            secondaryGlyphColor: '#E8B86D',
+            barSeparatorColor: '#6E5644',
+            scoreInfoColor: '#8B7D6B',
+            staffLineColor: '#6E5644',
             barNumberColor: '#8B7D6B',
           },
           scale: 1.1,
@@ -845,11 +846,11 @@
           scale: 1.1,
           stretchForce: 1,
           colors: {
-            mainGlyphColor: '#F0DEB4',
-            secondaryGlyphColor: '#D4A574',
-            barSeparatorColor: '#5C4535',
-            scoreInfoColor: '#A08060',
-            staffLineColor: '#5C4535',
+            mainGlyphColor: '#FFFFFF',
+            secondaryGlyphColor: '#E8B86D',
+            barSeparatorColor: '#6E5644',
+            scoreInfoColor: '#8B7D6B',
+            staffLineColor: '#6E5644',
             barNumberColor: '#8B7D6B',
           },
         },
@@ -857,11 +858,11 @@
           scale: 1.1,
           stretchForce: 1,
           colors: {
-            mainGlyphColor: '#F0DEB4',
-            secondaryGlyphColor: '#D4A574',
-            barSeparatorColor: '#5C4535',
-            scoreInfoColor: '#A08060',
-            staffLineColor: '#5C4535',
+            mainGlyphColor: '#FFFFFF',
+            secondaryGlyphColor: '#E8B86D',
+            barSeparatorColor: '#6E5644',
+            scoreInfoColor: '#8B7D6B',
+            staffLineColor: '#6E5644',
             barNumberColor: '#8B7D6B',
           },
         },
@@ -869,11 +870,11 @@
           scale: 1.12,
           stretchForce: 1.02,
           colors: {
-            mainGlyphColor: '#F7ECD4',
-            secondaryGlyphColor: '#D4A574',
+            mainGlyphColor: '#FFFFFF',
+            secondaryGlyphColor: '#E8B86D',
             barSeparatorColor: '#6E5644',
-            scoreInfoColor: '#A08060',
-            staffLineColor: '#5C4535',
+            scoreInfoColor: '#8B7D6B',
+            staffLineColor: '#6E5644',
             barNumberColor: '#8B7D6B',
           },
         },
@@ -881,11 +882,11 @@
           scale: 1.08,
           stretchForce: 1,
           colors: {
-            mainGlyphColor: '#FFF6E0',
+            mainGlyphColor: '#FFFFFF',
             secondaryGlyphColor: '#E8B86D',
-            barSeparatorColor: '#5C4535',
-            scoreInfoColor: '#A08060',
-            staffLineColor: '#5C4535',
+            barSeparatorColor: '#6E5644',
+            scoreInfoColor: '#8B7D6B',
+            staffLineColor: '#6E5644',
             barNumberColor: '#8B7D6B',
           },
         },
@@ -1164,7 +1165,9 @@
         }
 
         if (msg.type === 'getPosition') {
-          postOut({ type: 'position', positionMs: externalAudio.currentTime * 1000 })
+          var prGet = stemPlaybackRate
+          if (!Number.isFinite(prGet) || prGet < 0.25) prGet = 1
+          postOut({ type: 'position', positionMs: (externalAudio.currentTime / prGet) * 1000 })
           return
         }
 

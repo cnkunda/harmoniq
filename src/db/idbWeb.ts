@@ -7,16 +7,24 @@
 
 import type { LessonJSON } from '@/src/types'
 
-import type { JamSnapshotInsertInput, LessonPersistRow, LickRow, SessionArchiveRow, SkillNodeRow } from '@/src/db/types'
+import type {
+  JamSnapshotInsertInput,
+  LessonPersistRow,
+  LickRow,
+  PracticePlanCompletionRow,
+  SessionArchiveRow,
+  SkillNodeRow,
+} from '@/src/db/types'
 
 const DB_NAME = 'harmoniq_web_v1'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 const S_PREFS = 'app_prefs'
 const S_SESSIONS = 'sessions'
 const S_SKILL_NODES = 'skill_nodes'
 const S_LICKS = 'licks'
 const S_JAM = 'jam_snapshots'
+const S_PLAN_COMPLETIONS = 'practice_plan_completions'
 const S_LESSON = 'lesson_cache'
 const S_LESSONS = 'lessons'
 
@@ -55,6 +63,9 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
       }
       if (!db.objectStoreNames.contains(S_LESSONS)) {
         db.createObjectStore(S_LESSONS, { keyPath: 'job_id' })
+      }
+      if (!db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) {
+        db.createObjectStore(S_PLAN_COMPLETIONS, { keyPath: 'id' })
       }
     }
   })
@@ -119,17 +130,21 @@ export type IdbHydration = {
   skillNodes: SkillNodeRow[]
   licks: LickRow[]
   jams: JamSnapshotInsertInput[]
+  planCompletions: PracticePlanCompletionRow[]
   lesson: LessonJSON | null
   lessons: LessonPersistRow[]
 }
 
 export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> {
-  const [prefs, sessions, skillNodes, licks, jams, lessonRows, lessonCatalog] = await Promise.all([
+  const [prefs, sessions, skillNodes, licks, jams, planCompletions, lessonRows, lessonCatalog] = await Promise.all([
     getAllStore<PrefRow>(db, S_PREFS),
     getAllStore<SessionArchiveRow>(db, S_SESSIONS),
     getAllStore<SkillNodeRow>(db, S_SKILL_NODES),
     getAllStore<LickRow>(db, S_LICKS),
     getAllStore<JamSnapshotInsertInput>(db, S_JAM),
+    db.objectStoreNames.contains(S_PLAN_COMPLETIONS)
+      ? getAllStore<PracticePlanCompletionRow>(db, S_PLAN_COMPLETIONS)
+      : Promise.resolve([]),
     getAllStore<LessonCacheRow>(db, S_LESSON),
     db.objectStoreNames.contains(S_LESSONS) ? getAllStore<LessonPersistRow>(db, S_LESSONS) : Promise.resolve([]),
   ])
@@ -140,6 +155,7 @@ export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> 
     skillNodes,
     licks,
     jams,
+    planCompletions,
     lesson: latest?.lesson ?? null,
     lessons: lessonCatalog,
   }
@@ -168,6 +184,11 @@ export async function idbPersistLicks(db: IDBDatabase | null, rows: LickRow[]): 
 export async function idbPersistJams(db: IDBDatabase | null, rows: JamSnapshotInsertInput[]): Promise<void> {
   if (!db) return
   await putAll(db, S_JAM, rows)
+}
+
+export async function idbPersistPlanCompletions(db: IDBDatabase | null, rows: PracticePlanCompletionRow[]): Promise<void> {
+  if (!db || !db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) return
+  await putAll(db, S_PLAN_COMPLETIONS, rows)
 }
 
 export async function idbPersistLessons(db: IDBDatabase | null, rows: LessonPersistRow[]): Promise<void> {
@@ -228,6 +249,9 @@ export async function idbClearPracticeStores(db: IDBDatabase | null): Promise<vo
   await clearStore(db, S_SESSIONS)
   await clearStore(db, S_LICKS)
   await clearStore(db, S_JAM)
+  if (db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) {
+    await clearStore(db, S_PLAN_COMPLETIONS)
+  }
   await clearStore(db, S_SKILL_NODES)
   if (db.objectStoreNames.contains(S_LESSONS)) {
     await clearStore(db, S_LESSONS)

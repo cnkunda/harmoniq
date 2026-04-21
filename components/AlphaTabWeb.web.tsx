@@ -155,7 +155,7 @@ function applyRenderPresetToApi(
   themeExtra?: Partial<TabThemeColors>,
 ): void {
   const res = api.settings.display.resources
-  const mergedColors = { ...preset.colors, ...themeExtra }
+  const mergedColors = { ...themeExtra, ...preset.colors }
   for (const [k, v] of Object.entries(mergedColors)) {
     if (v) res[k] = v
   }
@@ -210,9 +210,6 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const syncTimerRef = useRef<number | null>(null)
     const readyPostedRef = useRef(false)
-    // #region agent log
-    const dbgRenderFinishedOnceRef = useRef(false)
-    // #endregion
     const loopStateRef = useRef<TabLoopBarRegion | null>(null)
     const loopBracketRef = useRef<HTMLDivElement | null>(null)
     /** Smooth horizontal scroll to target `scrollLeft` (SmartScroll bar follow). */
@@ -698,7 +695,12 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         getPosition: async () => {
           const audio = audioRef.current
           if (!audio) return null
-          return audio.currentTime * 1000
+          const pr =
+            Number.isFinite(audio.playbackRate) && audio.playbackRate > 0
+              ? audio.playbackRate
+              : stemPlaybackRateRef.current
+          const safePr = Math.max(0.25, Math.min(1.25, pr))
+          return (audio.currentTime / safePr) * 1000
         },
         setTheme: (colors: Partial<TabThemeColors>) => {
           const api = apiRef.current
@@ -942,7 +944,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           if (cancelled) return
 
           const preset = getTabRenderPreset(renderPreset)
-          const resources = mergeResources(preset.colors, theme)
+          const resources = mergeResources(theme, preset.colors)
           // Expo web / Metro: worker script URL resolution breaks (Invalid base URL) — render on main thread.
           const apiOptions = {
             core: {
@@ -1087,27 +1089,6 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
                 ? String((err as { message: unknown }).message)
                 : String(err)
             const msg = m || 'AlphaTab error'
-            // #region agent log
-            fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f059aa' },
-              body: JSON.stringify({
-                sessionId: 'f059aa',
-                runId: 'pre-fix',
-                hypothesisId: 'H1',
-                location: 'AlphaTabWeb.web.tsx:api.error',
-                message: 'AlphaTab engine error event',
-                data: {
-                  msg,
-                  errStack:
-                    err && typeof err === 'object' && 'stack' in err
-                      ? String((err as { stack: unknown }).stack).slice(0, 500)
-                      : undefined,
-                },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {})
-            // #endregion
             setEngineError(msg)
             onError?.(msg)
           })
@@ -1121,24 +1102,6 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
           api.renderFinished.on(() => {
             if (webRuntimeDiagOnRef.current) webDiagRenderRef.current += 1
-            // #region agent log
-            if (!dbgRenderFinishedOnceRef.current) {
-              dbgRenderFinishedOnceRef.current = true
-              fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f059aa' },
-                body: JSON.stringify({
-                  sessionId: 'f059aa',
-                  runId: 'pre-fix',
-                  hypothesisId: 'H5',
-                  location: 'AlphaTabWeb.web.tsx:renderFinished',
-                  message: 'First renderFinished',
-                  data: {},
-                  timestamp: Date.now(),
-                }),
-              }).catch(() => {})
-            }
-            // #endregion
             layoutLoopBracket()
             emitSongDetailsSnap()
             emitSongPlaybackMaybe()
@@ -1173,9 +1136,6 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
       return () => {
         cancelled = true
-        // #region agent log
-        dbgRenderFinishedOnceRef.current = false
-        // #endregion
         uiGuard.abort()
         setEngineReady(false)
         if (noteFlushTimerRef.current != null) {
@@ -1241,62 +1201,10 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         const bytes = base64ToUint8Array(raw)
         assertLikelyGpPayload(bytes)
         const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-        const audioTrim = audioSrc?.trim()
-        // #region agent log
-        fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f059aa' },
-          body: JSON.stringify({
-            sessionId: 'f059aa',
-            runId: 'pre-fix',
-            hypothesisId: 'H1',
-            location: 'AlphaTabWeb.web.tsx:pre-load',
-            message: 'Before api.load',
-            data: {
-              rawB64Len: raw.length,
-              byteLength: bytes.byteLength,
-              bufByteLength: buf.byteLength,
-              hasAudioSrc: Boolean(audioTrim),
-              audioSrcPrefix: audioTrim ? audioTrim.slice(0, 24) : '',
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion
         resetSongMetaRefs()
         api.load(buf)
-        // #region agent log
-        fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f059aa' },
-          body: JSON.stringify({
-            sessionId: 'f059aa',
-            runId: 'pre-fix',
-            hypothesisId: 'H3',
-            location: 'AlphaTabWeb.web.tsx:post-load-sync',
-            message: 'After api.load (same tick)',
-            data: {},
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Invalid GP5 payload'
-        // #region agent log
-        fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f059aa' },
-          body: JSON.stringify({
-            sessionId: 'f059aa',
-            runId: 'pre-fix',
-            hypothesisId: 'H1',
-            location: 'AlphaTabWeb.web.tsx:load-catch',
-            message: 'Load path threw before api.load',
-            data: { msg },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion
         setEngineError(msg)
         onError?.(msg)
       }
@@ -1432,7 +1340,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         )}
         {mounted && !soundFontReady ? (
           <View className="absolute left-3 right-3 top-3 rounded-lg border border-wood-600/45 bg-wood-800/70 p-3">
-            <Text className="mb-2 font-sans text-[11px] text-cream">Loading guitar soundfont…</Text>
+            <Text className="mb-2 font-sans text-[11px] text-cream">Loading instrument sounds…</Text>
             <LoadingSkeleton height={10} borderRadius={6} />
           </View>
         ) : null}
@@ -1442,7 +1350,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             pointerEvents="none"
           >
             <Text className="text-center font-sans text-[11px] text-muted-brown">
-              No GP5 for this view — analyze a song or switch tab variant.
+              {
+                "Tab preview isn't available for this lesson yet. Try analyzing a song or another tab variant."
+              }
             </Text>
           </View>
         ) : null}

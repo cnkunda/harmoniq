@@ -12,6 +12,7 @@ import {
     MIGRATION_V7_JAM_SNAPSHOT_RELIABILITY,
     MIGRATION_V8_LESSONS,
     MIGRATION_V9_SKILL_TECHNIQUE_ROLL,
+    MIGRATION_V10_PRACTICE_PLAN_COMPLETIONS,
     PREF_EXPERIENCE_LEVEL,
     PREF_ONBOARDING_COMPLETE,
     PREF_TASTE_PROFILE_JSON,
@@ -27,6 +28,8 @@ import type {
     LickInsertInput,
     LickRow,
     NodeSessionSnippet,
+    PracticePlanCompletionInsertInput,
+    PracticePlanCompletionRow,
     ReviewSkillUpdateInput,
     SessionArchiveRow,
     SessionInsertInput,
@@ -199,6 +202,14 @@ async function applyMigrations(): Promise<void> {
     await db.runAsync(
       'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
       9,
+      new Date().toISOString(),
+    )
+  }
+  if (current < 10) {
+    await db.execAsync(MIGRATION_V10_PRACTICE_PLAN_COMPLETIONS)
+    await db.runAsync(
+      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+      10,
       new Date().toISOString(),
     )
   }
@@ -648,6 +659,30 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
   }))
 }
 
+export async function insertPracticePlanCompletionRow(input: PracticePlanCompletionInsertInput): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  await db.runAsync(
+    `INSERT OR REPLACE INTO practice_plan_completions (id, completed_at, plan_json) VALUES (?, ?, ?)`,
+    input.id,
+    input.completed_at,
+    input.plan_json,
+  )
+}
+
+export async function listPracticePlanCompletions(): Promise<PracticePlanCompletionRow[]> {
+  await initDb()
+  const db = await getDb()
+  const rows = await db.getAllAsync<{ id: string; completed_at: string; plan_json: string }>(
+    'SELECT id, completed_at, plan_json FROM practice_plan_completions ORDER BY completed_at DESC',
+  )
+  return (rows ?? []).map((r) => ({
+    id: r.id,
+    completed_at: r.completed_at,
+    plan_json: r.plan_json,
+  }))
+}
+
 export async function buildJournalExportText(): Promise<string> {
   const [sessions, licks, jams, skills] = await Promise.all([
     listSessionsJournal(),
@@ -671,6 +706,7 @@ export async function clearAllPracticeData(): Promise<void> {
   await db.execAsync('DELETE FROM licks')
   await db.execAsync('DELETE FROM lessons')
   await db.execAsync('DELETE FROM jam_snapshots')
+  await db.execAsync('DELETE FROM practice_plan_completions')
   await db.execAsync(
     `UPDATE skill_nodes SET score = 0, sessions_count = 0, last_session_date = NULL,
      easiness_factor = 2.5, interval_days = 1, next_review_date = NULL, sm2_repetitions = 0,

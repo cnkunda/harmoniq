@@ -34,6 +34,12 @@ export function SessionChromeBar() {
   if (!pathname.includes('/session/')) return null
 
   const active = sessionStepIndexFromPathname(pathname)
+  const onTuneScreen = pathname.replace(/\/+$/, '').split('/').pop() === 'tune'
+
+  const closeSessionOrHome = () => {
+    if (router.canGoBack()) router.back()
+    else router.replace('/(tabs)')
+  }
   const slot = plan?.slots?.[idx]
   const slots = plan?.slots
   const hasPlan = Boolean(slots?.length)
@@ -87,7 +93,29 @@ export function SessionChromeBar() {
         </View>
 
         <View style={{ minWidth: ACTION_MIN, alignItems: 'flex-end' }}>
-          {hasPlan ? (
+          {onTuneScreen ? (
+            <View className="items-end gap-1">
+              <Pressable
+                onPress={closeSessionOrHome}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                hitSlop={10}
+              >
+                <Text className="font-sans-medium text-sm text-wood-900">Close</Text>
+              </Pressable>
+              {hasPlan && hasNext ? (
+                <Pressable
+                  onPress={goNextDrill}
+                  accessibilityRole="button"
+                  accessibilityLabel="Go to next drill in practice plan"
+                  hitSlop={10}
+                >
+                  <Text className="font-sans-medium text-xs text-muted-brown">Next drill</Text>
+                  <ArrowRight color={colors.muted.brown} size={16} style={{ alignSelf: 'flex-end', marginTop: 2 }} />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : hasPlan ? (
             hasNext ? (
               <Pressable
                 onPress={goNextDrill}

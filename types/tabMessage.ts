@@ -18,6 +18,7 @@ export type TabInboundMessage =
   | { type: 'syncTimelineMs'; positionMs: number }
   /** Host stem transport play/pause — AlphaTab cursor needs player active (see player.enableCursor). */
   | { type: 'setStemPlaybackActive'; active: boolean }
+  /** Host reads hidden reference `<audio>` clock; harness/web convert to score timeline ms (÷ stem `playbackRate`). */
   | { type: 'getPosition' }
   | { type: 'setTranspose'; semitones: number }
   | { type: 'setTheme'; colors: Partial<TabThemeColors> }
@@ -92,6 +93,7 @@ export type AlphaTabSurfaceRef = {
   syncPlaybackTimelineMs: (positionMs: number) => void
   /** Call when stem mixer play/pause toggles so AlphaTab shows the beat cursor during host-driven playback. */
   setStemPlaybackActive: (active: boolean) => void
+  /** Score timeline ms; hidden `<audio>` time ÷ stem playback rate (see harness `getPosition` / web `AlphaTabWeb`). */
   getPosition: () => Promise<number | null>
   setTheme: (colors: Partial<TabThemeColors>) => void
   /** Named session-step preset (native harness + web implementation). */

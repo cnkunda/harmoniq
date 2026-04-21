@@ -4,6 +4,16 @@ function isApiLikeError(err: unknown): err is { status: number; message: string 
   return typeof o.status === 'number' && typeof o.message === 'string'
 }
 
+function analyzeFlowErrorCode(err: unknown): string | undefined {
+  if (typeof err !== 'object' || err === null) return undefined
+  const o = err as Record<string, unknown>
+  const fromApi = o.errorCode
+  if (typeof fromApi === 'string' && fromApi.length > 0) return fromApi
+  const snake = o.error_code
+  if (typeof snake === 'string' && snake.length > 0) return snake
+  return undefined
+}
+
 /** Matches README.md § Error States — do not show raw stacks; use these strings. */
 export const README_ERROR_COPY = {
   micPermissionDenied:
@@ -19,8 +29,15 @@ export const README_ERROR_COPY = {
   scoreEndpointFailure: "Couldn't score that take — tap 'Do it again' to try once more.",
   noGuitarStem:
     "Couldn't isolate a clear guitar track from this recording. Try a different version of the song.",
+  /** Must match `STEM_SEPARATION_FAILED_USER_MESSAGE` in `backend/app/jobs.py`. */
+  stemSeparationFailed:
+    'Something went wrong separating guitar stems. Try a studio recording — live versions sometimes have unusual audio.',
+  /** Shown under primary copy when retry may need a different source, not the same file. */
+  analyzeRetryHint:
+    'Try another mix or studio recording, or use a different upload or YouTube version.',
+  /** Must stay in sync with README.md § Error States — Low transcription confidence. */
   lowTranscriptionConfidence:
-    "Transcription confidence is limited here — use your ears and this tab as a helpful sketch.",
+    'This part is a rough approximation — use it as a guide, not a rule.',
   browserMicBlocked:
     'Your browser is blocking mic access — click the lock icon to enable it.',
 } as const
@@ -36,12 +53,14 @@ export type MappedUiError = {
   actionKind: UiErrorActionKind
   /** Button label; `null` when `actionKind` is null. */
   actionLabel: string | null
+  /** Secondary line under the main message (e.g. retry hints for analyze). */
+  detail?: string | null
 }
 
 function networkishMessage(err: unknown): boolean {
   if (err instanceof TypeError) return true
   const msg = err instanceof Error ? err.message : String(err)
-  return /network|fetch|failed to load|internet|offline/i.test(msg)
+  return /network|fetch|failed to load|internet|offline|connection|timed out/i.test(msg)
 }
 
 function bodyLooksShort(body: string): boolean {
@@ -49,8 +68,14 @@ function bodyLooksShort(body: string): boolean {
   return b.includes('too short') || b.includes('30 sec') || b.includes('30s') || b.includes('duration')
 }
 
+function bodyLooksStemSeparationFailure(body: string): boolean {
+  const b = body.toLowerCase()
+  return b.includes('separating') && b.includes('guitar') && b.includes('stem')
+}
+
 function bodyLooksNoStem(body: string): boolean {
   const b = body.toLowerCase()
+  if (bodyLooksStemSeparationFailure(body)) return false
   return b.includes('guitar') && (b.includes('stem') || b.includes('isolate') || b.includes('no clear'))
 }
 
@@ -89,6 +114,8 @@ export function mapAnalyzeFlowError(
 
   if (isApiLikeError(err)) {
     const body = err.message?.trim() ?? ''
+    const code = analyzeFlowErrorCode(err)
+
     if (bodyLooksShort(body)) {
       return {
         message: README_ERROR_COPY.audioTooShort,
@@ -97,15 +124,76 @@ export function mapAnalyzeFlowError(
         actionLabel: 'Dismiss',
       }
     }
+
+    if (code === 'youtube_invalid') {
+      return {
+        message: README_ERROR_COPY.youtubeUrlInvalid,
+        variant: 'error',
+        actionKind: 'retry',
+        actionLabel: 'Retry',
+      }
+    }
+    if (code === 'audio_too_short') {
+      return {
+        message: README_ERROR_COPY.audioTooShort,
+        variant: 'warning',
+        actionKind: 'dismiss',
+        actionLabel: 'Dismiss',
+      }
+    }
+    if (code === 'stem_separation_failed') {
+      return {
+        message: README_ERROR_COPY.stemSeparationFailed,
+        variant: 'error',
+        actionKind: 'retry',
+        actionLabel: 'Retry',
+        detail: README_ERROR_COPY.analyzeRetryHint,
+      }
+    }
+    if (code === 'ingest_failed' || code === 'analysis_failed') {
+      return {
+        message: README_ERROR_COPY.analysisJobFailed,
+        variant: 'error',
+        actionKind: 'retry',
+        actionLabel: 'Retry',
+        detail: README_ERROR_COPY.analyzeRetryHint,
+      }
+    }
+    if (code === 'no_usable_guitar_stem') {
+      return {
+        message: README_ERROR_COPY.noGuitarStem,
+        variant: 'warning',
+        actionKind: 'retry',
+        actionLabel: 'Try again',
+        detail: README_ERROR_COPY.analyzeRetryHint,
+      }
+    }
+
+    if (bodyLooksStemSeparationFailure(body)) {
+      return {
+        message: README_ERROR_COPY.stemSeparationFailed,
+        variant: 'error',
+        actionKind: 'retry',
+        actionLabel: 'Retry',
+        detail: README_ERROR_COPY.analyzeRetryHint,
+      }
+    }
+
     if (bodyLooksNoStem(body)) {
       return {
         message: README_ERROR_COPY.noGuitarStem,
         variant: 'warning',
         actionKind: 'retry',
         actionLabel: 'Try again',
+        detail: README_ERROR_COPY.analyzeRetryHint,
       }
     }
-    if (ctx.usedYoutubeUrl && err.status === 400) {
+    // Async analyze: invalid YouTube URLs fail in the worker; poll surfaces ApiError(500, YOUTUBE_URL_INVALID_USER_MESSAGE).
+    // Sync path: some deployments may return HTTP 400 on POST.
+    if (
+      body === README_ERROR_COPY.youtubeUrlInvalid ||
+      (ctx.usedYoutubeUrl && err.status === 400)
+    ) {
       return {
         message: README_ERROR_COPY.youtubeUrlInvalid,
         variant: 'error',
@@ -119,6 +207,7 @@ export function mapAnalyzeFlowError(
         variant: 'error',
         actionKind: 'retry',
         actionLabel: 'Retry',
+        detail: README_ERROR_COPY.analyzeRetryHint,
       }
     }
     if (err.status === 404) {
@@ -127,6 +216,7 @@ export function mapAnalyzeFlowError(
         variant: 'error',
         actionKind: 'retry',
         actionLabel: 'Retry',
+        detail: README_ERROR_COPY.analyzeRetryHint,
       }
     }
     if (err.status >= 400) {
@@ -135,6 +225,7 @@ export function mapAnalyzeFlowError(
         variant: 'error',
         actionKind: 'retry',
         actionLabel: 'Retry',
+        detail: README_ERROR_COPY.analyzeRetryHint,
       }
     }
   }
@@ -144,19 +235,12 @@ export function mapAnalyzeFlowError(
     variant: 'error',
     actionKind: 'retry',
     actionLabel: 'Retry',
+    detail: README_ERROR_COPY.analyzeRetryHint,
   }
 }
 
-/** Review / POST /score failures. */
-export function mapScoreFlowError(err: unknown): MappedUiError {
-  if (networkishMessage(err)) {
-    return {
-      message: README_ERROR_COPY.noInternetAnalysis,
-      variant: 'warning',
-      actionKind: 'dismiss',
-      actionLabel: 'Dismiss',
-    }
-  }
+/** Review / onboarding placement POST /score failures (MANUAL_QA: backend down or HTTP error → same copy). */
+export function mapScoreFlowError(_err?: unknown): MappedUiError {
   return {
     message: README_ERROR_COPY.scoreEndpointFailure,
     variant: 'error',
@@ -199,6 +283,7 @@ export function mapLowTranscriptionConfidenceBanner(): MappedUiError {
 export type ErrorBannerActionFields = {
   message: string
   variant: ErrorUiVariant
+  detail?: string
   action?: { label: string; onPress: () => void }
 }
 
@@ -224,5 +309,6 @@ export function toErrorBannerProps(
             : handlers.onContinue
     action = { label: m.actionLabel, onPress: () => void run() }
   }
-  return { message: m.message, variant: m.variant, action }
+  const detail = m.detail?.trim() ? m.detail.trim() : undefined
+  return { message: m.message, variant: m.variant, ...(detail ? { detail } : {}), action }
 }

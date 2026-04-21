@@ -132,6 +132,14 @@ export interface LessonJSON {
   stems?: Record<string, string>
   lyrics_aligned?: Array<Record<string, unknown>>
   sections?: Array<Record<string, unknown>>
+  /** Backend stem isolation heuristic — guitar bleed / piano-led mix (`backend/app/stem_quality.py`). */
+  stem_isolation_warning?: string | null
+  stem_quality_flags?: string[]
+  guitar_stem_usable?: boolean | null
+  /** `guitar_stem` | `full_mix` | `piano_stem` — which source librosa used for tempo/beat structure. */
+  analysis_audio_role?: string | null
+  /** e.g. `no_isolated_guitar` when Basic Pitch was skipped. */
+  tabs_unavailable_reason?: string | null
   /** Optional AlphaTab SVG prerender hints — see `backend/app/alphatab_prerender.py`. */
   alphatab_prerender_hints?: {
     alphatab_version?: string
@@ -150,6 +158,8 @@ export interface AnalyzeJob {
   status: AnalyzeJobStatus
   result: LessonJSON | null
   error: string | null
+  /** Present when status is failed; stable code for `mapAnalyzeFlowError`. */
+  error_code?: string | null
   /** 0–1 while processing; from GET /analyze/{id} when backend reports it. */
   progress?: number | null
   stage_label?: string | null
@@ -164,6 +174,8 @@ export interface ScoreResult {
   phrasing_score: number
   bend_pitch_error_cents: number
   rushing_score: number
+  /** Short coaching paragraph from POST `/score` when the backend provides it. */
+  coach_paragraph?: string | null
   node_scores: Record<string, number>
   waveform_comparison: {
     user_wav_base64: string

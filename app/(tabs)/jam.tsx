@@ -1,8 +1,8 @@
 import { useRouter } from 'expo-router'
 import { Audio, type AVPlaybackStatus } from 'expo-av'
 import { Asset } from 'expo-asset'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Platform, ScrollView, Text, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native'
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
@@ -29,7 +29,7 @@ import {
 import { requestJamBacking } from '@/src/api/jam'
 import { mapBrowserMicBlockedForJam, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { BACKING_TRACKS, type BackingTrackId } from '@/src/constants/backingTracks'
-import { getAllSkillNodes, getAppPref, insertJamSnapshotRow } from '@/src/db/client'
+import { getAllSkillNodes, getAppPref, insertJamSnapshotRow, insertPracticePlanCompletionRow } from '@/src/db/client'
 import { useDnaStore } from '@/src/stores/dnaStore'
 import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import { coachFromPhraseFeatures } from '@/src/jam/jamPhraseCoach'
@@ -37,9 +37,11 @@ import { phraseToFeatures } from '@/src/jam/jamPhraseFeatures'
 import { createJamPhraseSegmenter } from '@/src/jam/jamPhraseSegmenter'
 import { prepareJamBackingPlayable } from '@/src/jam/jamBackingPlayable'
 import { JAM_REFERENCE_TAB_GP5_BASE64 } from '@/src/jam/jamReferenceTabGp5Base64'
+import { normalizeExternalAudioSrcForTabHarness } from '@/src/jam/normalizeJamTabAudioUri'
 import { pickSuggestedClassicFromWeakAreas } from '@/src/jam/jamSuggestedClassic'
 import { createPitchClassHistogram } from '@/src/jam/pitchClassHistogram'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
+import { usePlanStore } from '@/src/stores/planStore'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import {
   buildFretboardShareUrl,
@@ -74,8 +76,8 @@ export default function JamScreen() {
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [scaleUiGeneration, setScaleUiGeneration] = useState(0)
   const [jamTabReady, setJamTabReady] = useState(false)
-  /** Web AlphaTab external-media player: same backing URI as expo-av so duration/buffers are valid. */
-  const [jamWebTabAudioSrc, setJamWebTabAudioSrc] = useState<string | null>(null)
+  /** AlphaTab external-media URL (web blob/local asset URL; native file URL for WebView harness). */
+  const [jamTabExternalAudioSrc, setJamTabExternalAudioSrc] = useState<string | null>(null)
   const [webMicBlocked, setWebMicBlocked] = useState(false)
   const [micBannerKey, setMicBannerKey] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -94,13 +96,6 @@ export default function JamScreen() {
   const soundRef = useRef<Audio.Sound | null>(null)
   const jamAiPlaybackReleaseRef = useRef<(() => void) | null>(null)
   const lastAiPromptRef = useRef<string | null>(null)
-  // #region agent log
-  const jamSeamLogRef = useRef<{ started: boolean; nearEnd: boolean; wrapped: boolean }>({
-    started: false,
-    nearEnd: false,
-    wrapped: false,
-  })
-  // #endregion
   const histogramRef = useRef(createPitchClassHistogram())
   const jamBackingPositionRef = useRef(0)
   const jamBpmRef = useRef<number | null>(null)
@@ -115,7 +110,27 @@ export default function JamScreen() {
   const lastScaleTintRef = useRef<{ rootMidi: number; intervals: readonly number[] } | null>(null)
   const classicTrackDef = BACKING_TRACKS.find((t) => t.id === classicTrackId) ?? BACKING_TRACKS[0]
   jamBpmRef.current = classicTrackDef.bpm ?? null
+  const activeJamTrackLine =
+    backingMode === 'ai'
+      ? `AI instrumental (server · Gemini) · template: ${classicTrackDef.label} · ${classicTrackDef.key}${
+          classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'
+        }`
+      : `Offline loop (bundled) · ${classicTrackDef.label} · ${classicTrackDef.key}${
+          classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'
+        }`
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
+
+  const currentPlan = usePlanStore((s) => s.currentPlan)
+  const currentSlotIndex = usePlanStore((s) => s.currentSlotIndex)
+  const clearPlan = usePlanStore((s) => s.clearPlan)
+  /** Final plan step is often `free_jam`; SessionChromeBar only covers `/session/*`, so we surface completion here. */
+  const activePlanJamSlot = useMemo(() => {
+    const slots = currentPlan?.slots
+    if (!slots?.length) return null
+    if (currentSlotIndex !== slots.length - 1) return null
+    const slot = slots[currentSlotIndex]
+    return slot?.slot_type === 'free_jam' ? slot : null
+  }, [currentPlan?.slots, currentSlotIndex])
 
   useEffect(() => {
     const seg = createJamPhraseSegmenter({
@@ -189,6 +204,7 @@ export default function JamScreen() {
       }
       jamAiPlaybackReleaseRef.current?.()
       jamAiPlaybackReleaseRef.current = null
+      setJamTabExternalAudioSrc(null)
     }
   }, [pulse, stopPitch])
 
@@ -196,37 +212,13 @@ export default function JamScreen() {
     if (!isJamming) {
       setJamTabReady(false)
       jamLastStemPlayingRef.current = false
-      setJamWebTabAudioSrc(null)
       jamAiPlaybackReleaseRef.current?.()
       jamAiPlaybackReleaseRef.current = null
     }
   }, [isJamming])
 
-  // #region agent log
   useEffect(() => {
-    if (Platform.OS !== 'web' || !isJamming) return
-    fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f059aa' },
-      body: JSON.stringify({
-        sessionId: 'f059aa',
-        runId: 'pre-fix',
-        hypothesisId: 'H2',
-        location: 'jam.tsx:jam-active',
-        message: 'Jam web tab backing state',
-        data: {
-          backingMode,
-          jamWebTabAudioSrcLen: jamWebTabAudioSrc?.length ?? 0,
-          jamWebTabAudioPrefix: jamWebTabAudioSrc ? jamWebTabAudioSrc.slice(0, 32) : '',
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-  }, [isJamming, backingMode, jamWebTabAudioSrc])
-  // #endregion
-
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !isJamming || !jamTabReady) return
+    if (!isJamming || !jamTabReady) return
     const tab = jamStemTabRef.current?.getTabSurface()
     const cmd = lastScaleTintRef.current
     if (cmd) {
@@ -237,7 +229,7 @@ export default function JamScreen() {
   }, [isJamming, jamTabReady, scaleUiGeneration])
 
   const syncJamTabFromPlaybackStatus = useCallback((status: AVPlaybackStatus) => {
-    if (Platform.OS !== 'web' || !status.isLoaded) return
+    if (!status.isLoaded) return
     const tab = jamStemTabRef.current?.getTabSurface()
     tab?.syncPlaybackTimelineMs(status.positionMillis ?? 0)
     const playing = Boolean(status.isPlaying)
@@ -251,61 +243,6 @@ export default function JamScreen() {
     (status: AVPlaybackStatus) => {
       if (status.isLoaded) {
         jamBackingPositionRef.current = status.positionMillis ?? 0
-        if (Platform.OS === 'web') {
-          const dur = status.durationMillis ?? 0
-          const pos = status.positionMillis ?? 0
-          const seam = jamSeamLogRef.current
-          // #region agent log
-          if (!seam.started) {
-            seam.started = true
-            fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f059aa' },
-              body: JSON.stringify({
-                sessionId: 'f059aa',
-                runId: 'pre-fix',
-                hypothesisId: 'H6',
-                location: 'jam.tsx:status-start',
-                message: 'First playback status',
-                data: { durationMillis: dur, positionMillis: pos, isLooping: status.isLooping },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {})
-          }
-          if (!seam.nearEnd && dur > 0 && pos >= Math.max(0, dur - 120)) {
-            seam.nearEnd = true
-            fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f059aa' },
-              body: JSON.stringify({
-                sessionId: 'f059aa',
-                runId: 'pre-fix',
-                hypothesisId: 'H6',
-                location: 'jam.tsx:status-near-end',
-                message: 'Approaching loop seam',
-                data: { durationMillis: dur, positionMillis: pos },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {})
-          }
-          if (seam.nearEnd && !seam.wrapped && pos < 120) {
-            seam.wrapped = true
-            fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f059aa' },
-              body: JSON.stringify({
-                sessionId: 'f059aa',
-                runId: 'pre-fix',
-                hypothesisId: 'H6',
-                location: 'jam.tsx:status-wrapped',
-                message: 'Loop wrapped to start',
-                data: { positionMillis: pos },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {})
-          }
-          // #endregion
-        }
       }
       syncJamTabFromPlaybackStatus(status)
     },
@@ -314,7 +251,6 @@ export default function JamScreen() {
 
   const onJamTabReady = useCallback(() => {
     setJamTabReady(true)
-    if (Platform.OS !== 'web') return
     const snd = soundRef.current
     if (!snd) return
     void snd.getStatusAsync().then((st) => {
@@ -334,7 +270,7 @@ export default function JamScreen() {
 
     const pendingUriCleanup: (() => void)[] = []
     let source: number | { uri: string }
-    let webTabBackingUri: string | null = null
+    let tabHarnessAudioSrc: string | null = null
     if (backingMode === 'ai') {
       const res = await requestJamBacking({
         musical_key: classicTrackDef.key,
@@ -345,49 +281,28 @@ export default function JamScreen() {
       const prepared = await prepareJamBackingPlayable(res.audio_base64, res.mime_type)
       pendingUriCleanup.push(prepared.release)
       source = { uri: prepared.uri }
-      if (Platform.OS === 'web') webTabBackingUri = prepared.uri
+      tabHarnessAudioSrc = normalizeExternalAudioSrcForTabHarness(prepared.uri)
     } else {
       lastAiPromptRef.current = null
-      source = classicTrackDef.source
-      if (Platform.OS === 'web') {
-        const asset = Asset.fromModule(classicTrackDef.source)
-        await asset.downloadAsync()
-        webTabBackingUri = asset.localUri ?? asset.uri
-        if (!webTabBackingUri) {
-          throw new Error('Could not resolve classic backing URL for tab sync.')
-        }
+      const asset = Asset.fromModule(classicTrackDef.source)
+      await asset.downloadAsync()
+      const resolved = asset.localUri ?? asset.uri
+      if (!resolved) {
+        throw new Error('Could not resolve classic backing URL for tab sync.')
       }
+      tabHarnessAudioSrc = normalizeExternalAudioSrcForTabHarness(resolved)
+      source = Platform.OS === 'web' ? { uri: resolved } : classicTrackDef.source
+    }
+
+    if (tabHarnessAudioSrc) {
+      setJamTabExternalAudioSrc(tabHarnessAudioSrc)
     }
 
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7847/ingest/304bce8c-5898-4e69-ad2e-982e56245f77', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'f059aa' },
-        body: JSON.stringify({
-          sessionId: 'f059aa',
-          runId: 'pre-fix',
-          hypothesisId: 'H6',
-          location: 'jam.tsx:before-createAsync',
-          message: 'Preparing jam playback source',
-          data: {
-            backingMode,
-            classicTrackId: classicTrackDef.id,
-            hasWebTabBackingUri: Boolean(webTabBackingUri),
-            webTabBackingUriPrefix: webTabBackingUri ? webTabBackingUri.slice(0, 32) : '',
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion
       const { sound } = await Audio.Sound.createAsync(source, { isLooping: true, shouldPlay: false })
       jamAiPlaybackReleaseRef.current = pendingUriCleanup.length > 0 ? pendingUriCleanup[0]! : null
       pendingUriCleanup.length = 0
       soundRef.current = sound
-      jamSeamLogRef.current = { started: false, nearEnd: false, wrapped: false }
-      if (Platform.OS === 'web' && webTabBackingUri) {
-        setJamWebTabAudioSrc(webTabBackingUri)
-      }
       jamLastStemPlayingRef.current = false
       sound.setOnPlaybackStatusUpdate(handleJamPlaybackStatus)
       await sound.setVolumeAsync(1)
@@ -396,6 +311,7 @@ export default function JamScreen() {
       setIsJamming(true)
       startPulse()
     } catch (err) {
+      setJamTabExternalAudioSrc(null)
       for (const fn of pendingUriCleanup) {
         fn()
       }
@@ -425,9 +341,7 @@ export default function JamScreen() {
     setScaleRootPitchClass(null)
     lastScaleUiAtRef.current = 0
     lastScaleTintRef.current = null
-    if (Platform.OS === 'web') {
-      jamStemTabRef.current?.getTabSurface()?.clearScaleHighlight()
-    }
+    jamStemTabRef.current?.getTabSurface()?.clearScaleHighlight()
 
     try {
       await startPitch((reading) => {
@@ -468,6 +382,7 @@ export default function JamScreen() {
       await beginJamAfterMic()
     } catch (e) {
       await stopPitch()
+      setJamTabExternalAudioSrc(null)
       jamAiPlaybackReleaseRef.current?.()
       jamAiPlaybackReleaseRef.current = null
       lastAiPromptRef.current = null
@@ -519,9 +434,8 @@ export default function JamScreen() {
       }
     }
     jamLastStemPlayingRef.current = false
-    if (Platform.OS === 'web') {
-      jamStemTabRef.current?.getTabSurface()?.setStemPlaybackActive(false)
-    }
+    jamStemTabRef.current?.getTabSurface()?.setStemPlaybackActive(false)
+    setJamTabExternalAudioSrc(null)
 
     const hist = histogramRef.current
     const pitchClassWeightMap = hist.toScalePositionMap(durationSec)
@@ -537,9 +451,7 @@ export default function JamScreen() {
     setScaleRootPitchClass(null)
     lastScaleTintRef.current = null
     lastScaleUiAtRef.current = 0
-    if (Platform.OS === 'web') {
-      jamStemTabRef.current?.getTabSurface()?.clearScaleHighlight()
-    }
+    jamStemTabRef.current?.getTabSurface()?.clearScaleHighlight()
     const durationSeconds = Math.max(0, Math.floor(durationSec))
 
     let coachSummary: string
@@ -697,22 +609,57 @@ export default function JamScreen() {
         >
           <View className="mt-6 mb-4">
             <Text className="mb-1 font-serif text-3xl text-cream">Jam Mode</Text>
-            <Text className="font-sans text-sm text-muted-brown">
-              {backingMode === 'ai'
-                ? `AI instrumental · ${classicTrackDef.key}${
-                    classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ''
-                  } · template: ${classicTrackDef.label}`
-                : `${classicTrackDef.label} · ${classicTrackDef.key}${
-                    classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'
-                  }`}
-            </Text>
+            <Text className="font-sans text-sm text-cream/95">Active jam track: {activeJamTrackLine}</Text>
             {weakAreas.length > 0 ? (
               <Text className="mt-1 font-sans text-xs text-amber-light/90">
                 Suggested loop from your practice focus: {weakAreas.join(', ')}
               </Text>
             ) : null}
-            <Text className="mt-1 font-sans text-xs text-muted-brown">Reference tab is a generic scale map for visual guidance.</Text>
+            <Text className="mt-1 font-sans text-xs text-muted-brown">
+              Passive listening with scale hints. Reference score is a generic pattern (not the backing audio transcribed) — for
+              fretboard and tab scale highlights only.
+            </Text>
           </View>
+
+          {activePlanJamSlot != null && currentPlan?.slots?.length ? (
+            <View className="mb-4 rounded-xl border border-amber-accent/40 bg-amber-accent/12 px-4 py-3">
+              <Text className="font-sans-medium text-sm text-cream">
+                Practice plan · Step {currentSlotIndex + 1} of {currentPlan.slots.length}
+                {activePlanJamSlot.title?.trim() ? ` · ${activePlanJamSlot.title.trim()}` : ''}
+              </Text>
+              <Text className="mt-1 font-sans text-xs leading-snug text-muted-brown">
+                This is the last step in your plan. When you are done jamming, complete the session to clear the plan and go
+                home.
+              </Text>
+              <Pressable
+                onPress={() => {
+                  void (async () => {
+                    const plan = currentPlan
+                    const nSlots = plan?.slots?.length ?? 0
+                    if (plan && nSlots > 0) {
+                      try {
+                        await insertPracticePlanCompletionRow({
+                          id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                          completed_at: new Date().toISOString(),
+                          plan_json: JSON.stringify(plan),
+                        })
+                      } catch (e) {
+                        if (__DEV__) console.warn('[jam] plan completion persist failed', e)
+                      }
+                    }
+                    clearPlan()
+                    toast.success('Practice plan complete.')
+                    router.replace('/(tabs)')
+                  })()
+                }}
+                className="mt-3 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
+                accessibilityRole="button"
+                accessibilityLabel="Complete practice session and return home"
+              >
+                <Text className="text-center font-sans-medium text-base text-wood-900">Complete session</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {webMicBlocked && Platform.OS === 'web' ? (
             <ErrorBanner
@@ -731,8 +678,27 @@ export default function JamScreen() {
           {!isJamming && (
             <View className="mb-6 gap-2">
               <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wider text-muted-brown">
-                Backing track
+                Backing source
               </Text>
+              <AnimatedPressable
+                onPress={() => setBackingMode('classic')}
+                haptic="light"
+                disabled={busy}
+                className={`flex-row items-center justify-between rounded-xl border p-4 ${
+                  backingMode === 'classic'
+                    ? 'border-amber-accent/40 bg-amber-accent/10'
+                    : 'border-wood-700/50 bg-wood-800/40'
+                }`}
+              >
+                <View className="flex-1 pr-2">
+                  <Text className={`font-sans text-sm ${backingMode === 'classic' ? 'text-amber-light' : 'text-cream'}`}>
+                    Offline loop (bundled MP3)
+                  </Text>
+                  <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                    Works fully offline — no practice server required
+                  </Text>
+                </View>
+              </AnimatedPressable>
               <AnimatedPressable
                 onPress={() => setBackingMode('ai')}
                 haptic="light"
@@ -745,28 +711,30 @@ export default function JamScreen() {
               >
                 <View className="flex-1 pr-2">
                   <Text className={`font-sans text-sm ${backingMode === 'ai' ? 'text-amber-light' : 'text-cream'}`}>
-                    AI practice bed (instrumental)
+                    AI instrumental (server · Gemini)
                   </Text>
                   <Text className="mt-0.5 font-sans text-xs text-muted-brown">
-                    Uses key/tempo from the template loop you select below · needs backend + Gemini key
+                    Generates a fresh bed from the key/tempo of the loop you select below · needs API + GEMINI_API_KEY on the
+                    backend
                   </Text>
                 </View>
                 {busy && backingMode === 'ai' ? <ActivityIndicator color="#e8b86d" /> : null}
               </AnimatedPressable>
+              <Text className="mb-1 mt-2 font-sans-medium text-xs uppercase tracking-wider text-muted-brown">
+                Loop (style & key)
+              </Text>
+              <Text className="mb-1 font-sans text-[11px] text-muted-brown">
+                {backingMode === 'ai'
+                  ? 'Tap a row to set the template (key / BPM) for AI generation.'
+                  : 'Tap a row to choose which bundled MP3 plays when you start.'}
+              </Text>
               {BACKING_TRACKS.map((track) => {
                 const templateActive = backingMode === 'ai' && classicTrackId === track.id
                 const classicActive = backingMode === 'classic' && classicTrackId === track.id
                 return (
                   <AnimatedPressable
                     key={track.id}
-                    onPress={() => {
-                      setClassicTrackId(track.id)
-                      setBackingMode('classic')
-                    }}
-                    onLongPress={() => {
-                      setClassicTrackId(track.id)
-                      setBackingMode('ai')
-                    }}
+                    onPress={() => setClassicTrackId(track.id)}
                     haptic="light"
                     disabled={busy}
                     className={`flex-row items-center justify-between rounded-xl border p-4 ${
@@ -784,7 +752,7 @@ export default function JamScreen() {
                         {track.label}
                       </Text>
                       {templateActive && backingMode === 'ai' ? (
-                        <Text className="mt-0.5 font-sans text-xs text-muted-brown">Template for AI key / BPM</Text>
+                        <Text className="mt-0.5 font-sans text-xs text-muted-brown">AI template · key / tempo</Text>
                       ) : null}
                     </View>
                     {track.bpm != null ? (
@@ -795,9 +763,6 @@ export default function JamScreen() {
                   </AnimatedPressable>
                 )
               })}
-              <Text className="font-sans text-[10px] text-muted-brown/90">
-                Long-press a classic loop to keep it as the AI template while selecting AI bed above.
-              </Text>
             </View>
           )}
 
@@ -869,25 +834,27 @@ export default function JamScreen() {
                   setFretPulseKey((k) => k + 1)
                 }}
               />
-              {Platform.OS === 'web' ? (
-                <View className="gap-2">
-                  <Text className="font-sans text-xs text-muted-brown">
-                    Reference tab (generic): highlights detected scale tones over a fixed pattern.
-                  </Text>
-                  <SessionStemAndTab
-                    ref={jamStemTabRef}
-                    tabRenderPreset="study"
-                    showStemPanel={false}
-                    gp5Base64Override={JAM_REFERENCE_TAB_GP5_BASE64}
-                    audioSrcOverride={jamWebTabAudioSrc}
-                    transposeSemitonesOverride={0}
-                    onTabReady={onJamTabReady}
-                    tabFrameClassName="h-[200px] w-full overflow-hidden rounded-xl border border-wood-600/45 bg-ivory px-2"
-                  />
-                </View>
-              ) : null}
             </View>
           )}
+
+          <View className="mb-4 gap-2">
+            <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-brown">Reference score</Text>
+            <Text className="font-sans text-xs text-muted-brown">
+              {isJamming
+                ? 'Highlights follow your detected scale while the backing plays. Cursor syncs to the jam track.'
+                : 'Load the pattern before you start — same reference you will see while jamming.'}
+            </Text>
+            <SessionStemAndTab
+              ref={jamStemTabRef}
+              tabRenderPreset="study"
+              showStemPanel={false}
+              gp5Base64Override={JAM_REFERENCE_TAB_GP5_BASE64}
+              audioSrcOverride={jamTabExternalAudioSrc}
+              transposeSemitonesOverride={0}
+              onTabReady={onJamTabReady}
+              tabFrameClassName="h-[200px] w-full overflow-hidden rounded-xl border border-wood-600/45 bg-ivory px-2"
+            />
+          </View>
 
           <View className="gap-3 pb-4">
             {isJamming ? (

@@ -1,10 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
-import { SongDetailsCard } from '@/components/SongDetailsCard'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useLessonStore } from '@/src/stores/lessonStore'
@@ -12,7 +11,6 @@ import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
-import type { SongScoreMeta } from '@/types/tabMessage'
 
 export default function ListenScreen() {
   useStepCoachNarration()
@@ -24,11 +22,6 @@ export default function ListenScreen() {
   const lessonJobId = lesson?.job_id ?? ''
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const stemTabRef = useRef<SessionStemAndTabHandle>(null)
-  const [scoreMeta, setScoreMeta] = useState<SongScoreMeta | null>(null)
-  const [songPlayback, setSongPlayback] = useState<{
-    masterBarIndex: number
-    sectionLabel: string | null
-  } | null>(null)
 
   useEffect(() => {
     const raw = params.section
@@ -70,16 +63,6 @@ export default function ListenScreen() {
         ref={stemTabRef}
         tabRenderPreset="listen"
         autoPlayOnReady={lesson?.job_id === DEMO_LESSON_JOB_ID}
-        onTabSongDetails={setScoreMeta}
-        onTabSongPlayback={setSongPlayback}
-        detailsAboveTab={
-          <SongDetailsCard
-            lesson={lesson}
-            scoreMeta={scoreMeta}
-            playback={songPlayback}
-            lessonSectionIndex={lessonSectionIndex}
-          />
-        }
       />
     </SessionStepScreen>
   )

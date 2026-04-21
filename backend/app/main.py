@@ -63,8 +63,14 @@ from app import spotify as spotify_api
 from app.curriculum import suggest_next_session
 from app.sequencer import generate_practice_plan
 from app.taste import derive_taste_profile
-from app.ingest import get_job_dir
-from app.jobs import ANALYSIS_FAILED_USER_MESSAGE, enqueue_analyze_job, get_coach_hydration, jobs
+import app.ingest as ingest
+from app.jobs import (
+    ANALYSIS_FAILED_USER_MESSAGE,
+    ANALYZE_ERROR_ANALYSIS_FAILED,
+    enqueue_analyze_job,
+    get_coach_hydration,
+    jobs,
+)
 from app.coach import (
     generate_jam_coach_summary,
     generate_onboarding_placement_summary,
@@ -276,7 +282,7 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
 
             if upload is not None:
                 suffix = Path(upload.filename or "").suffix or ".audio"
-                job_dir = get_job_dir(job_id)
+                job_dir = ingest.get_job_dir(job_id)
                 dest = job_dir / f"input{suffix}"
                 if isinstance(upload, UploadFile):
                     await _save_uploadfile_limited(
@@ -302,6 +308,9 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
                 else:
                     raise TypeError("Expected multipart 'file' to be UploadFile or bytes-like")
                 upload_path = str(dest)
+                pre_dur = ingest.wav_file_duration_seconds(dest)
+                if pre_dur is not None and pre_dur < ingest.MIN_ANALYZE_DURATION_SECONDS:
+                    raise HTTPException(status_code=400, detail=ingest.AUDIO_TOO_SHORT_USER_MESSAGE)
 
         else:
             body = await request.json()
@@ -309,14 +318,26 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
                 youtube_url = body.get("url") or body.get("youtube_url")
                 player_profile = _parse_player_profile_field(body.get("player_profile"))
 
+    except HTTPException:
+        raise
     except UploadTooLargeError:
         logger.warning("POST /analyze upload too large job_id=%s", job_id)
-        jobs[job_id] = JobStatus(status="failed", result=None, error=ANALYSIS_FAILED_USER_MESSAGE)
+        jobs[job_id] = JobStatus(
+            status="failed",
+            result=None,
+            error=ANALYSIS_FAILED_USER_MESSAGE,
+            error_code=ANALYZE_ERROR_ANALYSIS_FAILED,
+        )
         return AnalyzeJobCreated(job_id=job_id)
 
     except Exception:
         logger.exception("POST /analyze failed to parse input job_id=%s", job_id)
-        jobs[job_id] = JobStatus(status="failed", result=None, error=ANALYSIS_FAILED_USER_MESSAGE)
+        jobs[job_id] = JobStatus(
+            status="failed",
+            result=None,
+            error=ANALYSIS_FAILED_USER_MESSAGE,
+            error_code=ANALYZE_ERROR_ANALYSIS_FAILED,
+        )
         return AnalyzeJobCreated(job_id=job_id)
 
     logger.info(

@@ -285,6 +285,12 @@ class LessonJSON(BaseModel):
     lyrics_aligned: list[dict[str, Any]] = Field(default_factory=list)
     sections: list[LessonSectionStub] = Field(default_factory=list)
     alphatab_prerender_hints: AlphaTabPrerenderHints | None = None
+    # Post–Demucs heuristics: piano-led / bleed (see app/stem_quality.py, docs/MANUAL_QA.md)
+    stem_isolation_warning: str | None = None
+    stem_quality_flags: list[str] = Field(default_factory=list)
+    guitar_stem_usable: bool | None = None
+    analysis_audio_role: str | None = None
+    tabs_unavailable_reason: str | None = None
 
 
 class JobStatus(BaseModel):
@@ -293,6 +299,10 @@ class JobStatus(BaseModel):
     status: Literal["processing", "complete", "failed"] = "processing"
     result: LessonJSON | None = None
     error: str | None = None
+    error_code: str | None = Field(
+        default=None,
+        description="Stable machine code when status=failed; client maps in mapAnalyzeFlowError.",
+    )
     progress: float | None = Field(
         default=None,
         ge=0.0,
@@ -363,6 +373,7 @@ class ScoreResult(BaseModel):
     phrasing_score: float
     bend_pitch_error_cents: float
     rushing_score: float
+    coach_paragraph: str = Field(default="", description="Short coaching copy for journal / UI.")
     node_scores: dict[str, float] = Field(default_factory=list)
     waveform_comparison: ScoreWaveformComparison
     diagnostics: ScoreDiagnostics = Field(default_factory=ScoreDiagnostics)

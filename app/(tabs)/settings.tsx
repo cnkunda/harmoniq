@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { FormCheckbox } from '@/components/FormCheckbox'
 import { toast } from '@/components/ToastConfig'
 import { disconnectSpotifyServer, fetchSpotifyTasteProfile, parseTasteProfileJson } from '@/src/api/analyze'
 import { stop as stopVoiceCoach } from '@/src/audio/voiceCoach'
@@ -52,6 +53,7 @@ import type { VoiceGenderPref } from '@/src/stores/voiceCoachPrefsStore'
 import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 
 function isCoachVoice(s: string): s is CoachVoiceId {
   return (COACH_VOICE_OPTIONS as readonly string[]).includes(s)
@@ -79,6 +81,8 @@ function parseStoredSpotifyProfile(raw: string | null): SpotifyTasteProfile | nu
 
 export default function SettingsScreen() {
   const router = useRouter()
+  const skipTuneStep = useSessionPrefsStore((s) => s.skipTuneStep)
+  const setSkipTuneStep = useSessionPrefsStore((s) => s.setSkipTuneStep)
   const loadSkills = useSkillStore((s) => s.loadFromDb)
   const resetLesson = useLessonStore((s) => s.resetLesson)
   const clearAnnotations = useSessionAnnotationsStore((s) => s.clearAll)
@@ -343,6 +347,21 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <Switch value={preferSimplerTabs} onValueChange={(v) => void persistSimpler(v)} />
+          </View>
+          <View className="mt-5 border-t border-wood-600/35 pt-5">
+            <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Session start</Text>
+            <Text className="mt-2 font-sans text-[11px] text-muted-brown">
+              When enabled, new sessions open on Listen and skip mic calibration and the low-E check.
+            </Text>
+            <View className="mt-3">
+              <FormCheckbox
+                checked={skipTuneStep}
+                onCheckedChange={(v) => void setSkipTuneStep(v)}
+                label="Don't show this again — skip tune & room noise before future lessons."
+                labelClassName="text-cream"
+                surface="wood"
+              />
+            </View>
           </View>
         </View>
 

@@ -3,6 +3,7 @@ import {
     idbClearPracticeStores,
     idbLoadEverything,
     idbPersistJams,
+    idbPersistPlanCompletions,
     idbPersistLessons,
     idbPersistLicks,
     idbPersistPrefs,
@@ -31,6 +32,8 @@ import type {
   LickInsertInput,
   LickRow,
   NodeSessionSnippet,
+  PracticePlanCompletionInsertInput,
+  PracticePlanCompletionRow,
   ReviewSkillUpdateInput,
   SessionArchiveRow,
   SessionInsertInput,
@@ -50,6 +53,7 @@ const appPrefs = new Map<string, string>()
 const licks: LickRow[] = []
 const lessonCatalog: LessonPersistRow[] = []
 const jamSnapshots: JamSnapshotInsertInput[] = []
+const planCompletions: PracticePlanCompletionRow[] = []
 
 let initPromise: Promise<void> | null = null
 
@@ -137,6 +141,11 @@ function applyHydration(h: IdbHydration): void {
   jamSnapshots.length = 0
   const jamsSorted = [...h.jams].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   jamSnapshots.push(...jamsSorted)
+  planCompletions.length = 0
+  const plansSorted = [...(h.planCompletions ?? [])].sort((a, b) =>
+    a.completed_at < b.completed_at ? 1 : a.completed_at > b.completed_at ? -1 : 0,
+  )
+  planCompletions.push(...plansSorted)
   lessonCatalog.length = 0
   lessonCatalog.push(...(h.lessons ?? []).map((row) => ({ ...row })))
 }
@@ -159,6 +168,10 @@ async function flushLicks(): Promise<void> {
 
 async function flushJams(): Promise<void> {
   await idbPersistJams(getHarmoniqIdbHandle(), jamSnapshots)
+}
+
+async function flushPlanCompletions(): Promise<void> {
+  await idbPersistPlanCompletions(getHarmoniqIdbHandle(), planCompletions)
 }
 
 async function flushLessons(): Promise<void> {
@@ -551,6 +564,26 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
     }))
 }
 
+export async function insertPracticePlanCompletionRow(input: PracticePlanCompletionInsertInput): Promise<void> {
+  seedWebSkillNodes()
+  const row: PracticePlanCompletionRow = {
+    id: input.id,
+    completed_at: input.completed_at,
+    plan_json: input.plan_json,
+  }
+  const i = planCompletions.findIndex((x) => x.id === row.id)
+  if (i >= 0) planCompletions[i] = row
+  else planCompletions.unshift(row)
+  await flushPlanCompletions()
+}
+
+export async function listPracticePlanCompletions(): Promise<PracticePlanCompletionRow[]> {
+  seedWebSkillNodes()
+  return [...planCompletions].sort((a, b) =>
+    a.completed_at < b.completed_at ? 1 : a.completed_at > b.completed_at ? -1 : 0,
+  )
+}
+
 export async function buildJournalExportText(): Promise<string> {
   const [sessions, lickRows, jams, skills] = await Promise.all([
     listSessionsJournal(),
@@ -574,6 +607,7 @@ export async function clearAllPracticeData(): Promise<void> {
   licks.length = 0
   lessonCatalog.length = 0
   jamSnapshots.length = 0
+  planCompletions.length = 0
   for (const n of DEFAULT_SKILL_NODES) {
     skillNodes.set(n.id, defaultSkillRow(n))
   }

@@ -763,6 +763,25 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           /* Stems + optional sections */
           <View className={playbackCardClass}>
             <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Stems</Text>
+            {(() => {
+              const warn =
+                typeof lesson.stem_isolation_warning === 'string' && lesson.stem_isolation_warning.trim()
+                  ? lesson.stem_isolation_warning.trim()
+                  : null
+              const tabNote =
+                !warn &&
+                lesson.tabs_unavailable_reason === 'no_isolated_guitar' &&
+                lesson.guitar_stem_usable === false
+                  ? 'Guitar tab was not generated for this track — the isolated guitar stem was not reliable enough.'
+                  : null
+              const body = warn ?? tabNote
+              if (!body) return null
+              return (
+                <View className="mb-3 rounded-lg border border-danger/35 bg-danger/10 px-3 py-2">
+                  <Text className="font-sans text-xs leading-snug text-wood-900">{body}</Text>
+                </View>
+              )
+            })()}
             {sections.length > 0 ? (
               <View className="mb-3">
                 <Text className="mb-2 font-sans-medium text-sm text-wood-900">Sections</Text>

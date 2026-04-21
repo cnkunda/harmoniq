@@ -10,6 +10,8 @@ const colors = {
     accent: '#D4A574',
     light: '#E8B86D',
   },
+  /** Tailwind `white` — AlphaTab primary glyphs on dark score. */
+  white: '#FFFFFF',
   cream: '#F5E6D0',
   ivory: '#F5F0E8',
   muted: {

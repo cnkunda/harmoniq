@@ -7,6 +7,8 @@ import type {
   LatestSessionSongRow,
   LessonListRow,
   NodeSessionSnippet,
+  PracticePlanCompletionInsertInput,
+  PracticePlanCompletionRow,
   ReviewSkillUpdateInput,
   SessionArchiveRow,
   SessionInsertInput,
@@ -47,6 +49,8 @@ export interface HarmoniqDbClient {
   applySessionMutation(updates: SkillSessionMutationRow[]): Promise<void>
   insertJamSnapshotRow(input: JamSnapshotInsertInput): Promise<void>
   listJamSnapshots(): Promise<JamSnapshotRow[]>
+  insertPracticePlanCompletionRow(input: PracticePlanCompletionInsertInput): Promise<void>
+  listPracticePlanCompletions(): Promise<PracticePlanCompletionRow[]>
   buildJournalExportText(): Promise<string>
   clearAllPracticeData(): Promise<void>
   insertLickRow(input: LickInsertInput): Promise<void>

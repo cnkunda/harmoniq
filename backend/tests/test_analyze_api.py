@@ -10,8 +10,14 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.ingest import get_data_dir
-from app.jobs import ANALYSIS_FAILED_USER_MESSAGE, YOUTUBE_URL_INVALID_USER_MESSAGE, jobs
+from app.ingest import AUDIO_TOO_SHORT_USER_MESSAGE, get_data_dir
+from app.jobs import (
+    ANALYSIS_FAILED_USER_MESSAGE,
+    ANALYZE_ERROR_ANALYSIS_FAILED,
+    ANALYZE_ERROR_YOUTUBE_INVALID,
+    YOUTUBE_URL_INVALID_USER_MESSAGE,
+    jobs,
+)
 from app.main import app
 
 client = TestClient(app)
@@ -29,6 +35,12 @@ def isolated_data_dir(tmp_path, monkeypatch):
     _ = tmp_path
     monkeypatch.setenv("DATA_DIR", f"./.tmp_test_data_{uuid4()}")
     yield
+
+
+@pytest.fixture(autouse=True)
+def allow_subsecond_wavs_in_analyze_tests(monkeypatch):
+    """Fixture WAVs are ~0.25s; production rejects under 30s (README / MANUAL_QA)."""
+    monkeypatch.setattr("app.ingest.MIN_ANALYZE_DURATION_SECONDS", 0.01)
 
 
 def _poll_until_not_processing(job_id: str, *, timeout_seconds: float = 20.0) -> dict:
@@ -53,6 +65,18 @@ def test_post_analyze_returns_job_id():
     data = r.json()
     assert "job_id" in data
     UUID(data["job_id"])  # raises if invalid
+
+
+def test_post_analyze_rejects_wav_under_min_duration_with_readme_message(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.ingest.MIN_ANALYZE_DURATION_SECONDS", 30.0)
+    input_wav = tmp_path / "short.wav"
+    _write_test_wav(input_wav, sample_rate=44100, channels=1, duration_seconds=5.0)
+    r = client.post(
+        "/analyze",
+        files={"file": ("short.wav", input_wav.read_bytes(), "audio/wav")},
+    )
+    assert r.status_code == 400, r.text
+    assert r.json()["detail"] == AUDIO_TOO_SHORT_USER_MESSAGE
 
 
 def _write_test_wav(
@@ -170,6 +194,7 @@ def test_worker_forced_exception_surfaces_as_failed_with_user_safe_message():
     assert body["status"] == "failed"
     assert body["result"] is None
     assert body["error"] == ANALYSIS_FAILED_USER_MESSAGE
+    assert body.get("error_code") == ANALYZE_ERROR_ANALYSIS_FAILED
 
 
 def test_invalid_youtube_url_fails_with_user_message():
@@ -178,6 +203,7 @@ def test_invalid_youtube_url_fails_with_user_message():
     assert body["status"] == "failed"
     assert body["result"] is None
     assert body["error"] == YOUTUBE_URL_INVALID_USER_MESSAGE
+    assert body.get("error_code") == ANALYZE_ERROR_YOUTUBE_INVALID
 
 
 def test_get_analyze_unknown_job_returns_404_json():
@@ -216,6 +242,9 @@ def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
         source_url=None,
         player_profile=None,
         source_metadata=None,
+        stem_classification=None,
+        mix_wav_path=None,
+        piano_stem_path=None,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub
@@ -285,6 +314,9 @@ def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
         source_url=None,
         player_profile=None,
         source_metadata=None,
+        stem_classification=None,
+        mix_wav_path=None,
+        piano_stem_path=None,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub
@@ -354,6 +386,9 @@ def test_missing_cached_artifact_forces_recompute(monkeypatch, tmp_path):
         source_url=None,
         player_profile=None,
         source_metadata=None,
+        stem_classification=None,
+        mix_wav_path=None,
+        piano_stem_path=None,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub

@@ -236,6 +236,7 @@ export default function OnboardingPhraseScreen() {
         {phraseError ? (
           <ErrorBanner
             className="mt-4 w-full"
+            onDismissed={() => setPhraseError(null)}
             {...toErrorBannerProps(phraseError, {
               onRetry: () => {
                 const take = lastScorableTakeRef.current

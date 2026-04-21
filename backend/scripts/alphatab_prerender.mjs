@@ -42,6 +42,15 @@ function main() {
     const settings = new alphaTab.Settings()
     settings.display.scale = typeof preset.scale === 'number' ? preset.scale : 1.1
     settings.display.stretchForce = typeof preset.stretchForce === 'number' ? preset.stretchForce : 1
+    // Dark score ink — merge only colors; replacing `resources` drops fonts and yields empty partials.
+    Object.assign(settings.display.resources, {
+      mainGlyphColor: '#FFFFFF',
+      secondaryGlyphColor: '#E8B86D',
+      barSeparatorColor: '#6E5644',
+      scoreInfoColor: '#8B7D6B',
+      staffLineColor: '#6E5644',
+      barNumberColor: '#8B7D6B',
+    })
     settings.core.engine = 'svg'
     settings.core.enableLazyLoading = false
 

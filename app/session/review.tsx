@@ -19,8 +19,12 @@ import { mapScoreFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { isHarmoniqSkillMutationSkipped } from '@/src/config'
 import { applyReviewSkillUpdates, getAllSkillNodes, getSessionCount, insertLickRow, insertSessionRow } from '@/src/db/client'
+import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
 import { computeSkillMutations } from '@/src/session/skillMutator'
 import { useDnaStore } from '@/src/stores/dnaStore'
+import { usePlanStore } from '@/src/stores/planStore'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
@@ -31,6 +35,7 @@ import { BPM_DRIFT_NOTE_MINIMUM } from '@/src/utils/practiceConfig'
 import { firstLessonStemRelPath, serializeLessonStemsJson } from '@/src/utils/lessonAudio'
 import { shareExportedBlob } from '@/src/utils/exportShare'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
+import { coachReviewFromScoreResult } from '@/src/session/coachReviewFromScoreResult'
 import {
   sessionAccuracy01FromScoreResult,
   timingStability01FromScoreResult,
@@ -98,6 +103,8 @@ export default function ReviewScreen() {
   const router = useRouter()
   const lesson = useLessonStore((s) => s.lesson)
   const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
+  const saveLesson = useLessonStore((s) => s.saveLesson)
+  const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const section = lesson?.sections?.[sectionIndex]
   const latestTake = useSessionPlayStore((s) => s.latestTake)
   const clearLatestTake = useSessionPlayStore((s) => s.clearLatestTake)
@@ -110,6 +117,10 @@ export default function ReviewScreen() {
   const [savingLick, setSavingLick] = useState(false)
 
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
+  const hasMoreSectionsInLesson = useMemo(() => {
+    const n = lesson?.sections?.length ?? 0
+    return n > 0 && sectionIndex + 1 < n
+  }, [lesson?.sections?.length, sectionIndex])
   const gp5ForExport = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
   const songTitleBase =
     typeof lesson?.song_title === 'string' && lesson.song_title.trim()
@@ -183,7 +194,7 @@ export default function ReviewScreen() {
             ? ((section as Record<string, unknown>).label as string)
             : null,
         date: new Date().toISOString(),
-        coach_review: null,
+        coach_review: coachReviewFromScoreResult(result),
         pitch_accuracy: result.pitch_accuracy,
         phrasing_score: result.phrasing_score,
         nodes_targeted: targeted,
@@ -315,10 +326,44 @@ export default function ReviewScreen() {
     }
   }, [gp5ForExport, songTitleBase])
 
-  const finish = () => {
+  const finish = useCallback(async () => {
     clearLatestTake()
+    const sectionsLen = lesson?.sections?.length ?? 0
+    if (sectionsLen > 0 && sectionIndex + 1 < sectionsLen) {
+      setLessonSectionIndex(sectionIndex + 1)
+      const skipTune = useSessionPrefsStore.getState().skipTuneStep
+      router.replace(sessionEntryHref(skipTune))
+      return
+    }
+
+    const { currentPlan, currentSlotIndex, clearPlan } = usePlanStore.getState()
+    const slots = currentPlan?.slots
+    const hasNext = Boolean(slots?.length && currentSlotIndex < slots.length - 1)
+    const activeSlot = slots?.[currentSlotIndex]
+    const slotRef =
+      typeof activeSlot?.lesson_ref === 'string' && activeSlot.lesson_ref.trim().length > 0
+        ? activeSlot.lesson_ref.trim()
+        : null
+    const currentJobId = typeof lesson?.job_id === 'string' && lesson.job_id.trim().length > 0 ? lesson.job_id.trim() : null
+    /** Avoid advancing a stale plan when the user opened a different song than this slot references. */
+    const planLessonConflict = Boolean(slotRef && currentJobId && slotRef !== currentJobId)
+
+    if (currentPlan && hasNext && !planLessonConflict) {
+      try {
+        const nextSlot = slots?.[currentSlotIndex + 1]
+        if (nextSlot?.slot_type === 'free_jam') {
+          toast.success('Song practice complete — opening Jam.')
+        }
+        await navigateToPracticePlanSlot(router, { saveLesson, setLessonSectionIndex }, currentSlotIndex + 1)
+        return
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Could not open the next plan step.')
+        return
+      }
+    }
+    if (currentPlan) clearPlan()
     router.replace('/(tabs)')
-  }
+  }, [clearLatestTake, lesson?.job_id, lesson?.sections?.length, router, saveLesson, sectionIndex, setLessonSectionIndex])
 
   const saveLick = useCallback(async () => {
     const gp5 = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
@@ -382,7 +427,7 @@ export default function ReviewScreen() {
       showBack
       onBack={() => router.back()}
       showNext
-      nextLabel="Done"
+      nextLabel={hasMoreSectionsInLesson ? 'Next section' : 'Done'}
       onNext={finish}
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.review}</DemoTourCallout> : null}
@@ -455,6 +500,7 @@ export default function ReviewScreen() {
       {reviewError ? (
         <ErrorBanner
           className="mt-3"
+          onDismissed={() => setReviewError(null)}
           {...toErrorBannerProps(reviewError, {
             onRetry: () => {
               setReviewError(null)

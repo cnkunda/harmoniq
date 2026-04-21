@@ -205,6 +205,38 @@ def _wav_b64_from_float(y: np.ndarray, sr: int) -> str:
     return base64.b64encode(bio.getvalue()).decode("ascii")
 
 
+def _coach_paragraph_from_score(
+    pitch_accuracy: float,
+    phrasing_score: float,
+    rushing_score: float,
+    confidence: str,
+    reliability_flags: list[str],
+) -> str:
+    p = int(round(pitch_accuracy * 100))
+    ph = int(round(phrasing_score * 100))
+    rt = int(round(rushing_score * 100))
+    parts: list[str] = []
+    if pitch_accuracy >= 0.85 and phrasing_score >= 0.8:
+        parts.append(f"Solid take—pitch near {p}% and phrasing near {ph}%.")
+    elif pitch_accuracy < 0.55:
+        parts.append(f"Pitch is the main gap today ({p}%); match the reference in smaller chunks.")
+    else:
+        parts.append(f"Pitch {p}%, phrasing {ph}%.")
+
+    if rushing_score < 0.55:
+        parts.append(f"Timing wants more pocket ({rt}%); subdivide with the click or backing.")
+    elif rushing_score >= 0.85:
+        parts.append("Timing is locking in nicely.")
+
+    if "timing_unstable" in reliability_flags:
+        parts.append("We saw uneven timing residuals—shorter phrases usually help.")
+    if any(f in reliability_flags for f in ("signal_low", "signal_near_silence", "voiced_sparse")):
+        parts.append("Signal was light—move closer to the mic on the next pass.")
+    if confidence == "low":
+        parts.append("Confidence is low on this capture, so treat these numbers as directional.")
+    return " ".join(parts).strip()
+
+
 def score_recording(payload: ScoreRequest) -> ScoreResult:
     y, sr = _decode_recording(payload)
     section = payload.section if isinstance(payload.section, dict) else {}
@@ -242,12 +274,21 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
             # Deterministic fallback projection from base metrics.
             node_scores[node] = round(float((pitch_accuracy + phrasing_score + rushing_score) / 3.0), 3)
 
+    coach_paragraph = _coach_paragraph_from_score(
+        float(pitch_accuracy),
+        float(phrasing_score),
+        float(rushing_score),
+        confidence,
+        reliability_flags,
+    )
+
     return ScoreResult(
         pitch_accuracy=round(float(pitch_accuracy), 3),
         note_duration_deltas=note_duration_deltas,
         phrasing_score=round(float(phrasing_score), 3),
         bend_pitch_error_cents=round(float(bend_error_cents), 1),
         rushing_score=round(float(rushing_score), 3),
+        coach_paragraph=coach_paragraph,
         node_scores=node_scores,
         waveform_comparison=ScoreWaveformComparison(
             user_wav_base64=_waveform_preview_b64(y, sr),

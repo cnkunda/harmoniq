@@ -4,14 +4,22 @@ import Svg, { Polyline } from 'react-native-svg'
 import Animated, { FadeIn } from 'react-native-reanimated'
 
 import colors from '@/src/constants/colors'
-import type { SessionJournalRow } from '@/src/db/types'
+import type { PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
+import { summaryFromPlanCompletionRow } from '@/src/home/planCompletionSummary'
 import { sessionOverallAccuracy } from '@/src/home/sessionAccuracy'
 
 const CHART_W = 268
 const CHART_H = 52
 const PAD = 6
 
-export function RecentProgress({ sessions }: { sessions: readonly SessionJournalRow[] }) {
+export function RecentProgress({
+  sessions,
+  lastPlanCompletion,
+}: {
+  sessions: readonly SessionJournalRow[]
+  /** Most recent row from `listPracticePlanCompletions()` (optional). */
+  lastPlanCompletion?: PracticePlanCompletionRow | null
+}) {
   const points = useMemo(() => {
     const chronological = [...sessions].slice(0, 3).reverse()
     return chronological
@@ -34,6 +42,14 @@ export function RecentProgress({ sessions }: { sessions: readonly SessionJournal
     })
     return coords.join(' ')
   }, [points])
+
+  const planNote = (() => {
+    if (!lastPlanCompletion) return null
+    const { stepCount, firstTitle } = summaryFromPlanCompletionRow(lastPlanCompletion)
+    if (stepCount <= 0) return null
+    const head = firstTitle ? `${firstTitle} · ` : ''
+    return `${head}${stepCount}-step plan finished`
+  })()
 
   return (
     <View className="mb-2">
@@ -63,6 +79,9 @@ export function RecentProgress({ sessions }: { sessions: readonly SessionJournal
           </View>
         </Animated.View>
       )}
+      {planNote ? (
+        <Text className="mt-2 font-sans text-xs text-muted-brown">Latest plan wrap-up: {planNote}.</Text>
+      ) : null}
     </View>
   )
 }

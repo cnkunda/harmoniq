@@ -407,7 +407,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         />
         {!soundFontReady ? (
           <View className="absolute left-3 right-3 top-3 rounded-lg border border-wood-600/45 bg-wood-800/70 p-3">
-            <Text className="mb-2 font-sans text-[11px] text-cream">Loading guitar soundfont…</Text>
+            <Text className="mb-2 font-sans text-[11px] text-cream">Loading instrument sounds…</Text>
             <LoadingSkeleton height={10} borderRadius={6} />
           </View>
         ) : null}
@@ -417,7 +417,9 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
             pointerEvents="none"
           >
             <Text className="text-center font-sans text-[11px] text-muted-brown">
-              No GP5 for this view — analyze a song or switch tab variant.
+              {
+                "Tab preview isn't available for this lesson yet. Try analyzing a song or another tab variant."
+              }
             </Text>
           </View>
         ) : null}

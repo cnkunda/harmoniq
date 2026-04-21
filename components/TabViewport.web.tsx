@@ -1,6 +1,5 @@
 import { forwardRef } from 'react'
 
-import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
 
 import { AlphaTabWeb } from './AlphaTabWeb'
@@ -39,7 +38,6 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
         soundFontProfile={soundFontProfile}
         renderPreset={renderPreset}
         runtimeDiagnosticsEnabled={runtimeDiagnosticsEnabled}
-        theme={TAB_HARNESS_THEME}
         style={style}
         onReady={onReady}
         onError={onError}

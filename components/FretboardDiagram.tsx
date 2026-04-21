@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from 'react'
-import { Platform, Pressable, Text, View } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import Animated, {
   Easing,
   interpolate,
@@ -66,6 +67,10 @@ type FretboardDiagramProps = {
   fretGuideCells?: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary' }> | null
   /** When set, replaces default footer hint when nothing is selected. */
   fretGuideFooterHint?: string | null
+  /** Optional pitch-ladder demo (e.g. warm-up); shows an “Example” pill like Tune. */
+  pitchLadderSlot?: ReactNode
+  /** When `pitchLadderSlot` is set, initial expanded state (default `true`). */
+  pitchLadderDefaultExpanded?: boolean
 }
 
 const SCALE_DEGREE_LABELS: Record<number, string> = {
@@ -84,6 +89,42 @@ const SCALE_DEGREE_LABELS: Record<number, string> = {
 }
 
 const KEYBOARD_ROWS = ['1234567890-=', 'qwertyuiop[]', "asdfghjkl;'", 'zxcvbnm,./'] as const
+
+/** Matches typical dot inlays (fret numbers are diagram columns: 0 = nut). */
+const SINGLE_INLAY_FRETS = new Set([3, 5, 7, 9])
+
+const NUT_COLUMN_WIDTH = 44
+
+const OPEN_STRING_NOTE_LETTERS = OPEN_MIDI_BY_ROW.map((midi) => pitchClassLabelFromMidi(midi))
+
+function fretInlayKind(
+  fret: number,
+  stringIdx: number,
+): 'single' | 'doubleUpper' | 'doubleLower' | null {
+  if (fret === 12) {
+    if (stringIdx === 0) return 'doubleUpper'
+    if (stringIdx === 5) return 'doubleLower'
+    return null
+  }
+  if (SINGLE_INLAY_FRETS.has(fret) && stringIdx === 2) return 'single'
+  return null
+}
+
+function stringLineThicknessPx(stringIdx: number): number {
+  return 1 + stringIdx * 0.38
+}
+
+/** Web-only wound-string look (`repeating-linear-gradient` + shadow). */
+function stringLineWebBackground(heightPx: number): ViewStyle {
+  const mid = Math.max(1, Math.round(heightPx / 2))
+  return {
+    width: '100%',
+    height: heightPx,
+    borderRadius: heightPx / 2,
+    backgroundImage: `repeating-linear-gradient(90deg, #a8a29e 0px, #f5f5f4 ${mid}px, #78716c ${mid + 2}px, #e7e5e4 ${mid + 4}px, #a8a29e ${mid + 6}px)`,
+    boxShadow: '0 1px 2px rgba(0,0,0,0.14)',
+  } as ViewStyle
+}
 
 /** Warm HSL peak keyed by pitch class so each perception note reads as a distinct flash (Study B3). */
 function flashPeakColorForMidi(midi: number | null): string {
@@ -230,9 +271,15 @@ export function FretboardDiagram({
   tunerState = null,
   fretGuideCells = null,
   fretGuideFooterHint = null,
+  pitchLadderSlot = null,
+  pitchLadderDefaultExpanded,
 }: FretboardDiagramProps) {
+  const [pitchLadderOpen, setPitchLadderOpen] = useState(
+    () => pitchLadderDefaultExpanded ?? true,
+  )
   const cell = selectedNote ? resolveFretCell(selectedNote) : null
   const flashMidi = selectedNote ? inferMidiFromNoteSelection(selectedNote) : null
+  const showPitchLadderControl = pitchLadderSlot != null
 
   useEffect(() => {
     if (!onSelectNote || !enableKeyboardInput || Platform.OS !== 'web') return
@@ -274,7 +321,7 @@ export function FretboardDiagram({
     <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/45 p-3">
       <View className="flex-row items-start justify-between gap-2">
         <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Position map</Text>
-        {showTuneControl || showOverlayControls || showCopyShare ? (
+        {showTuneControl || showOverlayControls || showCopyShare || showPitchLadderControl ? (
           <View className="max-w-[76%] flex-row flex-wrap items-center justify-end gap-1.5">
             {tuneActive && onCalibrateTune ? (
               <Pressable
@@ -296,6 +343,19 @@ export function FretboardDiagram({
               >
                 <Text className={`font-sans text-[11px] ${tuneActive ? 'text-wood-900' : 'text-muted-brown'}`}>
                   {tuneActive ? 'Tune on' : 'Tune'}
+                </Text>
+              </Pressable>
+            ) : null}
+            {showPitchLadderControl ? (
+              <Pressable
+                onPress={() => setPitchLadderOpen((o) => !o)}
+                className={`rounded-full border px-3 py-1 ${pitchLadderOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'}`}
+                accessibilityRole="button"
+                accessibilityLabel="Show example pitch ladder"
+                accessibilityState={{ selected: pitchLadderOpen }}
+              >
+                <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-muted-brown'}`}>
+                  Example
                 </Text>
               </Pressable>
             ) : null}
@@ -352,82 +412,164 @@ export function FretboardDiagram({
         </View>
       ) : null}
 
-      <View className="mt-3">
-        <View className="flex-row border-b border-wood-600/30 pb-1">
-          <View className="w-7" />
+      {pitchLadderOpen && pitchLadderSlot ? (
+        <View className="mt-2">
+          <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-muted-brown">
+            Example · pitch ladder (Play)
+          </Text>
+          {pitchLadderSlot}
+        </View>
+      ) : null}
+
+      <View className="mt-3 overflow-hidden rounded-lg border border-stone-400/55">
+        <View className="flex-row border-b border-stone-400/55 bg-stone-100 py-1.5">
+          <LinearGradient
+            colors={['#ddc9a8', '#c4a574', '#a68456']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.nutHeaderCell}
+          />
           {Array.from({ length: NUM_FRETS + 1 }).map((_, col) => (
-            <View key={`h-${col}`} className="flex-1 items-center">
-              <Text className="font-mono text-[9px] text-muted-brown">{col === 0 ? 'O' : col}</Text>
+            <View key={`h-${col}`} className="flex-1 items-center justify-center border-r border-stone-400/55 bg-[#fafaf9]">
+              <Text className="font-mono text-[9px] text-stone-600">{col === 0 ? 'O' : col}</Text>
             </View>
           ))}
         </View>
 
-        {Array.from({ length: 6 }).map((_, stringIdx) => (
-          <View key={`s-${stringIdx}`} className="relative flex-row items-center border-b border-wood-600/15 py-1">
-            <Text className="w-7 font-mono text-[9px] text-muted-brown">{stringIdx + 1}</Text>
-            {Array.from({ length: NUM_FRETS + 1 }).map((__, col) => {
-              const fret = col
-              const underlay = (stringIdx + col) % 4 === 0
-              const selected =
-                cell != null &&
-                cell.row === stringIdx &&
-                cellMatchesDiagramCol(cell.fret, fret)
-              const feedbackHere =
-                lastCellResult != null &&
-                lastCellResult.row === stringIdx &&
-                cellMatchesDiagramCol(lastCellResult.fret, fret)
-              const feedbackRing =
-                feedbackHere && lastCellResult
-                  ? lastCellResult.result === 'hit'
-                    ? 'border-success bg-success/35'
-                    : lastCellResult.result === 'close'
-                      ? 'border-amber-accent bg-amber-accent/30'
-                      : 'border-danger bg-danger/35'
-                  : ''
-              const scaleOn = scaleHighlightActive(scalePitchClasses, stringIdx, fret)
-              const midi = OPEN_MIDI_BY_ROW[stringIdx]! + fret
-              const overlayLabel = overlayLabelForCell(overlayMode, midi, degreeRootPitchClass)
-              const guideVariant = guideVariantAtCell(fretGuideCells, stringIdx, fret)
-              const guideRingClass =
-                guideVariant === 'primary'
-                  ? 'border-amber-accent bg-amber-accent/30'
-                  : guideVariant === 'secondary'
-                    ? 'border-success bg-success/35'
-                    : ''
-              return (
-                <Pressable
-                  key={`c-${stringIdx}-${col}`}
-                  onPress={() => onSelectNote?.({ string: stringIdx + 1, fret, midi })}
-                  disabled={!onSelectNote}
-                  className="relative flex-1 items-center justify-center py-0.5"
-                  accessibilityRole={onSelectNote ? 'button' : undefined}
-                  accessibilityLabel={onSelectNote ? `String ${stringIdx + 1}, fret ${fret}` : undefined}
+        {Array.from({ length: 6 }).map((_, stringIdx) => {
+          const thickness = stringLineThicknessPx(stringIdx)
+          const webStringStyle: ViewStyle =
+            Platform.OS === 'web'
+              ? stringLineWebBackground(thickness)
+              : {
+                  width: '100%',
+                  height: thickness,
+                  borderRadius: thickness / 2,
+                  backgroundColor: '#78716c',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.18,
+                  shadowRadius: 1.25,
+                  elevation: 2,
+                }
+
+          return (
+            <View
+              key={`s-${stringIdx}`}
+              className={`relative flex-row items-stretch ${stringIdx < 5 ? 'border-b border-stone-400/35' : ''}`}
+            >
+              <LinearGradient
+                colors={['#ddc9a8', '#c4a574', '#a68456']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.nutStringCell}
+              >
+                <Text style={styles.openStringNote}>{OPEN_STRING_NOTE_LETTERS[stringIdx]}</Text>
+              </LinearGradient>
+
+              <View className="relative min-h-[36px] flex-1 flex-row bg-[#fafaf9]">
+                <View
+                  pointerEvents="none"
+                  className="absolute inset-0 z-[3] justify-center px-0"
+                  style={{ zIndex: 3 }}
                 >
-                  {feedbackHere && lastCellResult ? (
-                    <View className={`absolute z-[15] h-5 w-5 rounded-full border-2 ${feedbackRing}`} />
-                  ) : null}
-                  {guideVariant && guideRingClass && !selected ? (
-                    <View className={`absolute z-[11] h-5 w-5 rounded-full border-2 ${guideRingClass}`} />
-                  ) : null}
-                  {scaleOn && !selected ? (
-                    <View className="absolute z-10 h-4 w-4 rounded-full border border-emerald-400/55 bg-emerald-500/15" />
-                  ) : null}
-                  <View
-                    className={`h-3 w-3 rounded-full ${underlay ? 'bg-amber-accent/25' : 'bg-wood-600/15'} ${selected ? 'opacity-40' : ''}`}
-                  />
-                  {overlayLabel ? (
-                    <Text className="absolute z-[12] font-mono text-[8px] text-wood-900/80">{overlayLabel}</Text>
-                  ) : null}
-                  {selected ? (
-                    <View className="absolute inset-0 z-20 items-center justify-center">
-                      <SelectedMarker key={pulseKey} flashMidi={flashMidi} />
-                    </View>
-                  ) : null}
-                </Pressable>
-              )
-            })}
-          </View>
-        ))}
+                  <View style={webStringStyle} />
+                </View>
+
+                {Array.from({ length: NUM_FRETS + 1 }).map((__, col) => {
+                  const fret = col
+                  const inlay = fretInlayKind(fret, stringIdx)
+                  const selected =
+                    cell != null &&
+                    cell.row === stringIdx &&
+                    cellMatchesDiagramCol(cell.fret, fret)
+                  const feedbackHere =
+                    lastCellResult != null &&
+                    lastCellResult.row === stringIdx &&
+                    cellMatchesDiagramCol(lastCellResult.fret, fret)
+                  const feedbackRing =
+                    feedbackHere && lastCellResult
+                      ? lastCellResult.result === 'hit'
+                        ? 'border-success bg-success/35'
+                        : lastCellResult.result === 'close'
+                          ? 'border-amber-accent bg-amber-accent/30'
+                          : 'border-danger bg-danger/35'
+                      : ''
+                  const scaleOn = scaleHighlightActive(scalePitchClasses, stringIdx, fret)
+                  const midi = OPEN_MIDI_BY_ROW[stringIdx]! + fret
+                  const overlayLabel = overlayLabelForCell(overlayMode, midi, degreeRootPitchClass)
+                  const guideVariant = guideVariantAtCell(fretGuideCells, stringIdx, fret)
+                  const guideRingClass =
+                    guideVariant === 'primary'
+                      ? 'border-amber-accent bg-amber-accent/30'
+                      : guideVariant === 'secondary'
+                        ? 'border-success bg-success/35'
+                        : ''
+                  const inlaySizeClass =
+                    inlay === 'doubleUpper' || inlay === 'doubleLower' ? 'h-1.5 w-1.5' : 'h-2 w-2'
+
+                  return (
+                    <Pressable
+                      key={`c-${stringIdx}-${col}`}
+                      onPress={() => onSelectNote?.({ string: stringIdx + 1, fret, midi })}
+                      disabled={!onSelectNote}
+                      className={`relative z-[4] flex-1 items-center justify-center border-r border-stone-400/55 py-1 ${
+                        col === 0 ? 'border-l-0' : ''
+                      }`}
+                      style={{ zIndex: 4 }}
+                      accessibilityRole={onSelectNote ? 'button' : undefined}
+                      accessibilityLabel={onSelectNote ? `String ${stringIdx + 1}, fret ${fret}` : undefined}
+                    >
+                      {inlay ? (
+                        <View
+                          className="absolute inset-0 items-center justify-center"
+                          pointerEvents="none"
+                          style={{ zIndex: 2 }}
+                        >
+                          <View className={`rounded-full bg-stone-500 ${inlaySizeClass}`} />
+                        </View>
+                      ) : null}
+                      {feedbackHere && lastCellResult ? (
+                        <View
+                          className={`absolute z-[15] h-5 w-5 rounded-full border-2 ${feedbackRing}`}
+                          style={{ zIndex: 15 }}
+                        />
+                      ) : null}
+                      {guideVariant && guideRingClass && !selected ? (
+                        <View
+                          className={`absolute z-[11] h-5 w-5 rounded-full border-2 ${guideRingClass}`}
+                          style={{ zIndex: 11 }}
+                        />
+                      ) : null}
+                      {scaleOn && !selected ? (
+                        <View
+                          className="absolute z-10 h-4 w-4 rounded-full border border-emerald-400/55 bg-emerald-500/15"
+                          style={{ zIndex: 10 }}
+                        />
+                      ) : null}
+                      {overlayLabel ? (
+                        <Text
+                          className="relative z-[12] font-mono text-[8px] text-stone-800"
+                          style={{ zIndex: 12 }}
+                        >
+                          {overlayLabel}
+                        </Text>
+                      ) : null}
+                      {selected ? (
+                        <View
+                          className="absolute inset-0 z-20 items-center justify-center"
+                          style={{ zIndex: 20 }}
+                        >
+                          <SelectedMarker key={pulseKey} flashMidi={flashMidi} />
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  )
+                })}
+              </View>
+            </View>
+          )
+        })}
       </View>
 
       <Text className="mt-2 font-mono text-[10px] text-muted-brown">
@@ -443,3 +585,28 @@ export function FretboardDiagram({
     </View>
   )
 }
+
+const styles = StyleSheet.create({
+  nutHeaderCell: {
+    width: NUT_COLUMN_WIDTH,
+    minHeight: 28,
+    borderRightWidth: 3,
+    borderRightColor: '#6b5344',
+  },
+  nutStringCell: {
+    width: NUT_COLUMN_WIDTH,
+    minHeight: 36,
+    borderRightWidth: 3,
+    borderRightColor: '#6b5344',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  openStringNote: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 15,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+})

@@ -23,6 +23,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** From `JobStatus.error_code` on failed analyze polls when present. */
+    public readonly errorCode?: string,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -139,9 +141,16 @@ export function isRecoverableAnalyzePollError(e: unknown): boolean {
   return false
 }
 
+/** Wall-clock cap for Add Song analyze polling — matches `mapAnalyzeFlowError` timeout branch. */
+export const ANALYZE_MAX_PROCESSING_WALL_MS = 5 * 60 * 1000
+
 export type PollAnalyzeOptions = {
   /** Called before scheduling a backoff retry after a transient poll failure. */
   onRecoverablePollError?: (info: { attempt: number; delayMs: number }) => void
+  /** Client clock when the user started this analyze run (e.g. `Date.now()` at submit). */
+  wallClockStartedAtMs?: number
+  /** Stop polling and reject if still `processing` after this many ms since `wallClockStartedAtMs`. */
+  maxProcessingWallMs?: number
 }
 
 const MAX_POLL_NETWORK_RETRIES = 12
@@ -344,6 +353,20 @@ export function pollAnalyzeJobCancelable(
         const job = await getJobStatus(jobId)
         pollNetworkFailures = 0
         onStatus(job)
+        const wallStart = options?.wallClockStartedAtMs
+        const maxWall = options?.maxProcessingWallMs
+        if (
+          wallStart != null &&
+          maxWall != null &&
+          maxWall > 0 &&
+          job.status === 'processing' &&
+          Date.now() - wallStart > maxWall
+        ) {
+          stop()
+          settled = true
+          reject(new ApiError(408, 'Analysis still running'))
+          return
+        }
         if (job.status === 'complete') {
           stop()
           settled = true
@@ -354,7 +377,11 @@ export function pollAnalyzeJobCancelable(
         if (job.status === 'failed') {
           stop()
           settled = true
-          reject(new ApiError(500, job.error ?? 'Analysis failed'))
+          const code =
+            typeof job.error_code === 'string' && job.error_code.length > 0
+              ? job.error_code
+              : undefined
+          reject(new ApiError(500, job.error ?? 'Analysis failed', code))
           return
         }
         schedule(intervalMs)

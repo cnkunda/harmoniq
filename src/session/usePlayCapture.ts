@@ -347,7 +347,11 @@ export function usePlayCapture(tempo: number | null | undefined) {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       setRecordingWallClockStartedAtMs(null)
-      setStatus(`Capture error: ${message}`)
+      if (message === 'MIC_PERMISSION_DENIED') {
+        setStatus('Allow microphone access to capture your playing.')
+      } else {
+        setStatus(`Capture error: ${message}`)
+      }
       try {
         await recorderRef.current.stop()
       } catch {

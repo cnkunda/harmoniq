@@ -30,6 +30,17 @@ class IngestError(RuntimeError):
     """Raised for ingest/normalization failures."""
 
 
+class AudioTooShortError(IngestError):
+    """Normalized audio is shorter than ``MIN_ANALYZE_DURATION_SECONDS`` (README / MANUAL_QA)."""
+
+
+# Must match `README_ERROR_COPY.audioTooShort` on the client.
+MIN_ANALYZE_DURATION_SECONDS = 30.0
+AUDIO_TOO_SHORT_USER_MESSAGE = (
+    "That clip is too short to analyze. Try a full song or a longer section."
+)
+
+
 class SourceMetadata(TypedDict):
     """Display metadata from ingest (YouTube); uploads omit this until client edits."""
 
@@ -134,6 +145,27 @@ def _verify_wav_properties(
         raise IngestError(f"Output song.wav has {channels} channels, expected {expected_channels}")
 
 
+def wav_file_duration_seconds(path: Path) -> float | None:
+    """Return length in seconds for a PCM WAV file, or ``None`` if unreadable (e.g. not WAV)."""
+    try:
+        with wave.open(str(path), "rb") as wf:
+            frames = wf.getnframes()
+            rate = wf.getframerate()
+            if rate <= 0:
+                return None
+            return frames / float(rate)
+    except (wave.Error, OSError):
+        return None
+
+
+def _require_min_analyze_duration(wav_path: Path) -> None:
+    dur = wav_file_duration_seconds(wav_path)
+    if dur is None:
+        raise IngestError("Could not read duration from normalized song.wav")
+    if dur < MIN_ANALYZE_DURATION_SECONDS:
+        raise AudioTooShortError(AUDIO_TOO_SHORT_USER_MESSAGE)
+
+
 def ingest_youtube_or_upload_to_wav(
     job_id: str,
     *,
@@ -183,5 +215,6 @@ def ingest_youtube_or_upload_to_wav(
         raise IngestError("No youtube_url or upload file provided")
 
     _verify_wav_properties(song_wav_path, expected_sample_rate=target_sr, expected_channels=1)
+    _require_min_analyze_duration(song_wav_path)
     return song_wav_path, source_metadata
 

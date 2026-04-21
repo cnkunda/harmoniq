@@ -58,6 +58,7 @@ test-results/
 
 # Backend / analysis artifacts (see PRIORITIES 0.5)
 backend/data/
+backend/data/smoke_test/
 *.wav
 !assets/demo-lesson/*.wav
 *.gp5
