@@ -8,6 +8,8 @@ import { CoachNote } from '@/components/CoachNote'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
+import { GhostPlayerControl } from '@/components/GhostPlayerControl'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { PlayCaptureCard, PlayStemRowScoringCard } from '@/components/play'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
@@ -21,7 +23,11 @@ import { mapMicPermissionDenied, toErrorBannerProps, type MappedUiError } from '
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
+import { getLatestGhostReference } from '@/src/db/client'
+import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhostTake'
+import { ghostReferenceToPlaybackUri } from '@/src/session/persistGhostTake'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { useAppStore } from '@/src/stores/useAppStore'
 import { usePlayCapture } from '@/src/session/usePlayCapture'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
@@ -29,6 +35,7 @@ import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import { hitInnerThresholdCents } from '@/src/session/noteAccuracyBeats'
 import type { NoteEventMessage } from '@/types/tabMessage'
+import * as FileSystem from 'expo-file-system/legacy'
 
 export default function PlayScreen() {
   const isDemo = useIsDemoLesson()
@@ -101,6 +108,74 @@ export default function PlayScreen() {
 
   const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
 
+  const pendingGhostReference = useSessionPlayStore((s) => s.pendingGhostReference)
+  const setPendingGhostReference = useSessionPlayStore((s) => s.setPendingGhostReference)
+
+  const [ghostPlaybackUri, setGhostPlaybackUri] = useState<string | null>(null)
+  const ghostBlobRevokeRef = useRef<(() => void) | null>(null)
+  const [ghostAnchorSecForMix, setGhostAnchorSecForMix] = useState<number | null>(null)
+  const [ghostRecordedLabel, setGhostRecordedLabel] = useState<string | null>(null)
+  const [playWithGhost, setPlayWithGhost] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    async function loadGhost() {
+      const jobId = lesson?.job_id?.trim()
+      if (!jobId) {
+        setGhostPlaybackUri(null)
+        setGhostAnchorSecForMix(null)
+        setGhostRecordedLabel(null)
+        setPlayWithGhost(false)
+        return
+      }
+      try {
+        const row = await getLatestGhostReference(jobId, sectionIndex)
+        if (!alive) return
+        if (!row) {
+          setGhostPlaybackUri(null)
+          setGhostAnchorSecForMix(null)
+          setGhostRecordedLabel(null)
+          setPlayWithGhost(false)
+          return
+        }
+        setGhostRecordedLabel(row.date)
+        setGhostAnchorSecForMix(row.ghost_anchor_sec ?? 0)
+        if (Platform.OS !== 'web' && row.waveform_user_path) {
+          const info = await FileSystem.getInfoAsync(row.waveform_user_path)
+          if (!info.exists) {
+            console.warn('[ghost] saved ghost file missing — disabling ghost mix', row.waveform_user_path)
+            setGhostPlaybackUri(null)
+            setPlayWithGhost(false)
+            return
+          }
+        }
+        const uri = ghostReferenceToPlaybackUri(row)
+        if (ghostBlobRevokeRef.current) {
+          ghostBlobRevokeRef.current()
+          ghostBlobRevokeRef.current = null
+        }
+        setGhostPlaybackUri(uri)
+        if (uri?.startsWith('blob:')) {
+          ghostBlobRevokeRef.current = () => URL.revokeObjectURL(uri)
+        }
+        setPlayWithGhost(true)
+      } catch (e) {
+        console.warn('[ghost] load failed', e)
+        if (!alive) return
+        setGhostPlaybackUri(null)
+        setPlayWithGhost(false)
+      }
+    }
+    void loadGhost()
+    return () => {
+      alive = false
+      if (ghostBlobRevokeRef.current) {
+        ghostBlobRevokeRef.current()
+        ghostBlobRevokeRef.current = null
+      }
+    }
+  }, [lesson?.job_id, sectionIndex])
+
   const handleToggleCapture = () => {
     if (!recording) setMicError(null)
     void (recording ? stopCapture('done') : startCapture()).catch((e) => {
@@ -137,7 +212,11 @@ export default function PlayScreen() {
       onBack={() => router.back()}
       showNext
       nextLabel="Next: Review"
-      onNext={() => router.push(sessionHref('review'))}
+      onNext={() => {
+        void commitPendingGhostTakeIfNeeded({ lesson, sectionIndex }).finally(() =>
+          router.push(sessionHref('review')),
+        )
+      }}
     >
       <View className="gap-5">
         {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
@@ -181,6 +260,9 @@ export default function PlayScreen() {
           }
           initialMetronomeOn={initialMetronomeOn}
           initialStemMuteById={{ guitar: true, bass: false, drums: false, vocals: true, piano: true, other: true }}
+          ghostStemPlaybackUri={ghostPlaybackUri}
+          ghostAnchorSec={ghostAnchorSecForMix}
+          playGhostWhileRecording={Boolean(playWithGhost && ghostPlaybackUri)}
           onPlaybackTick={playbackTick}
           onNoteEvent={(evt: NoteEventMessage) => {
             hookOnNoteEvent(evt)
@@ -191,6 +273,38 @@ export default function PlayScreen() {
             }
           }}
         />
+
+        <GhostPlayerControl
+          playWithGhost={playWithGhost}
+          onTogglePlayWithGhost={setPlayWithGhost}
+          ghostRecordedAtLabel={ghostRecordedLabel}
+          hasGhost={Boolean(ghostPlaybackUri)}
+        />
+
+        {take && take.audioBytes.length > 0 ? (
+          <View className="rounded-xl border border-wood-600/35 bg-cream-dark/25 px-3 py-2">
+            <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-muted-brown">
+              Ghost reference take
+            </Text>
+            <View className="flex-row items-center justify-between gap-2">
+              <Text className="min-w-0 flex-1 font-sans text-xs text-wood-900">
+                Flag this capture as your ghost reference for this section (saved when you open Review).
+              </Text>
+              <AnimatedPressable
+                accessibilityRole="switch"
+                accessibilityState={{ checked: pendingGhostReference }}
+                onPress={() => setPendingGhostReference(!pendingGhostReference)}
+                className={`rounded-full px-3 py-1.5 ${pendingGhostReference ? 'bg-amber-accent/90' : 'border border-wood-600/50 bg-wood-900/15'}`}
+              >
+                <Text
+                  className={`font-sans-medium text-xs ${pendingGhostReference ? 'text-wood-900' : 'text-muted-brown'}`}
+                >
+                  {pendingGhostReference ? 'On' : 'Off'}
+                </Text>
+              </AnimatedPressable>
+            </View>
+          </View>
+        ) : null}
 
         <View className="w-full min-w-0">
           <FretboardDiagram

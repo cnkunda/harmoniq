@@ -43,6 +43,7 @@ export type AlphaTabWebViewProps = {
   onHarnessError?: (message: string) => void
   onNoteEvent?: (evt: NoteEventMessage) => void
   onScoreSeekMs?: (positionMs: number) => void
+  readOnlyFollowMode?: boolean
   onSongDetails?: (score: SongScoreMeta) => void
   onSongPlayback?: (payload: { masterBarIndex: number; sectionLabel: string | null }) => void
   runtimeDiagnosticsEnabled?: boolean
@@ -74,6 +75,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
       onHarnessError,
       onNoteEvent,
       onScoreSeekMs,
+      readOnlyFollowMode = false,
       onSongDetails,
       onSongPlayback,
       runtimeDiagnosticsEnabled = false,
@@ -231,6 +233,11 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         }
       }
     }, [audioSrc, harnessReady, gp5Base64, postInbound, transposeSemitones, renderPreset, soundFontProfile])
+
+    useEffect(() => {
+      if (!harnessReady) return
+      postInbound({ type: 'setReadOnlyFollowMode', enabled: readOnlyFollowMode })
+    }, [harnessReady, postInbound, readOnlyFollowMode])
 
     useEffect(() => {
       if (!harnessReady) return

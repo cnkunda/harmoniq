@@ -33,6 +33,7 @@ import {
   PREF_COACH_VOICE,
   PREF_EXPERIENCE_LEVEL,
   PREF_METRONOME_DEFAULT_ON,
+  PREF_MOOD_CHECK_SKIP,
   PREF_PREFER_SIMPLER_TABS,
   PREF_SPOTIFY_CLIENT_SESSION,
   PREF_SPOTIFY_TASTE_PROFILE_JSON,
@@ -91,6 +92,7 @@ export default function SettingsScreen() {
   const [tuningHz, setTuningHz] = useState('440')
   const [styleFocus, setStyleFocus] = useState('')
   const [metronomeDefaultOn, setMetronomeDefaultOn] = useState(true)
+  const [skipMoodCheck, setSkipMoodCheck] = useState(false)
   const [coachVoice, setCoachVoice] = useState<CoachVoiceId>('warm')
   const [voiceCoachEnabled, setVoiceCoachEnabled] = useState(true)
   const [voiceCoachRate, setVoiceCoachRate] = useState(1)
@@ -101,11 +103,12 @@ export default function SettingsScreen() {
   const [experienceLevelSaved, setExperienceLevelSaved] = useState<string | null>(null)
 
   const loadPrefs = useCallback(async () => {
-    const [simpler, hz, style, metro, voice, tasteJson, derivedTasteRaw, expSaved] = await Promise.all([
+    const [simpler, hz, style, metro, skipMood, voice, tasteJson, derivedTasteRaw, expSaved] = await Promise.all([
       getAppPref(PREF_PREFER_SIMPLER_TABS),
       getAppPref(PREF_STANDARD_TUNING_HZ),
       getAppPref(PREF_STYLE_FOCUS),
       getAppPref(PREF_METRONOME_DEFAULT_ON),
+      getAppPref(PREF_MOOD_CHECK_SKIP),
       getAppPref(PREF_COACH_VOICE),
       getAppPref(PREF_SPOTIFY_TASTE_PROFILE_JSON),
       getAppPref(PREF_TASTE_PROFILE_JSON),
@@ -115,6 +118,7 @@ export default function SettingsScreen() {
     setTuningHz(hz && hz.trim() ? hz : '440')
     setStyleFocus(style ?? '')
     setMetronomeDefaultOn(metro !== '0')
+    setSkipMoodCheck(skipMood === '1')
     const vRaw = voice ?? ''
     setCoachVoice(isCoachVoice(vRaw) ? vRaw : 'warm')
     setSpotifyProfile(parseStoredSpotifyProfile(tasteJson))
@@ -208,6 +212,11 @@ export default function SettingsScreen() {
   const persistMetronome = async (v: boolean) => {
     setMetronomeDefaultOn(v)
     await setAppPref(PREF_METRONOME_DEFAULT_ON, v ? '1' : '0')
+  }
+
+  const persistSkipMoodCheck = async (v: boolean) => {
+    setSkipMoodCheck(v)
+    await setAppPref(PREF_MOOD_CHECK_SKIP, v ? '1' : '0')
   }
 
   const persistVoice = async (v: CoachVoiceId) => {
@@ -361,6 +370,10 @@ export default function SettingsScreen() {
                 labelClassName="text-cream"
                 surface="wood"
               />
+            </View>
+            <View className="mt-4 flex-row items-center justify-between gap-3">
+              <Text className="flex-1 font-sans text-sm text-cream">Auto-skip daily mood check before sessions</Text>
+              <Switch value={skipMoodCheck} onValueChange={(v) => void persistSkipMoodCheck(v)} />
             </View>
           </View>
         </View>

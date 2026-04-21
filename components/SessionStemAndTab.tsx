@@ -67,6 +67,9 @@ export type SessionStemAndTabProps = {
   onTabSongPlayback?: (payload: { masterBarIndex: number; sectionLabel: string | null }) => void
   /** Bundled demo: autoplay stems on Listen once loaded. */
   autoPlayOnReady?: boolean
+  ghostStemPlaybackUri?: string | null
+  ghostAnchorSec?: number | null
+  playGhostWhileRecording?: boolean
 }
 
 export type SessionStemAndTabHandle = {
@@ -104,6 +107,9 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     onTabSongDetails,
     onTabSongPlayback,
     autoPlayOnReady,
+    ghostStemPlaybackUri = null,
+    ghostAnchorSec = null,
+    playGhostWhileRecording = false,
   },
   ref,
 ) {
@@ -258,6 +264,9 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
             tabRef.current?.setPlaybackRate(rate)
           }}
           autoPlayOnReady={autoPlayOnReady}
+          ghostStemPlaybackUri={ghostStemPlaybackUri}
+          ghostAnchorSec={ghostAnchorSec}
+          playGhostWhileRecording={playGhostWhileRecording}
         />
       ) : null}
       {insertBetweenStemAndTab}

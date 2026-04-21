@@ -80,6 +80,8 @@ class CurriculumSuggestResponse(BaseModel):
 
 SlotType = Literal["warmup", "technique", "song_section", "free_jam"]
 
+MoodState = Literal["focused", "loose", "tired", "on_fire"]
+
 FretboardGuideVariant = Literal["primary", "secondary"]
 
 
@@ -157,6 +159,10 @@ class PracticePlanRequest(BaseModel):
     player_profile: PlayerProfile | None = None
     job_ids: list[str] = Field(default_factory=list)
     duration_minutes: int = Field(default=25, ge=10, le=120)
+    mood: MoodState | None = Field(
+        default=None,
+        description="Pre-session self-reported state — adapts slot mix, duration budget, BPM hints, coach tone (commit 76).",
+    )
     library_lessons: list[LessonJSON] = Field(
         default_factory=list,
         description="Full LessonJSON from device when server job store has no completed result.",
@@ -173,6 +179,19 @@ class SpotifyTasteProfile(BaseModel):
     energy_avg: float = 0.0
     tempo_avg: float = 0.0
     instrumentalness_avg: float = 0.0
+
+
+class SpotifyPlaybackState(BaseModel):
+    """Normalized Spotify playback snapshot for listening follow mode (commit 77)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    is_playing: bool = False
+    progress_ms: int = Field(default=0, ge=0)
+    playback_rate: float = Field(default=1.0, ge=0.25, le=2.0)
+    track_id: str | None = None
+    track_name: str | None = None
+    artists: list[str] = Field(default_factory=list)
 
 
 class TasteDeriveRequest(BaseModel):
@@ -194,6 +213,45 @@ class TasteDeriveRequest(BaseModel):
         if has_spotify == has_quiz:
             raise ValueError("Provide exactly one of spotify_profile or quiz_answers.")
         return self
+
+
+class TimeSignature(BaseModel):
+    numerator: int
+    denominator: int
+
+
+class BeatGrid(BaseModel):
+    """Quantization grid from beat tracking (commit 78)."""
+    model_config = ConfigDict(extra="ignore")
+
+    bpm: float = Field(..., ge=20.0, le=900.0) # Increased max to account for subdivided grid BPMs
+    beats: list[float] = Field(default_factory=list)
+    downbeats: list[float] = Field(default_factory=list)
+    time_signature: TimeSignature
+    tick_value: float
+    
+
+class StemRoutingHints(BaseModel):
+    """Stem selection hints handed off to chord/solo inference (commit 79 hook)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    chord_mix_stems: list[str] = Field(default_factory=lambda: ["bass", "other"])
+    melodic_preference_order: list[str] = Field(default_factory=list)
+    selected_melodic_stem: str = "guitar"
+
+
+class TranscriptionPrepareResponse(BaseModel):
+    """`POST /transcription/prepare` payload (commit 78)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    job_id: str
+    stems: dict[str, str] = Field(default_factory=dict)
+    beat_grid: BeatGrid
+    stem_routing: StemRoutingHints
+    audio_chunk_paths: list[str] = Field(default_factory=list)
+    invalidated_artifacts: list[str] = Field(default_factory=list)
 
 
 class AnalyzeRequest(BaseModel):

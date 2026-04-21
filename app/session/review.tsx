@@ -9,7 +9,8 @@ import * as WebBrowser from 'expo-web-browser'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
-import { PhrasingVisualizerStub, ScoreSummaryCard } from '@/components/ReviewSessionPanel'
+import { PhrasingWaveformVisualizer } from '@/components/PhrasingWaveformVisualizer'
+import { ScoreSummaryCard } from '@/components/ReviewSessionPanel'
 import { SessionPitchReview } from '@/components/SessionPitchReview'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
@@ -18,7 +19,16 @@ import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapScoreFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { isHarmoniqSkillMutationSkipped } from '@/src/config'
-import { applyReviewSkillUpdates, getAllSkillNodes, getSessionCount, insertLickRow, insertSessionRow } from '@/src/db/client'
+import {
+  applyReviewSkillUpdates,
+  getAppPref,
+  getAllSkillNodes,
+  getLatestGhostReference,
+  getSessionCount,
+  insertLickRow,
+  insertSessionRow,
+} from '@/src/db/client'
+import { PREF_MOOD_CHECK_LAST_MOOD } from '@/src/db/schema'
 import { sessionEntryHref } from '@/src/constants/sessionFlow'
 import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
 import { computeSkillMutations } from '@/src/session/skillMutator'
@@ -40,7 +50,9 @@ import {
   sessionAccuracy01FromScoreResult,
   timingStability01FromScoreResult,
 } from '@/src/session/scoreProgressSignals'
+import type { GhostReferenceRow } from '@/src/db/types'
 import type { ScoreResult } from '@/src/types'
+import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhostTake'
 
 function bytesToBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('base64')
@@ -115,6 +127,7 @@ export default function ReviewScreen() {
   const [exportState, setExportState] = useState<string>('Idle')
   const [sessionCount, setSessionCount] = useState<number | null>(null)
   const [savingLick, setSavingLick] = useState(false)
+  const [ghostRowForViz, setGhostRowForViz] = useState<GhostReferenceRow | null>(null)
 
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
   const hasMoreSectionsInLesson = useMemo(() => {
@@ -199,6 +212,10 @@ export default function ReviewScreen() {
         phrasing_score: result.phrasing_score,
         nodes_targeted: targeted,
         review_snapshot: JSON.stringify({ ...result, harmoniq_dna_capture }),
+        job_id: typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : null,
+        section_index: sectionIndex,
+        is_ghost_reference: false,
+        mood: ((await getAppPref(PREF_MOOD_CHECK_LAST_MOOD)) as 'focused' | 'loose' | 'tired' | 'on_fire' | null) ?? null,
       })
       void useDnaStore.getState().refresh()
       await applyReviewSkillUpdates({
@@ -247,6 +264,33 @@ export default function ReviewScreen() {
   useEffect(() => {
     void getSessionCount().then(setSessionCount).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    void commitPendingGhostTakeIfNeeded({ lesson, sectionIndex }).catch((e) =>
+      console.warn('[ghost] pending persist failed', e),
+    )
+  }, [lesson, sectionIndex])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadGhostRow() {
+      const jid = typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : ''
+      if (!jid) {
+        setGhostRowForViz(null)
+        return
+      }
+      try {
+        const row = await getLatestGhostReference(jid, sectionIndex)
+        if (!cancelled) setGhostRowForViz(row)
+      } catch {
+        if (!cancelled) setGhostRowForViz(null)
+      }
+    }
+    void loadGhostRow()
+    return () => {
+      cancelled = true
+    }
+  }, [lesson?.job_id, sectionIndex])
 
   const exportMidi = useCallback(async () => {
     if (gp5ForExport) {
@@ -422,7 +466,7 @@ export default function ReviewScreen() {
       subtitle={
         isDemo
           ? DEMO_TOUR_SUBTITLE.review
-          : 'Session scores, optional MIDI export, and a placeholder phrasing view until the visualizer ships.'
+          : 'Session scores, optional MIDI export, and phrasing / ghost waveforms when data is available.'
       }
       showBack
       onBack={() => router.back()}
@@ -431,7 +475,7 @@ export default function ReviewScreen() {
       onNext={finish}
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.review}</DemoTourCallout> : null}
-      <PhrasingVisualizerStub />
+      <PhrasingWaveformVisualizer score={score} ghostRow={ghostRowForViz} />
 
       {currentSession && currentSession.noteContours.length > 0 ? (
         <View className="mt-3">

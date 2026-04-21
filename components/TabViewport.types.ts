@@ -17,6 +17,8 @@ export type TabViewportProps = {
   onError?: (message: string) => void
   onNoteEvent?: (evt: NoteEventMessage) => void
   onScoreSeekMs?: (positionMs: number) => void
+  /** Listening follow mode: disable user score tap/seek interactions in AlphaTab host. */
+  readOnlyFollowMode?: boolean
   onSongDetails?: (score: SongScoreMeta) => void
   onSongPlayback?: (payload: { masterBarIndex: number; sectionLabel: string | null }) => void
   /** Commit 61: enable harness + store runtime diagnostics. */

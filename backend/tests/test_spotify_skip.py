@@ -12,4 +12,5 @@ def test_spotify_routes_skip_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
     assert c.get("/auth/spotify", params={"client_session": "test-session"}).status_code == 503
     assert c.get("/auth/spotify/callback", params={"code": "x", "state": "y"}).status_code == 503
     assert c.get("/taste/spotify", params={"client_session": "test-session"}).status_code == 503
+    assert c.get("/spotify/playback", params={"client_session": "test-session"}).status_code == 503
     assert c.delete("/auth/spotify", params={"client_session": "test-session"}).status_code == 503

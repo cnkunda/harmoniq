@@ -13,6 +13,9 @@ import {
     MIGRATION_V8_LESSONS,
     MIGRATION_V9_SKILL_TECHNIQUE_ROLL,
     MIGRATION_V10_PRACTICE_PLAN_COMPLETIONS,
+    MIGRATION_V11_SESSION_GHOST,
+    MIGRATION_V12_SESSION_GHOST_MIME,
+    MIGRATION_V13_SESSION_MOOD,
     PREF_EXPERIENCE_LEVEL,
     PREF_ONBOARDING_COMPLETE,
     PREF_TASTE_PROFILE_JSON,
@@ -32,6 +35,7 @@ import type {
     PracticePlanCompletionRow,
     ReviewSkillUpdateInput,
     SessionArchiveRow,
+    GhostReferenceRow,
     SessionInsertInput,
     SessionJournalRow,
     SkillNodeRow,
@@ -213,6 +217,47 @@ async function applyMigrations(): Promise<void> {
       new Date().toISOString(),
     )
   }
+  if (current < 11) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sessions)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    for (const stmt of MIGRATION_V11_SESSION_GHOST) {
+      const col = stmt.split(' ADD COLUMN ')[1]?.split(' ')[0]
+      if (!col) continue
+      if (!names.has(col)) {
+        await db.execAsync(stmt)
+        names.add(col)
+      }
+    }
+    await db.runAsync(
+      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+      11,
+      new Date().toISOString(),
+    )
+  }
+  if (current < 12) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sessions)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    if (!names.has('ghost_recording_mime')) {
+      await db.execAsync(MIGRATION_V12_SESSION_GHOST_MIME)
+    }
+    await db.runAsync(
+      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+      12,
+      new Date().toISOString(),
+    )
+  }
+  if (current < 13) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sessions)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    if (!names.has('mood')) {
+      await db.execAsync(MIGRATION_V13_SESSION_MOOD)
+    }
+    await db.runAsync(
+      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+      13,
+      new Date().toISOString(),
+    )
+  }
   for (const n of DEFAULT_SKILL_NODES) {
     await db.runAsync(
       `INSERT OR IGNORE INTO skill_nodes
@@ -235,8 +280,9 @@ export async function insertSessionRow(input: SessionInsertInput): Promise<void>
   await db.runAsync(
     `INSERT OR REPLACE INTO sessions
      (id, song_title, artist, section_label, date, coach_review, pitch_accuracy, phrasing_score, nodes_targeted,
-      review_snapshot, waveform_user_path, waveform_ref_path)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      review_snapshot, waveform_user_path, waveform_ref_path,
+      job_id, section_index, is_ghost_reference, ghost_anchor_sec, ghost_audio_base64, ghost_recording_mime, mood)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.id,
     input.song_title,
     input.artist,
@@ -249,6 +295,13 @@ export async function insertSessionRow(input: SessionInsertInput): Promise<void>
     input.review_snapshot ?? null,
     input.waveform_user_path ?? null,
     input.waveform_ref_path ?? null,
+    input.job_id ?? null,
+    input.section_index ?? null,
+    input.is_ghost_reference === true ? 1 : 0,
+    input.ghost_anchor_sec ?? null,
+    input.ghost_audio_base64 ?? null,
+    input.ghost_recording_mime ?? null,
+    input.mood ?? null,
   )
 }
 
@@ -272,10 +325,19 @@ type SessionRowDb = {
   review_snapshot: string | null
   waveform_user_path: string | null
   waveform_ref_path: string | null
+  job_id: string | null
+  section_index: number | null
+  is_ghost_reference: number | null
+  ghost_anchor_sec: number | null
+  ghost_audio_base64: string | null
+  ghost_recording_mime: string | null
+  mood: 'focused' | 'loose' | 'tired' | 'on_fire' | null
 }
 
 function mapSessionJournalRow(r: SessionRowDb): SessionJournalRow {
   const snap = r.review_snapshot
+  const ghostRef =
+    typeof r.is_ghost_reference === 'number' ? r.is_ghost_reference !== 0 : Boolean(r.is_ghost_reference)
   return {
     id: r.id,
     song_title: r.song_title,
@@ -289,6 +351,14 @@ function mapSessionJournalRow(r: SessionRowDb): SessionJournalRow {
     has_review_snapshot: snap != null && snap.trim() !== '',
     waveform_user_path: r.waveform_user_path ?? null,
     waveform_ref_path: r.waveform_ref_path ?? null,
+    job_id: r.job_id ?? null,
+    section_index: typeof r.section_index === 'number' ? r.section_index : null,
+    is_ghost_reference: ghostRef,
+    ghost_anchor_sec:
+      typeof r.ghost_anchor_sec === 'number' && Number.isFinite(r.ghost_anchor_sec) ? r.ghost_anchor_sec : null,
+    ghost_audio_base64: r.ghost_audio_base64 ?? null,
+    ghost_recording_mime: r.ghost_recording_mime ?? null,
+    mood: r.mood ?? null,
   }
 }
 
@@ -297,7 +367,8 @@ export async function listSessionsJournal(): Promise<SessionJournalRow[]> {
   const db = await getDb()
   const rows = await db.getAllAsync<SessionRowDb>(
     `SELECT id, song_title, artist, section_label, date, coach_review, pitch_accuracy, phrasing_score, nodes_targeted,
-            review_snapshot, waveform_user_path, waveform_ref_path
+            review_snapshot, waveform_user_path, waveform_ref_path,
+            job_id, section_index, is_ghost_reference, ghost_anchor_sec, ghost_audio_base64, ghost_recording_mime, mood
      FROM sessions ORDER BY date DESC`,
   )
   return (rows ?? []).map(mapSessionJournalRow)
@@ -308,7 +379,8 @@ export async function listSessionsArchive(): Promise<SessionArchiveRow[]> {
   const db = await getDb()
   const rows = await db.getAllAsync<SessionRowDb>(
     `SELECT id, song_title, artist, section_label, date, coach_review, pitch_accuracy, phrasing_score, nodes_targeted,
-            review_snapshot, waveform_user_path, waveform_ref_path
+            review_snapshot, waveform_user_path, waveform_ref_path,
+            job_id, section_index, is_ghost_reference, ghost_anchor_sec, ghost_audio_base64, ghost_recording_mime, mood
      FROM sessions ORDER BY date DESC`,
   )
   return (rows ?? []).map((r) => ({
@@ -322,7 +394,8 @@ export async function getSessionById(id: string): Promise<SessionArchiveRow | nu
   const db = await getDb()
   const r = await db.getFirstAsync<SessionRowDb>(
     `SELECT id, song_title, artist, section_label, date, coach_review, pitch_accuracy, phrasing_score, nodes_targeted,
-            review_snapshot, waveform_user_path, waveform_ref_path
+            review_snapshot, waveform_user_path, waveform_ref_path,
+            job_id, section_index, is_ghost_reference, ghost_anchor_sec, ghost_audio_base64, ghost_recording_mime, mood
      FROM sessions WHERE id = ?`,
     id,
   )
@@ -873,6 +946,46 @@ export async function deleteLessonByJobId(jobId: string): Promise<void> {
   await initDb()
   const db = await getDb()
   await db.runAsync('DELETE FROM lessons WHERE job_id = ?', jobId)
+}
+
+/** Commit 75: Most recent ghost reference take for this lesson section (for Play mix + Review overlay). */
+export async function getLatestGhostReference(jobId: string, sectionIndex: number): Promise<GhostReferenceRow | null> {
+  await initDb()
+  const db = await getDb()
+  const jid = jobId.trim()
+  if (!jid) return null
+  try {
+    const row = await db.getFirstAsync<{
+      id: string
+      date: string
+      waveform_user_path: string | null
+      ghost_anchor_sec: number | null
+      ghost_audio_base64: string | null
+      ghost_recording_mime: string | null
+    }>(
+      `SELECT id, date, waveform_user_path, ghost_anchor_sec, ghost_audio_base64, ghost_recording_mime
+       FROM sessions
+       WHERE job_id = ? AND section_index = ? AND is_ghost_reference = 1
+       ORDER BY date DESC LIMIT 1`,
+      jid,
+      sectionIndex,
+    )
+    if (!row) return null
+    return {
+      id: row.id,
+      date: row.date,
+      waveform_user_path: row.waveform_user_path ?? null,
+      ghost_anchor_sec:
+        typeof row.ghost_anchor_sec === 'number' && Number.isFinite(row.ghost_anchor_sec)
+          ? row.ghost_anchor_sec
+          : null,
+      ghost_audio_base64: row.ghost_audio_base64 ?? null,
+      ghost_recording_mime: row.ghost_recording_mime ?? null,
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[db] getLatestGhostReference failed', jid, sectionIndex, e)
+    return null
+  }
 }
 
 /** No-op on native (lesson cache is web IDB only). */

@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native'
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 import { useCallback, useMemo, useState } from 'react'
 import { Filter, Search } from 'lucide-react-native'
 import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { WoodGradient } from '@/components/WoodGradient'
 import { ApiError, submitExportJob } from '@/src/api/analyze'
-import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import colors from '@/src/constants/colors'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
@@ -126,7 +126,9 @@ export default function LibraryScreen() {
           }
           saveLesson(existing)
           setLessonSectionIndex(0)
-          router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))
+          void sessionEntryHrefWithMoodCheck(useSessionPrefsStore.getState().skipTuneStep).then((href) =>
+            router.push(href as Href),
+          )
           return
         }
         const full = await getLessonByJobId(row.job_id)
@@ -136,7 +138,9 @@ export default function LibraryScreen() {
         }
         saveLesson(full)
         setLessonSectionIndex(0)
-        router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))
+        void sessionEntryHrefWithMoodCheck(useSessionPrefsStore.getState().skipTuneStep).then((href) =>
+          router.push(href as Href),
+        )
       } catch {
         setLoadError('Could not open lesson.')
       }
@@ -198,7 +202,9 @@ export default function LibraryScreen() {
       const semitones = transposeById[lick.id] ?? 0
       saveLesson(lessonFromSavedLick(lick, semitones))
       setLessonSectionIndex(0)
-      router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))
+      void sessionEntryHrefWithMoodCheck(useSessionPrefsStore.getState().skipTuneStep).then((href) =>
+        router.push(href as Href),
+      )
     },
     [router, saveLesson, setLessonSectionIndex, transposeById],
   )

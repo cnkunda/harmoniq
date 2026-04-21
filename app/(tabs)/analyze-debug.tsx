@@ -1,5 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker'
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 import { useCallback, useState } from 'react'
 import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -9,7 +9,7 @@ import { ErrorBanner } from '@/components/ErrorBanner'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { API_BASE_URL } from '@/src/config'
 import colors from '@/src/constants/colors'
-import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 
@@ -151,7 +151,11 @@ export default function AnalyzeDebugScreen() {
               Sections: <Text className="font-sans-medium">{sectionCount}</Text>
             </Text>
             <Pressable
-              onPress={() => router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))}
+              onPress={() =>
+                void sessionEntryHrefWithMoodCheck(useSessionPrefsStore.getState().skipTuneStep).then((href) =>
+                  router.push(href as Href),
+                )
+              }
               className="mt-4 rounded-lg bg-amber-accent px-4 py-3"
               accessibilityRole="button"
             >

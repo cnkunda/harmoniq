@@ -72,3 +72,39 @@ def test_practice_plan_empty_jobs_and_no_embedded_yields_two_slots(monkeypatch) 
     finally:
         jobs.clear()
         monkeypatch.delenv("HARMONIQ_SKIP_PRACTICE_PLAN", raising=False)
+
+
+def test_practice_plan_api_tired_mood_shorter_without_technique(monkeypatch) -> None:
+    monkeypatch.setenv("HARMONIQ_SKIP_PRACTICE_PLAN", "1")
+    jobs.clear()
+    try:
+        la = _lesson(job_id="job-a", style="rock", section_tags=["bend"])
+        lb = _lesson(job_id="job-b", style="rock", section_tags=["vibrato"])
+        standard = client.post(
+            "/practice/plan",
+            json={
+                "player_profile": {"weak_areas": ["bending"]},
+                "job_ids": ["job-a", "job-b"],
+                "library_lessons": [la.model_dump(mode="json"), lb.model_dump(mode="json")],
+                "duration_minutes": 25,
+            },
+        )
+        tired = client.post(
+            "/practice/plan",
+            json={
+                "player_profile": {"weak_areas": ["bending"]},
+                "job_ids": ["job-a", "job-b"],
+                "library_lessons": [la.model_dump(mode="json"), lb.model_dump(mode="json")],
+                "duration_minutes": 25,
+                "mood": "tired",
+            },
+        )
+        assert standard.status_code == 200, standard.text
+        assert tired.status_code == 200, tired.text
+        s_data = standard.json()
+        t_data = tired.json()
+        assert t_data["total_duration_seconds"] < s_data["total_duration_seconds"]
+        assert [s["slot_type"] for s in t_data["slots"]] == ["warmup", "song_section", "free_jam"]
+    finally:
+        jobs.clear()
+        monkeypatch.delenv("HARMONIQ_SKIP_PRACTICE_PLAN", raising=False)

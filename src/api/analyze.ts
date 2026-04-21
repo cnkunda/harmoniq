@@ -15,6 +15,7 @@ import type {
   PracticePlanPayload,
   QuizAnswersPayload,
   ScoreResult,
+  SpotifyPlaybackStatePayload,
   SpotifyTasteProfile,
   TasteProfilePayload,
 } from '@/src/types'
@@ -573,6 +574,7 @@ export async function generatePracticePlan(payload: {
   player_profile?: PlayerProfilePayload
   job_ids: string[]
   duration_minutes?: number
+  mood?: 'focused' | 'loose' | 'tired' | 'on_fire'
   /** Device-persisted lessons when the API job store has no in-memory results. */
   library_lessons?: LessonJSON[]
 }): Promise<PracticePlanPayload> {
@@ -583,6 +585,7 @@ export async function generatePracticePlan(payload: {
       player_profile: payload.player_profile ?? null,
       job_ids: payload.job_ids,
       duration_minutes: payload.duration_minutes ?? 25,
+      mood: payload.mood ?? null,
       library_lessons: payload.library_lessons ?? [],
     }),
   })
@@ -647,6 +650,12 @@ export async function initiateSpotifyAuth(
 export async function fetchSpotifyTasteProfile(clientSession: string): Promise<SpotifyTasteProfile> {
   return request<SpotifyTasteProfile>(
     `/taste/spotify?client_session=${encodeURIComponent(clientSession)}`,
+  )
+}
+
+export async function fetchSpotifyPlaybackState(clientSession: string): Promise<SpotifyPlaybackStatePayload> {
+  return request<SpotifyPlaybackStatePayload>(
+    `/spotify/playback?client_session=${encodeURIComponent(clientSession)}`,
   )
 }
 

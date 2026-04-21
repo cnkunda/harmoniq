@@ -1,10 +1,11 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 import {
   ChevronRight,
   ClipboardList,
   Clock,
+  Headphones,
   Library as LibraryIcon,
   Link2,
   Music,
@@ -26,7 +27,7 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { RecentProgress } from '@/components/RecentProgress'
 import { TodaysPlanCard, TodaysPlanCardLoading } from '@/components/TodaysPlanCard'
 import { WeakAreaPulse } from '@/components/WeakAreaPulse'
-import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
 import { usePlanStore } from '@/src/stores/planStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
@@ -41,7 +42,7 @@ import {
   listPracticePlanCompletions,
   listSessionsJournal,
 } from '@/src/db/client'
-import { PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
+import { PREF_MOOD_CHECK_LAST_MOOD, PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { HomeSuggestion, PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
 import { startPracticePlanFromHome } from '@/src/session/practicePlanNavigation'
 import { useLessonStore } from '@/src/stores/lessonStore'
@@ -174,6 +175,11 @@ export default function HomeScreen() {
           const taste = parseTasteProfileJson(tasteRaw)
           const learningCtx = await loadLearningContextFromPrefs()
           const profile = buildPlayerProfileFromSkillNodes(skillRows, taste, learningCtx)
+          const moodRaw = ((await getAppPref(PREF_MOOD_CHECK_LAST_MOOD)) ?? '').trim()
+          const mood =
+            moodRaw === 'focused' || moodRaw === 'loose' || moodRaw === 'tired' || moodRaw === 'on_fire'
+              ? moodRaw
+              : undefined
           const libraryLessons = (
             await Promise.all(lessons.map((l) => getLessonByJobId(l.job_id)))
           ).filter((row): row is NonNullable<typeof row> => row != null)
@@ -181,6 +187,7 @@ export default function HomeScreen() {
             player_profile: profile,
             job_ids: lessons.map((l) => l.job_id),
             duration_minutes: 25,
+            mood,
             library_lessons: libraryLessons,
           })
           const next = plan.slots?.length ? plan : null
@@ -212,8 +219,13 @@ export default function HomeScreen() {
   )
 
   const goAnalyze = () => router.push('/add-song')
-  const goSession = () => router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))
+  const goSession = () => {
+    void sessionEntryHrefWithMoodCheck(useSessionPrefsStore.getState().skipTuneStep).then((href) =>
+      router.push(href as Href),
+    )
+  }
   const goLibrary = () => router.push('/library')
+  const goListening = () => router.push('/listening' as Href)
 
   const onStartDemoLesson = useCallback(() => {
     if (demoBusy) return
@@ -676,6 +688,17 @@ export default function HomeScreen() {
                   <Text className="text-center font-sans-medium text-sm text-cream">Open Library</Text>
                 </Pressable>
               </View>
+              <Pressable
+                onPress={goListening}
+                className="mt-3 min-h-[80px] items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/35 py-4 active:bg-wood-700/50"
+                accessibilityRole="button"
+                accessibilityLabel="Open listening mode"
+              >
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
+                  <Headphones color="#E8B86D" size={20} strokeWidth={2} />
+                </View>
+                <Text className="text-center font-sans-medium text-sm text-cream">Listening Mode</Text>
+              </Pressable>
             </View>
           </View>
         </View>

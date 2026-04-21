@@ -30,6 +30,7 @@ export interface CurriculumSuggestResponse {
 
 /** POST /practice/plan (commit 70). */
 export type PracticeSlotType = 'warmup' | 'technique' | 'song_section' | 'free_jam'
+export type MoodState = 'focused' | 'loose' | 'tired' | 'on_fire'
 
 /** Matches `FretboardGuideCell` / pool `fretboard_guide.cells` (tab string 1 = high E). */
 export type WarmupFretboardGuideVariant = 'primary' | 'secondary'
@@ -85,6 +86,16 @@ export interface SpotifyTasteProfile {
   energy_avg: number
   tempo_avg: number
   instrumentalness_avg: number
+}
+
+/** GET /spotify/playback — commit 77. */
+export interface SpotifyPlaybackStatePayload {
+  is_playing: boolean
+  progress_ms: number
+  playback_rate: number
+  track_id?: string | null
+  track_name?: string | null
+  artists: string[]
 }
 
 /** POST /taste/derive response — commit 68. */

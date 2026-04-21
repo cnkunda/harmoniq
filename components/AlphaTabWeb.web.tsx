@@ -199,6 +199,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       onError,
       onNoteEvent,
       onScoreSeekMs,
+      readOnlyFollowMode = false,
       onSongDetails,
       onSongPlayback,
       runtimeDiagnosticsEnabled = false,
@@ -234,6 +235,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     onNoteEventRef.current = onNoteEvent
     const onScoreSeekMsRef = useRef(onScoreSeekMs)
     onScoreSeekMsRef.current = onScoreSeekMs
+    const readOnlyFollowModeRef = useRef(readOnlyFollowMode)
+    readOnlyFollowModeRef.current = readOnlyFollowMode
     const appliedSoundFontProfileRef = useRef<SoundFontProfileId | null>(null)
     const activeSoundFontProfileRef = useRef<SoundFontProfileId>(DEFAULT_SOUNDFONT_PROFILE_ID)
     const webRuntimeDiagOnRef = useRef(false)
@@ -902,6 +905,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       el.addEventListener(
         'pointerdown',
         (e: PointerEvent) => {
+          if (readOnlyFollowModeRef.current) return
           if (e.button !== 0) return
           emitNoteTapFromScore(e.clientX, e.clientY)
         },
@@ -1052,7 +1056,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
                 a.currentTime = (ms * pr) / 1000
                 out?.updatePosition?.(ms)
                 emitSongPlaybackMaybe()
-                onScoreSeekMsRef.current?.(ms)
+                if (!readOnlyFollowModeRef.current) {
+                  onScoreSeekMsRef.current?.(ms)
+                }
               },
               play: () => Promise.resolve(),
               pause: () => {

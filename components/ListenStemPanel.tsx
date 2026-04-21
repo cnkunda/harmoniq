@@ -9,7 +9,9 @@ import { PlayCaptureLessonCardBanner } from '@/components/play'
 import { MetronomeArcReadout } from '@/components/MetronomeArcReadout'
 import type { MetronomeSubdivision } from '@/src/audio/metronomeShared'
 import { createStemMixer } from '@/src/audio/Mixer'
+import { GHOST_MIX_LINEAR, GHOST_STEM_ID } from '@/src/audio/ghostConstants'
 import type { StemMixer } from '@/src/audio/mixerTypes'
+import { useGhostStemSidecar } from '@/src/audio/useGhostStemSidecar'
 import { useLoopAudio } from '@/src/audio/useLoopAudio'
 import { useMetronome } from '@/src/audio/useMetronome'
 import colors from '@/src/constants/colors'
@@ -100,6 +102,11 @@ export type ListenStemPanelProps = {
   playCaptureSlot?: (ctx: PlayLessonCaptureContext) => ReactNode
   /** Bundled demo only: start playback once stems load (≤3 taps from Home). */
   autoPlayOnReady?: boolean
+  /** Commit 75: playable URI for the latest ghost reference (blob / file path). */
+  ghostStemPlaybackUri?: string | null
+  ghostAnchorSec?: number | null
+  /** Mix ghost under backing only while capturing when true. */
+  playGhostWhileRecording?: boolean
 }
 
 export type ListenStemPanelHandle = {
@@ -144,6 +151,9 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       captureRecording = false,
       playCaptureSlot,
       autoPlayOnReady = false,
+      ghostStemPlaybackUri = null,
+      ghostAnchorSec = null,
+      playGhostWhileRecording = false,
     },
     ref,
   ) {
@@ -153,6 +163,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
   const isScreenFocused = useIsFocused()
 
   const mixerRef = useRef<StemMixer | null>(null)
+  const paddedGhostRevokeRef = useRef<string | null>(null)
   const metro = useMetronome()
 
   const [ready, setReady] = useState(false)
@@ -179,6 +190,22 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
 
   const rateRef = useRef(rate)
   rateRef.current = rate
+
+  useGhostStemSidecar({
+    ghostFileUri: Platform.OS === 'web' ? null : ghostStemPlaybackUri,
+    anchorSec: ghostAnchorSec ?? 0,
+    ghostAudible: Boolean(playGhostWhileRecording && captureRecording && ghostStemPlaybackUri),
+    mixerPlaying: playing,
+    getMixerPositionSec: () => {
+      const m = mixerRef.current
+      const live = m?.getPositionSecondsNow?.()
+      if (typeof live === 'number' && Number.isFinite(live)) return live
+      return positionRef.current
+    },
+    masterDurationSec: durationSec,
+    playbackRate: rateRef.current,
+    mixerReady: ready,
+  })
 
   useEffect(() => {
     if (isScreenFocused) return
@@ -290,10 +317,41 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           await mixer.unload().catch(() => {})
           return
         }
+
+        if (Platform.OS === 'web' && ghostStemPlaybackUri) {
+          try {
+            const masterDur = mixer.getDurationSeconds()
+            const ghostWeb = require('@/src/audio/ghostStem.web') as typeof import('@/src/audio/ghostStem.web')
+            const paddedUrl = await ghostWeb.buildPaddedGhostStemBlobUrl({
+              ghostPlaybackUri: ghostStemPlaybackUri,
+              anchorSec: ghostAnchorSec ?? 0,
+              masterDurationSec: masterDur,
+            })
+            if (paddedUrl && !cancelled) {
+              if (paddedGhostRevokeRef.current) {
+                URL.revokeObjectURL(paddedGhostRevokeRef.current)
+              }
+              paddedGhostRevokeRef.current = paddedUrl
+              await mixer.unload()
+              await mixer.load([...defs, ghostWeb.ghostStemDefinition(paddedUrl)])
+            }
+          } catch (e) {
+            console.warn('[ListenStemPanel] ghost stem pad/decode skipped — playback continues without ghost', e)
+          }
+        }
+
+        if (cancelled) {
+          await mixer.unload().catch(() => {})
+          return
+        }
+
         const initMute: Record<string, boolean> = {}
         for (const id of ids) initMute[id] = Boolean(initialStemMuteById?.[id])
         setStemMute(initMute)
         await syncStemGains(mixer, initMute)
+        if (Platform.OS === 'web') {
+          await mixer.setStemGain(GHOST_STEM_ID, 0).catch(() => {})
+        }
         setDurationSec(mixer.getDurationSeconds())
         const idx = useLessonStore.getState().lessonSectionIndex
         const t0 = sectionSeekSeconds(lesson, idx)
@@ -337,8 +395,30 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       metro.stop()
       mixer.unload().catch(() => {})
       mixerRef.current = null
+      if (paddedGhostRevokeRef.current) {
+        URL.revokeObjectURL(paddedGhostRevokeRef.current)
+        paddedGhostRevokeRef.current = null
+      }
     }
-  }, [autoPlayOnReady, initialRate, initialStemMuteById, loadKey, lesson, metro, syncStemGains])
+  }, [
+    autoPlayOnReady,
+    ghostAnchorSec,
+    ghostStemPlaybackUri,
+    initialRate,
+    initialStemMuteById,
+    loadKey,
+    lesson,
+    metro,
+    syncStemGains,
+  ])
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const m = mixerRef.current
+    if (!m || !ready) return
+    const audible = Boolean(playGhostWhileRecording && captureRecording && ghostStemPlaybackUri)
+    void m.setStemGain(GHOST_STEM_ID, audible ? GHOST_MIX_LINEAR : 0).catch(() => {})
+  }, [captureRecording, ghostStemPlaybackUri, playGhostWhileRecording, ready])
 
   useEffect(() => {
     if (!ready) return

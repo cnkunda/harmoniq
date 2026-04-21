@@ -147,6 +147,7 @@
       externalAudio.crossOrigin = 'anonymous'
       /** Mirrors RN stem mixer rate — AlphaTab `playbackSpeed` must match for follow-scroll at slow speeds. */
       var stemPlaybackRate = 1
+      var readOnlyFollowMode = false
       /**
        * Pinned banks — keep in sync with `src/audio/soundfontProfiles.ts` and `assets/soundfonts/SOURCES.md` (Commit 60).
        * @type {Record<string, string>}
@@ -660,7 +661,9 @@
               postOut({ type: 'error', message: (e && e.message) ? e.message : 'handler seekTo failed' })
             }
             maybePostSongPlayback()
-            postOut({ type: 'scoreSeek', positionMs: ms })
+            if (!readOnlyFollowMode) {
+              postOut({ type: 'scoreSeek', positionMs: ms })
+            }
           },
           // Host calls api.play()/pause via setStemPlaybackActive; real audio is the stem mixer, not this element.
           play: function () {
@@ -822,6 +825,7 @@
       }
 
       container.addEventListener('pointerdown', function (ev) {
+        if (readOnlyFollowMode) return
         if (ev.button !== 0) return
         emitNoteEventFromScoreTap(ev.clientX, ev.clientY)
       })
@@ -1090,6 +1094,11 @@
           externalAudio.playbackRate = stemPlaybackRate
           applyStemPlaybackSpeedToApi()
           updatePositionFromAudio()
+          return
+        }
+
+        if (msg.type === 'setReadOnlyFollowMode' && typeof msg.enabled === 'boolean') {
+          readOnlyFollowMode = !!msg.enabled
           return
         }
 

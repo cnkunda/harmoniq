@@ -13,6 +13,7 @@ load_dotenv(_backend_root / ".env")
 
 import base64
 import binascii
+import asyncio
 import json
 import logging
 import inspect
@@ -35,6 +36,7 @@ from app.exporter import (
 )
 from app.schemas import (
     AnalyzeJobCreated,
+    BeatGrid,
     CoachHydrationStatus,
     CurriculumSuggestRequest,
     CurriculumSuggestResponse,
@@ -55,10 +57,19 @@ from app.schemas import (
     QuickFeedbackResponse,
     ScoreRequest,
     ScoreResult,
+    SpotifyPlaybackState,
     SpotifyTasteProfile,
     TasteDeriveRequest,
     TasteProfile,
+    TranscriptionPrepareResponse,
 )
+from app.audio_processing import AudioPreparationError, prepare_audio_input
+from app.beat_grid import (
+    BeatGridComputationError,
+    dependent_artifacts_for_grid_override,
+    estimate_beat_grid,
+)
+from app.demucs_engine import DemucsEngineError, build_stem_routing_hints, separate_with_demucs
 from app import spotify as spotify_api
 from app.curriculum import suggest_next_session
 from app.sequencer import generate_practice_plan
@@ -254,6 +265,141 @@ async def _save_uploadfile_limited(
             if total > max_bytes:
                 raise UploadTooLargeError(f"Upload exceeds max_bytes={max_bytes}")
             f.write(chunk)
+
+
+def _coerce_optional_float(raw: object, *, field: str) -> float | None:
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        txt = raw.strip()
+        if not txt:
+            return None
+        try:
+            return float(txt)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"{field} must be numeric.") from exc
+    raise HTTPException(status_code=422, detail=f"{field} must be numeric.")
+
+
+def _run_transcription_prepare_pipeline(
+    *,
+    job_id: str,
+    youtube_url: str | None,
+    upload_path: str | None,
+    time_signature_override: str | None,
+    bpm_override: float | None,
+) -> TranscriptionPrepareResponse:
+    prepared = prepare_audio_input(
+        job_id,
+        youtube_url=youtube_url,
+        upload_path=upload_path,
+    )
+    stems = separate_with_demucs(prepared.normalized_wav_path, prepared.job_dir)
+    beat_grid_payload = estimate_beat_grid(
+        prepared.normalized_wav_path,
+        time_signature=time_signature_override,
+        bpm_override=bpm_override,
+    )
+    backend_root = _backend_root().resolve()
+    stem_abs_paths: dict[str, Path] = {}
+    for key, rel in stems.items():
+        stem_abs_paths[key] = backend_root / rel
+    stem_routing = build_stem_routing_hints(stem_abs_paths)
+
+    invalidated: list[str] = []
+    if time_signature_override is not None or bpm_override is not None:
+        invalidated = dependent_artifacts_for_grid_override()
+
+    audio_chunk_paths = [str(p.relative_to(backend_root).as_posix()) for p in prepared.chunk_paths]
+
+    return TranscriptionPrepareResponse(
+        job_id=job_id,
+        stems=stems,
+        beat_grid=BeatGrid.model_validate(beat_grid_payload),
+        stem_routing=stem_routing,
+        audio_chunk_paths=audio_chunk_paths,
+        invalidated_artifacts=invalidated,
+    )
+
+
+@app.post(
+    "/transcription/prepare",
+    response_model=TranscriptionPrepareResponse,
+    tags=["Transcription"],
+    summary="POST /transcription/prepare — stems + BeatGrid (commit 78)",
+)
+async def transcription_prepare(request: Request) -> TranscriptionPrepareResponse:
+    """Prepare transcription assets without blocking the event loop."""
+    job_id = str(uuid.uuid4())
+    youtube_url: str | None = None
+    upload_path: str | None = None
+    time_signature_override: str | None = None
+    bpm_override: float | None = None
+
+    content_type = request.headers.get("content-type", "")
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        upload = form.get("file")
+        youtube_url = str(form.get("youtube_url") or form.get("url") or "").strip() or None
+        time_signature_override = str(form.get("time_signature_override") or "").strip() or None
+        bpm_override = _coerce_optional_float(form.get("bpm_override"), field="bpm_override")
+
+        if upload is not None:
+            suffix = Path(upload.filename or "").suffix or ".audio"
+            job_dir = ingest.get_job_dir(job_id)
+            dest = job_dir / f"input{suffix}"
+            if isinstance(upload, UploadFile):
+                await _save_uploadfile_limited(upload, dest, max_bytes=MAX_UPLOAD_BYTES)
+            elif isinstance(upload, (bytes, bytearray)):
+                if len(upload) > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=400, detail="Upload exceeds max allowed size.")
+                dest.write_bytes(bytes(upload))
+            elif hasattr(upload, "read"):
+                raw = upload.read()
+                if inspect.isawaitable(raw):
+                    raw = await raw
+                if isinstance(raw, str):
+                    raw = raw.encode()
+                if not isinstance(raw, (bytes, bytearray)):
+                    raise HTTPException(status_code=400, detail="Multipart file must be bytes-like.")
+                if len(raw) > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=400, detail="Upload exceeds max allowed size.")
+                dest.write_bytes(bytes(raw))
+            else:
+                raise HTTPException(status_code=400, detail="Multipart file must be UploadFile or bytes-like.")
+            upload_path = str(dest)
+    else:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Expected JSON object payload.")
+        youtube_url = str(body.get("youtube_url") or body.get("url") or "").strip() or None
+        time_signature_override = str(body.get("time_signature_override") or "").strip() or None
+        bpm_override = _coerce_optional_float(body.get("bpm_override"), field="bpm_override")
+
+    if not youtube_url and not upload_path:
+        raise HTTPException(status_code=400, detail="Provide either `file` upload or `youtube_url`.")
+
+    try:
+        return await asyncio.to_thread(
+            _run_transcription_prepare_pipeline,
+            job_id=job_id,
+            youtube_url=youtube_url,
+            upload_path=upload_path,
+            time_signature_override=time_signature_override,
+            bpm_override=bpm_override,
+        )
+    except HTTPException:
+        raise
+    except (AudioPreparationError, DemucsEngineError, BeatGridComputationError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        logger.exception("POST /transcription/prepare failed job_id=%s", job_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Transcription preparation failed unexpectedly.",
+        ) from None
 
 
 @app.post(
@@ -460,6 +606,7 @@ async def practice_plan(payload: PracticePlanRequest) -> PracticePlan:
         library_lessons=candidate_lessons,
         duration_minutes=payload.duration_minutes,
         skip_llm=skip_llm,
+        mood=payload.mood,
     )
 
 
@@ -566,6 +713,35 @@ async def taste_spotify(
         raise HTTPException(status_code=401, detail=str(e)) from e
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get(
+    "/spotify/playback",
+    response_model=SpotifyPlaybackState,
+    tags=["Spotify"],
+    summary="GET /spotify/playback — normalized current playback state (commit 77)",
+)
+async def spotify_playback(
+    client_session: str = Query(..., min_length=1, max_length=256),
+) -> SpotifyPlaybackState:
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).",
+        )
+    if os.getenv("HARMONIQ_SKIP_SPOTIFY_PLAYBACK", "").strip() == "1":
+        raise HTTPException(
+            status_code=503,
+            detail="Spotify playback-follow disabled (HARMONIQ_SKIP_SPOTIFY_PLAYBACK=1).",
+        )
+    try:
+        return await spotify_api.get_playback_state(client_session)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 @app.delete(

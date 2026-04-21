@@ -22,6 +22,8 @@ export type AlphaTabWebProps = {
   onNoteEvent?: (evt: NoteEventMessage) => void
   /** AlphaTab player seeked the score (e.g. bar click) — move stem/Web Audio transport to this time. */
   onScoreSeekMs?: (positionMs: number) => void
+  /** Listening follow mode: disable score-originated seek/tap interactions. */
+  readOnlyFollowMode?: boolean
   /** Static score metadata after load / render (web DOM path). */
   onSongDetails?: (score: SongScoreMeta) => void
   /** Live master bar + GP section label when playback position changes (web DOM path). */

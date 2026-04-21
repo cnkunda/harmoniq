@@ -35,9 +35,10 @@ import type {
   PracticePlanCompletionInsertInput,
   PracticePlanCompletionRow,
   ReviewSkillUpdateInput,
-  SessionArchiveRow,
-  SessionInsertInput,
-  SessionJournalRow,
+    SessionArchiveRow,
+    GhostReferenceRow,
+    SessionInsertInput,
+    SessionJournalRow,
   SkillNodeRow,
   SkillSessionMutationRow,
 } from '@/src/db/types'
@@ -234,6 +235,16 @@ function sessionRowFromInput(input: SessionInsertInput): SessionArchiveRow {
     waveform_user_path: input.waveform_user_path ?? null,
     waveform_ref_path: input.waveform_ref_path ?? null,
     review_snapshot: snap,
+    job_id: input.job_id ?? null,
+    section_index: typeof input.section_index === 'number' ? input.section_index : null,
+    is_ghost_reference: input.is_ghost_reference === true,
+    ghost_anchor_sec:
+      typeof input.ghost_anchor_sec === 'number' && Number.isFinite(input.ghost_anchor_sec)
+        ? input.ghost_anchor_sec
+        : null,
+    ghost_audio_base64: input.ghost_audio_base64 ?? null,
+    ghost_recording_mime: input.ghost_recording_mime ?? null,
+    mood: input.mood ?? null,
   }
 }
 
@@ -274,6 +285,13 @@ export async function listSessionsJournal(): Promise<SessionJournalRow[]> {
       has_review_snapshot: r.has_review_snapshot,
       waveform_user_path: r.waveform_user_path,
       waveform_ref_path: r.waveform_ref_path,
+      job_id: r.job_id ?? null,
+      section_index: r.section_index ?? null,
+      is_ghost_reference: r.is_ghost_reference ?? false,
+      ghost_anchor_sec: r.ghost_anchor_sec ?? null,
+      ghost_audio_base64: r.ghost_audio_base64 ?? null,
+      ghost_recording_mime: r.ghost_recording_mime ?? null,
+      mood: r.mood ?? null,
     }))
 }
 
@@ -708,6 +726,36 @@ export async function deleteLessonByJobId(jobId: string): Promise<void> {
   if (i < 0) return
   lessonCatalog.splice(i, 1)
   await flushLessons()
+}
+
+/** Commit 75: mirror native ghost lookup against in-memory session log + IDB. */
+export async function getLatestGhostReference(jobId: string, sectionIndex: number): Promise<GhostReferenceRow | null> {
+  await initDb()
+  seedWebSkillNodes()
+  const jid = jobId.trim()
+  if (!jid) return null
+  const hits = sessionLog.filter(
+    (s) =>
+      (s.job_id ?? '').trim() === jid &&
+      typeof s.section_index === 'number' &&
+      s.section_index === sectionIndex &&
+      s.is_ghost_reference === true,
+  )
+  if (hits.length === 0) return null
+  hits.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  const top = hits[0]
+  if (!top) return null
+  return {
+    id: top.id,
+    date: top.date,
+    waveform_user_path: top.waveform_user_path ?? null,
+    ghost_anchor_sec:
+      typeof top.ghost_anchor_sec === 'number' && Number.isFinite(top.ghost_anchor_sec)
+        ? top.ghost_anchor_sec
+        : null,
+    ghost_audio_base64: top.ghost_audio_base64 ?? null,
+    ghost_recording_mime: top.ghost_recording_mime ?? null,
+  }
 }
 
 /** After `initDb`, restore last `LessonJSON` from IDB if store is still empty (web reload). */

@@ -307,9 +307,11 @@ export function usePlayCapture(tempo: number | null | undefined) {
     setQuickCoachText(null)
     stoppingCaptureRef.current = false
     resetAccuracyTracking()
+    useSessionPlayStore.getState().setLastTakeAnchorSec(null)
     useAppStore.getState().initSessionForCapture()
     recordStartMsRef.current = Date.now()
-    anchorPosRef.current = tickRef.current?.positionSec ?? 0
+    const anchor = tickRef.current?.positionSec ?? 0
+    anchorPosRef.current = anchor
     try {
       await recorderRef.current.start()
       await start((reading) => {
@@ -395,6 +397,7 @@ export function usePlayCapture(tempo: number | null | undefined) {
         setRecording(false)
         setRecordingWallClockStartedAtMs(null)
         setPitchRunning(false)
+        useSessionPlayStore.getState().setLastTakeAnchorSec(anchorPosRef.current)
         setTake(rec)
         setLatestTake(rec)
         setStatus(reason === 'silence' ? 'Auto-stopped after 5s silence' : 'Capture stopped')

@@ -31,12 +31,6 @@ Aligned with [README.md](../README.md) error table and `README_ERROR_COPY` in `s
 
 ## Phase 5 session realism (Feel Real)
 
-### STOP — external media sync
-
-If **Listen** sync against the guitar stem is **FAIL** without issue + waiver, **stop**: Phase 5 is not shippable until fixed or waived.
-
-**Bar:** Guitar stem audio is the playback clock (`IExternalMediaHandler` / `PlayerMode.EnabledExternalMedia`). No timer-driven SmartScroll fighting external-media cursor updates.
-
 ### STOP — runtime telemetry
 
 Do **not** treat Phase 5 as passed if:

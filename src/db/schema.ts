@@ -89,6 +89,12 @@ export const PREF_LAST_SOUNDFONT_PROFILE = 'last_soundfont_profile'
 
 /** Commit 62: skip `/session/tune` when `"1"`. */
 export const PREF_SESSION_SKIP_TUNE = 'session_skip_tune'
+/** Commit 76: user can skip daily pre-session mood check. */
+export const PREF_MOOD_CHECK_SKIP = 'mood_check_skip'
+/** Commit 76: YYYY-MM-DD key for last day mood prompt was shown. */
+export const PREF_MOOD_CHECK_LAST_SHOWN_DAY = 'mood_check_last_shown_day'
+/** Commit 76: most recent chosen mood from pre-session check. */
+export const PREF_MOOD_CHECK_LAST_MOOD = 'mood_check_last_mood'
 /** Commit 62: active mic calibration profile id (`quiet-acoustic` | `electric-unplugged`). */
 export const PREF_SESSION_MIC_PROFILE_ID = 'session_mic_profile_id'
 /** Commit 62: JSON map of profile id → calibrated RMS gate threshold (after +6 dB headroom). */
@@ -162,6 +168,20 @@ CREATE TABLE IF NOT EXISTS practice_plan_completions (
   plan_json TEXT NOT NULL
 );
 `
+
+/** Commit 75: ghost reference takes — section-scoped playback under live capture + Review overlay. */
+export const MIGRATION_V11_SESSION_GHOST = [
+  'ALTER TABLE sessions ADD COLUMN job_id TEXT',
+  'ALTER TABLE sessions ADD COLUMN section_index INTEGER',
+  'ALTER TABLE sessions ADD COLUMN is_ghost_reference INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE sessions ADD COLUMN ghost_anchor_sec REAL',
+  'ALTER TABLE sessions ADD COLUMN ghost_audio_base64 TEXT',
+] as const
+
+/** Commit 75 — mime for inline/native ghost blobs (decoder hint). */
+export const MIGRATION_V12_SESSION_GHOST_MIME = 'ALTER TABLE sessions ADD COLUMN ghost_recording_mime TEXT'
+/** Commit 76: mood captured at session save time for later progress analysis. */
+export const MIGRATION_V13_SESSION_MOOD = 'ALTER TABLE sessions ADD COLUMN mood TEXT'
 
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },

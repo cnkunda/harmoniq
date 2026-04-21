@@ -1,4 +1,4 @@
-"""Deterministic practice plan assembly (commit 70) — slot order, durations, ZPD song pick."""
+"""Deterministic practice plan assembly (commit 70) — slot order, durations, ZPD song pick; commit 76 mood adaptation."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 from app.coach import generate_practice_plan_intros, template_practice_plan_intros
 from app.curriculum import suggest_next_session
 from app.exercises.warmup_generator import generate_warmup
-from app.schemas import DrillSlot, LessonJSON, PlayerProfile, PracticePlan, SlotType, WarmupPlan
+from app.schemas import DrillSlot, LessonJSON, MoodState, PlayerProfile, PracticePlan, SlotType, WarmupPlan
 
 _TECHNIQUE_LABEL: dict[str, str] = {
     "bending": "Bending",
@@ -16,6 +16,7 @@ _TECHNIQUE_LABEL: dict[str, str] = {
     "phrasing": "Phrasing",
     "pitch": "Pitch",
 }
+_MOOD_SEED: dict[MoodState, int] = {"focused": 11, "loose": 23, "tired": 37, "on_fire": 53}
 
 
 def _top_technique_focus(profile: PlayerProfile | None) -> str:
@@ -44,6 +45,28 @@ def _comfort_bpm_low(profile: PlayerProfile) -> int:
     return 80
 
 
+def _comfort_bpm_for_mood(comfort: int, mood: MoodState | None) -> int:
+    """Commit 76: mood nudges metronome / warm-up BPM anchor without leaving playable range."""
+    if mood == "tired":
+        return max(50, comfort - 10)
+    if mood == "on_fire":
+        return min(200, comfort + 14)
+    if mood == "loose":
+        return max(50, comfort - 5)
+    return comfort
+
+
+def _budget_seconds(duration_minutes: int, mood: MoodState | None) -> int:
+    base = max(600, min(7200, int(duration_minutes) * 60))
+    if mood == "tired":
+        return max(600, int(round(base * 0.72)))
+    if mood == "loose":
+        return max(600, int(round(base * 0.94)))
+    if mood == "on_fire":
+        return min(7200, int(round(base * 1.04)))
+    return base
+
+
 def _scale_warmup_plan_to_duration(wp: WarmupPlan, target_sec: int) -> WarmupPlan:
     """Shrink or stretch exercise seconds so the opener fits a smaller slot budget."""
     cur = wp.total_duration_seconds
@@ -63,15 +86,17 @@ def generate_practice_plan(
     library_lessons: list[LessonJSON],
     duration_minutes: int = 25,
     skip_llm: bool = False,
+    mood: MoodState | None = None,
 ) -> PracticePlan:
     """Build ordered drill slots; Claude hydrates one-sentence coach_intro per slot (batched)."""
-    total_sec = max(600, min(7200, int(duration_minutes) * 60))
+    total_sec = _budget_seconds(duration_minutes, mood)
     profile = player_profile or PlayerProfile()
     lib = [l for l in library_lessons if (l.job_id or "").strip()]
     n_lib = len(lib)
-    seed = n_lib + len(profile.weak_areas or []) * 17 + int(duration_minutes) * 3
+    seed = n_lib + len(profile.weak_areas or []) * 17 + int(duration_minutes) * 3 + ((_MOOD_SEED.get(mood) or 0) if mood else 0)
     comfort = _comfort_bpm_low(profile)
-    wp = generate_warmup(profile, profile.taste_profile, session_bpm=comfort, seed=seed)
+    session_bpm = _comfort_bpm_for_mood(comfort, mood)
+    wp = generate_warmup(profile, profile.taste_profile, session_bpm=session_bpm, seed=seed)
 
     slots_outline: list[dict[str, Any]] = []
 
@@ -104,14 +129,23 @@ def generate_practice_plan(
             },
         )
     else:
+        omit_technique = mood == "tired"
         old_w = min(300, max(180, int(total_sec * 0.16)))
         t = min(360, max(240, int(total_sec * 0.20)))
         song = max(240, int(total_sec * 0.38))
         fj = total_sec - old_w - t - song
-        if fj < 120:
-            shift = 120 - fj
-            fj = 120
-            song = max(180, song - shift)
+        if not omit_technique:
+            if fj < 120:
+                shift = 120 - fj
+                fj = 120
+                song = max(180, song - shift)
+        else:
+            song = max(240, song + t)
+            fj = total_sec - old_w - song
+            if fj < 120:
+                shortfall = 120 - fj
+                fj = 120
+                song = max(180, song - shortfall)
 
         tech_label = _top_technique_focus(profile)
         ranked = suggest_next_session(profile, lib)
@@ -143,17 +177,18 @@ def generate_practice_plan(
                 "warmup_plan": wp.model_dump(mode="json"),
             },
         )
-        slots_outline.append(
-            {
-                "slot_type": "technique",
-                "title": f"{tech_label} drill",
-                "duration_seconds": t,
-                "exercise_ref": None,
-                "technique_focus": (profile.weak_areas[0] if profile.weak_areas else "timing"),
-                "lesson_ref": None,
-                "song_title": None,
-            },
-        )
+        if not omit_technique:
+            slots_outline.append(
+                {
+                    "slot_type": "technique",
+                    "title": f"{tech_label} drill",
+                    "duration_seconds": t,
+                    "exercise_ref": None,
+                    "technique_focus": (profile.weak_areas[0] if profile.weak_areas else "timing"),
+                    "lesson_ref": None,
+                    "song_title": None,
+                },
+            )
         slots_outline.append(
             {
                 "slot_type": "song_section",
@@ -178,9 +213,9 @@ def generate_practice_plan(
         )
 
     intros = (
-        template_practice_plan_intros(slots_outline, profile)
+        template_practice_plan_intros(slots_outline, profile, mood=mood)
         if skip_llm
-        else generate_practice_plan_intros(slots_outline, profile)
+        else generate_practice_plan_intros(slots_outline, profile, mood=mood)
     )
     if len(intros) != len(slots_outline):
         raise RuntimeError(
@@ -207,3 +242,4 @@ def generate_practice_plan(
 
     total = sum(s.duration_seconds for s in slots)
     return PracticePlan(slots=slots, total_duration_seconds=total)
+

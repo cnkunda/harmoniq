@@ -15,6 +15,8 @@ export type TabInboundMessage =
   | { type: 'setAudioSrc'; audioSrc: string }
   | { type: 'setPlaybackRate'; playbackRate: number }
   | { type: 'seekTo'; positionMs: number }
+  /** Listening mode: score follows external media, but user score taps/seeks are disabled. */
+  | { type: 'setReadOnlyFollowMode'; enabled: boolean }
   | { type: 'syncTimelineMs'; positionMs: number }
   /** Host stem transport play/pause — AlphaTab cursor needs player active (see player.enableCursor). */
   | { type: 'setStemPlaybackActive'; active: boolean }

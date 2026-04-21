@@ -26,7 +26,7 @@ import {
 } from '@/src/api/analyze'
 import { searchTabs, type TabSearchHit } from '@/src/api/tabs'
 import colors from '@/src/constants/colors'
-import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapAnalyzeFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
@@ -36,7 +36,7 @@ import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 import type { AnalyzeJob, AnalyzeJobStatus } from '@/src/types'
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 
 type AddSongState = 'idle' | 'analyzing' | 'done' | 'error'
 
@@ -295,7 +295,9 @@ export default function AddSongScreen() {
         artist: a.length > 0 ? a : lesson.artist,
       })
     }
-    router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep))
+    void sessionEntryHrefWithMoodCheck(useSessionPrefsStore.getState().skipTuneStep).then((href) =>
+      router.push(href as Href),
+    )
   }, [lesson, router, saveLesson, uploadDisplayArtist, uploadDisplayTitle])
 
   const subtitle =

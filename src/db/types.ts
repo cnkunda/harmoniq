@@ -13,6 +13,19 @@ export type SessionInsertInput = {
   /** Optional file URIs when waveforms are stored on disk instead of snapshot. */
   waveform_user_path?: string | null
   waveform_ref_path?: string | null
+  /** Commit 75: lesson identity for ghost lookup. */
+  job_id?: string | null
+  section_index?: number | null
+  /** Commit 75: this row’s user take is the ghost reference for the section. */
+  is_ghost_reference?: boolean
+  /** Commit 75: song timeline position (seconds) when that take’s recording started. */
+  ghost_anchor_sec?: number | null
+  /** Commit 75: inline audio when file URI is unavailable (web). */
+  ghost_audio_base64?: string | null
+  /** Commit 75: e.g. `audio/webm` / `audio/m4a` for decoders. */
+  ghost_recording_mime?: string | null
+  /** Commit 76: pre-session self-reported mood. */
+  mood?: 'focused' | 'loose' | 'tired' | 'on_fire' | null
 }
 
 /** Session row for journal list (newest first). */
@@ -29,8 +42,25 @@ export type SessionJournalRow = {
   has_review_snapshot: boolean
   waveform_user_path: string | null
   waveform_ref_path: string | null
+  job_id?: string | null
+  section_index?: number | null
+  is_ghost_reference?: boolean
+  ghost_anchor_sec?: number | null
+  ghost_audio_base64?: string | null
+  ghost_recording_mime?: string | null
+  mood?: 'focused' | 'loose' | 'tired' | 'on_fire' | null
   /** Review session length in minutes when recorded (optional; not yet persisted on all paths). */
   duration_min?: number | null
+}
+
+/** Commit 75: latest ghost reference row for Play / Review. */
+export type GhostReferenceRow = {
+  id: string
+  date: string
+  waveform_user_path: string | null
+  ghost_anchor_sec: number | null
+  ghost_audio_base64: string | null
+  ghost_recording_mime: string | null
 }
 
 export type SessionArchiveRow = SessionJournalRow & {

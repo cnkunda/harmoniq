@@ -22,6 +22,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
       onError,
       onNoteEvent,
       onScoreSeekMs,
+      readOnlyFollowMode,
       onSongDetails,
       onSongPlayback,
       runtimeDiagnosticsEnabled,
@@ -43,6 +44,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
         onError={onError}
         onNoteEvent={onNoteEvent}
         onScoreSeekMs={onScoreSeekMs}
+        readOnlyFollowMode={readOnlyFollowMode}
         onSongDetails={onSongDetails}
         onSongPlayback={onSongPlayback}
       />

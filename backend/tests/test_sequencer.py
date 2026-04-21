@@ -60,3 +60,49 @@ def test_practice_plan_three_songs_four_slots_order_and_budget() -> None:
     assert plan.slots[0].slot_type == "warmup"
     assert plan.slots[0].warmup_plan is not None
     assert len(plan.slots[0].warmup_plan.exercises) == 3
+
+
+def test_practice_plan_tired_shorter_and_skips_technique_slot() -> None:
+    lib = [
+        _lesson(job_id="job-a", style="rock", section_tags=["bend"]),
+        _lesson(job_id="job-b", style="rock", section_tags=["vibrato"]),
+    ]
+    standard = generate_practice_plan(
+        player_profile=PlayerProfile(weak_areas=["bending"]),
+        library_lessons=lib,
+        duration_minutes=25,
+        skip_llm=True,
+        mood=None,
+    )
+    tired = generate_practice_plan(
+        player_profile=PlayerProfile(weak_areas=["bending"]),
+        library_lessons=lib,
+        duration_minutes=25,
+        skip_llm=True,
+        mood="tired",
+    )
+    assert tired.total_duration_seconds < standard.total_duration_seconds
+    assert [s.slot_type for s in tired.slots] == ["warmup", "song_section", "free_jam"]
+
+
+def test_mood_changes_template_intro_energy() -> None:
+    lib = [
+        _lesson(job_id="job-a", style="rock", section_tags=["bend"]),
+        _lesson(job_id="job-b", style="rock", section_tags=["vibrato"]),
+    ]
+    tired = generate_practice_plan(
+        player_profile=PlayerProfile(weak_areas=["bending"]),
+        library_lessons=lib,
+        duration_minutes=25,
+        skip_llm=True,
+        mood="tired",
+    )
+    on_fire = generate_practice_plan(
+        player_profile=PlayerProfile(weak_areas=["bending"]),
+        library_lessons=lib,
+        duration_minutes=25,
+        skip_llm=True,
+        mood="on_fire",
+    )
+    assert "gentle" in tired.slots[0].coach_intro.lower()
+    assert "great spark" in on_fire.slots[0].coach_intro.lower()

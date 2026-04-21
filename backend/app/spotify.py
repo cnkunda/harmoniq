@@ -19,13 +19,13 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
 
-from app.schemas import SpotifyTasteProfile
+from app.schemas import SpotifyPlaybackState, SpotifyTasteProfile
 
 logger = logging.getLogger("harmoniq.spotify")
 
 ACCOUNTS_BASE = "https://accounts.spotify.com"
 API_BASE = "https://api.spotify.com/v1"
-SCOPES = "user-top-read user-read-recently-played"
+SCOPES = "user-top-read user-read-recently-played user-read-playback-state"
 
 _pending: dict[str, tuple[str, str, Literal["native", "web"]]] = {}
 """state -> (code_verifier, client_session, return_platform)."""
@@ -299,6 +299,34 @@ async def _audio_features(token: str, track_ids: list[str]) -> list[dict[str, An
     return out
 
 
+def _spotify_error_reason(res: httpx.Response) -> str:
+    try:
+        payload = res.json()
+    except Exception:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    err = payload.get("error")
+    if isinstance(err, dict):
+        reason = err.get("reason")
+        if isinstance(reason, str):
+            return reason.strip()
+    return ""
+
+
+def _artists_from_item(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("name")
+        if isinstance(name, str) and name.strip():
+            out.append(name.strip())
+    return out
+
+
 def _aggregate_taste_with_features(
     top_artist_names: list[str],
     top_genres: list[str],
@@ -377,3 +405,54 @@ async def build_taste_profile(client_session: str) -> SpotifyTasteProfile:
 
     feats = await _audio_features(token, track_ids)
     return _aggregate_taste_with_features(top_artist_names, top_genres, feats)
+
+
+async def get_playback_state(client_session: str) -> SpotifyPlaybackState:
+    """Fetch `GET /me/player` and normalize for cursor follow mode.
+
+    Spotify playback state APIs require Premium for reliable device state.
+    """
+
+    token = await _valid_access_token(client_session)
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        res = await client.get(
+            f"{API_BASE}/me/player",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    if res.status_code == 204:
+        raise RuntimeError("No active Spotify playback. Start a track on a Premium device.")
+    if res.status_code == 401:
+        raise ValueError("Spotify is not connected for this device session.")
+    if res.status_code == 403:
+        reason = _spotify_error_reason(res)
+        if reason == "PREMIUM_REQUIRED":
+            raise PermissionError("Spotify Premium is required for playback-follow mode.")
+        raise PermissionError("Spotify playback state is unavailable (forbidden).")
+    if res.status_code != 200:
+        logger.warning("Spotify playback state failed status=%s", res.status_code)
+        raise RuntimeError(f"Spotify playback API error ({res.status_code}).")
+
+    payload = res.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError("Spotify playback payload was invalid.")
+    progress = payload.get("progress_ms")
+    item = payload.get("item")
+    track_id: str | None = None
+    track_name: str | None = None
+    artists: list[str] = []
+    if isinstance(item, dict):
+        rid = item.get("id")
+        if isinstance(rid, str) and rid.strip():
+            track_id = rid.strip()
+        rname = item.get("name")
+        if isinstance(rname, str) and rname.strip():
+            track_name = rname.strip()
+        artists = _artists_from_item(item.get("artists"))
+    return SpotifyPlaybackState(
+        is_playing=bool(payload.get("is_playing")),
+        progress_ms=max(0, int(progress)) if isinstance(progress, (int, float)) else 0,
+        playback_rate=1.0,
+        track_id=track_id,
+        track_name=track_name,
+        artists=artists,
+    )

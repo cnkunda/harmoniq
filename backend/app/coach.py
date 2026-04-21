@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from typing import Any
 
-from app.schemas import LessonSectionStub, PlayerProfile
+from app.schemas import LessonSectionStub, MoodState, PlayerProfile
 
 logger = logging.getLogger("harmoniq.coach")
 logger.setLevel(logging.INFO)
@@ -747,9 +747,23 @@ def hydrate_coach_copy_into_sections(
     return enriched, ("fallback" if fallback_reason else "complete"), fallback_reason
 
 
-def template_practice_plan_intros(slots_meta: list[dict[str, Any]], player_profile: PlayerProfile | None) -> list[str]:
+def template_practice_plan_intros(
+    slots_meta: list[dict[str, Any]],
+    player_profile: PlayerProfile | None,
+    *,
+    mood: MoodState | None = None,
+) -> list[str]:
     """Deterministic one-liners when Claude is unavailable or skipped (commit 70)."""
     _ = player_profile
+    mood_prefix = ""
+    if mood == "tired":
+        mood_prefix = "Keep this gentle and compact. "
+    elif mood == "on_fire":
+        mood_prefix = "Great spark today — lean into it. "
+    elif mood == "focused":
+        mood_prefix = "Stay precise and deliberate. "
+    elif mood == "loose":
+        mood_prefix = "Keep this relaxed and musical. "
     out: list[str] = []
     for m in slots_meta:
         st = str(m.get("slot_type") or "")
@@ -768,18 +782,20 @@ def template_practice_plan_intros(slots_meta: list[dict[str, Any]], player_profi
                     if names:
                         joined = ", then ".join(names)
                         out.append(
-                            f"Open with {joined} — small motions, even pulse, and no death grip on the neck.",
+                            f"{mood_prefix}Open with {joined} — small motions, even pulse, and no death grip on the neck.",
                         )
                         continue
-            out.append(f"Ease into {title} with tiny motions and an even pulse — no death grip on the neck.")
+            out.append(f"{mood_prefix}Ease into {title} with tiny motions and an even pulse — no death grip on the neck.")
         elif st == "technique":
             tf = str(m.get("technique_focus") or "technique").replace("_", " ")
-            out.append(f"Loop a small cell slowly and let the click expose rushing on {tf} before you add speed.")
+            out.append(f"{mood_prefix}Loop a small cell slowly and let the click expose rushing on {tf} before you add speed.")
         elif st == "song_section":
             song = str(m.get("song_title") or "the tune").strip() or "the tune"
-            out.append(f"Stay inside one phrase of {song} at a time — sing it once, then match the shape on guitar.")
+            out.append(
+                f"{mood_prefix}Stay inside one phrase of {song} at a time — sing it once, then match the shape on guitar."
+            )
         else:
-            out.append("Follow your ear in free play — keep dynamics conversational and leave space between ideas.")
+            out.append(f"{mood_prefix}Follow your ear in free play — keep dynamics conversational and leave space between ideas.")
     return out
 
 
@@ -815,17 +831,19 @@ def _parse_practice_plan_intros_json(raw_text: str, expected: int) -> list[str] 
 def generate_practice_plan_intros(
     slots_meta: list[dict[str, Any]],
     player_profile: PlayerProfile | None,
+    *,
+    mood: MoodState | None = None,
 ) -> list[str]:
     """Batch Claude call: one sentence per slot; strict length match to slot list."""
     if not slots_meta:
         return []
     if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("HARMONIQ_ENABLE_COACH_IN_TESTS") != "1":
-        return template_practice_plan_intros(slots_meta, player_profile)
+        return template_practice_plan_intros(slots_meta, player_profile, mood=mood)
 
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         logger.info("practice_plan_intros fallback reason=missing_api_key")
-        return template_practice_plan_intros(slots_meta, player_profile)
+        return template_practice_plan_intros(slots_meta, player_profile, mood=mood)
 
     lines: list[str] = []
     for i, m in enumerate(slots_meta, 1):
@@ -835,11 +853,19 @@ def generate_practice_plan_intros(
             f"{i}. type={m.get('slot_type')} title={m.get('title')} ~{dm} min",
         )
     n = len(slots_meta)
+    mood_line = (
+        "Mood state for this session: unknown/default.\n"
+        if mood is None
+        else f"Mood state for this session: {mood}.\n"
+    )
     user_prompt = (
         "Return JSON with exactly one key \"intros\" whose value is a JSON array of strings.\n"
         f"There must be exactly {n} strings, in the same order as the slots listed.\n"
         "Each string is exactly one short sentence (max 22 words), warm guitar-coach tone, plain English, actionable.\n"
+        "Coach tone by mood: tired=gentle/reassuring, on_fire=energetic/celebratory, focused=precise/direct, loose=playful/low-pressure.\n"
         "No markdown fences inside strings.\n\n"
+        + mood_line
+        + "\n"
         "Slots:\n"
         + "\n".join(lines)
         + "\n\n"
@@ -868,4 +894,4 @@ def generate_practice_plan_intros(
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
-    return template_practice_plan_intros(slots_meta, player_profile)
+    return template_practice_plan_intros(slots_meta, player_profile, mood=mood)

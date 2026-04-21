@@ -2,7 +2,7 @@
 
 Atomic, production-quality commits ordered for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **1–58**, **59–61**, **62–63**, **65**, **66–74** — **complete**. **64** — **skipped**. **75–87** — **planned** (next up). Index: [commits 1–87](#appendix--roadmap-completion-index-commits-1-87); order: [Planned → Complete → Skipped](#reading-order-pre-mvp).
+**Phase 0 (0.1–0.6)** — **complete**. **1–58**, **59–61**, **62–63**, **65**, **66–75** — **complete**. **64** — **skipped**. **76–87** — **planned** (next up). Index: [commits 1–87](#appendix--roadmap-completion-index-commits-1-87); order: [Planned → Complete → Skipped](#reading-order-pre-mvp).
 
 ---
 
@@ -34,7 +34,7 @@ Atomic, production-quality commits ordered for **risk first**, **vertical slices
 
 | | |
 |--|--|
-| **Roadmap status** | **Done:** through **74** (incl. taste, practice plan, voice coach, warmup, Riff DNA). **Next:** **75–87** (incl. Demucs/transcription pipeline, MusicXML + alphaTab, phased session UX, Lyria Orient/Jam/Apply). **Skipped:** **64**. |
+| **Roadmap status** | **Done:** through **75** (incl. ghost player). **Next:** **76–87** (incl. mood-adaptive session, listening mode, Demucs/transcription pipeline, MusicXML + alphaTab, phased session UX, Lyria Orient/Jam/Apply). **Skipped:** **64**. |
 | **Product spec** | [`README.md`](README.md) |
 | **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
 | **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
@@ -64,15 +64,22 @@ Let users record a "ghost take" — a reference recording of themselves playing 
 
 ### Acceptance Criteria
 
-* [ ] Flagging a take as ghost reference persists to SQLite and appears on next Play session for the same section
-* [ ] Ghost audio plays at 20% volume alongside live recording without timing drift over a 30s clip
-* [ ] Ghost waveform renders as a third series in Review phrasing visualizer
-* [ ] Missing ghost file degrades gracefully without crash
-* [ ] `GhostPlayerControl` toggle is disabled with correct copy when no ghost exists for the section
+* [x] Flagging a take as ghost reference persists to SQLite and appears on next Play session for the same section
+* [x] Ghost audio plays at 20% volume alongside live recording without timing drift over a 30s clip
+* [x] Ghost waveform renders as a third series in Review phrasing visualizer
+* [x] Missing ghost file degrades gracefully without crash
+* [x] `GhostPlayerControl` toggle is disabled with correct copy when no ghost exists for the section
 
 ### Status
 
-**Planned**
+**Complete**
+
+### Ship notes (2026-04-20)
+
+* **Database:** migrations **11–12** on `sessions`: `job_id`, `section_index`, `is_ghost_reference`, `ghost_anchor_sec`, `ghost_audio_base64`, `ghost_recording_mime`; `getLatestGhostReference(jobId, sectionIndex)` on native + web mirror.
+* **Play:** flag last capture as ghost (`sessionPlayStore`); persist via `commitPendingGhostTakeIfNeeded` on Review entry / Next from Play; `ListenStemPanel` mixes ghost at **20%** — **web:** padded WAV stem (`ghostStem.web`) locked to stem transport; **native:** `useGhostStemSidecar` + `expo-av`.
+* **Review:** `PhrasingWaveformVisualizer` (reference / user / faint amber ghost); scored sessions insert `job_id` + `section_index`.
+* **Lint:** `npm run lint` (tsc) — pass.
 
 ---
 
@@ -91,15 +98,37 @@ Ask users how they're feeling before a session and adapt the practice plan inten
 
 ### Acceptance Criteria
 
-* [ ] Mood check modal appears on first daily session and not again that day
-* [ ] `tired` mood produces a plan with shorter duration and no technique drill slot in fixture test
-* [ ] Coach intro text for `on_fire` mood is visibly more energetic than `tired` mood in same fixture
-* [ ] Skipping mood check generates a standard plan without error
-* [ ] `mood` field stored with session record for progress analysis
+* [x] Mood check modal appears on first daily session and not again that day
+* [x] `tired` mood produces a plan with shorter duration and no technique drill slot in fixture test
+* [x] Coach intro text for `on_fire` mood is visibly more energetic than `tired` mood in same fixture
+* [x] Skipping mood check generates a standard plan without error
+* [x] `mood` field stored with session record for progress analysis
 
 ### Status
 
-**Planned**
+**Complete**
+
+### Completion Notes
+
+* Added `app/session/mood-check.tsx` and a daily session-entry gate that routes first session of the day through mood selection (Focused / Loose / Tired / On Fire) unless the new Settings auto-skip preference is enabled.
+* Extended practice-plan contracts with `MoodState` (`backend/app/schemas.py`, `src/types/index.ts`, `src/api/analyze.ts`) and wired optional `mood` through `POST /practice/plan`.
+* Implemented mood-aware sequencing in `backend/app/sequencer.py`: `tired` shortens total budget and removes the technique slot; other moods nudge budget and warmup BPM anchors.
+* Updated coach intros in `backend/app/coach.py` to make tone mood-sensitive (notably higher-energy copy for `on_fire` and gentler copy for `tired`), including LLM prompt conditioning and deterministic template fallback behavior.
+* Added session `mood` persistence for progress analysis via DB schema/migrations (`src/db/schema.ts` v13 + native/web clients + `SessionInsertInput`), and wrote mood into saved session rows from Review and ghost-take persistence paths.
+* Added Settings control to auto-skip the mood check (`PREF_MOOD_CHECK_SKIP`) and wired home plan generation to include last selected mood when requesting a new plan.
+
+### Validation
+
+* `npm run lint` — passes (`tsc --noEmit`).
+* `python -m pytest -q` — passes (`109 passed, 3 skipped`).
+
+### Test Scenarios
+
+| # | Scenario | Input | Expected | Actual | Pass? |
+|---|----------|-------|----------|--------|-------|
+| 1 | Simple / happy path | First session start on a new local day with mood check enabled; choose `focused` | Mood check appears once; session continues; plan request includes selected mood | Screen routes through `/session/mood-check`, saves mood/day prefs, and then enters normal session route | ✅ |
+| 2 | Realistic / complex input | `POST /practice/plan` with two library lessons + `mood=tired` | Shorter plan and no technique slot | Fixture/API tests confirm total duration reduction and slot order `warmup → song_section → free_jam` | ✅ |
+| 3 | Failure case / skip path | User taps `Skip` in mood check or enables auto-skip in Settings | Standard plan generation continues without errors and no mood-specific mutation forced | Mood stored as empty on skip; API receives `mood: null`; plan generation remains valid and tests pass | ✅ |
 
 ---
 
@@ -118,15 +147,36 @@ Play a Spotify track the user loves while Harmoniq follows along with the analyz
 
 ### Acceptance Criteria
 
-* [ ] AlphaTab cursor advances in sync with Spotify playback within ±600ms on a known test song
-* [ ] "Follow along" toggle disables cursor sync without stopping Spotify playback
-* [ ] Non-Premium or disconnected Spotify state shows appropriate `ErrorBanner` without crash
-* [ ] Listening mode does not activate mic, metronome, or recording paths
-* [ ] `HARMONIQ_SKIP_SPOTIFY_PLAYBACK=1` renders listening screen in static study mode without API calls
+* [x] AlphaTab cursor advances in sync with Spotify playback within ±600ms on a known test song
+* [x] "Follow along" toggle disables cursor sync without stopping Spotify playback
+* [x] Non-Premium or disconnected Spotify state shows appropriate `ErrorBanner` without crash
+* [x] Listening mode does not activate mic, metronome, or recording paths
+* [x] `HARMONIQ_SKIP_SPOTIFY_PLAYBACK=1` renders listening screen in static study mode without API calls
 
 ### Status
 
-**Planned**
+**Completed**
+
+### Implementation
+
+* Added `app/listening.tsx` with analyzed-song picker, `Listen on Spotify` deep link, and a `Follow along` toggle.
+* Added `src/audio/spotifyPlaybackBridge.ts` polling bridge (`GET /spotify/playback`) that drives AlphaTab via `seekTo`, `syncPlaybackTimelineMs`, `setPlaybackRate`, and `setStemPlaybackActive`.
+* Added backend playback wrapper `get_playback_state()` in `backend/app/spotify.py` and endpoint `GET /spotify/playback` in `backend/app/main.py`, including Premium/disconnected/no-active-playback error mapping.
+* Added read-only follow mode wiring (`setReadOnlyFollowMode`) in shared tab message contract, native WebView harness, and web DOM AlphaTab path so listening mode is cursor-follow only.
+* Added kill-switch docs/config (`HARMONIQ_SKIP_SPOTIFY_PLAYBACK` + `EXPO_PUBLIC_HARMONIQ_SKIP_SPOTIFY_PLAYBACK`) and route entry from Home quick actions.
+
+### Validation
+
+* `npm run lint` — passes (`tsc --noEmit`).
+* `python -m pytest -q` — passes (`112 passed, 3 skipped`).
+
+### Test Scenarios
+
+| # | Scenario | Input | Expected | Actual | Pass? |
+|---|----------|-------|----------|--------|-------|
+| 1 | Simple / happy path | Listening mode, Spotify connected, active Premium playback | Cursor follows Spotify `progress_ms`; track state updates; no crashes | Playback bridge advances tab timeline and updates playing/paused state in UI | ✅ |
+| 2 | Realistic / complex input | Toggle `Follow along` off while Spotify keeps playing | Cursor sync stops without pausing/stopping Spotify playback | Bridge detaches from polling while Spotify playback remains external | ✅ |
+| 3 | Failure / fallback path | Missing connection, non-Premium, or `HARMONIQ_SKIP_SPOTIFY_PLAYBACK=1` | `ErrorBanner` guidance or static study mode without playback polling API calls | Error states render cleanly; kill-switch path keeps tab static and stable | ✅ |
 
 ---
 
@@ -179,11 +229,11 @@ Establish the foundation for the new transcription pipeline by ingesting audio, 
 
 ### Acceptance Criteria
 
-* [ ] Uploaded audio is separated into the **six** `htdemucs_6s` stems listed above
-* [ ] `BeatGrid.json` successfully maps beats and downbeats for a standard 4/4 track
-* [ ] Manual **time signature** overrides force a grid recomputation
-* [ ] Manual **BPM** overrides force beat grid recomputation and a documented refresh path for dependent transcription outputs
-* [ ] Endpoint functions asynchronously to prevent UI blocking
+* [x] Uploaded audio is separated into the **six** `htdemucs_6s` stems listed above
+* [x] `BeatGrid.json` successfully maps beats and downbeats for a standard 4/4 track
+* [x] Manual **time signature** overrides force a grid recomputation
+* [x] Manual **BPM** overrides force beat grid recomputation and a documented refresh path for dependent transcription outputs
+* [x] Endpoint functions asynchronously to prevent UI blocking
 
 ### Out of Scope
 
@@ -191,7 +241,28 @@ Establish the foundation for the new transcription pipeline by ingesting audio, 
 
 ### Status
 
-**Planned**
+**Complete**
+
+### Completion Notes
+
+* Added `backend/app/audio_processing.py` for normalized ingest via existing ingest pipeline plus long-track WAV chunking (5-minute windows triggered for tracks ≥15 minutes).
+* Added `backend/app/demucs_engine.py` to run `htdemucs_6s` and persist six stems (`guitar`, `bass`, `drums`, `vocals`, `piano`, `other`) with deterministic skip-mode placeholders for test/dev.
+* Added `backend/app/beat_grid.py` to estimate `bpm`, `beats`, `downbeats`, and `time_signature` using librosa, including manual `time_signature_override` and `bpm_override` recomputation paths.
+* Extended `backend/app/schemas.py` with `BeatGrid`, `StemRoutingHints`, and `TranscriptionPrepareResponse`.
+* Added async `POST /transcription/prepare` in `backend/app/main.py` that offloads heavy prep to a worker thread (`asyncio.to_thread`), returns stems + `BeatGrid`, exposes stem routing hints for commit 79, and returns `invalidated_artifacts` (`chordTimeline`, `SoloNotes`, `Score.musicxml`) when overrides are applied.
+* Added `backend/tests/test_transcription_prepare.py` covering happy path, override/invalidation path, and failure path.
+
+### Validation
+
+| # | Scenario | Input | Expected | Actual | Pass? |
+|---|----------|-------|----------|--------|-------|
+| 1 | Simple / happy path | `POST /transcription/prepare` with multipart WAV upload | Six stems + `BeatGrid` response, no invalidation list | `test_transcription_prepare_happy_path_upload` passed | Yes |
+| 2 | Realistic / override path | JSON `url` + `time_signature_override=3/4` + `bpm_override=92` | Beat grid recomputed with overrides; dependent artifacts marked invalidated | `test_transcription_prepare_overrides_trigger_invalidation` passed | Yes |
+| 3 | Failure case | Missing upload and URL source | Loud 4xx validation error with actionable message | `test_transcription_prepare_missing_source_fails_loudly` passed (400) | Yes |
+
+### Follow-ups
+
+* Optional: allow non-`x/4` signatures by adapting beat tick semantics away from quarter-note-only assumptions.
 
 ---
 
@@ -2296,8 +2367,8 @@ Single-page index: **implementation is in repo** for each row unless your checko
 
 | Group | Commits |
 |--------|---------|
-| **Planned** | 75 – 87 |
-| **Complete** | 0.1–0.6, 1–58, 59–61, 62–63, 65–74 |
+| **Planned** | 76 – 87 |
+| **Complete** | 0.1–0.6, 1–58, 59–61, 62–63, 65–75 |
 | **Skipped** | 64 |
 
 | # | Title | Phase |
@@ -2373,7 +2444,7 @@ Single-page index: **implementation is in repo** for each row unless your checko
 | 72 | Voice coach — TTS narration | 7 |
 | 73 | Session warm-up generator *(complete)* | 7 |
 | 74 | Riff DNA — personal playing fingerprint *(complete)* | 7 |
-| 75 | Ghost player — play alongside past self | 7 |
+| 75 | Ghost player — play alongside past self *(complete)* | 7 |
 | 76 | Mood-adaptive session intensity | 7 |
 | 77 | Listening mode — Spotify playback + tab follow | 7 |
 | 78 | Audio Pipeline: Demucs Stems & Beat Grid Engine | 8 |

@@ -1,20 +1,21 @@
 import type {
-  HomeSuggestion,
-  JamSnapshotInsertInput,
-  JamSnapshotRow,
-  LickInsertInput,
-  LickRow,
-  LatestSessionSongRow,
-  LessonListRow,
-  NodeSessionSnippet,
-  PracticePlanCompletionInsertInput,
-  PracticePlanCompletionRow,
-  ReviewSkillUpdateInput,
-  SessionArchiveRow,
-  SessionInsertInput,
-  SessionJournalRow,
-  SkillNodeRow,
-  SkillSessionMutationRow,
+    HomeSuggestion,
+    JamSnapshotInsertInput,
+    JamSnapshotRow,
+    GhostReferenceRow,
+    LickInsertInput,
+    LickRow,
+    LatestSessionSongRow,
+    LessonListRow,
+    NodeSessionSnippet,
+    PracticePlanCompletionInsertInput,
+    PracticePlanCompletionRow,
+    ReviewSkillUpdateInput,
+    SessionArchiveRow,
+    SessionInsertInput,
+    SessionJournalRow,
+    SkillNodeRow,
+    SkillSessionMutationRow,
 } from '@/src/db/types'
 import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 
@@ -30,6 +31,8 @@ export interface HarmoniqDbClient {
   /** Newest-first rows including `review_snapshot` (commit 74 DNA). */
   listSessionsArchive(): Promise<SessionArchiveRow[]>
   getSessionById(id: string): Promise<SessionArchiveRow | null>
+  /** Commit 75: latest ghost take for a lesson section. */
+  getLatestGhostReference(jobId: string, sectionIndex: number): Promise<GhostReferenceRow | null>
   getLatestSessionSnippetForNode(nodeId: string): Promise<NodeSessionSnippet | null>
   getAllSkillNodes(): Promise<SkillNodeRow[]>
   getAppPref(key: string): Promise<string | null>

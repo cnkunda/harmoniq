@@ -1,7 +1,7 @@
 import type { Href } from 'expo-router'
 
 import { upsertLessonFromAnalysis } from '@/src/db/client'
-import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import type { LessonJSON } from '@/src/types'
 
@@ -20,5 +20,6 @@ export async function startDemoSession(
   saveLesson(lesson)
   setLessonSectionIndex(0)
   await upsertLessonFromAnalysis(lesson)
-  router.push(sessionEntryHref(useSessionPrefsStore.getState().skipTuneStep) as Href)
+  const href = await sessionEntryHrefWithMoodCheck(useSessionPrefsStore.getState().skipTuneStep)
+  router.push(href as Href)
 }
