@@ -1,6 +1,7 @@
 import { AudioManager, AudioRecorder } from 'react-native-audio-api'
 
 import type { PitchReading, PitchStream } from '@/src/pitch/pitchTypes'
+import { globalAudioManager } from '../audio/GlobalAudioManager'
 
 export type { PitchReading, PitchStream }
 
@@ -82,6 +83,7 @@ class PitchStreamNative implements PitchStream {
   private skipCallbacks = 0
   private callbackCount = 0
   private emittedPitchCount = 0
+  private streamInstanceId = `pitch-stream-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
   isRunning(): boolean {
     return this.running
@@ -176,6 +178,18 @@ class PitchStreamNative implements PitchStream {
 
     this.running = true
     console.log('[PitchStream.native] microphone stream started')
+
+    // Register pitch stream with GlobalAudioManager
+    globalAudioManager.registerInstance(
+      this.streamInstanceId,
+      'audio-api-recorder',
+      this.recorder,
+      async () => {
+        if (this.running) {
+          await this.stop()
+        }
+      },
+    )
   }
 
   async stop(): Promise<void> {
@@ -195,6 +209,9 @@ class PitchStreamNative implements PitchStream {
     this.recorder.clearOnAudioReady()
     await AudioManager.setAudioSessionActivity(false)
     console.log('[PitchStream.native] resources released')
+
+    // Unregister from GlobalAudioManager
+    void globalAudioManager.unregisterInstance(this.streamInstanceId)
   }
 }
 

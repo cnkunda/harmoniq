@@ -1,6 +1,7 @@
 import { Audio } from 'expo-av'
 
 import type { BeatMetronome, BeatMetronomeParams } from './beatMetronome.types'
+import { globalAudioManager } from './GlobalAudioManager'
 import { beatPeriodSeconds, collectClickTimesInRange, type MetronomeSubdivision } from './metronomeShared'
 
 /**
@@ -16,13 +17,11 @@ const NATIVE_WINDOW_AFTER = 0.08
 
 let hiSound: Audio.Sound | null = null
 let loSound: Audio.Sound | null = null
+let metronomeInstanceId = `metronome-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
 async function ensureSounds(): Promise<{ hi: Audio.Sound; lo: Audio.Sound }> {
   if (hiSound && loSound) return { hi: hiSound, lo: loSound }
-  await Audio.setAudioModeAsync({
-    playsInSilentModeIOS: true,
-    allowsRecordingIOS: false,
-  })
+  await globalAudioManager.resetToPlaybackMode()
   const [hi, lo] = await Promise.all([
     Audio.Sound.createAsync(require('../../assets/audio/click-hi.wav'), {
       shouldPlay: false,
@@ -37,6 +36,20 @@ async function ensureSounds(): Promise<{ hi: Audio.Sound; lo: Audio.Sound }> {
   ])
   hiSound = hi.sound
   loSound = lo.sound
+
+  // Register metronome sounds with GlobalAudioManager
+  globalAudioManager.registerInstance(
+    metronomeInstanceId,
+    'expo-sound',
+    { hi: hiSound, lo: loSound },
+    async () => {
+      if (hiSound) await hiSound.unloadAsync().catch(() => {})
+      if (loSound) await loSound.unloadAsync().catch(() => {})
+      hiSound = null
+      loSound = null
+    },
+  )
+
   return { hi: hiSound, lo: loSound }
 }
 

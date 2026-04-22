@@ -83,7 +83,7 @@ export function createSpotifyPlaybackBridge(options: SpotifyPlaybackBridgeOption
     if (drift >= 1100) {
       tab.seekTo(progressMs)
     }
-    tab.syncPlaybackTimelineMs(progressMs)
+    tab.syncPlaybackTimelineMs(progressMs + 50)
     lastProgressMs = progressMs
   }
 

@@ -12,26 +12,23 @@ import {
   Play,
   Plus,
 } from 'lucide-react-native'
-import * as Linking from 'expo-linking'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { RecentProgress } from '@/components/RecentProgress'
+import { toast } from '@/components/ToastConfig'
+import { TodaysPlanCard, TodaysPlanCardLoading } from '@/components/TodaysPlanCard'
+import { WeakAreaPulse } from '@/components/WeakAreaPulse'
 import {
   buildPlayerProfileFromSkillNodes,
   generatePracticePlan,
   loadLearningContextFromPrefs,
   parseTasteProfileJson,
 } from '@/src/api/analyze'
-import { AnimatedPressable } from '@/components/AnimatedPressable'
-import { RecentProgress } from '@/components/RecentProgress'
-import { TodaysPlanCard, TodaysPlanCardLoading } from '@/components/TodaysPlanCard'
-import { WeakAreaPulse } from '@/components/WeakAreaPulse'
+import colors from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
-import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
-import { usePlanStore } from '@/src/stores/planStore'
-import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
-import { useSkillStore } from '@/src/stores/skillStore'
 import {
   getAllSkillNodes,
   getAppPref,
@@ -43,14 +40,17 @@ import {
   listSessionsJournal,
 } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_MOOD, PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
-import type { HomeSuggestion, PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
-import { startPracticePlanFromHome } from '@/src/session/practicePlanNavigation'
-import { useLessonStore } from '@/src/stores/lessonStore'
-import type { PracticePlanPayload } from '@/src/types'
-import colors from '@/src/constants/colors'
+import type { HomeSuggestion, LessonListRow, PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
 import { startDemoSession } from '@/src/demo/startDemoSession'
+import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
+import { startPracticePlanFromHome } from '@/src/session/practicePlanNavigation'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
+import { useLessonStore } from '@/src/stores/lessonStore'
+import { usePlanStore } from '@/src/stores/planStore'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
+import { useSkillStore } from '@/src/stores/skillStore'
 import { spotifyTasteLooksPresent } from '@/src/taste/tasteQuizGate'
+import type { PracticePlanPayload } from '@/src/types'
 import { lessonFromSavedLick } from '@/src/utils/lessonFromSavedLick'
 
 function getGreeting(name?: string | null): string {
@@ -100,6 +100,7 @@ export default function HomeScreen() {
   const lesson = useLessonStore((s) => s.lesson)
   const [suggestion, setSuggestion] = useState<HomeSuggestion | null>(null)
   const [sessionsLog, setSessionsLog] = useState<SessionJournalRow[]>([])
+  const [lessons, setLessons] = useState<LessonListRow[]>([])
   const [latestPlanCompletion, setLatestPlanCompletion] = useState<PracticePlanCompletionRow | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [drillLatestError, setDrillLatestError] = useState<string | null>(null)
@@ -145,6 +146,7 @@ export default function HomeScreen() {
       .then(async ([homeSuggestion, sessions, lessons, skillRows, tasteRaw, spotifyRaw, planCompletions]) => {
         setSuggestion(homeSuggestion)
         setSessionsLog(sessions)
+        setLessons(lessons)
         setLatestPlanCompletion(planCompletions[0] ?? null)
         setLoadError(false)
         setSpotifyLinked(spotifyTasteLooksPresent(spotifyRaw))
@@ -267,38 +269,37 @@ export default function HomeScreen() {
       dateLabel: string
       open: () => void
     }> = []
-    const analyzedTitle = lesson?.song_title?.trim()
-    if (analyzedTitle) {
-      const duplicate = sessionsLog
-        .slice(0, 2)
-        .some((s) => s.song_title?.trim().toLowerCase() === analyzedTitle.toLowerCase())
-      if (!duplicate) {
-        out.push({
-          id: `analysis-${lesson?.job_id ?? analyzedTitle}`,
-          title: analyzedTitle,
-          focus: toTitleCase(lesson?.style_label?.trim() || 'Ready to start session'),
-          dateLabel: relativeDateLabel(
-            (lesson as Record<string, unknown> | null)?.updated_at ??
-              (lesson as Record<string, unknown> | null)?.created_at ??
-              (lesson as Record<string, unknown> | null)?.analyzed_at ??
-              (lesson as Record<string, unknown> | null)?.generated_at,
-          ),
-          open: goSession,
-        })
-      }
-    }
-    for (const session of sessionsLog.slice(0, 2)) {
-      if (out.length >= 2) break
+    const sortedLessons = [...lessons].sort((a, b) => {
+      const dateA = new Date(a.analyzed_at).getTime()
+      const dateB = new Date(b.analyzed_at).getTime()
+      return dateB - dateA
+    })
+    for (const lessonRow of sortedLessons.slice(0, 3)) {
+      if (!lessonRow.song_title?.trim()) continue
       out.push({
-        id: session.id,
-        title: session.song_title?.trim() ? session.song_title : 'Practice session',
-        focus: toTitleCase(focusLabelFromNodes(session.nodes_targeted)),
-        dateLabel: relativeDateLabel(session.date),
-        open: () => router.push({ pathname: '/review-archive/[sessionId]', params: { sessionId: session.id } }),
+        id: lessonRow.job_id,
+        title: lessonRow.song_title,
+        focus: lessonRow.artist?.trim() ? `${lessonRow.artist} · ${lessonRow.section_count} section${lessonRow.section_count !== 1 ? 's' : ''}` : `${lessonRow.section_count} section${lessonRow.section_count !== 1 ? 's' : ''}`,
+        dateLabel: relativeDateLabel(lessonRow.analyzed_at),
+        open: async () => {
+          try {
+            const fullLesson = await getLessonByJobId(lessonRow.job_id)
+            if (!fullLesson) {
+              toast.error('Lesson not found. Try opening from Library.')
+              return
+            }
+            saveLesson(fullLesson)
+            setLessonSectionIndex(0)
+            const skipTune = useSessionPrefsStore.getState().skipTuneStep
+            router.replace(skipTune ? '/session/orient' : '/session/tune')
+          } catch {
+            toast.error('Could not open lesson.')
+          }
+        },
       })
     }
     return out
-  }, [goSession, lesson?.job_id, lesson?.song_title, lesson?.style_label, sessionsLog, router])
+  }, [lessons, router, saveLesson, setLessonSectionIndex])
 
   const drillLatestSavedLick = useCallback(async () => {
     if (suggestion?.kind !== 'library_saved') return

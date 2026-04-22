@@ -10,6 +10,17 @@ Single reference for release and pipeline gates: stem quality, pitch kill-switch
 
 ---
 
+## STOP — Phase 1 MVP gate
+
+Do NOT declare Phase 1 complete if ANY of the following are true:
+
+1. BUG-01 (infinite analyze poll) is unresolved — confirm poll stops within one interval of `status=complete` on a real song analysis
+2. BUG-02 (Jam Mode AlphaTab crash) is unresolved — confirm Jam Mode loads without error on the happy path (bundled offline loop, no GEMINI_API_KEY)
+3. POST /score returns empty or mock `waveform_comparison` — Review phrasing visualizer must show real user vs reference waveforms
+4. QA §17 pitch kill-switch has unchecked acceptance rows — One acceptance row remains open — requires two reviewers or reviewer + device recording to close
+
+---
+
 ## Purpose and scope
 
 | When | What to run |

@@ -1,4 +1,3 @@
-import { Buffer } from 'buffer'
 import { Audio } from 'expo-av'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -7,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
+import { TabViewport } from '@/components/TabViewport'
 import { WoodGradient } from '@/components/WoodGradient'
 import { logFirstAudioPlay } from '@/src/analytics/firstAudioPlay'
 import { submitScore } from '@/src/api/analyze'
@@ -19,13 +19,10 @@ import { mapMicPermissionDenied, mapScoreFlowError, toErrorBannerProps } from '@
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { PLACEMENT_PHRASES, PLACEMENT_SKILL_NODES } from '@/src/onboarding/placementPhrases'
 import { useOnboardingPlacementStore } from '@/src/stores/onboardingPlacementStore'
+import { bytesToBase64 } from '@/src/utils/bytesToBase64'
 
 /** Same bundled asset as jam/backing constants — avoids a broken `../../../../` path from `app/onboarding/phrase/`. */
 const PLACEMENT_REFERENCE_SOURCE = BACKING_TRACKS.find((t) => t.id === 'am-blues-70')!.source
-
-function bytesToBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString('base64')
-}
 
 function parsePhraseIndex(raw: string | string[] | undefined): number {
   const s = Array.isArray(raw) ? raw[0] : raw
@@ -203,6 +200,16 @@ export default function OnboardingPhraseScreen() {
         </Text>
         <Text className="mt-2 text-center font-serif text-2xl text-cream">{phrase.title}</Text>
         <Text className="mt-3 text-center font-sans text-sm leading-6 text-muted-brown">{phrase.instruction}</Text>
+
+        <View className="mt-4 w-full h-[180px] rounded-xl border border-wood-600/50 bg-ivory overflow-hidden">
+          <TabViewport
+            gp5Base64={phrase.gp5Base64}
+            audioSrc={null}
+            renderPreset="study"
+            style={{ flex: 1 }}
+            readOnlyFollowMode={true}
+          />
+        </View>
 
         <View className="mt-6 w-full gap-3">
           <Pressable

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 
 import { ApiError, pollAnalyzeJob, pollCoachHydration, submitAnalyzeJob } from '@/src/api/analyze'
 import { clearCachedLessonIfWeb, persistCachedLessonIfWeb } from '@/src/db/persistCachedLesson'
+import { getNextFocusArea } from '@/src/session'
 import type { AnalyzeJobStatus, LessonJSON } from '@/src/types'
 
 /** Idle / in-flight UI states plus server-reported job status from `AnalyzeJob`. */
@@ -69,7 +70,8 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
     const gen = ++pollGeneration
     set({ error: null, status: 'submitting', lesson: null })
     try {
-      const jobId = await submitAnalyzeJob({ youtube_url: url })
+      const focus_area = await getNextFocusArea()
+      const jobId = await submitAnalyzeJob({ youtube_url: url, focus_area })
       if (gen !== pollGeneration) return
       set({ jobId, status: 'processing' })
       const lesson = await pollAnalyzeJob(jobId, (job) => {
@@ -119,7 +121,8 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
     const gen = ++pollGeneration
     set({ error: null, status: 'submitting', lesson: null })
     try {
-      const jobId = await submitAnalyzeJob({ file, filename })
+      const focus_area = await getNextFocusArea()
+      const jobId = await submitAnalyzeJob({ file, filename, focus_area })
       if (gen !== pollGeneration) return
       set({ jobId, status: 'processing' })
       const lesson = await pollAnalyzeJob(jobId, (job) => {

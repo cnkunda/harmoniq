@@ -88,6 +88,8 @@ export type SkillNodeRow = {
   sm2_repetitions: number
   /** JSON array (max 3) of raw session accuracy samples for technique mutation rolling weak-area (commit 63). */
   technique_roll_json?: string | null
+  /** Schema version for tracking skill_nodes structure changes (commit 88). */
+  schema_version?: number
 }
 
 /** Persisted slice after pure skill mutation reducer (commit 63). */

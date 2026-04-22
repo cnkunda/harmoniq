@@ -1,8 +1,9 @@
 import { Audio } from 'expo-av'
-import { Platform } from 'react-native'
 import { useEffect, useRef } from 'react'
+import { Platform } from 'react-native'
 
 import { GHOST_MIX_LINEAR } from '@/src/audio/ghostConstants'
+import { globalAudioManager } from './GlobalAudioManager'
 
 /**
  * Native: parallel ghost clip synced to stem mixer transport.
@@ -19,6 +20,7 @@ export function useGhostStemSidecar(opts: {
   mixerReady: boolean
 }): void {
   const soundRef = useRef<Audio.Sound | null>(null)
+  const ghostInstanceId = useRef<string | null>(null)
 
   useEffect(() => {
     if (Platform.OS === 'web') return
@@ -34,7 +36,7 @@ export function useGhostStemSidecar(opts: {
 
     const boot = async () => {
       try {
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, allowsRecordingIOS: false })
+        await globalAudioManager.resetToPlaybackMode()
         const { sound } = await Audio.Sound.createAsync(
           { uri },
           { shouldPlay: false, isLooping: false, volume: GHOST_MIX_LINEAR },
@@ -44,6 +46,18 @@ export function useGhostStemSidecar(opts: {
           return
         }
         soundRef.current = sound
+
+        // Register ghost sound with GlobalAudioManager
+        const instanceId = `ghost-stem-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+        ghostInstanceId.current = instanceId
+        globalAudioManager.registerInstance(
+          instanceId,
+          'expo-sound',
+          sound,
+          async () => {
+            await sound.unloadAsync().catch(() => {})
+          },
+        )
       } catch (e) {
         console.warn('[ghost] native sidecar load failed', e)
       }
@@ -55,6 +69,12 @@ export function useGhostStemSidecar(opts: {
       cancelled = true
       void soundRef.current?.unloadAsync().catch(() => {})
       soundRef.current = null
+
+      // Unregister from GlobalAudioManager
+      if (ghostInstanceId.current) {
+        void globalAudioManager.unregisterInstance(ghostInstanceId.current)
+        ghostInstanceId.current = null
+      }
     }
   }, [opts.ghostFileUri, opts.mixerReady])
 

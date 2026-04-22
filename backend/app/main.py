@@ -310,8 +310,26 @@ async def theory_annotation(req: TheoryAnnotationRequest) -> TheoryAnnotationRes
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # per README: max 50MB
 
+# Allowed MIME types for audio uploads
+ALLOWED_AUDIO_MIME_TYPES = {
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/wave",
+    "audio/x-wav",
+    "audio/ogg",
+    "audio/webm",
+    "audio/mp4",
+    "audio/x-m4a",
+    "audio/m4a",
+}
+
 
 class UploadTooLargeError(ValueError):
+    pass
+
+
+class UnsupportedMimeTypeError(ValueError):
     pass
 
 
@@ -322,7 +340,12 @@ async def _save_uploadfile_limited(
     max_bytes: int,
     chunk_bytes: int = 1024 * 1024,
 ) -> None:
-    """Stream UploadFile to disk while enforcing a hard byte limit."""
+    """Stream UploadFile to disk while enforcing a hard byte limit and MIME type validation."""
+    # Validate MIME type
+    content_type = upload.content_type or ""
+    if content_type and content_type.lower() not in ALLOWED_AUDIO_MIME_TYPES:
+        raise UnsupportedMimeTypeError(f"Unsupported MIME type: {content_type}")
+
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     total = 0
     with dest_path.open("wb") as f:
@@ -461,6 +484,10 @@ async def transcription_prepare(request: Request) -> TranscriptionPrepareRespons
         )
     except HTTPException:
         raise
+    except UploadTooLargeError:
+        raise HTTPException(status_code=413, detail="Upload exceeds max allowed size (50MB).") from None
+    except UnsupportedMimeTypeError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from None
     except (AudioPreparationError, DemucsEngineError, BeatGridComputationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception:
@@ -544,6 +571,15 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
             error_code=ANALYZE_ERROR_ANALYSIS_FAILED,
         )
         return AnalyzeJobCreated(job_id=job_id)
+    except UnsupportedMimeTypeError:
+        logger.warning("POST /analyze unsupported MIME type job_id=%s", job_id)
+        jobs[job_id] = JobStatus(
+            status="failed",
+            result=None,
+            error="Unsupported file type. Please upload an audio file (MP3, WAV, OGG, WEBM, M4A).",
+            error_code=ANALYZE_ERROR_ANALYSIS_FAILED,
+        )
+        return AnalyzeJobCreated(job_id=job_id)
 
     except Exception:
         logger.exception("POST /analyze failed to parse input job_id=%s", job_id)
@@ -580,8 +616,8 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
 async def analyze_status(job_id: str) -> JobStatus:
     job = jobs.get(job_id)
     if job is None:
-        logger.warning("GET /analyze/%s — unknown job_id (404)", job_id)
-        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
+        logger.info("GET /analyze/%s — job not yet in store, returning queued", job_id)
+        return JobStatus(status="queued", result=None, error=None, error_code=None)
     logger.info("GET /analyze/%s status=%s", job_id, job.status)
     return job
 

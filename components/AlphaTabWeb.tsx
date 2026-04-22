@@ -30,6 +30,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         highlightScaleDegrees: () => {},
         clearScaleHighlight: () => {},
         scrollMasterBarIntoView: () => {},
+        smartScrollSeekToBar: () => {},
         getSongDetails: async () => null,
       }),
       [],

@@ -1,6 +1,6 @@
 /** Shared domain types — expanded in later commits; shapes match DESIGN_SYSTEM.md / backend schemas. */
 
-export type AnalyzeJobStatus = 'processing' | 'complete' | 'failed'
+export type AnalyzeJobStatus = 'queued' | 'processing' | 'complete' | 'failed'
 
 /** Lesson payload from GET /analyze/{job_id} when status is complete — matches `backend/app/schemas.py` with extras allowed. */
 /** Optional payload for POST /analyze — matches `backend/app/schemas.py` `PlayerProfile`. */
@@ -16,6 +16,7 @@ export interface PlayerProfilePayload {
   skill_nodes?: Array<{ id: string; label?: string | null; score?: number }>
   taste_profile?: TasteProfilePayload
   learning_context?: LearningContextPayload
+  focus_area?: 'timing' | 'vibrato' | 'dynamics' | 'phrasing' | 'bending' | 'rhythm' | 'expression'
 }
 
 export interface CurriculumSuggestion {

@@ -127,11 +127,18 @@ def _score_pitch(y: np.ndarray, sr: int, section: dict[str, Any]) -> tuple[float
 
 
 def _score_timing(
-    y: np.ndarray, sr: int, section: dict[str, Any]
+    y: np.ndarray, sr: int, section: dict[str, Any], solo_notes: Any = None
 ) -> tuple[float, float, list[float], float, float]:
     onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=256)
     onset_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=256, units="frames")
     onset_times = librosa.frames_to_time(onset_frames, sr=sr, hop_length=256)
+    
+    # Use MIDI note events as reference timing if available
+    reference_onsets = None
+    if solo_notes and hasattr(solo_notes, 'notes') and solo_notes.notes:
+        reference_onsets = np.array([note.start_time for note in solo_notes.notes])
+        logger.info("score.timing using %d MIDI note events as reference", len(reference_onsets))
+    
     if onset_times.size < 2:
         return 0.25, 0.25, [], 0.0, 0.0
 
@@ -142,16 +149,36 @@ def _score_timing(
         tempo = float(est_tempo if np.isfinite(est_tempo) and est_tempo > 0 else 90.0)
     beat_sec = 60.0 / float(tempo)
 
-    nearest_grid = np.round(iois / beat_sec) * beat_sec
-    residual = iois - nearest_grid
+    # If MIDI reference available, compare user onsets to nearest MIDI note onsets
+    if reference_onsets is not None and reference_onsets.size > 0:
+        # For each user onset, find nearest MIDI note onset and compute delta
+        deltas = []
+        for user_onset in onset_times[:32]:
+            nearest_midi = reference_onsets[np.argmin(np.abs(reference_onsets - user_onset))]
+            delta = user_onset - nearest_midi
+            clipped = float(np.clip(delta, -MAX_ABS_NOTE_DELTA_SECONDS, MAX_ABS_NOTE_DELTA_SECONDS))
+            deltas.append(round(clipped, 4))
+        
+        if deltas:
+            residual = np.array(deltas)
+        else:
+            residual = np.array([])
+    else:
+        # Fallback to beat grid comparison
+        nearest_grid = np.round(iois / beat_sec) * beat_sec
+        residual = iois - nearest_grid
+        clipped = np.clip(residual, -MAX_ABS_NOTE_DELTA_SECONDS, MAX_ABS_NOTE_DELTA_SECONDS)
+        deltas = [float(round(v, 4)) for v in clipped[:32].tolist()]
 
-    abs_resid = np.abs(residual)
-    phrasing_score = clamp01(1.0 - float(np.mean(abs_resid)) / max(0.08, beat_sec * 0.35))
-    rushing_ratio = float(np.mean(residual < 0))
+    abs_resid = np.abs(residual) if residual.size > 0 else np.array([])
+    phrasing_score = clamp01(1.0 - float(np.mean(abs_resid)) / max(0.08, beat_sec * 0.35)) if abs_resid.size > 0 else 0.25
+    rushing_ratio = float(np.mean(residual < 0)) if residual.size > 0 else 0.5
     rushing_score = clamp01(1.0 - rushing_ratio)
 
-    clipped = np.clip(residual, -MAX_ABS_NOTE_DELTA_SECONDS, MAX_ABS_NOTE_DELTA_SECONDS)
-    deltas = [float(round(v, 4)) for v in clipped[:32].tolist()]
+    if not deltas:
+        clipped = np.clip(residual, -MAX_ABS_NOTE_DELTA_SECONDS, MAX_ABS_NOTE_DELTA_SECONDS) if residual.size > 0 else np.array([])
+        deltas = [float(round(v, 4)) for v in clipped[:32].tolist()]
+    
     p50_ms = float(np.quantile(abs_resid, 0.5) * 1000.0) if abs_resid.size else 0.0
     p95_ms = float(np.quantile(abs_resid, 0.95) * 1000.0) if abs_resid.size else 0.0
     return phrasing_score, rushing_score, deltas, p50_ms, p95_ms
@@ -176,7 +203,37 @@ def _waveform_preview_b64(y: np.ndarray, sr: int) -> str:
     return _wav_b64_from_float(preview, sr)
 
 
-def _reference_click_b64(section: dict[str, Any], duration_s: float, sr: int) -> str:
+def _reference_click_b64(section: dict[str, Any], duration_s: float, sr: int, solo_notes: Any = None) -> str:
+    # Generate reference waveform from MIDI notes if available, otherwise use beat grid clicks
+    if solo_notes and hasattr(solo_notes, 'notes') and solo_notes.notes:
+        n = max(1, int(sr * min(duration_s, 8.0)))
+        ref = np.zeros(n, dtype=np.float32)
+        
+        for note in solo_notes.notes:
+            if not hasattr(note, 'start_time') or not hasattr(note, 'pitch') or not hasattr(note, 'duration'):
+                continue
+            start_sample = int(float(note.start_time) * sr)
+            if start_sample < 0 or start_sample >= n:
+                continue
+            
+            duration_samples = int(float(note.duration) * sr)
+            end_sample = min(n, start_sample + duration_samples)
+            
+            # Synthesize a simple tone at the MIDI pitch
+            if hasattr(note, 'pitch'):
+                midi_pitch = int(note.pitch)
+                frequency = 440.0 * (2.0 ** ((midi_pitch - 69) / 12.0))
+                t = np.arange(end_sample - start_sample) / sr
+                tone = 0.3 * np.sin(2 * np.pi * frequency * t)
+                
+                # Apply simple envelope
+                envelope = np.exp(-3.0 * t / (duration_samples / sr if duration_samples > 0 else 0.1))
+                ref[start_sample:end_sample] += tone * envelope.astype(np.float32)
+        
+        logger.info("score.reference generated waveform from %d MIDI notes", len(solo_notes.notes))
+        return _wav_b64_from_float(ref, sr)
+    
+    # Fallback to beat grid clicks
     beat_grid = section.get("beat_grid")
     if not isinstance(beat_grid, list) or len(beat_grid) == 0:
         return ""
@@ -242,7 +299,7 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
     section = payload.section if isinstance(payload.section, dict) else {}
 
     pitch_accuracy, bend_error_cents, voiced_ratio, harmonic_ratio, signal_quality = _score_pitch(y, sr, section)
-    phrasing_score, rushing_score, note_duration_deltas, timing_p50_ms, timing_p95_ms = _score_timing(y, sr, section)
+    phrasing_score, rushing_score, note_duration_deltas, timing_p50_ms, timing_p95_ms = _score_timing(y, sr, section, payload.solo_notes)
     reliability_flags: list[str] = []
     rms = float(np.sqrt(np.mean(np.square(y)))) if y.size else 0.0
     if rms < MIN_VALID_RMS:
@@ -292,7 +349,7 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
         node_scores=node_scores,
         waveform_comparison=ScoreWaveformComparison(
             user_wav_base64=_waveform_preview_b64(y, sr),
-            reference_wav_base64=_reference_click_b64(section, duration_s=len(y) / sr, sr=sr),
+            reference_wav_base64=_reference_click_b64(section, duration_s=len(y) / sr, sr=sr, solo_notes=payload.solo_notes),
         ),
         diagnostics=ScoreDiagnostics(
             signal_quality=round(signal_quality, 3),

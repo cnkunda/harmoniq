@@ -1,10 +1,18 @@
 import * as SQLite from 'expo-sqlite'
 
+import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
+import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
+import { logMigration, validateSessionsPreservation, validateSkillNodesPreservation } from '@/src/db/migrations'
 import {
     DB_NAME,
     DEFAULT_SKILL_NODES,
     MIGRATION_TABLE_SQL,
     MIGRATION_V1,
+    MIGRATION_V10_PRACTICE_PLAN_COMPLETIONS,
+    MIGRATION_V11_SESSION_GHOST,
+    MIGRATION_V12_SESSION_GHOST_MIME,
+    MIGRATION_V13_SESSION_MOOD,
+    MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION,
     MIGRATION_V3_APP_PREFS,
     MIGRATION_V4_SESSIONS_REVIEW,
     MIGRATION_V5_LICKS_STEMS_JSON,
@@ -12,17 +20,23 @@ import {
     MIGRATION_V7_JAM_SNAPSHOT_RELIABILITY,
     MIGRATION_V8_LESSONS,
     MIGRATION_V9_SKILL_TECHNIQUE_ROLL,
-    MIGRATION_V10_PRACTICE_PLAN_COMPLETIONS,
-    MIGRATION_V11_SESSION_GHOST,
-    MIGRATION_V12_SESSION_GHOST_MIME,
-    MIGRATION_V13_SESSION_MOOD,
     PREF_EXPERIENCE_LEVEL,
     PREF_ONBOARDING_COMPLETE,
     PREF_TASTE_PROFILE_JSON,
+    ROLLBACK_V10_PRACTICE_PLAN_COMPLETIONS,
+    ROLLBACK_V11_SESSION_GHOST,
+    ROLLBACK_V12_SESSION_GHOST_MIME,
+    ROLLBACK_V13_SESSION_MOOD,
+    ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION,
+    ROLLBACK_V4_SESSIONS_REVIEW,
+    ROLLBACK_V5_LICKS_STEMS_JSON,
+    ROLLBACK_V6_JAM_SNAPSHOT_CONTEXT,
+    ROLLBACK_V7_JAM_SNAPSHOT_RELIABILITY,
+    ROLLBACK_V8_LESSONS,
+    ROLLBACK_V9_SKILL_TECHNIQUE_ROLL
 } from '@/src/db/schema'
-import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
-import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
 import type {
+    GhostReferenceRow,
     HomeSuggestion,
     JamSnapshotInsertInput,
     JamSnapshotRow,
@@ -35,15 +49,14 @@ import type {
     PracticePlanCompletionRow,
     ReviewSkillUpdateInput,
     SessionArchiveRow,
-    GhostReferenceRow,
     SessionInsertInput,
     SessionJournalRow,
     SkillNodeRow,
     SkillSessionMutationRow,
 } from '@/src/db/types'
-import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
+import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 
 type DbHandle = Awaited<ReturnType<typeof SQLite.openDatabaseAsync>>
 
@@ -95,37 +108,75 @@ async function applyMigrations(): Promise<void> {
   await db.execAsync(MIGRATION_TABLE_SQL)
   const row = await db.getFirstAsync<{ version: number }>('SELECT MAX(version) as version FROM schema_migrations')
   const current = row?.version ?? 0
+  
+  // Helper to apply migration with rollback support
+  async function applyMigrationWithRollback(
+    version: number,
+    upSql: string | string[],
+    downSql: string | readonly string[],
+    validateBefore?: () => Promise<{ valid: boolean; error?: string }>,
+  ): Promise<void> {
+    try {
+      // Validate before applying if validation function provided
+      if (validateBefore) {
+        const validation = await validateBefore()
+        if (!validation.valid) {
+          throw new Error(`Validation failed: ${validation.error}`)
+        }
+      }
+      
+      // Apply migration
+      const statements = Array.isArray(upSql) ? upSql : [upSql]
+      for (const stmt of statements) {
+        await db.execAsync(stmt)
+      }
+      
+      // Record migration
+      await db.runAsync(
+        'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+        version,
+        new Date().toISOString(),
+      )
+      
+      logMigration({ version, success: true }, 'native')
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e)
+      console.error(`[db/native] Migration v${version} failed, attempting rollback: ${error}`)
+      
+      try {
+        const rollbackStatements = Array.isArray(downSql) ? downSql : [downSql]
+        for (const stmt of rollbackStatements) {
+          await db.execAsync(stmt)
+        }
+        logMigration({ version, success: false, error, rolledBack: true }, 'native')
+      } catch (rollbackError) {
+        const rbError = rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+        logMigration({ version, success: false, error: `${error}; Rollback failed: ${rbError}` }, 'native')
+      }
+      
+      throw e
+    }
+  }
+  
   if (current < 1) {
-    await db.execAsync(MIGRATION_V1)
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      1,
-      new Date().toISOString(),
-    )
+    await applyMigrationWithRollback(1, MIGRATION_V1, 'DROP TABLE IF EXISTS skill_nodes; DROP TABLE IF EXISTS sessions; DROP TABLE IF EXISTS licks; DROP TABLE IF EXISTS jam_snapshots')
   }
   if (current < 2) {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(skill_nodes)')
     const hasRep = (cols ?? []).some((c) => c.name === 'sm2_repetitions')
     if (!hasRep) {
-      await db.execAsync('ALTER TABLE skill_nodes ADD COLUMN sm2_repetitions INTEGER NOT NULL DEFAULT 0')
+      await applyMigrationWithRollback(2, 'ALTER TABLE skill_nodes ADD COLUMN sm2_repetitions INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE skill_nodes DROP COLUMN sm2_repetitions')
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 2, new Date().toISOString())
     }
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      2,
-      new Date().toISOString(),
-    )
   }
   if (current < 3) {
-    await db.execAsync(MIGRATION_V3_APP_PREFS)
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      3,
-      new Date().toISOString(),
-    )
+    await applyMigrationWithRollback(3, MIGRATION_V3_APP_PREFS, 'DROP TABLE IF EXISTS app_prefs')
   }
   if (current < 4) {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sessions)')
     const names = new Set((cols ?? []).map((c) => c.name))
+    const pendingStatements: string[] = []
     for (const stmt of MIGRATION_V4_SESSIONS_REVIEW) {
       const col = stmt.includes('review_snapshot')
         ? 'review_snapshot'
@@ -133,130 +184,120 @@ async function applyMigrations(): Promise<void> {
           ? 'waveform_user_path'
           : 'waveform_ref_path'
       if (!names.has(col)) {
-        await db.execAsync(stmt)
+        pendingStatements.push(stmt)
         names.add(col)
       }
     }
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      4,
-      new Date().toISOString(),
-    )
+    if (pendingStatements.length > 0) {
+      await applyMigrationWithRollback(4, pendingStatements, ROLLBACK_V4_SESSIONS_REVIEW, async () => validateSessionsPreservation(getSessionCount))
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 4, new Date().toISOString())
+    }
   }
   if (current < 5) {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(licks)')
     const names = new Set((cols ?? []).map((c) => c.name))
     if (!names.has('stems_json')) {
-      await db.execAsync(MIGRATION_V5_LICKS_STEMS_JSON)
+      await applyMigrationWithRollback(5, MIGRATION_V5_LICKS_STEMS_JSON, ROLLBACK_V5_LICKS_STEMS_JSON)
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 5, new Date().toISOString())
     }
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      5,
-      new Date().toISOString(),
-    )
   }
   if (current < 6) {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(jam_snapshots)')
     const names = new Set((cols ?? []).map((c) => c.name))
+    const pendingStatements: string[] = []
     for (const stmt of MIGRATION_V6_JAM_SNAPSHOT_CONTEXT) {
       const col = stmt.split(' ADD COLUMN ')[1]?.split(' ')[0]
       if (!col) continue
       if (!names.has(col)) {
-        await db.execAsync(stmt)
+        pendingStatements.push(stmt)
         names.add(col)
       }
     }
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      6,
-      new Date().toISOString(),
-    )
+    if (pendingStatements.length > 0) {
+      await applyMigrationWithRollback(6, pendingStatements, ROLLBACK_V6_JAM_SNAPSHOT_CONTEXT)
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 6, new Date().toISOString())
+    }
   }
   if (current < 7) {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(jam_snapshots)')
     const names = new Set((cols ?? []).map((c) => c.name))
+    const pendingStatements: string[] = []
     for (const stmt of MIGRATION_V7_JAM_SNAPSHOT_RELIABILITY) {
       const col = stmt.split(' ADD COLUMN ')[1]?.split(' ')[0]
       if (!col) continue
       if (!names.has(col)) {
-        await db.execAsync(stmt)
+        pendingStatements.push(stmt)
         names.add(col)
       }
     }
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      7,
-      new Date().toISOString(),
-    )
+    if (pendingStatements.length > 0) {
+      await applyMigrationWithRollback(7, pendingStatements, ROLLBACK_V7_JAM_SNAPSHOT_RELIABILITY)
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 7, new Date().toISOString())
+    }
   }
   if (current < 8) {
-    await db.execAsync(MIGRATION_V8_LESSONS)
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      8,
-      new Date().toISOString(),
-    )
+    await applyMigrationWithRollback(8, MIGRATION_V8_LESSONS, ROLLBACK_V8_LESSONS)
   }
   if (current < 9) {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(skill_nodes)')
     const names = new Set((cols ?? []).map((c) => c.name))
     if (!names.has('technique_roll_json')) {
-      await db.execAsync(MIGRATION_V9_SKILL_TECHNIQUE_ROLL)
+      await applyMigrationWithRollback(9, MIGRATION_V9_SKILL_TECHNIQUE_ROLL, ROLLBACK_V9_SKILL_TECHNIQUE_ROLL, async () => validateSkillNodesPreservation(getAllSkillNodes))
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 9, new Date().toISOString())
     }
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      9,
-      new Date().toISOString(),
-    )
   }
   if (current < 10) {
-    await db.execAsync(MIGRATION_V10_PRACTICE_PLAN_COMPLETIONS)
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      10,
-      new Date().toISOString(),
-    )
+    await applyMigrationWithRollback(10, MIGRATION_V10_PRACTICE_PLAN_COMPLETIONS, ROLLBACK_V10_PRACTICE_PLAN_COMPLETIONS)
   }
   if (current < 11) {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sessions)')
     const names = new Set((cols ?? []).map((c) => c.name))
+    const pendingStatements: string[] = []
     for (const stmt of MIGRATION_V11_SESSION_GHOST) {
       const col = stmt.split(' ADD COLUMN ')[1]?.split(' ')[0]
       if (!col) continue
       if (!names.has(col)) {
-        await db.execAsync(stmt)
+        pendingStatements.push(stmt)
         names.add(col)
       }
     }
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      11,
-      new Date().toISOString(),
-    )
+    if (pendingStatements.length > 0) {
+      await applyMigrationWithRollback(11, pendingStatements, ROLLBACK_V11_SESSION_GHOST, async () => validateSessionsPreservation(getSessionCount))
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 11, new Date().toISOString())
+    }
   }
   if (current < 12) {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sessions)')
     const names = new Set((cols ?? []).map((c) => c.name))
     if (!names.has('ghost_recording_mime')) {
-      await db.execAsync(MIGRATION_V12_SESSION_GHOST_MIME)
+      await applyMigrationWithRollback(12, MIGRATION_V12_SESSION_GHOST_MIME, ROLLBACK_V12_SESSION_GHOST_MIME)
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 12, new Date().toISOString())
     }
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      12,
-      new Date().toISOString(),
-    )
   }
   if (current < 13) {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sessions)')
     const names = new Set((cols ?? []).map((c) => c.name))
     if (!names.has('mood')) {
-      await db.execAsync(MIGRATION_V13_SESSION_MOOD)
+      await applyMigrationWithRollback(13, MIGRATION_V13_SESSION_MOOD, ROLLBACK_V13_SESSION_MOOD)
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 13, new Date().toISOString())
     }
-    await db.runAsync(
-      'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
-      13,
-      new Date().toISOString(),
-    )
+  }
+  if (current < 14) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(skill_nodes)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    if (!names.has('schema_version')) {
+      await applyMigrationWithRollback(14, MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION, ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION, async () => validateSkillNodesPreservation(getAllSkillNodes))
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 14, new Date().toISOString())
+    }
   }
   for (const n of DEFAULT_SKILL_NODES) {
     await db.runAsync(

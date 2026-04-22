@@ -118,7 +118,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         syncPlaybackTimelineMs: (positionMs: number) => {
           postInbound({
             type: 'syncTimelineMs',
-            positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs) : 0,
+            positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs + 50) : 0,
           })
         },
         setStemPlaybackActive: (active: boolean) => {
@@ -176,6 +176,13 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           postInbound({
             type: 'scrollMasterBarIntoView',
             barIndex: Math.max(0, Math.floor(barIndex)),
+          })
+        },
+        smartScrollSeekToBar: (positionSec: number, barTimestamps: number[]) => {
+          postInbound({
+            type: 'smartScrollSeekToBar',
+            positionSec: Number.isFinite(positionSec) ? Math.max(0, positionSec) : 0,
+            barTimestamps: Array.isArray(barTimestamps) ? barTimestamps : [],
           })
         },
         getSongDetails: () =>
@@ -318,6 +325,13 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         }
         if (msg.type === 'diagPong') {
           useAlphaTabRuntimeDiagStore.getState().setBridgeLatencyMs(Date.now() - msg.t0)
+          return
+        }
+        if (msg.type === 'smartScrollSeekResult') {
+          // Log seek timing for diagnostics (optional)
+          if (msg.estimatedSeekMs > 50) {
+            console.warn('[AlphaTabWebView] SmartScroll seek exceeded 50ms:', msg.estimatedSeekMs)
+          }
           return
         }
         if (msg.type === 'soundFontLoad') {

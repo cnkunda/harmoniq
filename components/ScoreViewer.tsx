@@ -117,7 +117,7 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
         syncPlaybackTimelineMs: (positionMs: number) => {
           postInbound({
             type: 'syncTimelineMs',
-            positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs) : 0,
+            positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs + 50) : 0,
           })
         },
         setStemPlaybackActive: (active: boolean) => {
@@ -175,6 +175,13 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
           postInbound({
             type: 'scrollMasterBarIntoView',
             barIndex: Math.max(0, Math.floor(barIndex)),
+          })
+        },
+        smartScrollSeekToBar: (positionSec: number, barTimestamps: number[]) => {
+          postInbound({
+            type: 'smartScrollSeekToBar',
+            positionSec: Number.isFinite(positionSec) ? Math.max(0, positionSec) : 0,
+            barTimestamps: Array.isArray(barTimestamps) ? barTimestamps : [],
           })
         },
         getSongDetails: () =>

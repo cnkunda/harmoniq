@@ -1,10 +1,10 @@
-import { useRouter } from 'expo-router'
 import { Buffer } from 'buffer'
 import * as FileSystem from 'expo-file-system/legacy'
+import { useRouter } from 'expo-router'
 import * as Sharing from 'expo-sharing'
+import * as WebBrowser from 'expo-web-browser'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Platform, Pressable, Text, View } from 'react-native'
-import * as WebBrowser from 'expo-web-browser'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
@@ -15,48 +15,45 @@ import { SessionPitchReview } from '@/components/SessionPitchReview'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
 import { ApiError, submitExportJob, submitScore } from '@/src/api/analyze'
+import { isHarmoniqSkillMutationSkipped } from '@/src/config'
+import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import {
+    applyReviewSkillUpdates,
+    getAllSkillNodes,
+    getAppPref,
+    getLatestGhostReference,
+    getSessionCount,
+    insertLickRow,
+    insertSessionRow,
+} from '@/src/db/client'
+import { PREF_MOOD_CHECK_LAST_MOOD } from '@/src/db/schema'
+import type { GhostReferenceRow } from '@/src/db/types'
+import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
+import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapScoreFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
-import { isHarmoniqSkillMutationSkipped } from '@/src/config'
-import {
-  applyReviewSkillUpdates,
-  getAppPref,
-  getAllSkillNodes,
-  getLatestGhostReference,
-  getSessionCount,
-  insertLickRow,
-  insertSessionRow,
-} from '@/src/db/client'
-import { PREF_MOOD_CHECK_LAST_MOOD } from '@/src/db/schema'
-import { sessionEntryHref } from '@/src/constants/sessionFlow'
+import { coachReviewFromScoreResult } from '@/src/session/coachReviewFromScoreResult'
+import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhostTake'
 import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
+import {
+    sessionAccuracy01FromScoreResult,
+    timingStability01FromScoreResult,
+} from '@/src/session/scoreProgressSignals'
 import { computeSkillMutations } from '@/src/session/skillMutator'
 import { useDnaStore } from '@/src/stores/dnaStore'
+import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
+import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useSkillStore } from '@/src/stores/skillStore'
-import { useLessonStore } from '@/src/stores/lessonStore'
-import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { useAppStore } from '@/src/stores/useAppStore'
-import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
-import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
-import { BPM_DRIFT_NOTE_MINIMUM } from '@/src/utils/practiceConfig'
-import { firstLessonStemRelPath, serializeLessonStemsJson } from '@/src/utils/lessonAudio'
-import { shareExportedBlob } from '@/src/utils/exportShare'
-import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
-import { coachReviewFromScoreResult } from '@/src/session/coachReviewFromScoreResult'
-import {
-  sessionAccuracy01FromScoreResult,
-  timingStability01FromScoreResult,
-} from '@/src/session/scoreProgressSignals'
-import type { GhostReferenceRow } from '@/src/db/types'
 import type { ScoreResult } from '@/src/types'
-import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhostTake'
-
-function bytesToBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString('base64')
-}
+import { bytesToBase64 } from '@/src/utils/bytesToBase64'
+import { shareExportedBlob } from '@/src/utils/exportShare'
+import { firstLessonStemRelPath, serializeLessonStemsJson } from '@/src/utils/lessonAudio'
+import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
+import { BPM_DRIFT_NOTE_MINIMUM } from '@/src/utils/practiceConfig'
 
 function midiVarLen(value: number): number[] {
   let buffer = value & 0x7f

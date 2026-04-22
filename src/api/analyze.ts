@@ -307,12 +307,16 @@ export async function submitAnalyzeJob(input: {
   file?: Blob
   filename?: string
   player_profile?: PlayerProfilePayload
+  focus_area?: 'timing' | 'vibrato' | 'dynamics' | 'phrasing' | 'bending' | 'rhythm' | 'expression'
 }): Promise<string> {
   if (input.file != null) {
     const form = new FormData()
     form.append('file', input.file, input.filename ?? 'upload.mp3')
     if (input.player_profile != null) {
       form.append('player_profile', JSON.stringify(input.player_profile))
+    }
+    if (input.focus_area != null) {
+      form.append('focus_area', input.focus_area)
     }
     const { job_id } = await request<{ job_id: string }>(
       '/analyze',
@@ -325,9 +329,12 @@ export async function submitAnalyzeJob(input: {
   if (!url) {
     throw new Error('Provide youtube_url or file')
   }
-  const body: { url: string; player_profile?: PlayerProfilePayload } = { url }
+  const body: { url: string; player_profile?: PlayerProfilePayload; focus_area?: string } = { url }
   if (input.player_profile != null) {
     body.player_profile = input.player_profile
+  }
+  if (input.focus_area != null) {
+    body.focus_area = input.focus_area
   }
   const { job_id } = await request<{ job_id: string }>('/analyze', {
     method: 'POST',
@@ -352,12 +359,13 @@ export function pollAnalyzeJob(
 export function pollAnalyzeJobCancelable(
   jobId: string,
   onStatus: (job: AnalyzeJob) => void,
-  intervalMs = 1100,
+  intervalMs = 2000,
   options?: PollAnalyzeOptions,
 ): { promise: Promise<LessonJSON>; cancel: () => void } {
   let settled = false
   let rejectRef: ((reason?: unknown) => void) | null = null
   let stopRef: (() => void) | null = null
+  let pollCount = 0
 
   const promise = new Promise<LessonJSON>((resolve, reject) => {
     rejectRef = reject
@@ -382,6 +390,7 @@ export function pollAnalyzeJobCancelable(
       try {
         const job = await getJobStatus(jobId)
         pollNetworkFailures = 0
+        pollCount += 1
         onStatus(job)
         const wallStart = options?.wallClockStartedAtMs
         const maxWall = options?.maxProcessingWallMs
@@ -414,7 +423,8 @@ export function pollAnalyzeJobCancelable(
           reject(new ApiError(500, job.error ?? 'Analysis failed', code))
           return
         }
-        schedule(intervalMs)
+        const backoffMs = Math.min(5000, intervalMs * Math.pow(1.5, Math.min(pollCount - 1, 4)))
+        schedule(backoffMs)
       } catch (e) {
         if (settled) return
         if (

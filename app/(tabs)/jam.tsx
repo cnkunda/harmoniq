@@ -1,14 +1,14 @@
-import { useRouter } from 'expo-router'
-import { Audio, type AVPlaybackStatus } from 'expo-av'
 import { Asset } from 'expo-asset'
+import { Audio, type AVPlaybackStatus } from 'expo-av'
+import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native'
 import Animated, {
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
+    cancelAnimation,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withTiming,
 } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
@@ -18,35 +18,36 @@ import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { toast } from '@/components/ToastConfig'
 import { WoodGradient } from '@/components/WoodGradient'
-import { logFirstAudioPlay } from '@/src/analytics/firstAudioPlay'
 import {
-  ApiError,
-  buildPlayerProfileFromSkillNodes,
-  loadLearningContextFromPrefs,
-  parseTasteProfileJson,
-  submitJamScore,
+    ApiError,
+    buildPlayerProfileFromSkillNodes,
+    loadLearningContextFromPrefs,
+    parseTasteProfileJson,
+    submitJamScore,
 } from '@/src/api/analyze'
 import { requestJamBacking } from '@/src/api/jam'
-import { mapBrowserMicBlockedForJam, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { BACKING_TRACKS, type BackingTrackId } from '@/src/constants/backingTracks'
-import { getAllSkillNodes, getAppPref, insertJamSnapshotRow, insertPracticePlanCompletionRow } from '@/src/db/client'
-import { useDnaStore } from '@/src/stores/dnaStore'
+import { getAllSkillNodes, getAppPref, getLessonByJobId, insertJamSnapshotRow, insertPracticePlanCompletionRow } from '@/src/db/client'
 import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
+import { mapBrowserMicBlockedForJam, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
+import { prepareJamBackingPlayable } from '@/src/jam/jamBackingPlayable'
 import { coachFromPhraseFeatures } from '@/src/jam/jamPhraseCoach'
 import { phraseToFeatures } from '@/src/jam/jamPhraseFeatures'
 import { createJamPhraseSegmenter } from '@/src/jam/jamPhraseSegmenter'
-import { prepareJamBackingPlayable } from '@/src/jam/jamBackingPlayable'
 import { JAM_REFERENCE_TAB_GP5_BASE64 } from '@/src/jam/jamReferenceTabGp5Base64'
-import { normalizeExternalAudioSrcForTabHarness } from '@/src/jam/normalizeJamTabAudioUri'
 import { pickSuggestedClassicFromWeakAreas } from '@/src/jam/jamSuggestedClassic'
+import { normalizeExternalAudioSrcForTabHarness } from '@/src/jam/normalizeJamTabAudioUri'
 import { createPitchClassHistogram } from '@/src/jam/pitchClassHistogram'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
-import { usePlanStore } from '@/src/stores/planStore'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
+import { useDnaStore } from '@/src/stores/dnaStore'
+import { useLessonStore } from '@/src/stores/lessonStore'
+import { usePlanStore } from '@/src/stores/planStore'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import {
-  buildFretboardShareUrl,
-  readFretboardShareStateFromLocation,
-  type FretboardOverlayMode,
+    buildFretboardShareUrl,
+    readFretboardShareStateFromLocation,
+    type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
 
 const SCALE_UI_INTERVAL_MS = 2000
@@ -122,15 +123,16 @@ export default function JamScreen() {
 
   const currentPlan = usePlanStore((s) => s.currentPlan)
   const currentSlotIndex = usePlanStore((s) => s.currentSlotIndex)
+  const setCurrentSlotIndex = usePlanStore((s) => s.setCurrentSlotIndex)
   const clearPlan = usePlanStore((s) => s.clearPlan)
   /** Final plan step is often `free_jam`; SessionChromeBar only covers `/session/*`, so we surface completion here. */
   const activePlanJamSlot = useMemo(() => {
     const slots = currentPlan?.slots
     if (!slots?.length) return null
-    if (currentSlotIndex !== slots.length - 1) return null
     const slot = slots[currentSlotIndex]
     return slot?.slot_type === 'free_jam' ? slot : null
   }, [currentPlan?.slots, currentSlotIndex])
+  const isFinalPlanStep = currentSlotIndex === (currentPlan?.slots?.length ?? 0) - 1
 
   useEffect(() => {
     const seg = createJamPhraseSegmenter({
@@ -231,7 +233,7 @@ export default function JamScreen() {
   const syncJamTabFromPlaybackStatus = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return
     const tab = jamStemTabRef.current?.getTabSurface()
-    tab?.syncPlaybackTimelineMs(status.positionMillis ?? 0)
+    tab?.syncPlaybackTimelineMs((status.positionMillis ?? 0) + 50)
     const playing = Boolean(status.isPlaying)
     if (playing !== jamLastStemPlayingRef.current) {
       jamLastStemPlayingRef.current = playing
@@ -628,36 +630,87 @@ export default function JamScreen() {
                 {activePlanJamSlot.title?.trim() ? ` · ${activePlanJamSlot.title.trim()}` : ''}
               </Text>
               <Text className="mt-1 font-sans text-xs leading-snug text-muted-brown">
-                This is the last step in your plan. When you are done jamming, complete the session to clear the plan and go
-                home.
+                {isFinalPlanStep
+                  ? 'This is the last step in your plan. When you are done jamming, complete the session to clear the plan and go home.'
+                  : 'When you are done jamming, continue to the next step in your plan.'}
               </Text>
-              <Pressable
-                onPress={() => {
-                  void (async () => {
-                    const plan = currentPlan
-                    const nSlots = plan?.slots?.length ?? 0
-                    if (plan && nSlots > 0) {
-                      try {
-                        await insertPracticePlanCompletionRow({
-                          id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-                          completed_at: new Date().toISOString(),
-                          plan_json: JSON.stringify(plan),
-                        })
-                      } catch (e) {
-                        if (__DEV__) console.warn('[jam] plan completion persist failed', e)
+              {isFinalPlanStep ? (
+                <Pressable
+                  onPress={() => {
+                    void (async () => {
+                      const plan = currentPlan
+                      const nSlots = plan?.slots?.length ?? 0
+                      if (plan && nSlots > 0) {
+                        try {
+                          await insertPracticePlanCompletionRow({
+                            id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                            completed_at: new Date().toISOString(),
+                            plan_json: JSON.stringify(plan),
+                          })
+                        } catch (e) {
+                          if (__DEV__) console.warn('[jam] plan completion persist failed', e)
+                        }
                       }
-                    }
-                    clearPlan()
-                    toast.success('Practice plan complete.')
-                    router.replace('/(tabs)')
-                  })()
-                }}
-                className="mt-3 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
-                accessibilityRole="button"
-                accessibilityLabel="Complete practice session and return home"
-              >
-                <Text className="text-center font-sans-medium text-base text-wood-900">Complete session</Text>
-              </Pressable>
+                      clearPlan()
+                      toast.success('Practice plan complete.')
+                      router.replace('/(tabs)')
+                    })()
+                  }}
+                  className="mt-3 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
+                  accessibilityRole="button"
+                  accessibilityLabel="Complete practice session and return home"
+                >
+                  <Text className="text-center font-sans-medium text-base text-wood-900">Complete session</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    void (async () => {
+                      try {
+                        const nextIndex = currentSlotIndex + 1
+                        const slots = currentPlan?.slots
+                        if (!slots || nextIndex >= slots.length) return
+                        setCurrentSlotIndex(nextIndex)
+                        const nextSlot = slots[nextIndex]
+                        const saveLesson = useLessonStore.getState().saveLesson
+                        const setLessonSectionIndex = useLessonStore.getState().setLessonSectionIndex
+                        if (nextSlot.slot_type === 'song_section' && nextSlot.lesson_ref) {
+                          const lesson = await getLessonByJobId(nextSlot.lesson_ref)
+                          if (!lesson) {
+                            toast.error(`No saved lesson for job ${nextSlot.lesson_ref}. Open the song from Library first.`)
+                            return
+                          }
+                          saveLesson(lesson)
+                          setLessonSectionIndex(0)
+                          const skipTune = useSessionPrefsStore.getState().skipTuneStep
+                          router.replace(skipTune ? '/session/orient' : '/session/tune')
+                          return
+                        }
+                        if (nextSlot.slot_type === 'free_jam') {
+                          router.replace('/(tabs)/jam')
+                          return
+                        }
+                        if (nextSlot.slot_type === 'warmup' && nextSlot.warmup_plan?.exercises?.length) {
+                          router.replace('/session/warmup')
+                          return
+                        }
+                        if (nextSlot.slot_type === 'technique') {
+                          router.replace('/session/study')
+                          return
+                        }
+                        router.replace('/session/slow')
+                      } catch (e) {
+                        toast.error(e instanceof Error ? e.message : 'Could not navigate to next step')
+                      }
+                    })()
+                  }}
+                  className="mt-3 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
+                  accessibilityRole="button"
+                  accessibilityLabel="Go to next drill in practice plan"
+                >
+                  <Text className="text-center font-sans-medium text-base text-wood-900">Next drill</Text>
+                </Pressable>
+              )}
             </View>
           ) : null}
 

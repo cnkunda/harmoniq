@@ -72,6 +72,13 @@ export const MIGRATION_V4_SESSIONS_REVIEW = [
   'ALTER TABLE sessions ADD COLUMN waveform_ref_path TEXT',
 ] as const
 
+/** Rollback for v4: remove added columns. */
+export const ROLLBACK_V4_SESSIONS_REVIEW = [
+  'ALTER TABLE sessions DROP COLUMN IF EXISTS review_snapshot',
+  'ALTER TABLE sessions DROP COLUMN IF EXISTS waveform_user_path',
+  'ALTER TABLE sessions DROP COLUMN IF EXISTS waveform_ref_path',
+] as const
+
 export const PREF_ONBOARDING_COMPLETE = 'onboarding_complete'
 
 /** Prefer skeleton (or alt) tab when `LessonJSON.transcription_confidence` is low (PRIORITIES §37). */
@@ -125,6 +132,9 @@ export const TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX = 0.72
 /** v5: Library licks — full stem map JSON (guitar, bass, drums, …). */
 export const MIGRATION_V5_LICKS_STEMS_JSON = 'ALTER TABLE licks ADD COLUMN stems_json TEXT'
 
+/** Rollback for v5: remove stems_json column. */
+export const ROLLBACK_V5_LICKS_STEMS_JSON = 'ALTER TABLE licks DROP COLUMN IF EXISTS stems_json'
+
 /** v6: jam snapshots — canonical pitch/position maps + track/inference context. */
 export const MIGRATION_V6_JAM_SNAPSHOT_CONTEXT = [
   'ALTER TABLE jam_snapshots ADD COLUMN pitch_class_weight_map TEXT',
@@ -137,11 +147,30 @@ export const MIGRATION_V6_JAM_SNAPSHOT_CONTEXT = [
   'ALTER TABLE jam_snapshots ADD COLUMN track_bpm INTEGER',
 ] as const
 
+/** Rollback for v6: remove added columns. */
+export const ROLLBACK_V6_JAM_SNAPSHOT_CONTEXT = [
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS pitch_class_weight_map',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS position_weight_map',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS inferred_scale_label',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS inference_confidence',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS track_id',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS track_label',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS track_key',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS track_bpm',
+] as const
+
 /** v7: jam snapshots — reliability tags + confidence envelope fields. */
 export const MIGRATION_V7_JAM_SNAPSHOT_RELIABILITY = [
   'ALTER TABLE jam_snapshots ADD COLUMN reliability_tags TEXT',
   'ALTER TABLE jam_snapshots ADD COLUMN reliability_confidence TEXT',
   'ALTER TABLE jam_snapshots ADD COLUMN reliability_signal_quality REAL',
+] as const
+
+/** Rollback for v7: remove added columns. */
+export const ROLLBACK_V7_JAM_SNAPSHOT_RELIABILITY = [
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS reliability_tags',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS reliability_confidence',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS reliability_signal_quality',
 ] as const
 
 /** v8: Library — persisted full analyzed lessons (not lick drill payloads). */
@@ -156,9 +185,16 @@ CREATE TABLE IF NOT EXISTS lessons (
 );
 `
 
+/** Rollback for v8: drop lessons table. */
+export const ROLLBACK_V8_LESSONS = 'DROP TABLE IF EXISTS lessons'
+
 /** v9: rolling technique-session history for skill mutation weak-area detection (commit 63). */
 export const MIGRATION_V9_SKILL_TECHNIQUE_ROLL =
   'ALTER TABLE skill_nodes ADD COLUMN technique_roll_json TEXT'
+
+/** Rollback for v9: remove technique_roll_json column. */
+export const ROLLBACK_V9_SKILL_TECHNIQUE_ROLL =
+  'ALTER TABLE skill_nodes DROP COLUMN IF EXISTS technique_roll_json'
 
 /** v10: practice plan completion rows (Jam “Complete session”). */
 export const MIGRATION_V10_PRACTICE_PLAN_COMPLETIONS = `
@@ -169,6 +205,9 @@ CREATE TABLE IF NOT EXISTS practice_plan_completions (
 );
 `
 
+/** Rollback for v10: drop practice_plan_completions table. */
+export const ROLLBACK_V10_PRACTICE_PLAN_COMPLETIONS = 'DROP TABLE IF EXISTS practice_plan_completions'
+
 /** Commit 75: ghost reference takes — section-scoped playback under live capture + Review overlay. */
 export const MIGRATION_V11_SESSION_GHOST = [
   'ALTER TABLE sessions ADD COLUMN job_id TEXT',
@@ -178,10 +217,32 @@ export const MIGRATION_V11_SESSION_GHOST = [
   'ALTER TABLE sessions ADD COLUMN ghost_audio_base64 TEXT',
 ] as const
 
+/** Rollback for v11: remove added columns. */
+export const ROLLBACK_V11_SESSION_GHOST = [
+  'ALTER TABLE sessions DROP COLUMN IF EXISTS job_id',
+  'ALTER TABLE sessions DROP COLUMN IF EXISTS section_index',
+  'ALTER TABLE sessions DROP COLUMN IF EXISTS is_ghost_reference',
+  'ALTER TABLE sessions DROP COLUMN IF EXISTS ghost_anchor_sec',
+  'ALTER TABLE sessions DROP COLUMN IF EXISTS ghost_audio_base64',
+] as const
+
 /** Commit 75 — mime for inline/native ghost blobs (decoder hint). */
 export const MIGRATION_V12_SESSION_GHOST_MIME = 'ALTER TABLE sessions ADD COLUMN ghost_recording_mime TEXT'
+
+/** Rollback for v12: remove ghost_recording_mime column. */
+export const ROLLBACK_V12_SESSION_GHOST_MIME = 'ALTER TABLE sessions DROP COLUMN IF EXISTS ghost_recording_mime'
+
 /** Commit 76: mood captured at session save time for later progress analysis. */
 export const MIGRATION_V13_SESSION_MOOD = 'ALTER TABLE sessions ADD COLUMN mood TEXT'
+
+/** Rollback for v13: remove mood column. */
+export const ROLLBACK_V13_SESSION_MOOD = 'ALTER TABLE sessions DROP COLUMN IF EXISTS mood'
+
+/** v14: skill_nodes schema_version field for Jazz Extensions support (commit 88). */
+export const MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION = 'ALTER TABLE skill_nodes ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1'
+
+/** Rollback for v14: remove schema_version column. */
+export const ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION = 'ALTER TABLE skill_nodes DROP COLUMN IF EXISTS schema_version'
 
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },

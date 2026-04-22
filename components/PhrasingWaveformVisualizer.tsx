@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 import Svg, { Polyline } from 'react-native-svg'
 
-import type { GhostReferenceRow } from '@/src/db/types'
 import { peaksFromAudioUint8 } from '@/src/audio/peaksFromAudio'
 import colors from '@/src/constants/colors'
+import type { GhostReferenceRow } from '@/src/db/types'
 import type { ScoreResult } from '@/src/types'
 
 const BINS = 96
@@ -12,6 +12,7 @@ const BINS = 96
 function base64ToUint8(b64: string): Uint8Array | null {
   try {
     const bin = atob(b64)
+    if (bin.length < 0) throw new Error('atob returned negative length')
     const u = new Uint8Array(bin.length)
     for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i)
     return u
@@ -35,10 +36,12 @@ function buildPolylinePoints(peaks: number[] | null, width: number, height: numb
 export type PhrasingWaveformVisualizerProps = {
   score: ScoreResult | null
   ghostRow: GhostReferenceRow | null
+  beatGrid?: number[] // Beat timestamps in seconds for grid lines
+  playbackProgress?: number // 0-1 playback progress for scrolling sync
 }
 
-/** Commit 75 — reference / user / ghost envelopes on one canvas (ghost = faint amber). */
-export function PhrasingWaveformVisualizer({ score, ghostRow }: PhrasingWaveformVisualizerProps) {
+/** Commit 84 — dual-waveform comparison with beat grid and playback sync. */
+export function PhrasingWaveformVisualizer({ score, ghostRow, beatGrid, playbackProgress = 0 }: PhrasingWaveformVisualizerProps) {
   const [ghostPeaks, setGhostPeaks] = useState<number[] | null>(null)
   const [ghostErr, setGhostErr] = useState<string | null>(null)
 
@@ -51,11 +54,6 @@ export function PhrasingWaveformVisualizer({ score, ghostRow }: PhrasingWaveform
       setRefSeries(null)
       setUserSeries(null)
       if (!score?.waveform_comparison) return
-      if (Platform.OS !== 'web') {
-        setRefSeries(null)
-        setUserSeries(null)
-        return
-      }
       const refBytes = base64ToUint8(score.waveform_comparison.reference_wav_base64)
       const userBytes = base64ToUint8(score.waveform_comparison.user_wav_base64)
       const [rp, up] = await Promise.all([
@@ -127,6 +125,22 @@ export function PhrasingWaveformVisualizer({ score, ghostRow }: PhrasingWaveform
 
   const hasAny = Boolean(refPts || userPts || ghostPts)
 
+  // Build beat grid lines (vertical lines at beat positions)
+  const beatGridLines = beatGrid && beatGrid.length > 0
+    ? beatGrid.map((beatTime, i) => {
+        // Normalize beat time to 0-1 range (assuming first beat is start, last beat is end)
+        const firstBeat = beatGrid[0]
+        const lastBeat = beatGrid[beatGrid.length - 1]
+        const duration = lastBeat - firstBeat || 1
+        const normalizedPos = duration > 0 ? (beatTime - firstBeat) / duration : 0
+        const x = normalizedPos * w
+        return { x, isDownbeat: i % 4 === 0 } // Assume 4/4 time, downbeat every 4 beats
+      })
+    : []
+
+  // Playback progress indicator position
+  const playheadX = playbackProgress * w
+
   return (
     <View className="mt-3 rounded-lg border border-wood-600/45 bg-cream-dark/40 px-3 py-3">
       <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
@@ -134,6 +148,29 @@ export function PhrasingWaveformVisualizer({ score, ghostRow }: PhrasingWaveform
       </Text>
       <View className="mt-2 h-28 w-full overflow-hidden rounded-md border border-wood-600/45 bg-ivory">
         <Svg viewBox={`0 0 ${w} ${h}`} width="100%" height="100%" preserveAspectRatio="none">
+          {/* Beat grid lines */}
+          {beatGridLines.map(({ x, isDownbeat }, i) => (
+            <Polyline
+              key={`beat-${i}`}
+              points={`${x},0 ${x},${h}`}
+              fill="none"
+              stroke={colors.muted.brown}
+              strokeOpacity={isDownbeat ? 0.5 : 0.25}
+              strokeWidth={isDownbeat ? 0.8 : 0.5}
+            />
+          ))}
+          
+          {/* Playback progress playhead */}
+          {playbackProgress > 0 && playbackProgress < 1 && (
+            <Polyline
+              points={`${playheadX},0 ${playheadX},${h}`}
+              fill="none"
+              stroke={colors.amber.accent}
+              strokeOpacity={0.8}
+              strokeWidth={1.2}
+            />
+          )}
+
           {ghostPts ? (
             <Polyline
               points={ghostPts}
@@ -144,13 +181,13 @@ export function PhrasingWaveformVisualizer({ score, ghostRow }: PhrasingWaveform
             />
           ) : null}
           {refPts ? (
-            <Polyline points={refPts} fill="none" stroke={colors.danger} strokeOpacity={0.75} strokeWidth={1} />
+            <Polyline points={refPts} fill="none" stroke={colors.cream} strokeOpacity={0.75} strokeWidth={1} />
           ) : null}
           {userPts ? (
             <Polyline
               points={userPts}
               fill="none"
-              stroke={colors.wood[800]}
+              stroke={colors.danger}
               strokeOpacity={0.9}
               strokeWidth={1.1}
             />
@@ -166,7 +203,7 @@ export function PhrasingWaveformVisualizer({ score, ghostRow }: PhrasingWaveform
         ) : null}
       </View>
       <Text className="mt-2 font-sans text-[11px] text-muted-brown">
-        Terracotta = your take · red = reference guide · faint amber = ghost self. {ghostErr ? ` ${ghostErr}` : ''}
+        Terracotta = your take · cream = reference guide · faint amber = ghost self. {ghostErr ? ` ${ghostErr}` : ''}
       </Text>
     </View>
   )

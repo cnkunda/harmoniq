@@ -13,8 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AudioDropzone } from '@/components/AudioDropzone'
 import { ErrorBanner } from '@/components/ErrorBanner'
-import { WoodGradient } from '@/components/WoodGradient'
 import { toast } from '@/components/ToastConfig'
+import { WoodGradient } from '@/components/WoodGradient'
 import {
     ANALYZE_MAX_PROCESSING_WALL_MS,
     AnalyzePollCancelledError,
@@ -27,13 +27,14 @@ import {
 import { searchTabs, type TabSearchHit } from '@/src/api/tabs'
 import colors from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
-import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
+import { getAppPref } from '@/src/db/client'
+import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapAnalyzeFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
-import { getAppPref } from '@/src/db/client'
-import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
+import { getNextFocusArea } from '@/src/session'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 import type { AnalyzeJob, AnalyzeJobStatus } from '@/src/types'
 import { useRouter, type Href } from 'expo-router'
@@ -173,14 +174,15 @@ export default function AddSongScreen() {
       processingStartedClockRef.current = null
       startedAtRef.current = Date.now()
       try {
-        const [tasteRaw, learningCtx] = await Promise.all([
+        const [tasteRaw, learningCtx, focus_area] = await Promise.all([
           getAppPref(PREF_TASTE_PROFILE_JSON),
           loadLearningContextFromPrefs(),
+          getNextFocusArea(),
         ])
         const taste = parseTasteProfileJson(tasteRaw)
         const player_profile = buildPlayerProfileFromSkillNodes(skillNodes, taste, learningCtx)
         const jobId = await submitAnalyzeJob(
-          player_profile != null ? { ...input, player_profile } : input,
+          player_profile != null ? { ...input, player_profile, focus_area } : { ...input, focus_area },
         )
         if (!aliveRef.current) return
         if (input.file) {
@@ -221,13 +223,14 @@ export default function AddSongScreen() {
                 ? job.stage_label.trim()
                 : null
             const pretty: Record<AnalyzeJobStatus, string> = {
+              queued: 'Job queued…',
               processing: 'Working on your track…',
               complete: 'Finishing lesson payload…',
               failed: 'Analysis failed.',
             }
             setStatusText(stage ?? pretty[job.status] ?? `Status: ${job.status}`)
           },
-          1100,
+          2000,
           {
             wallClockStartedAtMs: startedAtRef.current,
             maxProcessingWallMs: ANALYZE_MAX_PROCESSING_WALL_MS,

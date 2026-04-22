@@ -3,18 +3,19 @@ import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, u
 import { View } from 'react-native'
 
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
+import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
 import { TabViewport } from '@/components/TabViewport'
-import { isAlphaTabRuntimeDiagEnabled } from '@/src/constants/alphaTabRuntimeDiag'
 import { useResolvedSoundFontProfile } from '@/src/audio/useResolvedSoundFontProfile'
+import { isAlphaTabRuntimeDiagEnabled } from '@/src/constants/alphaTabRuntimeDiag'
 import { logListenTransportWrap } from '@/src/session/listenTransportDebug'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
-import { useSessionSmartScroll, type PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
-import { useLessonStore } from '@/src/stores/lessonStore'
-import { lessonStemUrl, sectionSeekSeconds, stemRelPathToPlaybackUri } from '@/src/utils/lessonAudio'
-import type { LessonJSON } from '@/src/types'
 import type { TabRenderPresetName } from '@/src/session/tabThemePresets'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import { useSessionSmartScroll } from '@/src/session/useSessionSmartScroll'
+import { useLessonStore } from '@/src/stores/lessonStore'
+import type { LessonJSON } from '@/src/types'
+import { lessonStemUrl, sectionSeekSeconds, stemRelPathToPlaybackUri } from '@/src/utils/lessonAudio'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
-import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
 import type { AlphaTabSurfaceRef, NoteEventMessage, SongScoreMeta, TabLoopBarRegion } from '@/types/tabMessage'
 
 const DEFAULT_TICK: PlaybackTickContext = {
@@ -244,13 +245,13 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
                 const wrapMs = Math.max(0, ctx.positionSec) * 1000
                 setScrollReset((n) => n + 1)
                 tabRef.current?.seekTo(wrapMs)
-                tabRef.current?.syncPlaybackTimelineMs(wrapMs)
+                tabRef.current?.syncPlaybackTimelineMs(wrapMs + 50)
               }
               if (ctx.playing !== lastStemPlayingRef.current) {
                 lastStemPlayingRef.current = ctx.playing
                 tabRef.current?.setStemPlaybackActive(ctx.playing)
               }
-              tabRef.current?.syncPlaybackTimelineMs(ctx.positionSec * 1000)
+              tabRef.current?.syncPlaybackTimelineMs(ctx.positionSec * 1000 + 50)
             }
             onPlaybackTick?.(ctx)
           }}

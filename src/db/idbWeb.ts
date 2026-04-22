@@ -8,16 +8,16 @@
 import type { LessonJSON } from '@/src/types'
 
 import type {
-  JamSnapshotInsertInput,
-  LessonPersistRow,
-  LickRow,
-  PracticePlanCompletionRow,
-  SessionArchiveRow,
-  SkillNodeRow,
+    JamSnapshotInsertInput,
+    LessonPersistRow,
+    LickRow,
+    PracticePlanCompletionRow,
+    SessionArchiveRow,
+    SkillNodeRow,
 } from '@/src/db/types'
 
 const DB_NAME = 'harmoniq_web_v1'
-const DB_VERSION = 3
+const DB_VERSION = 4
 
 const S_PREFS = 'app_prefs'
 const S_SESSIONS = 'sessions'
@@ -27,9 +27,11 @@ const S_JAM = 'jam_snapshots'
 const S_PLAN_COMPLETIONS = 'practice_plan_completions'
 const S_LESSON = 'lesson_cache'
 const S_LESSONS = 'lessons'
+const S_MIGRATIONS = 'schema_migrations'
 
 type PrefRow = { key: string; value: string }
 type LessonCacheRow = { id: 'latest'; lesson: LessonJSON; savedAt: string }
+type MigrationRow = { version: number; applied_at: string }
 
 function idbAvailable(): boolean {
   return typeof indexedDB !== 'undefined'
@@ -41,31 +43,61 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
     const r = indexedDB.open(DB_NAME, DB_VERSION)
     r.onerror = () => reject(r.error ?? new Error('IndexedDB open failed'))
     r.onsuccess = () => resolve(r.result)
-    r.onupgradeneeded = () => {
+    r.onupgradeneeded = (event) => {
       const db = r.result
-      if (!db.objectStoreNames.contains(S_PREFS)) {
-        db.createObjectStore(S_PREFS, { keyPath: 'key' })
-      }
-      if (!db.objectStoreNames.contains(S_SESSIONS)) {
-        db.createObjectStore(S_SESSIONS, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(S_SKILL_NODES)) {
-        db.createObjectStore(S_SKILL_NODES, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(S_LICKS)) {
-        db.createObjectStore(S_LICKS, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(S_JAM)) {
-        db.createObjectStore(S_JAM, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(S_LESSON)) {
-        db.createObjectStore(S_LESSON, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(S_LESSONS)) {
-        db.createObjectStore(S_LESSONS, { keyPath: 'job_id' })
-      }
-      if (!db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) {
-        db.createObjectStore(S_PLAN_COMPLETIONS, { keyPath: 'id' })
+      const oldVersion = (event as IDBVersionChangeEvent).oldVersion
+      const newVersion = (event as IDBVersionChangeEvent).newVersion ?? DB_VERSION
+      
+      try {
+        // Create migration tracking store if it doesn't exist
+        if (!db.objectStoreNames.contains(S_MIGRATIONS)) {
+          db.createObjectStore(S_MIGRATIONS, { keyPath: 'version' })
+        }
+        
+        // Create other object stores
+        if (!db.objectStoreNames.contains(S_PREFS)) {
+          db.createObjectStore(S_PREFS, { keyPath: 'key' })
+        }
+        if (!db.objectStoreNames.contains(S_SESSIONS)) {
+          db.createObjectStore(S_SESSIONS, { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains(S_SKILL_NODES)) {
+          db.createObjectStore(S_SKILL_NODES, { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains(S_LICKS)) {
+          db.createObjectStore(S_LICKS, { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains(S_JAM)) {
+          db.createObjectStore(S_JAM, { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains(S_LESSON)) {
+          db.createObjectStore(S_LESSON, { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains(S_LESSONS)) {
+          db.createObjectStore(S_LESSONS, { keyPath: 'job_id' })
+        }
+        if (!db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) {
+          db.createObjectStore(S_PLAN_COMPLETIONS, { keyPath: 'id' })
+        }
+        
+        // Record migration for version 4 (migration tracking system)
+        if (oldVersion < 4) {
+          const tx = r.transaction
+          if (tx) {
+            const migrationStore = tx.objectStore(S_MIGRATIONS)
+            migrationStore.put({ version: 4, applied_at: new Date().toISOString() })
+          }
+          if (__DEV__) {
+            console.log('[db/web] Migration v4 SUCCESS')
+          }
+        }
+      } catch (e) {
+        const error = e instanceof Error ? e.message : String(e)
+        if (__DEV__) {
+          console.error(`[db/web] Migration v${newVersion} FAILED: ${error}`)
+        }
+        // IndexedDB will automatically abort the transaction on error, which rolls back changes
+        throw e
       }
     }
   })

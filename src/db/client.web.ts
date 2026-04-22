@@ -1,11 +1,13 @@
+import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
+import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
 import {
     getHarmoniqIdbHandle,
     idbClearPracticeStores,
     idbLoadEverything,
     idbPersistJams,
-    idbPersistPlanCompletions,
     idbPersistLessons,
     idbPersistLicks,
+    idbPersistPlanCompletions,
     idbPersistPrefs,
     idbPersistSessions,
     idbPersistSkillNodes,
@@ -15,36 +17,34 @@ import {
     type IdbHydration,
 } from '@/src/db/idbWeb'
 import {
-  DEFAULT_SKILL_NODES,
-  PREF_EXPERIENCE_LEVEL,
-  PREF_ONBOARDING_COMPLETE,
-  PREF_TASTE_PROFILE_JSON,
+    DEFAULT_SKILL_NODES,
+    PREF_EXPERIENCE_LEVEL,
+    PREF_ONBOARDING_COMPLETE,
+    PREF_TASTE_PROFILE_JSON,
 } from '@/src/db/schema'
-import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
-import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
 import type {
-  HomeSuggestion,
-  JamSnapshotInsertInput,
-  JamSnapshotRow,
-  LatestSessionSongRow,
-  LessonListRow,
-  LessonPersistRow,
-  LickInsertInput,
-  LickRow,
-  NodeSessionSnippet,
-  PracticePlanCompletionInsertInput,
-  PracticePlanCompletionRow,
-  ReviewSkillUpdateInput,
-    SessionArchiveRow,
     GhostReferenceRow,
+    HomeSuggestion,
+    JamSnapshotInsertInput,
+    JamSnapshotRow,
+    LatestSessionSongRow,
+    LessonListRow,
+    LessonPersistRow,
+    LickInsertInput,
+    LickRow,
+    NodeSessionSnippet,
+    PracticePlanCompletionInsertInput,
+    PracticePlanCompletionRow,
+    ReviewSkillUpdateInput,
+    SessionArchiveRow,
     SessionInsertInput,
     SessionJournalRow,
-  SkillNodeRow,
-  SkillSessionMutationRow,
+    SkillNodeRow,
+    SkillSessionMutationRow,
 } from '@/src/db/types'
-import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
+import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 
 const skillNodes = new Map<string, SkillNodeRow>()
 /** Newest-first (matches native `ORDER BY date DESC`). */
@@ -70,6 +70,7 @@ function defaultSkillRow(def: { id: string; label: string }): SkillNodeRow {
     next_review_date: null,
     sm2_repetitions: 0,
     technique_roll_json: null,
+    schema_version: 1,
   }
 }
 
@@ -111,6 +112,7 @@ function applySkillNodesFromIdb(rows: SkillNodeRow[]): void {
         ...defaultSkillRow(n),
         ...existing,
         technique_roll_json: existing.technique_roll_json ?? null,
+        schema_version: existing.schema_version ?? 1,
       })
     } else {
       skillNodes.set(n.id, defaultSkillRow(n))
@@ -269,6 +271,7 @@ export async function getSessionCount(): Promise<number> {
 }
 
 export async function listSessionsJournal(): Promise<SessionJournalRow[]> {
+  await initDb()
   seedWebSkillNodes()
   return [...sessionLog]
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))

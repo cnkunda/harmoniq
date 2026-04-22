@@ -57,6 +57,10 @@ class PlayerProfile(BaseModel):
     skill_nodes: list[SkillNode] = Field(default_factory=list)
     taste_profile: TasteProfile | None = None
     learning_context: LearningContext | None = None
+    focus_area: CoachFocusArea | None = Field(
+        default=None,
+        description="Coach focus area for this session (commit 90): varies across sessions to prevent feedback redundancy.",
+    )
 
 
 class CurriculumSuggestRequest(BaseModel):
@@ -81,6 +85,8 @@ class CurriculumSuggestResponse(BaseModel):
 SlotType = Literal["warmup", "technique", "song_section", "free_jam"]
 
 MoodState = Literal["focused", "loose", "tired", "on_fire"]
+
+CoachFocusArea = Literal["timing", "vibrato", "dynamics", "phrasing", "bending", "rhythm", "expression"]
 
 FretboardGuideVariant = Literal["primary", "secondary"]
 
@@ -259,6 +265,10 @@ class AnalyzeRequest(BaseModel):
 
     url: str | None = None
     player_profile: PlayerProfile | None = None
+    focus_area: CoachFocusArea | None = Field(
+        default=None,
+        description="Coach focus area for this session (commit 90): varies across sessions to prevent feedback redundancy.",
+    )
 
 
 class AnalyzeJobCreated(BaseModel):
@@ -404,6 +414,7 @@ class ScoreRequest(BaseModel):
     recording_mime_type: str | None = None
     section: dict[str, Any] = Field(default_factory=dict)
     skill_nodes: list[str] = Field(default_factory=list)
+    solo_notes: SoloNotes | None = Field(default=None, description="MIDI note events for timing reference (commit 83)")
 
 
 class ScoreWaveformComparison(BaseModel):
@@ -436,7 +447,7 @@ class ScoreResult(BaseModel):
     bend_pitch_error_cents: float
     rushing_score: float
     coach_paragraph: str = Field(default="", description="Short coaching copy for journal / UI.")
-    node_scores: dict[str, float] = Field(default_factory=list)
+    node_scores: dict[str, float] = Field(default_factory=dict)
     waveform_comparison: ScoreWaveformComparison
     diagnostics: ScoreDiagnostics = Field(default_factory=ScoreDiagnostics)
     reliability: ReliabilityEnvelope = Field(default_factory=ReliabilityEnvelope)

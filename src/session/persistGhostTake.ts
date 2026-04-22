@@ -2,18 +2,7 @@ import type { RecordedTake } from '@/src/audio/recordSession.types'
 import type { LessonJSON } from '@/src/types'
 
 import type { GhostReferenceRow } from '@/src/db/types'
-
-function bytesToBase64(bytes: Uint8Array): string {
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(bytes).toString('base64')
-  }
-  let bin = ''
-  const chunk = 8192
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode(...bytes.subarray(i, Math.min(bytes.length, i + chunk)))
-  }
-  return btoa(bin)
-}
+import { bytesToBase64 } from '@/src/utils/bytesToBase64'
 
 function extensionForMime(mime: string): string {
   const m = mime.toLowerCase()
@@ -48,6 +37,7 @@ export async function prepareGhostTakePayload(input: PersistGhostTakeInput): Pro
   const baseName = `ghost_${jobId}_${sectionIndex}_${Date.now().toString(36)}.${ext}`
 
   if (typeof window !== 'undefined') {
+    // TODO: anchorSec reserved for future ghost take anchoring feature
     void anchorSec
     return {
       waveform_user_path: null,
@@ -78,6 +68,7 @@ export function ghostReferenceToPlaybackUri(row: GhostReferenceRow): string | nu
   if (typeof row.ghost_audio_base64 === 'string' && row.ghost_audio_base64.length > 0) {
     try {
       const bin = atob(row.ghost_audio_base64)
+      if (bin.length < 0) throw new Error('atob returned negative length')
       const bytes = new Uint8Array(bin.length)
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
       const mime =

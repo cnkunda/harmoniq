@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from typing import Any
 
-from app.schemas import LessonSectionStub, MoodState, PlayerProfile
+from app.schemas import CoachFocusArea, LessonSectionStub, MoodState, PlayerProfile
 
 logger = logging.getLogger("harmoniq.coach")
 logger.setLevel(logging.INFO)
@@ -51,6 +51,7 @@ Generate these for this lesson section:
 - song_title: {song_title}
 - artist: {artist}
 - key: {key}
+{focus_directive}
 
 coach_note:
 - 1 sentence
@@ -223,6 +224,40 @@ def _section_context_block(section_label: str | None, key: str | None) -> str:
     )
 
 
+def _focus_area_directive(focus_area: CoachFocusArea | None) -> str:
+    """Generate focus directive for coach prompt based on focus_area (commit 90)."""
+    if focus_area is None:
+        return ""
+    directives = {
+        "timing": "Focus area this session: Timing. Prioritize observations about rhythm, time feel, rushing, or dragging.",
+        "vibrato": "Focus area this session: Vibrato. Prioritize observations about pitch stability, wobble control, and vibrato width.",
+        "dynamics": "Focus area this session: Dynamics. Prioritize observations about volume control, articulation, and expressive touch.",
+        "phrasing": "Focus area this session: Phrasing. Prioritize observations about phrase shape, breathing space, and musical sentence structure.",
+        "bending": "Focus area this session: Bending. Prioritize observations about intonation, bend accuracy, and pitch center.",
+        "rhythm": "Focus area this session: Rhythm. Prioritize observations about groove, subdivision accuracy, and rhythmic consistency.",
+        "expression": "Focus area this session: Expression. Prioritize observations about emotional delivery, tone color, and musical intent.",
+    }
+    return directives.get(focus_area, "")
+
+
+FOCUS_AREA_ROTATION: list[CoachFocusArea] = [
+    "timing",
+    "vibrato",
+    "dynamics",
+    "phrasing",
+    "bending",
+    "rhythm",
+    "expression",
+]
+
+
+def rotate_focus_area(session_count: int) -> CoachFocusArea:
+    """Determine focus area for this session based on session count (commit 90)."""
+    if session_count < 0:
+        session_count = 0
+    return FOCUS_AREA_ROTATION[session_count % len(FOCUS_AREA_ROTATION)]
+
+
 def _normalize_for_match(value: str) -> str:
     lowered = value.lower()
     collapsed = re.sub(r"[^a-z0-9]+", " ", lowered)
@@ -297,6 +332,7 @@ def build_coach_user_prompt(
     player_profile: PlayerProfile | None = None,
     style_label: str | None = None,
     technique_hints: list[str] | None = None,
+    focus_area: CoachFocusArea | None = None,
 ) -> str:
     """Assemble the user message: optional context blocks + fixed JSON contract."""
     prefix = (
@@ -305,11 +341,13 @@ def build_coach_user_prompt(
         + _section_context_block(section_label, key)
     )
     profile_priority = _profile_priority_directive(player_profile)
+    focus_directive = _focus_area_directive(focus_area)
     body = COACH_USER_PROMPT_TEMPLATE.format(
         section_label=(section_label or "Section"),
         song_title=(song_title or "Unknown song"),
         artist=(artist or "Unknown artist"),
         key=(key or "Unknown key"),
+        focus_directive=focus_directive,
     )
     return prefix + profile_priority + body
 
@@ -505,6 +543,7 @@ def generate_coach_fields_for_section(
     player_profile: PlayerProfile | None = None,
     style_label: str | None = None,
     technique_hints: list[str] | None = None,
+    focus_area: CoachFocusArea | None = None,
 ) -> tuple[str, str]:
     result = generate_coach_fields_for_section_with_status(
         section_label=section_label,
@@ -514,6 +553,7 @@ def generate_coach_fields_for_section(
         player_profile=player_profile,
         style_label=style_label,
         technique_hints=technique_hints,
+        focus_area=focus_area,
     )
     return result.note, result.explanation
 
@@ -527,6 +567,7 @@ def generate_coach_fields_for_section_with_status(
     player_profile: PlayerProfile | None = None,
     style_label: str | None = None,
     technique_hints: list[str] | None = None,
+    focus_area: CoachFocusArea | None = None,
 ) -> CoachCallResult:
     """Return coach_note + coach_explanation, with timeout and dev fallback."""
     # Keep test runs deterministic and fully offline even when a real key is present.
@@ -549,6 +590,7 @@ def generate_coach_fields_for_section_with_status(
         player_profile=player_profile,
         style_label=style_label,
         technique_hints=technique_hints,
+        focus_area=focus_area,
     )
     focus_terms = _profile_focus_terms(player_profile)
     attempts = 1 + (COACH_PROFILE_RETRY_LIMIT if focus_terms else 0)
@@ -698,6 +740,7 @@ def merge_coach_copy_into_sections(
     player_profile: PlayerProfile | None = None,
     style_label: str | None = None,
     technique_hints: list[str] | None = None,
+    focus_area: CoachFocusArea | None = None,
 ) -> list[LessonSectionStub]:
     """Populate coach fields on each section while preserving existing fields."""
     sections_out, _, _ = hydrate_coach_copy_into_sections(
@@ -708,6 +751,7 @@ def merge_coach_copy_into_sections(
         player_profile=player_profile,
         style_label=style_label,
         technique_hints=technique_hints,
+        focus_area=focus_area,
     )
     return sections_out
 
@@ -721,6 +765,7 @@ def hydrate_coach_copy_into_sections(
     player_profile: PlayerProfile | None = None,
     style_label: str | None = None,
     technique_hints: list[str] | None = None,
+    focus_area: CoachFocusArea | None = None,
 ) -> tuple[list[LessonSectionStub], str, str | None]:
     """
     Populate section coach fields and report hydration status.
@@ -737,6 +782,7 @@ def hydrate_coach_copy_into_sections(
             player_profile=player_profile,
             style_label=style_label,
             technique_hints=technique_hints,
+            focus_area=focus_area,
         )
         payload = sec.model_dump(exclude_none=True)
         payload["coach_note"] = result.note

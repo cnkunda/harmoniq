@@ -2,7 +2,7 @@ import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
 
-import { barIndexForPlaybackSeconds } from './smartScroll'
+import { barIndexForPlaybackSeconds, PREDICTIVE_SCROLL_MS } from './smartScroll'
 
 export type PlaybackTickContext = {
   positionSec: number
@@ -48,7 +48,7 @@ export function useSessionSmartScroll({
     const id = setInterval(() => {
       const tick = tickRef.current
       if (!tick.ready || !tick.playing || ts.length === 0) return
-      const bar = barIndexForPlaybackSeconds(ts, tick.positionSec)
+      const bar = barIndexForPlaybackSeconds(ts, tick.positionSec, PREDICTIVE_SCROLL_MS)
       if (lastEmittedBar.current === bar) return
       lastEmittedBar.current = bar
       tabRef.current?.scrollMasterBarIntoView(bar)

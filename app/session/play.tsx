@@ -3,37 +3,38 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
 
-import { speak, stop as stopVoiceCoach } from '@/src/audio/voiceCoach'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { CoachFeedbackPrompt } from '@/components/CoachFeedbackPrompt'
 import { CoachNote } from '@/components/CoachNote'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { GhostPlayerControl } from '@/components/GhostPlayerControl'
-import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { PlayCaptureCard, PlayStemRowScoringCard } from '@/components/play'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
-import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
+import { speak, stop as stopVoiceCoach } from '@/src/audio/voiceCoach'
+import { sessionHref } from '@/src/constants/sessionFlow'
+import { getLatestGhostReference } from '@/src/db/client'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
-import { sessionHref } from '@/src/constants/sessionFlow'
-import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { mapMicPermissionDenied, toErrorBannerProps, type MappedUiError } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
-import { getLatestGhostReference } from '@/src/db/client'
 import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhostTake'
+import { hitInnerThresholdCents } from '@/src/session/noteAccuracyBeats'
 import { ghostReferenceToPlaybackUri } from '@/src/session/persistGhostTake'
-import { useLessonStore } from '@/src/stores/lessonStore'
-import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
-import { useAppStore } from '@/src/stores/useAppStore'
+import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { usePlayCapture } from '@/src/session/usePlayCapture'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
-import { useFretboardTuner } from '@/src/session/useFretboardTuner'
+import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
+import { useLessonStore } from '@/src/stores/lessonStore'
+import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
+import { useAppStore } from '@/src/stores/useAppStore'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
-import { hitInnerThresholdCents } from '@/src/session/noteAccuracyBeats'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import * as FileSystem from 'expo-file-system/legacy'
 
@@ -333,6 +334,12 @@ export default function PlayScreen() {
         {quickCoachText ? (
           <Animated.View entering={FadeIn.duration(320)}>
             <CoachNote text={quickCoachText} />
+            <CoachFeedbackPrompt
+              focusArea={(section?.coach_note ? section.focus_area as string | null : null) ?? null}
+              onFeedbackSubmitted={(rating: 'helpful' | 'repetitive' | 'neutral' | 'skipped') => {
+                console.log('Coach feedback submitted:', rating)
+              }}
+            />
           </Animated.View>
         ) : null}
 

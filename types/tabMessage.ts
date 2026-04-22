@@ -42,6 +42,8 @@ export type TabInboundMessage =
   | { type: 'setRuntimeDiagnosticsEnabled'; enabled: boolean }
   /** Commit 61: bridge RTT probe — harness replies with `diagPong`. */
   | { type: 'diagPing'; requestId: string; t0: number }
+  /** Commit 85: SmartScroll seek to bar by timestamp (binary search on bar_timestamps). */
+  | { type: 'smartScrollSeekToBar'; positionSec: number; barTimestamps: number[] }
 
 export type NoteEventMessage = {
   type: 'noteEvent'
@@ -112,6 +114,8 @@ export type AlphaTabSurfaceRef = {
   clearScaleHighlight: () => void
   /** Horizontal scroll host so the given master bar is in view (e.g. after chip seek). */
   scrollMasterBarIntoView: (barIndex: number) => void
+  /** Commit 85: SmartScroll seek to bar by timestamp (binary search on bar_timestamps). */
+  smartScrollSeekToBar: (positionSec: number, barTimestamps: number[]) => void
   /** Score metadata from AlphaTab (static; may be partial if the file omits fields). */
   getSongDetails: () => Promise<SongScoreMeta | null>
 }
@@ -147,6 +151,8 @@ export type TabOutboundMessage =
     }
   /** Commit 61: echo for `diagPing` RTT measurement. */
   | { type: 'diagPong'; requestId: string; t0: number }
+  /** Commit 85: SmartScroll seek response with bar index and seek timing. */
+  | { type: 'smartScrollSeekResult'; barIndex: number; barTimestampSec: number; estimatedSeekMs: number }
 
 export function encodeTabMessage(msg: TabInboundMessage): string {
   return JSON.stringify(msg)
@@ -304,6 +310,20 @@ export function decodeTabMessage(raw: string): TabOutboundMessage | null {
     const maybePong = o as { type: unknown; requestId?: unknown; t0?: unknown }
     if (o.type === 'diagPong' && typeof maybePong.requestId === 'string' && typeof maybePong.t0 === 'number') {
       return { type: 'diagPong', requestId: maybePong.requestId, t0: maybePong.t0 }
+    }
+    const maybeScroll = o as { type: unknown; barIndex?: unknown; barTimestampSec?: unknown; estimatedSeekMs?: unknown }
+    if (
+      o.type === 'smartScrollSeekResult' &&
+      typeof maybeScroll.barIndex === 'number' &&
+      typeof maybeScroll.barTimestampSec === 'number' &&
+      typeof maybeScroll.estimatedSeekMs === 'number'
+    ) {
+      return {
+        type: 'smartScrollSeekResult',
+        barIndex: Math.max(0, Math.floor(maybeScroll.barIndex)),
+        barTimestampSec: maybeScroll.barTimestampSec,
+        estimatedSeekMs: Math.max(0, maybeScroll.estimatedSeekMs),
+      }
     }
   } catch {
     /* invalid */

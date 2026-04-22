@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app import coach
-from app.schemas import LessonSectionStub, PlayerProfile
+from app.schemas import CoachFocusArea, LessonSectionStub, PlayerProfile
 
 
 def test_generate_coach_fields_uses_fallback_when_key_missing(monkeypatch):
@@ -172,3 +172,118 @@ def test_generate_coach_fields_accepts_synonym_for_weak_area(monkeypatch):
     assert note
     assert explanation
     assert note != coach.FALLBACK_COACH_NOTE
+
+
+def test_rotate_focus_area_cycles_through_all_areas():
+    """Test that rotate_focus_area cycles through all focus areas (commit 90)."""
+    # Session 0 should return first focus area
+    focus_0 = coach.rotate_focus_area(0)
+    assert focus_0 in coach.FOCUS_AREA_ROTATION
+
+    # Session 7 should cycle back to first focus area (7 areas total)
+    focus_7 = coach.rotate_focus_area(7)
+    assert focus_7 == coach.rotate_focus_area(0)
+
+    # Session 14 should also cycle back (14 % 7 = 0)
+    focus_14 = coach.rotate_focus_area(14)
+    assert focus_14 == coach.rotate_focus_area(0)
+
+    # Different sessions should return different focus areas (with wrap)
+    focus_1 = coach.rotate_focus_area(1)
+    focus_2 = coach.rotate_focus_area(2)
+    assert focus_1 != focus_2
+
+    # Negative session count should be treated as 0
+    focus_neg = coach.rotate_focus_area(-1)
+    assert focus_neg == coach.rotate_focus_area(0)
+
+
+def test_focus_area_directive_generates_correct_directives():
+    """Test that _focus_area_directive generates correct directives for each focus area (commit 90)."""
+    # Test each focus area generates a non-empty directive
+    for area in coach.FOCUS_AREA_ROTATION:
+        directive = coach._focus_area_directive(area)
+        assert directive
+        assert f"Focus area this session: {area.capitalize()}" in directive
+        assert "Prioritize observations" in directive
+
+    # Test None returns empty string
+    directive_none = coach._focus_area_directive(None)
+    assert directive_none == ""
+
+    # Test timing directive specifically
+    timing_directive = coach._focus_area_directive("timing")
+    assert "Timing" in timing_directive
+    assert "rhythm" in timing_directive.lower() or "time feel" in timing_directive.lower()
+
+    # Test vibrato directive specifically
+    vibrato_directive = coach._focus_area_directive("vibrato")
+    assert "Vibrato" in vibrato_directive
+    assert "pitch stability" in vibrato_directive.lower()
+
+
+def test_build_coach_prompt_includes_focus_area_directive():
+    """Test that build_coach_user_prompt includes focus area directive when provided (commit 90)."""
+    # With focus area
+    prompt_with_focus = coach.build_coach_user_prompt(
+        section_label="Verse",
+        song_title="Song",
+        artist="Artist",
+        key="G major",
+        focus_area="timing",
+    )
+    assert "Focus area this session: Timing" in prompt_with_focus
+    assert "Prioritize observations about rhythm" in prompt_with_focus
+
+    # Without focus area (None)
+    prompt_without_focus = coach.build_coach_user_prompt(
+        section_label="Verse",
+        song_title="Song",
+        artist="Artist",
+        key="G major",
+        focus_area=None,
+    )
+    assert "Focus area this session:" not in prompt_without_focus
+
+    # Different focus areas produce different prompts
+    prompt_timing = coach.build_coach_user_prompt(
+        section_label="Verse",
+        song_title="Song",
+        artist="Artist",
+        key="G major",
+        focus_area="timing",
+    )
+    prompt_vibrato = coach.build_coach_user_prompt(
+        section_label="Verse",
+        song_title="Song",
+        artist="Artist",
+        key="G major",
+        focus_area="vibrato",
+    )
+    assert prompt_timing != prompt_vibrato
+    assert "Timing" in prompt_timing
+    assert "Vibrato" in prompt_vibrato
+
+
+def test_generate_coach_fields_with_focus_area(monkeypatch):
+    """Test that generate_coach_fields_for_section passes focus_area through (commit 90)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("HARMONIQ_ENABLE_COACH_IN_TESTS", "1")
+    prompts: list[str] = []
+
+    def fake_call(*, api_key: str, user_prompt: str, **kwargs: object) -> str:
+        prompts.append(user_prompt)
+        return '{"coach_note":"Focus on timing.","coach_explanation":"Timing explanation here.","weak_focus":"none"}'
+
+    monkeypatch.setattr(coach, "_call_claude_text", fake_call)
+    note, explanation = coach.generate_coach_fields_for_section(
+        section_label="Verse",
+        song_title="Song",
+        artist="Artist",
+        key="G major",
+        focus_area="dynamics",
+    )
+    assert "Focus area this session: Dynamics" in prompts[0]
+    assert "volume control" in prompts[0].lower()
+    assert note == "Focus on timing."
+    assert explanation == "Timing explanation here."

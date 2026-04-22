@@ -42,6 +42,10 @@ export async function navigateToPracticePlanSlot(
     router.replace('/session/warmup')
     return
   }
+  if (slot.slot_type === 'technique') {
+    router.replace('/session/study')
+    return
+  }
   router.replace('/session/slow')
 }
 

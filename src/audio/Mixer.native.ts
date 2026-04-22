@@ -1,5 +1,6 @@
 import { Audio } from 'expo-av'
 
+import { globalAudioManager } from './GlobalAudioManager'
 import type { StemDefinition, StemMixer } from './mixerTypes'
 import { assertStemDefinitions } from './mixerTypes'
 
@@ -27,6 +28,7 @@ class ExpoParallelStemMixer implements StemMixer {
   private lastSampleWallMs = 0
   private sampleIsPlaying = false
   private sampleInterval: ReturnType<typeof setInterval> | null = null
+  private mixerInstanceId = `stem-mixer-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
   async load(stems: StemDefinition[]): Promise<void> {
     assertStemDefinitions(stems)
@@ -37,10 +39,7 @@ class ExpoParallelStemMixer implements StemMixer {
       throw new Error(`${LOG} load() requires at least one stem`)
     }
 
-    await Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      allowsRecordingIOS: false,
-    })
+    await globalAudioManager.resetToPlaybackMode()
 
     console.info(`${LOG} loading ${stems.length} stem(s):`, stems.map((s) => s.id).join(', '))
 
@@ -73,6 +72,17 @@ class ExpoParallelStemMixer implements StemMixer {
       this.lastSampleSec = 0
       this.lastSampleWallMs = performance.now()
       this.sampleIsPlaying = false
+
+      // Register mixer with GlobalAudioManager
+      globalAudioManager.registerInstance(
+        this.mixerInstanceId,
+        'expo-sound',
+        this,
+        async () => {
+          await this.unload()
+        },
+      )
+
       console.info(`${LOG} load OK duration≈${this.durationSec.toFixed(2)}s`)
     } catch (e) {
       console.error(`${LOG} load failed, unloading partial`, e)
@@ -219,6 +229,9 @@ class ExpoParallelStemMixer implements StemMixer {
     this.durationSec = 0
     this.lastSampleSec = 0
     this.sampleIsPlaying = false
+
+    // Unregister from GlobalAudioManager
+    void globalAudioManager.unregisterInstance(this.mixerInstanceId)
   }
 }
 

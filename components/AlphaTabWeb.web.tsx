@@ -682,6 +682,42 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           }
           requestAnimationFrame(() => scrollMasterBarIntoViewImpl(barIndex, 0))
         },
+        smartScrollSeekToBar: (positionSec: number, barTimestamps: number[]) => {
+          const t0 = performance.now()
+          const clampedPos = Math.max(0, Number.isFinite(positionSec) ? positionSec : 0)
+          const timestamps = Array.isArray(barTimestamps) ? barTimestamps : []
+          
+          // Binary search for bar index
+          let barIndex = 0
+          if (timestamps.length > 0) {
+            let lo = 0
+            let hi = timestamps.length - 1
+            while (lo < hi) {
+              const mid = Math.ceil((lo + hi) / 2)
+              if (timestamps[mid]! <= clampedPos) lo = mid
+              else hi = mid - 1
+            }
+            barIndex = lo
+          }
+          
+          const barTimestampSec = timestamps[barIndex] ?? 0
+          const seekMs = performance.now() - t0
+          
+          // Log if seek exceeds 50ms threshold
+          if (seekMs > 50) {
+            console.warn('[AlphaTabWeb] SmartScroll seek exceeded 50ms:', seekMs)
+          }
+          
+          // Seek to the bar timestamp
+          const ms = barTimestampSec * 1000
+          const audio = audioRef.current
+          const api = apiRef.current
+          const pr = stemPlaybackRateRef.current
+          if (audio) audio.currentTime = (ms * pr) / 1000
+          api?.player?.output?.updatePosition?.(ms)
+          emitSongPlaybackMaybe()
+          layoutLoopBracket()
+        },
         syncPlaybackTimelineMs: (positionMs: number) => {
           const api = apiRef.current
           if (!api) return
