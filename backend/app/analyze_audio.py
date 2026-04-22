@@ -269,6 +269,10 @@ def build_lesson_json_from_librosa(
     style = infer_style_from_librosa_summary(summary)
     stem_fields = _lesson_json_stem_fields(stem_classification)
 
+    # Commit 82: Set low_snr_warning for pre-emptive transcription quality warning
+    # Trigger warning when transcription confidence is very low (< 0.5)
+    low_snr_warning = transcription_confidence is not None and transcription_confidence < 0.5
+
     lesson = LessonJSON(
         job_id=job_id,
         song_title=song_title,
@@ -285,6 +289,7 @@ def build_lesson_json_from_librosa(
         lyrics_aligned=lyrics_aligned,
         sections=sections,
         wav_path=wav_path,
+        low_snr_warning=low_snr_warning,
         **stem_fields,
     )
     full_gp5 = tab_artifacts.get("tab_full_gp5_base64") if tab_artifacts else None

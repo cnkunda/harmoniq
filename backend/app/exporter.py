@@ -8,6 +8,8 @@ import re
 
 from app.gp_export_midi import gp5_bytes_to_midi
 from app.gp_export_musicxml import gp5_bytes_to_musicxml
+from app.musicxml_builder import build_musicxml # NEW
+from app.schemas import BeatGrid, ChordTimeline, SoloNotes # NEW
 
 ALLOWED_FORMATS = frozenset({"midi", "musicxml", "pdf", "png"})
 # ~16MB binary after base64 decode
@@ -65,3 +67,28 @@ def export_gp5_base64(
     if fmt == "pdf":
         raise ExportUnsupportedError("PDF export is not available on this server.")
     raise ExportUnsupportedError("PNG export is not available on this server.")
+
+def export_musicxml_from_json(
+    beat_grid: BeatGrid,
+    chord_timeline: ChordTimeline,
+    solo_notes: SoloNotes,
+    title: str = "Harmoniq Score",
+    artist: str = "Harmoniq AI",
+    key_signature: str | None = None,
+) -> tuple[bytes, str, str, str]:
+    """
+    Generate MusicXML from Harmoniq JSON artifacts.
+    Return (raw bytes, media type, file extension, download filename base (no ext)).
+    """
+    musicxml_str = build_musicxml(
+        beat_grid=beat_grid,
+        chord_timeline=chord_timeline,
+        solo_notes=solo_notes,
+        title=title,
+        artist=artist,
+        key_signature=key_signature,
+    )
+    # musicxml_builder returns a UTF-8 string, so encode it to bytes
+    data = musicxml_str.encode("utf-8")
+    stem = _safe_filename_stem(title)
+    return data, "application/vnd.recordare.musicxml+xml", ".musicxml", stem

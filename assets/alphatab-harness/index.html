@@ -1082,6 +1082,19 @@
           return
         }
 
+        if (msg.type === 'setMusicXml' && typeof msg.musicXml === 'string') {
+          try {
+            resetSongMetaForNewScore()
+            var encoder = new TextEncoder()
+            var bytes = encoder.encode(msg.musicXml)
+            api.load(bytes.buffer)
+            applyTranspose(currentTranspose)
+          } catch (e) {
+            postOut({ type: 'error', message: (e && e.message) ? e.message : 'setMusicXml: invalid MusicXML data' })
+          }
+          return
+        }
+
         if (msg.type === 'setAudioSrc' && typeof msg.audioSrc === 'string') {
           externalAudio.src = msg.audioSrc
           externalAudio.load()

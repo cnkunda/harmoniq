@@ -2,6 +2,8 @@
 
 Single reference for release and pipeline gates: stem quality, pitch kill-switch, error-copy verification, Phase 5 session realism, telemetry, Slow & loop residual risks, and lightweight regression smokes.
 
+**MVP Status:** Commits 1-85 complete. See [PRIORITIES.md](../PRIORITIES.md) for full roadmap. Commits 86-87 (Lyria RealTime backing band + adaptive steering) deferred to Future Features.
+
 **Cold start:** [E2E_DEMO.md](./E2E_DEMO.md).
 
 **Regression discipline:** Same platform build, test song, and tempo when comparing runs.
@@ -175,6 +177,18 @@ The former **`PLAYBACK_MATRIX`** home-tab rate/loop smoke (`am-blues-70bpm.mp3` 
 Production controls (rate **~0.5–1.0**, pitch preservation, looping) live in **`ListenStemPanel`**, **`jam.tsx`**, and related audio — validate there when changing transport behavior, not via a standalone Home smoke.
 
 ---
+
+## Backend test failures (pre-existing)
+
+The following backend tests fail due to missing optional ML dependencies (librosa, basic_pitch, music21) that are not installed in the CI/test environment. These failures are pre-existing and not related to recent commits:
+
+- `test_export_musicxml_from_json_basic` - missing music21
+- `test_chord_inference_silence_threshold` - missing librosa
+- `test_chord_majority_vote_pooling` - missing librosa
+- `test_solo_monophonic_truncation` - missing basic_pitch
+- `test_solo_micro_note_filtering` - missing basic_pitch
+
+**Status:** These failures are tracked but do not block commits. The optional dependencies are only needed for the full transcription pipeline and are not required for core Harmoniq functionality.
 
 ## Regression smokes
 

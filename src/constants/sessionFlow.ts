@@ -1,8 +1,8 @@
 import { getAppPref } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_SHOWN_DAY, PREF_MOOD_CHECK_SKIP } from '@/src/db/schema'
 
-/** Ordered session steps — matches `app/session/*.tsx` route segments (Commit 62 adds `tune`). */
-export const SESSION_STEPS = ['tune', 'listen', 'study', 'slow', 'play', 'review'] as const
+/** Ordered session steps — matches `app/session/*.tsx` route segments (Commit 62 adds `tune`; Commit 84 adds `orient`). */
+export const SESSION_STEPS = ['tune', 'orient', 'listen', 'study', 'slow', 'play', 'review'] as const
 export type SessionStep = (typeof SESSION_STEPS)[number]
 
 export function sessionStepIndexFromPathname(pathname: string): number {
@@ -19,7 +19,7 @@ export function sessionHref(step: SessionStep): `/session/${SessionStep}` {
 
 /** First session screen: pre-flight tuner (Commit 62) unless user chose to skip it. */
 export function sessionEntryHref(skipTuneStep: boolean): `/session/${SessionStep}` {
-  return skipTuneStep ? '/session/listen' : '/session/tune'
+  return skipTuneStep ? '/session/orient' : '/session/tune'
 }
 
 function currentLocalDayKey(): string {

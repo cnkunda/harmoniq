@@ -12,6 +12,7 @@ export type TabLoopBarRegion = {
 /** Parent → harness */
 export type TabInboundMessage =
   | { type: 'setScore'; gp5Base64: string }
+  | { type: 'setMusicXml'; musicXml: string }
   | { type: 'setAudioSrc'; audioSrc: string }
   | { type: 'setPlaybackRate'; playbackRate: number }
   | { type: 'seekTo'; positionMs: number }
@@ -89,6 +90,7 @@ export type SongScoreMeta = {
 /** Imperative API shared by `AlphaTabWebView` (native) and `AlphaTabWeb` (Expo web DOM). */
 export type AlphaTabSurfaceRef = {
   setAudioSrc: (audioSrc: string) => void
+  setMusicXml: (musicXml: string) => void
   setPlaybackRate: (playbackRate: number) => void
   seekTo: (positionMs: number) => void
   /** Drive cursor when audio comes from Web Audio (stems), not the tab reference audio element. */

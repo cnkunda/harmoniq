@@ -8,33 +8,56 @@ import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { LyricsStrip } from '@/components/LyricsStrip'
+import { ScoreViewer } from '@/components/ScoreViewer'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { TheoryCard } from '@/components/TheoryCard'
 import { toast } from '@/components/ToastConfig'
-import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
-import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
+import { exportMusicXmlFromJson, fetchTheoryAnnotation } from '@/src/api/analyze'
 import { sessionHref } from '@/src/constants/sessionFlow'
-import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { getAppPref } from '@/src/db/client'
 import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
+import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
+import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { capoSuggestion, parseKey } from '@/src/music/capoSuggestion'
+import { getChordFunction } from '@/src/music/chordFunction'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
 import {
-  buildFretboardShareUrl,
-  readFretboardShareStateFromLocation,
-  type FretboardOverlayMode,
+    buildFretboardShareUrl,
+    readFretboardShareStateFromLocation,
+    type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
-import type { NoteEventMessage } from '@/types/tabMessage'
+import type { AlphaTabSurfaceRef, NoteEventMessage } from '@/types/tabMessage'
+import type { ChordEvent, ChordTimeline, SoloNote, SoloNotes } from '@/types/transcription'
 
 type TabVariant = 'full' | 'skeleton' | 'alt'
+
+interface TranscriptionValidationMetadata {
+  validation?: {
+    is_playable: boolean;
+    flag_reason?: string | null;
+    model_version: string;
+    confidence: number;
+  };
+}
+
+interface LessonSectionWithMusic extends Record<string, unknown> {
+  chord_timeline?: ChordTimeline;
+  solo_notes?: SoloNotes;
+  confidence?: number | null;
+  transcription_metadata?: TranscriptionValidationMetadata | null;
+}
+
+type ProcessedMusicalEvent = { type: 'chord', time: number, data: ChordEvent } | { type: 'solo_note', time: number, data: SoloNote };
 
 const DEFAULT_TICK: PlaybackTickContext = {
   positionSec: 0,
@@ -66,15 +89,200 @@ export default function StudyScreen() {
   const isDemo = useIsDemoLesson()
   const router = useRouter()
   const sessionStemRef = useRef<SessionStemAndTabHandle>(null)
+  const scoreViewerRef = useRef<AlphaTabSurfaceRef>(null)
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const [tick, setTick] = useState<PlaybackTickContext>(DEFAULT_TICK)
+  const [musicXmlData, setMusicXmlData] = useState<string | null>(null);
+  const [alphaTabIsReady, setAlphaTabIsReady] = useState(false);
+  const [processedMusicalEvents, setProcessedMusicalEvents] = useState<ProcessedMusicalEvent[]>([]);
+  const [showTranscriptionWarningModal, setShowTranscriptionWarningModal] = useState(false);
+  const [stemRoutingOverride, setStemRoutingOverride] = useState<string | null>(null);
+  const [theoryAnnotation, setTheoryAnnotation] = useState<{ chordName: string; chordFunction: string; romanNumeral: string; rationale: string } | null>(null);
+
+  // Fetch MusicXML from backend when transcription data is available
+  useEffect(() => {
+    const fetchMusicXml = async () => {
+      const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
+      if (!section) return
+
+      // Check if we have the required transcription data
+      const hasBeatGrid = section.beat_grid != null
+      const hasChordTimeline = section.chord_timeline != null
+      const hasSoloNotes = section.solo_notes != null
+
+      if (!hasBeatGrid || !hasChordTimeline || !hasSoloNotes) {
+        setMusicXmlData(null)
+        return
+      }
+
+      try {
+        const musicXml = await exportMusicXmlFromJson({
+          beat_grid: section.beat_grid,
+          chord_timeline: section.chord_timeline,
+          solo_notes: section.solo_notes,
+          title: lesson?.song_title ?? null,
+          artist: lesson?.artist ?? null,
+        })
+        setMusicXmlData(musicXml)
+      } catch (e) {
+        console.error('Failed to fetch MusicXML:', e)
+        setMusicXmlData(null)
+      }
+    }
+
+    void fetchMusicXml()
+  }, [lesson?.job_id, lessonSectionIndex, lesson?.song_title, lesson?.artist])
+
+  // Show transcription warning modal when section confidence is low
+  useEffect(() => {
+    const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
+    if (!section) return
+
+    const sectionConfidence = typeof section.confidence === 'number' ? section.confidence : 1.0
+    const transcriptionConfidence = typeof lesson?.transcription_confidence === 'number' ? lesson.transcription_confidence : 1.0
+    const isLowConfidence = sectionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX ||
+                          transcriptionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX
+
+    // Check transcription metadata for validation flags
+    const validationMetadata = section.transcription_metadata?.validation
+    const hasValidationFlag = validationMetadata?.flag_reason != null
+
+    if (isLowConfidence || hasValidationFlag) {
+      setShowTranscriptionWarningModal(true)
+    } else {
+      setShowTranscriptionWarningModal(false)
+    }
+  }, [lesson?.sections, lessonSectionIndex, lesson?.transcription_confidence])
 
   const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
     setTick(ctx)
   }, [])
 
-  const section = lesson?.sections?.[lessonSectionIndex]
+  const handleAlphaTabReady = useCallback(() => {
+    setAlphaTabIsReady(true);
+    console.log('AlphaTab is ready!');
+  }, []);
+
+  const handleCursorPositionUpdate = useCallback((position: number) => {
+    // console.log('Cursor position:', position);
+
+    let currentEvent = null;
+    for (let i = processedMusicalEvents.length - 1; i >= 0; i--) {
+      if (processedMusicalEvents[i].time <= position) {
+        currentEvent = processedMusicalEvents[i];
+        break;
+      }
+    }
+
+    if (currentEvent) {
+      if (currentEvent.type === 'solo_note') {
+        const note = currentEvent.data;
+        // This is a placeholder, as SoloNote schema doesn't directly contain fret/string.
+        // In a real scenario, you'd map pitch to a fretboard position.
+        // For now, we'll use pitch as a proxy for midi and assign dummy fret/string.
+        setSelectedNote({ midi: note.pitch, fret: note.pitch % 12, string: (note.pitch % 6) + 1 });
+      } else if (currentEvent.type === 'chord') {
+        const chordEvent = currentEvent.data;
+        // For chords, we might want to highlight the chord shape or root note.
+        // This is a simplified representation.
+        // Assuming 'C:maj' -> C (MIDI 60), 'D:min' -> D (MIDI 62) etc.
+        const rootNote = chordEvent.chord.split(':')[0];
+        // This mapping is highly simplified and needs proper music theory implementation.
+        const midiMap: { [key: string]: number } = { 'C': 60, 'D': 62, 'E': 64, 'F': 65, 'G': 67, 'A': 69, 'B': 71 };
+        const midi = midiMap[rootNote] || 0;
+        setSelectedNote({ midi: midi, fret: midi % 12, string: (midi % 6) + 1 });
+      }
+    } else {
+      setSelectedNote(null);
+    }
+    setFretPulseKey((k) => k + 1);
+  }, [processedMusicalEvents]);
+
+  const handleBeatEvent = useCallback((beat: number) => {
+    console.log('Beat event:', beat);
+    // TODO: Potentially update UI elements based on beat
+  }, []);
+
+  const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
+
+  useEffect(() => {
+    if (section?.chord_timeline?.events || section?.solo_notes?.notes) {
+      const allEvents: ProcessedMusicalEvent[] = [];
+
+      if (section.chord_timeline?.events) {
+        section.chord_timeline.events.forEach((event: ChordEvent) => {
+          allEvents.push({ type: 'chord', time: event.timestamp, data: event });
+        });
+      }
+
+      if (section.solo_notes?.notes) {
+        section.solo_notes.notes.forEach((note: SoloNote) => {
+          allEvents.push({ type: 'solo_note', time: note.start_time, data: note });
+        });
+      }
+
+      allEvents.sort((a, b) => a.time - b.time);
+      setProcessedMusicalEvents(allEvents);
+    }
+  }, [section?.chord_timeline, section?.solo_notes]);
+
+  // Update theory annotation based on current chord during playback
+  useEffect(() => {
+    const updateTheoryAnnotation = async () => {
+      if (!section?.chord_timeline?.events || !lesson?.key) return;
+
+      // Find current chord based on playback position
+      const currentChordEvent = section.chord_timeline.events
+        .slice()
+        .reverse()
+        .find((event: ChordEvent) => event.timestamp <= tick.positionSec);
+
+      if (!currentChordEvent || currentChordEvent.chord === 'N') {
+        setTheoryAnnotation(null);
+        return;
+      }
+
+      // Get chord function
+      const chordFunction = getChordFunction(lesson.key, currentChordEvent.chord);
+      if (!chordFunction) {
+        setTheoryAnnotation(null);
+        return;
+      }
+
+      // Fetch theory rationale from backend
+      try {
+        const response = await fetchTheoryAnnotation({
+          key: lesson.key,
+          chord: currentChordEvent.chord,
+          chord_function: chordFunction.roman,
+        });
+        setTheoryAnnotation({
+          chordName: currentChordEvent.chord,
+          chordFunction: chordFunction.label,
+          romanNumeral: chordFunction.roman,
+          rationale: response.rationale,
+        });
+      } catch (e) {
+        console.error('Failed to fetch theory annotation:', e);
+        // Set fallback annotation without rationale
+        setTheoryAnnotation({
+          chordName: currentChordEvent.chord,
+          chordFunction: chordFunction.label,
+          romanNumeral: chordFunction.roman,
+          rationale: 'This chord functions as ' + chordFunction.label.toLowerCase() + ' in the key.',
+        });
+      }
+    };
+
+    // Debounce the annotation fetch to avoid excessive API calls
+    const timeoutId = setTimeout(() => {
+      void updateTheoryAnnotation();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [tick.positionSec, section?.chord_timeline, lesson?.key]);
+
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
   const lyricWords = useMemo(() => toLyricWords(lesson?.lyrics_aligned), [lesson?.lyrics_aligned])
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()
@@ -237,6 +445,92 @@ export default function StudyScreen() {
       onNext={() => router.push(sessionHref('slow'))}
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.study}</DemoTourCallout> : null}
+
+      {showTranscriptionWarningModal && (
+        <View className="mx-4 rounded-lg border border-amber-accent/50 bg-amber-accent/10 p-4">
+          <Text className="mb-2 font-sans-semibold text-amber-accent">
+            Transcription Uncertainty
+          </Text>
+          <Text className="mb-3 font-sans text-sm text-wood-900">
+            We're {Math.round((lesson?.transcription_confidence ?? 1.0) * 100)}% sure about this transcription.
+            Want to slow it down to 50% speed and verify?
+          </Text>
+          
+          {/* Stem routing override UI */}
+          {lesson?.stems && Object.keys(lesson.stems).length > 1 && (
+            <View className="mb-3">
+              <Text className="mb-2 font-sans-medium text-xs text-wood-900">
+                Re-route stem source:
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
+                {Object.keys(lesson.stems).map((stemName) => (
+                  <AnimatedPressable
+                    key={stemName}
+                    className={`rounded-md border px-3 py-1.5 ${
+                      stemRoutingOverride === stemName
+                        ? 'border-amber-accent bg-amber-accent/20'
+                        : 'border-wood-600/30 bg-wood-800/50'
+                    }`}
+                    onPress={() => {
+                      setStemRoutingOverride(stemName)
+                      // Trigger re-render with new stem
+                      console.log('Stem routing override:', stemName)
+                    }}
+                  >
+                    <Text
+                      className={`font-sans-medium text-xs ${
+                        stemRoutingOverride === stemName ? 'text-amber-accent' : 'text-cream'
+                      }`}
+                    >
+                      {stemName}
+                    </Text>
+                  </AnimatedPressable>
+                ))}
+              </View>
+            </View>
+          )}
+          
+          <View className="flex-row gap-2">
+            <AnimatedPressable
+              className="flex-1 rounded-md border border-amber-accent/30 bg-amber-accent/20 px-3 py-2"
+              onPress={() => {
+                setShowTranscriptionWarningModal(false)
+                // Slow down playback to 50%
+                const tabSurface = sessionStemRef.current?.getTabSurface()
+                tabSurface?.setPlaybackRate(0.5)
+              }}
+            >
+              <Text className="text-center font-sans-medium text-sm text-wood-900">
+                Slow Down & Verify
+              </Text>
+            </AnimatedPressable>
+            <AnimatedPressable
+              className="flex-1 rounded-md border border-wood-600/30 bg-wood-800/50 px-3 py-2"
+              onPress={() => {
+                setShowTranscriptionWarningModal(false)
+              }}
+            >
+              <Text className="text-center font-sans-medium text-sm text-cream">
+                Continue Anyway
+              </Text>
+            </AnimatedPressable>
+          </View>
+        </View>
+      )}
+
+      {musicXmlData && (
+        <View style={{ flex: 1, height: 300, width: '100%' }}>
+          <ScoreViewer
+            ref={scoreViewerRef}
+            musicXml={musicXmlData}
+            onAlphaTabReady={handleAlphaTabReady}
+            onCursorPositionUpdate={handleCursorPositionUpdate}
+            onBeatEvent={handleBeatEvent}
+            onNoteEvent={onTabNoteEvent}
+          />
+        </View>
+      )}
+
       <SessionStemAndTab
         ref={sessionStemRef}
         tabRenderPreset="study"
@@ -286,6 +580,15 @@ export default function StudyScreen() {
             />
 
             <LyricsStrip words={lyricWords} playbackSec={tick.positionSec} />
+
+            {theoryAnnotation && (
+              <TheoryCard
+                chordName={theoryAnnotation.chordName}
+                chordFunction={theoryAnnotation.chordFunction}
+                romanNumeral={theoryAnnotation.romanNumeral}
+                rationale={theoryAnnotation.rationale}
+              />
+            )}
 
             <View className="mt-2">
               <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">

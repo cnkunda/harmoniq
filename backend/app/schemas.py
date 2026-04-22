@@ -321,6 +321,8 @@ class LessonSectionStub(BaseModel):
     confidence: float | None = None
     # Start time in seconds for Listen step section chips (librosa segments).
     start_time_seconds: float | None = None
+    # Transcription validation metadata (commit #82)
+    transcription_metadata: dict[str, Any] | None = None
 
 
 class LessonJSON(BaseModel):
@@ -349,6 +351,8 @@ class LessonJSON(BaseModel):
     guitar_stem_usable: bool | None = None
     analysis_audio_role: str | None = None
     tabs_unavailable_reason: str | None = None
+    # Commit 82: Low SNR warning for pre-emptive transcription quality warning
+    low_snr_warning: bool | None = None
 
 
 class JobStatus(BaseModel):
@@ -532,3 +536,103 @@ class ExportRequest(BaseModel):
         description="Target export format; pdf/png may be rejected by the server build.",
     )
     title: str | None = Field(default=None, max_length=200, description="Optional filename stem hint.")
+
+
+class MusicXMLJsonExportRequest(BaseModel):
+    """POST /export/musicxml-from-json — MusicXML from Harmoniq JSON artifacts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    beat_grid: BeatGrid
+    chord_timeline: ChordTimeline
+    solo_notes: SoloNotes
+    title: str = Field("Harmoniq Score", max_length=200, description="Optional title for the score.")
+    artist: str = Field("Harmoniq AI", max_length=200, description="Optional artist for the score.")
+    key_signature: str | None = Field(
+        default=None,
+        max_length=80,
+        description="Optional key signature (e.g., 'C major', 'A minor'). If omitted, C major is used.",
+    )
+
+# Commit 79 Schemas
+
+class ChordEvent(BaseModel):
+    timestamp: float = Field(..., description="Start time of the chord in seconds")
+    chord: str = Field(..., description="Chord symbol (e.g., 'C:maj', 'N')")
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+class ChordTimeline(BaseModel):
+    events: list[ChordEvent]
+
+class SoloNote(BaseModel):
+    start_time: float = Field(..., description="Quantized start time in seconds")
+    duration: float = Field(..., description="Quantized duration in seconds", ge=0)
+    pitch: int = Field(..., description="MIDI pitch number (e.g., 60 for Middle C)")
+    velocity: int = Field(..., ge=0, le=127)
+
+class SoloNotes(BaseModel):
+    notes: list[SoloNote]
+
+# Commit 82 Schemas
+
+class TranscriptionVerifyRequest(BaseModel):
+    """POST /transcription/verify — user corrections for low-confidence transcriptions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str = Field(..., description="Job ID to apply corrections to")
+    section_index: int | None = Field(default=None, description="Section index to apply corrections to (optional, applies to all sections if null)")
+    stem_routing_override: str | None = Field(default=None, description="User-selected stem override (e.g., 'guitar_stem', 'full_mix')")
+    user_confirmed: bool = Field(default=False, description="Whether user confirmed the transcription is correct")
+    user_notes: str | None = Field(default=None, description="Optional user notes about the correction")
+
+class TranscriptionVerifyResponse(BaseModel):
+    """Response from POST /transcription/verify."""
+
+    success: bool
+    message: str
+    corrections_applied: bool
+
+# Commit 84 Schemas
+
+class OrientClipRequest(BaseModel):
+    """POST /session/orient-clip — request for generating orient clip."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str = Field(..., description="Job ID to generate clip for")
+    style_label: str | None = Field(default=None, description="Musical style (e.g., 'rock', 'blues')")
+    technique: str | None = Field(default=None, description="Target technique (e.g., 'bend', 'hammer-on')")
+    key: str | None = Field(default=None, description="Musical key (e.g., 'C major')")
+    bpm: float | None = Field(default=None, description="Tempo in beats per minute")
+
+class OrientClipResponse(BaseModel):
+    """Response from POST /session/orient-clip."""
+
+    wav_path: str = Field(..., description="Path to generated WAV file")
+    annotation: str = Field(..., description="What to listen for in the clip")
+    duration: float = Field(..., description="Duration in seconds")
+    used_placeholder: bool = Field(default=False, description="Whether a placeholder was used")
+    placeholder_reason: str | None = Field(default=None, description="Reason for placeholder if used")
+
+# Commit 85 Schemas
+
+class TheoryAnnotationRequest(BaseModel):
+    """POST /theory/annotation — plain-language theory rationale for a chord in a key context (PRIORITIES §85)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(..., description="Musical key (e.g., 'C major', 'A minor')")
+    chord: str = Field(..., description="Chord symbol (e.g., 'C:maj', 'D:min')")
+    chord_function: str = Field(..., description="Roman numeral function (e.g., 'I', 'IV', 'V')")
+
+
+class TheoryAnnotationResponse(BaseModel):
+    """Response from POST /theory/annotation."""
+
+    rationale: str = Field(..., description="Plain-language explanation of the chord's function")
+
+class AnalyzeTranscriptionResponse(BaseModel):
+    job_id: str
+    chord_timeline: ChordTimeline
+    solo_notes: SoloNotes

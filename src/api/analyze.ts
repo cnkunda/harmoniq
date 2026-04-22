@@ -4,20 +4,20 @@ import { PREF_EXPERIENCE_LEVEL, PREF_STYLE_FOCUS } from '@/src/db/schema'
 import type { SkillNodeRow } from '@/src/db/types'
 import { parseTechniqueRollJson, rollingSessionsWeak } from '@/src/session/skillMutator'
 import type {
-  AnalyzeJob,
-  CoachHydrationStatusPayload,
-  CurriculumSuggestResponse,
-  CurriculumSuggestion,
-  JamResult,
-  LearningContextPayload,
-  LessonJSON,
-  PlayerProfilePayload,
-  PracticePlanPayload,
-  QuizAnswersPayload,
-  ScoreResult,
-  SpotifyPlaybackStatePayload,
-  SpotifyTasteProfile,
-  TasteProfilePayload,
+    AnalyzeJob,
+    CoachHydrationStatusPayload,
+    CurriculumSuggestResponse,
+    CurriculumSuggestion,
+    JamResult,
+    LearningContextPayload,
+    LessonJSON,
+    PlayerProfilePayload,
+    PracticePlanPayload,
+    QuizAnswersPayload,
+    ScoreResult,
+    SpotifyPlaybackStatePayload,
+    SpotifyTasteProfile,
+    TasteProfilePayload,
 } from '@/src/types'
 
 export class ApiError extends Error {
@@ -58,6 +58,35 @@ export function parseFastApiDetail(raw: string): string {
 }
 
 export type ExportFormat = 'midi' | 'musicxml' | 'pdf' | 'png'
+
+/** POST /export/musicxml-from-json — MusicXML from Harmoniq JSON artifacts (Commit 80). */
+export async function exportMusicXmlFromJson(payload: {
+  beat_grid: unknown
+  chord_timeline: unknown
+  solo_notes: unknown
+  title?: string | null
+  artist?: string | null
+}): Promise<string> {
+  const body: Record<string, unknown> = {
+    beat_grid: payload.beat_grid,
+    chord_timeline: payload.chord_timeline,
+    solo_notes: payload.solo_notes,
+  }
+  if (typeof payload.title === 'string' && payload.title.trim()) body.title = payload.title.trim()
+  if (typeof payload.artist === 'string' && payload.artist.trim()) body.artist = payload.artist.trim()
+
+  const res = await fetch(`${API_BASE_URL}/export/musicxml-from-json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+  const text = await res.text()
+  return text
+}
 
 /** POST /export — returns blob + headers for filenames and MIME. */
 export async function submitExportJob(payload: {
@@ -668,4 +697,17 @@ export async function disconnectSpotifyServer(clientSession: string): Promise<vo
     const text = await res.text().catch(() => '')
     throw new ApiError(res.status, parseFastApiDetail(text))
   }
+}
+
+/** Commit 85: plain-language theory rationale for a chord in a key context. */
+export async function fetchTheoryAnnotation(payload: {
+  key: string
+  chord: string
+  chord_function: string
+}): Promise<{ rationale: string }> {
+  return request<{ rationale: string }>('/theory/annotation', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
 }

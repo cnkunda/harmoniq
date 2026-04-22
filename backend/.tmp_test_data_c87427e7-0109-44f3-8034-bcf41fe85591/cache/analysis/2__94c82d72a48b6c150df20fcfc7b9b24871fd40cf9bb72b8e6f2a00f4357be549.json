@@ -1,0 +1,48 @@
+{
+  "pipeline_version": "2",
+  "audio_sha256": "94c82d72a48b6c150df20fcfc7b9b24871fd40cf9bb72b8e6f2a00f4357be549",
+  "lesson_json": {
+    "job_id": "1020ef69-b156-4eb9-b486-01bc7cb8872d",
+    "song_title": "Version Test",
+    "artist": "Test",
+    "style_label": null,
+    "key": "C major",
+    "key_confidence": 0.9,
+    "tempo": 120.0,
+    "tempo_confidence": 0.9,
+    "transcription_confidence": 0.8,
+    "beat_grid": [
+      0.0
+    ],
+    "bar_timestamps": [
+      0.0
+    ],
+    "stems": {
+      "guitar": ".tmp_test_data_c87427e7-0109-44f3-8034-bcf41fe85591/jobs/1020ef69-b156-4eb9-b486-01bc7cb8872d/stems/guitar.wav",
+      "bass": ".tmp_test_data_c87427e7-0109-44f3-8034-bcf41fe85591/jobs/1020ef69-b156-4eb9-b486-01bc7cb8872d/stems/bass.wav",
+      "drums": ".tmp_test_data_c87427e7-0109-44f3-8034-bcf41fe85591/jobs/1020ef69-b156-4eb9-b486-01bc7cb8872d/stems/drums.wav",
+      "vocals": ".tmp_test_data_c87427e7-0109-44f3-8034-bcf41fe85591/jobs/1020ef69-b156-4eb9-b486-01bc7cb8872d/stems/vocals.wav",
+      "piano": ".tmp_test_data_c87427e7-0109-44f3-8034-bcf41fe85591/jobs/1020ef69-b156-4eb9-b486-01bc7cb8872d/stems/piano.wav",
+      "other": ".tmp_test_data_c87427e7-0109-44f3-8034-bcf41fe85591/jobs/1020ef69-b156-4eb9-b486-01bc7cb8872d/stems/other.wav"
+    },
+    "lyrics_aligned": [],
+    "sections": [
+      {
+        "label": "Intro",
+        "confidence": 0.8,
+        "start_time_seconds": null,
+        "transcription_metadata": null,
+        "coach_note": "",
+        "coach_explanation": ""
+      }
+    ],
+    "alphatab_prerender_hints": null,
+    "stem_isolation_warning": null,
+    "stem_quality_flags": [],
+    "guitar_stem_usable": null,
+    "analysis_audio_role": null,
+    "tabs_unavailable_reason": null,
+    "low_snr_warning": null,
+    "wav_path": "C:\\workspace\\harmoniq\\backend\\.tmp_test_data_c87427e7-0109-44f3-8034-bcf41fe85591\\jobs\\1020ef69-b156-4eb9-b486-01bc7cb8872d\\song.wav"
+  }
+}

@@ -887,7 +887,6 @@ def generate_practice_plan_intros(
             return parsed
         logger.warning("practice_plan_intros fallback reason=parse_error")
     except FutureTimeoutError:
-        future.cancel()
         logger.warning("practice_plan_intros fallback reason=timeout")
     except Exception as exc:
         logger.warning("practice_plan_intros fallback reason=api_error error=%s", exc.__class__.__name__)
@@ -895,3 +894,109 @@ def generate_practice_plan_intros(
         pool.shutdown(wait=False, cancel_futures=True)
 
     return template_practice_plan_intros(slots_meta, player_profile, mood=mood)
+
+
+# Commit 84: Orient phase annotation
+
+def generate_orient_annotation(
+    style_label: str | None,
+    technique: str | None,
+    key: str | None,
+    bpm: float | None,
+) -> str:
+    """
+    Generate 2-3 sentences telling the user what to listen for in the orient clip.
+
+    Args:
+        style_label: Musical style (e.g., "rock", "blues", "jazz")
+        technique: Target technique (e.g., "bend", "hammer-on", "slide")
+        key: Musical key (e.g., "C major", "A minor")
+        bpm: Tempo in beats per minute
+
+    Returns:
+        Annotation string telling the user what to listen for
+    """
+    # Template annotation for now - production would use Claude for dynamic generation
+    style = style_label or "this style"
+    tech = technique or "the technique"
+
+    return f"Listen for how {tech} is used in this {style} example. Pay attention to the timing and how it fits with the rhythm section. Notice the subtle variations in sound quality and phrasing."
+
+
+THEORY_ANNOTATION_USER_PROMPT = """Return valid JSON with exactly one string field "rationale".
+
+Generate a plain-language theory explanation for this musical context:
+- key: {key}
+- chord: {chord}
+- chord_function: {chord_function}
+
+Explain in 1-2 sentences why this chord functions this way in the key. Use plain English — avoid jargon unless you immediately explain it.
+Focus on how the chord feels (home base, tension, departure, return) and what it sets up next.
+Output only JSON."""
+
+FALLBACK_THEORY_RATIONALE = "This chord creates tension that wants to resolve back to the home key. Listen for how it pulls the ear toward the next chord."
+
+
+def generate_theory_annotation(
+    *,
+    key: str | None,
+    chord: str | None,
+    chord_function: str | None,
+) -> str:
+    """
+    Generate a plain-language theory rationale for a chord in a key context (PRIORITIES §85).
+
+    Args:
+        key: Musical key (e.g., "C major", "A minor")
+        chord: Chord symbol (e.g., "C:maj", "D:min")
+        chord_function: Roman numeral function (e.g., "I", "IV", "V")
+
+    Returns:
+        Rationale string explaining the chord's function in plain language
+    """
+    # Check kill-switch
+    if os.getenv("HARMONIQ_SKIP_THEORY_ANNOTATE", "").strip() == "1":
+        logger.info("theory_annotation fallback reason=HARMONIQ_SKIP_THEORY_ANNOTATE=1")
+        return FALLBACK_THEORY_RATIONALE
+
+    # Keep test runs deterministic and fully offline
+    if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("HARMONIQ_ENABLE_COACH_IN_TESTS") != "1":
+        logger.info("theory_annotation fallback reason=pytest_mode")
+        return FALLBACK_THEORY_RATIONALE
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        logger.warning("theory_annotation fallback reason=missing_api_key")
+        return FALLBACK_THEORY_RATIONALE
+
+    user_prompt = THEORY_ANNOTATION_USER_PROMPT.format(
+        key=key or "Unknown key",
+        chord=chord or "Unknown chord",
+        chord_function=chord_function or "Unknown function",
+    )
+
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(
+        _call_claude_text,
+        api_key=api_key,
+        user_prompt=user_prompt,
+        max_tokens=150,
+        temperature=0.5,
+    )
+
+    try:
+        raw_text = future.result(timeout=QUICK_FEEDBACK_TIMEOUT_SECONDS)
+        parsed = _parse_quick_message_json(raw_text)
+        if parsed is None:
+            logger.warning("theory_annotation fallback reason=parse_error")
+            return FALLBACK_THEORY_RATIONALE
+        return parsed
+    except FutureTimeoutError:
+        future.cancel()
+        logger.warning("theory_annotation fallback reason=timeout")
+        return FALLBACK_THEORY_RATIONALE
+    except Exception as exc:
+        logger.warning("theory_annotation fallback reason=api_error error=%s", exc.__class__.__name__)
+        return FALLBACK_THEORY_RATIONALE
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)

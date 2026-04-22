@@ -6,6 +6,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from fastapi import BackgroundTasks, HTTPException
+from app.schemas import AnalyzeTranscriptionResponse, BeatGrid
+from app.chord_inference import infer_chords
+from app.solo_inference import infer_solo
+import json
+
 # Load `backend/.env` so SPOTIFY_CLIENT_ID and other local secrets apply when using `uvicorn`
 # (shell env still wins if already set).
 _backend_root = Path(__file__).resolve().parents[1]
@@ -33,6 +39,7 @@ from app.exporter import (
     ExportDisabledError,
     ExportUnsupportedError,
     export_gp5_base64,
+    export_musicxml_from_json, # NEW
 )
 from app.schemas import (
     AnalyzeJobCreated,
@@ -40,8 +47,11 @@ from app.schemas import (
     CoachHydrationStatus,
     CurriculumSuggestRequest,
     CurriculumSuggestResponse,
+    TheoryAnnotationRequest,
+    TheoryAnnotationResponse,
     CurriculumSuggestionItem,
     ExportRequest,
+    MusicXMLJsonExportRequest, # NEW
     JamBackingRequest,
     JamBackingResponse,
     JamScoreRequest,
@@ -50,6 +60,8 @@ from app.schemas import (
     LessonJSON,
     OnboardingPlacementRequest,
     OnboardingPlacementResponse,
+    OrientClipRequest, # NEW commit 84
+    OrientClipResponse, # NEW commit 84
     PlayerProfile,
     PracticePlan,
     PracticePlanRequest,
@@ -62,6 +74,8 @@ from app.schemas import (
     TasteDeriveRequest,
     TasteProfile,
     TranscriptionPrepareResponse,
+    TranscriptionVerifyRequest, # NEW commit 82
+    TranscriptionVerifyResponse, # NEW commit 82
 )
 from app.audio_processing import AudioPreparationError, prepare_audio_input
 from app.beat_grid import (
@@ -86,7 +100,10 @@ from app.coach import (
     generate_jam_coach_summary,
     generate_onboarding_placement_summary,
     generate_quick_feedback,
+    generate_orient_annotation, # NEW commit 84
+    generate_theory_annotation, # NEW commit 85
 )
+from app.lyria_clip import generate_orient_clip  # NEW commit 84
 from app.scoring_constants import RELIABILITY_BANDS, SCORE_CONTRACT_VERSION, clamp01
 from app.jam_backing import (
     LyriaProviderError,
@@ -102,7 +119,7 @@ logger = logging.getLogger("harmoniq.api")
 logger.setLevel(logging.INFO)
 
 PITCH_CLASS_KEY_RE = re.compile(r"^pc_(C|C#|D|D#|E|F|F#|G|G#|A|A#|B)$")
-GENERIC_MAP_KEY_RE = re.compile(r"^[A-Za-z0-9_:#\-/+(). ]{1,64}$")
+GENERIC_MAP_KEY_RE = re.compile(r"^[A-Za-z0-9._:#\-/+(). ]{1,64}$")
 
 
 def _parse_player_profile_field(raw: object) -> PlayerProfile | None:
@@ -237,6 +254,58 @@ async def export_tab(req: ExportRequest) -> Response:
             "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
+
+
+@app.post(
+    "/export/musicxml-from-json",
+    tags=["Export"],
+    summary="POST /export/musicxml-from-json — MusicXML from Harmoniq JSON artifacts (Commit 80)",
+    responses={
+        422: {"description": "Invalid payload or data for MusicXML generation."},
+    },
+)
+async def export_musicxml_json(req: MusicXMLJsonExportRequest) -> Response:
+    """Generate MusicXML from BeatGrid, ChordTimeline, and SoloNotes JSON data."""
+    try:
+        data, mime, ext, stem = export_musicxml_from_json(
+            beat_grid=req.beat_grid,
+            chord_timeline=req.chord_timeline,
+            solo_notes=req.solo_notes,
+            title=req.title,
+            artist=req.artist,
+            key_signature=req.key_signature,
+        )
+    except Exception as e:
+        logger.exception("MusicXML generation failed")
+        raise HTTPException(status_code=422, detail=f"MusicXML generation failed: {e}") from e
+
+    filename = f"{stem}{ext}"
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+@app.post(
+    "/theory/annotation",
+    response_model=TheoryAnnotationResponse,
+    tags=["Theory"],
+    summary="POST /theory/annotation — plain-language theory rationale for a chord (PRIORITIES §85)",
+    responses={
+        422: {"description": "Invalid payload"},
+    },
+)
+async def theory_annotation(req: TheoryAnnotationRequest) -> TheoryAnnotationResponse:
+    """Generate a plain-language theory rationale for a chord in a key context."""
+    rationale = generate_theory_annotation(
+        key=req.key,
+        chord=req.chord,
+        chord_function=req.chord_function,
+    )
+    return TheoryAnnotationResponse(rationale=rationale)
 
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # per README: max 50MB
@@ -974,4 +1043,166 @@ async def jam_score(payload: JamScoreRequest) -> JamScoreResult:
             "signal_quality": round(signal_quality, 3),
             "reliability_flags": reliability_tags,
         },
+    )
+
+
+
+@app.post("/transcription/analyze/{job_id}", response_model=AnalyzeTranscriptionResponse)
+async def analyze_transcription(job_id: str):
+    """Commit 79: Runs ML inference on prepared stems."""
+    job_dir = Path(f"./data/jobs/{job_id}") # Adjust to your DATA_DIR logic
+    if not job_dir.exists():
+        raise HTTPException(status_code=404, detail="Job not found. Run prepare first.")
+        
+    # Load the beat grid created in Commit 78
+    grid_path = job_dir / "BeatGrid.json"
+    if not grid_path.exists():
+        raise HTTPException(status_code=400, detail="BeatGrid missing. Run prepare first.")
+        
+    with open(grid_path, "r") as f:
+        beat_grid = BeatGrid.model_validate_json(f.read())
+        
+    # Retrieve stem routing (assuming you saved this in Commit 78, or re-run the heuristic)
+    stems_dir = job_dir / "stems"
+    
+    # In a production app, mix the 'bass.wav' and 'other.wav' here using librosa or ffmpeg.
+    # For now, we will pass 'other.wav' to represent the backing track.
+    chord_mix_path = stems_dir / "other.wav" 
+    melodic_stem_path = stems_dir / "guitar.wav" # Fallback to vocals if guitar is silent
+
+    if not chord_mix_path.exists() or not melodic_stem_path.exists():
+        raise HTTPException(status_code=400, detail="Required stems missing.")
+
+    # Run heavy ML inference
+    chord_timeline = infer_chords(chord_mix_path, beat_grid)
+    solo_notes = infer_solo(melodic_stem_path, beat_grid)
+    
+    # Persist the artifacts
+    with open(job_dir / "chordTimeline.json", "w") as f:
+        f.write(chord_timeline.model_dump_json(indent=2))
+        
+    with open(job_dir / "SoloNotes.json", "w") as f:
+        f.write(solo_notes.model_dump_json(indent=2))
+        
+    return AnalyzeTranscriptionResponse(
+        job_id=job_id,
+        chord_timeline=chord_timeline,
+        solo_notes=solo_notes
+    )
+
+
+@app.post(
+    "/transcription/verify",
+    response_model=TranscriptionVerifyResponse,
+    tags=["Transcription"],
+    summary="POST /transcription/verify — user corrections for low-confidence transcriptions (commit 82)",
+)
+async def verify_transcription(req: TranscriptionVerifyRequest):
+    """
+    Commit 82: Write user corrections to the DB for collaborative verification.
+    
+    This endpoint allows users to:
+    - Confirm or reject low-confidence transcriptions
+    - Override stem routing (e.g., use full_mix instead of guitar_stem)
+    - Add notes about why the transcription needs correction
+    
+    Bypassed if HARMONIQ_SKIP_TRANSCRIPTION_VERIFY=1 is set.
+    """
+    # Check if verification is disabled via environment variable
+    if os.getenv("HARMONIQ_SKIP_TRANSCRIPTION_VERIFY") == "1":
+        return TranscriptionVerifyResponse(
+            success=True,
+            message="Verification bypassed (HARMONIQ_SKIP_TRANSCRIPTION_VERIFY=1)",
+            corrections_applied=False,
+        )
+    
+    job_dir = Path(f"./data/jobs/{req.job_id}")
+    if not job_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Job {req.job_id} not found.")
+    
+    # Load the lesson JSON to apply corrections
+    lesson_path = job_dir / "lesson.json"
+    if not lesson_path.exists():
+        raise HTTPException(status_code=404, detail="Lesson data not found for this job.")
+    
+    with open(lesson_path, "r") as f:
+        lesson_data = json.load(f)
+    
+    # Apply corrections
+    corrections_applied = False
+    
+    # Apply stem routing override if provided
+    if req.stem_routing_override:
+        if "stems" in lesson_data:
+            # In a production implementation, this would trigger re-analysis with the new stem
+            # For now, we just record the override in metadata
+            if "transcription_metadata" not in lesson_data:
+                lesson_data["transcription_metadata"] = {}
+            lesson_data["transcription_metadata"]["stem_routing_override"] = req.stem_routing_override
+            corrections_applied = True
+    
+    # Apply user confirmation
+    if req.user_confirmed:
+        if "transcription_metadata" not in lesson_data:
+            lesson_data["transcription_metadata"] = {}
+        lesson_data["transcription_metadata"]["user_confirmed"] = True
+        lesson_data["transcription_metadata"]["user_confirmed_at"] = __import__("datetime").datetime.now().isoformat()
+        corrections_applied = True
+    
+    # Apply user notes
+    if req.user_notes:
+        if "transcription_metadata" not in lesson_data:
+            lesson_data["transcription_metadata"] = {}
+        lesson_data["transcription_metadata"]["user_notes"] = req.user_notes
+        corrections_applied = True
+    
+    # Write updated lesson data back to file
+    if corrections_applied:
+        with open(lesson_path, "w") as f:
+            json.dump(lesson_data, f, indent=2)
+    
+    return TranscriptionVerifyResponse(
+        success=True,
+        message="Corrections recorded successfully" if corrections_applied else "No corrections to apply",
+        corrections_applied=corrections_applied,
+    )
+
+
+@app.post(
+    "/session/orient-clip",
+    response_model=OrientClipResponse,
+    tags=["Session"],
+    summary="POST /session/orient-clip — generate orient clip for Orient phase (commit 84)",
+)
+async def orient_clip(req: OrientClipRequest):
+    """
+    Commit 84: Generate a 30-second audio example demonstrating the session's target technique.
+    
+    Uses Lyria 3 Clip via Gemini API to generate the clip, with fallback to placeholder
+    when HARMONIQ_SKIP_LYRIA_CLIP=1 or when API integration is not yet complete.
+    """
+    # Generate the orient clip using lyria_clip module
+    clip_result = generate_orient_clip(
+        style_label=req.style_label,
+        technique=req.technique,
+        key=req.key,
+        bpm=req.bpm,
+        job_id=req.job_id,
+    )
+    
+    # Generate the orient annotation using coach module
+    annotation = generate_orient_annotation(
+        style_label=req.style_label,
+        technique=req.technique,
+        key=req.key,
+        bpm=req.bpm,
+    )
+    
+    # Return the response
+    return OrientClipResponse(
+        wav_path=clip_result["wav_path"],
+        annotation=annotation,
+        duration=clip_result["duration"],
+        used_placeholder=clip_result.get("used_placeholder", False),
+        placeholder_reason=clip_result.get("placeholder_reason"),
     )

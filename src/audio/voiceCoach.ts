@@ -5,6 +5,8 @@
 import { Platform } from 'react-native'
 
 import * as WebImpl from '@/src/audio/voiceCoach.web'
+import type { SessionPhase } from '@/src/constants/sessionPhases'
+import { PHASE_TRANSITION_COPY } from '@/src/constants/sessionPhases'
 
 type NativeMod = typeof import('./voiceCoach.native')
 
@@ -40,4 +42,15 @@ export function isSpeaking(): boolean {
   if (Platform.OS === 'web') return WebImpl.isSpeaking()
   const n = loadNativeSync()
   return n ? n.isSpeaking() : false
+}
+
+/**
+ * Commit 83: Narrate phase transitions using the voice coach.
+ * Speaks the enter copy for the given phase.
+ */
+export function speakPhaseTransition(phase: SessionPhase): void {
+  const copy = PHASE_TRANSITION_COPY[phase]
+  if (copy) {
+    speak(copy.enter)
+  }
 }

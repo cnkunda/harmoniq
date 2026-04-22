@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Text, View } from 'react-native'
-import Svg, { Polyline } from 'react-native-svg'
 import Animated, { FadeIn } from 'react-native-reanimated'
+import Svg, { Polyline } from 'react-native-svg'
 
 import colors from '@/src/constants/colors'
 import type { PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
@@ -53,7 +53,7 @@ export function RecentProgress({
 
   return (
     <View className="mb-2">
-      <Text className="mb-2 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Recent progress</Text>
+      <Text className="mb-2 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Recent sessions</Text>
       {points.length < 2 ? (
         <Text className="font-sans text-sm text-muted-brown">
           Finish at least two reviewed sessions to see your accuracy trend here.

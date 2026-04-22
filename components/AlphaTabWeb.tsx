@@ -16,6 +16,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       ref,
       () => ({
         setAudioSrc: () => {},
+        setMusicXml: () => {},
         setPlaybackRate: () => {},
         seekTo: () => {},
         syncPlaybackTimelineMs: () => {},

@@ -4,24 +4,24 @@ import { ActivityIndicator, Platform, Pressable, Text, View, type StyleProp, typ
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
-import colors from '@/src/constants/colors'
-import { DEFAULT_TAB_RENDER_PRESET } from '@/src/session/tabThemePresets'
-import type { TabRenderPresetName } from '@/src/session/tabThemePresets'
-import type {
-  AlphaTabSurfaceRef,
-  NoteEventMessage,
-  SongScoreMeta,
-  TabInboundMessage,
-  TabLoopBarRegion,
-  TabThemeColors,
-} from '@/types/tabMessage'
-import {
-  DEFAULT_SOUNDFONT_PROFILE_ID,
-  isSoundFontProfileId,
-  type SoundFontProfileId,
-} from '@/src/audio/soundfontProfiles'
 import { persistLastSuccessfulSoundFontProfile } from '@/src/audio/soundfontPersistence'
+import {
+    DEFAULT_SOUNDFONT_PROFILE_ID,
+    isSoundFontProfileId,
+    type SoundFontProfileId,
+} from '@/src/audio/soundfontProfiles'
+import colors from '@/src/constants/colors'
+import type { TabRenderPresetName } from '@/src/session/tabThemePresets'
+import { DEFAULT_TAB_RENDER_PRESET } from '@/src/session/tabThemePresets'
 import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
+import type {
+    AlphaTabSurfaceRef,
+    NoteEventMessage,
+    SongScoreMeta,
+    TabInboundMessage,
+    TabLoopBarRegion,
+    TabThemeColors,
+} from '@/types/tabMessage'
 import { decodeTabMessage, encodeTabMessage } from '@/types/tabMessage'
 
 /** @deprecated Use `AlphaTabSurfaceRef` from `@/types/tabMessage`. */
@@ -105,6 +105,9 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
       () => ({
         setAudioSrc: (nextAudioSrc: string) => {
           postInbound({ type: 'setAudioSrc', audioSrc: nextAudioSrc })
+        },
+        setMusicXml: (musicXml: string) => {
+          postInbound({ type: 'setMusicXml', musicXml })
         },
         setPlaybackRate: (playbackRate: number) => {
           postInbound({ type: 'setPlaybackRate', playbackRate: Number.isFinite(playbackRate) ? playbackRate : 1 })
