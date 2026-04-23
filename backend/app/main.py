@@ -76,6 +76,8 @@ from app.schemas import (
     TranscriptionPrepareResponse,
     TranscriptionVerifyRequest, # NEW commit 82
     TranscriptionVerifyResponse, # NEW commit 82
+    DiscoveryRequest, # NEW commit 91
+    DiscoveryResponse, # NEW commit 91
 )
 from app.audio_processing import AudioPreparationError, prepare_audio_input
 from app.beat_grid import (
@@ -86,6 +88,7 @@ from app.beat_grid import (
 from app.demucs_engine import DemucsEngineError, build_stem_routing_hints, separate_with_demucs
 from app import spotify as spotify_api
 from app.curriculum import suggest_next_session
+from app.discovery import generate_discovery_suggestions
 from app.sequencer import generate_practice_plan
 from app.taste import derive_taste_profile
 import app.ingest as ingest
@@ -1239,6 +1242,59 @@ async def orient_clip(req: OrientClipRequest):
         wav_path=clip_result["wav_path"],
         annotation=annotation,
         duration=clip_result["duration"],
-        used_placeholder=clip_result.get("used_placeholder", False),
-        placeholder_reason=clip_result.get("placeholder_reason"),
+        used_placeholder=clip_result["used_placeholder"],
+        placeholder_reason=clip_result["placeholder_reason"],
     )
+
+
+@app.post(
+    "/discovery/recommendations",
+    response_model=DiscoveryResponse,
+    tags=["Discovery"],
+    summary="POST /discovery/recommendations — song discovery based on harmonic similarity (commit 91)",
+)
+async def discovery_recommendations(req: DiscoveryRequest):
+    """
+    Commit 91: Generate song recommendations based on harmonic similarity to user's mastered songs.
+    
+    Uses harmonic similarity analysis to suggest next songs that keep users engaged in the Harmoniq ecosystem.
+    """
+    # Get mastered lessons from jobs dict
+    mastered_lessons: list[LessonJSON] = []
+    for job_id in req.mastered_job_ids:
+        job = jobs.get(job_id)
+        if job and job.lesson:
+            mastered_lessons.append(job.lesson)
+    
+    # Get all candidate lessons from jobs dict
+    candidate_lessons: list[LessonJSON] = []
+    for job in jobs.values():
+        if job.lesson:
+            candidate_lessons.append(job.lesson)
+    
+    # Generate suggestions using discovery module
+    suggestions = generate_discovery_suggestions(
+        mastered_lessons=mastered_lessons,
+        candidate_lessons=candidate_lessons,
+        skill_nodes=req.skill_nodes,
+        limit=req.limit,
+        min_similarity=req.min_similarity,
+    )
+    
+    # Convert to response format
+    suggestion_items = [
+        DiscoverySuggestionItem(
+            job_id=s.job_id,
+            song_title=s.song_title,
+            artist=s.artist,
+            key=s.key,
+            style_label=s.style_label,
+            tempo=s.tempo,
+            reason_label=s.reason_label,
+            similarity_score=s.similarity_score,
+            technique_focus=s.technique_focus,
+        )
+        for s in suggestions
+    ]
+    
+    return DiscoveryResponse(suggestions=suggestion_items)

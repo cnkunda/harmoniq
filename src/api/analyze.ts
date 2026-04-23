@@ -4,20 +4,20 @@ import { PREF_EXPERIENCE_LEVEL, PREF_STYLE_FOCUS } from '@/src/db/schema'
 import type { SkillNodeRow } from '@/src/db/types'
 import { parseTechniqueRollJson, rollingSessionsWeak } from '@/src/session/skillMutator'
 import type {
-    AnalyzeJob,
-    CoachHydrationStatusPayload,
-    CurriculumSuggestResponse,
-    CurriculumSuggestion,
-    JamResult,
-    LearningContextPayload,
-    LessonJSON,
-    PlayerProfilePayload,
-    PracticePlanPayload,
-    QuizAnswersPayload,
-    ScoreResult,
-    SpotifyPlaybackStatePayload,
-    SpotifyTasteProfile,
-    TasteProfilePayload,
+  AnalyzeJob,
+  CoachHydrationStatusPayload,
+  CurriculumSuggestResponse,
+  CurriculumSuggestion,
+  JamResult,
+  LearningContextPayload,
+  LessonJSON,
+  PlayerProfilePayload,
+  PracticePlanPayload,
+  QuizAnswersPayload,
+  ScoreResult,
+  SpotifyPlaybackStatePayload,
+  SpotifyTasteProfile,
+  TasteProfilePayload,
 } from '@/src/types'
 
 export class ApiError extends Error {
@@ -516,6 +516,7 @@ export async function submitScore(payload: {
   recording_mime_type?: string
   section: unknown
   skill_nodes: string[]
+  musical_tolerance_mode?: 'expressive' | 'technique'
 }): Promise<ScoreResult> {
   return request<ScoreResult>('/score', {
     method: 'POST',

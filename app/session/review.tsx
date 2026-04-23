@@ -26,7 +26,7 @@ import {
     insertLickRow,
     insertSessionRow,
 } from '@/src/db/client'
-import { PREF_MOOD_CHECK_LAST_MOOD } from '@/src/db/schema'
+import { PREF_MOOD_CHECK_LAST_MOOD, PREF_MUSICAL_TOLERANCE_MODE } from '@/src/db/schema'
 import type { GhostReferenceRow } from '@/src/db/types'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
@@ -48,7 +48,7 @@ import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 import { useAppStore } from '@/src/stores/useAppStore'
-import type { ScoreResult } from '@/src/types'
+import type { MusicalToleranceMode, ScoreResult } from '@/src/types'
 import { bytesToBase64 } from '@/src/utils/bytesToBase64'
 import { shareExportedBlob } from '@/src/utils/exportShare'
 import { firstLessonStemRelPath, serializeLessonStemsJson } from '@/src/utils/lessonAudio'
@@ -169,6 +169,7 @@ export default function ReviewScreen() {
     setBusy(true)
     setReviewError(null)
     try {
+      const toleranceMode = (await getAppPref(PREF_MUSICAL_TOLERANCE_MODE)) as MusicalToleranceMode | null
       const result = await submitScore({
         recording_wav_base64: bytesToBase64(latestTake.audioBytes),
         recording_mime_type: latestTake.mimeType,
@@ -180,6 +181,7 @@ export default function ReviewScreen() {
           bar_timestamps: lesson?.bar_timestamps ?? [],
         },
         skill_nodes: ['pitch_accuracy', 'phrasing', 'timing'],
+        musical_tolerance_mode: toleranceMode ?? 'technique',
       })
       setScore(result)
       const targeted = ['pitch_accuracy', 'phrasing', 'timing']

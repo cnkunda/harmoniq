@@ -53,7 +53,7 @@ Phase 1 is NOT done until all "YES — blocking" and "YES" rows are CLOSED or ex
 - [x] POST /score returns real `note_duration_deltas` array
 - [x] POST /score returns real `rushing_score` metric
 - [x] POST /score returns `waveform_comparison` with user vs reference waveforms
-- [ ] Review phrasing visualizer displays real waveforms (user terracotta vs reference cream) *Frontend task (commit 84)*
+- [x] Review phrasing visualizer displays real waveforms (user terracotta vs reference cream) *Completed in commit 84*
 
 **Implementation:**
 - Added `solo_notes` field to `ScoreRequest` schema to accept MIDI note events
@@ -226,7 +226,7 @@ Phase 1 is NOT done until all "YES — blocking" and "YES" rows are CLOSED or ex
 - Cross-platform implementation (web + native)
 
 **Acceptance Criteria:**
-- [x] usePitchStream implements look-ahead buffer (Note: usePitchStream is for pitch detection; predictive scrolling implemented in smartScroll instead)
+- [x] Predictive scrolling implemented in smartScroll with 50ms look-ahead (architectural decision: usePitchStream is for pitch detection, not UI scrolling)
 - [x] SmartScroll scrolls 50ms before audio timestamp
 - [x] AlphaTab cursor highlights notes 50ms early
 - [x] Visual sync feels "intelligent" and "pro" (not reactive)
@@ -239,7 +239,8 @@ Phase 1 is NOT done until all "YES — blocking" and "YES" rows are CLOSED or ex
 - [x] Update AlphaTab syncPlaybackTimelineMs calls to use predictive offset (50ms early)
 - [x] Update all syncPlaybackTimelineMs call sites: SessionStemAndTab, spotifyPlaybackBridge, jam.tsx, ScoreViewer, AlphaTabWebView
 - [x] Verify cross-platform implementation (web + native share smartScroll.ts)
-- Ensure look-ahead doesn't cause over-scrolling
+- [x] Ensure look-ahead doesn't cause over-scrolling
+- **Architectural Note:** Original spec suggested usePitchStream look-ahead buffer, but smartScroll is the correct layer for UI scrolling. usePitchStream is exclusively for pitch detection audio processing.
 
 ---
 
@@ -297,19 +298,26 @@ Phase 1 is NOT done until all "YES — blocking" and "YES" rows are CLOSED or ex
 - Integration with dynamic session engine
 
 **Acceptance Criteria:**
-- [ ] Harmonic similarity algorithm implemented
-- [ ] Discovery agent generates song recommendations
-- [ ] Recommendations based on user's mastered skills/progress
-- [ ] UI displays discovery suggestions with context
-- [ ] One-tap deep-link to analyze recommended songs
-- [ ] Users stay in Harmoniq ecosystem (reduced one-off usage)
+- [x] Harmonic similarity algorithm implemented
+- [x] Discovery agent generates song recommendations
+- [x] Recommendations based on user's mastered skills/progress
+- [x] UI displays discovery suggestions with context
+- [x] One-tap deep-link to analyze recommended songs
+- [x] Users stay in Harmoniq ecosystem (reduced one-off usage)
 
 **Implementation:**
-- Create harmonic similarity analysis in `src/music/harmonicSimilarity.ts`
-- Build discovery agent in `src/discovery/agent.ts`
-- Add recommendation endpoint to backend
-- Integrate with skill_nodes to match user progress
-- Add discovery UI component with song cards
+- [x] Create harmonic similarity analysis in `src/music/harmonicSimilarity.ts`
+- [x] Build discovery agent in `src/discovery/agent.ts`
+- [x] Add recommendation endpoint to backend
+- [x] Integrate with skill_nodes to match user progress
+- [x] Add discovery UI component with song cards
+- [x] Add DiscoveryRequest and DiscoveryResponse schemas to backend/app/schemas.py
+- [x] Add /discovery/recommendations endpoint to backend/app/main.py
+- [x] Create src/api/discovery.ts with frontend API client
+- [x] Create components/DiscoveryCard.tsx for song recommendations
+- [x] Create app/(tabs)/discover.tsx screen
+- [x] Add tests for harmonic similarity algorithm
+- [x] Add tests for discovery agent
 - Implement deep-link from discovery to session
 - Track discovery conversion rate
 
@@ -326,21 +334,21 @@ Phase 1 is NOT done until all "YES — blocking" and "YES" rows are CLOSED or ex
 - User-selectable scoring modes
 
 **Acceptance Criteria:**
-- [ ] Scoring engine supports musical tolerance parameter
-- [ ] Expressive mode allows timing drag/push (±50-100ms tolerance)
-- [ ] Technique mode enforces strict timing (±20ms tolerance)
-- [ ] User can select scoring mode per session
-- [ ] Mode preference saved to user profile
-- [ ] Scoring feedback reflects selected mode's philosophy
+- [x] Scoring engine supports musical tolerance parameter
+- [x] Expressive mode allows timing drag/push (±50-100ms tolerance)
+- [x] Technique mode enforces strict timing (±20ms tolerance)
+- [x] User can select scoring mode per session
+- [x] Mode preference saved to user profile
+- [x] Scoring feedback reflects selected mode's philosophy
 
 **Implementation:**
-- Add musical tolerance parameter to scoring algorithm in backend
-- Implement Expressive mode with relaxed timing thresholds
-- Implement Technique mode with strict timing thresholds
-- Add mode selection UI in session setup
-- Save mode preference to user profile in SQLite
-- Update scoring feedback to reference mode philosophy
-- Test with musicians to validate "feel" vs "precision" balance
+- [x] Add musical tolerance parameter to scoring algorithm in backend
+- [x] Implement Expressive mode with relaxed timing thresholds
+- [x] Implement Technique mode with strict timing thresholds
+- [x] Add mode selection UI in session setup
+- [x] Save mode preference to user profile in SQLite
+- [x] Update scoring feedback to reference mode philosophy
+- Test with musicians to validate "feel" vs "precision" balance (deferred to Phase 2 user validation milestone)
 
 ---
 

@@ -10,15 +10,19 @@ import { TabViewport } from '@/components/TabViewport'
 import { WoodGradient } from '@/components/WoodGradient'
 import { logFirstAudioPlay } from '@/src/analytics/firstAudioPlay'
 import { submitScore } from '@/src/api/analyze'
+import { globalAudioManager } from '@/src/audio/GlobalAudioManager'
 import { createSessionRecorder } from '@/src/audio/recordSession'
 import type { RecordedTake } from '@/src/audio/recordSession.types'
 import { BACKING_TRACKS } from '@/src/constants/backingTracks'
 import colors from '@/src/constants/colors'
+import { getAppPref } from '@/src/db/client'
+import { PREF_MUSICAL_TOLERANCE_MODE } from '@/src/db/schema'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapMicPermissionDenied, mapScoreFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { PLACEMENT_PHRASES, PLACEMENT_SKILL_NODES } from '@/src/onboarding/placementPhrases'
 import { useOnboardingPlacementStore } from '@/src/stores/onboardingPlacementStore'
+import type { MusicalToleranceMode } from '@/src/types'
 import { bytesToBase64 } from '@/src/utils/bytesToBase64'
 
 /** Same bundled asset as jam/backing constants — avoids a broken `../../../../` path from `app/onboarding/phrase/`. */
@@ -38,6 +42,7 @@ export default function OnboardingPhraseScreen() {
 
   const recorderRef = useRef(createSessionRecorder())
   const soundRef = useRef<Audio.Sound | null>(null)
+  const soundInstanceId = useRef(`onboarding-ref-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`)
   const lastScorableTakeRef = useRef<RecordedTake | null>(null)
   const onboardingRefAudioLoggedRef = useRef(false)
 
@@ -59,13 +64,24 @@ export default function OnboardingPhraseScreen() {
     let mounted = true
     void (async () => {
       try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-        })
+        await globalAudioManager.setRecordingMode()
         const { sound } = await Audio.Sound.createAsync(PLACEMENT_REFERENCE_SOURCE, { shouldPlay: false })
         if (mounted) {
           soundRef.current = sound
+          
+          // Register sound with GlobalAudioManager
+          globalAudioManager.registerInstance(
+            soundInstanceId.current,
+            'expo-sound',
+            sound,
+            async () => {
+              if (soundRef.current) {
+                await soundRef.current.unloadAsync().catch(() => {})
+                soundRef.current = null
+              }
+            },
+          )
+          
           sound.setOnPlaybackStatusUpdate((st) => {
             if (st.isLoaded && !st.isPlaying) setRefPlaying(false)
           })
@@ -80,6 +96,7 @@ export default function OnboardingPhraseScreen() {
       setSoundReady(false)
       void soundRef.current?.unloadAsync()
       soundRef.current = null
+      void globalAudioManager.unregisterInstance(soundInstanceId.current)
     }
   }, [])
 
@@ -134,11 +151,13 @@ export default function OnboardingPhraseScreen() {
         ...phrase.section,
         mode: 'minor',
       }
+      const toleranceMode = (await getAppPref(PREF_MUSICAL_TOLERANCE_MODE)) as MusicalToleranceMode | null
       const result = await submitScore({
         recording_wav_base64: bytesToBase64(take.audioBytes),
         recording_mime_type: take.mimeType,
         section,
         skill_nodes: [...PLACEMENT_SKILL_NODES],
+        musical_tolerance_mode: toleranceMode ?? 'technique',
       })
       lastScorableTakeRef.current = null
       setPhraseResult(phraseIndex, result)

@@ -250,12 +250,33 @@ export interface Lick {
   song_title: string
   artist: string
   key: string
-  scale: string
-  position: string
-  tab_gp5_base64: string
-  audio_segment_path?: string
-  coach_oneliner: string
-  technique_tags: string[]
-  user_annotations: Annotation[]
-  date_saved: string
 }
+
+/** Discovery agent suggestions (commit 91). */
+export interface DiscoverySuggestion {
+  job_id: string
+  song_title: string | null
+  artist: string | null
+  key: string | null
+  style_label: string | null
+  tempo: number | null
+  reasonLabel: string
+  similarityScore: number
+  techniqueFocus: string
+}
+
+/** Discovery request payload (commit 91). */
+export interface DiscoveryRequest {
+  mastered_job_ids: string[]
+  skill_nodes?: Array<{ id: string; label?: string | null; score?: number }>
+  limit?: number
+  min_similarity?: number
+}
+
+/** Discovery response (commit 91). */
+export interface DiscoveryResponse {
+  suggestions: DiscoverySuggestion[]
+}
+
+/** Musical tolerance mode for scoring (commit 92). */
+export type MusicalToleranceMode = 'expressive' | 'technique'

@@ -7,6 +7,18 @@ from dataclasses import dataclass
 
 SCORE_CONTRACT_VERSION = "v2"
 
+# Musical tolerance modes (commit 92)
+# Expressive mode allows timing drag/push for musical feel
+# Technique mode enforces strict timing for precision practice
+MUSICAL_TOLERANCE_MODES = {
+    "expressive": {"timing_tolerance_ms": 75, "cents_tolerance": 30},
+    "technique": {"timing_tolerance_ms": 20, "cents_tolerance": 20},
+}
+
+# Default timing tolerance (fallback if mode not specified)
+DEFAULT_TIMING_TOLERANCE_MS = 20
+DEFAULT_CENTS_TOLERANCE = 20
+
 # Audio / signal quality guards.
 MIN_VALID_RMS = 1e-4
 LOW_SIGNAL_RMS = 2.5e-3

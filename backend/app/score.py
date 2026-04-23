@@ -28,6 +28,7 @@ from app.scoring_constants import (
     MAX_ABS_NOTE_DELTA_SECONDS,
     MAX_BEND_ERROR_CENTS,
     MIN_VALID_RMS,
+    MUSICAL_TOLERANCE_MODES,
     RELIABILITY_BANDS,
     SCORE_CONTRACT_VERSION,
     clamp01,
@@ -127,7 +128,7 @@ def _score_pitch(y: np.ndarray, sr: int, section: dict[str, Any]) -> tuple[float
 
 
 def _score_timing(
-    y: np.ndarray, sr: int, section: dict[str, Any], solo_notes: Any = None
+    y: np.ndarray, sr: int, section: dict[str, Any], solo_notes: Any = None, musical_tolerance_mode: str = "technique"
 ) -> tuple[float, float, list[float], float, float]:
     onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=256)
     onset_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=256, units="frames")
@@ -149,6 +150,11 @@ def _score_timing(
         tempo = float(est_tempo if np.isfinite(est_tempo) and est_tempo > 0 else 90.0)
     beat_sec = 60.0 / float(tempo)
 
+    # Get tolerance configuration based on mode (commit 92)
+    tolerance_config = MUSICAL_TOLERANCE_MODES.get(musical_tolerance_mode, MUSICAL_TOLERANCE_MODES["technique"])
+    timing_tolerance_ms = tolerance_config["timing_tolerance_ms"]
+    timing_tolerance_sec = timing_tolerance_ms / 1000.0
+
     # If MIDI reference available, compare user onsets to nearest MIDI note onsets
     if reference_onsets is not None and reference_onsets.size > 0:
         # For each user onset, find nearest MIDI note onset and compute delta
@@ -156,7 +162,8 @@ def _score_timing(
         for user_onset in onset_times[:32]:
             nearest_midi = reference_onsets[np.argmin(np.abs(reference_onsets - user_onset))]
             delta = user_onset - nearest_midi
-            clipped = float(np.clip(delta, -MAX_ABS_NOTE_DELTA_SECONDS, MAX_ABS_NOTE_DELTA_SECONDS))
+            # Use mode-specific timing tolerance for clipping
+            clipped = float(np.clip(delta, -timing_tolerance_sec, timing_tolerance_sec))
             deltas.append(round(clipped, 4))
         
         if deltas:
@@ -167,16 +174,23 @@ def _score_timing(
         # Fallback to beat grid comparison
         nearest_grid = np.round(iois / beat_sec) * beat_sec
         residual = iois - nearest_grid
-        clipped = np.clip(residual, -MAX_ABS_NOTE_DELTA_SECONDS, MAX_ABS_NOTE_DELTA_SECONDS)
+        # Use mode-specific timing tolerance for clipping
+        clipped = np.clip(residual, -timing_tolerance_sec, timing_tolerance_sec)
         deltas = [float(round(v, 4)) for v in clipped[:32].tolist()]
 
     abs_resid = np.abs(residual) if residual.size > 0 else np.array([])
-    phrasing_score = clamp01(1.0 - float(np.mean(abs_resid)) / max(0.08, beat_sec * 0.35)) if abs_resid.size > 0 else 0.25
+    # Adjust phrasing scoring based on tolerance mode (commit 92)
+    # Expressive mode is more lenient, technique mode is stricter
+    if musical_tolerance_mode == "expressive":
+        phrasing_denominator = max(0.12, beat_sec * 0.5)  # More lenient denominator
+    else:
+        phrasing_denominator = max(0.08, beat_sec * 0.35)  # Stricter denominator
+    phrasing_score = clamp01(1.0 - float(np.mean(abs_resid)) / phrasing_denominator) if abs_resid.size > 0 else 0.25
     rushing_ratio = float(np.mean(residual < 0)) if residual.size > 0 else 0.5
     rushing_score = clamp01(1.0 - rushing_ratio)
 
     if not deltas:
-        clipped = np.clip(residual, -MAX_ABS_NOTE_DELTA_SECONDS, MAX_ABS_NOTE_DELTA_SECONDS) if residual.size > 0 else np.array([])
+        clipped = np.clip(residual, -timing_tolerance_sec, timing_tolerance_sec) if residual.size > 0 else np.array([])
         deltas = [float(round(v, 4)) for v in clipped[:32].tolist()]
     
     p50_ms = float(np.quantile(abs_resid, 0.5) * 1000.0) if abs_resid.size else 0.0
@@ -268,11 +282,19 @@ def _coach_paragraph_from_score(
     rushing_score: float,
     confidence: str,
     reliability_flags: list[str],
+    musical_tolerance_mode: str = "technique",
 ) -> str:
     p = int(round(pitch_accuracy * 100))
     ph = int(round(phrasing_score * 100))
     rt = int(round(rushing_score * 100))
     parts: list[str] = []
+    
+    # Mode-specific feedback (commit 92)
+    if musical_tolerance_mode == "expressive":
+        parts.append("Expressive mode: timing drag/push is allowed for musical feel.")
+    else:
+        parts.append("Technique mode: strict timing for precision practice.")
+    
     if pitch_accuracy >= 0.85 and phrasing_score >= 0.8:
         parts.append(f"Solid take—pitch near {p}% and phrasing near {ph}%.")
     elif pitch_accuracy < 0.55:
@@ -281,9 +303,15 @@ def _coach_paragraph_from_score(
         parts.append(f"Pitch {p}%, phrasing {ph}%.")
 
     if rushing_score < 0.55:
-        parts.append(f"Timing wants more pocket ({rt}%); subdivide with the click or backing.")
+        if musical_tolerance_mode == "expressive":
+            parts.append(f"Timing has room for feel ({rt}%); focus on groove over strict alignment.")
+        else:
+            parts.append(f"Timing wants more pocket ({rt}%); subdivide with the click or backing.")
     elif rushing_score >= 0.85:
-        parts.append("Timing is locking in nicely.")
+        if musical_tolerance_mode == "expressive":
+            parts.append("Your timing has great musical flow.")
+        else:
+            parts.append("Timing is locking in nicely.")
 
     if "timing_unstable" in reliability_flags:
         parts.append("We saw uneven timing residuals—shorter phrases usually help.")
@@ -299,7 +327,9 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
     section = payload.section if isinstance(payload.section, dict) else {}
 
     pitch_accuracy, bend_error_cents, voiced_ratio, harmonic_ratio, signal_quality = _score_pitch(y, sr, section)
-    phrasing_score, rushing_score, note_duration_deltas, timing_p50_ms, timing_p95_ms = _score_timing(y, sr, section, payload.solo_notes)
+    phrasing_score, rushing_score, note_duration_deltas, timing_p50_ms, timing_p95_ms = _score_timing(
+        y, sr, section, payload.solo_notes, payload.musical_tolerance_mode
+    )
     reliability_flags: list[str] = []
     rms = float(np.sqrt(np.mean(np.square(y)))) if y.size else 0.0
     if rms < MIN_VALID_RMS:
@@ -337,6 +367,7 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
         float(rushing_score),
         confidence,
         reliability_flags,
+        payload.musical_tolerance_mode,
     )
 
     return ScoreResult(

@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { globalAudioManager } from '@/src/audio/GlobalAudioManager'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { useLessonStore } from '@/src/stores/lessonStore'
 
@@ -25,6 +26,7 @@ export default function OrientScreen() {
   const [audioError, setAudioError] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const soundRef = useRef<Audio.Sound | null>(null)
+  const soundInstanceId = useRef(`orient-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`)
 
   const togglePlayback = useCallback(async () => {
     if (!orientClipUrl) return
@@ -40,7 +42,7 @@ export default function OrientScreen() {
         }
       } else {
         // Play
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true })
+        await globalAudioManager.resetToPlaybackMode()
         if (soundRef.current) {
           await soundRef.current.playAsync()
           setIsPlaying(true)
@@ -51,6 +53,20 @@ export default function OrientScreen() {
           )
           soundRef.current = sound
           setIsPlaying(true)
+          
+          // Register sound with GlobalAudioManager
+          globalAudioManager.registerInstance(
+            soundInstanceId.current,
+            'expo-sound',
+            sound,
+            async () => {
+              if (soundRef.current) {
+                await soundRef.current.unloadAsync().catch(() => {})
+                soundRef.current = null
+              }
+            },
+          )
+          
           sound.setOnPlaybackStatusUpdate((status) => {
             if (status.isLoaded && status.didJustFinish) {
               setIsPlaying(false)
@@ -70,6 +86,7 @@ export default function OrientScreen() {
       if (soundRef.current) {
         soundRef.current.unloadAsync()
       }
+      void globalAudioManager.unregisterInstance(soundInstanceId.current)
     }
   }, [])
 

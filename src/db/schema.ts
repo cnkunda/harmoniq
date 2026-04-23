@@ -102,6 +102,8 @@ export const PREF_MOOD_CHECK_SKIP = 'mood_check_skip'
 export const PREF_MOOD_CHECK_LAST_SHOWN_DAY = 'mood_check_last_shown_day'
 /** Commit 76: most recent chosen mood from pre-session check. */
 export const PREF_MOOD_CHECK_LAST_MOOD = 'mood_check_last_mood'
+/** Commit 92: musical tolerance mode for scoring (expressive | technique). */
+export const PREF_MUSICAL_TOLERANCE_MODE = 'musical_tolerance_mode'
 /** Commit 62: active mic calibration profile id (`quiet-acoustic` | `electric-unplugged`). */
 export const PREF_SESSION_MIC_PROFILE_ID = 'session_mic_profile_id'
 /** Commit 62: JSON map of profile id → calibrated RMS gate threshold (after +6 dB headroom). */

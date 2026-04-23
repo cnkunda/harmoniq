@@ -90,6 +90,8 @@ CoachFocusArea = Literal["timing", "vibrato", "dynamics", "phrasing", "bending",
 
 FretboardGuideVariant = Literal["primary", "secondary"]
 
+MusicalToleranceMode = Literal["expressive", "technique"]
+
 
 class FretboardGuideCell(BaseModel):
     """Tab string (1 = high E) + fret for warm-up fretboard highlights."""
@@ -415,6 +417,10 @@ class ScoreRequest(BaseModel):
     section: dict[str, Any] = Field(default_factory=dict)
     skill_nodes: list[str] = Field(default_factory=list)
     solo_notes: SoloNotes | None = Field(default=None, description="MIDI note events for timing reference (commit 83)")
+    musical_tolerance_mode: MusicalToleranceMode = Field(
+        default="technique",
+        description="Musical tolerance mode for scoring: 'expressive' (lenient) or 'technique' (strict) (commit 92)",
+    )
 
 
 class ScoreWaveformComparison(BaseModel):
@@ -647,3 +653,35 @@ class AnalyzeTranscriptionResponse(BaseModel):
     job_id: str
     chord_timeline: ChordTimeline
     solo_notes: SoloNotes
+
+# Commit 91 Schemas
+
+class DiscoveryRequest(BaseModel):
+    """POST /discovery/recommendations — song discovery based on harmonic similarity (PRIORITIES §91)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mastered_job_ids: list[str] = Field(..., description="Job IDs of songs the user has mastered")
+    skill_nodes: list[SkillNode] = Field(default_factory=list, description="User's skill progress data")
+    limit: int = Field(default=5, ge=1, le=20, description="Maximum number of recommendations")
+    min_similarity: float = Field(default=0.3, ge=0.0, le=1.0, description="Minimum similarity score threshold")
+
+
+class DiscoverySuggestionItem(BaseModel):
+    """Single discovery suggestion item."""
+
+    job_id: str
+    song_title: str | None
+    artist: str | None
+    key: str | None
+    style_label: str | None
+    tempo: float | None
+    reason_label: str
+    similarity_score: float
+    technique_focus: str
+
+
+class DiscoveryResponse(BaseModel):
+    """Response from POST /discovery/recommendations."""
+
+    suggestions: list[DiscoverySuggestionItem] = Field(default_factory=list)
