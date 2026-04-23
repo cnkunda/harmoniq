@@ -1,8 +1,8 @@
 import { getAppPref } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_SHOWN_DAY, PREF_MOOD_CHECK_SKIP } from '@/src/db/schema'
 
-/** Ordered session steps — matches `app/session/*.tsx` route segments (Commit 62 adds `tune`; Commit 84 adds `orient`; Commit 92 adds musical-tolerance). */
-export const SESSION_STEPS = ['tune', 'musical-tolerance', 'orient', 'listen', 'study', 'slow', 'play', 'review'] as const
+/** Ordered session steps — matches `app/session/*.tsx` route segments (Commit 62 adds `tune`; Commit 92 adds musical-tolerance). */
+export const SESSION_STEPS = ['tune', 'musical-tolerance', 'listen', 'study', 'slow', 'play', 'review'] as const
 export type SessionStep = (typeof SESSION_STEPS)[number]
 
 export function sessionStepIndexFromPathname(pathname: string): number {

@@ -1258,19 +1258,30 @@ async def discovery_recommendations(req: DiscoveryRequest):
     Commit 91: Generate song recommendations based on harmonic similarity to user's mastered songs.
     
     Uses harmonic similarity analysis to suggest next songs that keep users engaged in the Harmoniq ecosystem.
+    Uses library_lessons from database as the primary source, falling back to in-memory jobs if empty.
     """
-    # Get mastered lessons from jobs dict
-    mastered_lessons: list[LessonJSON] = []
-    for job_id in req.mastered_job_ids:
-        job = jobs.get(job_id)
-        if job and job.lesson:
-            mastered_lessons.append(job.lesson)
+    # Use library_lessons from database as primary source
+    candidate_lessons = req.library_lessons if req.library_lessons else []
     
-    # Get all candidate lessons from jobs dict
-    candidate_lessons: list[LessonJSON] = []
-    for job in jobs.values():
-        if job.lesson:
-            candidate_lessons.append(job.lesson)
+    # If library_lessons is empty, fall back to in-memory jobs (for testing/legacy)
+    if not candidate_lessons:
+        for job in jobs.values():
+            if job.lesson:
+                candidate_lessons.append(job.lesson)
+    
+    # Get mastered lessons from library_lessons by job_id
+    mastered_lessons: list[LessonJSON] = []
+    mastered_ids = set(req.mastered_job_ids)
+    for lesson in candidate_lessons:
+        if lesson.job_id and lesson.job_id in mastered_ids:
+            mastered_lessons.append(lesson)
+    
+    # Also check in-memory jobs for mastered lessons if not found in library
+    for job_id in req.mastered_job_ids:
+        if not any(l.job_id == job_id for l in mastered_lessons):
+            job = jobs.get(job_id)
+            if job and job.lesson:
+                mastered_lessons.append(job.lesson)
     
     # Generate suggestions using discovery module
     suggestions = generate_discovery_suggestions(

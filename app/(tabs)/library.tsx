@@ -1,30 +1,29 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { useRouter, type Href } from 'expo-router'
-import { useCallback, useMemo, useState } from 'react'
 import { Filter, Search } from 'lucide-react-native'
+import { useCallback, useMemo, useState } from 'react'
 import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { WoodGradient } from '@/components/WoodGradient'
 import { ApiError, submitExportJob } from '@/src/api/analyze'
-import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
-import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import colors from '@/src/constants/colors'
-import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
-import { getDemoLesson } from '@/src/demo/demoLesson'
-import { startDemoSession } from '@/src/demo/startDemoSession'
+import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import {
-  clearAllPracticeData,
-  deleteLessonByJobId,
-  deleteLickById,
-  getLessonByJobId,
-  getLicks,
-  listLessonsJournal,
+    clearAllPracticeData,
+    deleteLessonByJobId,
+    deleteLickById,
+    getLessonByJobId,
+    getLicks,
+    listLessonsJournal,
 } from '@/src/db/client'
 import type { LessonListRow, LickRow } from '@/src/db/types'
+import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
+import { getDemoLesson } from '@/src/demo/demoLesson'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { shareExportedBlob } from '@/src/utils/exportShare'
 import { lessonFromSavedLick } from '@/src/utils/lessonFromSavedLick'
 import { firstGp5Base64FromLessonSections } from '@/src/utils/lessonTabs'
@@ -118,13 +117,9 @@ export default function LibraryScreen() {
       setLoadError(null)
       try {
         if (row.job_id === DEMO_LESSON_JOB_ID) {
-          const existing = await getLessonByJobId(DEMO_LESSON_JOB_ID)
-          if (!existing) {
-            await startDemoSession(router, saveLesson, setLessonSectionIndex)
-            void listLessonsJournal().then(setLessons)
-            return
-          }
-          saveLesson(existing)
+          // Demo lesson is in-memory only - load directly from getDemoLesson()
+          const demoLesson = getDemoLesson()
+          saveLesson(demoLesson)
           setLessonSectionIndex(0)
           void sessionEntryHrefWithMoodCheck(useSessionPrefsStore.getState().skipTuneStep).then((href) =>
             router.push(href as Href),
@@ -278,17 +273,7 @@ export default function LibraryScreen() {
   }, [licks])
 
   const lessonsPool = useMemo(() => {
-    const hasDemo = lessons.some((l) => l.job_id === DEMO_LESSON_JOB_ID)
-    if (hasDemo) return lessons
-    const demoLesson = getDemoLesson()
-    const synthetic: LessonListRow = {
-      job_id: DEMO_LESSON_JOB_ID,
-      song_title: demoLesson.song_title ?? 'Reggae pocket (demo)',
-      artist: `${demoLesson.artist ?? 'Harmoniq'} · offline`,
-      analyzed_at: new Date(0).toISOString(),
-      section_count: Array.isArray(demoLesson.sections) ? demoLesson.sections.length : 1,
-    }
-    return [synthetic, ...lessons]
+    return lessons
   }, [lessons])
 
   const filteredLessons = useMemo(() => {

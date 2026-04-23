@@ -661,7 +661,8 @@ class DiscoveryRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    mastered_job_ids: list[str] = Field(..., description="Job IDs of songs the user has mastered")
+    mastered_job_ids: list[str] = Field(default_factory=list, description="Job IDs of songs the user has mastered")
+    library_lessons: list[LessonJSON] = Field(default_factory=list, description="All lessons from user's library (database)")
     skill_nodes: list[SkillNode] = Field(default_factory=list, description="User's skill progress data")
     limit: int = Field(default=5, ge=1, le=20, description="Maximum number of recommendations")
     min_similarity: float = Field(default=0.3, ge=0.0, le=1.0, description="Minimum similarity score threshold")

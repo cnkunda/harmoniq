@@ -16,16 +16,16 @@ export type SessionPhase = (typeof SESSION_PHASES)[number]
 
 /** Steps that belong to each phase. */
 export const PHASE_STEPS: Record<SessionPhase, SessionStep[]> = {
-  orient: ['orient', 'listen'],
+  orient: ['listen'],
   isolate: ['study', 'slow'],
   apply: ['play'],
   reflect: ['review'],
 }
 
-/** Phase index for each session step. Pre-flight steps (tune, warmup, mood-check) are not in phases. */
+/** Phase index for each session step. Pre-flight steps (tune, warmup, mood-check, musical-tolerance) are not in phases. */
 export const PHASE_FOR_STEP: Record<SessionStep, SessionPhase | null> = {
   tune: null, // Pre-flight
-  orient: 'orient',
+  'musical-tolerance': null, // Pre-flight
   listen: 'orient',
   study: 'isolate',
   slow: 'isolate',

@@ -1,12 +1,13 @@
 import { Tabs } from 'expo-router'
 import {
-  BarChart3,
-  FlaskConical,
-  Home,
-  Library,
-  Music,
-  Palette,
-  Settings,
+    BarChart3,
+    FlaskConical,
+    Home,
+    Library,
+    Music,
+    Palette,
+    Search,
+    Settings
 } from 'lucide-react-native'
 
 import colors from '@/src/constants/colors'
@@ -60,6 +61,13 @@ export default function TabLayout() {
         options={{
           title: 'Jam Mode',
           tabBarIcon: ({ color }) => <Music color={color} size={TAB_BAR_ICON_SIZE} strokeWidth={2} />,
+        }}
+      />
+      <Tabs.Screen
+        name="discover"
+        options={{
+          title: 'Discover',
+          tabBarIcon: ({ color }) => <Search color={color} size={TAB_BAR_ICON_SIZE} strokeWidth={2} />,
         }}
       />
       <Tabs.Screen

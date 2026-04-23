@@ -1,4 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native'
+import { Audio } from 'expo-av'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
@@ -100,6 +101,15 @@ export default function StudyScreen() {
   const [stemRoutingOverride, setStemRoutingOverride] = useState<string | null>(null);
   const [theoryAnnotation, setTheoryAnnotation] = useState<{ chordName: string; chordFunction: string; romanNumeral: string; rationale: string } | null>(null);
 
+  // Orient clip states (moved from separate orient.tsx screen)
+  const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
+  const [orientAnnotation, setOrientAnnotation] = useState<string | null>(null)
+  const [orientIsLoading, setOrientIsLoading] = useState(false)
+  const [orientError, setOrientError] = useState<string | null>(null)
+  const [orientIsPlaying, setOrientIsPlaying] = useState(false)
+  const orientSoundRef = useRef<any>(null)
+  const orientSoundInstanceId = useRef(`study-orient-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`)
+
   // Fetch MusicXML from backend when transcription data is available
   useEffect(() => {
     const fetchMusicXml = async () => {
@@ -154,6 +164,54 @@ export default function StudyScreen() {
       setShowTranscriptionWarningModal(false)
     }
   }, [lesson?.sections, lessonSectionIndex, lesson?.transcription_confidence])
+
+  // Fetch orient clip when lesson changes
+  useEffect(() => {
+    const fetchOrientClip = async () => {
+      if (!lesson?.job_id) return
+
+      setOrientIsLoading(true)
+      setOrientError(null)
+
+      try {
+        const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/session/orient-clip`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            job_id: lesson.job_id,
+            style_label: lesson.style_label,
+            technique: null,
+            key: lesson.key,
+            bpm: lesson.tempo,
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch orient clip: ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        setOrientClipUrl(data.wav_path)
+        setOrientAnnotation(data.annotation)
+      } catch (e) {
+        console.error('Failed to fetch orient clip:', e)
+        setOrientError(e instanceof Error ? e.message : 'Failed to load orient clip')
+      } finally {
+        setOrientIsLoading(false)
+      }
+    }
+
+    void fetchOrientClip()
+  }, [lesson?.job_id, lesson?.style_label, lesson?.key, lesson?.tempo])
+
+  // Cleanup orient sound on unmount
+  useEffect(() => {
+    return () => {
+      if (orientSoundRef.current) {
+        orientSoundRef.current.unloadAsync()
+      }
+    }
+  }, [])
 
   const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
     setTick(ctx)
@@ -430,6 +488,41 @@ export default function StudyScreen() {
     })
   }, [toggleTuner])
 
+  // Orient clip playback handler
+  const handleToggleOrientPlayback = useCallback(async () => {
+    if (!orientClipUrl) return
+
+    try {
+      if (orientIsPlaying) {
+        const sound = orientSoundRef.current
+        if (sound) {
+          await sound.pauseAsync()
+          setOrientIsPlaying(false)
+        }
+      } else {
+        if (orientSoundRef.current) {
+          await orientSoundRef.current.playAsync()
+          setOrientIsPlaying(true)
+        } else {
+          const { sound } = await (Audio as any).Sound.createAsync(
+            { uri: orientClipUrl },
+            { shouldPlay: true }
+          )
+          orientSoundRef.current = sound
+          setOrientIsPlaying(true)
+          sound.setOnPlaybackStatusUpdate((status: any) => {
+            if (status.isLoaded && status.didJustFinish) {
+              setOrientIsPlaying(false)
+            }
+          })
+        }
+      }
+    } catch (e) {
+      console.error('Orient playback error:', e)
+      toast.error('Could not play orient clip')
+    }
+  }, [orientClipUrl, orientIsPlaying])
+
   return (
     <SessionStepScreen
       title="Study"
@@ -572,6 +665,11 @@ export default function StudyScreen() {
               onToggleTune={toggleFretboardTuner}
               onCalibrateTune={startCalibration}
               tunerState={tunerState}
+              showOrientControl={!orientError}
+              orientClipUrl={orientClipUrl}
+              orientAnnotation={orientAnnotation}
+              orientIsPlaying={orientIsPlaying}
+              onToggleOrientPlayback={handleToggleOrientPlayback}
               onSelectNote={(note) => {
                 setSelectedNote(note)
                 setFretPulseKey((k) => k + 1)

@@ -2,21 +2,21 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import Animated, {
-  Easing,
-  interpolate,
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring,
-  withTiming,
+    Easing,
+    interpolate,
+    interpolateColor,
+    useAnimatedStyle,
+    useSharedValue,
+    withSequence,
+    withSpring,
+    withTiming,
 } from 'react-native-reanimated'
 
 import { spring } from '@/src/constants/animations'
 import colors from '@/src/constants/colors'
 import { NUM_FRETS, OPEN_MIDI_BY_ROW, inferMidiFromNoteSelection, resolveFretCell } from '@/src/music/fretboardCell'
-import type { FretboardTunerState } from '@/src/session/useFretboardTuner'
 import { pitchClassLabelFromMidi } from '@/src/music/noteNames'
+import type { FretboardTunerState } from '@/src/session/useFretboardTuner'
 import type { FretboardOverlayMode } from '@/src/utils/fretboardShareState'
 
 export { inferMidiFromNoteSelection, resolveFretCell } from '@/src/music/fretboardCell'
@@ -63,6 +63,14 @@ type FretboardDiagramProps = {
   onToggleTune?: () => void
   onCalibrateTune?: () => void
   tunerState?: FretboardTunerState | null
+  /** Optional Orient/Hint button for technique demonstration clips. */
+  showOrientControl?: boolean
+  orientActive?: boolean
+  onToggleOrient?: () => void
+  orientClipUrl?: string | null
+  orientAnnotation?: string | null
+  orientIsPlaying?: boolean
+  onToggleOrientPlayback?: () => void
   /** Warm-up / curriculum: highlight fixed cells (amber vs success rings). */
   fretGuideCells?: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary' }> | null
   /** When set, replaces default footer hint when nothing is selected. */
@@ -269,6 +277,13 @@ export function FretboardDiagram({
   onToggleTune,
   onCalibrateTune,
   tunerState = null,
+  showOrientControl = false,
+  orientActive = false,
+  onToggleOrient,
+  orientClipUrl = null,
+  orientAnnotation = null,
+  orientIsPlaying = false,
+  onToggleOrientPlayback,
   fretGuideCells = null,
   fretGuideFooterHint = null,
   pitchLadderSlot = null,
@@ -280,6 +295,7 @@ export function FretboardDiagram({
   const cell = selectedNote ? resolveFretCell(selectedNote) : null
   const flashMidi = selectedNote ? inferMidiFromNoteSelection(selectedNote) : null
   const showPitchLadderControl = pitchLadderSlot != null
+  const [orientPanelOpen, setOrientPanelOpen] = useState(false)
 
   useEffect(() => {
     if (!onSelectNote || !enableKeyboardInput || Platform.OS !== 'web') return
@@ -321,7 +337,7 @@ export function FretboardDiagram({
     <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/45 p-3">
       <View className="flex-row items-start justify-between gap-2">
         <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Position map</Text>
-        {showTuneControl || showOverlayControls || showCopyShare || showPitchLadderControl ? (
+        {showTuneControl || showOrientControl || showOverlayControls || showCopyShare || showPitchLadderControl ? (
           <View className="max-w-[76%] flex-row flex-wrap items-center justify-end gap-1.5">
             {tuneActive && onCalibrateTune ? (
               <Pressable
@@ -343,6 +359,21 @@ export function FretboardDiagram({
               >
                 <Text className={`font-sans text-[11px] ${tuneActive ? 'text-wood-900' : 'text-muted-brown'}`}>
                   {tuneActive ? 'Tune on' : 'Tune'}
+                </Text>
+              </Pressable>
+            ) : null}
+            {showOrientControl ? (
+              <Pressable
+                onPress={() => {
+                  setOrientPanelOpen((o) => !o)
+                  onToggleOrient?.()
+                }}
+                className={`rounded-full border px-3 py-1 ${orientPanelOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'}`}
+                accessibilityRole="button"
+                accessibilityLabel={orientPanelOpen ? 'Hide technique hint' : 'Show technique hint'}
+              >
+                <Text className={`font-sans text-[11px] ${orientPanelOpen ? 'text-wood-900' : 'text-muted-brown'}`}>
+                  {orientPanelOpen ? 'Hint' : 'Hint'}
                 </Text>
               </Pressable>
             ) : null}
@@ -409,6 +440,29 @@ export function FretboardDiagram({
           <Text className={`mt-1 font-sans text-[11px] ${tunerState.inTune ? 'text-success' : 'text-muted-brown'}`}>
             {tunerState.statusText}
           </Text>
+        </View>
+      ) : null}
+
+      {orientPanelOpen && showOrientControl ? (
+        <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
+          <Text className="font-sans-semibold text-[11px] text-wood-900">Technique Hint</Text>
+          {orientAnnotation ? (
+            <Text className="mt-1 font-sans text-[11px] text-muted-brown">{orientAnnotation}</Text>
+          ) : null}
+          {orientClipUrl ? (
+            <Pressable
+              onPress={onToggleOrientPlayback}
+              className="mt-2 rounded-md border border-wood-600/50 bg-cream-dark items-center justify-center py-2"
+              accessibilityRole="button"
+              accessibilityLabel={orientIsPlaying ? 'Pause technique clip' : 'Play technique clip'}
+            >
+              <Text className="font-sans-medium text-[11px] text-wood-900">
+                {orientIsPlaying ? 'Pause' : 'Play Clip'}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text className="mt-1 font-sans text-[11px] text-muted-brown">No hint clip available</Text>
+          )}
         </View>
       ) : null}
 

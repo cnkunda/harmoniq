@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
-import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
+import { TabViewport } from '@/components/TabViewport'
 import { toast } from '@/components/ToastConfig'
 import { WoodGradient } from '@/components/WoodGradient'
 import {
@@ -49,6 +49,7 @@ import {
     readFretboardShareStateFromLocation,
     type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
+import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
 
 const SCALE_UI_INTERVAL_MS = 2000
 const AI_INSTRUMENTAL_TRACK_ID = 'ai-instrumental'
@@ -105,7 +106,7 @@ export default function JamScreen() {
   /** Monotonic phrase segmentation clock (starts when mic opens). */
   const jamPhraseClockStartRef = useRef<number | null>(null)
   const jamStartedAtRef = useRef<number | null>(null)
-  const jamStemTabRef = useRef<SessionStemAndTabHandle>(null)
+  const jamStemTabRef = useRef<AlphaTabSurfaceRef>(null)
   const jamLastStemPlayingRef = useRef(false)
   const lastScaleUiAtRef = useRef(0)
   const lastScaleTintRef = useRef<{ rootMidi: number; intervals: readonly number[] } | null>(null)
@@ -221,7 +222,7 @@ export default function JamScreen() {
 
   useEffect(() => {
     if (!isJamming || !jamTabReady) return
-    const tab = jamStemTabRef.current?.getTabSurface()
+    const tab = jamStemTabRef.current
     const cmd = lastScaleTintRef.current
     if (cmd) {
       tab?.highlightScaleDegrees(cmd.rootMidi, [...cmd.intervals])
@@ -232,7 +233,7 @@ export default function JamScreen() {
 
   const syncJamTabFromPlaybackStatus = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return
-    const tab = jamStemTabRef.current?.getTabSurface()
+    const tab = jamStemTabRef.current
     tab?.syncPlaybackTimelineMs((status.positionMillis ?? 0) + 50)
     const playing = Boolean(status.isPlaying)
     if (playing !== jamLastStemPlayingRef.current) {
@@ -343,7 +344,7 @@ export default function JamScreen() {
     setScaleRootPitchClass(null)
     lastScaleUiAtRef.current = 0
     lastScaleTintRef.current = null
-    jamStemTabRef.current?.getTabSurface()?.clearScaleHighlight()
+    jamStemTabRef.current?.clearScaleHighlight()
 
     try {
       await startPitch((reading) => {
@@ -436,7 +437,7 @@ export default function JamScreen() {
       }
     }
     jamLastStemPlayingRef.current = false
-    jamStemTabRef.current?.getTabSurface()?.setStemPlaybackActive(false)
+    jamStemTabRef.current?.setStemPlaybackActive(false)
     setJamTabExternalAudioSrc(null)
 
     const hist = histogramRef.current
@@ -453,7 +454,7 @@ export default function JamScreen() {
     setScaleRootPitchClass(null)
     lastScaleTintRef.current = null
     lastScaleUiAtRef.current = 0
-    jamStemTabRef.current?.getTabSurface()?.clearScaleHighlight()
+    jamStemTabRef.current?.clearScaleHighlight()
     const durationSeconds = Math.max(0, Math.floor(durationSec))
 
     let coachSummary: string
@@ -729,93 +730,106 @@ export default function JamScreen() {
           ) : null}
 
           {!isJamming && (
-            <View className="mb-6 gap-2">
-              <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wider text-muted-brown">
-                Backing source
-              </Text>
-              <AnimatedPressable
-                onPress={() => setBackingMode('classic')}
-                haptic="light"
-                disabled={busy}
-                className={`flex-row items-center justify-between rounded-xl border p-4 ${
-                  backingMode === 'classic'
-                    ? 'border-amber-accent/40 bg-amber-accent/10'
-                    : 'border-wood-700/50 bg-wood-800/40'
-                }`}
-              >
-                <View className="flex-1 pr-2">
-                  <Text className={`font-sans text-sm ${backingMode === 'classic' ? 'text-amber-light' : 'text-cream'}`}>
-                    Offline loop (bundled MP3)
-                  </Text>
-                  <Text className="mt-0.5 font-sans text-xs text-muted-brown">
-                    Works fully offline — no practice server required
-                  </Text>
-                </View>
-              </AnimatedPressable>
-              <AnimatedPressable
-                onPress={() => setBackingMode('ai')}
-                haptic="light"
-                disabled={busy}
-                className={`flex-row items-center justify-between rounded-xl border p-4 ${
-                  backingMode === 'ai'
-                    ? 'border-amber-accent/40 bg-amber-accent/10'
-                    : 'border-wood-700/50 bg-wood-800/40'
-                }`}
-              >
-                <View className="flex-1 pr-2">
-                  <Text className={`font-sans text-sm ${backingMode === 'ai' ? 'text-amber-light' : 'text-cream'}`}>
-                    AI instrumental (server · Gemini)
-                  </Text>
-                  <Text className="mt-0.5 font-sans text-xs text-muted-brown">
-                    Generates a fresh bed from the key/tempo of the loop you select below · needs API + GEMINI_API_KEY on the
-                    backend
-                  </Text>
-                </View>
-                {busy && backingMode === 'ai' ? <ActivityIndicator color="#e8b86d" /> : null}
-              </AnimatedPressable>
-              <Text className="mb-1 mt-2 font-sans-medium text-xs uppercase tracking-wider text-muted-brown">
-                Loop (style & key)
-              </Text>
-              <Text className="mb-1 font-sans text-[11px] text-muted-brown">
-                {backingMode === 'ai'
-                  ? 'Tap a row to set the template (key / BPM) for AI generation.'
-                  : 'Tap a row to choose which bundled MP3 plays when you start.'}
-              </Text>
-              {BACKING_TRACKS.map((track) => {
-                const templateActive = backingMode === 'ai' && classicTrackId === track.id
-                const classicActive = backingMode === 'classic' && classicTrackId === track.id
-                return (
+            <View className="mb-6 gap-5">
+              {/* Backing Source Section */}
+              <View className="gap-2">
+                <Text className="font-sans-semibold text-sm uppercase tracking-wider text-amber-light">
+                  Backing Source
+                </Text>
+                <Text className="font-sans text-xs text-muted-brown">
+                  Choose how your backing track is generated
+                </Text>
+                <View className="mt-1 gap-2">
                   <AnimatedPressable
-                    key={track.id}
-                    onPress={() => setClassicTrackId(track.id)}
+                    onPress={() => setBackingMode('classic')}
                     haptic="light"
                     disabled={busy}
                     className={`flex-row items-center justify-between rounded-xl border p-4 ${
-                      classicActive
+                      backingMode === 'classic'
                         ? 'border-amber-accent/40 bg-amber-accent/10'
-                        : templateActive
-                          ? 'border-cream/25 bg-wood-800/60'
-                          : 'border-wood-700/50 bg-wood-800/40'
+                        : 'border-wood-700/50 bg-wood-800/40'
                     }`}
                   >
                     <View className="flex-1 pr-2">
-                      <Text
-                        className={`font-sans text-sm ${classicActive || templateActive ? 'text-amber-light' : 'text-cream'}`}
-                      >
-                        {track.label}
+                      <Text className={`font-sans text-sm ${backingMode === 'classic' ? 'text-amber-light' : 'text-cream'}`}>
+                        Offline loop (bundled MP3)
                       </Text>
-                      {templateActive && backingMode === 'ai' ? (
-                        <Text className="mt-0.5 font-sans text-xs text-muted-brown">AI template · key / tempo</Text>
-                      ) : null}
+                      <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                        Works fully offline — no practice server required
+                      </Text>
                     </View>
-                    {track.bpm != null ? (
-                      <Text className="font-mono text-xs text-muted-brown">{track.bpm} BPM</Text>
-                    ) : (
-                      <Text className="font-mono text-xs text-muted-brown">ambient</Text>
-                    )}
                   </AnimatedPressable>
-                )
-              })}
+                  <AnimatedPressable
+                    onPress={() => setBackingMode('ai')}
+                    haptic="light"
+                    disabled={busy}
+                    className={`flex-row items-center justify-between rounded-xl border p-4 ${
+                      backingMode === 'ai'
+                        ? 'border-amber-accent/40 bg-amber-accent/10'
+                        : 'border-wood-700/50 bg-wood-800/40'
+                    }`}
+                  >
+                    <View className="flex-1 pr-2">
+                      <Text className={`font-sans text-sm ${backingMode === 'ai' ? 'text-amber-light' : 'text-cream'}`}>
+                        AI instrumental (server · Gemini)
+                      </Text>
+                      <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                        Generates a fresh bed from the key/tempo of the loop you select below
+                      </Text>
+                    </View>
+                    {busy && backingMode === 'ai' ? <ActivityIndicator color="#e8b86d" /> : null}
+                  </AnimatedPressable>
+                </View>
+              </View>
+
+              {/* Loop Style Section */}
+              <View className="gap-2">
+                <Text className="font-sans-semibold text-sm uppercase tracking-wider text-amber-light">
+                  Loop Style
+                </Text>
+                <Text className="font-sans text-xs text-muted-brown">
+                  {backingMode === 'ai'
+                    ? 'Select a template (key / BPM) for AI generation'
+                    : 'Select which bundled MP3 plays when you start'}
+                </Text>
+                <View className="mt-1 gap-2">
+                  {BACKING_TRACKS.map((track) => {
+                    const templateActive = backingMode === 'ai' && classicTrackId === track.id
+                    const classicActive = backingMode === 'classic' && classicTrackId === track.id
+                    return (
+                      <AnimatedPressable
+                        key={track.id}
+                        onPress={() => setClassicTrackId(track.id)}
+                        haptic="light"
+                        disabled={busy}
+                        className={`flex-row items-center justify-between rounded-xl border p-4 ${
+                          classicActive
+                            ? 'border-amber-accent/40 bg-amber-accent/10'
+                            : templateActive
+                              ? 'border-cream/25 bg-wood-800/60'
+                              : 'border-wood-700/50 bg-wood-800/40'
+                        }`}
+                      >
+                        <View className="flex-1 pr-2">
+                          <Text
+                            className={`font-sans text-sm ${classicActive || templateActive ? 'text-amber-light' : 'text-cream'}`}
+                          >
+                            {track.label}
+                          </Text>
+                          {templateActive && backingMode === 'ai' ? (
+                            <Text className="mt-0.5 font-sans text-xs text-muted-brown">AI template · key / tempo</Text>
+                          ) : null}
+                        </View>
+                        {track.bpm != null ? (
+                          <Text className="font-mono text-xs text-muted-brown">{track.bpm} BPM</Text>
+                        ) : (
+                          <Text className="font-mono text-xs text-muted-brown">ambient</Text>
+                        )}
+                      </AnimatedPressable>
+                    )
+                  })}
+                </View>
+              </View>
             </View>
           )}
 
@@ -887,27 +901,26 @@ export default function JamScreen() {
                   setFretPulseKey((k) => k + 1)
                 }}
               />
+              {/* Reference Score - only visible while jamming */}
+              <View className="mb-4 gap-2">
+                <Text className="font-sans-medium text-xs uppercase tracking-wider text-amber-light">Reference score</Text>
+                <Text className="font-sans text-xs text-cream/80">
+                  Highlights follow your detected scale while the backing plays. Cursor syncs to the jam track.
+                </Text>
+                <View className="mt-4 h-[340px] w-full">
+                  <TabViewport
+                    ref={jamStemTabRef}
+                    gp5Base64={JAM_REFERENCE_TAB_GP5_BASE64}
+                    audioSrc={jamTabExternalAudioSrc}
+                    renderPreset="study"
+                    runtimeDiagnosticsEnabled={false}
+                    onReady={onJamTabReady}
+                    style={{ flex: 1, height: '100%', width: '100%' }}
+                  />
+                </View>
+              </View>
             </View>
           )}
-
-          <View className="mb-4 gap-2">
-            <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-brown">Reference score</Text>
-            <Text className="font-sans text-xs text-muted-brown">
-              {isJamming
-                ? 'Highlights follow your detected scale while the backing plays. Cursor syncs to the jam track.'
-                : 'Load the pattern before you start — same reference you will see while jamming.'}
-            </Text>
-            <SessionStemAndTab
-              ref={jamStemTabRef}
-              tabRenderPreset="study"
-              showStemPanel={false}
-              gp5Base64Override={JAM_REFERENCE_TAB_GP5_BASE64}
-              audioSrcOverride={jamTabExternalAudioSrc}
-              transposeSemitonesOverride={0}
-              onTabReady={onJamTabReady}
-              tabFrameClassName="h-[200px] w-full overflow-hidden rounded-xl border border-wood-600/45 bg-ivory px-2"
-            />
-          </View>
 
           <View className="gap-3 pb-4">
             {isJamming ? (

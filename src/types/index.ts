@@ -268,6 +268,7 @@ export interface DiscoverySuggestion {
 /** Discovery request payload (commit 91). */
 export interface DiscoveryRequest {
   mastered_job_ids: string[]
+  library_lessons?: LessonJSON[]
   skill_nodes?: Array<{ id: string; label?: string | null; score?: number }>
   limit?: number
   min_similarity?: number

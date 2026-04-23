@@ -2,15 +2,15 @@ import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter, type Href } from 'expo-router'
 import {
-  ChevronRight,
-  ClipboardList,
-  Clock,
-  Headphones,
-  Library as LibraryIcon,
-  Link2,
-  Music,
-  Play,
-  Plus,
+    ChevronRight,
+    ClipboardList,
+    Clock,
+    Headphones,
+    Library as LibraryIcon,
+    Link2,
+    Music,
+    Play,
+    Plus,
 } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
@@ -22,22 +22,22 @@ import { toast } from '@/components/ToastConfig'
 import { TodaysPlanCard, TodaysPlanCardLoading } from '@/components/TodaysPlanCard'
 import { WeakAreaPulse } from '@/components/WeakAreaPulse'
 import {
-  buildPlayerProfileFromSkillNodes,
-  generatePracticePlan,
-  loadLearningContextFromPrefs,
-  parseTasteProfileJson,
+    buildPlayerProfileFromSkillNodes,
+    generatePracticePlan,
+    loadLearningContextFromPrefs,
+    parseTasteProfileJson,
 } from '@/src/api/analyze'
 import colors from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import {
-  getAllSkillNodes,
-  getAppPref,
-  getHomeSuggestion,
-  getLessonByJobId,
-  getLickById,
-  listLessonsJournal,
-  listPracticePlanCompletions,
-  listSessionsJournal,
+    getAllSkillNodes,
+    getAppPref,
+    getHomeSuggestion,
+    getLessonByJobId,
+    getLickById,
+    listLessonsJournal,
+    listPracticePlanCompletions,
+    listSessionsJournal,
 } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_MOOD, PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { HomeSuggestion, LessonListRow, PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
@@ -227,7 +227,7 @@ export default function HomeScreen() {
     )
   }
   const goLibrary = () => router.push('/library')
-  const goListening = () => router.push('/listening' as Href)
+  const goListening = () => router.push('/(tabs)/discover')
 
   const onStartDemoLesson = useCallback(() => {
     if (demoBusy) return
