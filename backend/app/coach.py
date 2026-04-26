@@ -17,7 +17,7 @@ logger.setLevel(logging.INFO)
 
 MODEL_ID = "claude-sonnet-4-20250514"
 COACH_TIMEOUT_SECONDS = max(0.5, float(os.getenv("HARMONIQ_COACH_TIMEOUT_MS", "8000")) / 1000.0)
-PRACTICE_PLAN_INTRO_TIMEOUT_SECONDS = min(2.5, COACH_TIMEOUT_SECONDS)
+PRACTICE_PLAN_INTRO_TIMEOUT_SECONDS = min(8.0, COACH_TIMEOUT_SECONDS)
 QUICK_FEEDBACK_TIMEOUT_SECONDS = 5.0
 COACH_PROFILE_RETRY_LIMIT = 2
 COACH_PROFILE_TEMPERATURE_INITIAL = 0.5
@@ -390,10 +390,13 @@ def _call_claude_streaming(
     max_tokens: int = 220,
     temperature: float = 1.0,
 ) -> str:
+    import time
     from anthropic import Anthropic
 
+    start_time = time.perf_counter()
     client = Anthropic(api_key=api_key)
     chunks: list[str] = []
+    first_chunk_time: float | None = None
     with client.messages.stream(
         model=MODEL_ID,
         max_tokens=max_tokens,
@@ -408,7 +411,16 @@ def _call_claude_streaming(
             delta = getattr(evt, "delta", None)
             text = getattr(delta, "text", None)
             if isinstance(text, str) and text:
+                if first_chunk_time is None:
+                    first_chunk_time = time.perf_counter() - start_time
                 chunks.append(text)
+    total_time = time.perf_counter() - start_time
+    logger.info(
+        "claude_streaming timing total_ms=%.0f first_chunk_ms=%s tokens=%d",
+        total_time * 1000,
+        "%.0f" % (first_chunk_time * 1000) if first_chunk_time else "null",
+        max_tokens,
+    )
     return "".join(chunks).strip()
 
 

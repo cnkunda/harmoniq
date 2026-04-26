@@ -229,7 +229,7 @@ export default function PlayScreen() {
         ) : null}
         <SessionStemAndTab
           ref={stemTabRef}
-          tabRenderPreset="play"
+          tabRenderPreset="light"
           lessonPlaybackCardVariant="play"
           captureRecording={recording}
           playCaptureSlot={(ctx) => (

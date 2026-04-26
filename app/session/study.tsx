@@ -24,6 +24,7 @@ import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { capoSuggestion, parseKey } from '@/src/music/capoSuggestion'
 import { getChordFunction } from '@/src/music/chordFunction'
+import { chordToFretboardCells, formatChordDisplay } from '@/src/music/chordVoicing'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
@@ -32,13 +33,43 @@ import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
 import {
-    buildFretboardShareUrl,
-    readFretboardShareStateFromLocation,
-    type FretboardOverlayMode,
+  buildFretboardShareUrl,
+  readFretboardShareStateFromLocation,
+  type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { AlphaTabSurfaceRef, NoteEventMessage } from '@/types/tabMessage'
-import type { ChordEvent, ChordTimeline, SoloNote, SoloNotes } from '@/types/transcription'
+
+// Transcription types (matching backend schemas)
+interface BeatGrid {
+  bpm: number
+  pulse_bpm: number
+  beats: number[]
+  downbeats: number[]
+  time_signature: { numerator: number; denominator: number }
+  tick_value: number
+}
+
+interface ChordEvent {
+  timestamp: number
+  chord: string
+  confidence: number
+}
+
+interface ChordTimeline {
+  events: ChordEvent[]
+}
+
+interface SoloNote {
+  start_time: number
+  duration: number
+  pitch: number
+  velocity?: number
+}
+
+interface SoloNotes {
+  notes: SoloNote[]
+}
 
 type TabVariant = 'full' | 'skeleton' | 'alt'
 
@@ -101,6 +132,11 @@ export default function StudyScreen() {
   const [stemRoutingOverride, setStemRoutingOverride] = useState<string | null>(null);
   const [theoryAnnotation, setTheoryAnnotation] = useState<{ chordName: string; chordFunction: string; romanNumeral: string; rationale: string } | null>(null);
 
+  // Intelligent fretboard display mode (auto-detect or manual override)
+  const [fretboardMode, setFretboardMode] = useState<'auto' | 'chords' | 'solo' | 'both'>('auto')
+  const [voicingMode, setVoicingMode] = useState<'full' | 'compact'>('compact')
+  const [chordCells, setChordCells] = useState<Array<{ string: number; fret: number; interval: number }>>([])
+
   // Orient clip states (moved from separate orient.tsx screen)
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
   const [orientAnnotation, setOrientAnnotation] = useState<string | null>(null)
@@ -122,6 +158,14 @@ export default function StudyScreen() {
       const hasSoloNotes = section.solo_notes != null
 
       if (!hasBeatGrid || !hasChordTimeline || !hasSoloNotes) {
+        console.log('MusicXML fetch check - missing data:', {
+          hasBeatGrid,
+          hasChordTimeline,
+          hasSoloNotes,
+          sectionKeys: Object.keys(section || {}),
+          lessonSectionIndex,
+          jobId: lesson?.job_id
+        })
         setMusicXmlData(null)
         return
       }
@@ -137,6 +181,10 @@ export default function StudyScreen() {
         setMusicXmlData(musicXml)
       } catch (e) {
         console.error('Failed to fetch MusicXML:', e)
+        console.error('MusicXML fetch error details:', {
+          error: e instanceof Error ? e.message : String(e),
+          sectionIndex: lessonSectionIndex
+        })
         setMusicXmlData(null)
       }
     }
@@ -222,9 +270,51 @@ export default function StudyScreen() {
     console.log('AlphaTab is ready!');
   }, []);
 
-  const handleCursorPositionUpdate = useCallback((position: number) => {
-    // console.log('Cursor position:', position);
+  /**
+   * Analyze musical event density to determine optimal display mode
+   * Returns 'chord' | 'solo' | 'both' based on which is more prominent
+   */
+  const determineDisplayMode = useCallback((
+    position: number,
+    windowSeconds: number = 2
+  ): 'chord' | 'solo' | 'both' => {
+    const windowStart = position - windowSeconds
+    const windowEnd = position + windowSeconds
 
+    // Count chords in window (excluding 'N' - no chord)
+    const chordsInWindow = processedMusicalEvents.filter(
+      (e) => e.type === 'chord' &&
+             e.time >= windowStart &&
+             e.time <= windowEnd &&
+             e.data.chord !== 'N'
+    ).length
+
+    // Count solo notes in window
+    const soloNotesInWindow = processedMusicalEvents.filter(
+      (e) => e.type === 'solo_note' &&
+             e.time >= windowStart &&
+             e.time <= windowEnd
+    ).length
+
+    // Normalize by typical density expectations
+    // Chords typically change 0.5-2x per second (depending on progression speed)
+    // Solo notes can be 2-8x per second
+    const chordDensity = chordsInWindow / (windowSeconds * 2)
+    const soloDensity = soloNotesInWindow / (windowSeconds * 2)
+
+    // Thresholds for mode selection
+    if (soloDensity > chordDensity * 2 && soloNotesInWindow > 2) {
+      return 'solo' // Solo is prominent
+    } else if (chordDensity > 0.2 && chordsInWindow > 0) {
+      return 'chord' // Chords drive the section
+    } else if (soloNotesInWindow > 0 || chordsInWindow > 0) {
+      return 'both' // Both present but neither dominant
+    }
+    return 'chord' // Default to chord mode
+  }, [processedMusicalEvents])
+
+  const handleCursorPositionUpdate = useCallback((position: number) => {
+    // Find current musical event
     let currentEvent = null;
     for (let i = processedMusicalEvents.length - 1; i >= 0; i--) {
       if (processedMusicalEvents[i].time <= position) {
@@ -233,29 +323,62 @@ export default function StudyScreen() {
       }
     }
 
+    // Determine effective display mode (auto uses density analyzer)
+    const effectiveMode = fretboardMode === 'auto'
+      ? determineDisplayMode(position)
+      : fretboardMode
+
+    // Find current chord for chord mode
+    let currentChord: ChordEvent | null = null
+    if (effectiveMode === 'chord' || effectiveMode === 'both') {
+      const chordEvent = processedMusicalEvents
+        .slice()
+        .reverse()
+        .find((e): e is ProcessedMusicalEvent & { type: 'chord' } =>
+          e.type === 'chord' && e.time <= position && e.data.chord !== 'N'
+        )
+      if (chordEvent) {
+        currentChord = chordEvent.data
+      }
+    }
+
+    // Update chord cells on fretboard
+    if (currentChord && (effectiveMode === 'chord' || effectiveMode === 'both')) {
+      const cells = chordToFretboardCells(currentChord.chord, voicingMode, 'low')
+      setChordCells(cells.map(c => ({ string: c.string, fret: c.fret, interval: c.interval })))
+    } else {
+      setChordCells([])
+    }
+
+    // Update selected note for solo mode
     if (currentEvent) {
-      if (currentEvent.type === 'solo_note') {
-        const note = currentEvent.data;
-        // This is a placeholder, as SoloNote schema doesn't directly contain fret/string.
-        // In a real scenario, you'd map pitch to a fretboard position.
-        // For now, we'll use pitch as a proxy for midi and assign dummy fret/string.
-        setSelectedNote({ midi: note.pitch, fret: note.pitch % 12, string: (note.pitch % 6) + 1 });
-      } else if (currentEvent.type === 'chord') {
-        const chordEvent = currentEvent.data;
-        // For chords, we might want to highlight the chord shape or root note.
-        // This is a simplified representation.
-        // Assuming 'C:maj' -> C (MIDI 60), 'D:min' -> D (MIDI 62) etc.
-        const rootNote = chordEvent.chord.split(':')[0];
-        // This mapping is highly simplified and needs proper music theory implementation.
-        const midiMap: { [key: string]: number } = { 'C': 60, 'D': 62, 'E': 64, 'F': 65, 'G': 67, 'A': 69, 'B': 71 };
-        const midi = midiMap[rootNote] || 0;
-        setSelectedNote({ midi: midi, fret: midi % 12, string: (midi % 6) + 1 });
+      const showSolo = effectiveMode === 'solo' || effectiveMode === 'both'
+      const showChord = effectiveMode === 'chord' || effectiveMode === 'both'
+
+      if (currentEvent.type === 'solo_note' && showSolo) {
+        const note = currentEvent.data
+        setSelectedNote({ midi: note.pitch, fret: note.pitch % 12, string: (note.pitch % 6) + 1 })
+      } else if (currentEvent.type === 'chord' && showChord && effectiveMode !== 'both') {
+        // In chord-only mode, highlight the chord root
+        const chordEvent = currentEvent.data
+        const cells = chordToFretboardCells(chordEvent.chord, voicingMode, 'low')
+        const rootCell = cells.find(c => c.interval === 0)
+        if (rootCell) {
+          setSelectedNote({ midi: rootCell.midi, fret: rootCell.fret, string: rootCell.string })
+        } else {
+          setSelectedNote(null)
+        }
+      } else if (!showSolo && !showChord) {
+        setSelectedNote(null)
+      } else if (currentEvent.type === 'solo_note' && !showSolo) {
+        setSelectedNote(null)
       }
     } else {
-      setSelectedNote(null);
+      setSelectedNote(null)
     }
+
     setFretPulseKey((k) => k + 1);
-  }, [processedMusicalEvents]);
+  }, [processedMusicalEvents, fretboardMode, voicingMode, determineDisplayMode]);
 
   const handleBeatEvent = useCallback((beat: number) => {
     console.log('Beat event:', beat);
@@ -265,17 +388,21 @@ export default function StudyScreen() {
   const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
 
   useEffect(() => {
-    if (section?.chord_timeline?.events || section?.solo_notes?.notes) {
+    // Check both section level and lesson level for chord/solo data
+    const chordEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events
+    const soloNotes = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes
+
+    if (chordEvents || soloNotes) {
       const allEvents: ProcessedMusicalEvent[] = [];
 
-      if (section.chord_timeline?.events) {
-        section.chord_timeline.events.forEach((event: ChordEvent) => {
+      if (chordEvents) {
+        chordEvents.forEach((event: ChordEvent) => {
           allEvents.push({ type: 'chord', time: event.timestamp, data: event });
         });
       }
 
-      if (section.solo_notes?.notes) {
-        section.solo_notes.notes.forEach((note: SoloNote) => {
+      if (soloNotes) {
+        soloNotes.forEach((note: SoloNote) => {
           allEvents.push({ type: 'solo_note', time: note.start_time, data: note });
         });
       }
@@ -283,15 +410,17 @@ export default function StudyScreen() {
       allEvents.sort((a, b) => a.time - b.time);
       setProcessedMusicalEvents(allEvents);
     }
-  }, [section?.chord_timeline, section?.solo_notes]);
+  }, [section?.chord_timeline, section?.solo_notes, lesson?.chord_timeline, lesson?.solo_notes]);
 
   // Update theory annotation based on current chord during playback
   useEffect(() => {
     const updateTheoryAnnotation = async () => {
-      if (!section?.chord_timeline?.events || !lesson?.key) return;
+      // Check both section level and lesson level for chord_timeline
+      const chordEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events
+      if (!chordEvents || !lesson?.key) return;
 
       // Find current chord based on playback position
-      const currentChordEvent = section.chord_timeline.events
+      const currentChordEvent = chordEvents
         .slice()
         .reverse()
         .find((event: ChordEvent) => event.timestamp <= tick.positionSec);
@@ -339,7 +468,7 @@ export default function StudyScreen() {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [tick.positionSec, section?.chord_timeline, lesson?.key]);
+  }, [tick.positionSec, section?.chord_timeline, lesson?.chord_timeline, lesson?.key]);
 
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
   const lyricWords = useMemo(() => toLyricWords(lesson?.lyrics_aligned), [lesson?.lyrics_aligned])
@@ -626,7 +755,7 @@ export default function StudyScreen() {
 
       <SessionStemAndTab
         ref={sessionStemRef}
-        tabRenderPreset="study"
+        tabRenderPreset="light"
         tabVariant={variant}
         onPlaybackTick={handleStemPlaybackTick}
         onNoteEvent={onTabNoteEvent}
@@ -646,11 +775,66 @@ export default function StudyScreen() {
               />
             ) : null}
 
+            {/* Fretboard Mode Controls */}
+            <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
+              <Text className="mr-1 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Fretboard</Text>
+              {([
+                { mode: 'auto' as const, label: 'Auto' },
+                { mode: 'chords' as const, label: 'Chords' },
+                { mode: 'solo' as const, label: 'Solo' },
+                { mode: 'both' as const, label: 'Both' },
+              ] as const).map(({ mode, label }) => (
+                <AnimatedPressable
+                  key={mode}
+                  haptic="light"
+                  onPress={() => setFretboardMode(mode)}
+                  className={`rounded-full border px-2 py-0.5 ${
+                    fretboardMode === mode
+                      ? 'border-amber-accent bg-amber-accent/20'
+                      : 'border-wood-600/35 bg-cream-dark/35'
+                  }`}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                >
+                  <Text className={`font-sans text-[10px] ${fretboardMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>
+                    {label}
+                  </Text>
+                </AnimatedPressable>
+              ))}
+              {(fretboardMode === 'chords' || fretboardMode === 'both') && (
+                <>
+                  <View className="mx-1 h-3 w-px bg-wood-600/35" />
+                  {([
+                    { mode: 'compact' as const, label: 'Compact' },
+                    { mode: 'full' as const, label: 'Full' },
+                  ] as const).map(({ mode, label }) => (
+                    <AnimatedPressable
+                      key={mode}
+                      haptic="light"
+                      onPress={() => setVoicingMode(mode)}
+                      className={`rounded-full border px-2 py-0.5 ${
+                        voicingMode === mode
+                          ? 'border-success bg-success/20'
+                          : 'border-wood-600/35 bg-cream-dark/35'
+                      }`}
+                      accessibilityRole="button"
+                      accessibilityLabel={label}
+                    >
+                      <Text className={`font-sans text-[10px] ${voicingMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>
+                        {label}
+                      </Text>
+                    </AnimatedPressable>
+                  ))}
+                </>
+              )}
+            </View>
+
             <FretboardDiagram
               keyLabel={keyLabel}
               positionLabel={positionLabel}
               capoText={capoText}
               selectedNote={selectedNote}
+              chordCells={chordCells}
               pulseKey={fretPulseKey}
               overlayMode={overlayMode}
               showOverlayControls
@@ -693,33 +877,44 @@ export default function StudyScreen() {
                 Annotations (long-press bar)
               </Text>
               <View className="flex-row flex-wrap gap-2">
-                {[...Array(Math.max(1, Math.min(lesson?.bar_timestamps?.length ?? 0, STUDY_BAR_CHIP_MAX))).keys()].map((bar) => (
-                  <AnimatedPressable
-                    key={`bar-${bar}`}
-                    haptic="none"
-                    onPress={() => {
-                      const stamps = lesson?.bar_timestamps
-                      const t = Array.isArray(stamps) && typeof stamps[bar] === 'number' ? stamps[bar]! : 0
-                      void (async () => {
-                        await sessionStemRef.current?.seekTransportToSeconds(t)
-                        sessionStemRef.current?.scrollMasterBarIntoView(bar)
-                      })()
-                    }}
-                    onLongPress={() => {
-                      const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
-                      setAnnotation(sectionKey, bar, text)
-                    }}
-                    className={`rounded-full border px-2.5 py-1 ${
-                      bar === currentBar ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/35'
-                    }`}
-                    accessibilityRole="button"
-                    accessibilityHint="Tap to seek; long press to save a practice note for this bar"
-                  >
-                    <Text className={`font-mono text-[10px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-brown'}`}>
-                      bar {bar}
-                    </Text>
-                  </AnimatedPressable>
-                ))}
+                {[...Array(Math.max(1, Math.min(lesson?.bar_timestamps?.length ?? 0, STUDY_BAR_CHIP_MAX))).keys()].map((bar) => {
+                  // Get chord for this bar - check section level first, then lesson level
+                  const barTime = lesson?.bar_timestamps?.[bar] ?? 0
+                  const chordEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events
+                  const chordForBar = chordEvents
+                    ?.slice()
+                    ?.reverse()
+                    ?.find((e: ChordEvent) => e.timestamp <= barTime && e.chord !== 'N')
+                  const chordLabel = chordForBar ? formatChordDisplay(chordForBar.chord) : '—'
+
+                  return (
+                    <AnimatedPressable
+                      key={`bar-${bar}`}
+                      haptic="none"
+                      onPress={() => {
+                        const stamps = lesson?.bar_timestamps
+                        const t = Array.isArray(stamps) && typeof stamps[bar] === 'number' ? stamps[bar]! : 0
+                        void (async () => {
+                          await sessionStemRef.current?.seekTransportToSeconds(t)
+                          sessionStemRef.current?.scrollMasterBarIntoView(bar)
+                        })()
+                      }}
+                      onLongPress={() => {
+                        const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
+                        setAnnotation(sectionKey, bar, text)
+                      }}
+                      className={`min-w-[40px] items-center rounded-full border px-2 py-1 ${
+                        bar === currentBar ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/35'
+                      }`}
+                      accessibilityRole="button"
+                      accessibilityHint={`${chordLabel} at bar ${bar}. Tap to seek; long press to save a practice note`}
+                    >
+                      <Text className={`font-mono text-[10px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-brown'}`}>
+                        {chordLabel}
+                      </Text>
+                    </AnimatedPressable>
+                  )
+                })}
               </View>
               <Text className="mt-1 font-sans text-[11px] text-muted-brown">
                 Saved notes in this section: {Object.keys(sectionNotes).length}

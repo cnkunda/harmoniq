@@ -409,6 +409,7 @@ export default function WarmupScreen() {
         <View className="mt-2">
           <SessionStemAndTab
             ref={tabRef}
+            tabRenderPreset="light"
             showStemPanel={false}
             gp5Base64Override={gp5}
             initialMetronomeOn={false}

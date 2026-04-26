@@ -5,10 +5,10 @@ import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { resolveBundledSoundFontUrlForProfile } from '@/src/audio/soundfontBundled'
 import { persistLastSuccessfulSoundFontProfile } from '@/src/audio/soundfontPersistence'
 import {
-    DEFAULT_SOUNDFONT_PROFILE_ID,
-    isSoundFontProfileId,
-    SOUNDFONT_PROFILE_LOAD_TIMEOUT_MS,
-    type SoundFontProfileId,
+  DEFAULT_SOUNDFONT_PROFILE_ID,
+  isSoundFontProfileId,
+  SOUNDFONT_PROFILE_LOAD_TIMEOUT_MS,
+  type SoundFontProfileId,
 } from '@/src/audio/soundfontProfiles'
 import { ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS } from '@/src/constants/alphaTabBridge'
 import { ALPHATAB_WEB_SURFACE_CSS } from '@/src/constants/alphaTabPlayerUi'
@@ -16,15 +16,15 @@ import { RUNTIME_DIAG_THRESHOLDS, RUNTIME_DIAG_WINDOW_MS } from '@/src/constants
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
 import { applyScaleDegreeHighlight, clearScaleDegreeHighlight } from '@/src/jam/alphaTabScaleHighlight'
 import {
-    extractSongMetaFromScore,
-    resolveMasterBarIndexFromTick,
-    sectionLabelAtMasterBar,
-    type TickLookupApi,
+  extractSongMetaFromScore,
+  resolveMasterBarIndexFromTick,
+  sectionLabelAtMasterBar,
+  type TickLookupApi,
 } from '@/src/session/alphatabSongMeta'
 import {
-    DEFAULT_TAB_RENDER_PRESET,
-    getTabRenderPreset,
-    type TabRenderPreset,
+  DEFAULT_TAB_RENDER_PRESET,
+  getTabRenderPreset,
+  type TabRenderPreset,
 } from '@/src/session/tabThemePresets'
 import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
 import { base64ToUint8Array } from '@/src/utils/base64ToUint8Array'
@@ -250,6 +250,10 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const soundFontProfileResolved: SoundFontProfileId = isSoundFontProfileId(soundFontProfileProp)
       ? soundFontProfileProp
       : DEFAULT_SOUNDFONT_PROFILE_ID
+
+    const backgroundColor = useMemo(() => {
+      return renderPreset === 'light' ? '#F5F0E8' : '#2B1D0E'
+    }, [renderPreset])
 
     useEffect(() => {
       webRuntimeDiagOnRef.current = runtimeDiagnosticsEnabled
@@ -1351,11 +1355,12 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
               <div
                 ref={hostRef}
                 className="harmoniq-alphatab-scroll"
+                data-theme={renderPreset === 'light' ? 'light' : 'dark'}
                 style={{
                   flex: 1,
                   minHeight: 0,
                   width: '100%',
-                  backgroundColor: '#2B1D0E',
+                  backgroundColor,
                   overflowX: 'auto',
                   overflowY: 'hidden',
                   position: 'relative',
@@ -1372,7 +1377,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
                     bottom: 0,
                     overflow: 'auto',
                     zIndex: 6,
-                    backgroundColor: '#2B1D0E',
+                    backgroundColor,
                     pointerEvents: 'none',
                   }}
                   // Trusted lesson artifact from Harmoniq backend only.
@@ -1386,7 +1391,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
                 height: 20,
                 flexShrink: 0,
                 width: '100%',
-                backgroundColor: '#2B1D0E',
+                backgroundColor,
               }}
             />
           </div>

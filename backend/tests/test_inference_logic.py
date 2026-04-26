@@ -100,8 +100,8 @@ def test_chord_majority_vote_pooling(monkeypatch, tmp_path, mock_beat_grid):
     assert timeline.events[0].chord == "C"
 
 def test_solo_monophonic_truncation(monkeypatch, mock_beat_grid):
-    """Verify that a solo line cannot have overlapping notes."""
-    
+    """Verify that a solo line cannot have overlapping notes, with legato overlap."""
+
     # Note 1: 0.1s to 0.9s (Starts at Beat 0, Ends at Beat 1.0)
     # Note 2: 0.6s to 1.2s (Starts at Beat 0.5, Ends at Beat 1.0) -> OVERLAP!
     mock_notes = [
@@ -115,26 +115,32 @@ def test_solo_monophonic_truncation(monkeypatch, mock_beat_grid):
     solo = infer_solo(Path("dummy.wav"), mock_beat_grid)
 
     # Note 0 should have been truncated to end when Note 1 starts (at 0.5s)
+    # With 10ms legato overlap added for natural feel
     assert solo.notes[0].start_time == 0.0 # 0.1 snapped to 0.0
-    assert solo.notes[0].duration == 0.5   # Truncated from 0.9 to 0.5
-    
+    assert solo.notes[0].duration == 0.51  # Truncated to 0.5 + 0.01 legato overlap
+
     # Note 1 starts at 0.5
     assert solo.notes[1].start_time == 0.5 # 0.6 snapped to 0.5
     assert solo.notes[1].duration == 0.5   # 1.2 snapped to 1.0, 1.0-0.5 = 0.5
 
 def test_solo_micro_note_filtering(monkeypatch, mock_beat_grid):
-    """Ensure noise/very short notes are discarded."""
+    """Ensure micro-notes that pass duration filter are preserved with minimum tick duration."""
     
-    # One real note, one note that is only 0.01s long (noise)
+    # One real note, one grace note that gets crushed by quantization
+    # The grace note (0.26s-0.24s played backward, or 0.24s-0.26s very short)
+    # Both start and end snap to the same grid point (0.25), but it's preserved with min duration
     mock_notes = [
         (0.0, 0.5, 60, 0.8, None),
-        (0.6, 0.61, 64, 0.8, None) # Micro-note
+        (0.24, 0.26, 64, 0.8, None) # Very short note that snaps to same grid point
     ]
     
     monkeypatch.setattr("basic_pitch.inference.predict", lambda *a: (None, None, mock_notes))
 
     solo = infer_solo(Path("dummy.wav"), mock_beat_grid)
 
-    # Only the real note should survive
-    assert len(solo.notes) == 1
+    # Both notes should survive; the micro-note gets minimum tick duration
+    assert len(solo.notes) == 2
     assert solo.notes[0].pitch == 60
+    assert solo.notes[1].pitch == 64
+    # At 120 BPM with tick_value=0.25, one tick = (60/120)*0.25 = 0.125s
+    assert solo.notes[1].duration == 0.125

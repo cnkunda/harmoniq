@@ -118,6 +118,8 @@ export default function ReviewScreen() {
   const latestTake = useSessionPlayStore((s) => s.latestTake)
   const clearLatestTake = useSessionPlayStore((s) => s.clearLatestTake)
   const currentSession = useAppStore((s) => s.currentSession)
+  const currentPlan = usePlanStore((s) => s.currentPlan)
+  const currentSlotIndex = usePlanStore((s) => s.currentSlotIndex)
   const [busy, setBusy] = useState(false)
   const [score, setScore] = useState<ScoreResult | null>(null)
   const [reviewError, setReviewError] = useState<MappedUiError | null>(null)
@@ -131,6 +133,18 @@ export default function ReviewScreen() {
     const n = lesson?.sections?.length ?? 0
     return n > 0 && sectionIndex + 1 < n
   }, [lesson?.sections?.length, sectionIndex])
+  const nextButtonLabel = useMemo(() => {
+    if (hasMoreSectionsInLesson) return 'Next section'
+    // Check if there's a next session slot (mirrors finish() logic)
+    const slots = currentPlan?.slots
+    const hasNextSlot = Boolean(slots?.length && currentSlotIndex < slots.length - 1)
+    const activeSlot = slots?.[currentSlotIndex]
+    const slotRef = activeSlot?.lesson_ref?.trim()
+    const currentJobId = lesson?.job_id?.trim()
+    const planLessonConflict = Boolean(slotRef && currentJobId && slotRef !== currentJobId)
+    if (currentPlan && hasNextSlot && !planLessonConflict) return 'Continue'
+    return 'Done'
+  }, [hasMoreSectionsInLesson, currentPlan, currentSlotIndex, lesson?.job_id])
   const gp5ForExport = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
   const songTitleBase =
     typeof lesson?.song_title === 'string' && lesson.song_title.trim()
@@ -470,7 +484,7 @@ export default function ReviewScreen() {
       showBack
       onBack={() => router.back()}
       showNext
-      nextLabel={hasMoreSectionsInLesson ? 'Next section' : 'Done'}
+      nextLabel={nextButtonLabel}
       onNext={finish}
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.review}</DemoTourCallout> : null}

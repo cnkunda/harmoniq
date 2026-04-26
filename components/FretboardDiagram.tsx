@@ -73,6 +73,8 @@ type FretboardDiagramProps = {
   onToggleOrientPlayback?: () => void
   /** Warm-up / curriculum: highlight fixed cells (amber vs success rings). */
   fretGuideCells?: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary' }> | null
+  /** Chord shape cells to highlight on the fretboard (for intelligent display). */
+  chordCells?: ReadonlyArray<{ string: number; fret: number; interval?: number }> | null
   /** When set, replaces default footer hint when nothing is selected. */
   fretGuideFooterHint?: string | null
   /** Optional pitch-ladder demo (e.g. warm-up); shows an “Example” pill like Tune. */
@@ -285,6 +287,7 @@ export function FretboardDiagram({
   orientIsPlaying = false,
   onToggleOrientPlayback,
   fretGuideCells = null,
+  chordCells = null,
   fretGuideFooterHint = null,
   pitchLadderSlot = null,
   pitchLadderDefaultExpanded,
@@ -559,6 +562,11 @@ export function FretboardDiagram({
                       : guideVariant === 'secondary'
                         ? 'border-success bg-success/35'
                         : ''
+                  // Check if this cell is part of a chord shape
+                  const chordCell = chordCells?.find(
+                    (c) => c.string === stringIdx + 1 && cellMatchesDiagramCol(c.fret, fret)
+                  )
+                  const isChordRoot = chordCell?.interval === 0
                   const inlaySizeClass =
                     inlay === 'doubleUpper' || inlay === 'doubleLower' ? 'h-1.5 w-1.5' : 'h-2 w-2'
 
@@ -593,6 +601,16 @@ export function FretboardDiagram({
                         <View
                           className={`absolute z-[11] h-5 w-5 rounded-full border-2 ${guideRingClass}`}
                           style={{ zIndex: 11 }}
+                        />
+                      ) : null}
+                      {chordCell && !selected ? (
+                        <View
+                          className={`absolute z-[9] h-4 w-4 rounded-full border ${
+                            isChordRoot
+                              ? 'border-amber-accent bg-amber-accent/40'
+                              : 'border-amber-light bg-amber-accent/20'
+                          }`}
+                          style={{ zIndex: 9 }}
                         />
                       ) : null}
                       {scaleOn && !selected ? (

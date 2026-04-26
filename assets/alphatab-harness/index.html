@@ -5,11 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Harmoniq — AlphaTab harness</title>
   <style>
+    :root {
+      --bg-color: #2B1D0E;
+      --scrollbar-track: rgba(61, 35, 23, 0.92);
+      --scrollbar-thumb: #d4a574;
+      --scrollbar-thumb-hover: #e8b86d;
+    }
+    :root[data-theme="light"] {
+      --bg-color: #F5F0E8;
+      --scrollbar-track: rgba(200, 190, 175, 0.6);
+      --scrollbar-thumb: #b8956a;
+      --scrollbar-thumb-hover: #a08055;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       height: 100%;
       margin: 0;
-      background: #2B1D0E;
+      background: var(--bg-color);
       overflow: hidden;
       -webkit-touch-callout: none;
       user-select: none;
@@ -35,28 +47,28 @@
       overflow-y: hidden;
       -webkit-overflow-scrolling: touch;
       scrollbar-width: thin;
-      scrollbar-color: #d4a574 rgba(61, 35, 23, 0.92);
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
     }
     #alphatab::-webkit-scrollbar {
       height: 10px;
     }
     #alphatab::-webkit-scrollbar-track {
-      background: rgba(61, 35, 23, 0.92);
+      background: var(--scrollbar-track);
       border-radius: 5px;
     }
     #alphatab::-webkit-scrollbar-thumb {
-      background: #d4a574;
+      background: var(--scrollbar-thumb);
       border-radius: 5px;
-      border: 2px solid rgba(61, 35, 23, 0.92);
+      border: 2px solid var(--scrollbar-track);
     }
     #alphatab::-webkit-scrollbar-thumb:hover {
-      background: #e8b86d;
+      background: var(--scrollbar-thumb-hover);
     }
     .alphatab-bottom-inset {
       height: 20px;
       flex-shrink: 0;
       width: 100%;
-      background: #2b1d0e;
+      background: var(--bg-color);
     }
     /*
      * Player cursors — https://alphatab.net/docs/guides/styling-player
@@ -184,9 +196,9 @@
             /* Sync: src/constants/tabHarnessTheme.ts — DESIGN_SYSTEM theme white / amber.light / muted.brown */
             mainGlyphColor: '#FFFFFF',
             secondaryGlyphColor: '#E8B86D',
-            barSeparatorColor: '#6E5644',
+            barSeparatorColor: '#9B8D7B',
             scoreInfoColor: '#8B7D6B',
-            staffLineColor: '#6E5644',
+            staffLineColor: '#9B8D7B',
             barNumberColor: '#8B7D6B',
           },
           scale: 1.1,
@@ -852,9 +864,9 @@
           colors: {
             mainGlyphColor: '#FFFFFF',
             secondaryGlyphColor: '#E8B86D',
-            barSeparatorColor: '#6E5644',
+            barSeparatorColor: '#9B8D7B',
             scoreInfoColor: '#8B7D6B',
-            staffLineColor: '#6E5644',
+            staffLineColor: '#9B8D7B',
             barNumberColor: '#8B7D6B',
           },
         },
@@ -864,9 +876,9 @@
           colors: {
             mainGlyphColor: '#FFFFFF',
             secondaryGlyphColor: '#E8B86D',
-            barSeparatorColor: '#6E5644',
+            barSeparatorColor: '#9B8D7B',
             scoreInfoColor: '#8B7D6B',
-            staffLineColor: '#6E5644',
+            staffLineColor: '#9B8D7B',
             barNumberColor: '#8B7D6B',
           },
         },
@@ -876,9 +888,9 @@
           colors: {
             mainGlyphColor: '#FFFFFF',
             secondaryGlyphColor: '#E8B86D',
-            barSeparatorColor: '#6E5644',
+            barSeparatorColor: '#9B8D7B',
             scoreInfoColor: '#8B7D6B',
-            staffLineColor: '#6E5644',
+            staffLineColor: '#9B8D7B',
             barNumberColor: '#8B7D6B',
           },
         },
@@ -888,9 +900,9 @@
           colors: {
             mainGlyphColor: '#FFFFFF',
             secondaryGlyphColor: '#E8B86D',
-            barSeparatorColor: '#6E5644',
+            barSeparatorColor: '#9B8D7B',
             scoreInfoColor: '#8B7D6B',
-            staffLineColor: '#6E5644',
+            staffLineColor: '#9B8D7B',
             barNumberColor: '#8B7D6B',
           },
         },
@@ -1220,6 +1232,12 @@
 
         if (msg.type === 'setTheme' && msg.colors) {
           applyTheme(msg.colors)
+          return
+        }
+
+        if (msg.type === 'setRenderPreset' && msg.presetName) {
+          var isLight = msg.presetName === 'light'
+          document.documentElement.setAttribute('data-theme', isLight ? 'light' : 'dark')
           return
         }
 

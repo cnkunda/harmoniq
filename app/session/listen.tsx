@@ -5,11 +5,11 @@ import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
-import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
-import { useLessonStore } from '@/src/stores/lessonStore'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
+import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
+import { useLessonStore } from '@/src/stores/lessonStore'
 import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
 
 export default function ListenScreen() {
@@ -61,7 +61,7 @@ export default function ListenScreen() {
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.listen}</DemoTourCallout> : null}
       <SessionStemAndTab
         ref={stemTabRef}
-        tabRenderPreset="listen"
+        tabRenderPreset="light"
         autoPlayOnReady={lesson?.job_id === DEMO_LESSON_JOB_ID}
       />
     </SessionStepScreen>

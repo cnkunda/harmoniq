@@ -36,6 +36,7 @@ from app.ingest import (
     get_data_dir,
     get_job_dir,
     resolve_lesson_titles,
+    wav_file_duration_seconds,
 )
 
 from app.separate import SeparationError, separate_song_to_stems
@@ -47,6 +48,7 @@ logger.setLevel(logging.INFO)
 # Stable `JobStatus.error_code` when status=failed — keep in sync with `mapAnalyzeFlowError` (client).
 ANALYZE_ERROR_YOUTUBE_INVALID = "youtube_invalid"
 ANALYZE_ERROR_AUDIO_TOO_SHORT = "audio_too_short"
+ANALYZE_ERROR_AUDIO_TOO_LONG = "audio_too_long"
 ANALYZE_ERROR_INGEST_FAILED = "ingest_failed"
 ANALYZE_ERROR_STEM_SEPARATION_FAILED = "stem_separation_failed"
 ANALYZE_ERROR_ANALYSIS_FAILED = "analysis_failed"
@@ -159,6 +161,14 @@ YOUTUBE_URL_INVALID_USER_MESSAGE = (
 # Keep short so the acceptance criteria ("within a few seconds") is satisfied.
 PROCESSING_SLEEP_SECONDS = 0.1
 
+# Maximum audio duration for analysis (5 minutes) to prevent excessive processing time
+MAX_ANALYZE_DURATION_SECONDS = 300
+
+# User-facing error message for audio too long
+AUDIO_TOO_LONG_USER_MESSAGE = (
+    "Audio is too long for analysis. Please use a clip under 5 minutes."
+)
+
 # Must be user-safe and actionable on separation failures.
 STEM_SEPARATION_FAILED_USER_MESSAGE = (
     "Something went wrong separating guitar stems. Try a studio recording — live versions "
@@ -212,7 +222,10 @@ def _process_analyze_job(
 
     Thread-based on purpose: FastAPI `TestClient` polling can otherwise block
     asyncio task progress, causing jobs to remain stuck in `processing`.
+    
+    Performance logging: Each major stage is timed to identify bottlenecks.
     """
+    worker_start = time.time()
     logger.info("worker start job_id=%s youtube_url=%r upload_path=%r", job_id, youtube_url, upload_path)
     time.sleep(PROCESSING_SLEEP_SECONDS)
 
@@ -224,16 +237,45 @@ def _process_analyze_job(
         from app.ingest import ingest_youtube_or_upload_to_wav
 
         _set_job_processing_progress(job_id, 0.12, "Preparing audio…")
+        ingest_start = time.time()
         wav_path_obj, source_metadata = ingest_youtube_or_upload_to_wav(
             job_id,
             youtube_url=youtube_url,
             upload_path=upload_path,
         )
+        ingest_elapsed = time.time() - ingest_start
+        logger.info("ingest completed in %.2fs job_id=%s", ingest_elapsed, job_id)
         wav_path = str(wav_path_obj)
+        
+        # Check audio duration before expensive processing
+        wav_duration = wav_file_duration_seconds(wav_path_obj)
+        if wav_duration is not None and wav_duration > MAX_ANALYZE_DURATION_SECONDS:
+            logger.warning(
+                "Audio too long: %.1fs > %ds job_id=%s",
+                wav_duration,
+                MAX_ANALYZE_DURATION_SECONDS,
+                job_id,
+            )
+            jobs[job_id] = JobStatus(
+                status="failed",
+                result=None,
+                error=AUDIO_TOO_LONG_USER_MESSAGE,
+                error_code=ANALYZE_ERROR_AUDIO_TOO_LONG,
+            )
+            return
+        
         _set_job_processing_progress(job_id, 0.28, "Audio ready")
+        cache_check_start = time.time()
         cached_lesson = load_cached_lesson_for_wav(wav_path_obj, player_profile=player_profile)
+        cache_check_elapsed = time.time() - cache_check_start
+        logger.info("cache check completed in %.2fs job_id=%s hit=%s", cache_check_elapsed, job_id, cached_lesson is not None)
+        
         if cached_lesson is not None:
+            reuse_start = time.time()
             reused = reuse_cached_artifacts_into_job(cached_lesson, job_id=job_id)
+            reuse_elapsed = time.time() - reuse_start
+            logger.info("cache reuse completed in %.2fs job_id=%s", reuse_elapsed, job_id)
+            
             if reused is not None:
                 jobs[job_id] = JobStatus(status="complete", result=reused, error=None)
                 if _lesson_has_hydrated_coach(reused):
@@ -257,16 +299,23 @@ def _process_analyze_job(
                         daemon=True,
                     )
                     coach_thread.start()
-                logger.info("worker cache hit job_id=%s", job_id)
+                total_elapsed = time.time() - worker_start
+                logger.info("worker complete (cache hit) job_id=%s total=%.2fs", job_id, total_elapsed)
                 return
 
         job_dir = get_job_dir(job_id)
         _set_job_processing_progress(job_id, 0.4, "Separating stems…")
+        stem_start = time.time()
         stems = separate_song_to_stems(wav_path_obj, job_dir)
+        stem_elapsed = time.time() - stem_start
+        logger.info("stem separation completed in %.2fs job_id=%s", stem_elapsed, job_id)
         _set_job_processing_progress(job_id, 0.62, "Stems ready")
         backend_root = get_data_dir().parent
         stem_abs_paths = {k: backend_root / rel for k, rel in stems.items()}
+        classify_start = time.time()
         stem_classification = classify_stems_for_lesson(wav_path_obj, stem_abs_paths)
+        classify_elapsed = time.time() - classify_start
+        logger.info("stem classification completed in %.2fs job_id=%s", classify_elapsed, job_id)
         if stem_classification.flags:
             logger.info(
                 "stem_quality job_id=%s flags=%s usable=%s role=%s",
@@ -279,6 +328,7 @@ def _process_analyze_job(
         vocals_rel_path = stems.get("vocals")
         if not guitar_rel_path:
             # Separation contract should always return a guitar stem; fall back to stub.
+            stub_start = time.time()
             stub = _stub_lesson(
                 job_id,
                 youtube_url,
@@ -286,6 +336,8 @@ def _process_analyze_job(
                 stems=stems,
                 source_metadata=source_metadata,
             )
+            stub_elapsed = time.time() - stub_start
+            logger.info("stub lesson generated in %.2fs job_id=%s", stub_elapsed, job_id)
             result = stub
         else:
             _set_job_processing_progress(job_id, 0.78, "Analyzing structure & tabs…")
@@ -293,6 +345,7 @@ def _process_analyze_job(
             vocals_stem_path = backend_root / vocals_rel_path if vocals_rel_path else None
             piano_rel = stems.get("piano")
             piano_stem_path = (backend_root / piano_rel) if piano_rel else None
+            analyze_start = time.time()
             result = build_lesson_json_from_librosa(
                 job_id,
                 guitar_stem_path=guitar_stem_path,
@@ -306,8 +359,18 @@ def _process_analyze_job(
                 mix_wav_path=wav_path_obj,
                 piano_stem_path=piano_stem_path,
             )
+            analyze_elapsed = time.time() - analyze_start
+            logger.info("librosa analysis completed in %.2fs job_id=%s", analyze_elapsed, job_id)
+        skeleton_start = time.time()
         skeleton_result = _lesson_with_skeleton_coach(result)
+        skeleton_elapsed = time.time() - skeleton_start
+        logger.info("skeleton coach preparation completed in %.2fs job_id=%s", skeleton_elapsed, job_id)
+        
+        cache_save_start = time.time()
         save_cached_lesson_for_wav(wav_path_obj, skeleton_result, player_profile=player_profile)
+        cache_save_elapsed = time.time() - cache_save_start
+        logger.info("lesson cache save completed in %.2fs job_id=%s", cache_save_elapsed, job_id)
+        
         jobs[job_id] = JobStatus(status="complete", result=skeleton_result, error=None)
         _set_coach_pending(job_id, len(skeleton_result.sections))
         coach_thread = threading.Thread(
@@ -316,7 +379,15 @@ def _process_analyze_job(
             daemon=True,
         )
         coach_thread.start()
-        logger.info("worker complete job_id=%s", job_id)
+        total_elapsed = time.time() - worker_start
+        logger.info(
+            "worker complete job_id=%s total=%.2fs (ingest=%.2fs, stems=%.2fs, analyze=%.2fs)",
+            job_id,
+            total_elapsed,
+            ingest_elapsed,
+            stem_elapsed,
+            analyze_elapsed,
+        )
     except YouTubeUrlInvalidError:
         logger.warning("worker failed job_id=%s invalid youtube_url", job_id)
         jobs[job_id] = JobStatus(

@@ -280,22 +280,19 @@ def apply_tab_artifacts_to_sections(
 
     out: list[LessonSectionStub] = []
     for sec in sections:
-        # Recreate model objects so we control which keys are present.
-        tab_fields = {
-            "tab_full_gp5_base64": tab_artifacts["tab_full_gp5_base64"],
-            "tab_skeleton_gp5_base64": tab_artifacts["tab_skeleton_gp5_base64"],
-        }
+        # Preserve existing extra fields (e.g., transcription data) while adding tab fields
+        section_dict = sec.model_dump(exclude_none=True)
+        
+        # Update with tab artifacts
+        section_dict["tab_full_gp5_base64"] = tab_artifacts["tab_full_gp5_base64"]
+        section_dict["tab_skeleton_gp5_base64"] = tab_artifacts["tab_skeleton_gp5_base64"]
         if "tab_alt_position_gp5_base64" in tab_artifacts:
-            tab_fields["tab_alt_position_gp5_base64"] = tab_artifacts["tab_alt_position_gp5_base64"]
+            section_dict["tab_alt_position_gp5_base64"] = tab_artifacts["tab_alt_position_gp5_base64"]
+        
+        # Update confidence
+        section_dict["confidence"] = section_conf
 
-        out.append(
-            LessonSectionStub(
-                label=sec.label,
-                confidence=section_conf,
-                start_time_seconds=sec.start_time_seconds,
-                **tab_fields,
-            )
-        )
+        out.append(LessonSectionStub(**section_dict))
     return out
 
 

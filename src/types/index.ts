@@ -127,6 +127,52 @@ export interface CoachHydrationStatusPayload {
   fallback_reason?: string | null
 }
 
+export interface BeatGrid {
+  bpm: number
+  pulse_bpm: number
+  beats: number[]
+  downbeats: number[]
+  time_signature: { numerator: number; denominator: number }
+  tick_value: number
+}
+
+export interface ChordEvent {
+  timestamp: number
+  chord: string
+  confidence: number
+}
+
+export interface ChordTimeline {
+  events: ChordEvent[]
+}
+
+export interface SoloNote {
+  start_time: number
+  duration: number
+  pitch: number
+  velocity: number
+}
+
+export interface SoloNotes {
+  notes: SoloNote[]
+}
+
+export interface LessonSection {
+  label?: string | null
+  confidence?: number | null
+  start_time_seconds?: number | null
+  transcription_metadata?: Record<string, unknown> | null
+  beat_grid?: BeatGrid | null
+  chord_timeline?: ChordTimeline | null
+  solo_notes?: SoloNotes | null
+  tab_full_gp5_base64?: string | null
+  tab_skeleton_gp5_base64?: string | null
+  tab_alt_position_gp5_base64?: string | null
+  coach_note?: string | null
+  coach_explanation?: string | null
+  [key: string]: unknown
+}
+
 export interface LessonJSON {
   job_id?: string | null
   song_title?: string | null
@@ -141,9 +187,13 @@ export interface LessonJSON {
   /** Positive: delay metronome vs stems (seconds). Optional backend / manual calibration. */
   beat_align_offset_sec?: number | null
   bar_timestamps?: number[]
+  /** Chord timeline from transcription analysis - may be at lesson level or section level. */
+  chord_timeline?: { events: Array<{ timestamp: number; chord: string; confidence: number }> } | null
+  /** Solo notes from transcription analysis - may be at lesson level or section level. */
+  solo_notes?: { notes: Array<{ start_time: number; duration: number; pitch: number; velocity?: number }> } | null
   stems?: Record<string, string>
   lyrics_aligned?: Array<Record<string, unknown>>
-  sections?: Array<Record<string, unknown>>
+  sections?: LessonSection[]
   /** Backend stem isolation heuristic — guitar bleed / piano-led mix (`backend/app/stem_quality.py`). */
   stem_isolation_warning?: string | null
   stem_quality_flags?: string[]

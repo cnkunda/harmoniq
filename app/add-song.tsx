@@ -238,6 +238,10 @@ export default function AddSongScreen() {
               if (!aliveRef.current) return
               setStatusText('Connection issue — retrying status check…')
             },
+            onLongRunning: () => {
+              if (!aliveRef.current) return
+              setStatusText("This one's taking longer than usual. We'll notify you when it's ready.")
+            },
           },
         )
         cancelRef.current = poll.cancel

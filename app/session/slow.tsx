@@ -8,16 +8,16 @@ import { LoopRegionControl } from '@/components/LoopRegionControl'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { sessionHref } from '@/src/constants/sessionFlow'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
-import { sessionHref } from '@/src/constants/sessionFlow'
-import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { barRangeToSeconds } from '@/src/music/barLoopBounds'
 import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
-import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { deriveSlowLoopRegion } from '@/src/session/slowLoopRegion'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
+import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
+import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
@@ -146,7 +146,7 @@ export default function SlowScreen() {
       />
 
       <SessionStemAndTab
-        tabRenderPreset="slow"
+        tabRenderPreset="light"
         initialRate={0.65}
         initialMetronomeOn={initialMetronomeOn}
         autoLoopRegion={playbackLoop}

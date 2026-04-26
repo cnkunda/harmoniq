@@ -16,6 +16,11 @@ const WOOD_TRACK = 'rgba(61, 35, 23, 0.92)'
 const SCROLL_THUMB = colors.amber.accent
 const SCROLL_THUMB_HOVER = colors.amber.light
 
+/** Light theme scrollbar colors for cream parchment background. */
+const LIGHT_TRACK = 'rgba(200, 190, 175, 0.6)'
+const LIGHT_THUMB = '#b8956a'
+const LIGHT_THUMB_HOVER = '#a08055'
+
 /**
  * Horizontal scrollbar for the tab strip — wood track + amber thumb (WebKit + Firefox).
  * Apply class `harmoniq-alphatab-scroll` on the same element that scrolls horizontally.
@@ -41,6 +46,21 @@ export const ALPHATAB_SCROLLBAR_CSS = `
 }
 .harmoniq-alphatab-scroll::-webkit-scrollbar-thumb:hover {
   background: ${SCROLL_THUMB_HOVER};
+}
+
+/** Light theme: cream parchment background with brown scrollbar. */
+.harmoniq-alphatab-scroll[data-theme="light"] {
+  scrollbar-color: ${LIGHT_THUMB} ${LIGHT_TRACK};
+}
+.harmoniq-alphatab-scroll[data-theme="light"]::-webkit-scrollbar-track {
+  background: ${LIGHT_TRACK};
+}
+.harmoniq-alphatab-scroll[data-theme="light"]::-webkit-scrollbar-thumb {
+  background: ${LIGHT_THUMB};
+  border: 2px solid ${LIGHT_TRACK};
+}
+.harmoniq-alphatab-scroll[data-theme="light"]::-webkit-scrollbar-thumb:hover {
+  background: ${LIGHT_THUMB_HOVER};
 }
 `
 

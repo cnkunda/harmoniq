@@ -1,60 +1,78 @@
 import { useFocusEffect } from '@react-navigation/native'
-import { useRouter } from 'expo-router'
 import * as FileSystem from 'expo-file-system/legacy'
+import { useRouter } from 'expo-router'
 import * as Sharing from 'expo-sharing'
-import { useCallback, useEffect, useState } from 'react'
-import Slider from '@react-native-community/slider'
 import {
-  Alert,
-  Platform,
-  Pressable,
-  ScrollView,
-  Switch,
-  Text,
-  TextInput,
-  View,
+    ChevronRight,
+    Database,
+    Download,
+    Guitar,
+    Link2,
+    Music,
+    Settings as SettingsIcon,
+    Sliders,
+    Trash2,
+    User,
+} from 'lucide-react-native'
+import { useCallback, useEffect, useState } from 'react'
+import {
+    Alert,
+    Platform,
+    ScrollView,
+    Text,
+    TextInput,
+    View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { FormCheckbox } from '@/components/FormCheckbox'
+import {
+    SettingsCard,
+    SettingsChips,
+    SettingsSection,
+    SettingsSegmented,
+    SettingsSlider,
+    SettingsSwitch,
+} from '@/components/settings'
 import { toast } from '@/components/ToastConfig'
 import { disconnectSpotifyServer, fetchSpotifyTasteProfile, parseTasteProfileJson } from '@/src/api/analyze'
-import { stop as stopVoiceCoach } from '@/src/audio/voiceCoach'
 import { hydrateVoiceCoachPrefs } from '@/src/audio/hydrateVoiceCoachPrefs'
+import { stop as stopVoiceCoach } from '@/src/audio/voiceCoach'
+import colors from '@/src/constants/colors'
 import {
-  buildJournalExportText,
-  clearAllPracticeData,
-  getAppPref,
-  setAppPref,
+    buildJournalExportText,
+    clearAllPracticeData,
+    getAppPref,
+    setAppPref,
 } from '@/src/db/client'
 import {
-  COACH_VOICE_OPTIONS,
-  PREF_COACH_VOICE,
-  PREF_EXPERIENCE_LEVEL,
-  PREF_METRONOME_DEFAULT_ON,
-  PREF_MOOD_CHECK_SKIP,
-  PREF_PREFER_SIMPLER_TABS,
-  PREF_SPOTIFY_CLIENT_SESSION,
-  PREF_SPOTIFY_TASTE_PROFILE_JSON,
-  PREF_TASTE_PROFILE_JSON,
-  PREF_STANDARD_TUNING_HZ,
-  PREF_STYLE_FOCUS,
-  PREF_VOICE_COACH_ENABLED,
-  PREF_VOICE_COACH_GENDER,
-  PREF_VOICE_COACH_RATE,
-  type CoachVoiceId,
+    COACH_VOICE_OPTIONS,
+    PREF_COACH_VOICE,
+    PREF_EXPERIENCE_LEVEL,
+    PREF_METRONOME_DEFAULT_ON,
+    PREF_MOOD_CHECK_SKIP,
+    PREF_PREFER_SIMPLER_TABS,
+    PREF_SPOTIFY_CLIENT_SESSION,
+    PREF_SPOTIFY_TASTE_PROFILE_JSON,
+    PREF_STANDARD_TUNING_HZ,
+    PREF_STYLE_FOCUS,
+    PREF_TASTE_PROFILE_JSON,
+    PREF_VOICE_COACH_ENABLED,
+    PREF_VOICE_COACH_GENDER,
+    PREF_VOICE_COACH_RATE,
+    type CoachVoiceId,
 } from '@/src/db/schema'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
 import { fetchPersistAndDeriveSpotifyTaste } from '@/src/spotify/fetchPersistAndDeriveSpotify'
 import { formatSpotifySetupError } from '@/src/spotify/spotifyConnectErrors'
-import type { SpotifyTasteProfile } from '@/src/types'
-import { useSkillStore } from '@/src/stores/skillStore'
-import type { VoiceGenderPref } from '@/src/stores/voiceCoachPrefsStore'
-import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
+import { useSkillStore } from '@/src/stores/skillStore'
+import type { VoiceGenderPref } from '@/src/stores/voiceCoachPrefsStore'
+import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
+import type { SpotifyTasteProfile } from '@/src/types'
 
 function isCoachVoice(s: string): s is CoachVoiceId {
   return (COACH_VOICE_OPTIONS as readonly string[]).includes(s)
@@ -87,6 +105,8 @@ export default function SettingsScreen() {
   const loadSkills = useSkillStore((s) => s.loadFromDb)
   const resetLesson = useLessonStore((s) => s.resetLesson)
   const clearAnnotations = useSessionAnnotationsStore((s) => s.clearAll)
+  const user = useSkillStore((s) => s.nodes)
+  const sessionsCount = 0 // TODO: Get from store when available
 
   const [preferSimplerTabs, setPreferSimplerTabs] = useState(false)
   const [tuningHz, setTuningHz] = useState('440')
@@ -340,255 +360,320 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
       <ScrollView className="flex-1 px-6 py-6" contentContainerStyle={{ paddingBottom: 40 }}>
-        <Text className="font-serif text-2xl text-cream">Settings</Text>
-        <Text className="mt-2 font-sans text-sm text-muted-brown">
-          Preferences are stored on this device. Coach voice is saved for a future API prompt style.
-        </Text>
-
-        <View className="mt-8 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Practice</Text>
-          <View className="mt-4 flex-row items-center justify-between gap-3">
-            <View className="flex-1 pr-2">
-              <Text className="font-sans-medium text-sm text-cream">Prefer simpler tabs when analysis is uncertain</Text>
-              <Text className="mt-1 font-sans text-[11px] text-muted-brown">
-                Uses skeleton (or alt) tab by default on Study when transcription confidence is low. Reload section or
-                return to Study to apply.
-              </Text>
-            </View>
-            <Switch value={preferSimplerTabs} onValueChange={(v) => void persistSimpler(v)} />
-          </View>
-          <View className="mt-5 border-t border-wood-600/35 pt-5">
-            <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Session start</Text>
-            <Text className="mt-2 font-sans text-[11px] text-muted-brown">
-              When enabled, new sessions open on Listen and skip mic calibration and the low-E check.
-            </Text>
-            <View className="mt-3">
-              <FormCheckbox
-                checked={skipTuneStep}
-                onCheckedChange={(v) => void setSkipTuneStep(v)}
-                label="Don't show this again — skip tune & room noise before future lessons."
-                labelClassName="text-cream"
-                surface="wood"
-              />
-            </View>
-            <View className="mt-4 flex-row items-center justify-between gap-3">
-              <Text className="flex-1 font-sans text-sm text-cream">Auto-skip daily mood check before sessions</Text>
-              <Switch value={skipMoodCheck} onValueChange={(v) => void persistSkipMoodCheck(v)} />
-            </View>
-          </View>
+        {/* Header */}
+        <View className="mb-6">
+          <Text className="font-serif text-3xl text-cream">Settings</Text>
+          <Text className="mt-2 font-sans text-sm text-muted-brown">
+            Customize your practice experience
+          </Text>
         </View>
 
-        <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Tuning</Text>
-          <Text className="mt-2 font-sans text-xs text-muted-brown">A4 reference (Hz) — for future tuner features.</Text>
+        {/* User Profile Card */}
+        <SettingsCard
+          title="Your Profile"
+          description="Track your progress and customize your experience"
+          icon={User}
+          variant="gradient"
+        >
+          <View className="mt-4 flex-row items-center gap-4">
+            <View className="h-16 w-16 items-center justify-center rounded-full bg-wood-800/60 border border-wood-600">
+              <User color={colors.amber.accent} size={32} strokeWidth={2} />
+            </View>
+            <View className="flex-1">
+              <Text className="font-serif text-lg text-cream">Guitarist</Text>
+              {experienceLevelSaved ? (
+                <Text className="mt-1 font-sans text-sm text-amber-light/80 capitalize">
+                  {experienceLevelSaved} player
+                </Text>
+              ) : (
+                <Text className="mt-1 font-sans text-sm text-muted-brown">
+                  Experience level not set
+                </Text>
+              )}
+            </View>
+          </View>
+          <View className="mt-4 flex-row gap-4">
+            <View className="flex-1 rounded-lg bg-wood-900/40 border border-wood-600/50 p-3">
+              <Text className="font-sans text-2xl font-serif text-amber-light">{user.length}</Text>
+              <Text className="mt-1 font-sans text-xs text-muted-brown uppercase tracking-wider">
+                Skills
+              </Text>
+            </View>
+            <View className="flex-1 rounded-lg bg-wood-900/40 border border-wood-600/50 p-3">
+              <Text className="font-sans text-2xl font-serif text-amber-light">{sessionsCount}</Text>
+              <Text className="mt-1 font-sans text-xs text-muted-brown uppercase tracking-wider">
+                Sessions
+              </Text>
+            </View>
+          </View>
+        </SettingsCard>
+
+        {/* Practice Settings */}
+        <SettingsSection
+          icon={Guitar}
+          title="Practice Settings"
+          description="Customize how you learn and practice"
+          defaultOpen={true}
+        >
+          <SettingsSwitch
+            label="Prefer simpler tabs"
+            description="Uses skeleton tab when transcription confidence is low"
+            value={preferSimplerTabs}
+            onValueChange={(v) => void persistSimpler(v)}
+          />
+          <View className="mt-4 border-t border-wood-600/35 pt-4">
+            <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light mb-3">
+              Session Start
+            </Text>
+            <FormCheckbox
+              checked={skipTuneStep}
+              onCheckedChange={(v) => void setSkipTuneStep(v)}
+              label="Skip tuning & room noise before lessons"
+              labelClassName="text-cream"
+              surface="wood"
+            />
+            <SettingsSwitch
+              label="Auto-skip daily mood check"
+              description="Skip mood check before starting sessions"
+              value={skipMoodCheck}
+              onValueChange={(v) => void persistSkipMoodCheck(v)}
+            />
+          </View>
+        </SettingsSection>
+
+        {/* Tuning Settings */}
+        <SettingsSection
+          icon={Sliders}
+          title="Tuning"
+          description="Reference pitch for tuner features"
+          defaultOpen={false}
+        >
+          <Text className="font-sans text-xs text-muted-brown mb-2">A4 reference (Hz)</Text>
           <TextInput
             value={tuningHz}
             onChangeText={setTuningHz}
             keyboardType="decimal-pad"
-            className="mt-2 rounded-lg border border-wood-600/50 bg-ivory/95 px-3 py-2 font-mono text-sm text-wood-900"
+            className="rounded-lg border border-wood-600/50 bg-ivory/95 px-3 py-2 font-mono text-sm text-wood-900"
             placeholder="440"
           />
-          <Pressable
+          <AnimatedPressable
             onPress={() => void persistTuning()}
+            haptic="light"
             className="mt-3 self-start rounded-lg bg-amber-accent/90 px-4 py-2"
             accessibilityRole="button"
           >
             <Text className="font-sans-medium text-sm text-wood-900">Save tuning</Text>
-          </Pressable>
-        </View>
+          </AnimatedPressable>
+        </SettingsSection>
 
-        <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Style focus</Text>
-          <Text className="mt-2 font-sans text-xs text-muted-brown">Short note (blues, fingerstyle, etc.) for future coach context.</Text>
+        {/* Style Focus */}
+        <SettingsSection
+          icon={Music}
+          title="Style Focus"
+          description="Your musical preferences for coach context"
+          defaultOpen={false}
+        >
+          <Text className="font-sans text-xs text-muted-brown mb-2">
+            Short note (blues, fingerstyle, etc.)
+          </Text>
           <TextInput
             value={styleFocus}
             onChangeText={setStyleFocus}
-            className="mt-2 rounded-lg border border-wood-600/50 bg-ivory/95 px-3 py-2 font-sans text-sm text-wood-900"
+            className="rounded-lg border border-wood-600/50 bg-ivory/95 px-3 py-2 font-sans text-sm text-wood-900"
             placeholder="e.g. slow blues phrasing"
           />
-          <Pressable
+          <AnimatedPressable
             onPress={() => void persistStyle()}
+            haptic="light"
             className="mt-3 self-start rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
             accessibilityRole="button"
           >
             <Text className="font-sans-medium text-sm text-wood-900">Save style focus</Text>
-          </Pressable>
-        </View>
+          </AnimatedPressable>
+        </SettingsSection>
 
-        <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Metronome</Text>
-          <View className="mt-3 flex-row items-center justify-between">
-            <Text className="flex-1 font-sans text-sm text-cream">Default metronome on (Slow / Play)</Text>
-            <Switch value={metronomeDefaultOn} onValueChange={(v) => void persistMetronome(v)} />
-          </View>
-        </View>
-
-        <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Voice coach</Text>
-          <Text className="mt-2 font-sans text-xs text-muted-brown">
-            Reads coach notes at session steps, practice-plan slots, and quick feedback after Play — interruptible when
-            you move on.
-          </Text>
-          <View className="mt-3 flex-row items-center justify-between">
-            <Text className="flex-1 font-sans text-sm text-cream">Speak coach notes aloud</Text>
-            <Switch value={voiceCoachEnabled} onValueChange={(v) => void persistVoiceCoachEnabled(v)} />
-          </View>
-          <Text className="mt-4 font-sans text-sm text-cream">Speech rate</Text>
-          <Text className="mt-1 font-sans text-[11px] text-muted-brown">0.7 (slower) — 1.2 (faster)</Text>
-          <Slider
-            style={{ width: '100%', height: 36, marginTop: 8 }}
-            minimumValue={0.7}
-            maximumValue={1.2}
-            step={0.05}
-            value={voiceCoachRate}
-            minimumTrackTintColor="#D4A574"
-            maximumTrackTintColor="#5C4535"
-            thumbTintColor="#E8B86D"
-            onValueChange={setVoiceCoachRate}
-            onSlidingComplete={(v) => void persistVoiceCoachRate(v)}
+        {/* Metronome */}
+        <SettingsSection
+          icon={SettingsIcon}
+          title="Metronome"
+          description="Default metronome behavior"
+          defaultOpen={false}
+        >
+          <SettingsSwitch
+            label="Default metronome on"
+            description="Enable metronome by default in Slow and Play steps"
+            value={metronomeDefaultOn}
+            onValueChange={(v) => void persistMetronome(v)}
           />
-          <Text className="mt-2 font-sans text-xs text-muted-brown">Current: {voiceCoachRate.toFixed(2)}</Text>
-          <Text className="mt-4 font-sans text-sm text-cream">Voice character (where supported)</Text>
-          <View className="mt-2 flex-row flex-wrap gap-2">
-            {(['default', 'female', 'male'] as const).map((g) => (
-              <AnimatedPressable
-                key={g}
-                haptic="light"
-                onPress={() => void persistVoiceCoachGender(g)}
-                className={`rounded-full border px-3 py-1.5 ${
-                  voiceCoachGender === g ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/40'
-                }`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: voiceCoachGender === g }}
-              >
-                <Text className={`font-sans text-xs capitalize ${voiceCoachGender === g ? 'text-wood-900' : 'text-cream'}`}>
-                  {g}
-                </Text>
-              </AnimatedPressable>
-            ))}
-          </View>
-        </View>
+        </SettingsSection>
 
-        <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Music preferences</Text>
-          <Text className="mt-2 font-sans text-xs text-muted-brown">
-            Three steps—artists you love, vibe, and experience. Redo anytime; sessions and your library stay as they are.
-            Experience sets how we weight skills until real practice data comes in.
-          </Text>
-          {experienceLevelSaved ? (
-            <Text className="mt-2 font-sans text-sm text-cream">
-              Saved experience:{' '}
-              <Text className="font-sans-medium capitalize text-amber-light">{experienceLevelSaved}</Text>
-            </Text>
-          ) : (
-            <Text className="mt-2 font-sans text-sm text-muted-brown">
-              Experience not saved yet—finish the style quiz once so the coach can meet you where you are.
-            </Text>
-          )}
-          {derivedTasteLabel ? (
-            <Text className="mt-2 font-sans text-sm text-cream">
-              Style lane: <Text className="font-sans-medium text-amber-light">{derivedTasteLabel}</Text>
-            </Text>
-          ) : (
-            <Text className="mt-2 font-sans text-sm text-muted-brown">No saved style preferences yet.</Text>
-          )}
+        {/* Voice Coach */}
+        <SettingsSection
+          icon={Music}
+          title="Voice Coach"
+          description="Audio feedback during practice sessions"
+          defaultOpen={true}
+        >
+          <SettingsSwitch
+            label="Speak coach notes aloud"
+            description="Reads coach notes at session steps and after Play"
+            value={voiceCoachEnabled}
+            onValueChange={(v) => void persistVoiceCoachEnabled(v)}
+          />
+          <SettingsSlider
+            label="Speech rate"
+            description="0.7 (slower) — 1.2 (faster)"
+            value={voiceCoachRate}
+            min={0.7}
+            max={1.2}
+            step={0.05}
+            onValueChange={(v) => void persistVoiceCoachRate(v)}
+            formatValue={(v) => v.toFixed(2)}
+          />
+          <SettingsSegmented
+            label="Voice character"
+            description="Where supported by the platform"
+            options={['default', 'female', 'male'] as const}
+            value={voiceCoachGender}
+            onValueChange={(g) => void persistVoiceCoachGender(g)}
+          />
+        </SettingsSection>
+
+        {/* Music Preferences */}
+        <SettingsSection
+          icon={User}
+          title="Music Preferences"
+          description="Your musical taste and experience level"
+          defaultOpen={true}
+        >
+          <View className="mb-4">
+            {experienceLevelSaved ? (
+              <Text className="font-sans text-sm text-cream">
+                Experience:{' '}
+                <Text className="font-sans-medium capitalize text-amber-light">{experienceLevelSaved}</Text>
+              </Text>
+            ) : (
+              <Text className="font-sans text-sm text-muted-brown">
+                Complete the style quiz to set your experience level
+              </Text>
+            )}
+            {derivedTasteLabel ? (
+              <Text className="mt-2 font-sans text-sm text-cream">
+                Style lane: <Text className="font-sans-medium text-amber-light">{derivedTasteLabel}</Text>
+              </Text>
+            ) : (
+              <Text className="mt-2 font-sans text-sm text-muted-brown">No style preferences saved yet</Text>
+            )}
+          </View>
           <AnimatedPressable
             onPress={() => router.push('/onboarding/taste-quiz?update=1')}
-            className="mt-4 self-start rounded-lg border border-wood-600/50 bg-wood-900/40 px-4 py-2"
+            haptic="medium"
+            className="flex-row items-center justify-center gap-2 rounded-lg bg-amber-accent/90 px-4 py-3"
             accessibilityRole="button"
             accessibilityLabel="Update music preferences with style quiz"
           >
-            <Text className="font-sans-medium text-sm text-cream">Update preferences</Text>
+            <ChevronRight color="#2C1810" size={18} strokeWidth={2} />
+            <Text className="font-sans-medium text-sm text-wood-900">Update preferences</Text>
           </AnimatedPressable>
-        </View>
+        </SettingsSection>
 
-        <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Spotify</Text>
-          <Text className="mt-2 font-sans text-xs text-muted-brown">
-            Connect Spotify so Harmoniq can read top artists, genres, and recent listening (tokens stay on the
-            server).
-          </Text>
-          <View className="mt-3 flex-row flex-wrap items-center gap-2">
+        {/* Spotify */}
+        <SettingsSection
+          icon={Link2}
+          title="Spotify"
+          description="Connect for personalized recommendations"
+          defaultOpen={true}
+        >
+          <View className="mb-4">
             <Text className="font-sans text-sm text-cream">
-              {spotifyProfile !== null ? 'Spotify · Connected' : 'Not connected'}
+              {spotifyProfile !== null ? 'Connected' : 'Not connected'}
             </Text>
+            {spotifyProfile !== null &&
+              (spotifyProfile.top_artists.length > 0 || spotifyProfile.top_genres.length > 0) && (
+                <Text className="mt-2 font-sans text-[11px] leading-4 text-muted-brown" numberOfLines={4}>
+                  {spotifyProfile.top_artists.slice(0, 5).join(' · ')}
+                  {spotifyProfile.top_genres.length > 0
+                    ? `\n${spotifyProfile.top_genres.slice(0, 6).join(', ')}`
+                    : ''}
+                </Text>
+              )}
           </View>
-          {spotifyProfile !== null &&
-            (spotifyProfile.top_artists.length > 0 || spotifyProfile.top_genres.length > 0) && (
-              <Text className="mt-2 font-sans text-[11px] leading-4 text-muted-brown" numberOfLines={4}>
-                {spotifyProfile.top_artists.slice(0, 5).join(' · ')}
-                {spotifyProfile.top_genres.length > 0
-                  ? `\n${spotifyProfile.top_genres.slice(0, 6).join(', ')}`
-                  : ''}
-              </Text>
-            )}
-          <View className="mt-4 flex-row flex-wrap gap-2">
+          <View className="flex-row gap-2">
             <AnimatedPressable
               onPress={connectSpotify}
-              className="rounded-lg bg-amber-accent/90 px-4 py-2"
+              haptic="medium"
+              className="flex-1 rounded-lg bg-amber-accent/90 px-4 py-2.5"
               accessibilityRole="button"
             >
-              <Text className="font-sans-medium text-sm text-wood-900">Connect Spotify</Text>
+              <Text className="text-center font-sans-medium text-sm text-wood-900">Connect</Text>
             </AnimatedPressable>
             <AnimatedPressable
               onPress={disconnectSpotify}
-              className="rounded-lg border border-wood-600/50 bg-wood-900/40 px-4 py-2"
+              haptic="light"
+              className="flex-1 rounded-lg border border-wood-600/50 bg-wood-900/40 px-4 py-2.5"
               accessibilityRole="button"
             >
-              <Text className="font-sans-medium text-sm text-cream">Disconnect</Text>
+              <Text className="text-center font-sans-medium text-sm text-cream">Disconnect</Text>
             </AnimatedPressable>
           </View>
-        </View>
+        </SettingsSection>
 
-        <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Coach voice</Text>
-          <Text className="mt-1 font-sans text-[11px] text-muted-brown">Stored for a later server prompt variant.</Text>
-          <View className="mt-3 flex-row flex-wrap gap-2">
-            {COACH_VOICE_OPTIONS.map((v) => (
-              <Pressable
-                key={v}
-                onPress={() => void persistVoice(v)}
-                className={`rounded-full border px-3 py-1.5 ${
-                  coachVoice === v ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/50 bg-wood-900/40'
-                }`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: coachVoice === v }}
-              >
-                <Text className={`font-sans text-xs capitalize ${coachVoice === v ? 'text-amber-light' : 'text-cream'}`}>
-                  {v}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+        {/* Coach Voice Style */}
+        <SettingsSection
+          icon={SettingsIcon}
+          title="Coach Voice Style"
+          description="Prompt style for future AI coach variants"
+          defaultOpen={false}
+        >
+          <Text className="font-sans text-[11px] text-muted-brown mb-3">
+            Stored for a later server prompt variant
+          </Text>
+          <SettingsChips
+            options={COACH_VOICE_OPTIONS}
+            value={coachVoice}
+            onValueChange={(v) => void persistVoice(v)}
+          />
+        </SettingsSection>
 
-        <View className="mt-6 gap-3">
-          <Pressable
+        {/* Data Management */}
+        <SettingsSection
+          icon={Database}
+          title="Data Management"
+          description="Export or clear your practice data"
+          defaultOpen={false}
+        >
+          <AnimatedPressable
             onPress={() => void exportJournal()}
             disabled={exportBusy}
-            className="rounded-lg border border-amber-accent/50 bg-amber-accent/15 px-4 py-3 disabled:opacity-50"
+            haptic="medium"
+            className="mb-3 flex-row items-center justify-center gap-2 rounded-lg border border-amber-accent/50 bg-amber-accent/15 px-4 py-3 disabled:opacity-50"
             accessibilityRole="button"
           >
-            <Text className="text-center font-sans-medium text-amber-light">
-              {exportBusy ? 'Preparing export…' : 'Export journal (plain text)'}
+            <Download color="#D4A574" size={18} strokeWidth={2} />
+            <Text className="font-sans-medium text-amber-light">
+              {exportBusy ? 'Preparing export…' : 'Export journal'}
             </Text>
-          </Pressable>
-          <Pressable
+          </AnimatedPressable>
+          <AnimatedPressable
             onPress={confirmClear}
-            className="rounded-lg border border-danger/40 bg-danger/10 px-4 py-3"
+            haptic="heavy"
+            className="flex-row items-center justify-center gap-2 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3"
             accessibilityRole="button"
           >
-            <Text className="text-center font-sans-medium text-danger">Clear all practice data…</Text>
-          </Pressable>
-        </View>
+            <Trash2 color="#C17B5F" size={18} strokeWidth={2} />
+            <Text className="font-sans-medium text-danger">Clear all practice data…</Text>
+          </AnimatedPressable>
+        </SettingsSection>
 
-        <Pressable
+        {/* Back Button */}
+        <AnimatedPressable
           onPress={() => router.back()}
+          haptic="light"
           className="mt-8 rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-3"
           accessibilityRole="button"
         >
           <Text className="text-center font-sans-medium text-wood-900">Back</Text>
-        </Pressable>
+        </AnimatedPressable>
       </ScrollView>
     </SafeAreaView>
   )

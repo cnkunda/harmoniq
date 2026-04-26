@@ -617,6 +617,215 @@ Implement atomic SQLite updates for dynamic sessions with dual-entry state integ
 
 ---
 
+### Commit 104: Dynamic Tempo Support (Variable BPM)
+
+**Current State:** Static BPM Only
+The current implementation assumes every song is recorded to a static click track. Variable BPM/tempo changes are not supported.
+
+**Evidence:**
+- `backend/app/beat_grid.py:46-57` - `_uniform_beat_grid()` uses a constant `step = 60.0 / bpm` with no tempo variation
+- The function name itself is `_uniform_beat_grid` - implying a single fixed tempo
+- `backend/app/beat_grid.py:125` - When `bpm_override` is provided, it generates a uniform grid without any tempo mapping
+
+**Goal:** Support songs with tempo ramps, accelerandos, and live performances with variable BPM.
+
+**Scope:**
+- Replace `_uniform_beat_grid()` with a function that accepts an array of `(time, bpm)` pairs or tempo curve
+- Use `librosa.beat.beat_track()` with estimated tempo as a reference, not an override
+- Store tempo change events in the returned schema alongside `beats` and `downbeats`
+- Support gradual tempo changes (rubato) and sudden tempo shifts
+- Maintain backward compatibility with static BPM interface
+
+**Acceptance Criteria:**
+- [ ] Beat grid handles variable BPM songs with tempo ramps
+- [ ] Tempo curve can be provided as `(time, bpm)` array
+- [ ] Grid subdivisions respect local tempo at each point
+- [ ] Downbeats calculated correctly through tempo transitions
+- [ ] Static BPM interface continues to work unchanged
+- [ ] Performance: variable BPM grid generation <100ms for 5-minute track
+
+**Implementation Notes:**
+- Consider tempo segment interpolation (linear vs exponential ramps)
+- Store base pulse tempo vs instantaneous tempo separately
+- UI consideration: visual indicator when tempo changes detected
+- May require updating `_subdivide_beats()` to handle non-uniform pulse spacing
+
+---
+
+### Commit 105: Redis Job Queue + Celery Workers
+
+**Goal:** Replace in-memory job store with Redis-backed queue and Celery workers for horizontal scaling and persistence.
+
+**Current State:** In-memory dict (jobs.py:57) that loses jobs on restart and cannot handle concurrent load.
+
+**Scope:**
+- Redis for job state persistence
+- Celery workers for distributed processing
+- Job recovery on startup (re-queue in-flight jobs)
+- Worker auto-scaling based on queue depth
+
+**Acceptance Criteria:**
+- [ ] Jobs persist across server restarts
+- [ ] Multiple Celery workers can process jobs concurrently
+- [ ] In-flight jobs are recovered and re-queued on startup
+- [ ] Queue depth monitoring enables worker auto-scaling
+- [ ] Backward compatibility with existing job API
+
+**Implementation:**
+- Add Redis dependency to requirements.txt
+- Replace in-memory `jobs` dict with Redis-backed job store
+- Integrate Celery for async job processing
+- Implement job recovery script that runs on startup
+- Add queue depth metrics for auto-scaling decisions
+- Update job polling endpoint to work with Redis
+
+---
+
+### Commit 106: Dedicated ML Model Server
+
+**Goal:** Deploy dedicated inference service for chord model with batched inference, model versioning, and GPU batching.
+
+**Current State:** TFLite inference runs in-process (chord_inference.py:75-114) with no batching or versioning.
+
+**Scope:**
+- Separate chord inference service with batched inference
+- Model versioning and A/B testing support
+- GPU batching for throughput
+- Model loading/unloading without server restart
+
+**Acceptance Criteria:**
+- [ ] Dedicated inference service handles batch requests
+- [ ] Multiple model versions can be deployed simultaneously
+- [ ] GPU batching improves throughput by 3-5x
+- [ ] Model can be hot-swapped without server restart
+- [ ] A/B testing framework for model comparison
+
+**Implementation:**
+- Create separate FastAPI service for chord inference
+- Implement batch inference endpoint
+- Add model versioning to model loading logic
+- Integrate GPU batching with TensorFlow Serving or ONNX Runtime
+- Add model registry for version management
+- Implement A/B testing routing logic
+
+---
+
+### Commit 107: GPU Job Queue for Demucs
+
+**Goal:** Implement GPU job queue with priority scheduling for Demucs stem separation to improve throughput and cost efficiency.
+
+**Current State:** Demucs runs synchronously per job (separate.py:277) blocking the request thread for minutes.
+
+**Scope:**
+- GPU job queue with priority scheduling
+- Queue depth management
+- GPU utilization tracking
+- Batch processing for multiple audio files
+
+**Acceptance Criteria:**
+- [ ] Demucs jobs are queued and processed asynchronously
+- [ ] Priority scheduling ensures urgent jobs run first
+- [ ] Queue depth monitoring prevents overload
+- [ ] GPU utilization is tracked and optimized
+- [ ] Batch processing improves throughput for multiple files
+
+**Implementation:**
+- Integrate Demucs with Celery task queue
+- Add priority levels to job schema (urgent, normal, low)
+- Implement queue depth monitoring and alerts
+- Add GPU utilization tracking (nvidia-smi integration)
+- Implement batch processing for multiple audio files
+- Add queue management UI for operators
+
+---
+
+### Commit 108: Error Resilience (Circuit Breakers, Retry, DLQ)
+
+**Goal:** Implement circuit breakers, exponential backoff, and dead letter queues for transient failures.
+
+**Current State:** Basic try/except with user-friendly messages (jobs.py:391-431) but no retry logic.
+
+**Scope:**
+- Retry logic for transient YouTube failures with exponential backoff
+- Circuit breaker for LLM API calls
+- Dead letter queue for failed analysis jobs
+- Automatic retry for recoverable errors
+
+**Acceptance Criteria:**
+- [ ] YouTube download failures are retried with exponential backoff
+- [ ] Circuit breaker prevents cascading LLM API failures
+- [ ] Failed jobs are sent to dead letter queue for inspection
+- [ ] Recoverable errors are automatically retried
+- [ ] Error rate monitoring triggers circuit breaker
+
+**Implementation:**
+- Add retry decorator with exponential backoff for YouTube downloads
+- Implement circuit breaker pattern for LLM API calls
+- Create dead letter queue in Redis for failed jobs
+- Add automatic retry logic for recoverable errors
+- Implement error rate monitoring and alerting
+- Add DLQ inspection and re-queue tools
+
+---
+
+### Commit 109: Monitoring & Observability (Prometheus, Grafana)
+
+**Goal:** Add structured metrics, distributed tracing, and alerting for operational visibility.
+
+**Current State:** Basic logging with elapsed time tracking (jobs.py:246-247) but no metrics or alerting.
+
+**Scope:**
+- Prometheus metrics endpoint
+- Per-stage latency histograms
+- Error rate alerting
+- Distributed tracing (OpenTelemetry)
+
+**Acceptance Criteria:**
+- [ ] Prometheus metrics endpoint exposes job metrics
+- [ ] Per-stage latency histograms identify bottlenecks
+- [ ] Error rate alerting triggers on threshold breaches
+- [ ] Distributed tracing tracks requests across services
+- [ ] Grafana dashboards visualize system health
+
+**Implementation:**
+- Add Prometheus client library to backend
+- Implement metrics endpoint for job queue, latency, errors
+- Add histogram metrics for each pipeline stage
+- Integrate OpenTelemetry for distributed tracing
+- Set up Grafana dashboards for key metrics
+- Configure alerting rules for error rates and latency
+
+---
+
+### Commit 110: Audio Fingerprinting & Quality Scoring
+
+**Goal:** Implement audio fingerprinting for duplicate detection and quality scoring to reduce compute waste.
+
+**Current State:** Content-addressed caching with SHA256 (cache.py:37-45) but no duplicate detection across different encodings.
+
+**Scope:**
+- Audio fingerprinting for duplicate detection
+- Quality scoring for audio input
+- Smart caching based on audio similarity
+- Compute cost reduction through deduplication
+
+**Acceptance Criteria:**
+- [ ] Audio fingerprinting detects duplicates across different encodings
+- [ ] Quality scoring identifies low-quality audio upfront
+- [ ] Smart caching reduces re-analysis of similar audio
+- [ ] Compute costs reduced through deduplication
+- [ ] Fingerprint-based cache key improves hit rate
+
+**Implementation:**
+- Integrate audio fingerprinting library (e.g., dejavu)
+- Implement quality scoring algorithm (SNR, clipping detection)
+- Add fingerprint-based cache key alongside SHA256
+- Implement similarity search for near-duplicates
+- Add quality gate to reject low-quality audio early
+- Track cache hit rate improvements
+
+---
+
 ## PHASE 3: AI-Agent Scaling & Pro-App Parity
 
 **Status:** Planned
@@ -666,6 +875,17 @@ Long-term data analysis to identify skill plateaus and suggest non-linear practi
 ---
 
 ## Product Strengthening
+
+### Robustness & Scaling Gaps (vs Chord.ai)
+
+Infrastructure limitations to address before scaling:
+
+- **No job queue (Redis/Celery)** — uses in-memory dict for job tracking; will not survive restarts or handle concurrent load
+- **No retry logic for YouTube failures** — transient network errors cause hard failures; no exponential backoff or circuit breaker
+- **Demucs runs synchronously per-request** — blocks the request thread; would bottleneck at scale under concurrent load
+- **No audio fingerprinting for duplicate detection** — re-analyzing identical audio wastes compute; no cache key for deduplication
+
+---
 
 ### Offline Mode
 

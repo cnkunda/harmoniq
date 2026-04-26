@@ -179,8 +179,10 @@ export type PollAnalyzeOptions = {
   onRecoverablePollError?: (info: { attempt: number; delayMs: number }) => void
   /** Client clock when the user started this analyze run (e.g. `Date.now()` at submit). */
   wallClockStartedAtMs?: number
-  /** Stop polling and reject if still `processing` after this many ms since `wallClockStartedAtMs`. */
+  /** Notify if still `processing` after this many ms since `wallClockStartedAtMs`. Polling continues. */
   maxProcessingWallMs?: number
+  /** Called once when maxProcessingWallMs is exceeded. Polling continues until completion. */
+  onLongRunning?: () => void
 }
 
 const MAX_POLL_NETWORK_RETRIES = 12
@@ -351,7 +353,7 @@ export async function getJobStatus(jobId: string): Promise<AnalyzeJob> {
 export function pollAnalyzeJob(
   jobId: string,
   onStatus: (job: AnalyzeJob) => void,
-  intervalMs = 1100,
+  intervalMs = 3000,
 ): Promise<LessonJSON> {
   return pollAnalyzeJobCancelable(jobId, onStatus, intervalMs).promise
 }
@@ -359,9 +361,19 @@ export function pollAnalyzeJob(
 export function pollAnalyzeJobCancelable(
   jobId: string,
   onStatus: (job: AnalyzeJob) => void,
-  intervalMs = 2000,
+  intervalMs = 3000,
   options?: PollAnalyzeOptions,
 ): { promise: Promise<LessonJSON>; cancel: () => void } {
+  /**
+   * Polling strategy for long-running analyze jobs:
+   * - Initial interval: 3000ms (reduced server load for expensive operations)
+   * - Backoff: 1.3x per poll (less aggressive than 1.5x)
+   * - Max backoff: 8000ms (cap to avoid excessive delays)
+   * - Max exponent: 3 (reaches max backoff faster)
+   * 
+   * This reduces unnecessary polling for Demucs stem separation which can take
+   * minutes on CPU, while still providing responsive updates for fast jobs.
+   */
   let settled = false
   let rejectRef: ((reason?: unknown) => void) | null = null
   let stopRef: (() => void) | null = null
@@ -401,10 +413,7 @@ export function pollAnalyzeJobCancelable(
           job.status === 'processing' &&
           Date.now() - wallStart > maxWall
         ) {
-          stop()
-          settled = true
-          reject(new ApiError(408, 'Analysis still running'))
-          return
+          options?.onLongRunning?.()
         }
         if (job.status === 'complete') {
           stop()
@@ -423,7 +432,7 @@ export function pollAnalyzeJobCancelable(
           reject(new ApiError(500, job.error ?? 'Analysis failed', code))
           return
         }
-        const backoffMs = Math.min(5000, intervalMs * Math.pow(1.5, Math.min(pollCount - 1, 4)))
+        const backoffMs = Math.min(8000, intervalMs * Math.pow(1.3, Math.min(pollCount - 1, 3)))
         schedule(backoffMs)
       } catch (e) {
         if (settled) return

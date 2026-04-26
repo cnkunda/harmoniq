@@ -46,9 +46,9 @@ function main() {
     Object.assign(settings.display.resources, {
       mainGlyphColor: '#FFFFFF',
       secondaryGlyphColor: '#E8B86D',
-      barSeparatorColor: '#6E5644',
+      barSeparatorColor: '#9B8D7B',
       scoreInfoColor: '#8B7D6B',
-      staffLineColor: '#6E5644',
+      staffLineColor: '#9B8D7B',
       barNumberColor: '#8B7D6B',
     })
     settings.core.engine = 'svg'

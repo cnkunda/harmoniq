@@ -39,7 +39,7 @@ from app.exporter import (
     ExportDisabledError,
     ExportUnsupportedError,
     export_gp5_base64,
-    export_musicxml_from_json, # NEW
+    export_musicxml_from_json,
 )
 from app.schemas import (
     AnalyzeJobCreated,
@@ -51,7 +51,7 @@ from app.schemas import (
     TheoryAnnotationResponse,
     CurriculumSuggestionItem,
     ExportRequest,
-    MusicXMLJsonExportRequest, # NEW
+    MusicXMLJsonExportRequest,
     JamBackingRequest,
     JamBackingResponse,
     JamScoreRequest,
@@ -60,8 +60,8 @@ from app.schemas import (
     LessonJSON,
     OnboardingPlacementRequest,
     OnboardingPlacementResponse,
-    OrientClipRequest, # NEW commit 84
-    OrientClipResponse, # NEW commit 84
+    OrientClipRequest,
+    OrientClipResponse,
     PlayerProfile,
     PracticePlan,
     PracticePlanRequest,
@@ -74,10 +74,10 @@ from app.schemas import (
     TasteDeriveRequest,
     TasteProfile,
     TranscriptionPrepareResponse,
-    TranscriptionVerifyRequest, # NEW commit 82
-    TranscriptionVerifyResponse, # NEW commit 82
-    DiscoveryRequest, # NEW commit 91
-    DiscoveryResponse, # NEW commit 91
+    TranscriptionVerifyRequest,
+    TranscriptionVerifyResponse,
+    DiscoveryRequest,
+    DiscoveryResponse,
 )
 from app.audio_processing import AudioPreparationError, prepare_audio_input
 from app.beat_grid import (
@@ -103,10 +103,10 @@ from app.coach import (
     generate_jam_coach_summary,
     generate_onboarding_placement_summary,
     generate_quick_feedback,
-    generate_orient_annotation, # NEW commit 84
-    generate_theory_annotation, # NEW commit 85
+    generate_orient_annotation,
+    generate_theory_annotation,
 )
-from app.lyria_clip import generate_orient_clip  # NEW commit 84
+from app.lyria_clip import generate_orient_clip
 from app.scoring_constants import RELIABILITY_BANDS, SCORE_CONTRACT_VERSION, clamp01
 from app.jam_backing import (
     LyriaProviderError,
@@ -203,7 +203,7 @@ def _backend_root() -> Path:
 @app.get(
     "/lesson-file",
     tags=["Artifacts"],
-    summary="Serve a lesson stem or other job-relative audio file (PRIORITIES §20)",
+    summary="Serve a lesson stem or other job-relative audio file",
 )
 async def lesson_file(
     rel: str = Query(..., description="Path relative to backend root, e.g. data/jobs/…/stems/guitar.wav"),
@@ -423,7 +423,7 @@ def _run_transcription_prepare_pipeline(
     "/transcription/prepare",
     response_model=TranscriptionPrepareResponse,
     tags=["Transcription"],
-    summary="POST /transcription/prepare — stems + BeatGrid (commit 78)",
+    summary="POST /transcription/prepare — stems + BeatGrid",
 )
 async def transcription_prepare(request: Request) -> TranscriptionPrepareResponse:
     """Prepare transcription assets without blocking the event loop."""

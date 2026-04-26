@@ -26,9 +26,9 @@ TARGET_SR = 44100
 _SUBPROCESS_FAIL_SNIP = 8000
 
 
-def _run_subprocess_checked(cmd: list[str], *, what: str) -> None:
+def _run_subprocess_checked(cmd: list[str], *, what: str, timeout: int | None = None) -> None:
     """Run a command; on failure raise RuntimeError with stderr/stdout (truncated), not a bare exit code."""
-    p = subprocess.run(cmd, capture_output=True, text=True)
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if p.returncode == 0:
         return
     out = ((p.stderr or "").strip() + "\n" + (p.stdout or "").strip()).strip()
@@ -144,7 +144,7 @@ def run_demucs_htdemucs_6s(
     cmd = demucs_separate_command(
         input_wav, out_dir, model=model, python_executable=python_executable
     )
-    _run_subprocess_checked(cmd, what="demucs")
+    _run_subprocess_checked(cmd, what="demucs", timeout=7200)
     # Typical: out_dir/htdemucs_6s/<track>/guitar.wav
     stems_root = out_dir / model
     if not stems_root.is_dir():

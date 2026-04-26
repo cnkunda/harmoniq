@@ -4,9 +4,19 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+
 import numpy as np
 
 from app.pipeline_proof import TARGET_SR
+
+try:
+    import librosa
+except ImportError:
+    librosa = None  # type: ignore
+
+# Lower sample rate for beat tracking to reduce memory usage (~50% reduction)
+# 22050Hz is sufficient for tempo/beat estimation without affecting accuracy
+BEAT_TRACK_SR = 22050
 
 DEFAULT_TIME_SIGNATURE = "4/4"
 DEPENDENT_ARTIFACTS = ("chordTimeline", "SoloNotes", "Score.musicxml")
@@ -39,11 +49,9 @@ def _uniform_beat_grid(duration_s: float, bpm: float) -> list[float]:
     if bpm <= 0.0 or not math.isfinite(bpm):
         raise BeatGridComputationError("BPM must be a positive finite value.")
     step = 60.0 / bpm
-    beats: list[float] = []
-    t = 0.0
-    while t <= duration_s + 1e-6:
-        beats.append(round(t, 6))
-        t += step
+    # Use deterministic calculation to avoid floating-point drift over long tracks
+    num_beats = int(duration_s / step) + 1
+    beats = [round(i * step, 6) for i in range(num_beats)]
     if not beats:
         beats = [0.0]
     return beats
@@ -65,6 +73,12 @@ def _subdivide_beats(pulse_beats: list[float], subdivisions: int) -> list[float]
     return ticks
 
 def _downbeats_from_beats(beats: list[float], beats_per_bar: int) -> list[float]:
+    """Extract downbeat timestamps from beat grid.
+
+    Assumes the first element of beats is the start of Bar 1.
+    If implementing pickup notes (anacrusis) or offset features,
+    this logic will need adjustment to handle non-zero starting beats.
+    """
     if beats_per_bar <= 0:
         return [0.0]
     out = [float(beats[i]) for i in range(0, len(beats), beats_per_bar)]
@@ -91,13 +105,12 @@ def estimate_beat_grid(
     is_compound = denominator == 8 and beats_per_bar in (6, 9, 12)
     subdivisions = 3 if is_compound else 1
 
-    try:
-        import librosa
-    except Exception as exc:
-        raise BeatGridComputationError("librosa is required for beat grid estimation.") from exc
+    if librosa is None:
+        raise BeatGridComputationError("librosa is required for beat grid estimation.")
 
     try:
-        y, sr = librosa.load(str(audio_path), sr=TARGET_SR, mono=True)
+        # Use lower sample rate for beat tracking to reduce memory usage
+        y, sr = librosa.load(str(audio_path), sr=BEAT_TRACK_SR, mono=True)
     except Exception as exc:
         raise BeatGridComputationError(f"Could not load audio for beat tracking: {exc}") from exc
 
@@ -137,6 +150,7 @@ def estimate_beat_grid(
 
     return {
         "bpm": round(float(grid_bpm), 3),
+        "pulse_bpm": round(float(pulse_bpm), 3),  # Original pulse tempo (e.g., dotted quarter for 6/8)
         "beats": beats,
         "downbeats": downbeats,
         "time_signature": {

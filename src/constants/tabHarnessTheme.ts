@@ -8,9 +8,9 @@ import type { TabThemeColors } from '@/types/tabMessage'
 export const TAB_HARNESS_THEME: TabThemeColors = {
   mainGlyphColor: colors.white,
   secondaryGlyphColor: colors.amber.light,
-  /** Slightly lighter than `wood.500` for staff/separators on `#2B1D0E` score chrome. */
-  barSeparatorColor: '#6E5644',
+  /** Lighter warm brown for better visibility on `#2B1D0E` score chrome. */
+  barSeparatorColor: '#9B8D7B',
   scoreInfoColor: colors.muted.brown,
-  staffLineColor: '#6E5644',
+  staffLineColor: '#9B8D7B',
   barNumberColor: colors.muted.brown,
 }

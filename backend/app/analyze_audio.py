@@ -16,15 +16,67 @@ from app.ingest import SourceMetadata, resolve_lesson_titles
 from app.pipeline_proof import LibrosaSummary, librosa_summarize
 from app.style_detect import infer_style_from_librosa_summary
 from app.transcribe import transcribe_vocals_to_lyrics_aligned
-from app.schemas import LessonJSON, LessonSectionStub, PlayerProfile
+from app.schemas import (
+    BeatGrid,
+    ChordEvent,
+    ChordTimeline,
+    LessonJSON,
+    LessonSectionStub,
+    PlayerProfile,
+    SoloNote,
+    SoloNotes,
+)
 from app.stem_quality import StemClassification
 from app.alphatab_prerender import enrich_lesson_with_prerender_hints
 from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidence, generate_tab_artifacts_for_guitar_stem
+from app.beat_grid import estimate_beat_grid
+from app.chord_inference import infer_chords
+from app.solo_inference import infer_solo
 
 logger = logging.getLogger("harmoniq.analyze_audio")
 logger.setLevel(logging.INFO)
 
 TABS_UNAVAILABLE_NO_GUITAR = "no_isolated_guitar"
+
+
+def _filter_chord_timeline_by_section(
+    chord_timeline: ChordTimeline,
+    section_start: float | None,
+    section_end: float | None,
+) -> ChordTimeline:
+    """Filter chord events to only those within the section's time range."""
+    if section_start is None and section_end is None:
+        return chord_timeline
+    
+    filtered_events = []
+    for event in chord_timeline.events:
+        if section_start is not None and event.timestamp < section_start:
+            continue
+        if section_end is not None and event.timestamp >= section_end:
+            continue
+        filtered_events.append(event)
+    
+    return ChordTimeline(events=filtered_events)
+
+
+def _filter_solo_notes_by_section(
+    solo_notes: SoloNotes,
+    section_start: float | None,
+    section_end: float | None,
+) -> SoloNotes:
+    """Filter solo notes to only those within the section's time range."""
+    if section_start is None and section_end is None:
+        return solo_notes
+    
+    filtered_notes = []
+    for note in solo_notes.notes:
+        if section_start is not None and note.start_time < section_start:
+            continue
+        if section_end is not None and note.start_time >= section_end:
+            continue
+        filtered_notes.append(note)
+    
+    return SoloNotes(notes=filtered_notes)
 
 
 def _sorted_unique_floats(values: list[float], *, tol: float = 1e-3) -> list[float]:
@@ -187,9 +239,25 @@ def build_lesson_json_from_librosa(
             stem_classification=stem_classification,
         )
 
-    beat_grid = _sorted_unique_floats(summary.beat_times_s)
-    if not beat_grid:
-        beat_grid = [0.0]
+    # Generate full BeatGrid object for transcription inference
+    try:
+        beat_grid_dict = estimate_beat_grid(analysis_path)
+        beat_grid = BeatGrid.model_validate(beat_grid_dict)
+    except Exception:
+        logger.exception("beat grid estimation failed for job_id=%s; using fallback", job_id)
+        beat_grid = BeatGrid(
+            bpm=summary.tempo_bpm,
+            pulse_bpm=summary.tempo_bpm,
+            beats=_sorted_unique_floats(summary.beat_times_s),
+            downbeats=[0.0],
+            time_signature={"numerator": 4, "denominator": 4},
+            tick_value=0.25,
+        )
+
+    # For backward compatibility, also set simple beat_grid list
+    beat_grid_list = beat_grid.beats
+    if not beat_grid_list:
+        beat_grid_list = [0.0]
 
     bar_timestamps = _sorted_unique_floats(summary.bar_timestamps_s)
     if not bar_timestamps:
@@ -197,7 +265,29 @@ def build_lesson_json_from_librosa(
     if bar_timestamps[0] > 0.05:
         bar_timestamps.insert(0, 0.0)
 
+    # Run transcription inference for chord timeline and solo notes
+    chord_timeline: ChordTimeline | None = None
+    solo_notes: SoloNotes | None = None
+    
+    try:
+        # Use bass+other mix for chord inference, guitar for solo
+        chord_mix_path = mix_wav_path if mix_wav_path and mix_wav_path.is_file() else guitar_stem_path
+        chord_timeline = infer_chords(chord_mix_path, beat_grid)
+        logger.info("chord inference completed for job_id=%s with %d events", job_id, len(chord_timeline.events))
+    except Exception:
+        logger.exception("chord inference failed for job_id=%s; continuing without chord timeline", job_id)
+        chord_timeline = ChordTimeline(events=[])
+    
+    try:
+        solo_notes = infer_solo(guitar_stem_path, beat_grid)
+        logger.info("solo inference completed for job_id=%s with %d notes", job_id, len(solo_notes.notes))
+    except Exception:
+        logger.exception("solo inference failed for job_id=%s; continuing without solo notes", job_id)
+        solo_notes = SoloNotes(notes=[])
+
     sections: list[LessonSectionStub] = []
+    section_starts: list[float | None] = []
+    
     for seg in summary.segments:
         label = seg.get("label") if isinstance(seg, dict) else None
         if not isinstance(label, str) or not label.strip():
@@ -206,6 +296,7 @@ def build_lesson_json_from_librosa(
         start_time_seconds = (
             float(start_raw) if isinstance(start_raw, (int, float)) else None
         )
+        section_starts.append(start_time_seconds)
         # Placeholder confidence (overwritten once we have transcription confidence).
         sections.append(
             LessonSectionStub(
@@ -217,9 +308,44 @@ def build_lesson_json_from_librosa(
 
     if not sections:
         sections = [LessonSectionStub(label="Intro", confidence=0.3, start_time_seconds=0.0)]
+        section_starts = [0.0]
+
+    # Attach transcription data to each section
+    for i, section in enumerate(sections):
+        section_start = section.start_time_seconds
+        section_end = section_starts[i + 1] if i + 1 < len(section_starts) else None
+        
+        # Filter transcription data for this section's time range
+        section_chord_timeline = None
+        section_solo_notes = None
+        section_beat_grid = None
+        
+        if chord_timeline:
+            section_chord_timeline = _filter_chord_timeline_by_section(
+                chord_timeline, section_start, section_end
+            )
+        
+        if solo_notes:
+            section_solo_notes = _filter_solo_notes_by_section(
+                solo_notes, section_start, section_end
+            )
+        
+        # Attach BeatGrid to section (use the full beat grid for now, could be filtered too)
+        section_beat_grid = beat_grid
+        
+        # Update section with transcription data
+        section_dict = section.model_dump(exclude_none=True)
+        if section_chord_timeline:
+            section_dict["chord_timeline"] = section_chord_timeline.model_dump()
+        if section_solo_notes:
+            section_dict["solo_notes"] = section_solo_notes.model_dump()
+        if section_beat_grid:
+            section_dict["beat_grid"] = section_beat_grid.model_dump()
+        
+        sections[i] = LessonSectionStub(**section_dict)
 
     lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
-        vocals_stem_path, beat_grid=beat_grid, bar_timestamps=bar_timestamps
+        vocals_stem_path, beat_grid=beat_grid_list, bar_timestamps=bar_timestamps
     )
 
     skip_tabs = stem_classification is not None and not stem_classification.guitar_stem_usable
@@ -234,6 +360,8 @@ def build_lesson_json_from_librosa(
                 label=sec.label,
                 confidence=section_conf,
                 start_time_seconds=sec.start_time_seconds,
+                **{k: v for k, v in sec.model_dump(exclude_none=True).items() 
+                   if k not in ("label", "confidence", "start_time_seconds")}
             )
             for sec in sections
         ]
@@ -247,7 +375,7 @@ def build_lesson_json_from_librosa(
                 guitar_stem_path,
                 bpm=summary.tempo_bpm,
                 transcription_confidence=transcription_confidence,
-                beat_times_s=beat_grid,
+                beat_times_s=beat_grid_list,
             )
             sections = apply_tab_artifacts_to_sections(
                 sections,
@@ -262,6 +390,8 @@ def build_lesson_json_from_librosa(
                     label=sec.label,
                     confidence=section_conf,
                     start_time_seconds=sec.start_time_seconds,
+                    **{k: v for k, v in sec.model_dump(exclude_none=True).items() 
+                       if k not in ("label", "confidence", "start_time_seconds")}
                 )
                 for sec in sections
             ]
@@ -283,7 +413,7 @@ def build_lesson_json_from_librosa(
         tempo=summary.tempo_bpm,
         tempo_confidence=summary.tempo_confidence,
         transcription_confidence=transcription_confidence,
-        beat_grid=beat_grid,
+        beat_grid=beat_grid_list,
         bar_timestamps=bar_timestamps,
         stems=stems,
         lyrics_aligned=lyrics_aligned,

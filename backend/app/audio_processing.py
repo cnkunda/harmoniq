@@ -1,4 +1,8 @@
-"""Audio ingest + normalization utilities for transcription prep (commit 78)."""
+"""Audio preparation: normalize input to mono WAV and split long tracks into chunks.
+
+Accepts a YouTube URL or uploaded file path, delegates ingest/normalization
+to app.ingest, and optionally chunks the result for long recordings.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +10,15 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.ingest import SourceMetadata, get_job_dir, ingest_youtube_or_upload_to_wav, wav_file_duration_seconds
+from app.ingest import (
+    AudioTooShortError,
+    IngestError,
+    SourceMetadata,
+    YouTubeUrlInvalidError,
+    get_job_dir,
+    ingest_youtube_or_upload_to_wav,
+    wav_file_duration_seconds,
+)
 from app.pipeline_proof import TARGET_SR
 
 # Keep chunk windows reasonably small for long recordings (memory + inspectability).
@@ -51,8 +63,7 @@ def _chunk_wav_for_long_track(
                 raise AudioPreparationError("Invalid sample rate in normalized WAV")
 
             frames_per_chunk = int(chunk_seconds * sample_rate)
-            if frames_per_chunk <= 0:
-                raise AudioPreparationError("Computed non-positive frames_per_chunk")
+            # chunk_seconds > 0 and sample_rate > 0 validated above, so frames_per_chunk is always positive
 
             out: list[Path] = []
             cursor = 0
@@ -95,9 +106,16 @@ def prepare_audio_input(
             upload_path=upload_path,
             target_sr=target_sr,
         )
+    # AudioTooShortError is a subclass of IngestError — listed explicitly for readability
+    except (IngestError, YouTubeUrlInvalidError):
+        raise  # already structured, let them through
     except Exception as exc:
-        raise AudioPreparationError(str(exc)) from exc
+        raise AudioPreparationError(f"Unexpected error: {exc}") from exc
 
+    # NOTE: ingest_youtube_or_upload_to_wav already calls _verify_wav_and_get_duration
+    # internally. The duration check here on the same file is a redundant third wave.open().
+    # Short-term: acceptable given the None guard is needed anyway.
+    # Long-term: consider returning duration from ingest_youtube_or_upload_to_wav.
     duration = wav_file_duration_seconds(wav_path)
     if duration is None:
         raise AudioPreparationError("Could not read normalized WAV duration")
@@ -115,6 +133,6 @@ def prepare_audio_input(
         job_dir=job_dir,
         normalized_wav_path=wav_path,
         source_metadata=source_metadata,
-        duration_seconds=float(duration),
+        duration_seconds=duration,  # already float after None check
         chunk_paths=chunk_paths,
     )

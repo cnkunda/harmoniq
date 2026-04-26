@@ -232,7 +232,8 @@ class BeatGrid(BaseModel):
     """Quantization grid from beat tracking (commit 78)."""
     model_config = ConfigDict(extra="ignore")
 
-    bpm: float = Field(..., ge=20.0, le=900.0) # Increased max to account for subdivided grid BPMs
+    bpm: float = Field(..., ge=20.0, le=900.0)  # Grid BPM (eighth notes for compound meters)
+    pulse_bpm: float = Field(default=0.0, ge=20.0, le=300.0)  # Pulse tempo (e.g., dotted quarter for 6/8)
     beats: list[float] = Field(default_factory=list)
     downbeats: list[float] = Field(default_factory=list)
     time_signature: TimeSignature
