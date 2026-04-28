@@ -21,6 +21,7 @@ def _snap_to_grid(time_s: float, grid_beats: list[float]) -> float:
 def infer_solo(melodic_stem_path: Path, beat_grid: BeatGrid) -> SoloNotes:
     try:
         from basic_pitch.inference import predict
+        from basic_pitch import ICASSP_2022_MODEL_PATH
     except ImportError:
         # Graceful fallback for environments without TensorFlow/Basic Pitch
         print("WARNING: basic-pitch not installed. Returning empty solo notes.")
@@ -36,6 +37,7 @@ def infer_solo(melodic_stem_path: Path, beat_grid: BeatGrid) -> SoloNotes:
     # minimum_note_length: minimum duration in ms (Basic Pitch expects milliseconds)
     _, _, raw_note_events = predict(
         str(melodic_stem_path),
+        model_or_model_path=str(ICASSP_2022_MODEL_PATH.with_name("nmp.onnx")),
         onset_threshold=0.6,
         frame_threshold=0.4,
         minimum_note_length=min_duration_s * 1000

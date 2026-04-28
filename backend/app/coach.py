@@ -6,22 +6,29 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from typing import Any
+
+from anthropic import Anthropic
 
 from app.schemas import CoachFocusArea, LessonSectionStub, MoodState, PlayerProfile
 
 logger = logging.getLogger("harmoniq.coach")
 logger.setLevel(logging.INFO)
 
-MODEL_ID = "claude-sonnet-4-20250514"
+MODEL_ID = os.getenv("HARMONIQ_MODEL_ID", "claude-sonnet-4-20250514")
 COACH_TIMEOUT_SECONDS = max(0.5, float(os.getenv("HARMONIQ_COACH_TIMEOUT_MS", "8000")) / 1000.0)
 PRACTICE_PLAN_INTRO_TIMEOUT_SECONDS = min(8.0, COACH_TIMEOUT_SECONDS)
 QUICK_FEEDBACK_TIMEOUT_SECONDS = 5.0
-COACH_PROFILE_RETRY_LIMIT = 2
+COACH_PROFILE_MAX_RETRIES = 2  # Maximum retry attempts beyond the initial call
 COACH_PROFILE_TEMPERATURE_INITIAL = 0.5
 COACH_PROFILE_TEMPERATURE_RETRY = 0.3
+
+# Module-level executor for concurrent coach operations
+# max_workers=4 allows parallel section hydration without overwhelming API
+_COACH_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 # README "AI Coach — Prompt Design" base prompt; keep this literal for reviewability.
 BASE_SYSTEM_PROMPT = """You are a warm, musical guitar coach — somewhere between a patient session musician
@@ -78,14 +85,13 @@ WEAK_AREA_SYNONYMS: dict[str, tuple[str, ...]] = {
 }
 
 
-def _player_context_block(profile: PlayerProfile | None) -> str:
-    if profile is None:
+def _player_context_block(profile_data: dict | None) -> str:
+    if profile_data is None:
         return ""
-    data = profile.model_dump(mode="json", exclude_none=True)
-    weak = data.get("weak_areas") or []
-    nodes = data.get("skill_nodes") or []
-    taste = data.get("taste_profile")
-    lc = data.get("learning_context")
+    weak = profile_data.get("weak_areas") or []
+    nodes = profile_data.get("skill_nodes") or []
+    taste = profile_data.get("taste_profile")
+    lc = profile_data.get("learning_context")
     if not weak and not nodes and not taste and not lc:
         return ""
     lines = [
@@ -142,14 +148,13 @@ def _player_context_block(profile: PlayerProfile | None) -> str:
     return "\n".join(lines) + "\n\n"
 
 
-def _profile_priority_directive(profile: PlayerProfile | None) -> str:
-    if profile is None:
+def _profile_priority_directive(profile_data: dict | None) -> str:
+    if profile_data is None:
         return ""
-    data = profile.model_dump(mode="json", exclude_none=True)
-    weak = [str(w).strip() for w in (data.get("weak_areas") or []) if str(w).strip()]
-    nodes = data.get("skill_nodes") or []
-    taste = data.get("taste_profile")
-    lc = data.get("learning_context")
+    weak = [str(w).strip() for w in (profile_data.get("weak_areas") or []) if str(w).strip()]
+    nodes = profile_data.get("skill_nodes") or []
+    taste = profile_data.get("taste_profile")
+    lc = profile_data.get("learning_context")
     if not weak and not nodes and not taste and not lc:
         return ""
     if weak:
@@ -254,6 +259,7 @@ FOCUS_AREA_ROTATION: list[CoachFocusArea] = [
 def rotate_focus_area(session_count: int) -> CoachFocusArea:
     """Determine focus area for this session based on session count (commit 90)."""
     if session_count < 0:
+        logger.warning("rotate_focus_area received negative session_count=%s, clamping to 0", session_count)
         session_count = 0
     return FOCUS_AREA_ROTATION[session_count % len(FOCUS_AREA_ROTATION)]
 
@@ -335,12 +341,17 @@ def build_coach_user_prompt(
     focus_area: CoachFocusArea | None = None,
 ) -> str:
     """Assemble the user message: optional context blocks + fixed JSON contract."""
+    # Dump profile once to avoid redundant serialization in helpers
+    profile_data = None
+    if player_profile is not None:
+        profile_data = player_profile.model_dump(mode="json", exclude_none=True)
+
     prefix = (
-        _player_context_block(player_profile)
+        _player_context_block(profile_data)
         + _song_style_block(style_label, technique_hints)
         + _section_context_block(section_label, key)
     )
-    profile_priority = _profile_priority_directive(player_profile)
+    profile_priority = _profile_priority_directive(profile_data)
     focus_directive = _focus_area_directive(focus_area)
     body = COACH_USER_PROMPT_TEMPLATE.format(
         section_label=(section_label or "Section"),
@@ -390,8 +401,6 @@ def _call_claude_streaming(
     max_tokens: int = 220,
     temperature: float = 1.0,
 ) -> str:
-    import time
-    from anthropic import Anthropic
 
     start_time = time.perf_counter()
     client = Anthropic(api_key=api_key)
@@ -441,29 +450,8 @@ def _call_claude_text(
 
 
 def _parse_coach_json(raw_text: str) -> tuple[str, str, str] | None:
-    import json
-
-    raw = (raw_text or "").strip()
-    if not raw:
-        return None
-
-    # Claude may wrap valid JSON in markdown fences. Strip common wrappers first.
-    fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", raw, flags=re.IGNORECASE | re.DOTALL)
-    if fenced:
-        raw = fenced.group(1).strip()
-
-    # If extra prose appears around JSON, try the first object block.
-    if not raw.startswith("{") or not raw.endswith("}"):
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            raw = raw[start : end + 1]
-
-    try:
-        data = json.loads(raw)
-    except Exception:
-        return None
-    if not isinstance(data, dict):
+    data = _extract_json_object(raw_text)
+    if data is None:
         return None
     note = data.get("coach_note")
     explanation = data.get("coach_explanation")
@@ -477,30 +465,51 @@ def _parse_coach_json(raw_text: str) -> tuple[str, str, str] | None:
     return note.strip(), explanation.strip(), weak_focus.strip()
 
 
-def _parse_quick_message_json(raw_text: str) -> str | None:
-    import json
-
+def _extract_json_object(raw_text: str) -> dict | None:
+    """Extract JSON object from text, handling markdown fences and extra prose."""
     raw = (raw_text or "").strip()
     if not raw:
         return None
+
+    # Strip markdown fences
     fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", raw, flags=re.IGNORECASE | re.DOTALL)
     if fenced:
         raw = fenced.group(1).strip()
+
+    # Extract first object block if surrounded by prose
     if not raw.startswith("{") or not raw.endswith("}"):
         start = raw.find("{")
         end = raw.rfind("}")
         if start != -1 and end != -1 and end > start:
             raw = raw[start : end + 1]
+
     try:
         data = json.loads(raw)
     except Exception:
         return None
-    if not isinstance(data, dict):
+
+    return data if isinstance(data, dict) else None
+
+
+def _parse_quick_message_json(raw_text: str) -> str | None:
+    data = _extract_json_object(raw_text)
+    if data is None:
         return None
     msg = data.get("message")
     if not isinstance(msg, str) or not msg.strip():
         return None
     return msg.strip()
+
+
+def _parse_theory_rationale_json(raw_text: str) -> str | None:
+    """Parse theory annotation response looking for 'rationale' field."""
+    data = _extract_json_object(raw_text)
+    if data is None:
+        return None
+    rationale = data.get("rationale")
+    if not isinstance(rationale, str) or not rationale.strip():
+        return None
+    return rationale.strip()
 
 
 def generate_quick_feedback(accuracy_pattern: list[str]) -> str:
@@ -520,8 +529,7 @@ def generate_quick_feedback(accuracy_pattern: list[str]) -> str:
 
     pattern_csv = ", ".join(accuracy_pattern)
     user_prompt = QUICK_FEEDBACK_USER_PROMPT.format(pattern=pattern_csv)
-    pool = ThreadPoolExecutor(max_workers=1)
-    future = pool.submit(
+    future = _COACH_EXECUTOR.submit(
         _call_claude_text,
         api_key=api_key,
         user_prompt=user_prompt,
@@ -542,8 +550,6 @@ def generate_quick_feedback(accuracy_pattern: list[str]) -> str:
     except Exception as exc:
         logger.warning("quick_feedback fallback reason=api_error error=%s", exc.__class__.__name__)
         return FALLBACK_QUICK_FEEDBACK
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def generate_coach_fields_for_section(
@@ -605,8 +611,7 @@ def generate_coach_fields_for_section_with_status(
         focus_area=focus_area,
     )
     focus_terms = _profile_focus_terms(player_profile)
-    attempts = 1 + (COACH_PROFILE_RETRY_LIMIT if focus_terms else 0)
-    pool = ThreadPoolExecutor(max_workers=1)
+    attempts = 1 + COACH_PROFILE_MAX_RETRIES if focus_terms else 1
     try:
         for attempt in range(attempts):
             prompt = user_prompt
@@ -619,7 +624,7 @@ def generate_coach_fields_for_section_with_status(
                     if attempt == 0
                     else COACH_PROFILE_TEMPERATURE_RETRY
                 )
-            future = pool.submit(
+            future = _COACH_EXECUTOR.submit(
                 _call_claude_text,
                 api_key=api_key,
                 user_prompt=prompt,
@@ -659,9 +664,6 @@ def generate_coach_fields_for_section_with_status(
         logger.warning("coach fallback reason=api_error error=%s", exc.__class__.__name__)
         note, explanation = _fallback_coach_fields()
         return CoachCallResult(note=note, explanation=explanation, fallback_reason="api_error")
-    finally:
-        # Don't let hung network calls pin the caller after timeout fallback.
-        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def generate_onboarding_placement_summary(
@@ -689,8 +691,7 @@ Write exactly one paragraph, 3–4 sentences, plain English. No bullet points, n
 Follow README coach rules: one specific observation about their baseline, one actionable priority to work first, end with specific encouragement (not generic praise).
 Never start with "Great job" or "Nice work"."""
 
-    pool = ThreadPoolExecutor(max_workers=1)
-    future = pool.submit(_call_claude_text, api_key=api_key, user_prompt=user_prompt)
+    future = _COACH_EXECUTOR.submit(_call_claude_text, api_key=api_key, user_prompt=user_prompt)
     try:
         raw_text = future.result(timeout=COACH_TIMEOUT_SECONDS)
         text = (raw_text or "").strip()
@@ -708,8 +709,6 @@ Never start with "Great job" or "Nice work"."""
             exc.__class__.__name__,
         )
         return FALLBACK_ONBOARDING_PLACEMENT
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def generate_jam_coach_summary(
@@ -781,12 +780,19 @@ def hydrate_coach_copy_into_sections(
 ) -> tuple[list[LessonSectionStub], str, str | None]:
     """
     Populate section coach fields and report hydration status.
+    Processes sections concurrently to minimize wall-clock latency.
     Returns: (sections, status: complete|fallback, fallback_reason)
     """
-    enriched: list[LessonSectionStub] = []
-    fallback_reason: str | None = None
-    for sec in sections:
-        result = generate_coach_fields_for_section_with_status(
+    if not sections:
+        return [], "complete", None
+
+    # Submit all section requests concurrently, preserving original index
+    from concurrent.futures import as_completed
+
+    futures_to_idx: dict[Any, int] = {}
+    for idx, sec in enumerate(sections):
+        future = _COACH_EXECUTOR.submit(
+            generate_coach_fields_for_section_with_status,
             section_label=sec.label,
             song_title=song_title,
             artist=artist,
@@ -796,12 +802,46 @@ def hydrate_coach_copy_into_sections(
             technique_hints=technique_hints,
             focus_area=focus_area,
         )
+        futures_to_idx[future] = idx
+
+    # Collect results as they complete
+    results_by_idx: dict[int, CoachCallResult] = {}
+    fallback_reason: str | None = None
+
+    for future in as_completed(futures_to_idx):
+        idx = futures_to_idx[future]
+        try:
+            result = future.result(timeout=COACH_TIMEOUT_SECONDS)
+            results_by_idx[idx] = result
+            if result.fallback_reason is not None and fallback_reason is None:
+                fallback_reason = result.fallback_reason
+        except FutureTimeoutError:
+            logger.warning("hydrate_coach_copy section=%s fallback reason=timeout", idx)
+            if fallback_reason is None:
+                fallback_reason = "timeout"
+            # Use fallback for this section
+            note, explanation = _fallback_coach_fields()
+            results_by_idx[idx] = CoachCallResult(
+                note=note, explanation=explanation, fallback_reason="timeout"
+            )
+        except Exception as exc:
+            logger.warning("hydrate_coach_copy section=%s fallback reason=api_error error=%s", idx, exc.__class__.__name__)
+            if fallback_reason is None:
+                fallback_reason = "api_error"
+            note, explanation = _fallback_coach_fields()
+            results_by_idx[idx] = CoachCallResult(
+                note=note, explanation=explanation, fallback_reason="api_error"
+            )
+
+    # Build enriched sections in original order
+    enriched: list[LessonSectionStub] = []
+    for idx, sec in enumerate(sections):
+        result = results_by_idx[idx]
         payload = sec.model_dump(exclude_none=True)
         payload["coach_note"] = result.note
         payload["coach_explanation"] = result.explanation
         enriched.append(LessonSectionStub(**payload))
-        if result.fallback_reason is not None and fallback_reason is None:
-            fallback_reason = result.fallback_reason
+
     return enriched, ("fallback" if fallback_reason else "complete"), fallback_reason
 
 
@@ -858,22 +898,8 @@ def template_practice_plan_intros(
 
 
 def _parse_practice_plan_intros_json(raw_text: str, expected: int) -> list[str] | None:
-    raw = (raw_text or "").strip()
-    if not raw:
-        return None
-    fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", raw, flags=re.IGNORECASE | re.DOTALL)
-    if fenced:
-        raw = fenced.group(1).strip()
-    if not raw.startswith("{") or not raw.endswith("}"):
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            raw = raw[start : end + 1]
-    try:
-        data = json.loads(raw)
-    except Exception:
-        return None
-    if not isinstance(data, dict):
+    data = _extract_json_object(raw_text)
+    if data is None:
         return None
     intros = data.get("intros")
     if not isinstance(intros, list) or len(intros) != expected:
@@ -927,11 +953,12 @@ def generate_practice_plan_intros(
         "Slots:\n"
         + "\n".join(lines)
         + "\n\n"
-        + _player_context_block(player_profile).strip()
+        + _player_context_block(
+            player_profile.model_dump(mode="json", exclude_none=True) if player_profile else None
+        ).strip()
         + "\nOutput only JSON."
     )
-    pool = ThreadPoolExecutor(max_workers=1)
-    future = pool.submit(
+    future = _COACH_EXECUTOR.submit(
         _call_claude_text,
         api_key=api_key,
         user_prompt=user_prompt,
@@ -948,9 +975,6 @@ def generate_practice_plan_intros(
         logger.warning("practice_plan_intros fallback reason=timeout")
     except Exception as exc:
         logger.warning("practice_plan_intros fallback reason=api_error error=%s", exc.__class__.__name__)
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
-
     return template_practice_plan_intros(slots_meta, player_profile, mood=mood)
 
 
@@ -964,6 +988,10 @@ def generate_orient_annotation(
 ) -> str:
     """
     Generate 2-3 sentences telling the user what to listen for in the orient clip.
+
+    TODO: This is currently a template stub. Production should use Claude for
+    dynamic generation based on style, technique, key, and BPM.
+    Issue: Currently returns deterministic copy without AI inference.
 
     Args:
         style_label: Musical style (e.g., "rock", "blues", "jazz")
@@ -1033,8 +1061,7 @@ def generate_theory_annotation(
         chord_function=chord_function or "Unknown function",
     )
 
-    pool = ThreadPoolExecutor(max_workers=1)
-    future = pool.submit(
+    future = _COACH_EXECUTOR.submit(
         _call_claude_text,
         api_key=api_key,
         user_prompt=user_prompt,
@@ -1044,7 +1071,7 @@ def generate_theory_annotation(
 
     try:
         raw_text = future.result(timeout=QUICK_FEEDBACK_TIMEOUT_SECONDS)
-        parsed = _parse_quick_message_json(raw_text)
+        parsed = _parse_theory_rationale_json(raw_text)
         if parsed is None:
             logger.warning("theory_annotation fallback reason=parse_error")
             return FALLBACK_THEORY_RATIONALE
@@ -1056,5 +1083,3 @@ def generate_theory_annotation(
     except Exception as exc:
         logger.warning("theory_annotation fallback reason=api_error error=%s", exc.__class__.__name__)
         return FALLBACK_THEORY_RATIONALE
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)

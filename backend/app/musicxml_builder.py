@@ -5,6 +5,7 @@ MusicXML generation from Harmoniq's internal JSON artifacts (BeatGrid, ChordTime
 from __future__ import annotations
 
 import math
+from fractions import Fraction
 from typing import TYPE_CHECKING
 
 # Lazy load music21 for performance if not always used.
@@ -140,32 +141,41 @@ def build_musicxml(
             m21_measure.append(m21_time_signature)
             m21_measure.append(m21_key)
             m21_measure.append(m21.tempo.MetronomeMark(number=beat_grid.bpm))
-            m21_measure.append(m21.metadata.MovementTitle(title))
+
+        current_measure_position_s = measure_start_s # Absolute time in seconds
+        current_cumulative_ql = Fraction(0, 1)
+        next_tied_notes_queue = []
 
         # Add notes that were tied from the previous measure
         for tied_note_info in tied_notes_queue:
-            # tied_note_info is (m21_note_object, remaining_duration_s_from_original_note)
+            # tied_note_info is (original_note_obj, remaining_duration_s_from_original_note)
             original_note_obj, remaining_duration_s = tied_note_info
 
             duration_in_this_measure_s = min(remaining_duration_s, measure_end_s - measure_start_s)
-            m21_note_segment = m21.note.Note(original_note_obj.pitch)
-            m21_note_segment.volume.velocity = original_note_obj.volume.velocity
-            m21_note_segment.duration = m21.duration.Duration(duration_in_this_measure_s / quarter_note_duration_s)
             
-            # Tie logic
-            if remaining_duration_s > duration_in_this_measure_s:
-                # If note continues to next measure, mark as tied start
-                m21_note_segment.tie = m21.tie.Tie('start')
-                tied_notes_queue.append((original_note_obj, remaining_duration_s - duration_in_this_measure_s))
-            else:
-                # If this is the last segment, mark as tied stop (if it was tied)
-                if original_note_obj.tie == 'start': # Check if the original note started a tie
-                    m21_note_segment.tie = m21.tie.Tie('stop')
-            
-            m21_measure.append(m21_note_segment)
-        tied_notes_queue = [] # Clear for the next measure
+            target_cumulative_ql = Fraction(round(duration_in_this_measure_s / quarter_note_duration_s * 8), 8)
+            note_duration_ql = target_cumulative_ql - current_cumulative_ql
 
-        current_measure_position_s = measure_start_s # Absolute time in seconds
+            if note_duration_ql > 0:
+                m21_note_segment = m21.note.Note(original_note_obj.pitch)
+                m21_note_segment.volume.velocity = original_note_obj.velocity
+                m21_note_segment.duration = m21.duration.Duration(note_duration_ql)
+                
+                # Tie logic
+                if remaining_duration_s > duration_in_this_measure_s:
+                    # If note continues to next measure, mark as tied continue
+                    m21_note_segment.tie = m21.tie.Tie('continue')
+                    next_tied_notes_queue.append((original_note_obj, remaining_duration_s - duration_in_this_measure_s))
+                else:
+                    # If this is the last segment, mark as tied stop
+                    m21_note_segment.tie = m21.tie.Tie('stop')
+                
+                m21_measure.append(m21_note_segment)
+
+            current_cumulative_ql = target_cumulative_ql
+            current_measure_position_s = measure_start_s + duration_in_this_measure_s
+
+        tied_notes_queue = next_tied_notes_queue
 
         # Process solo notes for this measure
         # We need to consider notes that start in this measure AND notes that might have started
@@ -180,34 +190,43 @@ def build_musicxml(
         for note in notes_starting_in_this_measure:
             # Add rests for gaps before the note
             if note.start_time > current_measure_position_s:
-                rest_duration_s = note.start_time - current_measure_position_s
-                rest_duration_ql = rest_duration_s / quarter_note_duration_s
-                m21_rest = m21.note.Rest(rest_duration_ql)
-                m21_measure.append(m21_rest)
+                target_cumulative_ql = Fraction(round((note.start_time - measure_start_s) / quarter_note_duration_s * 8), 8)
+                rest_duration_ql = target_cumulative_ql - current_cumulative_ql
+                if rest_duration_ql > 0:
+                    m21_rest = m21.note.Rest(rest_duration_ql)
+                    m21_measure.append(m21_rest)
+                current_cumulative_ql = target_cumulative_ql
             
             # Determine the actual duration of this note segment within the current measure
             # A note can either end within this measure, or extend into the next
             duration_in_this_measure_s = min(note.duration, measure_end_s - note.start_time)
 
-            m21_note_segment = m21.note.Note(note.pitch)
-            m21_note_segment.volume.velocity = note.velocity
-            m21_note_segment.duration = m21.duration.Duration(duration_in_this_measure_s / quarter_note_duration_s)
+            target_cumulative_ql = Fraction(round((note.start_time + duration_in_this_measure_s - measure_start_s) / quarter_note_duration_s * 8), 8)
+            note_duration_ql = target_cumulative_ql - current_cumulative_ql
 
-            if note.duration > duration_in_this_measure_s:
-                # This note extends into the next measure, so tie it
-                m21_note_segment.tie = m21.tie.Tie('start')
-                # Add to queue for next measure processing
-                tied_notes_queue.append((note, note.duration - duration_in_this_measure_s))
-            
-            m21_measure.append(m21_note_segment)
+            if note_duration_ql > 0:
+                m21_note_segment = m21.note.Note(note.pitch)
+                m21_note_segment.volume.velocity = note.velocity
+                m21_note_segment.duration = m21.duration.Duration(note_duration_ql)
+
+                if note.duration > duration_in_this_measure_s:
+                    # This note extends into the next measure, so tie it
+                    m21_note_segment.tie = m21.tie.Tie('start')
+                    # Add to queue for next measure processing
+                    tied_notes_queue.append((note, note.duration - duration_in_this_measure_s))
+                
+                m21_measure.append(m21_note_segment)
+
             current_measure_position_s = note.start_time + duration_in_this_measure_s
+            current_cumulative_ql = target_cumulative_ql
         
         # Add a final rest if the measure is not filled
-        if current_measure_position_s < measure_end_s:
-            final_rest_duration_s = measure_end_s - current_measure_position_s
-            final_rest_duration_ql = final_rest_duration_s / quarter_note_duration_s
-            m21_final_rest = m21.note.Rest(final_rest_duration_ql)
-            m21_measure.append(m21_final_rest)
+        measure_total_ql = Fraction(round((measure_end_s - measure_start_s) / quarter_note_duration_s * 8), 8)
+        if current_cumulative_ql < measure_total_ql:
+            final_rest_duration_ql = measure_total_ql - current_cumulative_ql
+            if final_rest_duration_ql > 0:
+                m21_final_rest = m21.note.Rest(final_rest_duration_ql)
+                m21_measure.append(m21_final_rest)
 
 
         # Add chords to the measure (as text expressions for now, or proper harmony objects)

@@ -2,6 +2,7 @@ import type { StyleProp, ViewStyle } from 'react-native'
 import type { SoundFontProfileId } from '@/src/audio/soundfontProfiles'
 import type { TabRenderPresetName } from '@/src/session/tabThemePresets'
 import type { NoteEventMessage, SongScoreMeta } from '@/types/tabMessage'
+import type { LyricWord } from './LyricsStrip'
 
 export type TabViewportProps = {
   gp5Base64?: string | null
@@ -21,6 +22,15 @@ export type TabViewportProps = {
   readOnlyFollowMode?: boolean
   onSongDetails?: (score: SongScoreMeta) => void
   onSongPlayback?: (payload: { masterBarIndex: number; sectionLabel: string | null }) => void
-  /** Commit 61: enable harness + store runtime diagnostics. */
   runtimeDiagnosticsEnabled?: boolean
+  lyricWords?: LyricWord[]
+  playbackSec?: number
+  songTitle?: string
+  songArtist?: string
+  tabVariant?: 'full' | 'skeleton' | 'alt'
+  hasFull?: boolean
+  hasSkeleton?: boolean
+  hasAlt?: boolean
+  onTabVariantChange?: (v: 'full' | 'skeleton' | 'alt') => void
+  onSeekToStart?: () => void
 }

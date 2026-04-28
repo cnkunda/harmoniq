@@ -348,7 +348,87 @@ Phase 1 is NOT done until all "YES — blocking" and "YES" rows are CLOSED or ex
 - [x] Add mode selection UI in session setup
 - [x] Save mode preference to user profile in SQLite
 - [x] Update scoring feedback to reference mode philosophy
-- Test with musicians to validate "feel" vs "precision" balance (deferred to Phase 2 user validation milestone)
+- [ ] Test with musicians to validate "feel" vs "precision" balance (deferred to Phase 2 user validation milestone)
+
+---
+
+#### Commit 93: Backend API Modularization
+
+**Goal:** Refactor the monolithic `main.py` into feature-specific routers to improve maintainability and testability.
+
+**Scope:**
+- `backend/app/routers/` (analyze, export, discovery, taste, curriculum)
+- Centralized error handling and dependency injection
+- Health checks and CORS isolation
+
+**Acceptance Criteria:**
+- [ ] Backend integration tests pass after migration
+- [ ] No circular dependencies in router imports
+- [ ] Clear separation of concerns between job management and API routing
+
+---
+
+#### Commit 94: Automated Job Data Cleanup
+
+**Goal:** Implement a lifecycle management system for backend temporary data to prevent storage bloat.
+
+**Scope:**
+- `backend/scripts/cleanup_data.py`
+- Pruning logic for `.tmp_test_data_*` and old `data/jobs/` artifacts
+- Background task or cron job for periodic execution
+
+**Acceptance Criteria:**
+- [ ] Cleanup script safely removes orphaned temp folders
+- [ ] Configurable retention period (e.g., 7 days)
+- [ ] Dry-run mode for safe verification
+
+---
+
+#### Commit 95: ML Inference Stability & Diagnostics
+
+**Goal:** Resolve TensorFlow loading warnings and optimize inference fallback performance.
+
+**Scope:**
+- Fix `AttributeError: '_UserObject'` in `solo_inference.py`
+- Improve ONNX fallback logging and performance
+- Standardize model loading across chord and solo engines
+
+**Acceptance Criteria:**
+- [ ] Backend logs are free of model loading warnings
+- [ ] Cold-start inference time reduced by 20%
+- [ ] Detailed diagnostics for model mismatch errors
+
+---
+
+#### Commit 96: Unified Player UX Parity
+
+**Goal:** Standardize the "Rich Player" card layout across all session practice screens.
+
+**Scope:**
+- Update `app/session/play.tsx` and `app/session/slow.tsx` to match `study.tsx`
+- Refine `TabViewport.tsx` card padding and header alignment
+- Unified "Lyrics Strip" visibility logic
+
+**Acceptance Criteria:**
+- [ ] Consistent header/controls/lyrics layout across all 3 practice steps
+- [ ] No layout shifting when toggling lyrics or variants
+- [ ] Cross-platform styling parity (Native vs Web)
+
+---
+
+#### Commit 97: Functional Gap Closures (Lyria & Persistence)
+
+**Goal:** Complete pending functional requirements for orientation clips and UI state persistence.
+
+**Scope:**
+- Implement `backend/app/lyria_clip.py` for orientation hints
+- Add `AsyncStorage` persistence for user preferences (`tabVariant`, `showLyrics`)
+- Refine "Seek to Start" to ensure perfect audio/cursor sync
+
+**Acceptance Criteria:**
+- [ ] Orient-as-hint clips generated correctly for all songs
+- [ ] User preferences survive app restarts
+- [ ] Seek-to-start resolves within 50ms transport sync
 
 ---
 
@@ -400,7 +480,7 @@ Implement auto-switching to "Skeleton" tabs when transcription_confidence < 0.7.
 
 ---
 
-### Commit 93: Advanced Extension Recognition
+### Commit 98: Advanced Extension Recognition
 
 Upgrade the TFLite chord estimator to recognize over 700 chord types, specifically 9ths, 11ths, 13ths, and altered dominants (7#9, 7b13, alt7).
 
@@ -416,7 +496,7 @@ Upgrade the TFLite chord estimator to recognize over 700 chord types, specifical
 
 ---
 
-### Commit 94: Inversion & Slash Chord Logic
+### Commit 99: Inversion & Slash Chord Logic
 
 Implement bass-note detection to support accurate slash notation (e.g., G/B, D/F#) and identify 1st/2nd inversions.
 
@@ -432,7 +512,7 @@ Implement bass-note detection to support accurate slash notation (e.g., G/B, D/F
 
 ---
 
-### Commit 95: Voicing & Position Inference
+### Commit 100: Voicing & Position Inference
 
 Develop logic to identify specific fretboard shapes (e.g., distinguishing between a 'CAGED' E-shape vs. A-shape voicing) based on spectral peaks.
 
@@ -448,7 +528,7 @@ Develop logic to identify specific fretboard shapes (e.g., distinguishing betwee
 
 ---
 
-### Commit 96: Live Mic Mode
+### Commit 101: Live Mic Mode
 
 Implement a low-latency (<120ms) 'Active Listener' view for real-time chord detection from external audio sources (live bands/radio).
 
@@ -464,7 +544,7 @@ Implement a low-latency (<120ms) 'Active Listener' view for real-time chord dete
 
 ---
 
-### Commit 97: The "Chord Pulse" Dashboard
+### Commit 102: The "Chord Pulse" Dashboard
 
 Build a scrolling chord timeline with 'falling notes' visualizer and a beat-synced 'Pulse' ring that expands on downbeats.
 
@@ -480,7 +560,7 @@ Build a scrolling chord timeline with 'falling notes' visualizer and a beat-sync
 
 ---
 
-### Commit 98: Multi-Instrument Diagram Support
+### Commit 103: Multi-Instrument Diagram Support
 
 Add real-time toggles to switch between Guitar, Piano, and Ukulele diagrams, including support for alternate tunings.
 
@@ -496,7 +576,7 @@ Add real-time toggles to switch between Guitar, Piano, and Ukulele diagrams, inc
 
 ---
 
-### Commit 99: 6-Stem High-Fidelity Demucs
+### Commit 104: 6-Stem High-Fidelity Demucs
 
 Upgrade the analysis pipeline to 'htdemucs_6s' to allow independent 'Guitar' and 'Piano' stem isolation.
 
@@ -512,7 +592,7 @@ Upgrade the analysis pipeline to 'htdemucs_6s' to allow independent 'Guitar' and
 
 ---
 
-### Commit 100: Real-Time Stem Mixer & Export
+### Commit 105: Real-Time Stem Mixer & Export
 
 Add UI controls to mute/solo isolated stems during listening and support .WAV export for individual stems.
 
@@ -560,7 +640,7 @@ Logic to calculate and suggest optimal capo positions to match the detected key 
 
 ---
 
-### Commit 101: Dynamic Session Engine
+### Commit 106: Dynamic Session Engine
 
 Implement PlanJSON ingestion and orchestrator for dynamically generated full practice plans via SM-2 scheduler.
 
@@ -578,7 +658,7 @@ Implement PlanJSON ingestion and orchestrator for dynamically generated full pra
 
 ---
 
-### Commit 102: Orient-as-Hint
+### Commit 107: Orient-as-Hint
 
 Remove Orient as linear step; integrate as non-intrusive amber overlay (#D4860A) in Study/Play components with '?' toggle.
 
@@ -597,7 +677,7 @@ Remove Orient as linear step; integrate as non-intrusive amber overlay (#D4860A)
 
 ---
 
-### Commit 103: Mastery & Integrity
+### Commit 108: Mastery & Integrity
 
 Implement atomic SQLite updates for dynamic sessions with dual-entry state integrity.
 
@@ -617,7 +697,7 @@ Implement atomic SQLite updates for dynamic sessions with dual-entry state integ
 
 ---
 
-### Commit 104: Dynamic Tempo Support (Variable BPM)
+### Commit 109: Dynamic Tempo Support (Variable BPM)
 
 **Current State:** Static BPM Only
 The current implementation assumes every song is recorded to a static click track. Variable BPM/tempo changes are not supported.
@@ -652,7 +732,7 @@ The current implementation assumes every song is recorded to a static click trac
 
 ---
 
-### Commit 105: Redis Job Queue + Celery Workers
+### Commit 110: Redis Job Queue + Celery Workers
 
 **Goal:** Replace in-memory job store with Redis-backed queue and Celery workers for horizontal scaling and persistence.
 
@@ -681,7 +761,7 @@ The current implementation assumes every song is recorded to a static click trac
 
 ---
 
-### Commit 106: Dedicated ML Model Server
+### Commit 111: Dedicated ML Model Server
 
 **Goal:** Deploy dedicated inference service for chord model with batched inference, model versioning, and GPU batching.
 
@@ -710,7 +790,7 @@ The current implementation assumes every song is recorded to a static click trac
 
 ---
 
-### Commit 107: GPU Job Queue for Demucs
+### Commit 112: GPU Job Queue for Demucs
 
 **Goal:** Implement GPU job queue with priority scheduling for Demucs stem separation to improve throughput and cost efficiency.
 
@@ -739,7 +819,7 @@ The current implementation assumes every song is recorded to a static click trac
 
 ---
 
-### Commit 108: Error Resilience (Circuit Breakers, Retry, DLQ)
+### Commit 113: Error Resilience (Circuit Breakers, Retry, DLQ)
 
 **Goal:** Implement circuit breakers, exponential backoff, and dead letter queues for transient failures.
 
@@ -768,7 +848,7 @@ The current implementation assumes every song is recorded to a static click trac
 
 ---
 
-### Commit 109: Monitoring & Observability (Prometheus, Grafana)
+### Commit 114: Monitoring & Observability (Prometheus, Grafana)
 
 **Goal:** Add structured metrics, distributed tracing, and alerting for operational visibility.
 
@@ -797,7 +877,7 @@ The current implementation assumes every song is recorded to a static click trac
 
 ---
 
-### Commit 110: Audio Fingerprinting & Quality Scoring
+### Commit 115: Audio Fingerprinting & Quality Scoring
 
 **Goal:** Implement audio fingerprinting for duplicate detection and quality scoring to reduce compute waste.
 

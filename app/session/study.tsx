@@ -8,8 +8,6 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
-import { LyricsStrip } from '@/components/LyricsStrip'
-import { ScoreViewer } from '@/components/ScoreViewer'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
@@ -152,10 +150,14 @@ export default function StudyScreen() {
       const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
       if (!section) return
 
-      // Check if we have the required transcription data
-      const hasBeatGrid = section.beat_grid != null
-      const hasChordTimeline = section.chord_timeline != null
-      const hasSoloNotes = section.solo_notes != null
+      // Check if we have the required transcription data from either section or lesson level
+      const beatGrid = section.beat_grid ?? lesson?.beat_grid
+      const chordTimeline = section.chord_timeline ?? lesson?.chord_timeline
+      const soloNotes = section.solo_notes ?? lesson?.solo_notes
+
+      const hasBeatGrid = beatGrid != null
+      const hasChordTimeline = chordTimeline != null
+      const hasSoloNotes = soloNotes != null
 
       if (!hasBeatGrid || !hasChordTimeline || !hasSoloNotes) {
         console.log('MusicXML fetch check - missing data:', {
@@ -172,9 +174,9 @@ export default function StudyScreen() {
 
       try {
         const musicXml = await exportMusicXmlFromJson({
-          beat_grid: section.beat_grid,
-          chord_timeline: section.chord_timeline,
-          solo_notes: section.solo_notes,
+          beat_grid: beatGrid,
+          chord_timeline: chordTimeline,
+          solo_notes: soloNotes,
           title: lesson?.song_title ?? null,
           artist: lesson?.artist ?? null,
         })
@@ -200,7 +202,7 @@ export default function StudyScreen() {
     const sectionConfidence = typeof section.confidence === 'number' ? section.confidence : 1.0
     const transcriptionConfidence = typeof lesson?.transcription_confidence === 'number' ? lesson.transcription_confidence : 1.0
     const isLowConfidence = sectionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX ||
-                          transcriptionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX
+      transcriptionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX
 
     // Check transcription metadata for validation flags
     const validationMetadata = section.transcription_metadata?.validation
@@ -284,16 +286,16 @@ export default function StudyScreen() {
     // Count chords in window (excluding 'N' - no chord)
     const chordsInWindow = processedMusicalEvents.filter(
       (e) => e.type === 'chord' &&
-             e.time >= windowStart &&
-             e.time <= windowEnd &&
-             e.data.chord !== 'N'
+        e.time >= windowStart &&
+        e.time <= windowEnd &&
+        e.data.chord !== 'N'
     ).length
 
     // Count solo notes in window
     const soloNotesInWindow = processedMusicalEvents.filter(
       (e) => e.type === 'solo_note' &&
-             e.time >= windowStart &&
-             e.time <= windowEnd
+        e.time >= windowStart &&
+        e.time <= windowEnd
     ).length
 
     // Normalize by typical density expectations
@@ -561,27 +563,6 @@ export default function StudyScreen() {
     tabs.skeleton,
   ])
 
-  const variantButton = (v: TabVariant, label: string) => {
-    const disabled = v === 'full' ? !tabs.full : v === 'skeleton' ? !tabs.skeleton : !tabs.alt
-    return (
-      <AnimatedPressable
-        haptic="light"
-        onPress={() => setVariant(v)}
-        disabled={disabled}
-        className={`rounded-full border px-3 py-1.5 ${
-          variant === v ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/40'
-        } ${disabled ? 'opacity-40' : ''}`}
-        accessibilityRole="button"
-        accessibilityState={{ selected: variant === v }}
-      >
-        <Text
-          className={`font-sans text-xs ${variant === v ? 'text-wood-900' : 'text-muted-brown'}`}
-        >
-          {label}
-        </Text>
-      </AnimatedPressable>
-    )
-  }
 
   const copyShareLink = () => {
     if (typeof window === 'undefined') {
@@ -677,7 +658,7 @@ export default function StudyScreen() {
             We're {Math.round((lesson?.transcription_confidence ?? 1.0) * 100)}% sure about this transcription.
             Want to slow it down to 50% speed and verify?
           </Text>
-          
+
           {/* Stem routing override UI */}
           {lesson?.stems && Object.keys(lesson.stems).length > 1 && (
             <View className="mb-3">
@@ -688,11 +669,10 @@ export default function StudyScreen() {
                 {Object.keys(lesson.stems).map((stemName) => (
                   <AnimatedPressable
                     key={stemName}
-                    className={`rounded-md border px-3 py-1.5 ${
-                      stemRoutingOverride === stemName
-                        ? 'border-amber-accent bg-amber-accent/20'
-                        : 'border-wood-600/30 bg-wood-800/50'
-                    }`}
+                    className={`rounded-md border px-3 py-1.5 ${stemRoutingOverride === stemName
+                      ? 'border-amber-accent bg-amber-accent/20'
+                      : 'border-wood-600/30 bg-wood-800/50'
+                      }`}
                     onPress={() => {
                       setStemRoutingOverride(stemName)
                       // Trigger re-render with new stem
@@ -700,9 +680,8 @@ export default function StudyScreen() {
                     }}
                   >
                     <Text
-                      className={`font-sans-medium text-xs ${
-                        stemRoutingOverride === stemName ? 'text-amber-accent' : 'text-cream'
-                      }`}
+                      className={`font-sans-medium text-xs ${stemRoutingOverride === stemName ? 'text-amber-accent' : 'text-cream'
+                        }`}
                     >
                       {stemName}
                     </Text>
@@ -711,7 +690,7 @@ export default function StudyScreen() {
               </View>
             </View>
           )}
-          
+
           <View className="flex-row gap-2">
             <AnimatedPressable
               className="flex-1 rounded-md border border-amber-accent/30 bg-amber-accent/20 px-3 py-2"
@@ -740,7 +719,7 @@ export default function StudyScreen() {
         </View>
       )}
 
-      {musicXmlData && (
+      {/* {musicXmlData && (
         <View style={{ flex: 1, height: 300, width: '100%' }}>
           <ScoreViewer
             ref={scoreViewerRef}
@@ -751,15 +730,17 @@ export default function StudyScreen() {
             onNoteEvent={onTabNoteEvent}
           />
         </View>
-      )}
+      )} */}
 
       <SessionStemAndTab
         ref={sessionStemRef}
         tabRenderPreset="light"
         tabVariant={variant}
+        lyricWords={lyricWords}
         onPlaybackTick={handleStemPlaybackTick}
         onNoteEvent={onTabNoteEvent}
-        tabFrameClassName="mt-2 h-[328px] w-full px-2"
+        onTabVariantChange={setVariant}
+        tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
         insertBetweenStemAndTab={
           <>
             {showLowTranscriptionBanner ? (
@@ -776,58 +757,6 @@ export default function StudyScreen() {
             ) : null}
 
             {/* Fretboard Mode Controls */}
-            <View className="mb-2 flex-row flex-wrap items-center gap-1.5">
-              <Text className="mr-1 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Fretboard</Text>
-              {([
-                { mode: 'auto' as const, label: 'Auto' },
-                { mode: 'chords' as const, label: 'Chords' },
-                { mode: 'solo' as const, label: 'Solo' },
-                { mode: 'both' as const, label: 'Both' },
-              ] as const).map(({ mode, label }) => (
-                <AnimatedPressable
-                  key={mode}
-                  haptic="light"
-                  onPress={() => setFretboardMode(mode)}
-                  className={`rounded-full border px-2 py-0.5 ${
-                    fretboardMode === mode
-                      ? 'border-amber-accent bg-amber-accent/20'
-                      : 'border-wood-600/35 bg-cream-dark/35'
-                  }`}
-                  accessibilityRole="button"
-                  accessibilityLabel={label}
-                >
-                  <Text className={`font-sans text-[10px] ${fretboardMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>
-                    {label}
-                  </Text>
-                </AnimatedPressable>
-              ))}
-              {(fretboardMode === 'chords' || fretboardMode === 'both') && (
-                <>
-                  <View className="mx-1 h-3 w-px bg-wood-600/35" />
-                  {([
-                    { mode: 'compact' as const, label: 'Compact' },
-                    { mode: 'full' as const, label: 'Full' },
-                  ] as const).map(({ mode, label }) => (
-                    <AnimatedPressable
-                      key={mode}
-                      haptic="light"
-                      onPress={() => setVoicingMode(mode)}
-                      className={`rounded-full border px-2 py-0.5 ${
-                        voicingMode === mode
-                          ? 'border-success bg-success/20'
-                          : 'border-wood-600/35 bg-cream-dark/35'
-                      }`}
-                      accessibilityRole="button"
-                      accessibilityLabel={label}
-                    >
-                      <Text className={`font-sans text-[10px] ${voicingMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>
-                        {label}
-                      </Text>
-                    </AnimatedPressable>
-                  ))}
-                </>
-              )}
-            </View>
 
             <FretboardDiagram
               keyLabel={keyLabel}
@@ -854,14 +783,16 @@ export default function StudyScreen() {
               orientAnnotation={orientAnnotation}
               orientIsPlaying={orientIsPlaying}
               onToggleOrientPlayback={handleToggleOrientPlayback}
+              fretboardMode={fretboardMode}
+              onFretboardModeChange={setFretboardMode}
+              voicingMode={voicingMode}
+              onVoicingModeChange={setVoicingMode}
               onSelectNote={(note) => {
                 setSelectedNote(note)
                 setFretPulseKey((k) => k + 1)
                 setNoteModalOpen(true)
               }}
             />
-
-            <LyricsStrip words={lyricWords} playbackSec={tick.positionSec} />
 
             {theoryAnnotation && (
               <TheoryCard
@@ -903,9 +834,8 @@ export default function StudyScreen() {
                         const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
                         setAnnotation(sectionKey, bar, text)
                       }}
-                      className={`min-w-[40px] items-center rounded-full border px-2 py-1 ${
-                        bar === currentBar ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/35'
-                      }`}
+                      className={`min-w-[40px] items-center rounded-full border px-2 py-1 ${bar === currentBar ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/35'
+                        }`}
                       accessibilityRole="button"
                       accessibilityHint={`${chordLabel} at bar ${bar}. Tap to seek; long press to save a practice note`}
                     >
@@ -921,23 +851,7 @@ export default function StudyScreen() {
               </Text>
             </View>
 
-            <View className="mt-3 flex-row flex-wrap items-center gap-2">
-              {variantButton('full', 'Full tab')}
-              {variantButton('skeleton', 'Skeleton')}
-              {tabs.alt ? variantButton('alt', 'Alt position') : null}
-              <AnimatedPressable
-                haptic="light"
-                onPress={() => void sessionStemRef.current?.seekTransportToSeconds(0)}
-                className="rounded-full border border-wood-600/50 bg-cream-dark/50 px-3 py-1.5"
-                accessibilityRole="button"
-              >
-                <Text className="font-sans text-xs text-wood-900">Seek to start</Text>
-              </AnimatedPressable>
-            </View>
 
-            <Text className="mt-2 font-sans text-[11px] text-muted-brown">
-              Tap the tablature to select a note — the fretboard and detail card update from the live score.
-            </Text>
           </>
         }
       />

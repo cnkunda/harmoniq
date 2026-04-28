@@ -291,6 +291,10 @@ export function FretboardDiagram({
   fretGuideFooterHint = null,
   pitchLadderSlot = null,
   pitchLadderDefaultExpanded,
+  fretboardMode,
+  onFretboardModeChange,
+  voicingMode,
+  onVoicingModeChange,
 }: FretboardDiagramProps) {
   const [pitchLadderOpen, setPitchLadderOpen] = useState(
     () => pitchLadderDefaultExpanded ?? true,
@@ -340,8 +344,52 @@ export function FretboardDiagram({
     <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/45 p-3">
       <View className="flex-row items-start justify-between gap-2">
         <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Position map</Text>
-        {showTuneControl || showOrientControl || showOverlayControls || showCopyShare || showPitchLadderControl ? (
+        {showTuneControl || showOrientControl || showOverlayControls || showCopyShare || showPitchLadderControl || !!onFretboardModeChange ? (
           <View className="max-w-[76%] flex-row flex-wrap items-center justify-end gap-1.5">
+            {/* Fretboard mode pills */}
+            {onFretboardModeChange && ([
+              { mode: 'auto' as const, label: 'Auto' },
+              { mode: 'chords' as const, label: 'Chords' },
+              { mode: 'solo' as const, label: 'Solo' },
+              { mode: 'both' as const, label: 'Both' },
+            ] as const).map(({ mode, label }) => (
+              <Pressable
+                key={mode}
+                onPress={() => onFretboardModeChange(mode)}
+                className={`rounded-full border px-2.5 py-1 ${
+                  fretboardMode === mode ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'
+                }`}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                accessibilityState={{ selected: fretboardMode === mode }}
+              >
+                <Text className={`font-sans text-[11px] ${fretboardMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
+              </Pressable>
+            ))}
+            {/* Voicing mode pills (only when chord-based mode active) */}
+            {onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both') && (
+              <>
+                <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
+                {([
+                  { mode: 'compact' as const, label: 'Compact' },
+                  { mode: 'full' as const, label: 'Full' },
+                ] as const).map(({ mode, label }) => (
+                  <Pressable
+                    key={mode}
+                    onPress={() => onVoicingModeChange(mode)}
+                    className={`rounded-full border px-2.5 py-1 ${
+                      voicingMode === mode ? 'border-success bg-success/20' : 'border-wood-600/45 bg-cream-dark/50'
+                    }`}
+                    accessibilityRole="button"
+                    accessibilityLabel={label}
+                    accessibilityState={{ selected: voicingMode === mode }}
+                  >
+                    <Text className={`font-sans text-[11px] ${voicingMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
+                  </Pressable>
+                ))}
+                <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
+              </>
+            )}
             {tuneActive && onCalibrateTune ? (
               <Pressable
                 onPress={onCalibrateTune}

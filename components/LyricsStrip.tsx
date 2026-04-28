@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 
-type LyricWord = {
+export type LyricWord = {
   word: string
   timeSec: number
 }
@@ -9,6 +9,7 @@ type LyricWord = {
 type LyricsStripProps = {
   words: LyricWord[]
   playbackSec: number
+  hideHeading?: boolean
 }
 
 function activeIndexForTime(words: LyricWord[], t: number): number {
@@ -19,10 +20,11 @@ function activeIndexForTime(words: LyricWord[], t: number): number {
   return -1
 }
 
-export function LyricsStrip({ words, playbackSec }: LyricsStripProps) {
+export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProps) {
   const activeIndex = useMemo(() => activeIndexForTime(words, playbackSec), [words, playbackSec])
 
   if (words.length === 0) {
+    if (hideHeading) return null
     return (
       <Text className="mt-2 font-sans text-xs text-muted-brown">
         Lyrics unavailable for this lesson section.
@@ -31,23 +33,27 @@ export function LyricsStrip({ words, playbackSec }: LyricsStripProps) {
   }
 
   return (
-    <View className="mt-2">
-      <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
-        Lyrics
-      </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View className="flex-row flex-wrap items-center gap-2 pb-1">
+    <View className={hideHeading ? "w-full" : "mt-2 w-full"}>
+      {!hideHeading && (
+        <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+          Lyrics
+        </Text>
+      )}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
+        <View className="flex-row items-center gap-1.5 pb-1">
           {words.map((w, i) => (
-            <View
+            <Text
               key={`${i}-${w.timeSec}`}
-              className={`rounded-full border px-2.5 py-1 ${
-                i === activeIndex ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/40'
-              }`}
+              className={
+                i === activeIndex
+                  ? 'font-sans-bold text-base text-amber-accent'
+                  : i < activeIndex
+                  ? 'font-sans text-sm text-wood-900/60'
+                  : 'font-sans text-sm text-muted-brown'
+              }
             >
-              <Text className={`font-sans text-xs ${i === activeIndex ? 'text-wood-900' : 'text-muted-brown'}`}>
-                {w.word}
-              </Text>
-            </View>
+              {w.word}
+            </Text>
           ))}
         </View>
       </ScrollView>

@@ -17,6 +17,7 @@ import type { LessonJSON } from '@/src/types'
 import { lessonStemUrl, sectionSeekSeconds, stemRelPathToPlaybackUri } from '@/src/utils/lessonAudio'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { AlphaTabSurfaceRef, NoteEventMessage, SongScoreMeta, TabLoopBarRegion } from '@/types/tabMessage'
+import type { LyricWord } from './LyricsStrip'
 
 const DEFAULT_TICK: PlaybackTickContext = {
   positionSec: 0,
@@ -71,6 +72,9 @@ export type SessionStemAndTabProps = {
   ghostStemPlaybackUri?: string | null
   ghostAnchorSec?: number | null
   playGhostWhileRecording?: boolean
+  lyricWords?: LyricWord[]
+  onTabVariantChange?: (v: SessionTabVariant) => void
+  onSeekToStart?: () => void
 }
 
 export type SessionStemAndTabHandle = {
@@ -111,6 +115,9 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     ghostStemPlaybackUri = null,
     ghostAnchorSec = null,
     playGhostWhileRecording = false,
+    lyricWords,
+    onTabVariantChange,
+    onSeekToStart,
   },
   ref,
 ) {
@@ -291,6 +298,18 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
             showStemPanel ? (ms) => void stemPanelRef.current?.seekTransportToSeconds(ms / 1000) : undefined
           }
           style={{ flex: 1, height: '100%', width: '100%' }}
+          lyricWords={lyricWords}
+          playbackSec={tickRef.current?.positionSec ?? 0}
+          songTitle={lesson?.song_title ?? undefined}
+          songArtist={lesson?.artist ?? undefined}
+          tabVariant={tabVariant}
+          hasFull={!!tabs.full}
+          hasSkeleton={!!tabs.skeleton}
+          hasAlt={!!tabs.alt}
+          onTabVariantChange={onTabVariantChange}
+          onSeekToStart={onSeekToStart ?? (() => {
+            void stemPanelRef.current?.seekTransportToSeconds(0)
+          })}
         />
       </View>
     </>
