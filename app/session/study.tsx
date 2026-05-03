@@ -8,6 +8,7 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
+import { ScoreViewer } from '@/components/ScoreViewer'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
@@ -179,6 +180,14 @@ export default function StudyScreen() {
           solo_notes: soloNotes,
           title: lesson?.song_title ?? null,
           artist: lesson?.artist ?? null,
+        })
+        console.log('MusicXML fetch success:', {
+          hasBeatGrid,
+          hasChordTimeline,
+          hasSoloNotes,
+          sectionKeys: Object.keys(section || {}),
+          lessonSectionIndex,
+          jobId: lesson?.job_id
         })
         setMusicXmlData(musicXml)
       } catch (e) {
@@ -719,7 +728,7 @@ export default function StudyScreen() {
         </View>
       )}
 
-      {/* {musicXmlData && (
+      {musicXmlData && (
         <View style={{ flex: 1, height: 300, width: '100%' }}>
           <ScoreViewer
             ref={scoreViewerRef}
@@ -730,7 +739,7 @@ export default function StudyScreen() {
             onNoteEvent={onTabNoteEvent}
           />
         </View>
-      )} */}
+      )}
 
       <SessionStemAndTab
         ref={sessionStemRef}

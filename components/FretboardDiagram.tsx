@@ -81,6 +81,14 @@ type FretboardDiagramProps = {
   pitchLadderSlot?: ReactNode
   /** When `pitchLadderSlot` is set, initial expanded state (default `true`). */
   pitchLadderDefaultExpanded?: boolean
+  /** Fretboard display mode for intelligent chord/solo visualization. */
+  fretboardMode?: 'auto' | 'chords' | 'solo' | 'both'
+  /** Callback when fretboard mode changes. */
+  onFretboardModeChange?: (mode: 'auto' | 'chords' | 'solo' | 'both') => void
+  /** Chord voicing compactness preference. */
+  voicingMode?: 'full' | 'compact'
+  /** Callback when voicing mode changes. */
+  onVoicingModeChange?: (mode: 'full' | 'compact') => void
 }
 
 const SCALE_DEGREE_LABELS: Record<number, string> = {

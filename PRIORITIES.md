@@ -482,17 +482,219 @@ Implement auto-switching to "Skeleton" tabs when transcription_confidence < 0.7.
 
 ### Commit 98: Advanced Extension Recognition
 
-Upgrade the TFLite chord estimator to recognize over 700 chord types, specifically 9ths, 11ths, 13ths, and altered dominants (7#9, 7b13, alt7).
+**Goal:** Upgrade the TFLite chord estimator from 25 classes (major/minor/no-chord) to 60+ chord types including 7ths, 9ths, 11ths, 13ths, and altered dominants (7#9, 7b13, alt7).
+
+**Current State:** `build_chord_tflite.py` has only 25 classes (12 major + 12 minor + N) with synthetic 12-bin chroma templates.
 
 **Scope:**
-- Extended chord vocabulary in chord inference model
-- Jazz harmony support (9ths, 11ths, 13ths)
-- Altered dominant detection (7#9, 7b13, alt7)
+- Extend `CHORD_VOCAB` in `build_chord_tflite.py` with chord qualities:
+  - 7th chords: dominant 7 (C7), major 7 (Cmaj7), minor 7 (Cm7)
+  - Extended: 9ths (C9, Cm9, Cmaj9), 11ths, 13ths
+  - Altered: 7#9, 7b9, 7#5, 7b5, alt7
+  - Suspended: sus2, sus4, sus7
+  - Other: dim, dim7, aug, 6, m6
+- Define `CHORD_INTERVALS` mapping for all qualities
+- Update `make_chroma_template()` to generate templates for extended chords including overtones
+- Regenerate `chord_model.tflite` with expanded vocabulary
 
 **Acceptance Criteria:**
-- [ ] Chord model outputs extended chord symbols correctly
-- [ ] Jazz progressions with 9ths/11ths/13ths render accurately
-- [ ] Altered dominants identified in complex harmony
+- [ ] Chord vocabulary expanded from 25 to 60+ classes
+- [ ] `CHORD_INTERVALS` defines semitone patterns for all qualities
+- [ ] Synthetic templates include extended chord tones (9th=+14, 11th=+17, 13th=+21)
+- [ ] Model trains successfully with expanded vocabulary
+- [ ] TFLite conversion completes without errors
+- [ ] Smoke test passes for D7, Cmaj7, Am7 chord types
+
+---
+
+### Commit 98a: Chord Data Generation Improvements
+
+**Goal:** Enhance synthetic training data to better approximate real-world audio variability.
+
+**Current State:** `generate_dataset()` produces clean synthetic chroma with Gaussian noise only.
+
+**Scope:**
+- Add inversion simulation: rotate chord tones so bass ≠ root (1st/2nd inversions)
+- Implement missing note simulation: randomly drop chord tones to model sparse arrangements
+- Add pitch-shifting augmentation: circular shift chroma bins (±1 semitone)
+- Implement time-stretching: interpolate chroma frames (±10% speed variation)
+- Add bass-note ambiguity: inject low-frequency energy to simulate non-root bass
+- Replace Gaussian white noise with pink noise for more realistic spectral profile
+- Generate chord transition samples: 50/50 mixed windows at chord boundaries
+
+**Acceptance Criteria:**
+- [ ] Inversion parameter generates 1st/2nd inversion templates
+- [ ] Missing note dropout rate configurable (default 15%)
+- [ ] Pitch shift augmentation covers ±2 semitones
+- [ ] Time stretch factor range: 0.9x - 1.1x
+- [ ] Pink noise generation replaces white Gaussian noise
+- [ ] Transition samples improve boundary detection accuracy
+
+---
+
+### Commit 98b: 36-Bin CQT Feature Extraction
+
+**Goal:** Replace 12-bin chroma with 36-bin CQT (3 octaves × 12 bins) to preserve octave information for better chord discrimination.
+
+**Current State:** Model uses 12-bin chroma which loses octave context needed for bass-note detection.
+
+**Scope:**
+- Update `CHROMA_BINS = 36` in model input shape
+- Implement `librosa.cqt()` extraction with `n_bins=36, bins_per_octave=12`
+- Reshape CQT: sum magnitude across octaves but preserve octave structure
+- Update `make_chroma_template()` to generate 36-bin templates
+- Add bass-chroma separation: low CQT bins (0-3) as separate feature channel
+- Update data generation to produce 36-bin synthetic features
+
+**Acceptance Criteria:**
+- [ ] Model input shape updated to `(WINDOW, 36)`
+- [ ] CQT extraction produces 36-bin features with octave preservation
+- [ ] Bass chroma (low 4 bins) separated as additional input channel
+- [ ] Synthetic templates generate 36-bin harmonic distributions
+- [ ] Training accuracy improves vs 12-bin baseline (target: +5%)
+
+---
+
+### Commit 98c: CRNN Architecture with Bidirectional LSTM
+
+**Goal:** Extend temporal context from 9 frames (~200ms) to 128+ frames (~2.5-6s) and add recurrent layers for chord progression modeling.
+
+**Current State:** Shallow CNN with only 9-frame window cannot model chord progressions or temporal dependencies.
+
+**Scope:**
+- Increase `WINDOW` from 9 to 128 frames (configurable 64-256)
+- Add CNN frontend: Conv1D(64) → MaxPool → Conv1D(128) → MaxPool
+- Insert Bidirectional LSTM layers after CNN:
+  - `Bidirectional(LSTM(128, return_sequences=True))`
+  - `Bidirectional(LSTM(128, return_sequences=False))`
+- Add Dropout(0.3) between recurrent layers
+- Update `build_model()` to return CRNN architecture
+- Ensure TFLite compatibility with SELECT_TF_OPS
+
+**Acceptance Criteria:**
+- [ ] Model accepts 128-frame temporal windows
+- [ ] CNN frontend reduces temporal resolution before LSTM
+- [ ] Bidirectional LSTM layers capture forward and backward dependencies
+- [ ] TFLite conversion succeeds with recurrent layers
+- [ ] Inference latency <100ms on target mobile device
+- [ ] Validation accuracy improves vs shallow CNN (target: +8%)
+
+---
+
+### Commit 98d: Multi-Head Self-Attention Mechanism
+
+**Goal:** Add attention layers to let model focus on salient harmonic peaks in chroma features.
+
+**Current State:** No attention mechanism; model treats all chroma bins equally.
+
+**Scope:**
+- Add `MultiHeadAttention(num_heads=4, key_dim=64)` after CNN frontend
+- Implement attention masking for valid sequence positions
+- Add LayerNorm after attention block
+- Update model architecture: CNN → Attention → LSTM → Dense
+- Verify TFLite conversion compatibility with attention ops
+
+**Acceptance Criteria:**
+- [ ] Multi-head attention attends to chroma bin relationships
+- [ ] Attention weights visualizable for interpretability
+- [ ] TFLite conversion includes attention ops (SELECT_TF_OPS)
+- [ ] Model size increase <20% from attention parameters
+- [ ] Accuracy improvement on extended chords (target: +3%)
+
+---
+
+### Commit 98e: Viterbi Decoding for Chord Progressions
+
+**Goal:** Post-process frame-wise predictions with Viterbi algorithm to enforce plausible chord transitions and smooth sequences.
+
+**Current State:** No post-processing; frame-wise predictions can flicker between chords.
+
+**Scope:**
+- Build transition probability matrix from training data (60×60 for extended vocab)
+- Implement Viterbi decoder in Python for backend post-processing
+- Add log-probability computation for soft-max outputs
+- Implement backtracking for optimal path reconstruction
+- Integrate into chord inference pipeline after TFLite inference
+- Add transition matrix caching for performance
+
+**Acceptance Criteria:**
+- [ ] Transition matrix computed from real chord progression data
+- [ ] Viterbi decoder produces smoothed chord sequences
+- [ ] Decoding latency <10ms for 30-second audio
+- [ ] Reduced chord flickering in predictions (target: 40% reduction)
+- [ ] Integration test with known chord progression (e.g., ii-V-I)
+
+---
+
+### Commit 98f: Real Dataset Integration (Isophonics/Billboard)
+
+**Goal:** Train on real annotated audio instead of purely synthetic data to improve real-world accuracy.
+
+**Current State:** Model trained only on synthetic chroma templates; no exposure to real audio characteristics.
+
+**Scope:**
+- Download Isophonics dataset (Beatles, Queen, etc. with chord annotations)
+- Download McGill Billboard dataset (pop/rock with chord labels)
+- Write preprocessing script to extract CQT and align with chord labels
+- Convert annotations to extended chord vocabulary (map rare qualities to closest match)
+- Combine real + synthetic data (70/30 split recommended)
+- Add dataset mixing to training pipeline
+
+**Acceptance Criteria:**
+- [ ] Isophonics dataset loaded and preprocessed
+- [ ] Billboard dataset loaded and preprocessed
+- [ ] CQT features extracted and aligned with chord labels
+- [ ] Train/val/test split with no artist overlap
+- [ ] Real data comprises 70% of training batches
+- [ ] Validation accuracy on Isophonics test set >75% root accuracy
+
+---
+
+### Commit 98g: Training Infrastructure Improvements
+
+**Goal:** Add proper training callbacks, augmentation, and evaluation metrics.
+
+**Current State:** Only 12 epochs, no callbacks, no validation metrics beyond accuracy.
+
+**Scope:**
+- Add `EarlyStopping` callback (patience=5, restore_best_weights)
+- Add `ReduceLROnPlateau` callback (factor=0.5, patience=3)
+- Implement time-stretch augmentation in training loop
+- Add pitch-shift augmentation (±2 semitones)
+- Generate confusion matrix during validation
+- Compute per-class precision/recall/F1 metrics
+- Add class weighting to handle chord imbalance
+- Increase training epochs from 12 to 50
+
+**Acceptance Criteria:**
+- [ ] Early stopping prevents overfitting
+- [ ] Learning rate reduces automatically on plateau
+- [ ] Time stretch and pitch shift augmentations active
+- [ ] Confusion matrix identifies confused chord pairs
+- [ ] Per-class metrics reveal rare chord performance
+- [ ] Training completes in <2 hours on available hardware
+
+---
+
+### Commit 98h: Quantization-Aware Training
+
+**Goal:** Improve TFLite quantization accuracy by training with quantization constraints rather than post-training quantization.
+
+**Current State:** Post-training quantization may degrade accuracy for extended chord vocabulary.
+
+**Scope:**
+- Integrate `tensorflow_model_optimization` toolkit
+- Apply `quantize_model()` wrapper to training model
+- Implement QAT (Quantization-Aware Training) for 4-5 epochs
+- Compare accuracy vs post-training quantization baseline
+- Generate INT8 quantized model for mobile deployment
+
+**Acceptance Criteria:**
+- [ ] QAT model trained with simulated quantization
+- [ ] INT8 quantized model produced
+- [ ] Accuracy degradation <3% vs float32 model
+- [ ] Model size <500KB after quantization
+- [ ] Inference latency reduction confirmed on mobile device
 
 ---
 

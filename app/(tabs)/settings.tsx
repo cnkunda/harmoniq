@@ -3,37 +3,37 @@ import * as FileSystem from 'expo-file-system/legacy'
 import { useRouter } from 'expo-router'
 import * as Sharing from 'expo-sharing'
 import {
-    ChevronRight,
-    Database,
-    Download,
-    Guitar,
-    Link2,
-    Music,
-    Settings as SettingsIcon,
-    Sliders,
-    Trash2,
-    User,
+  ChevronRight,
+  Database,
+  Download,
+  Guitar,
+  Link2,
+  Music,
+  Settings as SettingsIcon,
+  Sliders,
+  Trash2,
+  User,
 } from 'lucide-react-native'
 import { useCallback, useEffect, useState } from 'react'
 import {
-    Alert,
-    Platform,
-    ScrollView,
-    Text,
-    TextInput,
-    View
+  Alert,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  View
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { FormCheckbox } from '@/components/FormCheckbox'
 import {
-    SettingsCard,
-    SettingsChips,
-    SettingsSection,
-    SettingsSegmented,
-    SettingsSlider,
-    SettingsSwitch,
+  SettingsCard,
+  SettingsChips,
+  SettingsSection,
+  SettingsSegmented,
+  SettingsSlider,
+  SettingsSwitch,
 } from '@/components/settings'
 import { toast } from '@/components/ToastConfig'
 import { disconnectSpotifyServer, fetchSpotifyTasteProfile, parseTasteProfileJson } from '@/src/api/analyze'
@@ -41,27 +41,27 @@ import { hydrateVoiceCoachPrefs } from '@/src/audio/hydrateVoiceCoachPrefs'
 import { stop as stopVoiceCoach } from '@/src/audio/voiceCoach'
 import colors from '@/src/constants/colors'
 import {
-    buildJournalExportText,
-    clearAllPracticeData,
-    getAppPref,
-    setAppPref,
+  buildJournalExportText,
+  clearAllPracticeData,
+  getAppPref,
+  setAppPref,
 } from '@/src/db/client'
 import {
-    COACH_VOICE_OPTIONS,
-    PREF_COACH_VOICE,
-    PREF_EXPERIENCE_LEVEL,
-    PREF_METRONOME_DEFAULT_ON,
-    PREF_MOOD_CHECK_SKIP,
-    PREF_PREFER_SIMPLER_TABS,
-    PREF_SPOTIFY_CLIENT_SESSION,
-    PREF_SPOTIFY_TASTE_PROFILE_JSON,
-    PREF_STANDARD_TUNING_HZ,
-    PREF_STYLE_FOCUS,
-    PREF_TASTE_PROFILE_JSON,
-    PREF_VOICE_COACH_ENABLED,
-    PREF_VOICE_COACH_GENDER,
-    PREF_VOICE_COACH_RATE,
-    type CoachVoiceId,
+  COACH_VOICE_OPTIONS,
+  PREF_COACH_VOICE,
+  PREF_EXPERIENCE_LEVEL,
+  PREF_METRONOME_DEFAULT_ON,
+  PREF_MOOD_CHECK_SKIP,
+  PREF_PREFER_SIMPLER_TABS,
+  PREF_SPOTIFY_CLIENT_SESSION,
+  PREF_SPOTIFY_TASTE_PROFILE_JSON,
+  PREF_STANDARD_TUNING_HZ,
+  PREF_STYLE_FOCUS,
+  PREF_TASTE_PROFILE_JSON,
+  PREF_VOICE_COACH_ENABLED,
+  PREF_VOICE_COACH_GENDER,
+  PREF_VOICE_COACH_RATE,
+  type CoachVoiceId,
 } from '@/src/db/schema'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
 import { fetchPersistAndDeriveSpotifyTaste } from '@/src/spotify/fetchPersistAndDeriveSpotify'
@@ -507,11 +507,11 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
 
-        {/* Voice Coach */}
+        {/* Voice & Coach Settings */}
         <SettingsSection
           icon={Music}
-          title="Voice Coach"
-          description="Audio feedback during practice sessions"
+          title="Voice & Coach Settings"
+          description="Audio feedback and AI coach personality settings"
           defaultOpen={true}
         >
           <SettingsSwitch
@@ -537,6 +537,15 @@ export default function SettingsScreen() {
             value={voiceCoachGender}
             onValueChange={(g) => void persistVoiceCoachGender(g)}
           />
+          <View className="mt-4 border-t border-wood-600/35 pt-4">
+            <SettingsChips
+              label="Coach Voice Style"
+              description="Prompt style for future AI coach variants"
+              options={COACH_VOICE_OPTIONS}
+              value={coachVoice}
+              onValueChange={(v) => { if (isCoachVoice(v)) void persistVoice(v) }}
+            />
+          </View>
         </SettingsSection>
 
         {/* Music Preferences */}
@@ -616,23 +625,6 @@ export default function SettingsScreen() {
               <Text className="text-center font-sans-medium text-sm text-cream">Disconnect</Text>
             </AnimatedPressable>
           </View>
-        </SettingsSection>
-
-        {/* Coach Voice Style */}
-        <SettingsSection
-          icon={SettingsIcon}
-          title="Coach Voice Style"
-          description="Prompt style for future AI coach variants"
-          defaultOpen={false}
-        >
-          <Text className="font-sans text-[11px] text-muted-brown mb-3">
-            Stored for a later server prompt variant
-          </Text>
-          <SettingsChips
-            options={COACH_VOICE_OPTIONS}
-            value={coachVoice}
-            onValueChange={(v) => void persistVoice(v)}
-          />
         </SettingsSection>
 
         {/* Data Management */}
