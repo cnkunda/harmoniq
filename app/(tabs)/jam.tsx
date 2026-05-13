@@ -27,7 +27,7 @@ import {
 } from '@/src/api/analyze'
 import { requestJamBacking } from '@/src/api/jam'
 import { BACKING_TRACKS, type BackingTrackId } from '@/src/constants/backingTracks'
-import { getAllSkillNodes, getAppPref, getLessonByJobId, insertJamSnapshotRow, insertPracticePlanCompletionRow } from '@/src/db/client'
+import { getAllSkillNodes, getAppPref, getLessonByJobId, insertJamSnapshotRow, insertPracticePlanCompletionRow, insertSessionRow } from '@/src/db/client'
 import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import { mapBrowserMicBlockedForJam, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { prepareJamBackingPlayable } from '@/src/jam/jamBackingPlayable'
@@ -647,6 +647,25 @@ export default function JamScreen() {
                             id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
                             completed_at: new Date().toISOString(),
                             plan_json: JSON.stringify(plan),
+                          })
+                          // Also insert a session row so plan completions count toward home page progress
+                          const firstSlot = plan.slots?.[0]
+                          const sessionTitle = firstSlot?.slot_type === 'song_section'
+                            ? (firstSlot.title ?? 'Practice session')
+                            : (firstSlot?.title ?? 'Practice session')
+                          await insertSessionRow({
+                            id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                            song_title: sessionTitle,
+                            artist: null,
+                            section_label: `${nSlots}-step plan`,
+                            date: new Date().toISOString(),
+                            coach_review: null,
+                            pitch_accuracy: null,
+                            phrasing_score: null,
+                            nodes_targeted: [],
+                            job_id: firstSlot?.lesson_ref ?? null,
+                            section_index: null,
+                            is_ghost_reference: false,
                           })
                         } catch (e) {
                           if (__DEV__) console.warn('[jam] plan completion persist failed', e)

@@ -2,14 +2,14 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import Animated, {
-    Easing,
-    interpolate,
-    interpolateColor,
-    useAnimatedStyle,
-    useSharedValue,
-    withSequence,
-    withSpring,
-    withTiming,
+  Easing,
+  interpolate,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
 } from 'react-native-reanimated'
 
 import { spring } from '@/src/constants/animations'
@@ -71,8 +71,10 @@ type FretboardDiagramProps = {
   orientAnnotation?: string | null
   orientIsPlaying?: boolean
   onToggleOrientPlayback?: () => void
-  /** Warm-up / curriculum: highlight fixed cells (amber vs success rings). */
-  fretGuideCells?: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary' }> | null
+  /** Warm-up / curriculum: highlight fixed cells (amber vs success rings). Finger 1-4 optional for color coding. */
+  fretGuideCells?: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary'; finger?: 1 | 2 | 3 | 4 }> | null
+  /** Active sequence index for animated warmup exercise highlighting */
+  activeGuideIndex?: number | null
   /** Chord shape cells to highlight on the fretboard (for intelligent display). */
   chordCells?: ReadonlyArray<{ string: number; fret: number; interval?: number }> | null
   /** When set, replaces default footer hint when nothing is selected. */
@@ -89,6 +91,14 @@ type FretboardDiagramProps = {
   voicingMode?: 'full' | 'compact'
   /** Callback when voicing mode changes. */
   onVoicingModeChange?: (mode: 'full' | 'compact') => void
+}
+
+/** Finger colors matching the shared Fretboard component style */
+const FINGER_COLORS: Record<number, { fill: string; border: string }> = {
+  1: { fill: '#60A5FA', border: '#3B82F6' }, // Index - blue
+  2: { fill: '#34D399', border: '#10B981' }, // Middle - green
+  3: { fill: '#FBBF24', border: '#F59E0B' }, // Ring - yellow
+  4: { fill: '#F87171', border: '#EF4444' }, // Pinky - red
 }
 
 const SCALE_DEGREE_LABELS: Record<number, string> = {
@@ -251,17 +261,105 @@ function overlayLabelForCell(
 }
 
 function guideVariantAtCell(
-  fretGuideCells: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary' }> | null | undefined,
+  fretGuideCells: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary'; finger?: 1 | 2 | 3 | 4 }> | null | undefined,
   stringIdx: number,
   diagramCol: number,
-): 'primary' | 'secondary' | null {
+): { variant: 'primary' | 'secondary'; finger?: 1 | 2 | 3 | 4 } | null {
   if (!fretGuideCells?.length) return null
   for (const gc of fretGuideCells) {
     if (gc.string === stringIdx + 1 && cellMatchesDiagramCol(gc.fret, diagramCol)) {
-      return gc.variant
+      return { variant: gc.variant, finger: gc.finger }
     }
   }
   return null
+}
+
+/**
+ * Guide marker with finger-color coding for warmup exercise display.
+ * Shows finger number or overlay label inside colored circle with pulse animation when active.
+ */
+function GuideMarker({
+  finger,
+  isActive,
+  overlayLabel,
+}: {
+  finger?: 1 | 2 | 3 | 4
+  isActive?: boolean
+  overlayLabel?: string | null | undefined
+}) {
+  const colors = finger ? FINGER_COLORS[finger] : { fill: '#D4A574', border: '#B8956A' }
+  const scale = useSharedValue(1)
+  const pulseAnim = useSharedValue(0)
+
+  useEffect(() => {
+    scale.value = 1
+    pulseAnim.value = 0
+    if (isActive) {
+      scale.value = withSequence(withSpring(1.25, spring.snappy), withSpring(1.1, spring.gentle))
+      pulseAnim.value = withSequence(
+        withTiming(1, { duration: 150, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) }),
+      )
+    }
+  }, [isActive, scale, pulseAnim])
+
+  const containerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }))
+
+  const ringStyle = useAnimatedStyle(() => ({
+    opacity: isActive ? interpolate(pulseAnim.value, [0, 0.5, 1], [0.6, 0.9, 0.6]) : 0.4,
+    transform: [{ scale: isActive ? interpolate(pulseAnim.value, [0, 1], [1, 1.4]) : 1 }],
+  }))
+
+  // Determine what to display: overlay label takes precedence over finger number
+  const displayContent = overlayLabel ?? (finger ? finger.toString() : null)
+  // Scale font size based on content length
+  const fontSize = overlayLabel && overlayLabel.length > 1 ? 8 : 10
+
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center', width: 28, height: 28 }}>
+      <Animated.View
+        style={[
+          ringStyle,
+          {
+            position: 'absolute',
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            borderWidth: 2,
+            borderColor: colors.border,
+            backgroundColor: colors.fill + '40', // 25% opacity
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          containerStyle,
+          {
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            backgroundColor: colors.fill,
+            borderWidth: 1.5,
+            borderColor: colors.border,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: '#000',
+            shadowOpacity: 0.2,
+            shadowRadius: 2,
+            shadowOffset: { width: 0, height: 1 },
+          },
+        ]}
+      >
+        {displayContent && (
+          <Text style={{ fontSize, fontWeight: '700', color: '#1a1410' }}>
+            {displayContent}
+          </Text>
+        )}
+      </Animated.View>
+    </View>
+  )
 }
 
 export function FretboardDiagram({
@@ -295,6 +393,7 @@ export function FretboardDiagram({
   orientIsPlaying = false,
   onToggleOrientPlayback,
   fretGuideCells = null,
+  activeGuideIndex = null,
   chordCells = null,
   fretGuideFooterHint = null,
   pitchLadderSlot = null,
@@ -611,13 +710,13 @@ export function FretboardDiagram({
                   const scaleOn = scaleHighlightActive(scalePitchClasses, stringIdx, fret)
                   const midi = OPEN_MIDI_BY_ROW[stringIdx]! + fret
                   const overlayLabel = overlayLabelForCell(overlayMode, midi, degreeRootPitchClass)
-                  const guideVariant = guideVariantAtCell(fretGuideCells, stringIdx, fret)
-                  const guideRingClass =
-                    guideVariant === 'primary'
-                      ? 'border-amber-accent bg-amber-accent/30'
-                      : guideVariant === 'secondary'
-                        ? 'border-success bg-success/35'
-                        : ''
+                  const guideInfo = guideVariantAtCell(fretGuideCells, stringIdx, fret)
+                  const isActiveGuide =
+                    activeGuideIndex != null &&
+                    fretGuideCells != null &&
+                    activeGuideIndex < fretGuideCells.length &&
+                    fretGuideCells[activeGuideIndex]?.string === stringIdx + 1 &&
+                    cellMatchesDiagramCol(fretGuideCells[activeGuideIndex]!.fret, fret)
                   // Check if this cell is part of a chord shape
                   const chordCell = chordCells?.find(
                     (c) => c.string === stringIdx + 1 && cellMatchesDiagramCol(c.fret, fret)
@@ -653,36 +752,49 @@ export function FretboardDiagram({
                           style={{ zIndex: 15 }}
                         />
                       ) : null}
-                      {guideVariant && guideRingClass && !selected ? (
+                      {/* Scale highlight - subtle background (lowest priority) */}
+                      {scaleOn ? (
                         <View
-                          className={`absolute z-[11] h-5 w-5 rounded-full border-2 ${guideRingClass}`}
-                          style={{ zIndex: 11 }}
+                          className="absolute z-[5] h-4 w-4 rounded-full border border-emerald-400/55 bg-emerald-500/15"
+                          style={{ zIndex: 5 }}
                         />
                       ) : null}
-                      {chordCell && !selected ? (
+
+                      {/* Chord cell highlight */}
+                      {chordCell ? (
                         <View
-                          className={`absolute z-[9] h-4 w-4 rounded-full border ${
+                          className={`absolute z-[7] h-4 w-4 rounded-full border ${
                             isChordRoot
                               ? 'border-amber-accent bg-amber-accent/40'
                               : 'border-amber-light bg-amber-accent/20'
                           }`}
-                          style={{ zIndex: 9 }}
+                          style={{ zIndex: 7 }}
                         />
                       ) : null}
-                      {scaleOn && !selected ? (
+
+                      {/* Guide marker with finger colors - combines with overlay label */}
+                      {guideInfo ? (
                         <View
-                          className="absolute z-10 h-4 w-4 rounded-full border border-emerald-400/55 bg-emerald-500/15"
+                          className="absolute z-[10] items-center justify-center"
                           style={{ zIndex: 10 }}
-                        />
-                      ) : null}
-                      {overlayLabel ? (
+                        >
+                          <GuideMarker
+                            finger={guideInfo.finger}
+                            isActive={isActiveGuide}
+                            overlayLabel={overlayLabel}
+                          />
+                        </View>
+                      ) : overlayLabel ? (
+                        /* Standalone overlay label when no guide */
                         <Text
-                          className="relative z-[12] font-mono text-[8px] text-stone-800"
-                          style={{ zIndex: 12 }}
+                          className="relative z-[8] font-mono text-[8px] text-stone-800"
+                          style={{ zIndex: 8 }}
                         >
                           {overlayLabel}
                         </Text>
                       ) : null}
+
+                      {/* Selected note - always on top but doesn't hide others */}
                       {selected ? (
                         <View
                           className="absolute inset-0 z-20 items-center justify-center"

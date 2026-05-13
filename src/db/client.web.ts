@@ -251,6 +251,7 @@ function sessionRowFromInput(input: SessionInsertInput): SessionArchiveRow {
 }
 
 export async function insertSessionRow(input: SessionInsertInput): Promise<void> {
+  await initDb()
   const row = sessionRowFromInput(input)
   const i = sessionLog.findIndex((x) => x.id === row.id)
   if (i >= 0) sessionLog[i] = row
@@ -586,7 +587,7 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
 }
 
 export async function insertPracticePlanCompletionRow(input: PracticePlanCompletionInsertInput): Promise<void> {
-  seedWebSkillNodes()
+  await initDb()
   const row: PracticePlanCompletionRow = {
     id: input.id,
     completed_at: input.completed_at,

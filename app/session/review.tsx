@@ -24,6 +24,7 @@ import {
     getLatestGhostReference,
     getSessionCount,
     insertLickRow,
+    insertPracticePlanCompletionRow,
     insertSessionRow,
 } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_MOOD, PREF_MUSICAL_TOLERANCE_MODE } from '@/src/db/schema'
@@ -418,9 +419,41 @@ export default function ReviewScreen() {
         return
       }
     }
+    // Final step of plan - record completion and session
+    if (currentPlan && slots && slots.length > 0) {
+      try {
+        await insertPracticePlanCompletionRow({
+          id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          completed_at: new Date().toISOString(),
+          plan_json: JSON.stringify(currentPlan),
+        })
+        // Also insert session row so plan completions count toward home page progress
+        const firstSlot = slots[0]
+        const sessionTitle = firstSlot?.slot_type === 'song_section'
+          ? (firstSlot.title ?? 'Practice session')
+          : (firstSlot?.title ?? 'Practice session')
+        await insertSessionRow({
+          id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          song_title: sessionTitle,
+          artist: typeof lesson?.artist === 'string' ? lesson.artist : null,
+          section_label: `${slots.length}-step plan`,
+          date: new Date().toISOString(),
+          coach_review: null,
+          pitch_accuracy: null,
+          phrasing_score: null,
+          nodes_targeted: [],
+          job_id: typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : null,
+          section_index: null,
+          is_ghost_reference: false,
+        })
+      } catch (e) {
+        if (__DEV__) console.warn('[review] plan completion persist failed', e)
+      }
+      clearPlan()
+    }
     if (currentPlan) clearPlan()
     router.replace('/(tabs)')
-  }, [clearLatestTake, lesson?.job_id, lesson?.sections?.length, router, saveLesson, sectionIndex, setLessonSectionIndex])
+  }, [clearLatestTake, lesson?.artist, lesson?.job_id, lesson?.sections?.length, router, saveLesson, sectionIndex, setLessonSectionIndex])
 
   const saveLick = useCallback(async () => {
     const gp5 = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null

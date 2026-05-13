@@ -40,6 +40,8 @@ export interface WarmupFretboardGuideCellPayload {
   string: number
   fret: number
   variant: WarmupFretboardGuideVariant
+  /** Finger to use (1=index, 2=middle, 3=ring, 4=pinky) */
+  finger?: 1 | 2 | 3 | 4
 }
 
 /** Curriculum-authored fretboard highlights (pool → POST /practice/plan). */

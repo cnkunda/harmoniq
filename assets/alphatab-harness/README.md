@@ -2,6 +2,8 @@
 
 Self-contained page loaded inside **React Native `WebView`** (mobile) or embedded in **web** (iframe / `postMessage`). **AlphaTab** is loaded from jsDelivr — **pinned** to `@coderline/alphatab@1.6.1` (do not switch to `@latest` in production without testing).
 
+**AlphaTab Documentation**: https://alphatab.net/docs/introduction
+
 SoundFont setup in this harness:
 
 - SoundFont URL is currently pinned to `GeneralUser.sf2` (see `assets/soundfonts/SOURCES.md`)
@@ -9,10 +11,10 @@ SoundFont setup in this harness:
 
 ## Visual defaults (Harmoniq README)
 
-| Element | Hex |
-|--------|-----|
-| Page background | `#2B1D0E` |
-| Note heads / primary glyphs | `#FFFFFF` (`mainGlyphColor`; see `src/constants/tabHarnessTheme.ts`) |
+| Element                      | Hex                                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| Page background              | `#2B1D0E`                                                                                        |
+| Note heads / primary glyphs  | `#FFFFFF` (`mainGlyphColor`; see `src/constants/tabHarnessTheme.ts`)                             |
 | Staff lines / bar separators | `#9B8D7B` (`staffLineColor` / `barSeparatorColor`; lighter for better visibility on dark chrome) |
 
 **Server SVG prerender:** `backend/scripts/alphatab_prerender.mjs` merges color overrides into the default `Settings().display.resources` (never replace the whole object — fonts are required). **Native WebView:** `TabViewport` may pass `prerenderArtifactUrl`, but the harness does not fetch or paint that overlay yet — prerender flash-free loading is **Expo web** only until native catches up.
@@ -34,7 +36,10 @@ Invalid base64 or corrupt GP data produces an outbound **`error`** message.
 ### `setAudioSrc`
 
 ```json
-{ "type": "setAudioSrc", "audioSrc": "http://<lan-host>:8000/lesson-file?rel=data%2Fjobs%2F...%2Fguitar.wav" }
+{
+  "type": "setAudioSrc",
+  "audioSrc": "http://<lan-host>:8000/lesson-file?rel=data%2Fjobs%2F...%2Fguitar.wav"
+}
 ```
 
 Sets the external media source used as the canonical playback timeline for cursor sync.
@@ -143,18 +148,18 @@ Allowed `presetName` values (case-insensitive): `listen`, `study`, `slow`, `play
 
 JSON string messages. Parse with **`decodeTabMessage`** from `types/tabMessage.ts`.
 
-| `type` | Fields | When |
-|--------|--------|------|
-| `ready` | — | Once, after the **first** `renderFinished` event (initial layout; score may still be empty until `setScore`). |
-| `renderPresetApplied` | `presetName: string` | After each successful `setRenderPreset` (normalized name). |
-| `error` | `message: string` | AlphaTab errors, bad `setScore`, media handler errors, etc. |
-| `position` | `positionMs: number` | Response to `getPosition`. |
-| `songDetails` | `score: object` (see `SongScoreMeta` in `types/tabMessage.ts`), optional `requestId` | After each render when the score model changes, on demand via `getSongDetails`, or after a new `setScore`. |
-| `songPlayback` | `masterBarIndex: number`, `sectionLabel: string \| null` | When playback cursor maps to a new bar or GP section label (deduped). |
-| `noteEvent` | `midi: number`, `beat: number`, optional `fret`, `string` | Forwarded from AlphaTab MIDI playback events (debounced to <= 33Hz). |
-| `soundFontLoad` | `status: loading \| loaded \| error`, optional `message` | Lifecycle signal from harness SoundFont preload path. |
-| `runtimeDiagnostics` | `windowMs`, `driftMs`, `noteEventHz`, `renderFps`, optional `breachFlags` | Commit **61**: ~5s aggregated AlphaTab harness metrics (same shape as DOM path). |
-| `diagPong` | `requestId`, `t0` | Commit **61**: echoed from `diagPing` for RN bridge latency. |
+| `type`                | Fields                                                                               | When                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `ready`               | —                                                                                    | Once, after the **first** `renderFinished` event (initial layout; score may still be empty until `setScore`). |
+| `renderPresetApplied` | `presetName: string`                                                                 | After each successful `setRenderPreset` (normalized name).                                                    |
+| `error`               | `message: string`                                                                    | AlphaTab errors, bad `setScore`, media handler errors, etc.                                                   |
+| `position`            | `positionMs: number`                                                                 | Response to `getPosition`.                                                                                    |
+| `songDetails`         | `score: object` (see `SongScoreMeta` in `types/tabMessage.ts`), optional `requestId` | After each render when the score model changes, on demand via `getSongDetails`, or after a new `setScore`.    |
+| `songPlayback`        | `masterBarIndex: number`, `sectionLabel: string \| null`                             | When playback cursor maps to a new bar or GP section label (deduped).                                         |
+| `noteEvent`           | `midi: number`, `beat: number`, optional `fret`, `string`                            | Forwarded from AlphaTab MIDI playback events (debounced to <= 33Hz).                                          |
+| `soundFontLoad`       | `status: loading \| loaded \| error`, optional `message`                             | Lifecycle signal from harness SoundFont preload path.                                                         |
+| `runtimeDiagnostics`  | `windowMs`, `driftMs`, `noteEventHz`, `renderFps`, optional `breachFlags`            | Commit **61**: ~5s aggregated AlphaTab harness metrics (same shape as DOM path).                              |
+| `diagPong`            | `requestId`, `t0`                                                                    | Commit **61**: echoed from `diagPing` for RN bridge latency.                                                  |
 
 ### Threshold sync (Commit 61)
 
@@ -174,7 +179,7 @@ The script uses `window.parent.postMessage(data, '*')` when `parent !== window`.
 2. Open DevTools → Console.
 3. Optional: listen for replies:
    ```js
-   window.addEventListener('message', (e) => console.log('harness →', e.data))
+   window.addEventListener("message", (e) => console.log("harness →", e.data));
    ```
 4. Paste a real `setScore` payload with valid GP5 base64 (generate from your pipeline or export a small `.gp5`).
 5. Call `setAudioSrc` and verify the cursor follows external media timeline.

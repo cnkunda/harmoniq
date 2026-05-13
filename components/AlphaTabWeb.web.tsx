@@ -1,3 +1,7 @@
+/**
+ * Web implementation of AlphaTab guitar tablature renderer.
+ * Uses the AlphaTab library: https://alphatab.net/docs/introduction
+ */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
@@ -5,10 +9,10 @@ import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { resolveBundledSoundFontUrlForProfile } from '@/src/audio/soundfontBundled'
 import { persistLastSuccessfulSoundFontProfile } from '@/src/audio/soundfontPersistence'
 import {
-  DEFAULT_SOUNDFONT_PROFILE_ID,
-  isSoundFontProfileId,
-  SOUNDFONT_PROFILE_LOAD_TIMEOUT_MS,
-  type SoundFontProfileId,
+    DEFAULT_SOUNDFONT_PROFILE_ID,
+    isSoundFontProfileId,
+    SOUNDFONT_PROFILE_LOAD_TIMEOUT_MS,
+    type SoundFontProfileId,
 } from '@/src/audio/soundfontProfiles'
 import { ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS } from '@/src/constants/alphaTabBridge'
 import { ALPHATAB_WEB_SURFACE_CSS } from '@/src/constants/alphaTabPlayerUi'
@@ -16,15 +20,15 @@ import { RUNTIME_DIAG_THRESHOLDS, RUNTIME_DIAG_WINDOW_MS } from '@/src/constants
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
 import { applyScaleDegreeHighlight, clearScaleDegreeHighlight } from '@/src/jam/alphaTabScaleHighlight'
 import {
-  extractSongMetaFromScore,
-  resolveMasterBarIndexFromTick,
-  sectionLabelAtMasterBar,
-  type TickLookupApi,
+    extractSongMetaFromScore,
+    resolveMasterBarIndexFromTick,
+    sectionLabelAtMasterBar,
+    type TickLookupApi,
 } from '@/src/session/alphatabSongMeta'
 import {
-  DEFAULT_TAB_RENDER_PRESET,
-  getTabRenderPreset,
-  type TabRenderPreset,
+    DEFAULT_TAB_RENDER_PRESET,
+    getTabRenderPreset,
+    type TabRenderPreset,
 } from '@/src/session/tabThemePresets'
 import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
 import { base64ToUint8Array } from '@/src/utils/base64ToUint8Array'
