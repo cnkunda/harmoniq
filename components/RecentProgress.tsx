@@ -20,12 +20,16 @@ export function RecentProgress({
   /** Most recent row from `listPracticePlanCompletions()` (optional). */
   lastPlanCompletion?: PracticePlanCompletionRow | null
 }) {
+  // Sessions with accuracy scores for the chart
   const points = useMemo(() => {
     const chronological = [...sessions].slice(0, 3).reverse()
     return chronological
       .map((s) => sessionOverallAccuracy(s))
       .filter((v): v is number => v != null && Number.isFinite(v))
   }, [sessions])
+
+  // Total session count for progress messaging (includes plan completions without accuracy)
+  const totalSessions = sessions.length
 
   const polyline = useMemo(() => {
     if (points.length < 2) return null
@@ -51,13 +55,22 @@ export function RecentProgress({
     return `${head}${stepCount}-step plan finished`
   })()
 
+  const completedCountMessage = totalSessions > 0
+    ? `You've completed ${totalSessions} session${totalSessions === 1 ? '' : 's'}.`
+    : null
+
   return (
     <View className="mb-2">
       <Text className="mb-2 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Recent sessions</Text>
       {points.length < 2 ? (
-        <Text className="font-sans text-sm text-muted-brown">
-          Finish at least two reviewed sessions to see your accuracy trend here.
-        </Text>
+        <View>
+          {completedCountMessage ? (
+            <Text className="font-sans text-sm text-muted-brown mb-1">{completedCountMessage}</Text>
+          ) : null}
+          <Text className="font-sans text-sm text-muted-brown">
+            Finish at least two sessions with review scores to see your accuracy trend here.
+          </Text>
+        </View>
       ) : (
         <Animated.View entering={FadeIn.duration(320)}>
           <Svg width={CHART_W} height={CHART_H} viewBox={`0 0 ${CHART_W} ${CHART_H}`}>

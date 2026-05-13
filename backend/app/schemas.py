@@ -101,6 +101,7 @@ class FretboardGuideCell(BaseModel):
     string: int = Field(..., ge=1, le=6)
     fret: int = Field(..., ge=0, le=12)
     variant: FretboardGuideVariant = "primary"
+    finger: int | None = Field(default=None, ge=1, le=4, description="Finger to use (1=index, 2=middle, 3=ring, 4=pinky)")
 
 
 class FretboardGuide(BaseModel):

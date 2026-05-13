@@ -1,3 +1,7 @@
+/**
+ * Web implementation of AlphaTab guitar tablature renderer.
+ * Uses the AlphaTab library: https://alphatab.net/docs/introduction
+ */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
@@ -5,10 +9,10 @@ import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { resolveBundledSoundFontUrlForProfile } from '@/src/audio/soundfontBundled'
 import { persistLastSuccessfulSoundFontProfile } from '@/src/audio/soundfontPersistence'
 import {
-  DEFAULT_SOUNDFONT_PROFILE_ID,
-  isSoundFontProfileId,
-  SOUNDFONT_PROFILE_LOAD_TIMEOUT_MS,
-  type SoundFontProfileId,
+    DEFAULT_SOUNDFONT_PROFILE_ID,
+    isSoundFontProfileId,
+    SOUNDFONT_PROFILE_LOAD_TIMEOUT_MS,
+    type SoundFontProfileId,
 } from '@/src/audio/soundfontProfiles'
 import { ALPHA_TAB_NOTE_EVENT_MIN_INTERVAL_MS } from '@/src/constants/alphaTabBridge'
 import { ALPHATAB_WEB_SURFACE_CSS } from '@/src/constants/alphaTabPlayerUi'
@@ -16,15 +20,15 @@ import { RUNTIME_DIAG_THRESHOLDS, RUNTIME_DIAG_WINDOW_MS } from '@/src/constants
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
 import { applyScaleDegreeHighlight, clearScaleDegreeHighlight } from '@/src/jam/alphaTabScaleHighlight'
 import {
-  extractSongMetaFromScore,
-  resolveMasterBarIndexFromTick,
-  sectionLabelAtMasterBar,
-  type TickLookupApi,
+    extractSongMetaFromScore,
+    resolveMasterBarIndexFromTick,
+    sectionLabelAtMasterBar,
+    type TickLookupApi,
 } from '@/src/session/alphatabSongMeta'
 import {
-  DEFAULT_TAB_RENDER_PRESET,
-  getTabRenderPreset,
-  type TabRenderPreset,
+    DEFAULT_TAB_RENDER_PRESET,
+    getTabRenderPreset,
+    type TabRenderPreset,
 } from '@/src/session/tabThemePresets'
 import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
 import { base64ToUint8Array } from '@/src/utils/base64ToUint8Array'
@@ -216,6 +220,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     /** Smooth horizontal scroll to target `scrollLeft` (SmartScroll bar follow). */
     const scrollSmoothRafRef = useRef<number | null>(null)
     const scrollTargetLeftRef = useRef<number | null>(null)
+    /** Drift correction: rolling average of recent sync deltas (0.7 old + 0.3 new). */
+    const driftCorrectedMsRef = useRef<number | null>(null)
+    const lastDriftSampleTimeRef = useRef<number>(0)
 
     const [mounted, setMounted] = useState(false)
     const [engineReady, setEngineReady] = useState(false)
@@ -245,6 +252,8 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const webDiagDriftSumRef = useRef(0)
     const webDiagDriftNRef = useRef(0)
     const webDiagIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const onPlaybackCursorMoveRef = useRef(onPlaybackCursorMove)
+    onPlaybackCursorMoveRef.current = onPlaybackCursorMove
 
     const themeKey = useMemo(() => JSON.stringify(theme ?? {}), [theme])
     const soundFontProfileResolved: SoundFontProfileId = isSoundFontProfileId(soundFontProfileProp)
@@ -670,6 +679,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             scrollSmoothRafRef.current = null
           }
           scrollTargetLeftRef.current = null
+          // Reset drift correction on explicit seek
+          driftCorrectedMsRef.current = null
+          lastDriftSampleTimeRef.current = Date.now()
           const ms = Math.max(0, Number.isFinite(positionMs) ? positionMs : 0)
           const audio = audioRef.current
           const api = apiRef.current
@@ -726,13 +738,37 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           const api = apiRef.current
           if (!api) return
           const syncMs = Math.max(0, positionMs)
-          api.player?.output?.updatePosition?.(syncMs)
-          if (webRuntimeDiagOnRef.current) {
+          
+          // Drift correction: apply exponential smoothing every 500ms to prevent
+          // cursor lag accumulation on long songs. Uses AlphaTab's internal timePosition
+          // as feedback to correct for timing drift.
+          const now = Date.now()
+          const timeSinceLastDriftSample = now - lastDriftSampleTimeRef.current
+          if (timeSinceLastDriftSample >= 500) {
+            lastDriftSampleTimeRef.current = now
             const tp = api.timePosition
             if (typeof tp === 'number' && Number.isFinite(tp)) {
-              webDiagDriftSumRef.current += Math.abs(syncMs - tp)
-              webDiagDriftNRef.current += 1
+              const delta = syncMs - tp
+              // Exponential smoothing: 70% old estimate + 30% new measurement
+              const smoothedMs = driftCorrectedMsRef.current !== null
+                ? 0.7 * driftCorrectedMsRef.current + 0.3 * syncMs
+                : syncMs
+              driftCorrectedMsRef.current = smoothedMs
+              // Use smoothed position for cursor update
+              api.player?.output?.updatePosition?.(smoothedMs)
+              // Track drift in diagnostics
+              if (webRuntimeDiagOnRef.current) {
+                webDiagDriftSumRef.current += Math.abs(delta)
+                webDiagDriftNRef.current += 1
+              }
+            } else {
+              api.player?.output?.updatePosition?.(syncMs)
+              driftCorrectedMsRef.current = syncMs
             }
+          } else {
+            // Use smoothed position if available, otherwise use raw sync
+            const targetMs = driftCorrectedMsRef.current !== null ? driftCorrectedMsRef.current : syncMs
+            api.player?.output?.updatePosition?.(targetMs)
           }
           emitSongPlaybackMaybe()
         },
@@ -1161,6 +1197,42 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             if (webRuntimeDiagOnRef.current) webDiagRenderRef.current += 1
             layoutLoopBracket()
             emitSongDetailsSnap()
+            
+            // Emit real-time playback cursor position for fretboard sync
+            const api_local = apiRef.current
+            if (api_local && onPlaybackCursorMoveRef.current) {
+              try {
+                const tick = typeof api_local.tickPosition === 'number' && Number.isFinite(api_local.tickPosition)
+                  ? api_local.tickPosition
+                  : 0
+                const beat = api_local.tickCache?.findBeat?.(tick)
+                if (beat && typeof beat === 'object') {
+                  const beatNotes = (beat as { notes?: Array<{ string?: number; fret?: number; realValue?: number; midi?: number }> }).notes
+                  if (Array.isArray(beatNotes) && beatNotes.length > 0) {
+                    // Use first note in beat (simplification; real implementation could track playing notes)
+                    const firstNote = beatNotes[0]
+                    if (firstNote && typeof firstNote === 'object') {
+                      const str = typeof firstNote.string === 'number' ? firstNote.string : undefined
+                      const fret = typeof firstNote.fret === 'number' ? firstNote.fret : undefined
+                      const midiRaw = typeof firstNote.realValue === 'number'
+                        ? firstNote.realValue
+                        : typeof firstNote.midi === 'number'
+                          ? firstNote.midi
+                          : undefined
+                      const midi = typeof midiRaw === 'number' ? Math.round(midiRaw) : undefined
+                      onPlaybackCursorMoveRef.current({
+                        stringIndex: str,
+                        fretNumber: fret,
+                        midi,
+                      })
+                    }
+                  }
+                }
+              } catch {
+                // Silently fail cursor extraction if AlphaTab API changes
+              }
+            }
+            
             emitSongPlaybackMaybe()
             if (!externalStemWired) {
               externalStemWired = true

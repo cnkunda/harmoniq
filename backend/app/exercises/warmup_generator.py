@@ -8,6 +8,7 @@ from typing import Any
 
 from app.schemas import FretboardGuide, PlayerProfile, TasteProfile, WarmupExercise, WarmupPlan
 
+# Exercise pool inspired by Nicolas Slonimsky's Thesaurus: https://www.lapetitedistribution.org/archive/Nicolas_Slonimsky.pdf
 _POOL_PATH = Path(__file__).resolve().parent / "warmup_pool.json"
 
 

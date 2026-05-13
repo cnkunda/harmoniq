@@ -1,3 +1,7 @@
+/**
+ * Warmup session screen with finger exercises and technique drills.
+ * Includes Slonimsky-inspired patterns from: https://www.lapetitedistribution.org/archive/Nicolas_Slonimsky.pdf
+ */
 import Slider from '@react-native-community/slider'
 import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -67,6 +71,7 @@ export default function WarmupScreen() {
   const [tempoMul, setTempoMul] = useState(1)
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
+  const [activeGuideIndex, setActiveGuideIndex] = useState<number | null>(null)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [pitchDemoFlashToken, setPitchDemoFlashToken] = useState(0)
 
@@ -84,6 +89,7 @@ export default function WarmupScreen() {
   useEffect(() => {
     setSelectedNote(null)
     setNoteModalOpen(false)
+    setActiveGuideIndex(null)
   }, [exerciseIndex])
 
   useEffect(() => {
@@ -389,6 +395,7 @@ export default function WarmupScreen() {
             setNoteModalOpen(true)
           }}
           fretGuideCells={fretGuideCellsForUi}
+          activeGuideIndex={activeGuideIndex}
           fretGuideFooterHint={fretGuideFooterHint}
           pitchLadderDefaultExpanded
           pitchLadderSlot={
@@ -418,6 +425,15 @@ export default function WarmupScreen() {
             onNoteEvent={(evt: NoteEventMessage) => {
               setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
               setFretPulseKey((k) => k + 1)
+              // Match note to fretboard guide cell for sequence highlighting
+              if (fretGuideCellsForUi?.length) {
+                const matchIndex = fretGuideCellsForUi.findIndex(
+                  (cell) => cell.string === evt.string && cell.fret === evt.fret
+                )
+                if (matchIndex >= 0) {
+                  setActiveGuideIndex(matchIndex)
+                }
+              }
               if (evt.fromScoreTap) {
                 setNoteModalOpen(true)
               }
