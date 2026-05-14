@@ -2,15 +2,14 @@ import { useFocusEffect } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter, type Href } from 'expo-router'
 import {
-    ChevronRight,
-    ClipboardList,
-    Clock,
-    Headphones,
-    Library as LibraryIcon,
-    Link2,
-    Music,
-    Play,
-    Plus,
+  ChevronRight,
+  ClipboardList,
+  Clock,
+  Library as LibraryIcon,
+  Link2,
+  Music,
+  Play,
+  Plus
 } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
@@ -22,22 +21,22 @@ import { toast } from '@/components/ToastConfig'
 import { TodaysPlanCard, TodaysPlanCardLoading } from '@/components/TodaysPlanCard'
 import { WeakAreaPulse } from '@/components/WeakAreaPulse'
 import {
-    buildPlayerProfileFromSkillNodes,
-    generatePracticePlan,
-    loadLearningContextFromPrefs,
-    parseTasteProfileJson,
+  buildPlayerProfileFromSkillNodes,
+  generatePracticePlan,
+  loadLearningContextFromPrefs,
+  parseTasteProfileJson,
 } from '@/src/api/analyze'
 import colors from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import {
-    getAllSkillNodes,
-    getAppPref,
-    getHomeSuggestion,
-    getLessonByJobId,
-    getLickById,
-    listLessonsJournal,
-    listPracticePlanCompletions,
-    listSessionsJournal,
+  getAllSkillNodes,
+  getAppPref,
+  getHomeSuggestion,
+  getLessonByJobId,
+  getLickById,
+  listLessonsJournal,
+  listPracticePlanCompletions,
+  listSessionsJournal,
 } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_MOOD, PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { HomeSuggestion, LessonListRow, PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
@@ -689,7 +688,7 @@ export default function HomeScreen() {
                   <Text className="text-center font-sans-medium text-sm text-cream">Open Library</Text>
                 </Pressable>
               </View>
-              <Pressable
+              {/* <Pressable
                 onPress={goListening}
                 className="mt-3 min-h-[80px] items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/35 py-4 active:bg-wood-700/50"
                 accessibilityRole="button"
@@ -699,7 +698,7 @@ export default function HomeScreen() {
                   <Headphones color="#E8B86D" size={20} strokeWidth={2} />
                 </View>
                 <Text className="text-center font-sans-medium text-sm text-cream">Listening Mode</Text>
-              </Pressable>
+              </Pressable> */}
             </View>
           </View>
         </View>

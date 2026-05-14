@@ -20,7 +20,11 @@ function chipLabel(slot: DrillSlotPayload): string {
   if (slot.slot_type === 'warmup') return 'Warmup'
   if (slot.slot_type === 'technique') {
     const f = (slot.technique_focus ?? 'technique').replace(/_/g, ' ')
-    return f.length > 14 ? `${f.slice(0, 12)}…` : `${f} drill`
+    const capitalized = f.charAt(0).toUpperCase() + f.slice(1)
+
+    return capitalized.length > 14
+      ? `${capitalized.slice(0, 12)}…`
+      : `${capitalized} drill`
   }
   const t = slot.title.trim()
   if (t.length <= 20) return t
