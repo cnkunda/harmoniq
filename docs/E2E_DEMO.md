@@ -34,12 +34,14 @@ After submitting a YouTube URL for analysis:
 ### Step 2: Listen (Step 1 of 5)
 
 1. After analysis completes, tap **Continue to session**
-2. On the **Listen** screen, tap **Play**
-3. Confirm:
-   - Audio plays smoothly
-   - AlphaTab cursor advances in sync with audio
-   - Metronome (if enabled) clicks on beat
-   - Seeking works without crashes
+2. On the **Listen** screen:
+   - **Playback card**: Confirm audio plays smoothly, timeline scrubber works
+   - **Metronome card**: Confirm beats are audible when enabled, subdivision chips work
+   - **Stems card**: Confirm stem mute/solo toggles work for each instrument
+3. Tap **Watch How It's Played** button
+4. Confirm modal opens with video placeholder and play button
+5. Confirm orient annotation text is displayed
+6. Close the modal
 
 ---
 
@@ -50,6 +52,7 @@ After submitting a YouTube URL for analysis:
 3. Tap a section to create a loop
 4. Confirm loop plays smoothly
 5. Tap **Clear loop** to remove the loop
+6. Confirm fretboard diagram is displayed between stems and tab
 
 ---
 
@@ -57,8 +60,9 @@ After submitting a YouTube URL for analysis:
 
 1. Tap **Study** in the session flow
 2. Tap a note on the score
-3. Confirm fretboard highlights the corresponding position
+3. Confirm SVG fretboard highlights the corresponding position
 4. Confirm scale hints (if available) show appropriate notes
+5. Confirm chord voicing circles display on the fretboard during playback
 
 ---
 
@@ -67,8 +71,9 @@ After submitting a YouTube URL for analysis:
 1. Tap **Play** in the session flow
 2. Grant microphone permissions (if prompted)
 3. Play along with the backing track
-4. After completing the section, tap **Finish**
-5. Review your score and feedback
+4. Confirm fretboard shows hit/miss feedback rings during playback
+5. After completing the section, tap **Finish**
+6. Review your score and feedback
 
 ---
 

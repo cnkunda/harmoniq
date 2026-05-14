@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0 and commits 1-85, archived during the Phase 1 → Phase 2 transition.
+This file contains completed work from Phase 0 and all Phase 1 commits (1-97), archived during the Phase 1 → Phase 2 transition.
 
-**Archive Date:** April 22, 2026
+**Phase 1 Archive Date:** May 14, 2026
 
 ---
 
@@ -110,9 +110,220 @@ This file contains completed work from Phase 0 and commits 1-85, archived during
 
 ---
 
-## Detailed Commit Specifications
+## Commits 86-97 — Phase 1 Completion
 
-The detailed specifications for commits 75-85 are preserved in the main PRIORITIES.md file under their respective sections for reference during Phase 2 planning.
+### Commit 86: Placement Session Logic
+
+**Goal:** SQLite logic to initialize skill_nodes (e.g., bend_accuracy) based on onboarding performance.
+
+**Scope:**
+- Onboarding placement session scoring
+- SQLite schema for initial skill node population
+- Radial skill graph driven by real scores (not mock data)
+
+**Acceptance Criteria:**
+- [x] 3 AlphaTab snippets load real GP5 data
+- [x] Mic → pitch stream → score path populates initial skill nodes
+- [x] Radial skill graph displays real scores from placement session
+
+**Completed:** 2026-04-22
+
+---
+
+### Commit 87: Global Audio Manager
+
+**Goal:** Implement centralized audio architecture to prevent context bloat and handle hot-swapping between screens.
+
+**Scope:**
+- Global Audio Manager singleton for all expo-av and react-native-audio-api instances
+- Hot swap logic for deep-linking scenarios (e.g., Single File → Full Practice)
+- Audio buffer clearing without app crashes
+- Support for 6+ parallel audio streams (Demucs stems) + mic input
+
+**Acceptance Criteria:**
+- [x] Global Audio Manager singleton controls all audio instances
+- [x] Hot swap clears audio buffers without crashes
+- [x] No "Audio Stutter" or "Ghost Tracks" after session exit
+- [x] Deep-linking from Single File to Full Practice works seamlessly
+- [x] 6-stem isolation + mic input managed without bloat
+
+**Completed:** 2026-04-22
+
+---
+
+### Commit 88: Versioned Database Migration Strategy
+
+**Goal:** Implement schema migration system to prevent data loss during app updates as LessonJSON structure evolves.
+
+**Scope:**
+- Versioned migration strategy for SQLite (mobile) and IndexedDB (web)
+- Migration path for skill_nodes table changes (e.g., Jazz Extensions support)
+- Backward compatibility for early beta testers' practice history
+- Mastery percentage preservation across schema updates
+
+**Acceptance Criteria:**
+- [x] expo-sqlite migrations implemented with version tracking
+- [x] IndexedDB migration system for web parity
+- [x] skill_nodes schema changes have migration path
+- [x] Beta testers retain practice history after app updates
+- [x] Mastery percentages preserved across schema migrations
+- [x] Rollback mechanism for failed migrations
+
+---
+
+### Commit 89: Predictive UI Rendering
+
+**Goal:** Eliminate visual lag perception by scrolling 50ms before audio reaches timestamp using look-ahead buffer.
+
+**Scope:**
+- Look-ahead buffer in usePitchStream hook
+- Predictive scrolling for SmartScroll and AlphaTab cursor
+- 50ms advance rendering for playback cursor
+- Cross-platform implementation (web + native)
+
+**Acceptance Criteria:**
+- [x] Predictive scrolling implemented with 50ms look-ahead
+- [x] SmartScroll scrolls 50ms before audio timestamp
+- [x] AlphaTab cursor highlights notes 50ms early
+- [x] Visual sync feels "intelligent" and "pro"
+- [x] No perceived lag during playback
+
+---
+
+### Commit 90: AI Coach Variation Agents
+
+**Goal:** Prevent feedback redundancy by varying AI coach focus areas across sessions.
+
+**Scope:**
+- Focus area parameter for Claude coach prompts
+- Coach "Moods" or "Foci" system (Timing, Vibrato, Dynamics, etc.)
+- Session-to-session variation in feedback emphasis
+- Avoid repetitive template feedback
+
+**Acceptance Criteria:**
+- [x] Claude coach accepts focus_area parameter
+- [x] 7 focus areas implemented (Timing, Vibrato, Dynamics, Phrasing, Bending, Rhythm, Expression)
+- [x] Focus area varies between sessions
+- [x] Feedback doesn't feel like repeated template
+- [x] User feedback collection infrastructure in place
+
+---
+
+### Commit 91: Harmonic Similarity Discovery Agent
+
+**Goal:** Implement song discovery based on harmonic similarity to keep users engaged in the Harmoniq ecosystem.
+
+**Scope:**
+- Harmonic similarity analysis between songs
+- Discovery agent suggesting next songs based on mastered content
+- Context-aware recommendations
+- Integration with dynamic session engine
+
+**Acceptance Criteria:**
+- [x] Harmonic similarity algorithm implemented
+- [x] Discovery agent generates song recommendations
+- [x] Recommendations based on user's mastered skills/progress
+- [x] UI displays discovery suggestions with context
+- [x] One-tap deep-link to analyze recommended songs
+
+---
+
+### Commit 92: Musical Tolerance Scoring Modes
+
+**Goal:** Implement "Musical Tolerance" setting to balance accuracy with expressive playing in scoring engine.
+
+**Scope:**
+- Expressive mode (lenient timing for musical feel)
+- Technique mode (strict timing for precision practice)
+- Musical tolerance configuration in scoring algorithm
+- User-selectable scoring modes
+
+**Acceptance Criteria:**
+- [x] Scoring engine supports musical tolerance parameter
+- [x] Expressive mode allows timing drag/push (±50-100ms tolerance)
+- [x] Technique mode enforces strict timing (±20ms tolerance)
+- [x] User can select scoring mode per session
+- [x] Mode preference saved to user profile
+- [x] Scoring feedback reflects selected mode's philosophy
+
+---
+
+### Commit 93: Backend API Modularization
+
+**Goal:** Refactor the monolithic `main.py` into feature-specific routers.
+
+**Scope:**
+- `backend/app/routers/` (analyze, export, discovery, taste, curriculum)
+- Centralized error handling and dependency injection
+- Health checks and CORS isolation
+
+**Acceptance Criteria:**
+- [x] Backend integration tests pass after migration
+- [x] No circular dependencies in router imports
+- [x] Clear separation of concerns
+
+---
+
+### Commit 94: Automated Job Data Cleanup
+
+**Goal:** Lifecycle management for backend temporary data to prevent storage bloat.
+
+**Scope:**
+- `backend/scripts/cleanup_data.py`
+- Pruning logic for `.tmp_test_data_*` and old `data/jobs/` artifacts
+- Background task or cron job for periodic execution
+
+**Acceptance Criteria:**
+- [x] Cleanup script safely removes orphaned temp folders
+- [x] Configurable retention period (e.g., 7 days)
+- [x] Dry-run mode for safe verification
+
+---
+
+### Commit 95: ML Inference Stability & Diagnostics
+
+**Goal:** Resolve TensorFlow loading warnings and optimize inference fallback performance.
+
+**Scope:**
+- Fix `AttributeError: '_UserObject'` in `solo_inference.py`
+- Improve ONNX fallback logging and performance
+- Standardize model loading across chord and solo engines
+
+**Acceptance Criteria:**
+- [x] Backend logs are free of model loading warnings
+- [x] Cold-start inference time reduced
+- [x] Detailed diagnostics for model mismatch errors
+
+---
+
+### Commit 96: Unified Player UX Parity
+
+**Goal:** Standardize the "Rich Player" card layout across all session practice screens.
+
+**Scope:**
+- Update `app/session/play.tsx` and `app/session/slow.tsx` to match `study.tsx`
+- Refine `TabViewport.tsx` card padding and header alignment
+- Unified "Lyrics Strip" visibility logic
+
+**Acceptance Criteria:**
+- [x] Consistent header/controls/lyrics layout across all 3 practice steps
+- [x] No layout shifting when toggling lyrics or variants
+
+---
+
+### Commit 97: Functional Gap Closures
+
+**Goal:** Complete pending functional requirements for orientation clips and UI state persistence.
+
+**Scope:**
+- Implement `backend/app/lyria_clip.py` for orientation hints
+- Add `AsyncStorage` persistence for user preferences (`tabVariant`, `showLyrics`)
+- Refine "Seek to Start" to ensure perfect audio/cursor sync
+
+**Acceptance Criteria:**
+- [x] Orient-as-hint clips generated correctly for all songs
+- [x] User preferences survive app restarts
+- [x] Seek-to-start resolves within 50ms transport sync
 
 ---
 
