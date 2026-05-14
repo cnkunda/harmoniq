@@ -110,7 +110,7 @@ def test_solo_monophonic_truncation(monkeypatch, mock_beat_grid):
     ]
     
     # Mock basic-pitch to return these overlapping notes
-    monkeypatch.setattr("basic_pitch.inference.predict", lambda *a: (None, None, mock_notes))
+    monkeypatch.setattr("basic_pitch.inference.predict", lambda *a, **kw: (None, None, mock_notes))
 
     solo = infer_solo(Path("dummy.wav"), mock_beat_grid)
 
@@ -134,7 +134,7 @@ def test_solo_micro_note_filtering(monkeypatch, mock_beat_grid):
         (0.24, 0.26, 64, 0.8, None) # Very short note that snaps to same grid point
     ]
     
-    monkeypatch.setattr("basic_pitch.inference.predict", lambda *a: (None, None, mock_notes))
+    monkeypatch.setattr("basic_pitch.inference.predict", lambda *a, **kw: (None, None, mock_notes))
 
     solo = infer_solo(Path("dummy.wav"), mock_beat_grid)
 
