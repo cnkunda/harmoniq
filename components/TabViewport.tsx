@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 
 import type { AlphaTabSurfaceRef, SongScoreMeta } from '@/types/tabMessage'
 import { LyricsStrip } from './LyricsStrip'
@@ -149,14 +150,17 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
           />
         </View>
 
-        {/* Lyrics Footer */}
+        {/* Lyrics Footer — animated to prevent layout shift */}
         {showLyrics && hasLyrics && (
-          <View className={`border-t ${dividerBorder} px-3 py-2.5`}>
+          <Animated.View
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut.duration(150)}
+            className={`border-t ${dividerBorder} px-3 py-2.5`}
+          >
             <LyricsStrip words={lyricWords} playbackSec={playbackSec ?? 0} hideHeading />
-          </View>
+          </Animated.View>
         )}
       </View>
     )
   },
 )
-

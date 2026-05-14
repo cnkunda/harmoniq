@@ -125,32 +125,34 @@ export default function SlowScreen() {
         />
       ) : null}
 
-      <FretboardDiagram
-        keyLabel={keyLabel}
-        positionLabel={positionLabel}
-        capoText={capoText}
-        selectedNote={selectedNote}
-        pulseKey={fretPulseKey}
-        enableKeyboardInput
-        showTuneControl
-        tuneActive={tunerState.active}
-        tuneCalibrating={tunerState.calibrating}
-        onToggleTune={toggleFretboardTuner}
-        onCalibrateTune={startCalibration}
-        tunerState={tunerState}
-        onSelectNote={(note) => {
-          setSelectedNote(note)
-          setFretPulseKey((k) => k + 1)
-          setNoteModalOpen(true)
-        }}
-      />
-
       <SessionStemAndTab
         tabRenderPreset="light"
         initialRate={0.65}
         initialMetronomeOn={initialMetronomeOn}
         autoLoopRegion={playbackLoop}
         loopHighlight={loopHighlight}
+        tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
+        insertBetweenStemAndTab={
+          <FretboardDiagram
+            keyLabel={keyLabel}
+            positionLabel={positionLabel}
+            capoText={capoText}
+            selectedNote={selectedNote}
+            pulseKey={fretPulseKey}
+            enableKeyboardInput
+            showTuneControl
+            tuneActive={tunerState.active}
+            tuneCalibrating={tunerState.calibrating}
+            onToggleTune={toggleFretboardTuner}
+            onCalibrateTune={startCalibration}
+            tunerState={tunerState}
+            onSelectNote={(note) => {
+              setSelectedNote(note)
+              setFretPulseKey((k) => k + 1)
+              setNoteModalOpen(true)
+            }}
+          />
+        }
         onNoteEvent={(evt: NoteEventMessage) => {
           setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
           setFretPulseKey((k) => k + 1)

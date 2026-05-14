@@ -264,6 +264,45 @@ export default function PlayScreen() {
           ghostStemPlaybackUri={ghostPlaybackUri}
           ghostAnchorSec={ghostAnchorSecForMix}
           playGhostWhileRecording={Boolean(playWithGhost && ghostPlaybackUri)}
+          tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
+          insertBetweenStemAndTab={
+            <View className="gap-5">
+              <View className="w-full min-w-0">
+                <FretboardDiagram
+                  keyLabel={keyLabel}
+                  positionLabel={positionLabel}
+                  capoText={capoText}
+                  selectedNote={selectedNote}
+                  pulseKey={fretPulseKey}
+                  lastCellResult={lastFretResult}
+                  enableKeyboardInput
+                  showTuneControl
+                  tuneActive={tunerState.active}
+                  tuneDisabled={recording}
+                  tuneCalibrating={tunerState.calibrating}
+                  onToggleTune={toggleFretboardTuner}
+                  onCalibrateTune={startCalibration}
+                  tunerState={tunerState}
+                  onSelectNote={(note) => {
+                    setSelectedNote(note)
+                    setFretPulseKey((k) => k + 1)
+                    setNoteModalOpen(true)
+                  }}
+                />
+              </View>
+              {quickCoachText ? (
+                <Animated.View entering={FadeIn.duration(320)}>
+                  <CoachNote text={quickCoachText} />
+                  <CoachFeedbackPrompt
+                    focusArea={(section?.coach_note ? section.focus_area as string | null : null) ?? null}
+                    onFeedbackSubmitted={(rating: 'helpful' | 'repetitive' | 'neutral' | 'skipped') => {
+                      console.log('Coach feedback submitted:', rating)
+                    }}
+                  />
+                </Animated.View>
+              ) : null}
+            </View>
+          }
           onPlaybackTick={playbackTick}
           onNoteEvent={(evt: NoteEventMessage) => {
             hookOnNoteEvent(evt)
@@ -305,42 +344,6 @@ export default function PlayScreen() {
               </AnimatedPressable>
             </View>
           </View>
-        ) : null}
-
-        <View className="w-full min-w-0">
-          <FretboardDiagram
-            keyLabel={keyLabel}
-            positionLabel={positionLabel}
-            capoText={capoText}
-            selectedNote={selectedNote}
-            pulseKey={fretPulseKey}
-            lastCellResult={lastFretResult}
-            enableKeyboardInput
-            showTuneControl
-            tuneActive={tunerState.active}
-            tuneDisabled={recording}
-            tuneCalibrating={tunerState.calibrating}
-            onToggleTune={toggleFretboardTuner}
-            onCalibrateTune={startCalibration}
-            tunerState={tunerState}
-            onSelectNote={(note) => {
-              setSelectedNote(note)
-              setFretPulseKey((k) => k + 1)
-              setNoteModalOpen(true)
-            }}
-          />
-        </View>
-
-        {quickCoachText ? (
-          <Animated.View entering={FadeIn.duration(320)}>
-            <CoachNote text={quickCoachText} />
-            <CoachFeedbackPrompt
-              focusArea={(section?.coach_note ? section.focus_area as string | null : null) ?? null}
-              onFeedbackSubmitted={(rating: 'helpful' | 'repetitive' | 'neutral' | 'skipped') => {
-                console.log('Coach feedback submitted:', rating)
-              }}
-            />
-          </Animated.View>
         ) : null}
 
         {micError ? (

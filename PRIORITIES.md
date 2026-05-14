@@ -436,8 +436,19 @@ Phase 1 is NOT done until all "YES — blocking" and "YES" rows are CLOSED or ex
 - Unified "Lyrics Strip" visibility logic
 
 **Acceptance Criteria:**
-- [ ] Consistent header/controls/lyrics layout across all 3 practice steps
-- [ ] No layout shifting when toggling lyrics or variants
+- [x] Consistent header/controls/lyrics layout across all 3 practice steps
+- [x] No layout shifting when toggling lyrics or variants
+
+**Verification:**
+- `TabViewport.tsx` and `TabViewport.web.tsx`: lyrics footer wrapped in
+  `Animated.View` with `FadeIn`/`FadeOut` to prevent layout shift
+- `play.tsx`: Fretboard diagram + coach notes moved into
+  `insertBetweenStemAndTab`, matching study.tsx layout pattern
+- `slow.tsx`: Fretboard diagram moved into `insertBetweenStemAndTab`,
+  matching study.tsx layout pattern
+- `tabFrameClassName="mt-2 min-h-[328px] w-full px-2"` added to
+  play.tsx and slow.tsx for consistent tab sizing
+- TypeScript: 0 errors
 - [ ] Cross-platform styling parity (Native vs Web)
 
 ---
