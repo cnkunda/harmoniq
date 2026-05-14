@@ -27,7 +27,7 @@ export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProp
     if (hideHeading) return null
     return (
       <Text className="mt-2 font-sans text-xs text-muted-brown">
-        Lyrics unavailable for this lesson section.
+        Lyrics unavailable for this section.
       </Text>
     )
   }

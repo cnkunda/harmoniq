@@ -197,7 +197,7 @@ export default function ProgressScreen() {
                     const { stepCount, firstTitle } = summaryFromPlanCompletionRow(row)
                     const subtitle =
                       stepCount > 0
-                        ? `${stepCount}-step plan${firstTitle ? ` · started with ${firstTitle}` : ''}`
+                        ? `${stepCount}-section plan${firstTitle ? ` · started with ${firstTitle}` : ''}`
                         : 'Practice plan'
                     return (
                       <View

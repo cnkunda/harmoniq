@@ -449,7 +449,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           >
             <Text className="text-center font-sans text-[11px] text-muted-brown">
               {
-                "Tab preview isn't available for this lesson yet. Try analyzing a song or another tab variant."
+                "Tab preview isn't available for this song yet. Try analyzing a song or another tab variant."
               }
             </Text>
           </View>

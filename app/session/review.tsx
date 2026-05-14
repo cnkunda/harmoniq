@@ -415,7 +415,7 @@ export default function ReviewScreen() {
         await navigateToPracticePlanSlot(router, { saveLesson, setLessonSectionIndex }, currentSlotIndex + 1)
         return
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not open the next plan step.')
+        toast.error(e instanceof Error ? e.message : 'Could not open the next plan section.')
         return
       }
     }
@@ -436,7 +436,7 @@ export default function ReviewScreen() {
           id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           song_title: sessionTitle,
           artist: typeof lesson?.artist === 'string' ? lesson.artist : null,
-          section_label: `${slots.length}-step plan`,
+          section_label: `${slots.length}-section plan`,
           date: new Date().toISOString(),
           coach_review: null,
           pitch_accuracy: null,

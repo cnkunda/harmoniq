@@ -171,7 +171,7 @@ export default function WarmupScreen() {
     }
   }, [ex?.fretboard_guide])
 
-  const goNextDrill = () => {
+  const goNextSection = () => {
     void navigateToPracticePlanSlot(router, { saveLesson, setLessonSectionIndex }, idx + 1)
   }
 
@@ -228,12 +228,12 @@ export default function WarmupScreen() {
       showBack
       backLabel={exerciseIndex > 0 ? 'Previous exercise' : 'Back'}
       onBack={goPrevExercise}
-      showNext={completed}
-      nextLabel="Next drill"
-      onNext={goNextDrill}
-      footerContainerClassName="flex-row gap-3 border-t border-wood-600/20 bg-ivory px-6 pb-8 pt-4"
-      backButtonClassName="flex-1 rounded-2xl border border-wood-600/45 bg-cream py-3.5"
-      nextButtonClassName="flex-1 rounded-2xl border border-amber-accent/55 bg-amber-accent/35 py-3.5"
+       showNext={completed}
+        nextLabel="Next section"
+       onNext={goNextSection}
+       footerContainerClassName="flex-row gap-3 border-t border-wood-600/20 bg-ivory px-6 pb-8 pt-4"
+       backButtonClassName="flex-1 rounded-2xl border border-wood-600/45 bg-cream py-3.5"
+       nextButtonClassName="flex-1 rounded-2xl border border-amber-accent/55 bg-amber-accent/35 py-3.5 whitespace-nowrap"
     >
       <View className={`mt-1 ${colClass}`}>
         <View className={leftColClass}>
@@ -362,7 +362,7 @@ export default function WarmupScreen() {
                   <Text className="text-center font-sans-medium text-sm text-wood-900">Skip exercise</Text>
                 </Pressable>
                 <Pressable
-                  onPress={goNextDrill}
+                  onPress={goNextSection}
                   className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-ivory py-3"
                   accessibilityRole="button"
                   accessibilityLabel="Skip entire warm-up"
@@ -444,7 +444,7 @@ export default function WarmupScreen() {
 
       {completed ? (
         <Text className="mt-4 font-sans text-sm text-muted-brown">
-          Nice — you&apos;re warmed up. Tap Next drill to continue your plan.
+          Nice — you&apos;re warmed up. Tap Next section to continue your plan.
         </Text>
       ) : null}
 

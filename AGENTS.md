@@ -32,6 +32,14 @@ expo start --web      # browser
 - Default API URL is `http://localhost:8000`. Change in `.env` or `app.config.ts` → `extra.apiBaseUrl`.
 - For WSL: use your LAN IP (`192.168.x.x`) in both `.env` and `backend/.env` (`HARMONIQ_CORS_ORIGINS`) so a physical phone can reach it.
 
+## Typical development workflow
+
+For optimal development experience, run each component in its own terminal:
+
+1. **Frontend (Git Bash)**: Run `npx expo start` for native or `expo start --web` for browser
+2. **Backend (WSL)**: Activate `.venv-wsl` and run `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
+3. **Agent**: Use opencode in a separate terminal for code modifications
+
 ---
 
 ## Key commands

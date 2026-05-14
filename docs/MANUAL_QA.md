@@ -26,16 +26,6 @@ Single reference for release and pipeline gates: stem quality, pitch kill-switch
 | ML inference diagnostics | `backend/app/solo_inference.py`, `chord_inference.py` | Replaced `print()` with `logging`. Fallback model chain for solo inference. Model backend detection logging. |
 | Contextual orient annotations | `backend/app/lyria_clip.py` | Uses `generate_orient_annotation` from `app.coach` for style/technique-aware hints. |
 
-### Pre-existing test failures (resolved)
-
-The following test was fixed during Phase 1 close-out:
-- `test_export_musicxml_from_json_basic` — Fixed key signature parsing for music21 v9, fixed chord format conversion (`C:maj` → `C`)
-
-Remaining known pre-existing failures:
-- `test_solo_micro_note_filtering` — min_duration filter removes the micro-note (assertion expects 2 notes)
-- `test_analyze_api.py` (5 tests) — Tests expect 404 for unknown jobs, code returns "queued" (200) — original behavior
-
----
 
 ## Purpose and scope
 

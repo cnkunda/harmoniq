@@ -284,7 +284,7 @@ export default function HomeScreen() {
           try {
             const fullLesson = await getLessonByJobId(lessonRow.job_id)
             if (!fullLesson) {
-              toast.error('Lesson not found. Try opening from Library.')
+              toast.error('Song not found. Try opening from Library.')
               return
             }
             saveLesson(fullLesson)
@@ -292,7 +292,7 @@ export default function HomeScreen() {
             const skipTune = useSessionPrefsStore.getState().skipTuneStep
             router.replace(skipTune ? '/session/orient' : '/session/tune')
           } catch {
-            toast.error('Could not open lesson.')
+            toast.error('Could not open song.')
           }
         },
       })
@@ -574,7 +574,7 @@ export default function HomeScreen() {
                     haptic="medium"
                     className="mb-3 flex-row items-center justify-center gap-2 self-stretch rounded-xl bg-amber-accent px-8 py-3.5 shadow-md sm:self-start"
                     accessibilityRole="button"
-                    accessibilityLabel="Drill latest saved lick"
+                    accessibilityLabel="Practice latest saved lick"
                   >
                     <Play color="#2C1810" size={20} fill="#2C1810" strokeWidth={0} />
                     <Text className="font-sans-medium text-base text-wood-900">Start Session</Text>
@@ -630,11 +630,9 @@ export default function HomeScreen() {
           </LinearGradient>
 
           {suggestion && suggestion.kind !== 'cold_start' && weakPulseNode ? <WeakAreaPulse node={weakPulseNode} /> : null}
-          {suggestion && suggestion.kind !== 'cold_start' ? (
-            <View className="mb-8">
-              <RecentProgress sessions={sessionsLog.slice(0, 3)} lastPlanCompletion={latestPlanCompletion} />
-            </View>
-          ) : null}
+          <View className="mb-8">
+            <RecentProgress sessions={sessionsLog.slice(0, 5)} lastPlanCompletion={latestPlanCompletion} />
+          </View>
 
           <View className="flex-col gap-8">
             <View>

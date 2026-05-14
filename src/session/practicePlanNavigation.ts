@@ -31,22 +31,22 @@ export async function navigateToPracticePlanSlot(
     }
     deps.saveLesson(lesson)
     deps.setLessonSectionIndex(0)
-    router.replace(sessionEntryHref(skipTune))
+    router.push(sessionEntryHref(skipTune))
     return
   }
   if (slot.slot_type === 'free_jam') {
-    router.replace('/(tabs)/jam')
+    router.push('/(tabs)/jam')
     return
   }
   if (slot.slot_type === 'warmup' && slot.warmup_plan?.exercises?.length) {
-    router.replace('/session/warmup')
+    router.push('/session/warmup')
     return
   }
   if (slot.slot_type === 'technique') {
-    router.replace('/session/study')
+    router.push('/session/study')
     return
   }
-  router.replace('/session/slow')
+  router.push('/session/slow')
 }
 
 export async function startPracticePlanFromHome(

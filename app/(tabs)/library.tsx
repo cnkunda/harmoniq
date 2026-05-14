@@ -85,14 +85,14 @@ export default function LibraryScreen() {
       const full = await getLessonByJobId(row.job_id)
       const gp = full ? firstGp5Base64FromLessonSections(full.sections) : null
       if (!gp) {
-        setLoadError('This lesson has no GP5 tab data to export yet.')
+        setLoadError('This song has no GP5 tab data to export yet.')
         return
       }
       const title = typeof full?.song_title === 'string' ? full.song_title.trim() : null
       const fallbackBase =
         typeof full?.song_title === 'string' && full.song_title.trim()
           ? full.song_title.trim()
-          : row.song_title?.trim() || 'lesson'
+          : row.song_title?.trim() || 'song'
       const { blob, mimeType, contentDisposition } = await submitExportJob({
         gp5_base64: gp,
         format: 'midi',
@@ -128,7 +128,7 @@ export default function LibraryScreen() {
         }
         const full = await getLessonByJobId(row.job_id)
         if (!full) {
-          setLoadError('That lesson could not be loaded.')
+          setLoadError('That song could not be loaded.')
           return
         }
         saveLesson(full)
@@ -137,7 +137,7 @@ export default function LibraryScreen() {
           router.push(href as Href),
         )
       } catch {
-        setLoadError('Could not open lesson.')
+        setLoadError('Could not open song.')
       }
     },
     [router, saveLesson, setLessonSectionIndex],
@@ -152,7 +152,7 @@ export default function LibraryScreen() {
         if (lesson?.job_id === row.job_id) resetLesson()
         setLessons(await listLessonsJournal())
       } catch (e) {
-        setLoadError(e instanceof Error ? e.message : 'Could not remove lesson.')
+        setLoadError(e instanceof Error ? e.message : 'Could not remove song.')
       }
     },
     [resetLesson],
@@ -160,17 +160,17 @@ export default function LibraryScreen() {
 
   const confirmRemoveLesson = useCallback(
     (row: LessonListRow) => {
-      const title = row.song_title?.trim() || 'this lesson'
+      const title = row.song_title?.trim() || 'this song'
       const message = `Remove "${title}" and its saved analysis from this device? This cannot be undone.`
 
       if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined' && window.confirm(`Remove lesson?\n\n${message}`)) {
+        if (typeof window !== 'undefined' && window.confirm(`Remove song?\n\n${message}`)) {
           void performRemoveLesson(row)
         }
         return
       }
 
-      Alert.alert('Remove lesson?', message, [
+      Alert.alert('Remove song?', message, [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
@@ -313,7 +313,7 @@ export default function LibraryScreen() {
   const emptyLicks = filteredLicks.length === 0 && !loadError
 
   const searchPlaceholder =
-    libraryTab === 'lessons' ? 'Search lessons by song or artist…' : 'Search by song, artist, or technique…'
+    libraryTab === 'lessons' ? 'Search songs by title or artist…' : 'Search by song, artist, or technique…'
 
   return (
     <WoodGradient className="flex-1">
@@ -342,7 +342,7 @@ export default function LibraryScreen() {
                 <Text
                   className={`text-center font-sans-medium text-sm ${libraryTab === 'lessons' ? 'text-amber-light' : 'text-muted-brown'}`}
                 >
-                  Lessons
+                  Songs
                 </Text>
               </Pressable>
               <Pressable
@@ -439,7 +439,7 @@ export default function LibraryScreen() {
               emptyLessons ? (
                 <View className="items-center py-20">
                   <Text className="font-sans text-muted-brown">
-                    {lessons.length === 0 ? 'No analyzed songs yet. Add one from Analyze.' : 'No lessons match your search.'}
+                    {lessons.length === 0 ? 'No analyzed songs yet. Add one from Analyze.' : 'No songs match your search.'}
                   </Text>
                 </View>
               ) : (
@@ -470,7 +470,7 @@ export default function LibraryScreen() {
                             exportBusyJobId === row.job_id ? 'opacity-40' : ''
                           }`}
                           accessibilityRole="button"
-                          accessibilityLabel="Export lesson MIDI"
+                          accessibilityLabel="Export song MIDI"
                         >
                           <Text className="text-center font-sans-medium text-sm text-wood-900">
                             {exportBusyJobId === row.job_id ? 'Exporting…' : 'Export MIDI'}
@@ -480,7 +480,7 @@ export default function LibraryScreen() {
                           onPress={() => confirmRemoveLesson(row)}
                           className="rounded-lg border border-danger/45 bg-wood-900/50 px-3 py-2"
                           accessibilityRole="button"
-                          accessibilityLabel="Remove lesson"
+                          accessibilityLabel="Remove song"
                         >
                           <Text className="font-sans-medium text-xs text-danger">Remove</Text>
                         </Pressable>
@@ -548,9 +548,9 @@ export default function LibraryScreen() {
                         onPress={() => drill(lick)}
                         className="min-w-[100px] flex-1 rounded-lg bg-wood-700 px-3 py-2"
                         accessibilityRole="button"
-                        accessibilityLabel="Drill this lick"
+                        accessibilityLabel="Practice this lick"
                       >
-                        <Text className="text-center font-sans-medium text-sm text-amber-light">Drill this</Text>
+                        <Text className="text-center font-sans-medium text-sm text-amber-light">Practice</Text>
                       </Pressable>
                       <Pressable
                         onPress={() => listenToLick(lick)}

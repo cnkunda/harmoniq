@@ -8,9 +8,8 @@ export type SessionStep = (typeof SESSION_STEPS)[number]
 export function sessionStepIndexFromPathname(pathname: string): number {
   const normalized = pathname.replace(/\/+$/, '')
   const leaf = normalized.split(/[/\\]/).pop() ?? ''
-  if (leaf === 'warmup') return SESSION_STEPS.indexOf('slow')
   const i = SESSION_STEPS.indexOf(leaf as SessionStep)
-  return i >= 0 ? i : 0
+  return i >= 0 ? i : -1
 }
 
 export function sessionHref(step: SessionStep): `/session/${SessionStep}` {

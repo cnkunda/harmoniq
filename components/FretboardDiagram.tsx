@@ -711,8 +711,8 @@ export function FretboardDiagram({
 
             {/* Fret numbers (O for nut, 1-12 for frets) */}
             <SvgText
-              x={MARGIN_L + COL_W * 0.35}
-              y={34}
+              x={fretCenterX(0)}
+              y={26}
               textAnchor="middle"
               fill="#A8A29E"
               fontSize={9}
@@ -724,7 +724,7 @@ export function FretboardDiagram({
               <SvgText
                 key={`fn-${i}`}
                 x={fretCenterX(i + 1)}
-                y={34}
+                y={26}
                 textAnchor="middle"
                 fill="#A8A29E"
                 fontSize={9}

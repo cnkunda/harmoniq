@@ -23,9 +23,15 @@ function reggaeDemoAsset(): unknown {
 }
 
 const BUNDLED_STEM_LOADERS: Record<string, () => unknown> = {
-  /** 30s sample — see `assets/demo-lesson/SOURCES.md` */
-  'bundled://demo/reggae': reggaeDemoAsset,
+  /** 30s reggae sample — see `assets/demo-lesson/SOURCES.md` */
+  'bundled://demo/reggae-guitar': reggaeDemoAsset,
+  'bundled://demo/reggae-bass': reggaeDemoAsset,
+  'bundled://demo/reggae-drums': reggaeDemoAsset,
+  'bundled://demo/reggae-vocals': reggaeDemoAsset,
+  'bundled://demo/reggae-piano': reggaeDemoAsset,
+  'bundled://demo/reggae-other': reggaeDemoAsset,
   /** Legacy path (same asset) — persisted lessons may still reference this key */
+  'bundled://demo/reggae': reggaeDemoAsset,
   'bundled://demo/am-blues-70': reggaeDemoAsset,
 }
 

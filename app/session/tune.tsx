@@ -263,7 +263,7 @@ export default function TuneScreen() {
         <FormCheckbox
           checked={dontShowAgain}
           onCheckedChange={setDontShowAgain}
-          label="Don't show this again — skip this step when I start future lessons."
+          label="Don't show this again — skip this step when I start future sessions."
         />
       </View>
 

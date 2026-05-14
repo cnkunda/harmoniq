@@ -14,7 +14,7 @@ import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useSessionSmartScroll } from '@/src/session/useSessionSmartScroll'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { LessonJSON } from '@/src/types'
-import { lessonStemUrl, sectionSeekSeconds, stemRelPathToPlaybackUri } from '@/src/utils/lessonAudio'
+import { firstLessonStemRelPath, lessonStemUrl, sectionSeekSeconds, stemRelPathToPlaybackUri } from '@/src/utils/lessonAudio'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { AlphaTabSurfaceRef, NoteEventMessage, SongScoreMeta, TabLoopBarRegion } from '@/types/tabMessage'
 import type { LyricWord } from './LyricsStrip'
@@ -176,12 +176,12 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
   const audioSrc = useMemo(() => {
     if (audioSrcOverride !== undefined) return audioSrcOverride
     if (gp5Base64Override?.trim()) return null
-    const rel = lesson?.stems?.guitar
+    const rel = firstLessonStemRelPath(lesson?.stems)
     if (!rel || typeof rel !== 'string') return null
     const bundled = stemRelPathToPlaybackUri(rel)
     if (bundled) return bundled
     return lessonStemUrl(rel)
-  }, [audioSrcOverride, gp5Base64Override, lesson?.stems?.guitar])
+  }, [audioSrcOverride, gp5Base64Override, lesson?.stems])
 
   const transposeSemitones =
     typeof transposeSemitonesOverride === 'number'

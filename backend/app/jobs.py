@@ -25,7 +25,7 @@ from app.schemas import (
 )
 
 from app.analyze_audio import build_lesson_json_from_librosa
-from app.cache import load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
+from app.cache import invalidate_cache_for_wav, load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
 from app.coach import hydrate_coach_copy_into_sections
 from app.ingest import (
     AUDIO_TOO_SHORT_USER_MESSAGE,
@@ -302,6 +302,14 @@ def _process_analyze_job(
                 total_elapsed = time.time() - worker_start
                 logger.info("worker complete (cache hit) job_id=%s total=%.2fs", job_id, total_elapsed)
                 return
+
+            # Cache hit but artifacts missing — invalidate stale entry so
+            # future attempts don't re-encounter the same dead reference.
+            logger.warning(
+                "cache artifacts missing for job_id=%s; invalidating cache entry and re-analyzing",
+                job_id,
+            )
+            invalidate_cache_for_wav(wav_path_obj, player_profile=player_profile)
 
         job_dir = get_job_dir(job_id)
         _set_job_processing_progress(job_id, 0.4, "Separating stems…")

@@ -1,21 +1,22 @@
 /**
  * Session phase definitions for commit #83.
  *
- * Restructures the linear session into a 4-phase pedagogical model:
- * - Orient (hear the target)
- * - Isolate (understand and break down)
- * - Apply (play with a responsive band)
- * - Reflect (honest specific feedback)
+ * 5-phase pedagogical model mapped to the linear session step order:
+ * - Orient  (listen    — hear the target sound)
+ * - Isolate (study     — break it down and understand)
+ * - Refine  (slow      — slow practice to build muscle memory)
+ * - Apply   (play      — play with the band)
+ * - Reflect (review    — honest specific feedback)
  */
 
 import { type SessionStep } from "@/src/constants/sessionFlow";
 
-/** The 4 session phases in order. */
+/** The 5 session phases in step order. */
 export const SESSION_PHASES = [
   "orient",
   "isolate",
-  "apply",
   "refine",
+  "apply",
   "reflect",
 ] as const;
 export type SessionPhase = (typeof SESSION_PHASES)[number];
@@ -24,15 +25,15 @@ export type SessionPhase = (typeof SESSION_PHASES)[number];
 export const PHASE_STEPS: Record<SessionPhase, SessionStep[]> = {
   orient: ["listen"],
   isolate: ["study"],
-  apply: ["play"],
   refine: ["slow"],
+  apply: ["play"],
   reflect: ["review"],
 };
 
 /** Phase index for each session step. Pre-flight steps (tune, warmup, mood-check, musical-tolerance) are not in phases. */
 export const PHASE_FOR_STEP: Record<SessionStep, SessionPhase | null> = {
-  tune: null, // Pre-flight
-  "musical-tolerance": null, // Pre-flight
+  tune: null,
+  "musical-tolerance": null,
   listen: "orient",
   study: "isolate",
   slow: "refine",
@@ -57,6 +58,10 @@ export const PHASE_TRANSITION_COPY: Record<
     enter: "Now let's break it down and understand each part.",
     description: "Study the notes and play them slowly to build muscle memory.",
   },
+  refine: {
+    enter: "",
+    description: "",
+  },
   apply: {
     enter: "Time to play along with the band.",
     description: "Apply what you've learned by playing with the backing track.",
@@ -64,10 +69,6 @@ export const PHASE_TRANSITION_COPY: Record<
   reflect: {
     enter: "Let's review your performance.",
     description: "Review your accuracy and identify areas for improvement.",
-  },
-  refine: {
-    enter: "",
-    description: "",
   },
 };
 
@@ -87,6 +88,10 @@ export const PHASE_COMPLETION_CONDITIONS: Record<
     minSteps: 1,
     description: "Complete at least one study or slow practice session",
   },
+  refine: {
+    minSteps: 0,
+    description: "",
+  },
   apply: {
     minSteps: 1,
     description: "Play along with the backing track at least once",
@@ -95,10 +100,6 @@ export const PHASE_COMPLETION_CONDITIONS: Record<
     minSteps: 1,
     description: "Review your performance",
   },
-  refine: {
-    minSteps: 0,
-    description: "",
-  },
 };
 
 /** Get the phase for a given session step. Returns null for pre-flight steps. */
@@ -106,55 +107,7 @@ export function getPhaseForStep(step: SessionStep): SessionPhase | null {
   return PHASE_FOR_STEP[step] ?? null;
 }
 
-/** Get the index of a phase. */
+/** Get the index of a phase in SESSION_PHASES. */
 export function getPhaseIndex(phase: SessionPhase): number {
   return SESSION_PHASES.indexOf(phase);
-}
-
-/** Get the next phase, or null if at the last phase. */
-export function getNextPhase(currentPhase: SessionPhase): SessionPhase | null {
-  const index = getPhaseIndex(currentPhase);
-  if (index === -1 || index === SESSION_PHASES.length - 1) {
-    return null;
-  }
-  return SESSION_PHASES[index + 1];
-}
-
-/** Get the previous phase, or null if at the first phase. */
-export function getPreviousPhase(
-  currentPhase: SessionPhase,
-): SessionPhase | null {
-  const index = getPhaseIndex(currentPhase);
-  if (index <= 0) {
-    return null;
-  }
-  return SESSION_PHASES[index - 1];
-}
-
-/** Get the first step of a phase. */
-export function getPhaseFirstStep(phase: SessionPhase): SessionStep | null {
-  const steps = PHASE_STEPS[phase];
-  return steps.length > 0 ? steps[0] : null;
-}
-
-/** Get the last step of a phase. */
-export function getPhaseLastStep(phase: SessionPhase): SessionStep | null {
-  const steps = PHASE_STEPS[phase];
-  return steps.length > 0 ? steps[steps.length - 1] : null;
-}
-
-/** Check if a step is the last step in its phase. */
-export function isLastStepInPhase(step: SessionStep): boolean {
-  const phase = getPhaseForStep(step);
-  if (!phase) return false;
-  const lastStep = getPhaseLastStep(phase);
-  return lastStep === step;
-}
-
-/** Check if a step is the first step in its phase. */
-export function isFirstStepInPhase(step: SessionStep): boolean {
-  const phase = getPhaseForStep(step);
-  if (!phase) return false;
-  const firstStep = getPhaseFirstStep(phase);
-  return firstStep === step;
 }

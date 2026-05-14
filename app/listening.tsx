@@ -156,7 +156,7 @@ export default function ListeningScreen() {
     const artist = selectedLesson.artist?.trim() ?? ''
     const query = [artist, title].filter(Boolean).join(' ').trim()
     if (!query) {
-      setLoadError('This lesson is missing song metadata for Spotify search.')
+      setLoadError('This song is missing metadata for Spotify search.')
       return
     }
     const urls = spotifySearchUrls(query)
@@ -219,7 +219,7 @@ export default function ListeningScreen() {
                     }`}
                   >
                     <Text className={`font-sans-medium text-sm ${selected ? 'text-amber-light' : 'text-cream'}`}>
-                      {row.song_title?.trim() || 'Untitled lesson'}
+                      {row.song_title?.trim() || 'Untitled song'}
                     </Text>
                     <Text className="mt-0.5 font-sans text-xs text-muted-brown">
                       {row.artist?.trim() || 'Unknown artist'}

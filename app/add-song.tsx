@@ -225,7 +225,7 @@ export default function AddSongScreen() {
             const pretty: Record<AnalyzeJobStatus, string> = {
               queued: 'Job queued…',
               processing: 'Working on your track…',
-              complete: 'Finishing lesson payload…',
+              complete: 'Preparing session…',
               failed: 'Analysis failed.',
             }
             setStatusText(stage ?? pretty[job.status] ?? `Status: ${job.status}`)

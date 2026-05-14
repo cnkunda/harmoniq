@@ -8,13 +8,12 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
-import { ScoreViewer } from '@/components/ScoreViewer'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { TheoryCard } from '@/components/TheoryCard'
 import { toast } from '@/components/ToastConfig'
-import { exportMusicXmlFromJson, fetchTheoryAnnotation } from '@/src/api/analyze'
+import { fetchTheoryAnnotation } from '@/src/api/analyze'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { getAppPref } from '@/src/db/client'
 import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
@@ -24,8 +23,7 @@ import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/e
 import { capoSuggestion, parseKey } from '@/src/music/capoSuggestion'
 import { getChordFunction } from '@/src/music/chordFunction'
 import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
-import { chordToFretboardCells, formatChordDisplay } from '@/src/music/chordVoicing'
-import { allCellsForMidi } from '@/src/music/fretboardCell'
+import { formatChordDisplay } from '@/src/music/chordVoicing'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
@@ -39,7 +37,7 @@ import {
   type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
-import type { AlphaTabSurfaceRef, NoteEventMessage } from '@/types/tabMessage'
+import type { NoteEventMessage } from '@/types/tabMessage'
 
 // Transcription types (matching backend schemas)
 interface BeatGrid {
@@ -90,7 +88,7 @@ interface LessonSectionWithMusic extends Record<string, unknown> {
   transcription_metadata?: TranscriptionValidationMetadata | null;
 }
 
-type ProcessedMusicalEvent = { type: 'chord', time: number, data: ChordEvent } | { type: 'solo_note', time: number, data: SoloNote };
+
 
 const DEFAULT_TICK: PlaybackTickContext = {
   positionSec: 0,
@@ -144,13 +142,9 @@ function StudyScreenInner() {
   const router = useRouter()
   const musicActions = useMusicActions()
   const sessionStemRef = useRef<SessionStemAndTabHandle>(null)
-  const scoreViewerRef = useRef<AlphaTabSurfaceRef>(null)
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const [tick, setTick] = useState<PlaybackTickContext>(DEFAULT_TICK)
-  const [musicXmlData, setMusicXmlData] = useState<string | null>(null);
-  const [alphaTabIsReady, setAlphaTabIsReady] = useState(false);
-  const [processedMusicalEvents, setProcessedMusicalEvents] = useState<ProcessedMusicalEvent[]>([]);
   const [showTranscriptionWarningModal, setShowTranscriptionWarningModal] = useState(false);
   const [stemRoutingOverride, setStemRoutingOverride] = useState<string | null>(null);
   const [theoryAnnotation, setTheoryAnnotation] = useState<{ chordName: string; chordFunction: string; romanNumeral: string; rationale: string } | null>(null);
@@ -167,72 +161,6 @@ function StudyScreenInner() {
   const [orientIsPlaying, setOrientIsPlaying] = useState(false)
   const orientSoundRef = useRef<any>(null)
   const orientSoundInstanceId = useRef(`study-orient-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`)
-
-  // Load MusicXML from lesson (pre-generated during analysis) or fetch on-demand
-  useEffect(() => {
-    const loadMusicXml = async () => {
-      // First, try to use the pre-generated MusicXML from LessonJSON
-      if (lesson?.musicxml && lesson.musicxml.trim()) {
-        console.log('Using pre-generated MusicXML from lesson, length:', lesson.musicxml.length)
-        setMusicXmlData(lesson.musicxml)
-        return
-      }
-
-      // Fallback: fetch from backend if pre-generated is not available
-      const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
-      if (!section) return
-
-      // Check if we have the required transcription data from either section or lesson level
-      const beatGrid = section.beat_grid ?? lesson?.beat_grid
-      const chordTimeline = section.chord_timeline ?? lesson?.chord_timeline
-      const soloNotes = section.solo_notes ?? lesson?.solo_notes
-
-      const hasBeatGrid = beatGrid != null
-      const hasChordTimeline = chordTimeline != null
-      const hasSoloNotes = soloNotes != null
-
-      if (!hasBeatGrid || !hasChordTimeline || !hasSoloNotes) {
-        console.log('MusicXML fetch check - missing data:', {
-          hasBeatGrid,
-          hasChordTimeline,
-          hasSoloNotes,
-          sectionKeys: Object.keys(section || {}),
-          lessonSectionIndex,
-          jobId: lesson?.job_id
-        })
-        setMusicXmlData(null)
-        return
-      }
-
-      try {
-        const musicXml = await exportMusicXmlFromJson({
-          beat_grid: beatGrid,
-          chord_timeline: chordTimeline,
-          solo_notes: soloNotes,
-          title: lesson?.song_title ?? null,
-          artist: lesson?.artist ?? null,
-        })
-        console.log('MusicXML fetch success (fallback):', {
-          hasBeatGrid,
-          hasChordTimeline,
-          hasSoloNotes,
-          sectionKeys: Object.keys(section || {}),
-          lessonSectionIndex,
-          jobId: lesson?.job_id
-        })
-        setMusicXmlData(musicXml)
-      } catch (e) {
-        console.error('Failed to fetch MusicXML:', e)
-        console.error('MusicXML fetch error details:', {
-          error: e instanceof Error ? e.message : String(e),
-          sectionIndex: lessonSectionIndex
-        })
-        setMusicXmlData(null)
-      }
-    }
-
-    void loadMusicXml()
-  }, [lesson?.job_id, lesson?.musicxml, lessonSectionIndex, lesson?.song_title, lesson?.artist, lesson?.beat_grid, lesson?.chord_timeline, lesson?.solo_notes])
 
   // Show transcription warning modal when section confidence is low
   useEffect(() => {
@@ -310,137 +238,14 @@ function StudyScreenInner() {
     musicActions.setPlaying(ctx.playing)
   }, [musicActions])
 
-  const handleAlphaTabReady = useCallback(() => {
-    setAlphaTabIsReady(true);
-    musicActions.setPlayerReady(true);
-    console.log('AlphaTab is ready!');
-  }, [musicActions]);
-
-  /**
-   * Analyze musical event density to determine optimal display mode
-   * Returns 'chord' | 'solo' | 'both' based on which is more prominent
-   */
-  const determineDisplayMode = useCallback((
-    position: number,
-    windowSeconds: number = 2
-  ): 'chord' | 'solo' | 'both' => {
-    const windowStart = position - windowSeconds
-    const windowEnd = position + windowSeconds
-
-    // Count chords in window (excluding 'N' - no chord)
-    const chordsInWindow = processedMusicalEvents.filter(
-      (e) => e.type === 'chord' &&
-        e.time >= windowStart &&
-        e.time <= windowEnd &&
-        e.data.chord !== 'N'
-    ).length
-
-    // Count solo notes in window
-    const soloNotesInWindow = processedMusicalEvents.filter(
-      (e) => e.type === 'solo_note' &&
-        e.time >= windowStart &&
-        e.time <= windowEnd
-    ).length
-
-    // Normalize by typical density expectations
-    // Chords typically change 0.5-2x per second (depending on progression speed)
-    // Solo notes can be 2-8x per second
-    const chordDensity = chordsInWindow / (windowSeconds * 2)
-    const soloDensity = soloNotesInWindow / (windowSeconds * 2)
-
-    // Thresholds for mode selection
-    if (soloDensity > chordDensity * 2 && soloNotesInWindow > 2) {
-      return 'solo' // Solo is prominent
-    } else if (chordDensity > 0.2 && chordsInWindow > 0) {
-      return 'chord' // Chords drive the section
-    } else if (soloNotesInWindow > 0 || chordsInWindow > 0) {
-      return 'both' // Both present but neither dominant
-    }
-    return 'chord' // Default to chord mode
-  }, [processedMusicalEvents])
-
-  const handleCursorPositionUpdate = useCallback((position: number) => {
-    // Find current musical event
-    let currentEvent = null;
-    for (let i = processedMusicalEvents.length - 1; i >= 0; i--) {
-      if (processedMusicalEvents[i].time <= position) {
-        currentEvent = processedMusicalEvents[i];
-        break;
-      }
-    }
-
-    // Determine effective display mode (auto uses density analyzer)
-    const effectiveMode = fretboardMode === 'auto'
-      ? determineDisplayMode(position)
-      : fretboardMode
-
-    // Update selected note based on mode
-    if (currentEvent) {
-      const showSolo = effectiveMode === 'solo' || effectiveMode === 'both'
-      const showChord = effectiveMode === 'chord' || effectiveMode === 'both'
-
-      if (currentEvent.type === 'solo_note' && showSolo) {
-        const note = currentEvent.data
-        const cells = allCellsForMidi(note.pitch)
-        if (cells.length > 0) {
-          const cell = cells[0]!
-          setSelectedNote({ midi: note.pitch, fret: cell.fret, string: cell.row + 1 })
-        } else {
-          setSelectedNote(null)
-        }
-      } else if (currentEvent.type === 'chord' && showChord && effectiveMode !== 'both') {
-        // In chord-only mode, highlight the chord root
-        const chordEvent = currentEvent.data
-        const cells = chordToFretboardCells(chordEvent.chord, voicingMode, 'low')
-        const rootCell = cells.find(c => c.interval === 0)
-        if (rootCell) {
-          setSelectedNote({ midi: rootCell.midi, fret: rootCell.fret, string: rootCell.string })
-        } else {
-          setSelectedNote(null)
-        }
-      } else if (!showSolo && !showChord) {
-        setSelectedNote(null)
-      } else if (currentEvent.type === 'solo_note' && !showSolo) {
-        setSelectedNote(null)
-      }
-    } else {
-      setSelectedNote(null)
-    }
-
-    setFretPulseKey((k) => k + 1);
-  }, [processedMusicalEvents, fretboardMode, voicingMode, determineDisplayMode]);
-
-  const handleBeatEvent = useCallback((beat: number) => {
-    // AlphaTab dispatches its bar index here; mirror to shared music context.
-    musicActions.setBeat(beat);
-  }, [musicActions]);
+  // Seed initial chord/notes on mount so fretboard isn't blank before playback starts
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // Only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
-
-  useEffect(() => {
-    // Check both section level and lesson level for chord/solo data
-    const chordEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events
-    const soloNotes = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes
-
-    if (chordEvents || soloNotes) {
-      const allEvents: ProcessedMusicalEvent[] = [];
-
-      if (chordEvents) {
-        chordEvents.forEach((event: ChordEvent) => {
-          allEvents.push({ type: 'chord', time: event.timestamp, data: event });
-        });
-      }
-
-      if (soloNotes) {
-        soloNotes.forEach((note: SoloNote) => {
-          allEvents.push({ type: 'solo_note', time: note.start_time, data: note });
-        });
-      }
-
-      allEvents.sort((a, b) => a.time - b.time);
-      setProcessedMusicalEvents(allEvents);
-    }
-  }, [section?.chord_timeline, section?.solo_notes, lesson?.chord_timeline, lesson?.solo_notes]);
 
   // Update theory annotation based on current chord during playback
   useEffect(() => {
@@ -744,19 +549,6 @@ function StudyScreenInner() {
               </Text>
             </AnimatedPressable>
           </View>
-        </View>
-      )}
-
-      {musicXmlData && (
-        <View style={{ flex: 1, height: 300, width: '100%' }}>
-          <ScoreViewer
-            ref={scoreViewerRef}
-            musicXml={musicXmlData}
-            onAlphaTabReady={handleAlphaTabReady}
-            onCursorPositionUpdate={handleCursorPositionUpdate}
-            onBeatEvent={handleBeatEvent}
-            onNoteEvent={onTabNoteEvent}
-          />
         </View>
       )}
 

@@ -11,7 +11,7 @@ import { ErrorBanner } from '@/components/ErrorBanner'
 import { LickCard } from '@/components/LickCard'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { PitchIndicator } from '@/components/PitchIndicator'
-import { SessionStepper } from '@/components/SessionStepper'
+
 import { SkillGraph } from '@/components/SkillGraph'
 import { StemMixer } from '@/components/StemMixer'
 import { TabView } from '@/components/TabView'
@@ -440,7 +440,7 @@ function FeedbackLayerDevSection() {
           Icon={Music}
           heading="No licks yet"
           subtext="Save a phrase from analysis or practice to see it here."
-          ctaLabel="Browse lessons"
+          ctaLabel="Browse library"
           onCta={() => toast.success('EmptyState CTA pressed')}
         />
       </View>
@@ -541,7 +541,6 @@ export default function DesignPreviewScreen() {
             </Text>
             <View className="gap-3">
               <CoachNote text="Preview: coach copy uses the warm wood panel and amber accent rail." />
-              <SessionStepper />
               <WaveformVisualizer />
               <StemMixer />
               <PitchIndicator />

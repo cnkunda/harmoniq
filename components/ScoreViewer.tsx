@@ -429,7 +429,7 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
             pointerEvents="none"
           >
             <Text className="text-center font-sans text-[11px] text-muted-brown">
-              MusicXML score not available for this lesson yet.
+              MusicXML score not available for this song yet.
             </Text>
           </View>
         ) : null}

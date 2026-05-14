@@ -80,15 +80,15 @@ export function SessionStepScreen({
           ) : (
             <View className="flex-1" />
           )}
-          {showNext ? (
-            <Pressable
-              onPress={onNext}
-              className={nextClass}
-              accessibilityRole="button"
-            >
-              <Text className="text-center font-sans-medium text-wood-900">{nextLabel}</Text>
-            </Pressable>
-          ) : null}
+           {showNext ? (
+             <Pressable
+               onPress={onNext}
+               className={`${nextClass} flex-nowrap items-center`}
+               accessibilityRole="button"
+             >
+                <Text className="text-center font-sans-medium text-wood-900 whitespace-nowrap">{nextLabel}</Text>
+             </Pressable>
+           ) : null}
         </View>
       )}
     </View>

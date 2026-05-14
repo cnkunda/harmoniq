@@ -627,13 +627,13 @@ export default function JamScreen() {
           {activePlanJamSlot != null && currentPlan?.slots?.length ? (
             <View className="mb-4 rounded-xl border border-amber-accent/40 bg-amber-accent/12 px-4 py-3">
               <Text className="font-sans-medium text-sm text-cream">
-                Practice plan · Step {currentSlotIndex + 1} of {currentPlan.slots.length}
+                Practice plan · {currentSlotIndex + 1} of {currentPlan.slots.length}
                 {activePlanJamSlot.title?.trim() ? ` · ${activePlanJamSlot.title.trim()}` : ''}
               </Text>
               <Text className="mt-1 font-sans text-xs leading-snug text-muted-brown">
                 {isFinalPlanStep
-                  ? 'This is the last step in your plan. When you are done jamming, complete the session to clear the plan and go home.'
-                  : 'When you are done jamming, continue to the next step in your plan.'}
+                  ? 'This is the last section in your plan. When you are done jamming, complete the session to clear the plan and go home.'
+                  : 'When you are done jamming, continue to the next section in your plan.'}
               </Text>
               {isFinalPlanStep ? (
                 <Pressable
@@ -657,7 +657,7 @@ export default function JamScreen() {
                             id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
                             song_title: sessionTitle,
                             artist: null,
-                            section_label: `${nSlots}-step plan`,
+                            section_label: `${nSlots}-section plan`,
                             date: new Date().toISOString(),
                             coach_review: null,
                             pitch_accuracy: null,
@@ -726,9 +726,9 @@ export default function JamScreen() {
                   }}
                   className="mt-3 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
                   accessibilityRole="button"
-                  accessibilityLabel="Go to next drill in practice plan"
+                        accessibilityLabel="Go to next section in practice plan"
                 >
-                  <Text className="text-center font-sans-medium text-base text-wood-900">Next drill</Text>
+                  <Text className="text-center font-sans-medium text-base text-wood-900">Next section</Text>
                 </Pressable>
               )}
             </View>

@@ -34,6 +34,7 @@ export function SessionChromeBar() {
   if (!pathname.includes('/session/')) return null
 
   const active = sessionStepIndexFromPathname(pathname)
+  const showStepDots = active >= 0
   const onTuneScreen = pathname.replace(/\/+$/, '').split('/').pop() === 'tune'
 
   const closeSessionOrHome = () => {
@@ -45,12 +46,12 @@ export function SessionChromeBar() {
   const hasPlan = Boolean(slots?.length)
   const hasNext = hasPlan && slots != null && idx < slots.length - 1
 
-  const goNextDrill = () => {
+  const goNextSection = () => {
     void (async () => {
       try {
         await navigateToPracticePlanSlot(router, { saveLesson, setLessonSectionIndex }, idx + 1)
       } catch (e) {
-        console.warn('[SessionChromeBar] next drill failed', e)
+        console.warn('[SessionChromeBar] next section failed', e)
       }
     })()
   }
@@ -75,22 +76,26 @@ export function SessionChromeBar() {
           </View>
         </View>
 
-        <View className={`flex-1 flex-row items-center justify-center px-1 ${gapClass}`}>
-          {SESSION_STEPS.map((step, i) => (
-            <View
-              key={step}
-              className={
-                i === active
-                  ? compact
-                    ? 'h-2 w-7 rounded-full bg-amber-accent'
-                    : 'h-2 w-10 rounded-full bg-amber-accent'
-                  : 'h-2 w-2 rounded-full bg-wood-600/35'
-              }
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
-            />
-          ))}
-        </View>
+        {showStepDots ? (
+          <View className={`flex-1 flex-row items-center justify-center px-1 ${gapClass}`}>
+            {SESSION_STEPS.map((step, i) => (
+              <View
+                key={step}
+                className={
+                  i === active
+                    ? compact
+                      ? 'h-2 w-7 rounded-full bg-amber-accent'
+                      : 'h-2 w-10 rounded-full bg-amber-accent'
+                    : 'h-2 w-2 rounded-full bg-wood-600/35'
+                }
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              />
+            ))}
+          </View>
+        ) : (
+          <View className="flex-1" />
+        )}
 
         <View style={{ minWidth: ACTION_MIN, alignItems: 'flex-end' }}>
           {onTuneScreen ? (
@@ -105,26 +110,28 @@ export function SessionChromeBar() {
               </Pressable>
               {hasPlan && hasNext ? (
                 <Pressable
-                  onPress={goNextDrill}
+                  onPress={goNextSection}
                   accessibilityRole="button"
-                  accessibilityLabel="Go to next drill in practice plan"
+                  accessibilityLabel="Go to next section in practice plan"
                   hitSlop={10}
+                  className="flex-row items-center gap-0.5"
                 >
-                  <Text className="font-sans-medium text-xs text-muted-brown">Next drill</Text>
-                  <ArrowRight color={colors.muted.brown} size={16} style={{ alignSelf: 'flex-end', marginTop: 2 }} />
+                  <Text className="font-sans-medium text-xs text-muted-brown">Next section</Text>
+                  <ArrowRight color={colors.muted.brown} size={14} style={{ marginTop: 2 }} />
                 </Pressable>
               ) : null}
             </View>
           ) : hasPlan ? (
             hasNext ? (
               <Pressable
-                onPress={goNextDrill}
+                onPress={goNextSection}
                 accessibilityRole="button"
-                accessibilityLabel="Go to next drill in practice plan"
+                accessibilityLabel="Go to next section in practice plan"
                 hitSlop={10}
+                className="flex-row items-center gap-0.5"
               >
-                <Text className="font-sans-medium text-sm text-wood-900">Next drill</Text>
-                <ArrowRight color={colors.wood[900]} size={18} style={{ alignSelf: 'flex-end', marginTop: 2 }} />
+                <Text className="font-sans-medium text-sm text-wood-900">Next section</Text>
+                <ArrowRight color={colors.wood[900]} size={16} style={{ marginTop: 2 }} />
               </Pressable>
             ) : (
               <Pressable
@@ -144,7 +151,7 @@ export function SessionChromeBar() {
 
       {hasPlan && slots != null ? (
         <Text className="border-t border-wood-600/10 px-4 py-2 font-sans text-xs text-muted-brown" numberOfLines={1}>
-          Plan · Step {idx + 1}/{slots.length}: {slot?.title ?? '—'}
+          Plan · {idx + 1}/{slots.length}: {slot?.title ?? '—'}
         </Text>
       ) : null}
     </View>

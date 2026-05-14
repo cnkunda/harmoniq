@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from app.coach import generate_orient_annotation
+from app.ingest import get_data_dir
 
 logger = logging.getLogger("harmoniq.lyria_clip")
 logger.setLevel(logging.INFO)
@@ -57,11 +58,16 @@ def _generate_placeholder_clip(
     bpm: float | None,
     reason: str,
 ) -> dict[str, Any]:
-    """Generate a silent WAV file and a context-aware annotation."""
-    job_dir = Path(f"./data/jobs/{job_id}")
-    job_dir.mkdir(parents=True, exist_ok=True)
+    """Generate a silent WAV file and a context-aware annotation.
 
-    wav_path = job_dir / "orient_clip.wav"
+    Stores the orient clip in ``data/orient_clips/<job_id>/`` instead of the
+    job directory so that an empty job dir (cleaned-up analysis artifacts) is
+    not conflated with a fully-processed job.
+    """
+    orient_dir = get_data_dir() / "orient_clips" / job_id
+    orient_dir.mkdir(parents=True, exist_ok=True)
+
+    wav_path = orient_dir / "orient_clip.wav"
     _create_silent_wav(wav_path, duration_seconds=30, sample_rate=44100)
 
     # Use the coach module for a context-aware annotation

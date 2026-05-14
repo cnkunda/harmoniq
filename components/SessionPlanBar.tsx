@@ -26,7 +26,7 @@ export function SessionPlanBar() {
   return (
     <View className="border-b border-wood-600/25 bg-ivory px-4 py-2">
       <Text className="font-sans text-xs text-muted-brown" numberOfLines={1}>
-        Plan · Step {idx + 1}/{plan.slots.length}: {slot?.title ?? '—'}
+        Plan · {idx + 1}/{plan.slots.length}: {slot?.title ?? '—'}
       </Text>
       {hasNext ? (
         <Pressable
@@ -35,15 +35,15 @@ export function SessionPlanBar() {
               try {
                 await navigateToPracticePlanSlot(router, { saveLesson, setLessonSectionIndex }, idx + 1)
               } catch (e) {
-                console.warn('[SessionPlanBar] next drill failed', e)
+                console.warn('[SessionPlanBar] next section failed', e)
               }
             })()
           }}
           className="mt-2 self-start rounded-lg border border-amber-accent/50 bg-amber-accent/15 px-3 py-2"
           accessibilityRole="button"
-          accessibilityLabel="Go to next drill in practice plan"
+          accessibilityLabel="Go to next section in practice plan"
         >
-          <Text className="font-sans-medium text-sm text-wood-900">Next drill</Text>
+          <Text className="font-sans-medium text-sm text-wood-900">Next section</Text>
         </Pressable>
       ) : (
         <Pressable

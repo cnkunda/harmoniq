@@ -1,11 +1,8 @@
 /**
  * PhaseIndicator component for commit #83.
  * 
- * Replaces SessionStepper with 4 phase dots with labels:
- * - Orient (hear the target)
- * - Isolate (understand and break down)
- * - Apply (play with a responsive band)
- * - Reflect (honest specific feedback)
+ * 5 phase dots with labels matching the session step progression:
+ * Orient → Isolate → Refine → Apply → Reflect.
  */
 
 import { View, Text } from 'react-native'
@@ -22,7 +19,6 @@ export interface PhaseIndicatorProps {
 
 export function PhaseIndicator({ currentPhase: propPhase, showLabels = true }: PhaseIndicatorProps) {
   const storePhase = useSessionPhaseStore((s) => s.currentPhase)
-  const phaseCompletion = useSessionPhaseStore((s) => s.phaseCompletion)
   
   // Use prop if provided, otherwise use store value
   const currentPhase = propPhase !== undefined ? propPhase : storePhase

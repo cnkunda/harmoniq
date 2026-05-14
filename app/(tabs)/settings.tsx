@@ -428,7 +428,7 @@ export default function SettingsScreen() {
             <FormCheckbox
               checked={skipTuneStep}
               onCheckedChange={(v) => void setSkipTuneStep(v)}
-              label="Skip tuning & room noise before lessons"
+              label="Skip tuning & room noise before sessions"
               labelClassName="text-cream"
               surface="wood"
             />
@@ -501,7 +501,7 @@ export default function SettingsScreen() {
         >
           <SettingsSwitch
             label="Default metronome on"
-            description="Enable metronome by default in Slow and Play steps"
+            description="Enable metronome by default in Slow and Play screens"
             value={metronomeDefaultOn}
             onValueChange={(v) => void persistMetronome(v)}
           />
@@ -516,7 +516,7 @@ export default function SettingsScreen() {
         >
           <SettingsSwitch
             label="Speak coach notes aloud"
-            description="Reads coach notes at session steps and after Play"
+            description="Reads coach notes at each session phase and after Play"
             value={voiceCoachEnabled}
             onValueChange={(v) => void persistVoiceCoachEnabled(v)}
           />

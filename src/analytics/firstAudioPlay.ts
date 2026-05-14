@@ -4,7 +4,7 @@ let fired = false
 
 export type FirstAudioPlaySource =
   | 'demo_listen'
-  | 'lesson_listen'
+  | 'session_listen'
   | 'jam_classic'
   | 'jam_ai'
   | 'onboarding_reference'

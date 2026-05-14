@@ -103,6 +103,17 @@ def save_cached_lesson_for_wav(
     p.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def invalidate_cache_for_wav(wav_path: Path, *, player_profile: PlayerProfile | None = None) -> bool:
+    """Remove analysis cache entry for this audio hash/profile. Returns True if removed."""
+    key = cache_key_for_wav_and_profile(wav_path, player_profile)
+    p = _cache_path(key)
+    if p.exists():
+        p.unlink()
+        logger.info("cache invalidated for hash=%s", key.split(":", 1)[1][:8])
+        return True
+    return False
+
+
 def clear_analysis_cache() -> list[Path]:
     """
     Delete all analysis cache entry files and return removed paths.
@@ -143,22 +154,27 @@ def reuse_cached_artifacts_into_job(cached_lesson: LessonJSON, *, job_id: str) -
 
     wav_rel = getattr(cached_lesson, "wav_path", None)
     if not isinstance(wav_rel, str):
+        logger.warning("cache_reuse missing wav_path in cached lesson for job=%s", job_id)
         return None
     wav_src = backend_root / wav_rel
     if not _copy_if_present(wav_src, target_wav):
+        logger.warning("cache_reuse source wav missing src=%s job=%s", wav_src, job_id)
         return None
 
     source_stems = cached_lesson.stems or {}
     if not source_stems:
+        logger.warning("cache_reuse no stems in cached lesson for job=%s", job_id)
         return None
 
     remapped_stems: dict[str, str] = {}
     for stem_name, stem_rel in source_stems.items():
         if not isinstance(stem_rel, str):
+            logger.warning("cache_reuse non-string stem rel for stem=%s job=%s", stem_name, job_id)
             return None
         src = backend_root / stem_rel
         dst = job_dir / "stems" / f"{stem_name}.wav"
         if not _copy_if_present(src, dst):
+            logger.warning("cache_reuse source stem missing src=%s stem=%s job=%s", src, stem_name, job_id)
             return None
         remapped_stems[stem_name] = str(dst.relative_to(backend_root).as_posix())
 

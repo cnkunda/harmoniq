@@ -107,7 +107,7 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
         )
         await promise.catch(() => {
           void import('@/components/ToastConfig').then(({ toast }) => {
-            toast.info('Coach tips could not refresh. Your lesson is still ready.')
+            toast.info('Coach tips could not refresh. Your session is still ready.')
           })
         })
       })()
@@ -158,7 +158,7 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
         )
         await promise.catch(() => {
           void import('@/components/ToastConfig').then(({ toast }) => {
-            toast.info('Coach tips could not refresh. Your lesson is still ready.')
+            toast.info('Coach tips could not refresh. Your session is still ready.')
           })
         })
       })()

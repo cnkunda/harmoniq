@@ -381,7 +381,10 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
         metro.bindAudioContext(ctx)
       } catch (e) {
         if (!cancelled) {
-          setLoadError(e instanceof Error ? e.message : 'Could not load stems.')
+          const jobId = lesson?.job_id ?? 'unknown'
+          const detail = e instanceof Error ? `${e.message} (job=${jobId})` : `Could not load stems (job=${jobId})`
+          console.error('[ListenStemPanel] stem load failed:', e, { jobId })
+          setLoadError(detail)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -548,7 +551,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
         await m.play()
         setPlaying(true)
         logFirstAudioPlay({
-          source: lesson?.job_id === DEMO_LESSON_JOB_ID ? 'demo_listen' : 'lesson_listen',
+          source: lesson?.job_id === DEMO_LESSON_JOB_ID ? 'demo_listen' : 'session_listen',
           job_id: lesson?.job_id ?? null,
         })
       }
@@ -576,7 +579,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
   if (!lesson) {
     return (
       <Text className="mt-2 font-sans text-sm text-muted-brown">
-        No lesson in memory — add a song from Home or open a session after analysis so stems can load.
+        No song loaded — add one from Home or open a session after analysis so stems can load.
       </Text>
     )
   }
@@ -586,8 +589,8 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
     return (
       <Text className="mt-2 font-sans text-sm text-muted-brown">
         {isDrillLick
-          ? 'This saved lick has no backing stem on file. Save it again from Review after a full analyzed lesson, or open a song that includes stems.'
-          : 'This lesson has no stem paths yet. Re-run analysis with a backend that writes stems.'}
+          ? 'This saved lick has no backing stem on file. Save it again from Review after a full analysis, or open a song that includes stems.'
+          : 'This song has no stem paths yet. Re-run analysis with a backend that writes stems.'}
       </Text>
     )
   }
@@ -598,7 +601,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
     const sec = Math.floor(s % 60)
     return `${m}:${sec.toString().padStart(2, '0')}`
   }
-  const songTitle = lesson.song_title?.trim() || 'Untitled lesson'
+  const songTitle = lesson.song_title?.trim() || 'Untitled song'
   const sectionTotal = Math.max(sections.length, 1)
   const sectionDisplay = Math.min(lessonSectionIndex + 1, sectionTotal)
 

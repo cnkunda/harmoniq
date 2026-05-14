@@ -24,7 +24,7 @@ function chipLabel(slot: DrillSlotPayload): string {
 
     return capitalized.length > 14
       ? `${capitalized.slice(0, 12)}…`
-      : `${capitalized} drill`
+      : `${capitalized}`
   }
   const t = slot.title.trim()
   if (t.length <= 20) return t
@@ -118,7 +118,7 @@ export function TodaysPlanCard({
       <View className="mb-4 flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1">
           <Text className="mb-1 font-serif text-2xl text-cream">Your {sessionMinutes}-min session</Text>
-          <Text className="font-sans text-sm text-amber-light/80">{plan.slots.length} steps · guided path</Text>
+          <Text className="font-sans text-sm text-amber-light/80">{plan.slots.length} sections · guided path</Text>
         </View>
         <PlanProgressRing progress={progressFraction} />
       </View>
