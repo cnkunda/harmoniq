@@ -385,9 +385,17 @@ Phase 1 is NOT done until all "YES — blocking" and "YES" rows are CLOSED or ex
 - Background task or cron job for periodic execution
 
 **Acceptance Criteria:**
-- [ ] Cleanup script safely removes orphaned temp folders
-- [ ] Configurable retention period (e.g., 7 days)
-- [ ] Dry-run mode for safe verification
+- [x] Cleanup script safely removes orphaned temp folders
+- [x] Configurable retention period (e.g., 7 days)
+- [x] Dry-run mode for safe verification
+
+**Verification:**
+- `scripts/cleanup_data.py` prunes `.tmp_test_data_*` dirs and old `data/jobs/` dirs
+- Retention configurable via `HARMONIQ_CLEANUP_RETENTION_DAYS` env var or `--days` CLI flag
+- `--dry-run` flag previews changes without deleting
+- Cleanup runs as a background task on FastAPI startup (`HARMONIQ_SKIP_CLEANUP=1` to disable)
+- Active jobs (in-memory) are skipped; non-UUID dirs in jobs/ are ignored
+- Tested: 4 stale dirs cleaned with `--days 0`, 30/31 backend tests pass
 
 ---
 

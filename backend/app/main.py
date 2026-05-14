@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
 import math
 import os
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
@@ -57,10 +59,39 @@ logger.setLevel(logging.INFO)
 PITCH_CLASS_KEY_RE = re.compile(r"^pc_(C|C#|D|D#|E|F|F#|G|G#|A|A#|B)$")
 GENERIC_MAP_KEY_RE = re.compile(r"^[A-Za-z0-9._:#\-/+(). ]{1,64}$")
 
+async def _run_startup_cleanup():
+    """Run data cleanup as a background task on startup."""
+    skip = os.getenv("HARMONIQ_SKIP_CLEANUP", "").strip() == "1"
+    if skip:
+        logger.info("Startup cleanup skipped (HARMONIQ_SKIP_CLEANUP=1)")
+        return
+    try:
+        from scripts.cleanup_data import run_cleanup
+
+        backend_root = Path(__file__).resolve().parents[1]
+        data_dir = backend_root / "data"
+        retention_raw = os.getenv("HARMONIQ_CLEANUP_RETENTION_DAYS", "7").strip()
+        retention = max(1, int(retention_raw)) if retention_raw else 7
+        logger.info("Startup cleanup (retention=%d days, data=%s)", retention, data_dir)
+        result = run_cleanup(data_dir, backend_root, retention, dry_run=False)
+        if result["total_failed"] > 0:
+            logger.warning("Startup cleanup completed with %d error(s)", result["total_failed"])
+    except Exception:
+        logger.exception("Startup cleanup failed")
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Run startup cleanup and yield."""
+    asyncio.create_task(_run_startup_cleanup())
+    yield
+
+
 app = FastAPI(
     title="Harmoniq API",
     description="Local analysis backend for Harmoniq (in-memory job runner; real pipeline later).",
     version="0.2.0",
+    lifespan=lifespan,
 )
 
 
