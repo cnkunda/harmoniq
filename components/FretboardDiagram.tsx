@@ -1,6 +1,12 @@
 import { LinearGradient } from 'expo-linear-gradient'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  Platform,
+  Pressable,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native'
 import Animated, {
   Easing,
   interpolate,
@@ -11,13 +17,32 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated'
+import {
+  Circle,
+  Defs,
+  G,
+  Line,
+  LinearGradient as SvgLinearGradient,
+  RadialGradient as SvgRadialGradient,
+  Rect as SvgRect,
+  Stop,
+  Svg,
+  Text as SvgText,
+} from 'react-native-svg'
 
 import { spring } from '@/src/constants/animations'
 import colors from '@/src/constants/colors'
-import { NUM_FRETS, OPEN_MIDI_BY_ROW, inferMidiFromNoteSelection, resolveFretCell } from '@/src/music/fretboardCell'
+import {
+  NUM_FRETS,
+  OPEN_MIDI_BY_ROW,
+  inferMidiFromNoteSelection,
+  resolveFretCell,
+} from '@/src/music/fretboardCell'
 import { pitchClassLabelFromMidi } from '@/src/music/noteNames'
 import type { FretboardTunerState } from '@/src/session/useFretboardTuner'
 import type { FretboardOverlayMode } from '@/src/utils/fretboardShareState'
+import { useMusicState } from '@/src/context/MusicContext'
+import { chordToFretboardCells, formatChordDisplay } from '@/src/music/chordVoicing'
 
 export { inferMidiFromNoteSelection, resolveFretCell } from '@/src/music/fretboardCell'
 
@@ -37,25 +62,16 @@ type FretboardDiagramProps = {
     midi?: number
   } | null
   pulseKey?: number
-  /** Pitch classes 0–11 to outline subtly (Jam scale overlay). */
   scalePitchClasses?: readonly number[] | null
-  /** Optional: tapping a map cell selects that note (used by Study/Play). */
   onSelectNote?: (note: { string: number; fret: number; midi: number }) => void
-  /** Last scored beat — brief tint on the matching string/fret cell (Play). */
   lastCellResult?: FretboardLastCellResult | null
-  /** Overlay labels for learning aids (off by default to avoid clutter). */
   overlayMode?: FretboardOverlayMode
-  /** Root pitch class (0-11), used for scale-degree overlays. */
   degreeRootPitchClass?: number | null
-  /** Web-only shortcut input (keyboard rows map to fret positions). */
   enableKeyboardInput?: boolean
-  /** Optional compact overlay mode controls in header action row. */
   showOverlayControls?: boolean
   onOverlayModeChange?: (mode: FretboardOverlayMode) => void
-  /** Optional share-link action in header action row. */
   showCopyShare?: boolean
   onCopyShareLink?: () => void
-  /** Optional top-right tuner toggle on the fretboard header. */
   showTuneControl?: boolean
   tuneActive?: boolean
   tuneDisabled?: boolean
@@ -63,7 +79,6 @@ type FretboardDiagramProps = {
   onToggleTune?: () => void
   onCalibrateTune?: () => void
   tunerState?: FretboardTunerState | null
-  /** Optional Orient/Hint button for technique demonstration clips. */
   showOrientControl?: boolean
   orientActive?: boolean
   onToggleOrient?: () => void
@@ -71,64 +86,59 @@ type FretboardDiagramProps = {
   orientAnnotation?: string | null
   orientIsPlaying?: boolean
   onToggleOrientPlayback?: () => void
-  /** Warm-up / curriculum: highlight fixed cells (amber vs success rings). Finger 1-4 optional for color coding. */
   fretGuideCells?: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary'; finger?: 1 | 2 | 3 | 4 }> | null
-  /** Active sequence index for animated warmup exercise highlighting */
   activeGuideIndex?: number | null
-  /** Chord shape cells to highlight on the fretboard (for intelligent display). */
   chordCells?: ReadonlyArray<{ string: number; fret: number; interval?: number }> | null
-  /** When set, replaces default footer hint when nothing is selected. */
   fretGuideFooterHint?: string | null
-  /** Optional pitch-ladder demo (e.g. warm-up); shows an “Example” pill like Tune. */
   pitchLadderSlot?: ReactNode
-  /** When `pitchLadderSlot` is set, initial expanded state (default `true`). */
   pitchLadderDefaultExpanded?: boolean
-  /** Fretboard display mode for intelligent chord/solo visualization. */
   fretboardMode?: 'auto' | 'chords' | 'solo' | 'both'
-  /** Callback when fretboard mode changes. */
   onFretboardModeChange?: (mode: 'auto' | 'chords' | 'solo' | 'both') => void
-  /** Chord voicing compactness preference. */
   voicingMode?: 'full' | 'compact'
-  /** Callback when voicing mode changes. */
   onVoicingModeChange?: (mode: 'full' | 'compact') => void
 }
 
-/** Finger colors matching the shared Fretboard component style */
 const FINGER_COLORS: Record<number, { fill: string; border: string }> = {
-  1: { fill: '#60A5FA', border: '#3B82F6' }, // Index - blue
-  2: { fill: '#34D399', border: '#10B981' }, // Middle - green
-  3: { fill: '#FBBF24', border: '#F59E0B' }, // Ring - yellow
-  4: { fill: '#F87171', border: '#EF4444' }, // Pinky - red
+  1: { fill: '#60A5FA', border: '#3B82F6' },
+  2: { fill: '#34D399', border: '#10B981' },
+  3: { fill: '#FBBF24', border: '#F59E0B' },
+  4: { fill: '#F87171', border: '#EF4444' },
 }
 
 const SCALE_DEGREE_LABELS: Record<number, string> = {
-  0: '1',
-  1: 'b2',
-  2: '2',
-  3: 'b3',
-  4: '3',
-  5: '4',
-  6: 'b5',
-  7: '5',
-  8: '#5',
-  9: '6',
-  10: 'b7',
-  11: '7',
+  0: '1', 1: 'b2', 2: '2', 3: 'b3', 4: '3', 5: '4',
+  6: 'b5', 7: '5', 8: '#5', 9: '6', 10: 'b7', 11: '7',
 }
 
 const KEYBOARD_ROWS = ['1234567890-=', 'qwertyuiop[]', "asdfghjkl;'", 'zxcvbnm,./'] as const
-
-/** Matches typical dot inlays (fret numbers are diagram columns: 0 = nut). */
 const SINGLE_INLAY_FRETS = new Set([3, 5, 7, 9])
 
-const NUT_COLUMN_WIDTH = 44
+// SVG layout constants
+const SVG_W = 900
+const SVG_H = 260
+const MARGIN_L = 44
+const MARGIN_R = 12
+const BOARD_T = 36
+const BOARD_B = 234
+const BOARD_H = BOARD_B - BOARD_T
+const NUT_W = 8
+const FRET_START_X = MARGIN_L + NUT_W
+const COL_W = (SVG_W - MARGIN_R - FRET_START_X) / 12
 
-const OPEN_STRING_NOTE_LETTERS = OPEN_MIDI_BY_ROW.map((midi) => pitchClassLabelFromMidi(midi))
+function stringY(i: number): number {
+  return BOARD_T + BOARD_H * (i + 0.5) / 6
+}
 
-function fretInlayKind(
-  fret: number,
-  stringIdx: number,
-): 'single' | 'doubleUpper' | 'doubleLower' | null {
+function fretCenterX(f: number): number {
+  if (f === 0) return MARGIN_L + NUT_W / 2
+  return FRET_START_X + COL_W * (f - 0.5)
+}
+
+function fretWireX(f: number): number {
+  return FRET_START_X + COL_W * f
+}
+
+function fretInlayKind(fret: number, stringIdx: number): 'single' | 'doubleUpper' | 'doubleLower' | null {
   if (fret === 12) {
     if (stringIdx === 0) return 'doubleUpper'
     if (stringIdx === 5) return 'doubleLower'
@@ -142,19 +152,6 @@ function stringLineThicknessPx(stringIdx: number): number {
   return 1 + stringIdx * 0.38
 }
 
-/** Web-only wound-string look (`repeating-linear-gradient` + shadow). */
-function stringLineWebBackground(heightPx: number): ViewStyle {
-  const mid = Math.max(1, Math.round(heightPx / 2))
-  return {
-    width: '100%',
-    height: heightPx,
-    borderRadius: heightPx / 2,
-    backgroundImage: `repeating-linear-gradient(90deg, #a8a29e 0px, #f5f5f4 ${mid}px, #78716c ${mid + 2}px, #e7e5e4 ${mid + 4}px, #a8a29e ${mid + 6}px)`,
-    boxShadow: '0 1px 2px rgba(0,0,0,0.14)',
-  } as ViewStyle
-}
-
-/** Warm HSL peak keyed by pitch class so each perception note reads as a distinct flash (Study B3). */
 function flashPeakColorForMidi(midi: number | null): string {
   if (midi == null || !Number.isFinite(midi)) return '#F5ECD8'
   const pc = ((Math.round(midi) % 12) + 12) % 12
@@ -162,9 +159,36 @@ function flashPeakColorForMidi(midi: number | null): string {
   return `hsl(${hue}, 76%, 76%)`
 }
 
-/**
- * Remount via `key={pulseKey}` from parent so each `noteEvent` replays scale + color pulse in sync with playback.
- */
+function scaleHighlightActive(
+  scalePitchClasses: readonly number[] | null | undefined,
+  stringIdx: number,
+  fret: number,
+): boolean {
+  if (!scalePitchClasses || scalePitchClasses.length === 0) return false
+  const midi = OPEN_MIDI_BY_ROW[stringIdx]! + fret
+  const pc = ((midi % 12) + 12) % 12
+  return scalePitchClasses.includes(pc)
+}
+
+function cellMatchesDiagramCol(cellFret: number, col: number): boolean {
+  return cellFret <= NUM_FRETS ? cellFret === col : col === NUM_FRETS
+}
+
+function overlayLabelForCell(
+  overlayMode: FretboardOverlayMode,
+  midi: number,
+  degreeRootPitchClass: number | null,
+): string | null {
+  if (overlayMode === 'off') return null
+  if (overlayMode === 'note_names') return pitchClassLabelFromMidi(midi)
+  if (degreeRootPitchClass == null) return null
+  const pc = ((Math.round(midi) % 12) + 12) % 12
+  const iv = (pc - degreeRootPitchClass + 12) % 12
+  return SCALE_DEGREE_LABELS[iv] ?? null
+}
+
+const OPEN_STRING_NOTE_LETTERS = OPEN_MIDI_BY_ROW.map((midi) => pitchClassLabelFromMidi(midi))
+
 function SelectedMarker({ flashMidi }: { flashMidi: number | null }) {
   const scale = useSharedValue(1)
   const colorPulse = useSharedValue(0)
@@ -191,7 +215,6 @@ function SelectedMarker({ flashMidi }: { flashMidi: number | null }) {
     transform: [{ scale: interpolate(colorPulse.value, [0, 1], [0.85, 1.75]) }],
   }))
 
-  // Avoid NativeWind `className` on Animated.View — on web it can override `transform` and kill the pulse.
   return (
     <View style={{ alignItems: 'center', justifyContent: 'center', width: 28, height: 28 }}>
       <Animated.View
@@ -226,58 +249,6 @@ function SelectedMarker({ flashMidi }: { flashMidi: number | null }) {
   )
 }
 
-/**
- * Six strings × nut + 12 frets; selected AlphaTab note renders above dot pattern.
- */
-function scaleHighlightActive(
-  scalePitchClasses: readonly number[] | null | undefined,
-  stringIdx: number,
-  fret: number,
-): boolean {
-  if (!scalePitchClasses || scalePitchClasses.length === 0) return false
-  const midi = OPEN_MIDI_BY_ROW[stringIdx]! + fret
-  const pc = ((midi % 12) + 12) % 12
-  return scalePitchClasses.includes(pc)
-}
-
-function cellMatchesDiagramCol(
-  cellFret: number,
-  col: number,
-): boolean {
-  return cellFret <= NUM_FRETS ? cellFret === col : col === NUM_FRETS
-}
-
-function overlayLabelForCell(
-  overlayMode: FretboardOverlayMode,
-  midi: number,
-  degreeRootPitchClass: number | null,
-): string | null {
-  if (overlayMode === 'off') return null
-  if (overlayMode === 'note_names') return pitchClassLabelFromMidi(midi)
-  if (degreeRootPitchClass == null) return null
-  const pc = ((Math.round(midi) % 12) + 12) % 12
-  const iv = (pc - degreeRootPitchClass + 12) % 12
-  return SCALE_DEGREE_LABELS[iv] ?? null
-}
-
-function guideVariantAtCell(
-  fretGuideCells: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary'; finger?: 1 | 2 | 3 | 4 }> | null | undefined,
-  stringIdx: number,
-  diagramCol: number,
-): { variant: 'primary' | 'secondary'; finger?: 1 | 2 | 3 | 4 } | null {
-  if (!fretGuideCells?.length) return null
-  for (const gc of fretGuideCells) {
-    if (gc.string === stringIdx + 1 && cellMatchesDiagramCol(gc.fret, diagramCol)) {
-      return { variant: gc.variant, finger: gc.finger }
-    }
-  }
-  return null
-}
-
-/**
- * Guide marker with finger-color coding for warmup exercise display.
- * Shows finger number or overlay label inside colored circle with pulse animation when active.
- */
 function GuideMarker({
   finger,
   isActive,
@@ -287,34 +258,29 @@ function GuideMarker({
   isActive?: boolean
   overlayLabel?: string | null | undefined
 }) {
-  const colors = finger ? FINGER_COLORS[finger] : { fill: '#D4A574', border: '#B8956A' }
-  const scale = useSharedValue(1)
+  const fc = finger ? FINGER_COLORS[finger] : { fill: '#D4A574', border: '#B8956A' }
+  const scaleVal = useSharedValue(1)
   const pulseAnim = useSharedValue(0)
 
   useEffect(() => {
-    scale.value = 1
+    scaleVal.value = 1
     pulseAnim.value = 0
     if (isActive) {
-      scale.value = withSequence(withSpring(1.25, spring.snappy), withSpring(1.1, spring.gentle))
+      scaleVal.value = withSequence(withSpring(1.25, spring.snappy), withSpring(1.1, spring.gentle))
       pulseAnim.value = withSequence(
         withTiming(1, { duration: 150, easing: Easing.out(Easing.quad) }),
         withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) }),
       )
     }
-  }, [isActive, scale, pulseAnim])
+  }, [isActive, scaleVal, pulseAnim])
 
-  const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }))
-
+  const containerStyle = useAnimatedStyle(() => ({ transform: [{ scale: scaleVal.value }] }))
   const ringStyle = useAnimatedStyle(() => ({
     opacity: isActive ? interpolate(pulseAnim.value, [0, 0.5, 1], [0.6, 0.9, 0.6]) : 0.4,
     transform: [{ scale: isActive ? interpolate(pulseAnim.value, [0, 1], [1, 1.4]) : 1 }],
   }))
 
-  // Determine what to display: overlay label takes precedence over finger number
   const displayContent = overlayLabel ?? (finger ? finger.toString() : null)
-  // Scale font size based on content length
   const fontSize = overlayLabel && overlayLabel.length > 1 ? 8 : 10
 
   return (
@@ -328,8 +294,8 @@ function GuideMarker({
             height: 22,
             borderRadius: 11,
             borderWidth: 2,
-            borderColor: colors.border,
-            backgroundColor: colors.fill + '40', // 25% opacity
+            borderColor: fc.border,
+            backgroundColor: fc.fill + '40',
           },
         ]}
       />
@@ -337,18 +303,10 @@ function GuideMarker({
         style={[
           containerStyle,
           {
-            width: 18,
-            height: 18,
-            borderRadius: 9,
-            backgroundColor: colors.fill,
-            borderWidth: 1.5,
-            borderColor: colors.border,
-            alignItems: 'center',
-            justifyContent: 'center',
-            shadowColor: '#000',
-            shadowOpacity: 0.2,
-            shadowRadius: 2,
-            shadowOffset: { width: 0, height: 1 },
+            width: 18, height: 18, borderRadius: 9,
+            backgroundColor: fc.fill, borderWidth: 1.5, borderColor: fc.border,
+            alignItems: 'center', justifyContent: 'center',
+            shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
           },
         ]}
       >
@@ -394,7 +352,7 @@ export function FretboardDiagram({
   onToggleOrientPlayback,
   fretGuideCells = null,
   activeGuideIndex = null,
-  chordCells = null,
+  chordCells: chordCellsProp = null,
   fretGuideFooterHint = null,
   pitchLadderSlot = null,
   pitchLadderDefaultExpanded,
@@ -403,49 +361,137 @@ export function FretboardDiagram({
   voicingMode,
   onVoicingModeChange,
 }: FretboardDiagramProps) {
-  const [pitchLadderOpen, setPitchLadderOpen] = useState(
-    () => pitchLadderDefaultExpanded ?? true,
-  )
+  const [pitchLadderOpen, setPitchLadderOpen] = useState(() => pitchLadderDefaultExpanded ?? true)
+  const [orientPanelOpen, setOrientPanelOpen] = useState(false)
+  const [svgSize, setSvgSize] = useState({ w: 0, h: 0 })
+
+  // MusicContext integration (optional – graceful fallback if no provider in tree)
+  let musicState: { currentChord: string | null; activeNotes: Array<{ string: number; fret: number; midi?: number }> } | null = null
+  try {
+    musicState = useMusicState()
+  } catch {
+    // No MusicProvider in tree; that's fine
+  }
+
   const cell = selectedNote ? resolveFretCell(selectedNote) : null
   const flashMidi = selectedNote ? inferMidiFromNoteSelection(selectedNote) : null
   const showPitchLadderControl = pitchLadderSlot != null
-  const [orientPanelOpen, setOrientPanelOpen] = useState(false)
+
+  // Derive chord cells: prefer prop, then compute from MusicContext
+  const chordCells = useMemo(() => {
+    if (chordCellsProp && chordCellsProp.length > 0) return chordCellsProp
+    if (musicState?.currentChord && musicState.currentChord !== 'N') {
+      const cells = chordToFretboardCells(musicState.currentChord, voicingMode ?? 'compact', 'low')
+      return cells.map(c => ({ string: c.string, fret: c.fret, interval: c.interval }))
+    }
+    return []
+  }, [chordCellsProp, musicState?.currentChord, voicingMode])
+
+  // Chord name from MusicContext or fallback
+  const chordName = useMemo(() => {
+    if (musicState?.currentChord && musicState.currentChord !== 'N') {
+      return formatChordDisplay(musicState.currentChord)
+    }
+    return null
+  }, [musicState?.currentChord])
+
+  // Active notes from MusicContext or fallback to selectedNote
+  const activeNotes = useMemo(() => {
+    if (musicState?.activeNotes && musicState.activeNotes.length > 0) {
+      return musicState.activeNotes
+    }
+    return []
+  }, [musicState?.activeNotes])
+
+  // Display mode filtering for SVG rendering
+  const showChords = useMemo(() => {
+    if (!fretboardMode || fretboardMode === 'auto' || fretboardMode === 'both' || fretboardMode === 'chords') return true
+    return false
+  }, [fretboardMode])
+
+  const showSoloNotes = useMemo(() => {
+    if (!fretboardMode || fretboardMode === 'auto' || fretboardMode === 'both' || fretboardMode === 'solo') return true
+    return false
+  }, [fretboardMode])
+
+  const onSvgLayout = useCallback((e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width
+    setSvgSize({ w, h: w * SVG_H / SVG_W })
+  }, [])
 
   useEffect(() => {
     if (!onSelectNote || !enableKeyboardInput || Platform.OS !== 'web') return
     const handler = (evt: KeyboardEvent) => {
       const target = evt.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
-      // Do not steal browser shortcuts (Ctrl/Meta/Alt + key still reports the base character).
       if (evt.ctrlKey || evt.metaKey || evt.altKey) return
       const key = evt.key.toLowerCase()
       let rowIndex = -1
       let fret = -1
       for (let i = 0; i < KEYBOARD_ROWS.length; i += 1) {
         const idx = KEYBOARD_ROWS[i].indexOf(key)
-        if (idx >= 0) {
-          rowIndex = i
-          fret = idx
-          break
-        }
+        if (idx >= 0) { rowIndex = i; fret = idx; break }
       }
       if (rowIndex < 0 || fret < 0 || fret > NUM_FRETS) return
-      // Musicca-style behavior: hold Shift to access upper strings from the top rows.
       let stringIdx = 5 - rowIndex
       if (evt.shiftKey && rowIndex <= 1) {
         stringIdx = rowIndex === 0 ? 1 : 0
       }
       if (stringIdx < 0 || stringIdx > 5) return
       evt.preventDefault()
-      onSelectNote({
-        string: stringIdx + 1,
-        fret,
-        midi: OPEN_MIDI_BY_ROW[stringIdx]! + fret,
-      })
+      onSelectNote({ string: stringIdx + 1, fret, midi: OPEN_MIDI_BY_ROW[stringIdx]! + fret })
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [enableKeyboardInput, onSelectNote])
+
+  const handleCellPress = useCallback((stringIdx: number, fret: number) => {
+    if (!onSelectNote) return
+    onSelectNote({ string: stringIdx + 1, fret, midi: OPEN_MIDI_BY_ROW[stringIdx]! + fret })
+  }, [onSelectNote])
+
+  // Pre-compute SVG cell data for tap targets
+  const svgCells = useMemo(() => {
+    const cells: Array<{
+      stringIdx: number
+      fret: number
+      sx: number
+      sy: number
+      ex: number
+      ey: number
+    }> = []
+    for (let si = 0; si < 6; si++) {
+      for (let f = 0; f <= NUM_FRETS; f++) {
+        let sx: number, ex: number
+        if (f === 0) {
+          sx = MARGIN_L
+          ex = FRET_START_X + COL_W
+        } else {
+          sx = FRET_START_X + COL_W * (f - 1)
+          ex = FRET_START_X + COL_W * f
+        }
+        const sy = stringY(si) - BOARD_H / 12
+        const ey = stringY(si) + BOARD_H / 12
+        cells.push({ stringIdx: si, fret: f, sx, sy, ex, ey })
+      }
+    }
+    return cells
+  }, [])
+
+  const feedbackRingColor = lastCellResult
+    ? lastCellResult.result === 'hit'
+      ? colors.success
+      : lastCellResult.result === 'close'
+        ? colors.amber.accent
+        : colors.danger
+    : null
+
+  const feedbackX = lastCellResult
+    ? fretCenterX(lastCellResult.fret)
+    : 0
+  const feedbackY = lastCellResult
+    ? stringY(lastCellResult.row)
+    : 0
 
   return (
     <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/45 p-3">
@@ -453,7 +499,6 @@ export function FretboardDiagram({
         <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Position map</Text>
         {showTuneControl || showOrientControl || showOverlayControls || showCopyShare || showPitchLadderControl || !!onFretboardModeChange ? (
           <View className="max-w-[76%] flex-row flex-wrap items-center justify-end gap-1.5">
-            {/* Fretboard mode pills */}
             {onFretboardModeChange && ([
               { mode: 'auto' as const, label: 'Auto' },
               { mode: 'chords' as const, label: 'Chords' },
@@ -473,7 +518,6 @@ export function FretboardDiagram({
                 <Text className={`font-sans text-[11px] ${fretboardMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
               </Pressable>
             ))}
-            {/* Voicing mode pills (only when chord-based mode active) */}
             {onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both') && (
               <>
                 <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
@@ -522,17 +566,12 @@ export function FretboardDiagram({
             ) : null}
             {showOrientControl ? (
               <Pressable
-                onPress={() => {
-                  setOrientPanelOpen((o) => !o)
-                  onToggleOrient?.()
-                }}
+                onPress={() => { setOrientPanelOpen((o) => !o); onToggleOrient?.() }}
                 className={`rounded-full border px-3 py-1 ${orientPanelOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'}`}
                 accessibilityRole="button"
                 accessibilityLabel={orientPanelOpen ? 'Hide technique hint' : 'Show technique hint'}
               >
-                <Text className={`font-sans text-[11px] ${orientPanelOpen ? 'text-wood-900' : 'text-muted-brown'}`}>
-                  {orientPanelOpen ? 'Hint' : 'Hint'}
-                </Text>
+                <Text className={`font-sans text-[11px] ${orientPanelOpen ? 'text-wood-900' : 'text-muted-brown'}`}>Hint</Text>
               </Pressable>
             ) : null}
             {showPitchLadderControl ? (
@@ -543,9 +582,7 @@ export function FretboardDiagram({
                 accessibilityLabel="Show example pitch ladder"
                 accessibilityState={{ selected: pitchLadderOpen }}
               >
-                <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-muted-brown'}`}>
-                  Example
-                </Text>
+                <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-muted-brown'}`}>Example</Text>
               </Pressable>
             ) : null}
             {showOverlayControls
@@ -565,9 +602,7 @@ export function FretboardDiagram({
                     accessibilityLabel={label}
                     accessibilityState={{ selected: overlayMode === mode }}
                   >
-                    <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>
-                      {label}
-                    </Text>
+                    <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
                   </Pressable>
                 ))
               : null}
@@ -633,180 +668,372 @@ export function FretboardDiagram({
         </View>
       ) : null}
 
-      <View className="mt-3 overflow-hidden rounded-lg border border-stone-400/55">
-        <View className="flex-row border-b border-stone-400/55 bg-stone-100 py-1.5">
-          <LinearGradient
-            colors={['#ddc9a8', '#c4a574', '#a68456']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.nutHeaderCell}
-          />
-          {Array.from({ length: NUM_FRETS + 1 }).map((_, col) => (
-            <View key={`h-${col}`} className="flex-1 items-center justify-center border-r border-stone-400/55 bg-[#fafaf9]">
-              <Text className="font-mono text-[9px] text-stone-600">{col === 0 ? 'O' : col}</Text>
-            </View>
-          ))}
-        </View>
+      {/* SVG Fretboard */}
+      <View
+        onLayout={onSvgLayout}
+        className="mt-3 overflow-hidden rounded-lg"
+        style={{ width: '100%', height: svgSize.h || 200 }}
+      >
+        {svgSize.w > 0 && (
+          <Svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width={svgSize.w} height={svgSize.h}>
+            <Defs>
+              <SvgLinearGradient id="woodBg" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0%" stopColor="#3D2317" />
+                <Stop offset="100%" stopColor="#2C1810" />
+              </SvgLinearGradient>
+              <SvgRadialGradient id="noteGlow" cx="50%" cy="50%" r="50%">
+                <Stop offset="0%" stopColor="#E53935" stopOpacity="0.35" />
+                <Stop offset="100%" stopColor="#E53935" stopOpacity="0" />
+              </SvgRadialGradient>
+              <SvgRadialGradient id="chordRootGlow" cx="50%" cy="50%" r="50%">
+                <Stop offset="0%" stopColor="#D4A574" stopOpacity="0.45" />
+                <Stop offset="100%" stopColor="#D4A574" stopOpacity="0" />
+              </SvgRadialGradient>
+            </Defs>
 
-        {Array.from({ length: 6 }).map((_, stringIdx) => {
-          const thickness = stringLineThicknessPx(stringIdx)
-          const webStringStyle: ViewStyle =
-            Platform.OS === 'web'
-              ? stringLineWebBackground(thickness)
-              : {
-                  width: '100%',
-                  height: thickness,
-                  borderRadius: thickness / 2,
-                  backgroundColor: '#78716c',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 1 },
-                  shadowOpacity: 0.18,
-                  shadowRadius: 1.25,
-                  elevation: 2,
+            {/* Wood background */}
+            <SvgRect x="0" y="0" width={SVG_W} height={SVG_H} fill="url(#woodBg)" rx="6" />
+
+            {/* Chord name */}
+            {chordName && (
+              <SvgText
+                x={SVG_W / 2}
+                y={20}
+                textAnchor="middle"
+                fill={colors.amber.light}
+                fontSize={15}
+                fontWeight="700"
+                fontFamily="PlayfairDisplay-Bold"
+              >
+                {chordName}
+              </SvgText>
+            )}
+
+            {/* Fret numbers (O for nut, 1-12 for frets) */}
+            <SvgText
+              x={MARGIN_L + COL_W * 0.35}
+              y={34}
+              textAnchor="middle"
+              fill="#A8A29E"
+              fontSize={9}
+              fontFamily="JetBrainsMono-Regular"
+            >
+              O
+            </SvgText>
+            {Array.from({ length: 12 }).map((_, i) => (
+              <SvgText
+                key={`fn-${i}`}
+                x={fretCenterX(i + 1)}
+                y={34}
+                textAnchor="middle"
+                fill="#A8A29E"
+                fontSize={9}
+                fontFamily="JetBrainsMono-Regular"
+              >
+                {i + 1}
+              </SvgText>
+            ))}
+
+            {/* Open string labels */}
+            {OPEN_STRING_NOTE_LETTERS.map((label, i) => (
+              <SvgText
+                key={`os-${i}`}
+                x={MARGIN_L - 6}
+                y={stringY(i) + 4}
+                textAnchor="end"
+                fill={colors.amber.accent}
+                fontSize={11}
+                fontWeight="600"
+              >
+                {label}
+              </SvgText>
+            ))}
+
+            {/* Nut (ivory) */}
+            <SvgRect
+              x={MARGIN_L}
+              y={BOARD_T}
+              width={NUT_W}
+              height={BOARD_H}
+              fill="#F5F0E8"
+              rx={1}
+              stroke="#D4A574"
+              strokeWidth={0.5}
+            />
+
+            {/* Fret wires (silver vertical lines) */}
+            {Array.from({ length: 12 }).map((_, i) => (
+              <Line
+                key={`fw-${i}`}
+                x1={fretWireX(i + 1)}
+                y1={BOARD_T - 4}
+                x2={fretWireX(i + 1)}
+                y2={BOARD_B + 4}
+                stroke="#A8A29E"
+                strokeWidth={1.2}
+                opacity={0.7}
+              />
+            ))}
+
+            {/* Fret inlays */}
+            {Array.from({ length: 6 }).map((_, si) =>
+              Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
+                const inlay = fretInlayKind(col, si)
+                if (!inlay) return null
+                const cx = fretCenterX(col)
+                const cy = stringY(si)
+                if (inlay === 'single') {
+                  return (
+                    <Circle
+                      key={`inl-${si}-${col}`}
+                      cx={cx}
+                      cy={cy}
+                      r={4.5}
+                      fill="#8B7D6B"
+                      opacity={0.55}
+                    />
+                  )
                 }
+                if (inlay === 'doubleUpper') {
+                  return (
+                    <Circle
+                      key={`inl-${si}-${col}`}
+                      cx={cx}
+                      cy={cy - 8}
+                      r={3.5}
+                      fill="#8B7D6B"
+                      opacity={0.55}
+                    />
+                  )
+                }
+                if (inlay === 'doubleLower') {
+                  return (
+                    <Circle
+                      key={`inl-${si}-${col}`}
+                      cx={cx}
+                      cy={cy + 8}
+                      r={3.5}
+                      fill="#8B7D6B"
+                      opacity={0.55}
+                    />
+                  )
+                }
+                return null
+              }),
+            )}
 
+            {/* Strings (horizontal lines, varying thickness) */}
+            {Array.from({ length: 6 }).map((_, si) => (
+              <Line
+                key={`str-${si}`}
+                x1={MARGIN_L}
+                y1={stringY(si)}
+                x2={SVG_W - MARGIN_R}
+                y2={stringY(si)}
+                stroke="#A8A29E"
+                strokeWidth={stringLineThicknessPx(si) * 2.2}
+                opacity={0.75}
+              />
+            ))}
+
+            {/* Scale highlights */}
+            {Array.from({ length: 6 }).map((_, si) =>
+              Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
+                if (!scaleHighlightActive(scalePitchClasses, si, col)) return null
+                const midi = OPEN_MIDI_BY_ROW[si]! + col
+                const isActiveNote = activeNotes.some(n => n.midi === midi)
+                if (isActiveNote) return null // don't double-highlight
+                return (
+                  <Circle
+                    key={`sc-${si}-${col}`}
+                    cx={fretCenterX(col === 0 ? 0 : col)}
+                    cy={stringY(si)}
+                    r={7}
+                    fill="#6EC88C"
+                    opacity={0.15}
+                    stroke="#6EC88C"
+                    strokeWidth={0.8}
+                    strokeOpacity={0.4}
+                  />
+                )
+              }),
+            )}
+
+            {/* Chord voicing circles */}
+            {showChords && chordCells?.map((cc, idx) => {
+              const si = cc.string - 1
+              const col = cc.fret
+              if (si < 0 || si > 5) return null
+              const isRoot = cc.interval === 0
+              // Check if this note is already an active note
+              const isActiveChordNote = activeNotes.some(n => n.string === cc.string && n.fret === cc.fret)
+              if (isActiveChordNote) return null // active notes render separately
+              return (
+                <Circle
+                  key={`ch-${idx}`}
+                  cx={fretCenterX(col)}
+                  cy={stringY(si)}
+                  r={isRoot ? 8 : 6}
+                  fill={isRoot ? colors.amber.accent : colors.amber.light}
+                  opacity={isRoot ? 0.85 : 0.55}
+                  stroke={isRoot ? colors.amber.accent : colors.amber.light}
+                  strokeWidth={0.5}
+                />
+              )
+            })}
+
+            {/* Active notes (red glow + text) */}
+            {showSoloNotes && activeNotes.map((note, idx) => {
+              const si = note.string - 1
+              const col = note.fret
+              if (si < 0 || si > 5) return null
+              const cx = fretCenterX(col)
+              const cy = stringY(si)
+              const pitchLabel = note.midi ? pitchClassLabelFromMidi(note.midi) : ''
+              return (
+                <G key={`an-${idx}`}>
+                  <Circle cx={cx} cy={cy} r={14} fill="url(#noteGlow)" />
+                  <Circle cx={cx} cy={cy} r={7} fill="#E53935" />
+                  {pitchLabel ? (
+                    <SvgText
+                      x={cx}
+                      y={cy + 3.5}
+                      textAnchor="middle"
+                      fill="#FFFFFF"
+                      fontSize={8}
+                      fontWeight="700"
+                      stroke="#1a1a1a"
+                      strokeWidth={2.5}
+                    >
+                      {pitchLabel}
+                    </SvgText>
+                  ) : null}
+                </G>
+              )
+            })}
+
+            {/* Feedback ring (Play tab hit/miss) */}
+            {lastCellResult && (
+              <Circle
+                cx={feedbackX}
+                cy={feedbackY}
+                r={10}
+                fill="none"
+                stroke={feedbackRingColor!}
+                strokeWidth={2.5}
+                opacity={0.85}
+              />
+            )}
+
+            {/* Guide markers */}
+            {fretGuideCells?.map((gc, idx) => {
+              const si = gc.string - 1
+              const col = gc.fret
+              if (si < 0 || si > 5) return null
+              const isActive = activeGuideIndex === idx
+              const midi = OPEN_MIDI_BY_ROW[si]! + col
+              const ol = overlayLabelForCell(overlayMode, midi, degreeRootPitchClass)
+              const fc = gc.finger ? FINGER_COLORS[gc.finger] : { fill: '#D4A574', border: '#B8956A' }
+              const ringR = isActive ? 11 : 9
+              return (
+                <G key={`gm-${idx}`}>
+                  <Circle
+                    cx={fretCenterX(col)}
+                    cy={stringY(si)}
+                    r={ringR}
+                    fill={fc.fill + '30'}
+                    stroke={fc.border}
+                    strokeWidth={1.5}
+                    opacity={isActive ? 0.9 : 0.5}
+                  />
+                  <SvgText
+                    x={fretCenterX(col)}
+                    y={stringY(si) + 3.5}
+                    textAnchor="middle"
+                    fill="#1a1410"
+                    fontSize={ol && ol.length > 1 ? 8 : 10}
+                    fontWeight="700"
+                  >
+                    {ol ?? (gc.finger ? gc.finger.toString() : '')}
+                  </SvgText>
+                </G>
+              )
+            })}
+
+            {/* Overlay labels */}
+            {overlayMode !== 'off' && !fretGuideCells && (
+              Array.from({ length: 6 }).map((_, si) =>
+                Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
+                  const midi = OPEN_MIDI_BY_ROW[si]! + col
+                  const label = overlayLabelForCell(overlayMode, midi, degreeRootPitchClass)
+                  if (!label) return null
+                  return (
+                    <SvgText
+                      key={`ol-${si}-${col}`}
+                      x={fretCenterX(col)}
+                      y={stringY(si) + 3}
+                      textAnchor="middle"
+                      fill="#8B7D6B"
+                      fontSize={7}
+                      fontFamily="JetBrainsMono-Regular"
+                      opacity={0.8}
+                    >
+                      {label}
+                    </SvgText>
+                  )
+                }),
+              )
+            )}
+
+            {/* Tap targets (transparent pressable rects) */}
+            {svgCells.map(({ stringIdx, fret, sx, sy, ex, ey }) => (
+              <SvgRect
+                key={`tap-${stringIdx}-${fret}`}
+                x={sx}
+                y={sy}
+                width={ex - sx}
+                height={ey - sy}
+                fill="transparent"
+                onPress={() => handleCellPress(stringIdx, fret)}
+              />
+            ))}
+          </Svg>
+        )}
+
+        {/* Animated overlays positioned over SVG (selected note pulse) */}
+        {cell && svgSize.w > 0 && (
+          <View
+            style={{
+              position: 'absolute',
+              left: (fretCenterX(cell.fret) / SVG_W) * svgSize.w - 14,
+              top: (stringY(cell.row) / SVG_H) * svgSize.h - 14,
+            }}
+            pointerEvents="none"
+          >
+            <SelectedMarker key={pulseKey} flashMidi={flashMidi} />
+          </View>
+        )}
+
+        {/* Guide marker animated overlays */}
+        {fretGuideCells?.map((gc, idx) => {
+          if (activeGuideIndex !== idx) return null
+          const si = gc.string - 1
+          const col = gc.fret
+          if (si < 0 || si > 5) return null
+          if (!svgSize.w) return null
+          const midi = OPEN_MIDI_BY_ROW[si]! + col
+          const ol = overlayLabelForCell(overlayMode, midi, degreeRootPitchClass)
           return (
             <View
-              key={`s-${stringIdx}`}
-              className={`relative flex-row items-stretch ${stringIdx < 5 ? 'border-b border-stone-400/35' : ''}`}
+              key={`gm-anim-${idx}`}
+              style={{
+                position: 'absolute',
+                left: (fretCenterX(col) / SVG_W) * svgSize.w - 14,
+                top: (stringY(si) / SVG_H) * svgSize.h - 14,
+              }}
+              pointerEvents="none"
             >
-              <LinearGradient
-                colors={['#ddc9a8', '#c4a574', '#a68456']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.nutStringCell}
-              >
-                <Text style={styles.openStringNote}>{OPEN_STRING_NOTE_LETTERS[stringIdx]}</Text>
-              </LinearGradient>
-
-              <View className="relative min-h-[36px] flex-1 flex-row bg-[#fafaf9]">
-                <View
-                  pointerEvents="none"
-                  className="absolute inset-0 z-[3] justify-center px-0"
-                  style={{ zIndex: 3 }}
-                >
-                  <View style={webStringStyle} />
-                </View>
-
-                {Array.from({ length: NUM_FRETS + 1 }).map((__, col) => {
-                  const fret = col
-                  const inlay = fretInlayKind(fret, stringIdx)
-                  const selected =
-                    cell != null &&
-                    cell.row === stringIdx &&
-                    cellMatchesDiagramCol(cell.fret, fret)
-                  const feedbackHere =
-                    lastCellResult != null &&
-                    lastCellResult.row === stringIdx &&
-                    cellMatchesDiagramCol(lastCellResult.fret, fret)
-                  const feedbackRing =
-                    feedbackHere && lastCellResult
-                      ? lastCellResult.result === 'hit'
-                        ? 'border-success bg-success/35'
-                        : lastCellResult.result === 'close'
-                          ? 'border-amber-accent bg-amber-accent/30'
-                          : 'border-danger bg-danger/35'
-                      : ''
-                  const scaleOn = scaleHighlightActive(scalePitchClasses, stringIdx, fret)
-                  const midi = OPEN_MIDI_BY_ROW[stringIdx]! + fret
-                  const overlayLabel = overlayLabelForCell(overlayMode, midi, degreeRootPitchClass)
-                  const guideInfo = guideVariantAtCell(fretGuideCells, stringIdx, fret)
-                  const isActiveGuide =
-                    activeGuideIndex != null &&
-                    fretGuideCells != null &&
-                    activeGuideIndex < fretGuideCells.length &&
-                    fretGuideCells[activeGuideIndex]?.string === stringIdx + 1 &&
-                    cellMatchesDiagramCol(fretGuideCells[activeGuideIndex]!.fret, fret)
-                  // Check if this cell is part of a chord shape
-                  const chordCell = chordCells?.find(
-                    (c) => c.string === stringIdx + 1 && cellMatchesDiagramCol(c.fret, fret)
-                  )
-                  const isChordRoot = chordCell?.interval === 0
-                  const inlaySizeClass =
-                    inlay === 'doubleUpper' || inlay === 'doubleLower' ? 'h-1.5 w-1.5' : 'h-2 w-2'
-
-                  return (
-                    <Pressable
-                      key={`c-${stringIdx}-${col}`}
-                      onPress={() => onSelectNote?.({ string: stringIdx + 1, fret, midi })}
-                      disabled={!onSelectNote}
-                      className={`relative z-[4] flex-1 items-center justify-center border-r border-stone-400/55 py-1 ${
-                        col === 0 ? 'border-l-0' : ''
-                      }`}
-                      style={{ zIndex: 4 }}
-                      accessibilityRole={onSelectNote ? 'button' : undefined}
-                      accessibilityLabel={onSelectNote ? `String ${stringIdx + 1}, fret ${fret}` : undefined}
-                    >
-                      {inlay ? (
-                        <View
-                          className="absolute inset-0 items-center justify-center"
-                          pointerEvents="none"
-                          style={{ zIndex: 2 }}
-                        >
-                          <View className={`rounded-full bg-stone-500 ${inlaySizeClass}`} />
-                        </View>
-                      ) : null}
-                      {feedbackHere && lastCellResult ? (
-                        <View
-                          className={`absolute z-[15] h-5 w-5 rounded-full border-2 ${feedbackRing}`}
-                          style={{ zIndex: 15 }}
-                        />
-                      ) : null}
-                      {/* Scale highlight - subtle background (lowest priority) */}
-                      {scaleOn ? (
-                        <View
-                          className="absolute z-[5] h-4 w-4 rounded-full border border-emerald-400/55 bg-emerald-500/15"
-                          style={{ zIndex: 5 }}
-                        />
-                      ) : null}
-
-                      {/* Chord cell highlight */}
-                      {chordCell ? (
-                        <View
-                          className={`absolute z-[7] h-4 w-4 rounded-full border ${
-                            isChordRoot
-                              ? 'border-amber-accent bg-amber-accent/40'
-                              : 'border-amber-light bg-amber-accent/20'
-                          }`}
-                          style={{ zIndex: 7 }}
-                        />
-                      ) : null}
-
-                      {/* Guide marker with finger colors - combines with overlay label */}
-                      {guideInfo ? (
-                        <View
-                          className="absolute z-[10] items-center justify-center"
-                          style={{ zIndex: 10 }}
-                        >
-                          <GuideMarker
-                            finger={guideInfo.finger}
-                            isActive={isActiveGuide}
-                            overlayLabel={overlayLabel}
-                          />
-                        </View>
-                      ) : overlayLabel ? (
-                        /* Standalone overlay label when no guide */
-                        <Text
-                          className="relative z-[8] font-mono text-[8px] text-stone-800"
-                          style={{ zIndex: 8 }}
-                        >
-                          {overlayLabel}
-                        </Text>
-                      ) : null}
-
-                      {/* Selected note - always on top but doesn't hide others */}
-                      {selected ? (
-                        <View
-                          className="absolute inset-0 z-20 items-center justify-center"
-                          style={{ zIndex: 20 }}
-                        >
-                          <SelectedMarker key={pulseKey} flashMidi={flashMidi} />
-                        </View>
-                      ) : null}
-                    </Pressable>
-                  )
-                })}
-              </View>
+              <GuideMarker finger={gc.finger} isActive overlayLabel={ol} />
             </View>
           )
         })}
@@ -825,28 +1052,3 @@ export function FretboardDiagram({
     </View>
   )
 }
-
-const styles = StyleSheet.create({
-  nutHeaderCell: {
-    width: NUT_COLUMN_WIDTH,
-    minHeight: 28,
-    borderRightWidth: 3,
-    borderRightColor: '#6b5344',
-  },
-  nutStringCell: {
-    width: NUT_COLUMN_WIDTH,
-    minHeight: 36,
-    borderRightWidth: 3,
-    borderRightColor: '#6b5344',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  openStringNote: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 15,
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-})

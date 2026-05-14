@@ -23,7 +23,9 @@ import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { capoSuggestion, parseKey } from '@/src/music/capoSuggestion'
 import { getChordFunction } from '@/src/music/chordFunction'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
 import { chordToFretboardCells, formatChordDisplay } from '@/src/music/chordVoicing'
+import { allCellsForMidi } from '@/src/music/fretboardCell'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
@@ -116,9 +118,31 @@ function toLyricWords(input: unknown): Array<{ word: string; timeSec: number }> 
 const STUDY_BAR_CHIP_MAX = 64
 
 export default function StudyScreen() {
+  const lesson = useLessonStore((s) => s.lesson)
+  const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
+  const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
+
+  // Extract timeline data for MusicProvider (prefer section-level, fall back to lesson-level)
+  const chordEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events ?? null
+  const soloNotesArr = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
+
+  return (
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
+    >
+      <StudyScreenInner />
+    </MusicProvider>
+  )
+}
+
+function StudyScreenInner() {
   useStepCoachNarration()
   const isDemo = useIsDemoLesson()
   const router = useRouter()
+  const musicActions = useMusicActions()
   const sessionStemRef = useRef<SessionStemAndTabHandle>(null)
   const scoreViewerRef = useRef<AlphaTabSurfaceRef>(null)
   const lesson = useLessonStore((s) => s.lesson)
@@ -134,7 +158,6 @@ export default function StudyScreen() {
   // Intelligent fretboard display mode (auto-detect or manual override)
   const [fretboardMode, setFretboardMode] = useState<'auto' | 'chords' | 'solo' | 'both'>('auto')
   const [voicingMode, setVoicingMode] = useState<'full' | 'compact'>('compact')
-  const [chordCells, setChordCells] = useState<Array<{ string: number; fret: number; interval: number }>>([])
 
   // Orient clip states (moved from separate orient.tsx screen)
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
@@ -145,9 +168,17 @@ export default function StudyScreen() {
   const orientSoundRef = useRef<any>(null)
   const orientSoundInstanceId = useRef(`study-orient-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`)
 
-  // Fetch MusicXML from backend when transcription data is available
+  // Load MusicXML from lesson (pre-generated during analysis) or fetch on-demand
   useEffect(() => {
-    const fetchMusicXml = async () => {
+    const loadMusicXml = async () => {
+      // First, try to use the pre-generated MusicXML from LessonJSON
+      if (lesson?.musicxml && lesson.musicxml.trim()) {
+        console.log('Using pre-generated MusicXML from lesson, length:', lesson.musicxml.length)
+        setMusicXmlData(lesson.musicxml)
+        return
+      }
+
+      // Fallback: fetch from backend if pre-generated is not available
       const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
       if (!section) return
 
@@ -181,7 +212,7 @@ export default function StudyScreen() {
           title: lesson?.song_title ?? null,
           artist: lesson?.artist ?? null,
         })
-        console.log('MusicXML fetch success:', {
+        console.log('MusicXML fetch success (fallback):', {
           hasBeatGrid,
           hasChordTimeline,
           hasSoloNotes,
@@ -200,8 +231,8 @@ export default function StudyScreen() {
       }
     }
 
-    void fetchMusicXml()
-  }, [lesson?.job_id, lessonSectionIndex, lesson?.song_title, lesson?.artist])
+    void loadMusicXml()
+  }, [lesson?.job_id, lesson?.musicxml, lessonSectionIndex, lesson?.song_title, lesson?.artist, lesson?.beat_grid, lesson?.chord_timeline, lesson?.solo_notes])
 
   // Show transcription warning modal when section confidence is low
   useEffect(() => {
@@ -274,12 +305,16 @@ export default function StudyScreen() {
 
   const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
     setTick(ctx)
-  }, [])
+    // Drive shared music context state from playback tick
+    musicActions.setPosition(ctx.positionSec * 1000)
+    musicActions.setPlaying(ctx.playing)
+  }, [musicActions])
 
   const handleAlphaTabReady = useCallback(() => {
     setAlphaTabIsReady(true);
+    musicActions.setPlayerReady(true);
     console.log('AlphaTab is ready!');
-  }, []);
+  }, [musicActions]);
 
   /**
    * Analyze musical event density to determine optimal display mode
@@ -339,36 +374,20 @@ export default function StudyScreen() {
       ? determineDisplayMode(position)
       : fretboardMode
 
-    // Find current chord for chord mode
-    let currentChord: ChordEvent | null = null
-    if (effectiveMode === 'chord' || effectiveMode === 'both') {
-      const chordEvent = processedMusicalEvents
-        .slice()
-        .reverse()
-        .find((e): e is ProcessedMusicalEvent & { type: 'chord' } =>
-          e.type === 'chord' && e.time <= position && e.data.chord !== 'N'
-        )
-      if (chordEvent) {
-        currentChord = chordEvent.data
-      }
-    }
-
-    // Update chord cells on fretboard
-    if (currentChord && (effectiveMode === 'chord' || effectiveMode === 'both')) {
-      const cells = chordToFretboardCells(currentChord.chord, voicingMode, 'low')
-      setChordCells(cells.map(c => ({ string: c.string, fret: c.fret, interval: c.interval })))
-    } else {
-      setChordCells([])
-    }
-
-    // Update selected note for solo mode
+    // Update selected note based on mode
     if (currentEvent) {
       const showSolo = effectiveMode === 'solo' || effectiveMode === 'both'
       const showChord = effectiveMode === 'chord' || effectiveMode === 'both'
 
       if (currentEvent.type === 'solo_note' && showSolo) {
         const note = currentEvent.data
-        setSelectedNote({ midi: note.pitch, fret: note.pitch % 12, string: (note.pitch % 6) + 1 })
+        const cells = allCellsForMidi(note.pitch)
+        if (cells.length > 0) {
+          const cell = cells[0]!
+          setSelectedNote({ midi: note.pitch, fret: cell.fret, string: cell.row + 1 })
+        } else {
+          setSelectedNote(null)
+        }
       } else if (currentEvent.type === 'chord' && showChord && effectiveMode !== 'both') {
         // In chord-only mode, highlight the chord root
         const chordEvent = currentEvent.data
@@ -392,9 +411,9 @@ export default function StudyScreen() {
   }, [processedMusicalEvents, fretboardMode, voicingMode, determineDisplayMode]);
 
   const handleBeatEvent = useCallback((beat: number) => {
-    console.log('Beat event:', beat);
-    // TODO: Potentially update UI elements based on beat
-  }, []);
+    // AlphaTab dispatches its bar index here; mirror to shared music context.
+    musicActions.setBeat(beat);
+  }, [musicActions]);
 
   const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
 
@@ -772,7 +791,6 @@ export default function StudyScreen() {
               positionLabel={positionLabel}
               capoText={capoText}
               selectedNote={selectedNote}
-              chordCells={chordCells}
               pulseKey={fretPulseKey}
               overlayMode={overlayMode}
               showOverlayControls
