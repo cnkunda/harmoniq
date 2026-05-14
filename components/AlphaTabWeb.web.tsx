@@ -235,6 +235,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const noteFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     /** Mirrors ListenStemPanel / mixer rate so AlphaTab scroll + cursor use the same speed factor. */
     const stemPlaybackRateRef = useRef(1)
+    const isPlayingRef = useRef(false)
     const onNoteEventRef = useRef(onNoteEvent)
     onNoteEventRef.current = onNoteEvent
     const onScoreSeekMsRef = useRef(onScoreSeekMs)
@@ -741,10 +742,22 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           emitSongPlaybackMaybe()
         },
         setStemPlaybackActive: (active: boolean) => {
+          isPlayingRef.current = Boolean(active)
           const api = apiRef.current
           if (!api) return
           try {
             if (active) api.play?.()
+            else api.pause?.()
+          } catch {
+            /* ignore */
+          }
+        },
+        playPause: () => {
+          isPlayingRef.current = !isPlayingRef.current
+          const api = apiRef.current
+          if (!api) return
+          try {
+            if (isPlayingRef.current) api.play?.()
             else api.pause?.()
           } catch {
             /* ignore */

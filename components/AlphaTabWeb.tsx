@@ -21,6 +21,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         seekTo: () => {},
         syncPlaybackTimelineMs: () => {},
         setStemPlaybackActive: () => {},
+        playPause: () => {},
         getPosition: async () => null,
         setTheme: () => {},
         setRenderPreset: () => {},

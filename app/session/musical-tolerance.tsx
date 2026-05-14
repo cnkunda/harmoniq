@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import { sessionHref } from '@/src/constants/sessionFlow'
 import { setAppPref } from '@/src/db/client'
 import { PREF_MUSICAL_TOLERANCE_MODE } from '@/src/db/schema'
 import type { MusicalToleranceMode } from '@/src/types'
@@ -18,7 +17,7 @@ export default function MusicalToleranceScreen() {
     try {
       await setAppPref(PREF_MUSICAL_TOLERANCE_MODE, mode)
       console.info('[musical-tolerance] saved', mode)
-      router.replace(sessionHref('orient'))
+      router.replace('/session/orient')
     } finally {
       setBusy(false)
     }

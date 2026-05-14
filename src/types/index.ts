@@ -216,6 +216,8 @@ export interface LessonJSON {
     partial_count?: number
     artifact_rel?: string | null
   } | null
+  /** MusicXML lead sheet with chord symbols (<harmony>) and tab notes (<technical> string/fret). */
+  musicxml?: string | null
 }
 
 export interface AnalyzeJob {

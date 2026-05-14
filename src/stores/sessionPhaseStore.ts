@@ -50,6 +50,7 @@ export const useSessionPhaseStore = create<SessionPhaseState>((set, get) => ({
     orient: { completed: false, completedAt: null, stepsCompleted: 0 },
     isolate: { completed: false, completedAt: null, stepsCompleted: 0 },
     apply: { completed: false, completedAt: null, stepsCompleted: 0 },
+    refine: { completed: false, completedAt: null, stepsCompleted: 0 },
     reflect: { completed: false, completedAt: null, stepsCompleted: 0 },
   },
 
@@ -134,6 +135,7 @@ export const useSessionPhaseStore = create<SessionPhaseState>((set, get) => ({
         orient: { completed: false, completedAt: null, stepsCompleted: 0 },
         isolate: { completed: false, completedAt: null, stepsCompleted: 0 },
         apply: { completed: false, completedAt: null, stepsCompleted: 0 },
+        refine: { completed: false, completedAt: null, stepsCompleted: 0 },
         reflect: { completed: false, completedAt: null, stepsCompleted: 0 },
       },
       currentPhase: null,

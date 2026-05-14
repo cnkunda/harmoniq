@@ -535,7 +535,7 @@ export default function SettingsScreen() {
             description="Where supported by the platform"
             options={['default', 'female', 'male'] as const}
             value={voiceCoachGender}
-            onValueChange={(g) => void persistVoiceCoachGender(g)}
+            onValueChange={(g) => void persistVoiceCoachGender(g as VoiceGenderPref)}
           />
           <View className="mt-4 border-t border-wood-600/35 pt-4">
             <SettingsChips

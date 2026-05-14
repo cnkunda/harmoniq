@@ -1,10 +1,15 @@
 """
 MusicXML generation from Harmoniq's internal JSON artifacts (BeatGrid, ChordTimeline, SoloNotes).
+
+This module creates a MusicXML lead sheet with:
+- Beat-aligned chord symbols via <harmony> elements
+- Solo notes with guitar tablature (string/fret) via <technical> elements
 """
 
 from __future__ import annotations
 
 import math
+import re
 from fractions import Fraction
 from typing import TYPE_CHECKING
 
@@ -14,6 +19,7 @@ if TYPE_CHECKING:
     import music21
 
 from app.schemas import BeatGrid, ChordTimeline, SoloNotes, TimeSignature, ChordEvent, SoloNote
+from app.guitar_position import midi_to_guitar_position
 
 # Constants for MusicXML generation
 DEFAULT_DIVISIONS = 480  # Standard for many MusicXML applications (e.g., MuseScore, Finale)
@@ -263,4 +269,90 @@ def build_musicxml(
     # 4. Convert the score to MusicXML string
     # Using 'midi' variant for better compatibility, as 'score-partwise' is default for music21
     # and alphaTab expects partwise.
-    return m21.musicxml.m21ToXml.GeneralObjectExporter().parse(score).decode('utf-8')
+    musicxml_output = m21.musicxml.m21ToXml.GeneralObjectExporter().parse(score).decode('utf-8')
+
+    # 5. Add technical elements (string/fret) for guitar tablature
+    musicxml_output = _add_technical_elements(musicxml_output, solo_notes)
+
+    return musicxml_output
+
+
+def _add_technical_elements(musicxml: str, solo_notes: SoloNotes) -> str:
+    """
+    Add <technical> elements with string/fret to notes in the MusicXML.
+    
+    Uses regex to find all <note>...</note> elements (including those with attributes
+    like <note dynamics="88.89">), check if they contain a <pitch>, and inject
+    a <technical> element with the guitar string/fret position.
+    """
+    if not solo_notes.notes:
+        return musicxml
+    
+    # Build a mapping from (step, alter, octave) to string/fret
+    pitch_to_position = {}
+    for note in solo_notes.notes:
+        try:
+            pos = midi_to_guitar_position(note.pitch)
+            step, alter, octave = _midi_to_step_alter_octave(note.pitch)
+            pitch_key = (step, alter, octave)
+            if pitch_key not in pitch_to_position:
+                pitch_to_position[pitch_key] = (pos.string, pos.fret)
+        except ValueError:
+            pass
+    
+    if not pitch_to_position:
+        return musicxml
+    
+    # Match <note> elements including those with attributes
+    # Pattern: <note...>...</note> (non-greedy)
+    note_pattern = re.compile(r'(<note(?:\s[^>]*)?>)(.*?)(</note>)', re.DOTALL)
+    
+    def replace_note(match: re.Match) -> str:
+        opening_tag = match.group(1)
+        note_content = match.group(2)
+        closing_tag = match.group(3)
+        
+        # Check if this note has a pitch (not a rest)
+        if '<rest' in note_content:
+            return match.group(0)
+        
+        step_match = re.search(r'<step>([A-G])</step>', note_content)
+        octave_match = re.search(r'<octave>(\d+)</octave>', note_content)
+        alter_match = re.search(r'<alter>(-?\d+)</alter>', note_content)
+        
+        if not step_match or not octave_match:
+            return match.group(0)
+        
+        step = step_match.group(1)
+        octave = int(octave_match.group(1))
+        alter = int(alter_match.group(1)) if alter_match else 0
+        pitch_key = (step, alter, octave)
+        
+        if pitch_key not in pitch_to_position:
+            return match.group(0)
+        
+        string_num, fret_num = pitch_to_position[pitch_key]
+        technical = f"<notations><technical><string>{string_num}</string><fret>{fret_num}</fret></technical></notations>"
+        # Insert technical before closing </note>
+        return opening_tag + note_content + technical + closing_tag
+    
+    return note_pattern.sub(replace_note, musicxml)
+
+
+def _midi_to_step_alter_octave(midi: int) -> tuple[str, int, int]:
+    """Convert MIDI to (step, alter, octave) matching MusicXML format.
+    
+    Returns: (step letter, alter (-1/0/1), octave number)
+    """
+    # Use sharps for chromatic notes (matches music21 default)
+    sharp_map = [
+        ('C', 0), ('C', 1), ('D', 0), ('D', 1), ('E', 0), ('F', 0),
+        ('F', 1), ('G', 0), ('G', 1), ('A', 0), ('A', 1), ('B', 0),
+    ]
+    pc = midi % 12
+    octave = (midi // 12) - 1
+    step, alter = sharp_map[pc]
+    return step, alter, octave
+
+
+

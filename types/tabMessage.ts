@@ -95,6 +95,8 @@ export type AlphaTabSurfaceRef = {
   setMusicXml: (musicXml: string) => void
   setPlaybackRate: (playbackRate: number) => void
   seekTo: (positionMs: number) => void
+  /** Toggle playback (native header button injects JS to call this). */
+  playPause: () => void
   /** Drive cursor when audio comes from Web Audio (stems), not the tab reference audio element. */
   syncPlaybackTimelineMs: (positionMs: number) => void
   /** Call when stem mixer play/pause toggles so AlphaTab shows the beat cursor during host-driven playback. */

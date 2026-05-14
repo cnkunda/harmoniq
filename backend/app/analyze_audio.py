@@ -28,6 +28,7 @@ from app.schemas import (
 )
 from app.stem_quality import StemClassification
 from app.alphatab_prerender import enrich_lesson_with_prerender_hints
+from app.musicxml_builder import build_musicxml
 from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidence, generate_tab_artifacts_for_guitar_stem
 from app.beat_grid import estimate_beat_grid
 from app.chord_inference import infer_chords
@@ -403,6 +404,22 @@ def build_lesson_json_from_librosa(
     # Trigger warning when transcription confidence is very low (< 0.5)
     low_snr_warning = transcription_confidence is not None and transcription_confidence < 0.5
 
+    # Generate MusicXML lead sheet with chords and solo notes
+    musicxml_str = ""
+    try:
+        if chord_timeline and solo_notes and beat_grid:
+            musicxml_str = build_musicxml(
+                beat_grid=beat_grid,
+                chord_timeline=chord_timeline,
+                solo_notes=solo_notes,
+                title=song_title or "Harmoniq Score",
+                artist=artist or "Harmoniq AI",
+                key_signature=summary.key_name,
+            )
+            logger.info("MusicXML generated for job_id=%s, length=%d chars", job_id, len(musicxml_str))
+    except Exception:
+        logger.exception("MusicXML generation failed for job_id=%s; continuing without it", job_id)
+
     lesson = LessonJSON(
         job_id=job_id,
         song_title=song_title,
@@ -420,6 +437,7 @@ def build_lesson_json_from_librosa(
         sections=sections,
         wav_path=wav_path,
         low_snr_warning=low_snr_warning,
+        musicxml=musicxml_str,
         **stem_fields,
     )
     full_gp5 = tab_artifacts.get("tab_full_gp5_base64") if tab_artifacts else None

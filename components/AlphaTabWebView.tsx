@@ -88,6 +88,8 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
       requestId: string
       resolve: (v: SongScoreMeta | null) => void
     } | null>(null)
+    // Optimistically track playback state for playPause toggle
+    const isPlayingRef = useRef(false)
 
     const [reloadKey, setReloadKey] = useState(0)
     const [harnessUri, setHarnessUri] = useState<string | null>(null)
@@ -121,10 +123,15 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
             positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs + 50) : 0,
           })
         },
-        setStemPlaybackActive: (active: boolean) => {
-          postInbound({ type: 'setStemPlaybackActive', active: Boolean(active) })
-        },
-        getPosition: () =>
+      setStemPlaybackActive: (active: boolean) => {
+        isPlayingRef.current = Boolean(active)
+        postInbound({ type: 'setStemPlaybackActive', active: Boolean(active) })
+      },
+      playPause: () => {
+        isPlayingRef.current = !isPlayingRef.current
+        postInbound({ type: 'setStemPlaybackActive', active: isPlayingRef.current })
+      },
+      getPosition: () =>
           new Promise<number | null>((resolve) => {
             getPositionResolverRef.current = resolve
             postInbound({ type: 'getPosition' })

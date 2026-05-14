@@ -9,7 +9,6 @@ import { FormCheckbox } from '@/components/FormCheckbox'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { noiseGateThresholdFromAmbientSamples } from '@/src/audio/noiseGate'
 import colors from '@/src/constants/colors'
-import { sessionHref } from '@/src/constants/sessionFlow'
 import { SESSION_PLAYBACK_CARD_CLASS } from '@/src/constants/sessionPlaybackCard'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
@@ -67,7 +66,7 @@ export default function TuneScreen() {
 
   const forwardToListen = async () => {
     if (dontShowAgain) await setSkipTuneStep(true)
-    router.push(sessionHref('orient'))
+    router.push('/session/orient')
   }
 
   useEffect(() => {

@@ -1,26 +1,26 @@
 import { Asset } from 'expo-asset'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { ActivityIndicator, Platform, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { ActivityIndicator, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { persistLastSuccessfulSoundFontProfile } from '@/src/audio/soundfontPersistence'
 import {
-    DEFAULT_SOUNDFONT_PROFILE_ID,
-    isSoundFontProfileId,
-    type SoundFontProfileId,
+  DEFAULT_SOUNDFONT_PROFILE_ID,
+  isSoundFontProfileId,
+  type SoundFontProfileId,
 } from '@/src/audio/soundfontProfiles'
 import colors from '@/src/constants/colors'
 import type { TabRenderPresetName } from '@/src/session/tabThemePresets'
 import { DEFAULT_TAB_RENDER_PRESET } from '@/src/session/tabThemePresets'
 import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
 import type {
-    AlphaTabSurfaceRef,
-    NoteEventMessage,
-    SongScoreMeta,
-    TabInboundMessage,
-    TabLoopBarRegion,
-    TabThemeColors,
+  AlphaTabSurfaceRef,
+  NoteEventMessage,
+  SongScoreMeta,
+  TabInboundMessage,
+  TabLoopBarRegion,
+  TabThemeColors,
 } from '@/types/tabMessage'
 import { decodeTabMessage, encodeTabMessage } from '@/types/tabMessage'
 
@@ -83,6 +83,7 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
   ) {
     const webRef = useRef<any>(null)
     const getPositionResolverRef = useRef<((ms: number | null) => void) | null>(null)
+    const isPlayingRef = useRef(false)
     const songDetailsResolverRef = useRef<{
       requestId: string
       resolve: (v: SongScoreMeta | null) => void
@@ -121,7 +122,12 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
           })
         },
         setStemPlaybackActive: (active: boolean) => {
+          isPlayingRef.current = Boolean(active)
           postInbound({ type: 'setStemPlaybackActive', active: Boolean(active) })
+        },
+        playPause: () => {
+          isPlayingRef.current = !isPlayingRef.current
+          postInbound({ type: 'setStemPlaybackActive', active: isPlayingRef.current })
         },
         getPosition: () =>
           new Promise<number | null>((resolve) => {
@@ -342,18 +348,18 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
       [onHarnessError, onNoteEvent, onReady, onScoreSeekMs, onSongDetails, onSongPlayback, onCursorPositionUpdate, onBeatEvent, onAlphaTabReady],
     )
 
-    if (Platform.OS === 'web') {
-      return (
-        <View
-          className="items-center justify-center rounded-xl border border-wood-600/45 bg-cream-dark/40 p-4"
-          style={style}
-        >
-          <Text className="text-center font-sans text-sm text-muted-brown">
-            ScoreViewer runs in WebView on iOS/Android only. Web uses the DOM path.
-          </Text>
-        </View>
-      )
-    }
+    // if (Platform.OS === 'web') {
+    //   return (
+    //     <View
+    //       className="items-center justify-center rounded-xl border border-wood-600/45 bg-cream-dark/40 p-4"
+    //       style={style}
+    //     >
+    //       <Text className="text-center font-sans text-sm text-muted-brown">
+    //         ScoreViewer runs in WebView on iOS/Android only. Web uses the DOM path.
+    //       </Text>
+    //     </View>
+    //   )
+    // }
 
     if (assetError || !harnessUri) {
       return (
