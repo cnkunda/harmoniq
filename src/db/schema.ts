@@ -120,6 +120,11 @@ export const PREF_EXPERIENCE_LEVEL = 'experience_level'
 
 /** Commit 72: TTS voice coach — unset or non-`0` = enabled. */
 export const PREF_VOICE_COACH_ENABLED = 'voice_coach_enabled'
+
+/** Commit 97: Preferred tab variant across sessions (`full` | `skeleton` | `alt`). */
+export const PREF_TAB_VARIANT = 'tab_variant'
+/** Commit 97: Whether lyrics strip is shown by default. */
+export const PREF_SHOW_LYRICS = 'show_lyrics'
 /** Commit 72: speech rate 0.7–1.2 (stored as string float, default 1). */
 export const PREF_VOICE_COACH_RATE = 'voice_coach_rate'
 /** Commit 72: `default` | `female` | `male` — OS voice selection hint. */

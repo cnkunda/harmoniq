@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 
@@ -6,6 +6,8 @@ import type { AlphaTabSurfaceRef, SongScoreMeta } from '@/types/tabMessage'
 import { LyricsStrip } from './LyricsStrip'
 import { AlphaTabWeb } from './AlphaTabWeb'
 import type { TabViewportProps } from './TabViewport.types'
+import { getAppPref, setAppPref } from '@/src/db/client'
+import { PREF_SHOW_LYRICS } from '@/src/db/schema'
 
 export type { TabViewportProps } from './TabViewport.types'
 
@@ -43,6 +45,21 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
   ) {
     const [songMeta, setSongMeta] = useState<SongScoreMeta | null>(null)
     const [showLyrics, setShowLyrics] = useState(true)
+
+    // Persist showLyrics preference (Commit 97)
+    useEffect(() => {
+      void getAppPref(PREF_SHOW_LYRICS).then((v) => {
+        if (v === '0') setShowLyrics(false)
+      })
+    }, [])
+
+    const handleShowLyricsToggle = useCallback(() => {
+      setShowLyrics((prev) => {
+        const next = !prev
+        void setAppPref(PREF_SHOW_LYRICS, next ? '1' : '0')
+        return next
+      })
+    }, [])
 
     const handleSongDetails = useCallback((meta: SongScoreMeta) => {
       setSongMeta(meta)
@@ -108,7 +125,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
               {variantPill('alt', 'Alt', hasAlt)}
               {hasLyrics && (
                 <Pressable
-                  onPress={() => setShowLyrics(!showLyrics)}
+                  onPress={handleShowLyricsToggle}
                   className={`rounded-full border px-2.5 py-1 ${showLyrics ? pillActiveBase : pillBase}`}
                   accessibilityRole="button"
                 >

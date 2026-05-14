@@ -463,9 +463,21 @@ Phase 1 is NOT done until all "YES — blocking" and "YES" rows are CLOSED or ex
 - Refine "Seek to Start" to ensure perfect audio/cursor sync
 
 **Acceptance Criteria:**
-- [ ] Orient-as-hint clips generated correctly for all songs
-- [ ] User preferences survive app restarts
-- [ ] Seek-to-start resolves within 50ms transport sync
+- [x] Orient-as-hint clips generated correctly for all songs
+- [x] User preferences survive app restarts
+- [x] Seek-to-start resolves within 50ms transport sync
+
+**Verification:**
+- `lyria_clip.py`: uses `generate_orient_annotation` from `app.coach` for
+  context-aware orient annotations (style/technique/key/bpm), replaces
+  static template annotation
+- `src/db/schema.ts`: added `PREF_TAB_VARIANT` and `PREF_SHOW_LYRICS`
+- `TabViewport.tsx` + `TabViewport.web.tsx`: persist `showLyrics` to
+  AsyncStorage on toggle, load on mount
+- `SessionStemAndTab.tsx`: persist `tabVariant` to AsyncStorage on change,
+  load saved pref on mount; seek-to-start now syncs AlphaTab cursor via
+  `syncPlaybackTimelineMs(0)` after audio seek
+- TypeScript: 0 errors, Backend: 33/34 tests pass
 
 ---
 

@@ -18,6 +18,8 @@ import { lessonStemUrl, sectionSeekSeconds, stemRelPathToPlaybackUri } from '@/s
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { AlphaTabSurfaceRef, NoteEventMessage, SongScoreMeta, TabLoopBarRegion } from '@/types/tabMessage'
 import type { LyricWord } from './LyricsStrip'
+import { getAppPref, setAppPref } from '@/src/db/client'
+import { PREF_TAB_VARIANT, PREF_SHOW_LYRICS } from '@/src/db/schema'
 
 const DEFAULT_TICK: PlaybackTickContext = {
   positionSec: 0,
@@ -128,6 +130,22 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
   const lastTickPositionSecRef = useRef(0)
 
   const lesson = useLessonStore((s) => s.lesson)
+
+  // Load persisted tabVariant on mount (Commit 97)
+  const [variantInitialized, setVariantInitialized] = useState(false)
+  useEffect(() => {
+    if (onTabVariantChange && !variantInitialized) {
+      void getAppPref(PREF_TAB_VARIANT).then((v) => {
+        if (v === 'skeleton' || v === 'alt') {
+          onTabVariantChange(v)
+        }
+        setVariantInitialized(true)
+      })
+    } else {
+      setVariantInitialized(true)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const prerenderArtifactUrl = useMemo(() => {
     const hints = lesson?.alphatab_prerender_hints as LessonJSON['alphatab_prerender_hints']
     const rel = hints?.artifact_rel
@@ -306,9 +324,14 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
           hasFull={!!tabs.full}
           hasSkeleton={!!tabs.skeleton}
           hasAlt={!!tabs.alt}
-          onTabVariantChange={onTabVariantChange}
+          onTabVariantChange={onTabVariantChange ? (v) => {
+            void setAppPref(PREF_TAB_VARIANT, v)
+            onTabVariantChange(v)
+          } : undefined}
           onSeekToStart={onSeekToStart ?? (() => {
-            void stemPanelRef.current?.seekTransportToSeconds(0)
+            void stemPanelRef.current?.seekTransportToSeconds(0).then(() => {
+              tabRef.current?.syncPlaybackTimelineMs(0)
+            })
           })}
         />
       </View>
