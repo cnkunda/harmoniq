@@ -44,11 +44,11 @@ def test_transcription_prepare_happy_path_upload(monkeypatch, tmp_path):
         stems_dir.mkdir(parents=True, exist_ok=True)
         return {stem: f"stems/{stem}.wav" for stem in ("guitar", "bass", "drums", "vocals", "piano", "other")}
 
-    monkeypatch.setattr("app.main.separate_with_demucs", fake_separate)
+    monkeypatch.setattr("app.routers.analyze.separate_with_demucs", fake_separate)
     
     # Updated Mock: Returns the NEW semantic dictionary
     monkeypatch.setattr(
-        "app.main.estimate_beat_grid",
+        "app.routers.analyze.estimate_beat_grid",
         lambda *_args, **_kwargs: {
             "bpm": 120.0,
             "beats": [0.0, 0.5, 1.0, 1.5],
@@ -59,7 +59,7 @@ def test_transcription_prepare_happy_path_upload(monkeypatch, tmp_path):
     )
     
     monkeypatch.setattr(
-        "app.main.build_stem_routing_hints",
+        "app.routers.analyze.build_stem_routing_hints",
         lambda _paths: {"selected_melodic_stem": "guitar", "chord_mix_stems": ["bass", "other"]}
     )
 
@@ -96,11 +96,11 @@ def test_transcription_prepare_compound_meter_override(monkeypatch, tmp_path):
             "tick_value": 0.125,
         }
 
-    monkeypatch.setattr("app.main.prepare_audio_input", 
+    monkeypatch.setattr("app.routers.analyze.prepare_audio_input", 
         lambda *a, **k: AudioPreparationResult("job1", tmp_path, tmp_path/"norm.wav", None, 3.0, ()))
-    monkeypatch.setattr("app.main.separate_with_demucs", lambda *a: {"guitar": "g.wav"})
-    monkeypatch.setattr("app.main.estimate_beat_grid", fake_estimate)
-    monkeypatch.setattr("app.main.build_stem_routing_hints", lambda *a: {"selected_melodic_stem": "guitar"})
+    monkeypatch.setattr("app.routers.analyze.separate_with_demucs", lambda *a: {"guitar": "g.wav"})
+    monkeypatch.setattr("app.routers.analyze.estimate_beat_grid", fake_estimate)
+    monkeypatch.setattr("app.routers.analyze.build_stem_routing_hints", lambda *a: {"selected_melodic_stem": "guitar"})
 
     res = client.post(
         "/transcription/prepare",

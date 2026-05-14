@@ -18,8 +18,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import music21
 
+import logging
 from app.schemas import BeatGrid, ChordTimeline, SoloNotes, TimeSignature, ChordEvent, SoloNote
 from app.guitar_position import midi_to_guitar_position
+
+logger = logging.getLogger("harmoniq.musicxml_builder")
 
 # Constants for MusicXML generation
 DEFAULT_DIVISIONS = 480  # Standard for many MusicXML applications (e.g., MuseScore, Finale)
@@ -80,16 +83,22 @@ def build_musicxml(
 
         # Determine the key
     if key_signature:
-        # music21 expects "C major", "A minor" etc.
-        # We need to parse this string into music21.key.Key
+        # Parse "C major" or "C" or "A minor" or "Am" into music21.key.Key
+        parts = key_signature.split(None, 1)
+        root = parts[0]
+        mode = parts[1].lower() if len(parts) > 1 else 'major'
+        # Normalize mode names
+        if mode in ('minor', 'min', 'm'):
+            mode_flag = 'minor'
+        else:
+            mode_flag = 'major'
         try:
-            m21_key = m21.key.Key(key_signature)
+            m21_key = m21.key.Key(root, mode_flag)
         except Exception:
-            print(f"WARNING: Could not parse key signature '{key_signature}'. Defaulting to C major.")
-            m21_key = m21.key.Key('C', 'major')
+            logger.warning("Could not parse key signature '%s'. Defaulting to C major.", key_signature)
+            m21_key = m21.key.Key('C')
     else:
-        # TODO: Infer key from chord timeline or add as input
-        m21_key = m21.key.Key('C', 'major') 
+        m21_key = m21.key.Key('C') 
 
     m21_clef = m21.clef.TrebleClef()
 
@@ -250,12 +259,12 @@ def build_musicxml(
                 continue
 
             # Create a Music21 ChordSymbol object
+            m21_chord_str = _harmoniq_chord_to_music21(chord_event.chord)
             try:
-                m21_chord_symbol = m21.harmony.ChordSymbol(chord_event.chord)
+                m21_chord_symbol = m21.harmony.ChordSymbol(m21_chord_str)
             except Exception:
-                # Fallback for unparseable chord symbols
-                print(f"WARNING: Could not parse chord symbol '{chord_event.chord}'. Adding as text expression.")
-                m21_chord_symbol = m21.expressions.TextExpression(chord_event.chord)
+                logger.warning("Could not parse chord symbol '%s' (mapped to '%s'). Adding as text expression.", chord_event.chord, m21_chord_str)
+                m21_chord_symbol = m21.expressions.TextExpression(m21_chord_str)
 
             # Calculate offset from the start of the measure in quarter lengths
             offset_s = chord_event.timestamp - measure_start_s
@@ -355,4 +364,28 @@ def _midi_to_step_alter_octave(midi: int) -> tuple[str, int, int]:
     return step, alter, octave
 
 
+def _harmoniq_chord_to_music21(chord_symbol: str) -> str:
+    """Convert Harmoniq chord format (e.g. 'C:maj', 'F#:min7') to music21 format ('C', 'F#m7').
+
+    music21's ChordSymbol expects standard chord abbreviations like 'C', 'Cm', 'C7', 'Cmaj7'.
+    Harmoniq uses a 'root:quality' format that music21 cannot parse directly.
+    """
+    if not chord_symbol:
+        return chord_symbol
+    parts = chord_symbol.split(":", 1)
+    root = parts[0]
+    if len(parts) < 2:
+        return root
+    quality = parts[1].strip()
+    if not quality:
+        return root
+    quality_map = {
+        "maj": "", "min": "m", "m": "m", "dim": "dim", "aug": "aug",
+        "7": "7", "maj7": "maj7", "min7": "m7", "m7": "m7",
+        "7sus4": "7sus4", "sus4": "sus4", "sus2": "sus2",
+        "6": "6", "min6": "m6", "m6": "m6",
+        "9": "9", "maj9": "maj9", "min9": "m9", "m9": "m9",
+    }
+    suffix = quality_map.get(quality.lower(), quality)
+    return root + suffix
 

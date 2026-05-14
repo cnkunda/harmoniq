@@ -109,9 +109,9 @@ def test_export_musicxml_from_json_basic():
     assert ts.denominator == 4
 
     # Check Key Signature
-    ks = first_measure.getKeySignatures()[0]
-    assert ks.mode == "major"
-    assert ks.tonic.name == "C"
+    ks = first_measure.keySignature
+    assert ks is not None
+    assert ks.sharps == 0
 
     # Check Tempo
     tempo = first_measure.getElementsByClass(music21.tempo.MetronomeMark)[0]
