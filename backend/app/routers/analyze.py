@@ -73,7 +73,7 @@ def _backend_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _parse_player_profile_field(raw: object) -> object:
+def _parse_player_profile_field(raw: object) -> PlayerProfile | None:
     """Accept JSON object or JSON string; invalid payloads are dropped."""
     if raw is None:
         return None

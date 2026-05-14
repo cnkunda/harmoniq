@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 import logging
@@ -14,12 +13,12 @@ from typing import Literal
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request, Response, UploadFile
+from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
-from app.coach import generate_jam_coach_summary, generate_onboarding_placement_summary, generate_quick_feedback, generate_orient_annotation
-from app.exporter import ExportDisabledError, ExportUnsupportedError, export_gp5_base64, export_musicxml_from_json
+from app.coach import generate_jam_coach_summary, generate_onboarding_placement_summary, generate_quick_feedback, generate_orient_annotation, generate_theory_annotation
 from app.jam_backing import LyriaProviderError, build_instrumental_prompt, call_gemini_lyria_instrumental, gemini_lyria_config, load_bundled_track_wav, select_bundled_track
 from app.lyria_clip import generate_orient_clip
 from app.routers.analyze import router as analyze_router
@@ -28,19 +27,14 @@ from app.routers.discovery import router as discovery_router
 from app.routers.taste import router as taste_router
 from app.routers.curriculum import router as curriculum_router
 from app.schemas import (
-    DiscoveryRequest,
-    DiscoveryResponse,
-    DiscoverySuggestionItem,
     JamBackingRequest,
     JamBackingResponse,
     JamScoreRequest,
     JamScoreResult,
-    LessonJSON,
     OnboardingPlacementRequest,
     OnboardingPlacementResponse,
     OrientClipRequest,
     OrientClipResponse,
-    PlayerProfile,
     QuickFeedbackRequest,
     QuickFeedbackResponse,
     ScoreRequest,
@@ -52,8 +46,6 @@ from app.schemas import (
 from app.scoring_constants import RELIABILITY_BANDS, SCORE_CONTRACT_VERSION, clamp01
 import app.spotify as spotify_api
 from app.tab_catalog.provider import TabSearchResponse, search_tabs
-from app.coach import generate_theory_annotation
-from app.ingest import get_job_dir
 
 # Load backend/.env so local secrets apply when using uvicorn
 _backend_root = Path(__file__).resolve().parents[1]
@@ -118,8 +110,6 @@ class HarmoniqAPIError(Exception):
         self.status_code = status_code
         super().__init__(detail)
 
-
-from fastapi.exceptions import RequestValidationError
 
 @app.exception_handler(HarmoniqAPIError)
 async def harmoniq_api_error_handler(request: Request, exc: HarmoniqAPIError) -> Response:

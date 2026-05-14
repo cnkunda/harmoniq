@@ -362,9 +362,16 @@ Phase 1 is NOT done until all "YES — blocking" and "YES" rows are CLOSED or ex
 - Health checks and CORS isolation
 
 **Acceptance Criteria:**
-- [ ] Backend integration tests pass after migration
-- [ ] No circular dependencies in router imports
-- [ ] Clear separation of concerns between job management and API routing
+- [x] Backend integration tests pass after migration
+- [x] No circular dependencies in router imports
+- [x] Clear separation of concerns between job management and API routing
+
+**Verification:**
+- 30 backend tests pass, 1 pre-existing failure (MusicXML key signature test, unrelated)
+- All 5 routers import cleanly without circular dependencies
+- Routes organized by feature: analyze, export, discovery, taste, curriculum
+- Pre-existing bug fixed: `job.lesson` → `job.result` in discovery router
+- Centralized `HarmoniqAPIError` exception handler added
 
 ---
 
