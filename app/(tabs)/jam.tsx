@@ -934,6 +934,7 @@ export default function JamScreen() {
                     renderPreset="study"
                     runtimeDiagnosticsEnabled={false}
                     onReady={onJamTabReady}
+                    onError={(msg) => toast.error(msg)}
                     style={{ flex: 1, height: '100%', width: '100%' }}
                   />
                 </View>

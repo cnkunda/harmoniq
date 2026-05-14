@@ -120,3 +120,19 @@ def test_apply_tab_artifacts_sets_approximate_flag_via_section_confidence():
     dumped = sec.model_dump()
     assert "tab_alt_position_gp5_base64" not in dumped
 
+
+def test_jam_reference_gp5_is_parseable():
+    """BUG-02 guard: jam reference GP5 must remain valid so AlphaTab doesn't crash."""
+    # Read the frontend jam reference tab base64
+    jam_ref_path = Path(__file__).resolve().parents[2] / "src" / "jam" / "jamReferenceTabGp5Base64.ts"
+    if not jam_ref_path.exists():
+        pytest.skip("jam reference tab not found — running outside repo root")
+    content = jam_ref_path.read_text()
+    import re
+    m = re.search(r"'([^']+)'", content)
+    assert m is not None, "Could not extract base64 from jam reference file"
+    b64 = m.group(1)
+    song = _parse_gp5_from_base64(b64)
+    assert len(song.tracks) >= 1, "Jam reference GP5 must have at least one track"
+    assert _count_pitched_beats(song) >= 1, "Jam reference GP5 must have at least one pitched beat"
+

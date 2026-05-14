@@ -41,12 +41,14 @@ Remaining known pre-existing failures:
 
 | When | What to run |
 |------|----------------|
-| Demucs/model/ingest changed | Stem separation gate (below) |
-| Shipping Play/score that depends on pitch | Pitch kill-switch (below) |
+| Demucs/model/ingest changed | Stem separation gate |
+| Pitch/score pipeline changed | Note accuracy + phrasing regression (listen tab + play tab session) |
 | UX/copy or `mapErrorToUi` touched | Error states matrix (spot-check affected rows) |
-| AlphaTab harness, Listen/Play sync, Jam backing, metronome | Feel Real § (waived items, telemetry, STOP rules) |
+| AlphaTab harness, Listen/Play sync, Jam backing, metronome | Feel Real (waived items, telemetry, STOP rules) |
 | Slow UI or loop metadata logic changed | Slow & loop residual risks + optional cross-step smoke |
 | `expo-av` / bundled assets / Jam backing changed | Design tab backing-track smoke + [expo-av & Design dev playback](#expo-av--design-dev-playback) |
+
+Phase 1 MVP gate items (BUG-01, BUG-02, GAP-01/02, QA-01) have been resolved or waived as part of the Phase 1 close-out. See [PRIORITIES.md](../PRIORITIES.md) for current status.
 
 Depth on scoring diagnostics: [SCORING.md](./SCORING.md).
 

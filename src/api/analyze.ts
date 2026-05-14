@@ -378,6 +378,7 @@ export function pollAnalyzeJobCancelable(
   let rejectRef: ((reason?: unknown) => void) | null = null
   let stopRef: (() => void) | null = null
   let pollCount = 0
+  let seenCompletedOrFailed = false  // BUG-01 guard: never re-poll after terminal status
 
   const promise = new Promise<LessonJSON>((resolve, reject) => {
     rejectRef = reject
@@ -398,11 +399,27 @@ export function pollAnalyzeJobCancelable(
     }
 
     const tick = async () => {
-      if (settled) return
+      if (settled || seenCompletedOrFailed) return  // BUG-01: never re-poll after terminal status
       try {
         const job = await getJobStatus(jobId)
         pollNetworkFailures = 0
         pollCount += 1
+
+        // BUG-01: check terminal status BEFORE calling onStatus, so a throw from
+        // the callback doesn't bypass the settled flag and trigger re-polling.
+        if (job.status === 'complete') {
+          stop(); settled = true; seenCompletedOrFailed = true
+          if (job.result) resolve(job.result)
+          else reject(new ApiError(500, 'Analysis complete but no result'))
+          return
+        }
+        if (job.status === 'failed') {
+          stop(); settled = true; seenCompletedOrFailed = true
+          const code = typeof job.error_code === 'string' && job.error_code.length > 0 ? job.error_code : undefined
+          reject(new ApiError(500, job.error ?? 'Analysis failed', code))
+          return
+        }
+
         onStatus(job)
         const wallStart = options?.wallClockStartedAtMs
         const maxWall = options?.maxProcessingWallMs
@@ -414,23 +431,6 @@ export function pollAnalyzeJobCancelable(
           Date.now() - wallStart > maxWall
         ) {
           options?.onLongRunning?.()
-        }
-        if (job.status === 'complete') {
-          stop()
-          settled = true
-          if (job.result) resolve(job.result)
-          else reject(new ApiError(500, 'Analysis complete but no result'))
-          return
-        }
-        if (job.status === 'failed') {
-          stop()
-          settled = true
-          const code =
-            typeof job.error_code === 'string' && job.error_code.length > 0
-              ? job.error_code
-              : undefined
-          reject(new ApiError(500, job.error ?? 'Analysis failed', code))
-          return
         }
         const backoffMs = Math.min(8000, intervalMs * Math.pow(1.3, Math.min(pollCount - 1, 3)))
         schedule(backoffMs)
