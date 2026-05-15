@@ -22,6 +22,7 @@ export function SettingsCard({
   if (variant === 'gradient') {
     return (
       <LinearGradient
+        // matches colors.wood[600] and colors.wood[900] with alpha
         colors={['rgba(74, 55, 40, 0.98)', 'rgba(44, 24, 16, 0.99)']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}

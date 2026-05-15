@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import colors from '@/src/constants/colors'
 import type { SkillNodeRow } from '@/src/db/types'
 
 function displayName(node: SkillNodeRow): string {
@@ -43,7 +44,7 @@ export function WeakAreaPulse({
           accessibilityLabel="Dismiss insight"
           className="rounded-full border border-wood-600/50 bg-wood-900/30 p-1.5"
         >
-          <X color="#E8B86D" size={18} strokeWidth={2} />
+          <X color={colors.amber.light} size={18} strokeWidth={2} />
         </AnimatedPressable>
       </View>
     </View>

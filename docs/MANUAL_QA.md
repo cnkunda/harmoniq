@@ -10,9 +10,75 @@ Single reference for release and pipeline gates: stem quality, pitch kill-switch
 
 ---
 
-## Phase 2 Migration Notes
+## Phase 1 Gated Items — Resolution Verification
 
-### New features since Phase 1
+The following gated issues were identified during Phase 1 and resolved or waived before Phase 1 close-out. Run these checks when making changes in related code areas.
+
+### BUG-01: Analyze polling infinite loop
+
+**What it was:** Frontend kept polling `GET /analyze/{id}` after the backend returned `complete`, causing unnecessary network traffic and potential edge-case re-analysis triggers.
+
+**Resolution:** `seenCompletedOrFailed` guard added at `src/api/analyze.ts:381` — tick function returns immediately if terminal status has been observed. Terminal status is checked *before* the `onStatus` callback to prevent callback exceptions from bypassing the guard.
+
+**Verification steps:**
+1. Submit a YouTube URL for analysis
+2. Open DevTools Network tab, filter by `/analyze/`
+3. Wait for analysis to complete
+4. Confirm **zero** additional `/analyze/{id}` requests fire after the response with `"status": "complete"`
+5. Force a failure (e.g., invalid URL) and confirm polling stops immediately on `"status": "failed"`
+6. FAIL if any request fires after terminal status
+
+---
+
+### BUG-02: Jam Mode AlphaTab crash
+
+**What it was:** Jam Mode caused AlphaTab to crash with "Invalid typed array length" error (-2) when rendering tabs in the WebView, resulting in a blank black canvas.
+
+**Resolution:** Jam reference GP5 validated to avoid corrupt typed array data. Backend test `test_tabgen.py:125` guards against the invalid reference. The bundle fallback path (no `GEMINI_API_KEY`) provides stable bundled loops.
+
+**Verification steps:**
+1. Navigate to Jam Mode (no `GEMINI_API_KEY`)
+2. Select "A minor · Blues shuffle" backing track
+3. Tap Start Jamming
+4. Confirm AlphaTab tab renders without error; no "Invalid typed array length" or black canvas
+5. Stop and switch to a second backing track
+6. Confirm second track also loads without crash
+7. FAIL if any typed array error appears in the WebView console
+
+---
+
+### GAP-01 / GAP-02: Functional gaps in session flow
+
+**What they were:** GAP-01: Orient phase missing technique-specific annotation clips. GAP-02: Session state not fully persisted across app restarts (tab variant, lyrics strip preferences).
+
+**Resolution:** GAP-01 addressed by `backend/app/lyria_clip.py` — contextual orient annotations generated via `generate_orient_annotation` from the coach module. GAP-02 addressed by AsyncStorage persistence for `tabVariant` and `showLyrics` preferences.
+
+**Verification steps:**
+1. Open a session and tap **Watch How It's Played** on Listen step
+2. Confirm orient annotation text is style/technique-aware (not generic)
+3. Toggle tab variant preference in a session step, exit, re-enter — confirm preference restored
+4. Toggle lyrics strip on/off, exit, re-enter — confirm preference restored
+5. FAIL if orient text is generic placeholder
+6. FAIL if preferences are lost on re-entry
+
+---
+
+### QA-01: Placement confidence consistency
+
+**What it was:** Onboarding placement skill graph displayed default/placeholder values instead of real computed scores, and confidence intervals were inconsistent.
+
+**Resolution:** Commit 86 (Placement Session Logic) wired real scoring from the 3 placement phrases into SQLite `skill_nodes`, driving the radial skill graph from actual data.
+
+**Verification steps:**
+1. Complete the onboarding placement flow (play 3 phrases)
+2. Navigate to the skill graph screen
+3. Confirm scores reflect real placement performance (not defaults)
+4. Confirm confidence intervals are displayed when applicable
+5. FAIL if skill graph shows mock or placeholder values
+
+---
+
+### Phase 1 Delivered Features
 
 | Feature | Location | QA Notes |
 |---------|----------|----------|
@@ -25,7 +91,37 @@ Single reference for release and pipeline gates: stem quality, pitch kill-switch
 | Job data cleanup | `backend/scripts/cleanup_data.py` | Prunes `.tmp_test_data_*` and old `data/jobs/` dirs. Configurable retention. Dry-run mode. Runs on FastAPI startup. |
 | ML inference diagnostics | `backend/app/solo_inference.py`, `chord_inference.py` | Replaced `print()` with `logging`. Fallback model chain for solo inference. Model backend detection logging. |
 | Contextual orient annotations | `backend/app/lyria_clip.py` | Uses `generate_orient_annotation` from `app.coach` for style/technique-aware hints. |
+| Global Audio Manager | `src/audio/GlobalAudioManager.ts` | Singleton manages all `expo-av` + mic instances. Hot swap between sessions. No ghost tracks. |
+| Predictive UI rendering | hook + SmartScroll + AlphaTab cursor | 50ms look-ahead buffer for cursor highlight and scroll position. |
+| AI Coach variation agents | `src/coach/variation.ts` | 7 focus areas (Timing, Vibrato, Dynamics, Phrasing, Bending, Rhythm, Expression) rotate across sessions. |
+| Harmonic similarity discovery | agents + discovery router | Song suggestions based on mastered content. One-tap deep-link to analyze. |
+| Musical Tolerance scoring | scoring engine | Expressive (±50-100ms) and Technique (±20ms) modes. Preference persisted per session. |
+| Unified Player UX parity | Listen/Study/Slow/Play steps | Consistent header/controls/lyrics layout across all practice steps. |
+| Placement session logic | onboarding + skill_nodes | Real GP5 snippets, mic → pitch → score → radial graph with confidence. |
+| Versioned DB migrations | `src/db/migrations.ts` | SQLite (mobile) and IndexedDB (web) with rollback. Data preserved across updates. |
 
+### Phase 1 Delivery Verification Checklist
+
+Manual QA sign-off for commits 86–97 acceptance criteria. Fill on Phase 1 close-out or when making changes to these areas.
+
+| # | Feature (Commit) | Manual Check | PASS/FAIL | Notes |
+|---|-------------------|--------------|-----------|-------|
+| 1 | Placement session logic (86) | Complete onboarding → play 3 phrases → skill graph shows real scores, not defaults | | |
+| 2 | Global Audio Manager (87) | Session A → exit → session B → no ghost tracks, no stutter, no context bloat | | |
+| 3 | Versioned DB migrations (88) | Upgrade from prior schema version → data (songs, mastery) preserved; rollback works | | |
+| 4 | Predictive UI rendering (89) | During playback, cursor highlights ~50ms early; no visual lag perceived | | |
+| 5 | AI Coach variation (90) | 3 sessions on same song → each has different focus area (Timing/Vibrato/Dynamics/Phrasing/Bending/Rhythm/Expression) | | |
+| 6 | Harmonic similarity discovery (91) | Master a song → discovery suggestions appear based on mastered content | | |
+| 7 | Musical Tolerance scoring (92) | Expressive mode (±50-100ms) and Technique mode (±20ms) both affect scoring feedback | | |
+| 8 | Backend API modularization (93) | All routers respond: `/analyze`, `/export`, `/discovery`, `/taste`, `/curriculum`, `/health` | | |
+| 9 | Job data cleanup (94) | Backend logs show cleanup running on startup; old temp data pruned | | |
+| 10 | ML inference diagnostics (95) | Backend logs are free of model loading warnings; cold-start inference completes | | |
+| 11 | Unified Player UX parity (96) | Navigate Listen → Slow → Study → Play: consistent header/controls/lyrics positioning; no layout shift on toggle | | |
+| 12 | Orient-as-hint / AsyncStorage / seek sync (97) | Orient annotation is technique-aware; tab variant + lyrics prefs survive restart; seek-to-start syncs within 50ms | | |
+| 13 | BUG-01 — Analyze polling fix | Polling stops on `complete`/`failed` — zero additional requests | | |
+| 14 | BUG-02 — Jam Mode AlphaTab crash | Jam Mode renders tabs without "Invalid typed array length" error | | |
+
+---
 
 ## Purpose and scope
 
@@ -38,9 +134,7 @@ Single reference for release and pipeline gates: stem quality, pitch kill-switch
 | Slow UI or loop metadata logic changed | Slow & loop residual risks + optional cross-step smoke |
 | `expo-av` / bundled assets / Jam backing changed | Design tab backing-track smoke + [expo-av & Design dev playback](#expo-av--design-dev-playback) |
 
-Phase 1 MVP gate items (BUG-01, BUG-02, GAP-01/02, QA-01) have been resolved or waived as part of the Phase 1 close-out. See [PRIORITIES.md](../PRIORITIES.md) for current status.
-
-Depth on scoring diagnostics: [SCORING.md](./SCORING.md).
+Phase 1 gated items (BUG-01, BUG-02, GAP-01/02, QA-01) — see [Phase 1 Gated Items](#phase-1-gated-items--resolution-verification) above for resolution verification steps. See [PRIORITIES.md](../PRIORITIES.md) for Phase 2 roadmap.
 
 ---
 
@@ -212,10 +306,15 @@ Quick paths that do not duplicate full PASS grids:
 
 1. **Cross-step:** From a lesson with stems — **Listen** (seek + optional metronome) → **Slow** (confirm ~**0.65×**, loop plays, **Clear loop** once) → **Study** (tap score note → fretboard highlights).
 2. **Jam backing seam:** With `GEMINI_API_KEY`, exercise **`POST /jam/backing`** WAV path; compare loop seam vs **two** bundled loops and note MP3 fallback behavior if API absent.
-3. **Review / score:** After a Play pass, open **Review** — diagnostics/reliability UI matches [SCORING.md](./SCORING.md); force score failure → **Do it again** recovers ([Error states](#score-endpoint-failure)).
+3. **Review / score:** After a Play pass, open **Review** — diagnostics/reliability UI; force score failure → **Do it again** recovers ([Error states](#score-endpoint-failure)).
 4. **Telemetry (native):** On iOS/Android, confirm **bridge RTT** and **driftMs** over one reference song vs [Thresholds](#thresholds).
-5. **Onboarding:** If changing pitch/score aggregation, verify placement path shows confidence when applicable ([SCORING.md](./SCORING.md) Phase 3).
+5. **Onboarding:** If changing pitch/score aggregation, verify placement path shows confidence when applicable.
 6. **Design `expo-av`:** If touching `BACKING_TRACKS` or `expo-av`, run the **Smoke-test all … backing tracks** control on the Design tab and confirm `OK — played N tracks` (see [expo-av & Design dev playback](#expo-av--design-dev-playback)).
+7. **Global Audio Manager cleanup:** Complete a session on Song A → exit to Home → start session on Song B → confirm no ghost tracks, no audio stutter.
+8. **Coach variation:** Complete Play → Review on the same song twice; compare coach focus area — should differ (Timing, Vibrato, Dynamics, etc.).
+9. **Musical Tolerance toggle:** In Play step, switch between Expressive and Technique modes; confirm scoring feedback changes to match.
+10. **Discovery suggestions:** After mastering a song, check Home/Explore for discovery recommendations based on mastered content.
+11. **Predictive rendering:** During Listen playback, verify cursor highlights notes ~50ms before audio position (DevTools console logs confirm look-ahead).
 
 ---
 

@@ -1,6 +1,8 @@
 import { View } from 'react-native'
 import Svg, { Circle, G, Line, Polygon, Text as SvgText } from 'react-native-svg'
 
+import colors from '@/src/constants/colors'
+
 type GraphNode = {
   id: string
   label: string
@@ -56,7 +58,7 @@ export function SkillGraph({ nodes = DEFAULT_NODES, size = 240 }: SkillGraphProp
     <View className="w-full items-center rounded-2xl border border-wood-700/50 bg-wood-800/40 p-4">
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         {gridPolygons.map((points, index) => (
-          <Polygon key={`ring-${index}`} points={points} fill="none" stroke="#4A3728" strokeWidth={1} />
+          <Polygon key={`ring-${index}`} points={points} fill="none" stroke={colors.wood[600]} strokeWidth={1} />
         ))}
 
         {safeNodes.map((node, index) => {
@@ -65,11 +67,11 @@ export function SkillGraph({ nodes = DEFAULT_NODES, size = 240 }: SkillGraphProp
           const labelPoint = pointAt(angle, radius + 18)
           return (
             <G key={node.id}>
-              <Line x1={center} y1={center} x2={axisEnd.x} y2={axisEnd.y} stroke="#4A3728" strokeWidth={1} />
+              <Line x1={center} y1={center} x2={axisEnd.x} y2={axisEnd.y} stroke={colors.wood[600]} strokeWidth={1} />
               <SvgText
                 x={labelPoint.x}
                 y={labelPoint.y + 4}
-                fill="#8B7D6B"
+                fill={colors.muted.brown}
                 fontSize={10}
                 textAnchor="middle"
                 fontFamily="DMSans-Regular"
@@ -80,11 +82,11 @@ export function SkillGraph({ nodes = DEFAULT_NODES, size = 240 }: SkillGraphProp
           )
         })}
 
-        <Polygon points={dataPolygon} fill="#D4A574" fillOpacity={0.2} stroke="#D4A574" strokeWidth={2} />
+        <Polygon points={dataPolygon} fill={colors.amber.accent} fillOpacity={0.2} stroke={colors.amber.accent} strokeWidth={2} />
 
         {safeNodes.map((node, index) => {
           const point = pointAt(angleOf(index), clampScore(node.score) * radius)
-          return <Circle key={`dot-${node.id}`} cx={point.x} cy={point.y} r={3.5} fill="#D4A574" />
+          return <Circle key={`dot-${node.id}`} cx={point.x} cy={point.y} r={3.5} fill={colors.amber.accent} />
         })}
       </Svg>
     </View>

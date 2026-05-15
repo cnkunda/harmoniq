@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router'
 import { useCallback, useMemo } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import Animated, { FadeIn } from 'react-native-reanimated'
 import Svg, { Polyline } from 'react-native-svg'
 
@@ -111,7 +112,7 @@ export function RecentProgress({
         saveLesson(fullLesson)
         setLessonSectionIndex(Math.max(0, s.section_index ?? 0))
         const skipTune = useSessionPrefsStore.getState().skipTuneStep
-        router.replace(skipTune ? '/session/orient' : '/session/tune')
+        router.replace(skipTune ? '/session/listen' : '/session/tune')
       } catch {
         toast.error('Could not open session.')
       }
@@ -155,8 +156,9 @@ export function RecentProgress({
           No completed sessions yet.
         </Text>
           {sessions.slice(0, 5).map((s) => (
-            <Pressable
+            <AnimatedPressable
               key={s.id}
+              haptic="light"
               onPress={() => void openSession(s)}
               disabled={!s.job_id}
               className="flex-row items-center justify-between rounded-xl border border-wood-700/50 bg-wood-800/40 px-3 py-2.5 active:bg-wood-800/60"
@@ -168,7 +170,7 @@ export function RecentProgress({
                 <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{sessionCardSubtitle(s)}</Text>
               </View>
               <Text className="font-sans text-[11px] text-muted-brown">{relativeDateLabel(s.date)}</Text>
-            </Pressable>
+            </AnimatedPressable>
           ))}
         </View>
       ) : (

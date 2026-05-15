@@ -2,7 +2,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { useRouter, type Href } from 'expo-router'
 import { Filter, Search } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
-import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { Alert, Platform, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
@@ -333,7 +333,7 @@ export default function LibraryScreen() {
             </View>
 
             <View className="mb-6 flex-row rounded-xl border border-wood-700 bg-wood-800/50 p-1">
-              <Pressable
+              <AnimatedPressable haptic="light"
                 onPress={() => setLibraryTab('lessons')}
                 className={`flex-1 rounded-lg py-2.5 ${libraryTab === 'lessons' ? 'bg-wood-700' : ''}`}
                 accessibilityRole="tab"
@@ -344,8 +344,8 @@ export default function LibraryScreen() {
                 >
                   Songs
                 </Text>
-              </Pressable>
-              <Pressable
+              </AnimatedPressable>
+              <AnimatedPressable haptic="light"
                 onPress={() => setLibraryTab('licks')}
                 className={`flex-1 rounded-lg py-2.5 ${libraryTab === 'licks' ? 'bg-wood-700' : ''}`}
                 accessibilityRole="tab"
@@ -356,7 +356,7 @@ export default function LibraryScreen() {
                 >
                   Licks
                 </Text>
-              </Pressable>
+              </AnimatedPressable>
             </View>
 
             <View className="mb-10 flex-row items-center gap-3">
@@ -373,7 +373,7 @@ export default function LibraryScreen() {
                 />
               </View>
               {libraryTab === 'licks' ? (
-                <Pressable
+                <AnimatedPressable haptic="light"
                   onPress={() => setShowFilters((v) => !v)}
                   className="min-h-14 flex-row items-center gap-2 rounded-xl border border-wood-700 bg-wood-800/60 px-4"
                   accessibilityRole="button"
@@ -383,7 +383,7 @@ export default function LibraryScreen() {
                   <Text className={`font-sans text-sm ${showFilters ? 'text-cream' : 'text-muted-brown'}`}>
                     {showFilters ? 'Hide' : 'Filter'}
                   </Text>
-                </Pressable>
+                </AnimatedPressable>
               ) : null}
             </View>
 
@@ -392,7 +392,7 @@ export default function LibraryScreen() {
                 <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-light">Song filter</Text>
                 <View className="mb-4 flex-row flex-wrap gap-2">
                   {songOptions.map((s) => (
-                    <Pressable
+                    <AnimatedPressable haptic="light"
                       key={`song-${s}`}
                       onPress={() => setSongFilter(s)}
                       className={`rounded-full border px-3 py-1.5 ${
@@ -402,7 +402,7 @@ export default function LibraryScreen() {
                       <Text className={`font-sans text-xs ${songFilter === s ? 'text-wood-900' : 'text-muted-brown'}`}>
                         {s === 'all' ? 'All songs' : s}
                       </Text>
-                    </Pressable>
+                    </AnimatedPressable>
                   ))}
                 </View>
 
@@ -411,7 +411,7 @@ export default function LibraryScreen() {
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
                   {techniqueOptions.map((t) => (
-                    <Pressable
+                    <AnimatedPressable haptic="light"
                       key={`tech-${t}`}
                       onPress={() => setTechniqueFilter(t)}
                       className={`rounded-full border px-3 py-1.5 ${
@@ -423,7 +423,7 @@ export default function LibraryScreen() {
                       <Text className={`font-sans text-xs ${techniqueFilter === t ? 'text-wood-900' : 'text-muted-brown'}`}>
                         {t === 'all' ? 'All techniques' : t}
                       </Text>
-                    </Pressable>
+                    </AnimatedPressable>
                   ))}
                 </View>
               </View>
@@ -455,14 +455,14 @@ export default function LibraryScreen() {
                         {row.section_count} {row.section_count === 1 ? 'section' : 'sections'} · {relativeDateLabel(row.analyzed_at)}
                       </Text>
                       <View className="mt-3 flex-row flex-wrap items-center gap-2">
-                        <Pressable
+                        <AnimatedPressable haptic="light"
                           onPress={() => void openFullLesson(row)}
                           className="min-w-[120px] flex-1 rounded-lg bg-wood-700 px-3 py-2"
                           accessibilityRole="button"
                           accessibilityLabel="Listen to full song"
                         >
                           <Text className="text-center font-sans-medium text-sm text-amber-light">Listen</Text>
-                        </Pressable>
+                        </AnimatedPressable>
                         <AnimatedPressable
                           onPress={() => void exportLessonMidi(row)}
                           disabled={exportBusyJobId === row.job_id}
@@ -476,14 +476,14 @@ export default function LibraryScreen() {
                             {exportBusyJobId === row.job_id ? 'Exporting…' : 'Export MIDI'}
                           </Text>
                         </AnimatedPressable>
-                        <Pressable
+                        <AnimatedPressable haptic="light"
                           onPress={() => confirmRemoveLesson(row)}
                           className="rounded-lg border border-danger/45 bg-wood-900/50 px-3 py-2"
                           accessibilityRole="button"
                           accessibilityLabel="Remove song"
                         >
                           <Text className="font-sans-medium text-xs text-danger">Remove</Text>
-                        </Pressable>
+                        </AnimatedPressable>
                       </View>
                     </View>
                   ))}
@@ -523,7 +523,7 @@ export default function LibraryScreen() {
                       {[-2, -1, 0, 1, 2].map((n) => {
                         const selected = (transposeById[lick.id] ?? 0) === n
                         return (
-                          <Pressable
+                          <AnimatedPressable haptic="light"
                             key={`${lick.id}-tp-${n}`}
                             onPress={() =>
                               setTransposeById((prev) => ({
@@ -538,36 +538,36 @@ export default function LibraryScreen() {
                             <Text className={`font-mono text-[11px] ${selected ? 'text-wood-900' : 'text-muted-brown'}`}>
                               {n > 0 ? `+${n}` : n}
                             </Text>
-                          </Pressable>
+                          </AnimatedPressable>
                         )
                       })}
                     </View>
 
                     <View className="mt-3 flex-row flex-wrap items-center gap-2">
-                      <Pressable
+                      <AnimatedPressable haptic="light"
                         onPress={() => drill(lick)}
                         className="min-w-[100px] flex-1 rounded-lg bg-wood-700 px-3 py-2"
                         accessibilityRole="button"
                         accessibilityLabel="Practice this lick"
                       >
                         <Text className="text-center font-sans-medium text-sm text-amber-light">Practice</Text>
-                      </Pressable>
-                      <Pressable
+                      </AnimatedPressable>
+                      <AnimatedPressable haptic="light"
                         onPress={() => listenToLick(lick)}
                         className="min-w-[100px] flex-1 rounded-lg border border-wood-600/45 bg-cream-dark/35 px-3 py-2"
                         accessibilityRole="button"
                         accessibilityLabel="Listen to this lick"
                       >
                         <Text className="text-center font-sans-medium text-sm text-wood-900">Listen</Text>
-                      </Pressable>
-                      <Pressable
+                      </AnimatedPressable>
+                      <AnimatedPressable haptic="light"
                         onPress={() => confirmRemoveLick(lick)}
                         className="rounded-lg border border-danger/45 bg-wood-900/50 px-3 py-2"
                         accessibilityRole="button"
                         accessibilityLabel="Remove from library"
                       >
                         <Text className="font-sans-medium text-xs text-danger">Remove</Text>
-                      </Pressable>
+                      </AnimatedPressable>
                     </View>
                   </View>
                 ))}

@@ -1,6 +1,6 @@
 import { Audio } from 'expo-av'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native'
+import { Platform, ScrollView, Switch, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Music } from 'lucide-react-native'
 
@@ -26,6 +26,7 @@ import { API_BASE_URL } from '@/src/config'
 import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
 import type { PitchReading } from '@/src/pitch/pitchTypes'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
+import colors from '@/src/constants/colors'
 
 const WOOD_SWATCHES = [
   { label: 'wood-900', className: 'bg-wood-900' },
@@ -82,13 +83,13 @@ function AlphaTabRuntimeDiagDevSection() {
           ) : null}
         </>
       )}
-      <Pressable
+      <AnimatedPressable haptic="none"
         onPress={() => clear()}
         className="mt-2 self-start rounded-lg border border-wood-600/60 bg-wood-800/80 px-3 py-2"
         accessibilityRole="button"
       >
         <Text className="font-sans-medium text-xs text-cream">Clear snapshot</Text>
-      </Pressable>
+      </AnimatedPressable>
     </View>
   )
 }
@@ -137,7 +138,7 @@ function BackingTrackDevSection() {
         Set EXPO_PUBLIC_API_URL in a root `.env` (see `.env.example`) for a LAN backend; restart Metro after
         changes.
       </Text>
-      <Pressable
+      <AnimatedPressable haptic="none"
         onPress={runSmokeTest}
         disabled={busy}
         className={`items-center rounded-lg py-3 ${busy ? 'bg-wood-700' : 'bg-amber-accent/90'}`}
@@ -145,7 +146,7 @@ function BackingTrackDevSection() {
         <Text className={`font-sans-medium text-sm ${busy ? 'text-muted-brown' : 'text-wood-900'}`}>
           {busy ? 'Playing test sequence…' : 'Smoke-test all 5 backing tracks (expo-av)'}
         </Text>
-      </Pressable>
+      </AnimatedPressable>
       <Text className="mt-2 font-mono text-[11px] text-cream/80">{status}</Text>
     </View>
   )
@@ -248,8 +249,8 @@ function StemMixerDevSection() {
           value={guitarOn}
           onValueChange={setGuitarOn}
           disabled={!ready || busy}
-          trackColor={{ false: '#5c4a38', true: '#D4860A80' }}
-          thumbColor={guitarOn ? '#F0DEB4' : '#7A5A3B'}
+          trackColor={{ false: colors.wood[500], true: '#D4860A80' }}
+          thumbColor={guitarOn ? colors.creamDark : colors.wood[600]}
         />
       </View>
       <View className="mb-4 flex-row items-center justify-between">
@@ -258,12 +259,12 @@ function StemMixerDevSection() {
           value={drumsOn}
           onValueChange={setDrumsOn}
           disabled={!ready || busy}
-          trackColor={{ false: '#5c4a38', true: '#D4860A80' }}
-          thumbColor={drumsOn ? '#F0DEB4' : '#7A5A3B'}
+          trackColor={{ false: colors.wood[500], true: '#D4860A80' }}
+          thumbColor={drumsOn ? colors.creamDark : colors.wood[600]}
         />
       </View>
 
-      <Pressable
+      <AnimatedPressable haptic="light"
         onPress={togglePlay}
         disabled={!ready || busy}
         className={`items-center rounded-lg py-3 ${!ready || busy ? 'bg-wood-700' : 'bg-amber-accent/90'}`}
@@ -271,7 +272,7 @@ function StemMixerDevSection() {
         <Text className={`font-sans-medium text-sm ${!ready || busy ? 'text-muted-brown' : 'text-wood-900'}`}>
           {!ready ? 'Loading…' : playing ? 'Pause' : 'Play'}
         </Text>
-      </Pressable>
+      </AnimatedPressable>
       <Text className="mt-2 font-mono text-[11px] text-cream/80">{status}</Text>
     </View>
   )
@@ -359,9 +360,9 @@ function PitchWorkletDevSection() {
           Mic + pitch (dev)
         </Text>
         <Text className="mb-3 font-sans text-sm text-cream">{permissionHint}</Text>
-        <Pressable onPress={startStream} disabled={busy} className="items-center rounded-lg bg-amber-accent/90 py-3">
+        <AnimatedPressable haptic="none" onPress={startStream} disabled={busy} className="items-center rounded-lg bg-amber-accent/90 py-3">
           <Text className="font-sans-medium text-sm text-wood-900">{busy ? 'Retrying…' : 'Retry mic access'}</Text>
-        </Pressable>
+        </AnimatedPressable>
       </View>
     )
   }
@@ -384,7 +385,7 @@ function PitchWorkletDevSection() {
           {hz ? `${hz.toFixed(1)} Hz` : '--'} {cents !== null ? `· ${cents > 0 ? '+' : ''}${cents} cents` : ''}
         </Text>
       </View>
-      <Pressable
+      <AnimatedPressable haptic="light"
         onPress={toggle}
         disabled={busy}
         className={`items-center rounded-lg py-3 ${busy ? 'bg-wood-700' : 'bg-amber-accent/90'}`}
@@ -392,7 +393,7 @@ function PitchWorkletDevSection() {
         <Text className={`font-sans-medium text-sm ${busy ? 'text-muted-brown' : 'text-wood-900'}`}>
           {busy ? 'Working…' : active ? 'Stop mic' : 'Start mic'}
         </Text>
-      </Pressable>
+      </AnimatedPressable>
       <Text className="mt-2 font-mono text-[11px] text-cream/80">{status}</Text>
     </View>
   )

@@ -50,6 +50,7 @@ import {
     type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
+import colors from '@/src/constants/colors'
 
 const SCALE_UI_INTERVAL_MS = 2000
 const AI_INSTRUMENTAL_TRACK_ID = 'ai-instrumental'
@@ -636,7 +637,7 @@ export default function JamScreen() {
                   : 'When you are done jamming, continue to the next section in your plan.'}
               </Text>
               {isFinalPlanStep ? (
-                <Pressable
+                <AnimatedPressable haptic="light"
                   onPress={() => {
                     void (async () => {
                       const plan = currentPlan
@@ -681,9 +682,9 @@ export default function JamScreen() {
                   accessibilityLabel="Complete practice session and return home"
                 >
                   <Text className="text-center font-sans-medium text-base text-wood-900">Complete session</Text>
-                </Pressable>
+                </AnimatedPressable>
               ) : (
-                <Pressable
+                <AnimatedPressable haptic="light"
                   onPress={() => {
                     void (async () => {
                       try {
@@ -703,7 +704,7 @@ export default function JamScreen() {
                           saveLesson(lesson)
                           setLessonSectionIndex(0)
                           const skipTune = useSessionPrefsStore.getState().skipTuneStep
-                          router.replace(skipTune ? '/session/orient' : '/session/tune')
+                          router.replace(skipTune ? '/session/listen' : '/session/tune')
                           return
                         }
                         if (nextSlot.slot_type === 'free_jam') {
@@ -729,7 +730,7 @@ export default function JamScreen() {
                         accessibilityLabel="Go to next section in practice plan"
                 >
                   <Text className="text-center font-sans-medium text-base text-wood-900">Next section</Text>
-                </Pressable>
+                </AnimatedPressable>
               )}
             </View>
           ) : null}
@@ -752,7 +753,7 @@ export default function JamScreen() {
             <View className="mb-6 gap-5">
               {/* Backing Source Section */}
               <View className="gap-2">
-                <Text className="font-sans-semibold text-sm uppercase tracking-wider text-amber-light">
+                <Text className="font-sans-medium text-sm uppercase tracking-wider text-amber-light">
                   Backing Source
                 </Text>
                 <Text className="font-sans text-xs text-muted-brown">
@@ -796,14 +797,14 @@ export default function JamScreen() {
                         Generates a fresh bed from the key/tempo of the loop you select below
                       </Text>
                     </View>
-                    {busy && backingMode === 'ai' ? <ActivityIndicator color="#e8b86d" /> : null}
+                    {busy && backingMode === 'ai' ? <ActivityIndicator color={colors.amber.light} /> : null}
                   </AnimatedPressable>
                 </View>
               </View>
 
               {/* Loop Style Section */}
               <View className="gap-2">
-                <Text className="font-sans-semibold text-sm uppercase tracking-wider text-amber-light">
+                <Text className="font-sans-medium text-sm uppercase tracking-wider text-amber-light">
                   Loop Style
                 </Text>
                 <Text className="font-sans text-xs text-muted-brown">

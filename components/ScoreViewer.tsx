@@ -1,6 +1,7 @@
 import { Asset } from 'expo-asset'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { ActivityIndicator, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
@@ -373,12 +374,11 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
             <ActivityIndicator color={colors.amber.accent} />
           )}
           {assetError ? (
-            <Text
-              className="rounded-lg border border-amber-accent/50 bg-amber-accent/90 px-4 py-2 font-sans-medium text-wood-900"
-              onPress={onRetry}
-            >
-              Retry
-            </Text>
+            <AnimatedPressable haptic="light" onPress={onRetry}>
+              <Text className="rounded-lg border border-amber-accent/50 bg-amber-accent/90 px-4 py-2 font-sans-medium text-wood-900">
+                Retry
+              </Text>
+            </AnimatedPressable>
           ) : null}
         </View>
       )
@@ -415,7 +415,7 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
           allowUniversalAccessFromFileURLs
           mixedContentMode="always"
           setSupportMultipleWindows={false}
-          style={{ flex: 1, backgroundColor: '#2B1D0E' }}
+          style={{ flex: 1, backgroundColor: colors.wood[900] }}
         />
         {!soundFontReady ? (
           <View className="absolute left-3 right-3 top-3 rounded-lg border border-wood-600/45 bg-wood-800/70 p-3">

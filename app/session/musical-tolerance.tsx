@@ -17,7 +17,7 @@ export default function MusicalToleranceScreen() {
     try {
       await setAppPref(PREF_MUSICAL_TOLERANCE_MODE, mode)
       console.info('[musical-tolerance] saved', mode)
-      router.replace('/session/orient')
+      router.replace('/session/listen')
     } finally {
       setBusy(false)
     }

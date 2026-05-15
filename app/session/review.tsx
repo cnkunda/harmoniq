@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router'
 import * as Sharing from 'expo-sharing'
 import * as WebBrowser from 'expo-web-browser'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Platform, Pressable, Text, View } from 'react-native'
+import { Platform, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
@@ -546,14 +546,14 @@ export default function ReviewScreen() {
       ) : null}
 
       <View className="mt-3 flex-row flex-wrap items-center gap-2">
-        <Pressable
+        <AnimatedPressable haptic="light"
           onPress={() => void runScore()}
           disabled={busy}
           className="rounded-lg bg-amber-accent/90 px-4 py-2 disabled:opacity-40"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">{busy ? 'Scoring…' : 'Run score'}</Text>
-        </Pressable>
+        </AnimatedPressable>
         <AnimatedPressable
           onPress={() => void exportMidi()}
           className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
@@ -568,21 +568,21 @@ export default function ReviewScreen() {
         >
           <Text className="font-sans-medium text-wood-900">Export MusicXML</Text>
         </AnimatedPressable>
-        <Pressable
+        <AnimatedPressable haptic="light"
           onPress={() => void saveLick()}
           disabled={savingLick}
           className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2 disabled:opacity-40"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">{savingLick ? 'Saving…' : 'Save to Library'}</Text>
-        </Pressable>
-        <Pressable
+        </AnimatedPressable>
+        <AnimatedPressable haptic="light"
           onPress={() => router.push('/library')}
           className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">Open Library</Text>
-        </Pressable>
+        </AnimatedPressable>
       </View>
 
       <Text className="mt-2 font-mono text-[11px] text-muted-brown">{exportState}</Text>

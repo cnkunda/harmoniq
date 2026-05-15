@@ -1,8 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { PhrasingVisualizerStub, ScoreSummaryCard } from '@/components/ReviewSessionPanel'
 import { WaveformPlaybackActions } from '@/components/WaveformPlaybackActions'
 import { getSessionById } from '@/src/db/client'
@@ -54,14 +55,14 @@ export default function ReviewArchiveScreen() {
         <Text className="font-serif text-2xl text-wood-900">Session replay</Text>
         <Text className="mt-1 font-sans text-sm text-muted-brown">Read-only review from your journal.</Text>
 
-        <Pressable
+        <AnimatedPressable haptic="light"
           onPress={() => router.back()}
           className="mt-4 self-start rounded-lg border border-wood-600/45 bg-cream-dark/45 px-3 py-2"
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Text className="font-sans-medium text-sm text-wood-900">Back</Text>
-        </Pressable>
+        </AnimatedPressable>
 
         {row === undefined ? (
           <Text className="mt-6 font-sans text-sm text-muted-brown">Loading…</Text>

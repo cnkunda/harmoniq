@@ -23,6 +23,7 @@ import {
   G,
   Line,
   LinearGradient as SvgLinearGradient,
+  Path,
   RadialGradient as SvgRadialGradient,
   Rect as SvgRect,
   Stop,
@@ -42,7 +43,7 @@ import { pitchClassLabelFromMidi } from '@/src/music/noteNames'
 import type { FretboardTunerState } from '@/src/session/useFretboardTuner'
 import type { FretboardOverlayMode } from '@/src/utils/fretboardShareState'
 import { useMusicState } from '@/src/context/MusicContext'
-import { chordToFretboardCells, formatChordDisplay } from '@/src/music/chordVoicing'
+import { chordToFretboardCells, formatChordDisplay, parseChordSymbol, noteToPitchClass } from '@/src/music/chordVoicing'
 
 export { inferMidiFromNoteSelection, resolveFretCell } from '@/src/music/fretboardCell'
 
@@ -105,6 +106,8 @@ const FINGER_COLORS: Record<number, { fill: string; border: string }> = {
   4: { fill: '#F87171', border: '#EF4444' },
 }
 
+const NOTE_ACTIVE_RED = '#E53935'
+
 const SCALE_DEGREE_LABELS: Record<number, string> = {
   0: '1', 1: 'b2', 2: '2', 3: 'b3', 4: '3', 5: '4',
   6: 'b5', 7: '5', 8: '#5', 9: '6', 10: 'b7', 11: '7',
@@ -153,7 +156,7 @@ function stringLineThicknessPx(stringIdx: number): number {
 }
 
 function flashPeakColorForMidi(midi: number | null): string {
-  if (midi == null || !Number.isFinite(midi)) return '#F5ECD8'
+  if (midi == null || !Number.isFinite(midi)) return colors.cream
   const pc = ((Math.round(midi) % 12) + 12) % 12
   const hue = 26 + pc * 2.2
   return `hsl(${hue}, 76%, 76%)`
@@ -207,7 +210,7 @@ function SelectedMarker({ flashMidi }: { flashMidi: number | null }) {
   const dotStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
     backgroundColor: interpolateColor(colorPulse.value, [0, 1], [colors.amber.accent, peakFill]),
-    borderColor: interpolateColor(colorPulse.value, [0, 1], [colors.amber.light, '#FFFAF0']),
+    borderColor: interpolateColor(colorPulse.value, [0, 1], [colors.amber.light, colors.ivory]),
   }))
 
   const ringStyle = useAnimatedStyle(() => ({
@@ -238,7 +241,7 @@ function SelectedMarker({ flashMidi }: { flashMidi: number | null }) {
             height: 16,
             borderRadius: 8,
             borderWidth: 2,
-            shadowColor: '#000',
+            shadowColor: colors.wood[900],
             shadowOpacity: 0.22,
             shadowRadius: 3,
             shadowOffset: { width: 0, height: 1 },
@@ -258,7 +261,7 @@ function GuideMarker({
   isActive?: boolean
   overlayLabel?: string | null | undefined
 }) {
-  const fc = finger ? FINGER_COLORS[finger] : { fill: '#D4A574', border: '#B8956A' }
+  const fc = finger ? FINGER_COLORS[finger] : { fill: colors.amber.accent, border: colors.amber.accent }
   const scaleVal = useSharedValue(1)
   const pulseAnim = useSharedValue(0)
 
@@ -306,12 +309,12 @@ function GuideMarker({
             width: 18, height: 18, borderRadius: 9,
             backgroundColor: fc.fill, borderWidth: 1.5, borderColor: fc.border,
             alignItems: 'center', justifyContent: 'center',
-            shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
+            shadowColor: colors.wood[900], shadowOpacity: 0.2, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
           },
         ]}
       >
         {displayContent && (
-          <Text style={{ fontSize, fontWeight: '700', color: '#1a1410' }}>
+          <Text style={{ fontSize, fontWeight: '700', color: colors.wood[900] }}>
             {displayContent}
           </Text>
         )}
@@ -393,6 +396,62 @@ export function FretboardDiagram({
       return formatChordDisplay(musicState.currentChord)
     }
     return null
+  }, [musicState?.currentChord])
+
+  const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+  const CHORD_FULL_NAMES: Record<string, string> = {
+    maj: 'Major', min: 'Minor', dim: 'Diminished', aug: 'Augmented',
+    '7': 'Dominant 7th', maj7: 'Major 7th', min7: 'Minor 7th',
+    '7sus4': '7th Sus 4', sus4: 'Sus 4', sus2: 'Sus 2',
+    '6': 'Major 6th', min6: 'Minor 6th',
+    '9': 'Dominant 9th', maj9: 'Major 9th', min9: 'Minor 9th',
+  }
+
+  const EXTENSIONS: Record<string, string[]> = {
+    maj: ['7', 'maj7', '6', '9', 'maj9'],
+    min: ['m7', 'm9', 'm11', 'm13', 'mM7'],
+    dim: ['dim7', 'm7b5'],
+    aug: ['aug7', 'maj7#5'],
+    '7': ['9', '13', '7sus4', '7#9', '7b9'],
+    maj7: ['9', '13', 'maj9', '#11'],
+    min7: ['m9', 'm11', 'm13'],
+    '7sus4': ['9sus4', '13sus4'],
+    sus4: ['7sus4', '9sus4'],
+    sus2: ['7sus2', '9sus2'],
+    '6': ['7', 'maj7', '9'],
+    min6: ['m7', 'm9'],
+    '9': ['13', '7#9', '7b9'],
+    maj9: ['13', '#11'],
+    min9: ['11', '13'],
+  }
+
+  const chordNotes = useMemo(() => {
+    if (!musicState?.currentChord || musicState.currentChord === 'N') return []
+    const parsed = parseChordSymbol(musicState.currentChord)
+    if (!parsed) return []
+    const rootPc = noteToPitchClass(parsed.root)
+    const intervals = [...new Set(chordCells.map(c => c.interval))]
+    return intervals
+      .sort((a, b) => a - b)
+      .filter(iv => iv >= 0 && iv <= 12)
+      .map(iv => NOTE_NAMES[(rootPc + iv) % 12])
+  }, [musicState?.currentChord, chordCells])
+
+  const chordFullName = useMemo(() => {
+    if (!musicState?.currentChord || musicState.currentChord === 'N') return null
+    const parsed = parseChordSymbol(musicState.currentChord)
+    if (!parsed) return null
+    return CHORD_FULL_NAMES[parsed.quality] ?? parsed.quality
+  }, [musicState?.currentChord])
+
+  const chordExtensions = useMemo(() => {
+    if (!musicState?.currentChord || musicState.currentChord === 'N') return []
+    const parsed = parseChordSymbol(musicState.currentChord)
+    if (!parsed) return []
+    const exts = EXTENSIONS[parsed.quality]
+    if (!exts) return []
+    return exts.map(ext => `${parsed.root}${ext}`)
   }, [musicState?.currentChord])
 
   // Active notes from MusicContext or fallback to selectedNote
@@ -495,135 +554,174 @@ export function FretboardDiagram({
 
   return (
     <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/45 p-3">
-      <View className="flex-row items-start justify-between gap-2">
-        <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Position map</Text>
-        {showTuneControl || showOrientControl || showOverlayControls || showCopyShare || showPitchLadderControl || !!onFretboardModeChange ? (
-          <View className="max-w-[76%] flex-row flex-wrap items-center justify-end gap-1.5">
-            {onFretboardModeChange && ([
-              { mode: 'auto' as const, label: 'Auto' },
-              { mode: 'chords' as const, label: 'Chords' },
-              { mode: 'solo' as const, label: 'Solo' },
-              { mode: 'both' as const, label: 'Both' },
-            ] as const).map(({ mode, label }) => (
-              <Pressable
-                key={mode}
-                onPress={() => onFretboardModeChange(mode)}
-                className={`rounded-full border px-2.5 py-1 ${
-                  fretboardMode === mode ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'
-                }`}
-                accessibilityRole="button"
-                accessibilityLabel={label}
-                accessibilityState={{ selected: fretboardMode === mode }}
-              >
-                <Text className={`font-sans text-[11px] ${fretboardMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
-              </Pressable>
-            ))}
-            {onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both') && (
-              <>
-                <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
-                {([
-                  { mode: 'compact' as const, label: 'Compact' },
-                  { mode: 'full' as const, label: 'Full' },
-                ] as const).map(({ mode, label }) => (
-                  <Pressable
-                    key={mode}
-                    onPress={() => onVoicingModeChange(mode)}
-                    className={`rounded-full border px-2.5 py-1 ${
-                      voicingMode === mode ? 'border-success bg-success/20' : 'border-wood-600/45 bg-cream-dark/50'
-                    }`}
-                    accessibilityRole="button"
-                    accessibilityLabel={label}
-                    accessibilityState={{ selected: voicingMode === mode }}
-                  >
-                    <Text className={`font-sans text-[11px] ${voicingMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
-                  </Pressable>
-                ))}
-                <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
-              </>
-            )}
-            {tuneActive && onCalibrateTune ? (
-              <Pressable
-                onPress={onCalibrateTune}
-                className="rounded-full border border-wood-600/45 bg-cream-dark/50 px-2.5 py-1"
-                accessibilityRole="button"
-                accessibilityLabel="Calibrate tuner noise floor"
-              >
-                <Text className="font-mono text-[9px] text-wood-900">{tuneCalibrating ? 'Cal…' : 'Cal'}</Text>
-              </Pressable>
-            ) : null}
-            {showTuneControl ? (
-              <Pressable
-                onPress={onToggleTune}
-                disabled={tuneDisabled}
-                className={`rounded-full border px-3 py-1 ${tuneActive ? 'border-success bg-success/25' : 'border-wood-600/45 bg-cream-dark/50'} ${tuneDisabled ? 'opacity-45' : ''}`}
-                accessibilityRole="button"
-                accessibilityLabel={tuneActive ? 'Disable fretboard tuner' : 'Enable fretboard tuner'}
-              >
-                <Text className={`font-sans text-[11px] ${tuneActive ? 'text-wood-900' : 'text-muted-brown'}`}>
-                  {tuneActive ? 'Tune on' : 'Tune'}
-                </Text>
-              </Pressable>
-            ) : null}
-            {showOrientControl ? (
-              <Pressable
-                onPress={() => { setOrientPanelOpen((o) => !o); onToggleOrient?.() }}
-                className={`rounded-full border px-3 py-1 ${orientPanelOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'}`}
-                accessibilityRole="button"
-                accessibilityLabel={orientPanelOpen ? 'Hide technique hint' : 'Show technique hint'}
-              >
-                <Text className={`font-sans text-[11px] ${orientPanelOpen ? 'text-wood-900' : 'text-muted-brown'}`}>Hint</Text>
-              </Pressable>
-            ) : null}
-            {showPitchLadderControl ? (
-              <Pressable
-                onPress={() => setPitchLadderOpen((o) => !o)}
-                className={`rounded-full border px-3 py-1 ${pitchLadderOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'}`}
-                accessibilityRole="button"
-                accessibilityLabel="Show example pitch ladder"
-                accessibilityState={{ selected: pitchLadderOpen }}
-              >
-                <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-muted-brown'}`}>Example</Text>
-              </Pressable>
-            ) : null}
-            {showOverlayControls
-              ? ([
-                  { mode: 'off' as const, label: 'Overlay off' },
-                  { mode: 'note_names' as const, label: 'Note names' },
-                  { mode: 'scale_degrees' as const, label: 'Scale degrees' },
-                ] as const).map(({ mode, label }) => (
-                  <Pressable
-                    key={mode}
-                    onPress={() => onOverlayModeChange?.(mode)}
-                    disabled={!onOverlayModeChange}
-                    className={`rounded-full border px-3 py-1 ${
-                      overlayMode === mode ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'
-                    } ${onOverlayModeChange ? '' : 'opacity-50'}`}
-                    accessibilityRole="button"
-                    accessibilityLabel={label}
-                    accessibilityState={{ selected: overlayMode === mode }}
-                  >
-                    <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
-                  </Pressable>
-                ))
-              : null}
-            {showCopyShare ? (
-              <Pressable
-                onPress={onCopyShareLink}
-                disabled={!onCopyShareLink}
-                className={`rounded-full border border-wood-600/45 bg-cream-dark/50 px-3 py-1 ${onCopyShareLink ? '' : 'opacity-50'}`}
-                accessibilityRole="button"
-                accessibilityLabel="Copy share link"
-              >
-                <Text className="font-sans text-[11px] text-wood-900">Copy share link</Text>
-              </Pressable>
+      <View className="flex-row items-start justify-between gap-5">
+        <View className="gap-1" style={{ minWidth: 130 }}>
+          <Text className="font-sans-medium text-[10px] uppercase tracking-[0.14em] text-amber-accent">Position map</Text>
+          <View className="flex-row items-baseline gap-2">
+            <Text className="font-sans text-base font-semibold text-wood-900">{keyLabel}</Text>
+            {capoText ? (
+              <View className="rounded-full border border-amber-accent/25 bg-amber-accent/10 px-[7px] py-0.5">
+                <Text className="text-[10px] font-medium text-amber-accent/70">{capoText}</Text>
+              </View>
             ) : null}
           </View>
-        ) : null}
+        </View>
+        <View className="flex-1 flex-row flex-wrap items-center justify-end gap-1.5">
+          {onFretboardModeChange && (
+            <View className="flex-row rounded-full border border-wood-600/45 bg-cream-dark/30 p-0.5 gap-[2px]">
+              {([
+                { mode: 'auto' as const, label: 'Auto' },
+                { mode: 'chords' as const, label: 'Chord' },
+                { mode: 'solo' as const, label: 'Solo' },
+                { mode: 'both' as const, label: 'Both' },
+              ] as const).map(({ mode, label }) => (
+                <Pressable
+                  key={mode}
+                  onPress={() => onFretboardModeChange(mode)}
+                  className={`rounded-full px-4 py-1.5 ${
+                    fretboardMode === mode ? 'bg-amber-accent/20' : ''
+                  }`}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  accessibilityState={{ selected: fretboardMode === mode }}
+                >
+                  <Text className={`font-sans text-xs ${
+                    fretboardMode === mode ? 'text-amber-accent font-medium' : 'text-muted-brown'
+                  }`}>{label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {tuneActive && onCalibrateTune ? (
+            <Pressable
+              onPress={onCalibrateTune}
+              className="rounded-full border border-wood-600/45 bg-cream-dark/50 px-3 py-1.5"
+              accessibilityRole="button"
+              accessibilityLabel="Calibrate tuner noise floor"
+            >
+              <Text className="font-mono text-[10px] text-wood-900">{tuneCalibrating ? 'Cal…' : 'Cal'}</Text>
+            </Pressable>
+          ) : null}
+
+          {onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both') && (
+            <>
+              <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
+              {([
+                { mode: 'compact' as const, label: 'Compact' },
+                { mode: 'full' as const, label: 'Full' },
+              ] as const).map(({ mode, label }) => (
+                <Pressable
+                  key={mode}
+                  onPress={() => onVoicingModeChange(mode)}
+                  className={`rounded-full border px-3 py-1.5 ${
+                    voicingMode === mode ? 'border-success bg-success/20' : 'border-wood-600/45 bg-cream-dark/50'
+                  }`}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  accessibilityState={{ selected: voicingMode === mode }}
+                >
+                  <Text className={`font-sans text-[11px] ${voicingMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
+                </Pressable>
+              ))}
+            </>
+          )}
+
+          {showOverlayControls && (
+            <>
+              {!!onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both') ? (
+                <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
+              ) : null}
+              {([
+                { mode: 'off' as const, label: 'Overlay' },
+                { mode: 'note_names' as const, label: 'Labels' },
+                { mode: 'scale_degrees' as const, label: 'Degrees' },
+              ] as const).map(({ mode, label }) => (
+                <Pressable
+                  key={mode}
+                  onPress={() => onOverlayModeChange?.(mode)}
+                  disabled={!onOverlayModeChange}
+                  className={`rounded-full border px-3 py-1.5 ${
+                    overlayMode === mode ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'
+                  } ${onOverlayModeChange ? '' : 'opacity-50'}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  accessibilityState={{ selected: overlayMode === mode }}
+                >
+                  <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
+                </Pressable>
+              ))}
+            </>
+          )}
+
+          {showPitchLadderControl ? (
+            <Pressable
+              onPress={() => setPitchLadderOpen((o) => !o)}
+              className={`rounded-full border px-3 py-1.5 ${pitchLadderOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'}`}
+              accessibilityRole="button"
+              accessibilityLabel="Show example pitch ladder"
+              accessibilityState={{ selected: pitchLadderOpen }}
+            >
+              <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-muted-brown'}`}>Example</Text>
+            </Pressable>
+          ) : null}
+
+          {(showTuneControl || showOrientControl || showCopyShare) &&
+           (!!onFretboardModeChange || !!onVoicingModeChange || showOverlayControls || showPitchLadderControl || tuneActive) ? (
+            <View className="mx-0.5 h-[18px] w-px bg-wood-600/25" />
+          ) : null}
+
+          {showTuneControl ? (
+            <Pressable
+              onPress={onToggleTune}
+              disabled={tuneDisabled}
+              className={`h-[34px] w-[34px] items-center justify-center rounded-lg border ${tuneActive ? 'border-success bg-success/25' : 'border-wood-600/45'} ${tuneDisabled ? 'opacity-45' : ''}`}
+              accessibilityRole="button"
+              accessibilityLabel={tuneActive ? 'Disable fretboard tuner' : 'Enable fretboard tuner'}
+            >
+              <Svg viewBox="0 0 24 24" width={16} height={16}>
+                <Circle cx={12} cy={12} r={3} stroke={colors.muted.brown} strokeWidth={1.5} fill="none" />
+                <Path
+                  d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"
+                  stroke={colors.muted.brown} strokeWidth={1.5} strokeLinecap="round" fill="none"
+                />
+              </Svg>
+            </Pressable>
+          ) : null}
+
+          {showOrientControl ? (
+            <Pressable
+              onPress={() => { setOrientPanelOpen((o) => !o); onToggleOrient?.() }}
+              className={`h-[34px] w-[34px] items-center justify-center rounded-lg border ${orientPanelOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45'}`}
+              accessibilityRole="button"
+              accessibilityLabel={orientPanelOpen ? 'Hide technique hint' : 'Show technique hint'}
+            >
+              <Svg viewBox="0 0 24 24" width={16} height={16}>
+                <Circle cx={12} cy={12} r={10} stroke={colors.muted.brown} strokeWidth={1.5} fill="none" />
+                <Path d="M12 16v-4m0-4h.01" stroke={colors.muted.brown} strokeWidth={1.5} strokeLinecap="round" fill="none" />
+              </Svg>
+            </Pressable>
+          ) : null}
+
+          {showCopyShare ? (
+            <Pressable
+              onPress={onCopyShareLink}
+              disabled={!onCopyShareLink}
+              className={`h-[34px] w-[34px] items-center justify-center rounded-lg border border-wood-600/45 ${onCopyShareLink ? '' : 'opacity-50'}`}
+              accessibilityRole="button"
+              accessibilityLabel="Copy share link"
+            >
+              <Svg viewBox="0 0 24 24" width={16} height={16}>
+                <Path
+                  d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8m-4-6-4-4-4 4m4-4v13"
+                  stroke={colors.muted.brown} strokeWidth={1.5} strokeLinecap="round"
+                  strokeLinejoin="round" fill="none"
+                />
+              </Svg>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
-      <Text className="mt-1 font-sans text-xs text-wood-900">
-        {keyLabel} · {positionLabel}
-      </Text>
-      <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{capoText}</Text>
       {tuneActive && tunerState ? (
         <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
           <Text className="font-mono text-[11px] text-wood-900">
@@ -638,7 +736,7 @@ export function FretboardDiagram({
 
       {orientPanelOpen && showOrientControl ? (
         <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
-          <Text className="font-sans-semibold text-[11px] text-wood-900">Technique Hint</Text>
+          <Text className="font-sans-medium text-[11px] text-wood-900">Technique Hint</Text>
           {orientAnnotation ? (
             <Text className="mt-1 font-sans text-[11px] text-muted-brown">{orientAnnotation}</Text>
           ) : null}
@@ -678,12 +776,12 @@ export function FretboardDiagram({
           <Svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width={svgSize.w} height={svgSize.h}>
             <Defs>
               <SvgLinearGradient id="woodBg" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0%" stopColor="#3D2317" />
-                <Stop offset="100%" stopColor="#2C1810" />
+                <Stop offset="0%" stopColor={colors.wood[800]} />
+                <Stop offset="100%" stopColor={colors.wood[900]} />
               </SvgLinearGradient>
               <SvgRadialGradient id="noteGlow" cx="50%" cy="50%" r="50%">
-                <Stop offset="0%" stopColor="#E53935" stopOpacity="0.35" />
-                <Stop offset="100%" stopColor="#E53935" stopOpacity="0" />
+                <Stop offset="0%" stopColor={NOTE_ACTIVE_RED} stopOpacity="0.35" />
+                <Stop offset="100%" stopColor={NOTE_ACTIVE_RED} stopOpacity="0" />
               </SvgRadialGradient>
               <SvgRadialGradient id="chordRootGlow" cx="50%" cy="50%" r="50%">
                 <Stop offset="0%" stopColor="#D4A574" stopOpacity="0.45" />
@@ -694,27 +792,12 @@ export function FretboardDiagram({
             {/* Wood background */}
             <SvgRect x="0" y="0" width={SVG_W} height={SVG_H} fill="url(#woodBg)" rx="6" />
 
-            {/* Chord name */}
-            {chordName && (
-              <SvgText
-                x={SVG_W / 2}
-                y={20}
-                textAnchor="middle"
-                fill={colors.amber.light}
-                fontSize={15}
-                fontWeight="700"
-                fontFamily="PlayfairDisplay-Bold"
-              >
-                {chordName}
-              </SvgText>
-            )}
-
             {/* Fret numbers (O for nut, 1-12 for frets) */}
             <SvgText
               x={fretCenterX(0)}
               y={26}
               textAnchor="middle"
-              fill="#A8A29E"
+              fill={colors.muted.brown}
               fontSize={9}
               fontFamily="JetBrainsMono-Regular"
             >
@@ -726,7 +809,7 @@ export function FretboardDiagram({
                 x={fretCenterX(i + 1)}
                 y={26}
                 textAnchor="middle"
-                fill="#A8A29E"
+                fill={colors.muted.brown}
                 fontSize={9}
                 fontFamily="JetBrainsMono-Regular"
               >
@@ -769,7 +852,7 @@ export function FretboardDiagram({
                 y1={BOARD_T - 4}
                 x2={fretWireX(i + 1)}
                 y2={BOARD_B + 4}
-                stroke="#A8A29E"
+                stroke={colors.muted.brown}
                 strokeWidth={1.2}
                 opacity={0.7}
               />
@@ -830,7 +913,7 @@ export function FretboardDiagram({
                 y1={stringY(si)}
                 x2={SVG_W - MARGIN_R}
                 y2={stringY(si)}
-                stroke="#A8A29E"
+                stroke={colors.muted.brown}
                 strokeWidth={stringLineThicknessPx(si) * 2.2}
                 opacity={0.75}
               />
@@ -849,9 +932,9 @@ export function FretboardDiagram({
                     cx={fretCenterX(col === 0 ? 0 : col)}
                     cy={stringY(si)}
                     r={7}
-                    fill="#6EC88C"
+                    fill={colors.success}
                     opacity={0.15}
-                    stroke="#6EC88C"
+                    stroke={colors.success}
                     strokeWidth={0.8}
                     strokeOpacity={0.4}
                   />
@@ -893,16 +976,16 @@ export function FretboardDiagram({
               return (
                 <G key={`an-${idx}`}>
                   <Circle cx={cx} cy={cy} r={14} fill="url(#noteGlow)" />
-                  <Circle cx={cx} cy={cy} r={7} fill="#E53935" />
+                  <Circle cx={cx} cy={cy} r={7} fill={NOTE_ACTIVE_RED} />
                   {pitchLabel ? (
                     <SvgText
                       x={cx}
                       y={cy + 3.5}
                       textAnchor="middle"
-                      fill="#FFFFFF"
+                      fill={colors.white}
                       fontSize={8}
                       fontWeight="700"
-                      stroke="#1a1a1a"
+                      stroke={colors.wood[900]}
                       strokeWidth={2.5}
                     >
                       {pitchLabel}
@@ -933,7 +1016,7 @@ export function FretboardDiagram({
               const isActive = activeGuideIndex === idx
               const midi = OPEN_MIDI_BY_ROW[si]! + col
               const ol = overlayLabelForCell(overlayMode, midi, degreeRootPitchClass)
-              const fc = gc.finger ? FINGER_COLORS[gc.finger] : { fill: '#D4A574', border: '#B8956A' }
+              const fc = gc.finger ? FINGER_COLORS[gc.finger] : { fill: colors.amber.accent, border: colors.amber.accent }
               const ringR = isActive ? 11 : 9
               return (
                 <G key={`gm-${idx}`}>
@@ -950,7 +1033,7 @@ export function FretboardDiagram({
                     x={fretCenterX(col)}
                     y={stringY(si) + 3.5}
                     textAnchor="middle"
-                    fill="#1a1410"
+                    fill={colors.wood[900]}
                     fontSize={ol && ol.length > 1 ? 8 : 10}
                     fontWeight="700"
                   >
@@ -1039,15 +1122,66 @@ export function FretboardDiagram({
         })}
       </View>
 
-      <Text className="mt-2 font-mono text-[10px] text-muted-brown">
-        {cell
-          ? `Selected · string ${cell.row + 1} (tab) · fret ${cell.fret} · pulse #${pulseKey}`
-          : fretGuideFooterHint?.trim() || 'Tap a note in the score to highlight a fret.'}
-      </Text>
-      {enableKeyboardInput && Platform.OS === 'web' ? (
-        <Text className="mt-1 font-sans text-[10px] text-muted-brown">
-          Keyboard: rows `1-4` map to lower strings; hold Shift on top rows for strings 1-2.
+      {chordName && chordNotes.length > 0 ? (
+        <View className="mt-2 border-t border-wood-600/20 pt-3">
+          <View className="flex-row items-center">
+            <View className="flex-row items-baseline gap-3 pr-4 border-r border-wood-600/20">
+              <Text className="font-serif text-3xl tracking-tight text-amber-accent">
+                {chordName}
+              </Text>
+              {chordFullName ? (
+                <Text className="text-[11px] uppercase tracking-widest text-amber-accent/60 font-medium">
+                  {chordFullName}
+                </Text>
+              ) : null}
+            </View>
+            <View className="px-4 border-r border-wood-600/20">
+              <Text className="text-[9px] uppercase tracking-wider text-amber-accent/50 mb-0.5">
+                Notes
+              </Text>
+              <View className="flex-row items-center gap-1.5">
+                {chordNotes.map((note, idx) => (
+                  <View key={note} className="flex-row items-center gap-1.5">
+                    {idx > 0 && (
+                      <View className="h-1 w-1 rounded-full bg-amber-accent/30" />
+                    )}
+                    <Text className="text-sm font-medium text-amber-accent">{note}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+            {chordExtensions.length > 0 ? (
+              <View className="flex-1 pl-4">
+                <Text className="text-[9px] uppercase tracking-wider text-amber-accent/50 mb-1">
+                  Extended harmony
+                </Text>
+                <View className="flex-row flex-wrap gap-1.5">
+                  {chordExtensions.map((ext) => (
+                    <View
+                      key={ext}
+                      className="rounded-full border border-wood-600/30 px-2 py-0.5"
+                    >
+                      <Text className="text-[10px] font-medium text-amber-accent/70">
+                        {ext}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+            <Text className="ml-auto font-mono text-[10px] text-muted-brown">Tap a note to identify position</Text>
+          </View>
+        </View>
+      ) : null}
+
+      {cell ? (
+        <Text className="mt-2 font-mono text-[10px] text-muted-brown">
+          Selected · string {cell.row + 1} (tab) · fret {cell.fret} · pulse #{pulseKey}
         </Text>
+      ) : !fretGuideFooterHint && !(chordName && chordNotes.length > 0) ? (
+        <Text className="mt-2 font-mono text-[10px] text-muted-brown">Tap a note to identify position</Text>
+      ) : fretGuideFooterHint ? (
+        <Text className="mt-2 font-mono text-[10px] text-muted-brown">{fretGuideFooterHint}</Text>
       ) : null}
     </View>
   )

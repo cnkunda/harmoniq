@@ -2,8 +2,9 @@ import { Audio } from 'expo-av'
 import * as Linking from 'expo-linking'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
-import { Platform, Pressable, Text, View } from 'react-native'
+import { Platform, Text, View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 
 export default function OnboardingMicScreen() {
@@ -75,19 +76,19 @@ export default function OnboardingMicScreen() {
             <Text className="mt-2 text-center font-sans text-xs text-muted-brown">
               Enable the mic in system settings, then tap Refresh below.
             </Text>
-            <Pressable
+            <AnimatedPressable haptic="light"
               onPress={openSettings}
               className="mt-3 self-center rounded-md border border-amber-accent/50 px-3 py-2"
               accessibilityRole="button"
               accessibilityLabel="Open system settings"
             >
               <Text className="font-sans-medium text-sm text-amber-light">Open Settings</Text>
-            </Pressable>
+            </AnimatedPressable>
           </View>
         ) : null}
 
         <View className="mt-8 w-full gap-3">
-          <Pressable
+          <AnimatedPressable haptic="light"
             onPress={() => void request()}
             disabled={busy || status === 'granted'}
             className="rounded-lg bg-amber-accent px-4 py-3 disabled:opacity-40"
@@ -96,26 +97,26 @@ export default function OnboardingMicScreen() {
             <Text className="text-center font-sans-medium text-wood-900">
               {status === 'granted' ? 'Microphone ready' : busy ? 'Requesting…' : 'Allow microphone'}
             </Text>
-          </Pressable>
+          </AnimatedPressable>
           {Platform.OS !== 'web' ? (
-            <Pressable
+            <AnimatedPressable haptic="light"
               onPress={() => void refresh()}
               className="rounded-lg border border-wood-600/50 px-4 py-3"
               accessibilityRole="button"
             >
               <Text className="text-center font-sans-medium text-cream">Refresh status</Text>
-            </Pressable>
+            </AnimatedPressable>
           ) : null}
         </View>
 
-        <Pressable
+        <AnimatedPressable haptic="light"
           onPress={() => router.push({ pathname: '/onboarding/phrase/[index]', params: { index: '0' } })}
           disabled={status !== 'granted'}
           className="mt-10 w-full rounded-lg border border-amber-accent/60 bg-wood-800/80 px-4 py-3 disabled:opacity-35"
           accessibilityRole="button"
         >
           <Text className="text-center font-sans-medium text-amber-light">Next: placement phrases</Text>
-        </Pressable>
+        </AnimatedPressable>
       </View>
     </OnboardingScreenShell>
   )

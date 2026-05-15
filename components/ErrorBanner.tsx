@@ -1,6 +1,7 @@
 import { AlertTriangle, X } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 import colors from '@/src/constants/colors'
 
@@ -68,12 +69,13 @@ export function ErrorBanner({
       </View>
       <View className="flex-row items-center gap-3">
         {action && (
-          <Pressable onPress={action.onPress}>
+          <AnimatedPressable haptic="light" onPress={action.onPress}>
             <Text className={`font-sans-medium text-sm underline ${s.text}`}>{action.label}</Text>
-          </Pressable>
+          </AnimatedPressable>
         )}
         {dismissible && (
-          <Pressable
+          <AnimatedPressable
+            haptic="light"
             onPress={() => {
               setDismissed(true)
               onDismissed?.()
@@ -81,7 +83,7 @@ export function ErrorBanner({
             hitSlop={8}
           >
             <X color={s.iconColor} size={14} />
-          </Pressable>
+          </AnimatedPressable>
         )}
       </View>
     </View>

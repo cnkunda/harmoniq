@@ -5,8 +5,9 @@
 import Slider from '@react-native-community/slider'
 import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, Text, useWindowDimensions, View } from 'react-native'
+import { Text, useWindowDimensions, View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { PitchIndicator } from '@/components/PitchIndicator'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
@@ -22,6 +23,7 @@ import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
 import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
 import type { NoteEventMessage } from '@/types/tabMessage'
+import colors from '@/src/constants/colors'
 
 const WIDE_BREAKPOINT = 900
 
@@ -268,24 +270,24 @@ export default function WarmupScreen() {
           </View>
 
           {!completed && !warmupStarted ? (
-            <Pressable
+            <AnimatedPressable haptic="light"
               onPress={() => setWarmupStarted(true)}
               className="mt-6 w-full rounded-2xl bg-amber-accent/90 py-3.5"
               accessibilityRole="button"
               accessibilityLabel="Start warm-up exercise timer"
             >
               <Text className="text-center font-sans-medium text-wood-900">Start exercise</Text>
-            </Pressable>
+            </AnimatedPressable>
           ) : null}
           {!completed && warmupStarted ? (
-            <Pressable
+            <AnimatedPressable haptic="light"
               onPress={stopExercise}
               className="mt-6 w-full rounded-2xl border-2 border-wood-600/45 bg-cream-dark/50 py-3.5"
               accessibilityRole="button"
               accessibilityLabel="Stop warm-up exercise timer"
             >
               <Text className="text-center font-sans-medium text-wood-900">Stop exercise</Text>
-            </Pressable>
+            </AnimatedPressable>
           ) : null}
         </View>
 
@@ -328,9 +330,9 @@ export default function WarmupScreen() {
                 step={0.05}
                 value={tempoMul}
                 onValueChange={setTempoMul}
-                minimumTrackTintColor="#c9a227"
-                maximumTrackTintColor="#8b7355"
-                thumbTintColor="#5c4033"
+                minimumTrackTintColor={colors.amber.light}
+                maximumTrackTintColor={colors.muted.brown}
+                thumbTintColor={colors.wood[700]}
               />
               <Text className="mt-1 font-sans text-xs text-muted-brown">
                 Adjusts preview only — plan stays the same.
@@ -353,22 +355,22 @@ export default function WarmupScreen() {
 
             {!completed ? (
               <View className="mt-5 flex-row flex-wrap gap-2">
-                <Pressable
+                <AnimatedPressable haptic="light"
                   onPress={skipExercise}
                   className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-ivory py-3"
                   accessibilityRole="button"
                   accessibilityLabel="Skip to next warm-up exercise"
                 >
                   <Text className="text-center font-sans-medium text-sm text-wood-900">Skip exercise</Text>
-                </Pressable>
-                <Pressable
+                </AnimatedPressable>
+                <AnimatedPressable haptic="light"
                   onPress={goNextSection}
                   className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-ivory py-3"
                   accessibilityRole="button"
                   accessibilityLabel="Skip entire warm-up"
                 >
                   <Text className="text-center font-sans-medium text-sm text-wood-900">Skip warm-up</Text>
-                </Pressable>
+                </AnimatedPressable>
               </View>
             ) : null}
           </View>

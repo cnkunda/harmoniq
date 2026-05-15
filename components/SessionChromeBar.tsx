@@ -1,6 +1,7 @@
 import { usePathname, useRouter } from 'expo-router'
 import { ArrowRight } from 'lucide-react-native'
-import { Pressable, Text, View, useWindowDimensions } from 'react-native'
+import { Text, View, useWindowDimensions } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 import colors from '@/src/constants/colors'
 import { SESSION_STEPS, sessionStepIndexFromPathname } from '@/src/constants/sessionFlow'
@@ -61,13 +62,14 @@ export function SessionChromeBar() {
       <View className="flex-row items-center px-4 py-3">
         <View style={{ minWidth: BRAND_MIN }}>
           <View className="flex-row flex-wrap items-center gap-2">
-            <Pressable
+            <AnimatedPressable
+              haptic="light"
               onPress={() => router.push('/(tabs)')}
               accessibilityRole="button"
               accessibilityLabel="Home"
             >
               <Text className="font-serif text-lg text-wood-900">Harmoniq</Text>
-            </Pressable>
+            </AnimatedPressable>
             {isDemoLesson ? (
               <View className="rounded-full border border-amber-accent/45 bg-amber-accent/12 px-2 py-0.5">
                 <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-wood-800">Demo</Text>
@@ -100,16 +102,18 @@ export function SessionChromeBar() {
         <View style={{ minWidth: ACTION_MIN, alignItems: 'flex-end' }}>
           {onTuneScreen ? (
             <View className="items-end gap-1">
-              <Pressable
+              <AnimatedPressable
+                haptic="light"
                 onPress={closeSessionOrHome}
                 accessibilityRole="button"
                 accessibilityLabel="Close"
                 hitSlop={10}
               >
                 <Text className="font-sans-medium text-sm text-wood-900">Close</Text>
-              </Pressable>
+              </AnimatedPressable>
               {hasPlan && hasNext ? (
-                <Pressable
+                <AnimatedPressable
+                  haptic="light"
                   onPress={goNextSection}
                   accessibilityRole="button"
                   accessibilityLabel="Go to next section in practice plan"
@@ -118,12 +122,13 @@ export function SessionChromeBar() {
                 >
                   <Text className="font-sans-medium text-xs text-muted-brown">Next section</Text>
                   <ArrowRight color={colors.muted.brown} size={14} style={{ marginTop: 2 }} />
-                </Pressable>
+                </AnimatedPressable>
               ) : null}
             </View>
           ) : hasPlan ? (
             hasNext ? (
-              <Pressable
+              <AnimatedPressable
+                haptic="light"
                 onPress={goNextSection}
                 accessibilityRole="button"
                 accessibilityLabel="Go to next section in practice plan"
@@ -132,16 +137,17 @@ export function SessionChromeBar() {
               >
                 <Text className="font-sans-medium text-sm text-wood-900">Next section</Text>
                 <ArrowRight color={colors.wood[900]} size={16} style={{ marginTop: 2 }} />
-              </Pressable>
+              </AnimatedPressable>
             ) : (
-              <Pressable
+              <AnimatedPressable
+                haptic="light"
                 onPress={() => clearPlan()}
                 accessibilityRole="button"
                 accessibilityLabel="Clear practice plan"
                 hitSlop={10}
               >
                 <Text className="font-sans-medium text-sm text-wood-900 text-right">End plan</Text>
-              </Pressable>
+              </AnimatedPressable>
             )
           ) : (
             <View />

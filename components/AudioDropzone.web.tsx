@@ -38,7 +38,7 @@ export function AudioDropzone({
   }
 
   const border = isDragging ? colors.amber.accent : colors.wood[600]
-  const bg = isDragging ? 'rgba(212,165,116,0.08)' : 'rgba(61,35,23,0.45)'
+  const bg = isDragging ? colors.amber.accent + '14' : colors.wood[800] + '73'
   const fg = isDragging ? colors.amber.light : colors.muted.brown
 
   return (
@@ -68,7 +68,7 @@ export function AudioDropzone({
         background: bg,
         transition: 'all 0.2s ease',
         color: fg,
-        fontFamily: '"DMSans-Regular", "DM Sans", sans-serif',
+        fontFamily: 'DMSans-Regular',
         fontSize: 14,
         lineHeight: 1.5,
       }}

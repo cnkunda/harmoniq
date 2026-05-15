@@ -1,9 +1,10 @@
 import { Audio } from 'expo-av'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native'
+import { Modal, ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
@@ -166,7 +167,7 @@ export default function ListenScreen() {
       />
 
       <View className="mt-6">
-        <Pressable
+        <AnimatedPressable haptic="light"
           onPress={openOrientModal}
           disabled={orientIsLoading}
           className="min-h-[80px] items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/35 py-4 active:bg-wood-700/50 disabled:opacity-50"
@@ -180,12 +181,12 @@ export default function ListenScreen() {
           }
         >
           <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
-            <Film color="#E8B86D" size={20} strokeWidth={2} />
+            <Film color={colors.amber.light} size={20} strokeWidth={2} />
           </View>
           <Text className="text-center font-sans-medium text-sm text-cream">
             {orientIsLoading ? 'Loading…' : orientError ? 'Unavailable' : 'Watch How It\'s Played'}
           </Text>
-        </Pressable>
+        </AnimatedPressable>
       </View>
 
       <Modal
@@ -196,21 +197,21 @@ export default function ListenScreen() {
       >
         <SafeAreaView className="flex-1 bg-wood-900">
           <View className="flex-row justify-end px-4 pt-2">
-            <Pressable
+            <AnimatedPressable haptic="light"
               onPress={closeOrientModal}
               className="h-10 w-10 items-center justify-center rounded-full bg-wood-800 active:bg-wood-700"
               accessibilityRole="button"
               accessibilityLabel="Close performance guide"
             >
               <X color={colors.amber.light} size={20} strokeWidth={2} />
-            </Pressable>
+            </AnimatedPressable>
           </View>
 
           <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
             <View className="mx-4 mt-2">
               <View className="h-64 items-center justify-center rounded-xl border border-wood-600/50 bg-wood-800">
                 {orientClipUrl ? (
-                  <Pressable
+                  <AnimatedPressable haptic="light"
                     onPress={handleToggleOrientPlayback}
                     className="h-full w-full items-center justify-center"
                     accessibilityRole="button"
@@ -221,10 +222,10 @@ export default function ListenScreen() {
                     ) : (
                       <Play color={colors.amber.accent} size={52} strokeWidth={1.5} />
                     )}
-                  </Pressable>
+                  </AnimatedPressable>
                 ) : (
                   <View className="items-center gap-3 px-6">
-                    <Film color="#8B7D6B" size={40} strokeWidth={1.5} />
+                    <Film color={colors.muted.brown} size={40} strokeWidth={1.5} />
                     <Text className="text-center font-sans text-sm text-muted-brown">
                       {orientIsLoading
                         ? 'Loading performance guide…'

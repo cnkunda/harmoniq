@@ -1,13 +1,15 @@
 import { LinearGradient } from 'expo-linear-gradient'
 import type { LinearGradientProps } from 'expo-linear-gradient'
 
+import colors from '@/src/constants/colors'
+
 export interface WoodGradientProps extends Omit<LinearGradientProps, 'colors'> {
   variant?: 'background' | 'card'
 }
 
 const GRADIENTS = {
-  background: ['#3D2317', '#2C1810'] as const,
-  card: ['#4A3728', '#3D2B1F'] as const,
+  background: [colors.wood[800], colors.wood[900]] as const,
+  card: [colors.wood[600], colors.wood[700]] as const,
 }
 
 export function WoodGradient({ variant = 'background', style, ...props }: WoodGradientProps) {

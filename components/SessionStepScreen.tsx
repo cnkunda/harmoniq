@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { ScrollView, Text, View } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 export interface SessionStepScreenProps {
   title: string
@@ -70,24 +71,26 @@ export function SessionStepScreen({
       {hideFooter ? null : (
         <View className={footerRow}>
           {showBack ? (
-            <Pressable
+            <AnimatedPressable
+              haptic="light"
               onPress={onBack}
               className={backClass}
               accessibilityRole="button"
             >
               <Text className="text-center font-sans-medium text-wood-900">{backLabel}</Text>
-            </Pressable>
+            </AnimatedPressable>
           ) : (
             <View className="flex-1" />
           )}
            {showNext ? (
-             <Pressable
-               onPress={onNext}
-               className={`${nextClass} flex-nowrap items-center`}
-               accessibilityRole="button"
-             >
-                <Text className="text-center font-sans-medium text-wood-900 whitespace-nowrap">{nextLabel}</Text>
-             </Pressable>
+              <AnimatedPressable
+                haptic="light"
+                onPress={onNext}
+                className={`${nextClass} flex-nowrap items-center`}
+                accessibilityRole="button"
+              >
+                 <Text className="text-center font-sans-medium text-wood-900 whitespace-nowrap">{nextLabel}</Text>
+              </AnimatedPressable>
            ) : null}
         </View>
       )}

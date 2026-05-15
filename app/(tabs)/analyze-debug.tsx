@@ -1,9 +1,10 @@
 import * as DocumentPicker from 'expo-document-picker'
 import { useRouter, type Href } from 'expo-router'
 import { useCallback, useState } from 'react'
-import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { Platform, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { AudioDropzone } from '@/components/AudioDropzone'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
@@ -97,14 +98,14 @@ export default function AnalyzeDebugScreen() {
             editable={!isLoading}
             className="rounded-xl border border-wood-600 bg-wood-800 px-4 py-3 font-sans text-sm text-cream"
           />
-          <Pressable
+          <AnimatedPressable haptic="light"
             onPress={onAnalyzeUrl}
             disabled={isLoading || !url.trim()}
             className="mt-2 rounded-lg bg-amber-accent px-4 py-3 disabled:opacity-40"
             accessibilityRole="button"
           >
             <Text className="text-center font-sans-medium text-wood-900">Analyze URL</Text>
-          </Pressable>
+          </AnimatedPressable>
         </View>
 
         {Platform.OS === 'web' ? (
@@ -119,14 +120,14 @@ export default function AnalyzeDebugScreen() {
             />
           </View>
         ) : (
-          <Pressable
+          <AnimatedPressable haptic="light"
             onPress={() => void onPickFile()}
             disabled={isLoading}
             className="mt-8 rounded-lg border border-amber-accent px-4 py-3 disabled:opacity-40"
             accessibilityRole="button"
           >
             <Text className="text-center font-sans-medium text-amber-light">Pick audio file</Text>
-          </Pressable>
+          </AnimatedPressable>
         )}
 
         {isLoading ? (
@@ -150,7 +151,7 @@ export default function AnalyzeDebugScreen() {
             <Text className="mt-1 font-sans text-cream">
               Sections: <Text className="font-sans-medium">{sectionCount}</Text>
             </Text>
-            <Pressable
+            <AnimatedPressable haptic="light"
               onPress={() =>
                 void sessionEntryHrefWithMoodCheck(useSessionPrefsStore.getState().skipTuneStep).then((href) =>
                   router.push(href as Href),
@@ -160,7 +161,7 @@ export default function AnalyzeDebugScreen() {
               accessibilityRole="button"
             >
               <Text className="text-center font-sans-medium text-wood-900">Continue to session</Text>
-            </Pressable>
+            </AnimatedPressable>
           </View>
         ) : null}
       </ScrollView>

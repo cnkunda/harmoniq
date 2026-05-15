@@ -1,7 +1,7 @@
 import Slider from '@react-native-community/slider'
 import { useIsFocused } from '@react-navigation/native'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react'
-import { Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native'
+import { Platform, ScrollView, Switch, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
@@ -641,13 +641,14 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           <Text className="font-sans text-xs text-wood-900">
             Loop active: {loopRegion.label ?? 'target bar'} ({fmt(loopRegion.startSec)} - {fmt(loopRegion.endSec)})
           </Text>
-          <Pressable
+          <AnimatedPressable
+            haptic="light"
             onPress={() => setLoopRegion(null)}
             className="mt-2 self-start rounded-md border border-wood-600/45 bg-cream-dark/50 px-2.5 py-1.5"
             accessibilityRole="button"
           >
             <Text className="font-sans text-xs text-wood-900">Clear loop</Text>
-          </Pressable>
+          </AnimatedPressable>
         </View>
       ) : null}
 
@@ -702,7 +703,8 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             } flex-row items-center gap-2.5`}
           >
             <View className="w-12 shrink-0 items-center">
-              <Pressable
+              <AnimatedPressable
+                haptic="light"
                 onPress={() => void togglePlay()}
                 disabled={!ready || loading}
                 className="h-12 w-12 items-center justify-center rounded-full bg-amber-accent disabled:opacity-40"
@@ -715,7 +717,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                 ) : (
                   <Play color={colors.wood[900]} size={22} fill={colors.wood[900]} strokeWidth={0} />
                 )}
-              </Pressable>
+              </AnimatedPressable>
             </View>
             <View className="min-w-0 flex-1 justify-center">
               <View className="mb-1.5 flex-row items-baseline justify-between gap-3 pl-px pr-px">
@@ -759,8 +761,9 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                 {SPEED_PRESETS.map(({ label, value }) => {
                   const active = Math.abs(rate - value) < RATE_MATCH_EPS
                   return (
-                    <Pressable
+                    <AnimatedPressable
                       key={label}
+                      haptic="light"
                       onPress={() => void onSeekRate(value)}
                       disabled={!ready || loading}
                       className={`flex-1 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
@@ -771,7 +774,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                       accessibilityLabel={`Speed ${label}`}
                     >
                       <Text className={active ? CHOICE_LABEL_MONO_ON : CHOICE_LABEL_MONO_OFF}>{label}</Text>
-                    </Pressable>
+                    </AnimatedPressable>
                   )
                 })}
               </View>
@@ -875,18 +878,19 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                       const { label } = parseSectionRecord(sec)
                       const active = i === lessonSectionIndex
                       return (
-                        <Pressable
-                          key={`${i}-${label}`}
-                          onPress={() => void onChip(i)}
-                          disabled={!ready || loading}
-                          className={`shrink-0 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
-                            !ready || loading ? 'opacity-40' : ''
-                          }`}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: active }}
-                        >
-                          <Text className={active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>{label}</Text>
-                        </Pressable>
+                      <AnimatedPressable
+                        key={`${i}-${label}`}
+                        haptic="none"
+                        onPress={() => void onChip(i)}
+                        disabled={!ready || loading}
+                        className={`shrink-0 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
+                          !ready || loading ? 'opacity-40' : ''
+                        }`}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                      >
+                        <Text className={active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>{label}</Text>
+                      </AnimatedPressable>
                       )
                     })}
                   </View>
@@ -905,8 +909,9 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                   const disabled = !ready || loading || !hasStem
                   const tileBusy = hasStem && (!ready || loading)
                   return (
-                    <Pressable
+                    <AnimatedPressable
                       key={id}
+                      haptic="none"
                       onPress={() => toggleStem(id)}
                       disabled={disabled}
                       accessibilityRole="button"
@@ -930,7 +935,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                       >
                         {label}
                       </Text>
-                    </Pressable>
+                    </AnimatedPressable>
                   )
                 })}
               </View>

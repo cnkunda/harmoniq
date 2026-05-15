@@ -1,5 +1,6 @@
 import { useRouter, usePathname } from 'expo-router'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
 import { useLessonStore } from '@/src/stores/lessonStore'
@@ -29,7 +30,8 @@ export function SessionPlanBar() {
         Plan · {idx + 1}/{plan.slots.length}: {slot?.title ?? '—'}
       </Text>
       {hasNext ? (
-        <Pressable
+        <AnimatedPressable
+          haptic="light"
           onPress={() => {
             void (async () => {
               try {
@@ -44,16 +46,17 @@ export function SessionPlanBar() {
           accessibilityLabel="Go to next section in practice plan"
         >
           <Text className="font-sans-medium text-sm text-wood-900">Next section</Text>
-        </Pressable>
+        </AnimatedPressable>
       ) : (
-        <Pressable
+        <AnimatedPressable
+          haptic="light"
           onPress={() => clearPlan()}
           className="mt-2 self-start rounded-lg border border-wood-600/40 px-3 py-2"
           accessibilityRole="button"
           accessibilityLabel="Clear practice plan"
         >
           <Text className="font-sans-medium text-sm text-wood-900">End plan</Text>
-        </Pressable>
+        </AnimatedPressable>
       )}
     </View>
   )

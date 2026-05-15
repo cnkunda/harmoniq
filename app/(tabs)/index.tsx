@@ -290,7 +290,7 @@ export default function HomeScreen() {
             saveLesson(fullLesson)
             setLessonSectionIndex(0)
             const skipTune = useSessionPrefsStore.getState().skipTuneStep
-            router.replace(skipTune ? '/session/orient' : '/session/tune')
+            router.replace(skipTune ? '/session/listen' : '/session/tune')
           } catch {
             toast.error('Could not open song.')
           }
@@ -326,7 +326,7 @@ export default function HomeScreen() {
 
   const durationBadge = (
     <View className="flex-row items-center gap-1 rounded-lg border border-wood-700 bg-wood-800/50 px-3 py-1.5">
-      <Clock color="#8B7D6B" size={16} strokeWidth={2} />
+      <Clock color={colors.muted.brown} size={16} strokeWidth={2} />
       <Text className="font-sans text-sm text-muted-brown">~{recommendedMinutes} min</Text>
     </View>
   )
@@ -372,14 +372,14 @@ export default function HomeScreen() {
                 loadError ? (
                   <View>
                     <Text className="font-sans text-sm text-cream">Could not load your suggestion.</Text>
-                    <Pressable
+                    <AnimatedPressable haptic="light"
                       onPress={refresh}
                       className="mt-4 rounded-xl border border-amber-accent/60 bg-wood-900/50 px-4 py-3"
                       accessibilityRole="button"
                       accessibilityLabel="Retry loading suggestion"
                     >
                       <Text className="text-center font-sans-medium text-amber-light">Retry</Text>
-                    </Pressable>
+                    </AnimatedPressable>
                   </View>
                 ) : (
                   <Text className="font-sans text-sm text-cream">Loading suggestion…</Text>
@@ -404,7 +404,7 @@ export default function HomeScreen() {
                       </Text>
                       <View className="gap-2">
                         {tasteSongHints.map((hint) => (
-                          <Pressable
+                          <AnimatedPressable haptic="light"
                             key={hint}
                             onPress={() =>
                               void Linking.openURL(
@@ -416,7 +416,7 @@ export default function HomeScreen() {
                             accessibilityLabel={`Search YouTube for ${hint}`}
                           >
                             <Text className="font-sans text-sm text-cream">{hint}</Text>
-                          </Pressable>
+                          </AnimatedPressable>
                         ))}
                       </View>
                       <Text className="mt-2 font-sans text-xs leading-5 text-muted-brown">
@@ -437,7 +437,7 @@ export default function HomeScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Open style quiz"
                       >
-                        <ClipboardList color="#2C1810" size={20} strokeWidth={2} />
+                        <ClipboardList color={colors.wood[900]} size={20} strokeWidth={2} />
                         <Text className="font-sans-medium text-base text-wood-900">Style quiz</Text>
                       </AnimatedPressable>
                       <AnimatedPressable
@@ -461,7 +461,7 @@ export default function HomeScreen() {
                       More ways to begin
                     </Text>
                     <View className="gap-2">
-                      <Pressable
+                      <AnimatedPressable haptic="light"
                         onPress={goAnalyze}
                         className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
                         accessibilityRole="button"
@@ -469,9 +469,9 @@ export default function HomeScreen() {
                       >
                         <Plus color={colors.amber.light} size={20} strokeWidth={2} />
                         <Text className="flex-1 font-sans-medium text-sm text-cream">Add a song</Text>
-                      </Pressable>
+                      </AnimatedPressable>
                       {spotifyLinked ? (
-                        <Pressable
+                        <AnimatedPressable haptic="light"
                           onPress={() => router.push('/(tabs)/settings')}
                           className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
                           accessibilityRole="button"
@@ -480,9 +480,9 @@ export default function HomeScreen() {
                           <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
                           <Text className="flex-1 font-sans-medium text-sm text-cream">Spotify · Connected</Text>
                           <ChevronRight color={colors.amber.light} size={20} strokeWidth={2} />
-                        </Pressable>
+                        </AnimatedPressable>
                       ) : (
-                        <Pressable
+                        <AnimatedPressable haptic="light"
                           onPress={onConnectSpotify}
                           disabled={spotifyBusy}
                           className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90 disabled:opacity-50"
@@ -493,7 +493,7 @@ export default function HomeScreen() {
                           <Text className="flex-1 font-sans-medium text-sm text-cream">
                             {spotifyBusy ? 'Connecting…' : 'Connect to Spotify'}
                           </Text>
-                        </Pressable>
+                        </AnimatedPressable>
                       )}
                     </View>
                   </View>
@@ -541,7 +541,7 @@ export default function HomeScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Start session at Listen"
                   >
-                    <Play color="#2C1810" size={20} fill="#2C1810" strokeWidth={0} />
+                    <Play color={colors.wood[900]} size={20} fill={colors.wood[900]} strokeWidth={0} />
                     <Text className="font-sans-medium text-base text-wood-900">Start session</Text>
                   </AnimatedPressable>
                 </>
@@ -576,17 +576,17 @@ export default function HomeScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Practice latest saved lick"
                   >
-                    <Play color="#2C1810" size={20} fill="#2C1810" strokeWidth={0} />
+                    <Play color={colors.wood[900]} size={20} fill={colors.wood[900]} strokeWidth={0} />
                     <Text className="font-sans-medium text-base text-wood-900">Start Session</Text>
                   </AnimatedPressable>
-                  {/* <Pressable
+                  {/* <AnimatedPressable haptic="light"
                     onPress={goAnalyze}
                     className="self-stretch rounded-xl border border-wood-600/50 bg-cream-dark/15 px-4 py-3 sm:self-start"
                     accessibilityRole="button"
                     accessibilityLabel="Add a full song"
                   >
                     <Text className="text-center font-sans-medium text-cream">Add full song</Text>
-                  </Pressable> */}
+                  </AnimatedPressable> */}
                 </>
               ) : (
                 <>
@@ -621,7 +621,7 @@ export default function HomeScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Start session at Listen"
                   >
-                    <Play color="#2C1810" size={20} fill="#2C1810" strokeWidth={0} />
+                    <Play color={colors.wood[900]} size={20} fill={colors.wood[900]} strokeWidth={0} />
                     <Text className="font-sans-medium text-base text-wood-900">Start session</Text>
                   </AnimatedPressable>
                 </>
@@ -642,7 +642,7 @@ export default function HomeScreen() {
                   <Text className="font-sans text-sm text-muted-brown">No songs added yet.</Text>
                 ) : (
                   recentItems.map((item) => (
-                    <Pressable
+                    <AnimatedPressable haptic="light"
                       key={item.id}
                       onPress={item.open}
                       className="flex-row items-center justify-between rounded-xl border border-wood-700/50 bg-wood-800/40 px-3 py-2.5 active:bg-wood-800/60"
@@ -654,7 +654,7 @@ export default function HomeScreen() {
                         <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{item.focus}</Text>
                       </View>
                       <Text className="font-sans text-[11px] text-muted-brown">{item.dateLabel}</Text>
-                    </Pressable>
+                    </AnimatedPressable>
                   ))
                 )}
               </View>
@@ -663,40 +663,40 @@ export default function HomeScreen() {
             <View>
               <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Quick actions</Text>
               <View className="flex-row gap-3">
-                <Pressable
+                <AnimatedPressable haptic="light"
                   onPress={goAnalyze}
                   className="min-h-[128px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 py-4 active:bg-wood-700/50"
                   accessibilityRole="button"
                   accessibilityLabel="Add a song"
                 >
                   <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
-                    <Plus color="#E8B86D" size={20} strokeWidth={2} />
+                    <Plus color={colors.amber.light} size={20} strokeWidth={2} />
                   </View>
                   <Text className="text-center font-sans-medium text-sm text-cream">Add Song</Text>
-                </Pressable>
-                <Pressable
+                </AnimatedPressable>
+                <AnimatedPressable haptic="light"
                   onPress={goLibrary}
                   className="min-h-[128px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 py-4 active:bg-wood-700/50"
                   accessibilityRole="button"
                   accessibilityLabel="Open library"
                 >
                   <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
-                    <LibraryIcon color="#E8B86D" size={20} strokeWidth={2} />
+                    <LibraryIcon color={colors.amber.light} size={20} strokeWidth={2} />
                   </View>
                   <Text className="text-center font-sans-medium text-sm text-cream">Open Library</Text>
-                </Pressable>
+                </AnimatedPressable>
               </View>
-              {/* <Pressable
+              {/* <AnimatedPressable haptic="light"
                 onPress={goListening}
                 className="mt-3 min-h-[80px] items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/35 py-4 active:bg-wood-700/50"
                 accessibilityRole="button"
                 accessibilityLabel="Open listening mode"
               >
                 <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
-                  <Headphones color="#E8B86D" size={20} strokeWidth={2} />
+                  <Headphones color={colors.amber.light} size={20} strokeWidth={2} />
                 </View>
                 <Text className="text-center font-sans-medium text-sm text-cream">Listening Mode</Text>
-              </Pressable> */}
+              </AnimatedPressable> */}
             </View>
           </View>
         </View>

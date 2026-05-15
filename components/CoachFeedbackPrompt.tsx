@@ -1,6 +1,7 @@
 import { Check, SkipForward, X } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 import colors from '@/src/constants/colors'
 import { getSessionCount, recordCoachFeedback, type CoachFeedbackRating } from '@/src/session'
@@ -51,32 +52,36 @@ export function CoachFeedbackPrompt({ focusArea, onFeedbackSubmitted, onDismisse
         How was this coaching tip?
       </Text>
       <View className="flex-row gap-2">
-        <Pressable
+        <AnimatedPressable
+          haptic="light"
           onPress={() => handleFeedback('helpful')}
           className="flex-1 flex-row items-center justify-center gap-2 rounded-lg bg-success/20 px-3 py-2.5"
         >
           <Check color={colors.success} size={16} strokeWidth={2} />
           <Text className="font-sans text-[13px] font-medium text-success">Helpful</Text>
-        </Pressable>
-        <Pressable
+        </AnimatedPressable>
+        <AnimatedPressable
+          haptic="light"
           onPress={() => handleFeedback('repetitive')}
           className="flex-1 flex-row items-center justify-center gap-2 rounded-lg bg-danger/20 px-3 py-2.5"
         >
           <X color={colors.danger} size={16} strokeWidth={2} />
           <Text className="font-sans text-[13px] font-medium text-danger">Repetitive</Text>
-        </Pressable>
-        <Pressable
+        </AnimatedPressable>
+        <AnimatedPressable
+          haptic="light"
           onPress={() => handleFeedback('neutral')}
           className="flex-1 flex-row items-center justify-center gap-2 rounded-lg bg-wood-700/50 px-3 py-2.5"
         >
           <Text className="font-sans text-[13px] font-medium text-cream/70">Neutral</Text>
-        </Pressable>
-        <Pressable
+        </AnimatedPressable>
+        <AnimatedPressable
+          haptic="light"
           onPress={handleSkip}
           className="flex-row items-center justify-center rounded-lg bg-transparent px-2 py-2.5"
         >
           <SkipForward color={colors.muted.brown} size={16} strokeWidth={2} />
-        </Pressable>
+        </AnimatedPressable>
       </View>
     </View>
   )

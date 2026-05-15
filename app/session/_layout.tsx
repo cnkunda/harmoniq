@@ -1,9 +1,7 @@
 import { Stack, usePathname } from 'expo-router'
 import { useEffect } from 'react'
-import { View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { PhaseIndicator } from '@/components/PhaseIndicator'
 import { SessionChromeBar } from '@/components/SessionChromeBar'
 import { sessionStepIndexFromPathname, type SessionStep } from '@/src/constants/sessionFlow'
 import { useSessionPhaseStore } from '@/src/stores/sessionPhaseStore'
@@ -24,12 +22,7 @@ export default function SessionLayout() {
   return (
     <SafeAreaView className="flex-1 bg-ivory" edges={['top', 'left', 'right']}>
       <SessionChromeBar />
-      <View className="flex-1">
-        <View className="px-4 py-2">
-          <PhaseIndicator />
-        </View>
-        <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
-      </View>
+      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
     </SafeAreaView>
   )
 }

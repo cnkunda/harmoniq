@@ -47,7 +47,7 @@ export function PhaseIndicator({ currentPhase: propPhase, showLabels = true }: P
                   ? 'bg-amber-accent'
                   : isCompleted
                   ? 'bg-wood-600'
-                  : 'bg-wood-300'
+                  : 'bg-wood-500/50'
               }`}
             />
             
@@ -59,7 +59,7 @@ export function PhaseIndicator({ currentPhase: propPhase, showLabels = true }: P
                     ? 'font-semibold text-amber-accent'
                     : isCompleted
                     ? 'text-wood-600'
-                    : 'text-wood-300'
+                    : 'text-wood-500/60'
                 }`}
               >
                 {phaseLabel}

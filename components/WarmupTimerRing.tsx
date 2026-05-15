@@ -82,7 +82,7 @@ export function WarmupTimerRing({
         <Text className="font-serif text-4xl" style={{ color: colors.cream, includeFontPadding: false }}>
           {timeLabel}
         </Text>
-        <Text className="mt-0.5 font-sans text-xs" style={{ color: 'rgba(245, 230, 208, 0.88)' }}>
+        <Text className="mt-0.5 font-sans text-xs" style={{ color: colors.cream, opacity: 0.88 }}>
           remaining
         </Text>
       </View>

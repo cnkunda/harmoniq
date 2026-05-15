@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { ScrollView, Text, View } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { WoodGradient } from '@/components/WoodGradient'
@@ -36,14 +37,15 @@ export function OnboardingScreenShell({
   const header = showHeader ? (
     <View className="min-h-11 flex-row items-center justify-between px-6 pt-2">
       {showBack ? (
-        <Pressable
+        <AnimatedPressable
+          haptic="light"
           onPress={onBack}
           className="min-h-[44px] min-w-[44px] justify-center py-2 pr-2"
           accessibilityRole="button"
           accessibilityLabel="Back"
         >
           <Text className="font-sans text-sm text-muted-brown">Back</Text>
-        </Pressable>
+        </AnimatedPressable>
       ) : (
         <View className="w-9" />
       )}

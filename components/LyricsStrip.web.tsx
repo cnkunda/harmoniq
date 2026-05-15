@@ -23,24 +23,33 @@ function activeIndexForTime(words: LyricWord[], t: number): number {
 export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProps) {
   const activeIndex = useMemo(() => activeIndexForTime(words, playbackSec), [words, playbackSec])
   const scrollViewRef = useRef<ScrollView>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [wordLayouts, setWordLayouts] = useState<{ [key: number]: { x: number; width: number } }>({})
 
-  // Scroll to keep active word visible
+  // Scroll to keep active word visible (web implementation using DOM)
   useEffect(() => {
-    if (scrollViewRef.current && activeIndex >= 0 && wordLayouts[activeIndex]) {
+    if (containerRef.current && activeIndex >= 0 && wordLayouts[activeIndex]) {
       const { x, width } = wordLayouts[activeIndex]
-      // Scroll to center the active word (with offset for padding)
-      const scrollX = x - 60 // 60 is approximate center offset
-      scrollViewRef.current.scrollTo({ x: Math.max(0, scrollX), animated: true })
+      const container = containerRef.current
+      const containerWidth = container.clientWidth
+      
+      // Scroll to center the active word
+      const targetScroll = x - containerWidth / 2 + width / 2 - 16 // Adjust for padding
+      container.scrollTo({
+        left: Math.max(0, targetScroll),
+        behavior: 'smooth',
+      })
     }
   }, [activeIndex, wordLayouts])
 
   const handleWordLayout = (index: number, event: any) => {
-    const { x, width } = event.nativeEvent.layout
-    setWordLayouts((prev) => ({
-      ...prev,
-      [index]: { x, width },
-    }))
+    if (event?.nativeEvent?.layout) {
+      const { x, width } = event.nativeEvent.layout
+      setWordLayouts((prev) => ({
+        ...prev,
+        [index]: { x, width },
+      }))
+    }
   }
 
   if (words.length === 0) {
@@ -59,12 +68,16 @@ export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProp
           Lyrics
         </Text>
       )}
-      <ScrollView
-        ref={scrollViewRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16 }}
-        scrollEventThrottle={16}
+      <div
+        ref={containerRef}
+        style={{
+          display: 'flex',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          paddingLeft: 16,
+          paddingRight: 16,
+          scrollBehavior: 'smooth',
+        }}
       >
         <View className="flex-row items-center gap-1.5 pb-1">
           {words.map((w, i) => (
@@ -83,7 +96,8 @@ export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProp
             </Text>
           ))}
         </View>
-      </ScrollView>
+      </div>
     </View>
   )
 }
+

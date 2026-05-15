@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router'
 import { Music } from 'lucide-react-native'
 import { useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 import colors from '@/src/constants/colors'
 import { shouldOfferTasteQuizOnboarding } from '@/src/taste/tasteQuizGate'
@@ -48,7 +49,7 @@ export default function OnboardingWelcomeScreen() {
           After this, Home lines up the same choices: try the demo, add a song, take the optional style quiz, or connect
           Spotify.
         </Text>
-        <Pressable
+        <AnimatedPressable haptic="light"
           onPress={onContinue}
           disabled={routing}
           className="mt-10 w-full rounded-lg bg-amber-accent px-4 py-3.5 disabled:opacity-60"
@@ -58,7 +59,7 @@ export default function OnboardingWelcomeScreen() {
           <Text className="text-center font-sans-medium text-wood-900">
             {routing ? 'Continue…' : 'Continue'}
           </Text>
-        </Pressable>
+        </AnimatedPressable>
       </View>
     </OnboardingScreenShell>
   )

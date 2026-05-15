@@ -7,6 +7,7 @@ import { getLicks, getOnboardingComplete, initDb, listLessonsJournal } from '@/s
 import { fetchPersistAndDeriveSpotifyTaste } from '@/src/spotify/fetchPersistAndDeriveSpotify'
 import { formatSpotifySetupError } from '@/src/spotify/spotifyConnectErrors'
 import { hasCommittedTasteOrSpotifyRaw } from '@/src/taste/tasteQuizGate'
+import colors from '@/src/constants/colors'
 
 /** Enter main app if placement finished, library content exists, or taste/Spotify prefs are present. */
 async function shouldEnterMainApp(): Promise<boolean> {
@@ -55,7 +56,7 @@ export default function EntryRedirect() {
   if (done === null) {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-wood-900 px-8">
-        <ActivityIndicator accessibilityLabel="Loading" color="#E8A54B" />
+        <ActivityIndicator accessibilityLabel="Loading" color={colors.amber.light} />
         <Text className="text-center font-sans text-sm text-muted-brown">Loading…</Text>
       </View>
     )

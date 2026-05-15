@@ -1,6 +1,6 @@
 import { Check, X } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Platform, ScrollView, Text, TextInput, View } from 'react-native'
 import Animated, {
     cancelAnimation,
     useAnimatedStyle,
@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { AudioDropzone } from '@/components/AudioDropzone'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { toast } from '@/components/ToastConfig'
@@ -328,7 +329,7 @@ export default function AddSongScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View className="relative w-full max-w-2xl self-center px-8 py-8">
-            <Pressable
+            <AnimatedPressable haptic="light"
               onPress={onClose}
               className="absolute right-0 top-0 z-10 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg active:opacity-70"
               accessibilityRole="button"
@@ -336,7 +337,7 @@ export default function AddSongScreen() {
               hitSlop={8}
             >
               <X color={colors.muted.brown} size={22} strokeWidth={2} />
-            </Pressable>
+            </AnimatedPressable>
             <Text
               className="px-12 text-center font-serif text-2xl text-cream"
               accessibilityRole="header"
@@ -364,7 +365,7 @@ export default function AddSongScreen() {
                           </Text>
                         </View>
                       ) : null}
-                      <Pressable
+                      <AnimatedPressable haptic="none"
                         onPress={() => setImportTab(opt.id)}
                         disabled={pillsDisabled}
                         accessibilityRole="tab"
@@ -377,7 +378,7 @@ export default function AddSongScreen() {
                         >
                           {opt.label}
                         </Text>
-                      </Pressable>
+                      </AnimatedPressable>
                     </View>
                   )
                 })}
@@ -405,7 +406,7 @@ export default function AddSongScreen() {
                         <Text className="font-sans-medium text-cream">{pendingUploadFilename}</Text>
                       </Text>
                     ) : null}
-                    <Pressable
+                    <AnimatedPressable haptic="light"
                       onPress={() => {
                         if (!pendingUploadFile || uiState === 'analyzing') return
                         void runAnalyze({
@@ -419,7 +420,7 @@ export default function AddSongScreen() {
                       accessibilityLabel="Analyze selected audio file"
                     >
                       <Text className="text-center font-sans-medium text-base text-wood-900">Analyze file</Text>
-                    </Pressable>
+                    </AnimatedPressable>
                   </View>
                 ) : null}
 
@@ -442,7 +443,7 @@ export default function AddSongScreen() {
                       editable={uiState !== 'analyzing'}
                       className="min-h-[48px] rounded-xl border border-wood-500/80 bg-ivory px-4 py-3 font-sans text-sm text-wood-900"
                     />
-                    <Pressable
+                    <AnimatedPressable haptic="light"
                       onPress={() => void runAnalyze({ youtube_url: url.trim() })}
                       disabled={!canStartFromUrl}
                       className="min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3 disabled:opacity-40"
@@ -450,7 +451,7 @@ export default function AddSongScreen() {
                       accessibilityLabel="Analyze YouTube URL"
                     >
                       <Text className="text-center font-sans-medium text-base text-wood-900">Analyze URL</Text>
-                    </Pressable>
+                    </AnimatedPressable>
                   </View>
                 ) : null}
 
@@ -471,7 +472,7 @@ export default function AddSongScreen() {
                         editable={!tabSearchBusy && uiState !== 'analyzing'}
                         className="min-h-12 flex-1 rounded-xl border border-wood-600 bg-wood-900 px-4 py-3 font-sans text-sm text-cream"
                       />
-                      <Pressable
+                      <AnimatedPressable haptic="light"
                         onPress={() => {
                           setTabSearchError(null)
                           setTabSearchBusy(true)
@@ -490,7 +491,7 @@ export default function AddSongScreen() {
                         <Text className="text-center font-sans-medium text-sm text-amber-light">
                           {tabSearchBusy ? '…' : 'Search'}
                         </Text>
-                      </Pressable>
+                      </AnimatedPressable>
                     </View>
                     {tabSearchError ? (
                       <Text
@@ -611,20 +612,20 @@ export default function AddSongScreen() {
             <Text className="mt-3 text-center font-sans text-sm text-cream">
               Sections: <Text className="font-sans-medium">{sectionCount}</Text>
             </Text>
-            <Pressable
+            <AnimatedPressable haptic="light"
               onPress={continueToSession}
               className="mt-6 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
               accessibilityRole="button"
             >
               <Text className="text-center font-sans-medium text-base text-wood-900">Continue to session</Text>
-            </Pressable>
-            <Pressable
+            </AnimatedPressable>
+            <AnimatedPressable haptic="light"
               onPress={() => router.replace('/')}
               className="mt-3 min-h-[48px] justify-center rounded-xl border border-wood-600/60 bg-wood-900/50 px-4 py-3"
               accessibilityRole="button"
             >
               <Text className="text-center font-sans-medium text-base text-cream">Back to Home</Text>
-            </Pressable>
+            </AnimatedPressable>
           </View>
         ) : null}
 

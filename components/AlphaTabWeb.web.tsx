@@ -5,6 +5,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { Pressable, Text, View } from 'react-native'
 
+import colors from '@/src/constants/colors'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { resolveBundledSoundFontUrlForProfile } from '@/src/audio/soundfontBundled'
 import { persistLastSuccessfulSoundFontProfile } from '@/src/audio/soundfontPersistence'
@@ -257,7 +258,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       : DEFAULT_SOUNDFONT_PROFILE_ID
 
     const backgroundColor = useMemo(() => {
-      return renderPreset === 'light' ? '#F5F0E8' : '#2B1D0E'
+      return renderPreset === 'light' ? colors.ivory : colors.wood[900]
     }, [renderPreset])
 
     useEffect(() => {

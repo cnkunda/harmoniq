@@ -11,7 +11,6 @@ import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
-import { TheoryCard } from '@/components/TheoryCard'
 import { toast } from '@/components/ToastConfig'
 import { fetchTheoryAnnotation } from '@/src/api/analyze'
 import { sessionHref } from '@/src/constants/sessionFlow'
@@ -484,7 +483,7 @@ function StudyScreenInner() {
 
       {showTranscriptionWarningModal && (
         <View className="mx-4 rounded-lg border border-amber-accent/50 bg-amber-accent/10 p-4">
-          <Text className="mb-2 font-sans-semibold text-amber-accent">
+          <Text className="mb-2 font-sans-medium text-amber-accent">
             Transcription Uncertainty
           </Text>
           <Text className="mb-3 font-sans text-sm text-wood-900">
@@ -612,15 +611,6 @@ function StudyScreenInner() {
                 setNoteModalOpen(true)
               }}
             />
-
-            {theoryAnnotation && (
-              <TheoryCard
-                chordName={theoryAnnotation.chordName}
-                chordFunction={theoryAnnotation.chordFunction}
-                romanNumeral={theoryAnnotation.romanNumeral}
-                rationale={theoryAnnotation.rationale}
-              />
-            )}
 
             <View className="mt-2">
               <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">

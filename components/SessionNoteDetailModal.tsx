@@ -14,7 +14,7 @@ export function SessionNoteDetailModal({ detail, visible, onClose }: SessionNote
     <Modal visible={visible && detail != null} transparent animationType="fade" onRequestClose={onClose}>
       <View className="flex-1">
         <Pressable
-          className="absolute inset-0 bg-black/50"
+          className="absolute inset-0 bg-wood-900/50"
           onPress={onClose}
           accessibilityRole="button"
           accessibilityLabel="Close note details"

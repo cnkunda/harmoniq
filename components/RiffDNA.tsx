@@ -93,7 +93,8 @@ export function RiffDNA({ dna }: RiffDNAProps) {
             <SvgCircle cx={50} cy={50} r={24} fill="none" stroke={colors.wood[600]} strokeWidth={0.35} opacity={0.35} />
             <Polygon
               points={radarPoints(dna.pitch_class_bias, 50, 50, 36, 8)}
-              fill="rgba(212,165,116,0.22)"
+              fill={colors.amber.accent}
+              opacity={0.22}
               stroke={colors.amber.accent}
               strokeWidth={0.8}
             />

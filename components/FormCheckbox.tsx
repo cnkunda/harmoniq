@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 import colors from '@/src/constants/colors'
 import { Check } from 'lucide-react-native'
@@ -33,7 +34,8 @@ export function FormCheckbox({
       : 'border-wood-600/60 bg-cream-dark/50'
 
   return (
-    <Pressable
+    <AnimatedPressable
+      haptic="none"
       onPress={() => !disabled && onCheckedChange(!checked)}
       disabled={disabled}
       className={`flex-row items-start gap-3 ${disabled ? 'opacity-50' : ''}`}
@@ -44,6 +46,6 @@ export function FormCheckbox({
         {checked ? <Check color={checkColor} size={14} strokeWidth={2.5} /> : null}
       </View>
       <Text className={`flex-1 font-sans text-sm leading-5 ${labelTone}`}>{label}</Text>
-    </Pressable>
+    </AnimatedPressable>
   )
 }

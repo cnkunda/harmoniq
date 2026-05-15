@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 import { fetchOnboardingPlacementCoach } from '@/src/api/analyze'
@@ -148,14 +149,14 @@ export default function OnboardingResultsScreen() {
           )}
         </View>
 
-        <Pressable
+        <AnimatedPressable haptic="light"
           onPress={finish}
           className="mt-8 rounded-lg bg-amber-accent px-4 py-3"
           accessibilityRole="button"
           accessibilityLabel="Go to home"
         >
           <Text className="text-center font-sans-medium text-wood-900">Enter Harmoniq</Text>
-        </Pressable>
+        </AnimatedPressable>
       </View>
     </OnboardingScreenShell>
   )

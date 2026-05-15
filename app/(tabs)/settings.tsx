@@ -581,7 +581,7 @@ export default function SettingsScreen() {
             accessibilityRole="button"
             accessibilityLabel="Update music preferences with style quiz"
           >
-            <ChevronRight color="#2C1810" size={18} strokeWidth={2} />
+            <ChevronRight color={colors.wood[900]} size={18} strokeWidth={2} />
             <Text className="font-sans-medium text-sm text-wood-900">Update preferences</Text>
           </AnimatedPressable>
         </SettingsSection>
@@ -641,7 +641,7 @@ export default function SettingsScreen() {
             className="mb-3 flex-row items-center justify-center gap-2 rounded-lg border border-amber-accent/50 bg-amber-accent/15 px-4 py-3 disabled:opacity-50"
             accessibilityRole="button"
           >
-            <Download color="#D4A574" size={18} strokeWidth={2} />
+            <Download color={colors.amber.accent} size={18} strokeWidth={2} />
             <Text className="font-sans-medium text-amber-light">
               {exportBusy ? 'Preparing export…' : 'Export journal'}
             </Text>
@@ -652,7 +652,7 @@ export default function SettingsScreen() {
             className="flex-row items-center justify-center gap-2 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3"
             accessibilityRole="button"
           >
-            <Trash2 color="#C17B5F" size={18} strokeWidth={2} />
+            <Trash2 color={colors.danger} size={18} strokeWidth={2} />
             <Text className="font-sans-medium text-danger">Clear all practice data…</Text>
           </AnimatedPressable>
         </SettingsSection>

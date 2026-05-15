@@ -1,7 +1,8 @@
 import { Audio } from 'expo-av'
 import * as FileSystem from 'expo-file-system/legacy'
 import { useCallback, useRef, useState } from 'react'
-import { Platform, Pressable, Text, View } from 'react-native'
+import { Platform, Text, View } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 type Props = {
   userWavBase64: string
@@ -78,22 +79,24 @@ export function WaveformPlaybackActions({ userWavBase64, referenceWavBase64, use
     <View className="mt-3 rounded-lg border border-wood-600/45 bg-cream-dark/35 px-3 py-3">
       <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Waveforms</Text>
       <View className="mt-2 flex-row flex-wrap gap-2">
-        <Pressable
+        <AnimatedPressable
+          haptic="light"
           onPress={() => void play('user')}
           className="rounded-lg border border-wood-600/50 bg-ivory px-3 py-2"
           accessibilityRole="button"
           accessibilityLabel="Play your take"
         >
           <Text className="font-sans-medium text-sm text-wood-900">Play your take</Text>
-        </Pressable>
-        <Pressable
+        </AnimatedPressable>
+        <AnimatedPressable
+          haptic="light"
           onPress={() => void play('ref')}
           className="rounded-lg border border-wood-600/50 bg-ivory px-3 py-2"
           accessibilityRole="button"
           accessibilityLabel="Play reference"
         >
           <Text className="font-sans-medium text-sm text-wood-900">Play reference</Text>
-        </Pressable>
+        </AnimatedPressable>
       </View>
       {label ? <Text className="mt-2 font-sans text-[11px] text-muted-brown">{label}</Text> : null}
     </View>

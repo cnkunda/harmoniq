@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 
 import type { AlphaTabSurfaceRef, SongScoreMeta } from '@/types/tabMessage'
@@ -67,7 +68,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
     }, [onSongDetails])
 
     const isLight = renderPreset === 'light'
-    const cardBg = isLight ? 'bg-ivory' : 'bg-[#2B1D0E]'
+    const cardBg = isLight ? 'bg-ivory' : 'bg-wood-900'
     const dividerBorder = isLight ? 'border-wood-600/20' : 'border-wood-600/40'
     const textColor = isLight ? 'text-wood-900' : 'text-cream'
     const pillBase = isLight ? 'border-wood-600/30 bg-cream-dark/40' : 'border-wood-600/35 bg-transparent'
@@ -83,14 +84,15 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
       if (!available) return null
       const active = tabVariant === v
       return (
-        <Pressable
+        <AnimatedPressable
           key={v}
+          haptic="none"
           onPress={() => onTabVariantChange?.(v)}
           className={`rounded-full border px-2.5 py-1 ${active ? pillActiveBase : pillBase}`}
           accessibilityRole="button"
         >
           <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${active ? 'text-amber-accent' : 'text-muted-brown'}`}>{label}</Text>
-        </Pressable>
+        </AnimatedPressable>
       )
     }
 
@@ -102,7 +104,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
             {/* Left: song info */}
             <View className="flex-1 justify-center">
               {displayTitle && (
-                <Text className={`font-sans-semibold text-[13px] leading-tight ${textColor}`} numberOfLines={1}>
+                <Text className={`font-sans-medium text-[13px] leading-tight ${textColor}`} numberOfLines={1}>
                   {displayTitle}
                 </Text>
               )}
@@ -124,22 +126,24 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
               {variantPill('skeleton', 'Skeleton', hasSkeleton)}
               {variantPill('alt', 'Alt', hasAlt)}
               {hasLyrics && (
-                <Pressable
+                <AnimatedPressable
+                  haptic="none"
                   onPress={handleShowLyricsToggle}
                   className={`rounded-full border px-2.5 py-1 ${showLyrics ? pillActiveBase : pillBase}`}
                   accessibilityRole="button"
                 >
                   <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${showLyrics ? 'text-amber-accent' : 'text-muted-brown'}`}>Lyrics</Text>
-                </Pressable>
+                </AnimatedPressable>
               )}
               {onSeekToStart && (
-                <Pressable
+                <AnimatedPressable
+                  haptic="light"
                   onPress={onSeekToStart}
                   className={`rounded-full border px-2.5 py-1 ${pillBase}`}
                   accessibilityRole="button"
                 >
                   <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-muted-brown">⏮ Start</Text>
-                </Pressable>
+                </AnimatedPressable>
               )}
             </View>
           </View>

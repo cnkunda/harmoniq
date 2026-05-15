@@ -1,6 +1,7 @@
 import { Asset } from 'expo-asset'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { ActivityIndicator, Platform, Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { ActivityIndicator, Platform, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
@@ -391,13 +392,14 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
             <ActivityIndicator color={colors.amber.accent} />
           )}
           {assetError ? (
-            <Pressable
+            <AnimatedPressable
+              haptic="light"
               onPress={onRetry}
               className="rounded-lg border border-amber-accent/50 bg-amber-accent/90 px-4 py-2"
               accessibilityRole="button"
             >
               <Text className="font-sans-medium text-wood-900">Retry</Text>
-            </Pressable>
+            </AnimatedPressable>
           ) : null}
         </View>
       )
@@ -408,9 +410,9 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         {harnessError ? (
           <View className="border-b border-amber-accent/30 bg-amber-accent/10 px-3 py-2">
             <Text className="font-sans text-xs text-wood-900">{harnessError}</Text>
-            <Pressable onPress={onRetry} className="mt-2 self-start" accessibilityRole="button">
+            <AnimatedPressable haptic="light" onPress={onRetry} className="mt-2 self-start" accessibilityRole="button">
               <Text className="font-sans-medium text-xs text-amber-accent underline">Reload harness</Text>
-            </Pressable>
+            </AnimatedPressable>
           </View>
         ) : null}
         <WebView
@@ -434,7 +436,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           allowUniversalAccessFromFileURLs
           mixedContentMode="always"
           setSupportMultipleWindows={false}
-          style={{ flex: 1, backgroundColor: '#2B1D0E' }}
+          style={{ flex: 1, backgroundColor: colors.wood[900] }}
         />
         {!soundFontReady ? (
           <View className="absolute left-3 right-3 top-3 rounded-lg border border-wood-600/45 bg-wood-800/70 p-3">
