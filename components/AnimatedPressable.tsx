@@ -53,12 +53,11 @@ export function AnimatedPressable({
   }
 
   return (
-    <Animated.View style={animStyle}>
+    <Animated.View style={[animStyle, style]}>
       <Pressable
         {...props}
         className={className}
         disabled={disabled}
-        style={style}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={handlePress}
