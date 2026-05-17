@@ -88,12 +88,12 @@ Implement auto-switching to "Skeleton" tabs when transcription_confidence < 0.7.
 - Regenerate `chord_model.tflite` with expanded vocabulary
 
 **Acceptance Criteria:**
-- [ ] Chord vocabulary expanded from 25 to 60+ classes
-- [ ] `CHORD_INTERVALS` defines semitone patterns for all qualities
-- [ ] Synthetic templates include extended chord tones (9th=+14, 11th=+17, 13th=+21)
-- [ ] Model trains successfully with expanded vocabulary
-- [ ] TFLite conversion completes without errors
-- [ ] Smoke test passes for D7, Cmaj7, Am7 chord types
+- [x] Chord vocabulary expanded from 25 to 60+ classes (277 total)
+- [x] `CHORD_INTERVALS` defines semitone patterns for all qualities
+- [x] Synthetic templates include extended chord tones (9th=+14, 11th=+17, 13th=+21)
+- [x] Model trains successfully with expanded vocabulary
+- [x] TFLite conversion completes without errors
+- [x] Smoke test passes for D7, Cmaj7, Am7 chord types
 
 ---
 

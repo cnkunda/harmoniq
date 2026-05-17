@@ -4,11 +4,12 @@ build_chord_tflite.py
 Final Version: Uses Concrete Function tracing to bypass Keras 3 / Python 3.12 
 serialization bugs.
 
-Vocabulary: 12 Major + 12 Minor + 1 No-Chord (25 total)
+Vocabulary: 23 qualities x 12 roots + 1 No-Chord (277 total) — Advanced Extensions (Commit 98)
 Architecture: Circular Chroma Convolution with Harmonic Templates
 """
 
 import os
+from pathlib import Path
 
 # Force TensorFlow backend and CPU mode
 os.environ["KERAS_BACKEND"] = "tensorflow"
@@ -21,29 +22,74 @@ import tensorflow as tf
 # ---------------------------------------------------------------------------
 # 1. Constants & Vocabulary
 # ---------------------------------------------------------------------------
-CHORD_VOCAB = [
-    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    "Cm", "C#m", "Dm", "D#m", "Em", "Fm", "F#m", "Gm", "G#m", "Am", "A#m", "Bm",
-    "N",
-]
+ROOT_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+CHORD_INTERVALS = {
+    # Core triads
+    "maj":  [0, 4, 7],
+    "min":  [0, 3, 7],
+    # 7th chords
+    "7":    [0, 4, 7, 10],
+    "maj7": [0, 4, 7, 11],
+    "min7": [0, 3, 7, 10],
+    # Extended
+    "9":    [0, 4, 7, 10, 14],
+    "min9": [0, 3, 7, 10, 14],
+    "maj9": [0, 4, 7, 11, 14],
+    "11":   [0, 4, 7, 10, 14, 17],
+    "13":   [0, 4, 7, 10, 14, 17, 21],
+    # Altered dominants
+    "7#9":  [0, 4, 7, 10, 15],
+    "7b9":  [0, 4, 7, 10, 13],
+    "7#5":  [0, 4, 8, 10],
+    "7b5":  [0, 4, 6, 10],
+    "alt7": [0, 4, 6, 8, 10, 13, 15],
+    # Suspended
+    "sus2":  [0, 2, 7],
+    "sus4":  [0, 5, 7],
+    "7sus4": [0, 5, 7, 10],
+    # Other
+    "dim":   [0, 3, 6],
+    "dim7":  [0, 3, 6, 9],
+    "aug":   [0, 4, 8],
+    "6":     [0, 4, 7, 9],
+    "min6":  [0, 3, 7, 9],
+}
+
+# Build vocabulary as root:quality pairs, e.g. "C:maj", "D:7", "A:min7"
+CHORD_VOCAB = []
+CHORD_CLASS_MAP = []
+for quality in CHORD_INTERVALS:
+    for root_idx, root_note in enumerate(ROOT_NOTES):
+        CHORD_VOCAB.append(f"{root_note}:{quality}")
+        CHORD_CLASS_MAP.append((root_idx, quality))
+
+# No-chord token
+CHORD_VOCAB.append("N")
+CHORD_CLASS_MAP.append((-1, "N"))
+
 NUM_CLASSES  = len(CHORD_VOCAB)
 WINDOW       = 9
 CHROMA_BINS  = 12
 
-MAJOR_INTERVALS = [0, 4, 7]
-MINOR_INTERVALS = [0, 3, 7]
-
 # ---------------------------------------------------------------------------
-# 2. Data Generation (Harmonic Overtones)
+# 2. Data Generation (Harmonic Overtones with Extension Attenuation)
 # ---------------------------------------------------------------------------
-def make_chroma_template(root: int, quality: str = "major") -> np.ndarray:
+def make_chroma_template(root: int, quality: str) -> np.ndarray:
     chroma = np.zeros(CHROMA_BINS, dtype=np.float32)
-    intervals = MAJOR_INTERVALS if quality == "major" else MINOR_INTERVALS
-    for interval in intervals:
+    if quality == "N":
+        return np.full(CHROMA_BINS, 1.0 / CHROMA_BINS, dtype=np.float32)
+    intervals = CHORD_INTERVALS[quality]
+    for i, interval in enumerate(intervals):
         note = (root + interval) % CHROMA_BINS
-        chroma[note] += 1.0                    # Fundamental
-        chroma[(note + 7) % CHROMA_BINS] += 0.5 # 5th overtone (dominant)
-        chroma[note] += 0.3                    # Octave
+        # Attenuate extensions above the octave (>12 semitones)
+        weight = 1.0 if interval <= 12 else 0.7
+        # Boost the root (first interval) to improve root discrimination
+        if i == 0:
+            weight *= 1.20
+        chroma[note] += weight                    # Fundamental
+        chroma[(note + 7) % CHROMA_BINS] += 0.5   # 5th overtone
+        chroma[note] += 0.3                       # Octave reinforcement
     total = chroma.sum()
     return chroma / total if total > 0 else chroma
 
@@ -53,13 +99,9 @@ def make_window(center_chroma: np.ndarray, noise_std: float = 0.12) -> np.ndarra
     return np.stack(frames, axis=0)
 
 def generate_dataset(samples_per_class: int = 1500):
-    X, y, templates = [], [], []
-    for q in ["major", "minor"]:
-        for r in range(12):
-            templates.append(make_chroma_template(r, q))
-    templates.append(np.full(CHROMA_BINS, 1.0 / CHROMA_BINS, dtype=np.float32))
-
-    for idx, template in enumerate(templates):
+    X, y = [], []
+    for idx, (root_idx, quality) in enumerate(CHORD_CLASS_MAP):
+        template = make_chroma_template(root_idx, quality)
         for _ in range(samples_per_class):
             std = 0.08 + np.random.uniform(0, 0.12)
             X.append(make_window(template, std))
@@ -89,7 +131,7 @@ def build_model() -> tf.keras.Model:
     # Flatten preserves the temporal attack/decay profile across the 9 frames
     x = tf.keras.layers.Flatten()(x)
     
-    x = tf.keras.layers.Dense(128, activation="relu")(x)
+    x = tf.keras.layers.Dense(256, activation="relu")(x)
     x = tf.keras.layers.Dropout(0.3)(x)
     outputs = tf.keras.layers.Dense(NUM_CLASSES, activation="softmax", name="chord_probs")(x)
 
@@ -134,28 +176,46 @@ def run_pipeline():
     
     try:
         tflite_model = converter.convert()
-        with open("chord_model.tflite", "wb") as f:
+        _APP_DIR = Path(__file__).resolve().parent.parent / "app"
+        output_path = _APP_DIR / "chord_model.tflite"
+        with open(output_path, "wb") as f:
             f.write(tflite_model)
-        print(f"\nSuccess! Saved chord_model.tflite ({len(tflite_model)/1024:.1f} KB)")
+        print(f"\nSuccess! Saved {output_path} ({len(tflite_model)/1024:.1f} KB)")
     except Exception as e:
         print(f"\nConversion failed: {e}")
         return
 
     # 5. Smoke Test
-    print("\nRunning TFLite Inference Test...")
-    interp = tf.lite.Interpreter(model_path="chord_model.tflite")
+    print("\nRunning TFLite Inference Tests...")
+    interp = tf.lite.Interpreter(model_path=str(output_path))
     interp.allocate_tensors()
     input_details = interp.get_input_details()[0]
     output_details = interp.get_output_details()[0]
     
-    # Test D Major (root 2)
-    test_input = make_window(make_chroma_template(2, "major"), 0.05)[np.newaxis]
-    interp.set_tensor(input_details['index'], test_input)
-    interp.invoke()
-    res = interp.get_tensor(output_details['index'])[0]
+    test_cases = [
+        ("D:7",    2,  "7"),     # D dominant 7th
+        ("C:maj7", 0,  "maj7"), # C major 7th
+        ("A:min7", 9,  "min7"), # A minor 7th
+    ]
     
-    top_idx = np.argmax(res)
-    print(f"Result: Predicted {CHORD_VOCAB[top_idx]} ({res[top_idx]:.1%})")
+    all_passed = True
+    for expected, root_idx, quality in test_cases:
+        test_input = make_window(make_chroma_template(root_idx, quality), 0.05)[np.newaxis]
+        interp.set_tensor(input_details['index'], test_input)
+        interp.invoke()
+        res = interp.get_tensor(output_details['index'])[0]
+        top_idx = np.argmax(res)
+        predicted = CHORD_VOCAB[top_idx]
+        passed = predicted == expected
+        if not passed:
+            all_passed = False
+        status = "PASS" if passed else "FAIL"
+        print(f"  {expected:<8} -> {predicted:<8} ({res[top_idx]:.1%}) [{status}]")
+    
+    if all_passed:
+        print("\nAll smoke tests PASSED")
+    else:
+        print("\nSome smoke tests FAILED")
 
 if __name__ == "__main__":
     run_pipeline()

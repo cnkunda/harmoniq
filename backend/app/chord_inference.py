@@ -21,11 +21,17 @@ from app.pipeline_proof import TARGET_SR
 
 logger = logging.getLogger("harmoniq.inference.chord")
 
-CHORD_VOCAB = [
-    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    "Cm", "C#m", "Dm", "D#m", "Em", "Fm", "F#m", "Gm", "G#m", "Am", "A#m", "Bm",
-    "N",
+_ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+_CHORD_QUALITIES = [
+    "maj", "min",
+    "7", "maj7", "min7",
+    "9", "min9", "maj9", "11", "13",
+    "7#9", "7b9", "7#5", "7b5", "alt7",
+    "sus2", "sus4", "7sus4",
+    "dim", "dim7", "aug", "6", "min6",
 ]
+
+CHORD_VOCAB = [f"{root}:{qual}" for qual in _CHORD_QUALITIES for root in _ROOTS] + ["N"]
 
 _MODEL_PATH = Path(__file__).parent / "chord_model.tflite"
 _WINDOW = 9
