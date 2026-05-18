@@ -34,8 +34,14 @@ _CHORD_QUALITIES = [
 CHORD_VOCAB = [f"{root}:{qual}" for qual in _CHORD_QUALITIES for root in _ROOTS] + ["N"]
 
 _MODEL_PATH = Path(__file__).parent / "chord_model.tflite"
-_WINDOW = 9
+_WINDOW = 128
 _HOP_SEC = 0.1
+_BINS_PER_OCTAVE = 12
+_NUM_OCTAVES = 3
+_CHROMA_BINS = _BINS_PER_OCTAVE * _NUM_OCTAVES  # 36
+_BASS_BINS = 4
+_FEATURE_DIM = _CHROMA_BINS + _BASS_BINS         # 40
+_BATCH_CHUNK = 512  # Process 512 windows per TFLite invoke to cap memory
 
 
 def _get_segment_db(y_segment: np.ndarray) -> float:
@@ -106,35 +112,67 @@ def _get_interpreter():
     return interp
 
 
+def _build_windows(features: np.ndarray) -> np.ndarray:
+    """Build batched sliding windows from feature sequence.
+
+    Returns array of shape [T, _WINDOW, _FEATURE_DIM] where each slice [i]
+    is the _WINDOW-frame context centred on frame i.
+    """
+    T = len(features)
+    half = _WINDOW // 2
+    pad = np.zeros((half, _FEATURE_DIM), dtype=np.float32)
+    padded = np.concatenate([pad, features, pad], axis=0)
+    windows = np.zeros((T, _WINDOW, _FEATURE_DIM), dtype=np.float32)
+    for i in range(T):
+        windows[i] = padded[i : i + _WINDOW]
+    return windows
+
+
 def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
     import librosa
 
     hop = int(sr * _HOP_SEC)
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop, n_chroma=12)
-    chroma = chroma.T.astype(np.float32)
-    norms = chroma.sum(axis=1, keepdims=True).clip(1e-8, None)
-    chroma = chroma / norms
 
-    T = len(chroma)
-    half = _WINDOW // 2
-    pad = np.zeros((half, 12), dtype=np.float32)
-    padded = np.concatenate([pad, chroma, pad], axis=0)
+    # Extract 36-bin CQT
+    cqt = librosa.cqt(y=y, sr=sr, hop_length=hop, n_bins=36, bins_per_octave=12)
+    cqt = np.abs(cqt)
+    cqt = cqt.T.astype(np.float32)
+
+    # Normalize per frame
+    norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
+    cqt = cqt / norms
+
+    # Extract bass channel (bins 0-3)
+    bass = cqt[:, :4]
+
+    # Concatenate: [36 CQT + 4 bass] = [T, 40]
+    features = np.concatenate([cqt, bass], axis=1)
+
+    # Build all sliding windows at once
+    windows = _build_windows(features)  # [T, 128, 40]
 
     interp = _get_interpreter()
     inp_detail = interp.get_input_details()[0]
     outp_detail = interp.get_output_details()[0]
 
+    T = len(windows)
+    all_probs = np.empty((T, len(CHORD_VOCAB)), dtype=np.float32)
+
+    # Process in chunks to cap memory usage
+    for start in range(0, T, _BATCH_CHUNK):
+        end = min(start + _BATCH_CHUNK, T)
+        chunk = windows[start:end]
+        interp.set_tensor(inp_detail["index"], chunk)
+        interp.invoke()
+        all_probs[start:end] = interp.get_tensor(outp_detail["index"])
+
     results = []
     for i in range(T):
-        window = padded[i : i + _WINDOW][np.newaxis]
-        interp.set_tensor(inp_detail["index"], window)
-        interp.invoke()
-        probs = interp.get_tensor(outp_detail["index"])[0]
-        pred_idx = int(np.argmax(probs))
+        pred_idx = int(np.argmax(all_probs[i]))
         results.append({
             "time": i * _HOP_SEC,
             "chord": CHORD_VOCAB[pred_idx],
-            "confidence": float(probs[pred_idx]),
+            "confidence": float(all_probs[i][pred_idx]),
         })
     return results
 

@@ -27,6 +27,9 @@ yarn-debug.*
 yarn-error.*
 .cursor/debug-*
 
+# opencode
+.opencode/
+
 # macOS
 .DS_Store
 *.pem

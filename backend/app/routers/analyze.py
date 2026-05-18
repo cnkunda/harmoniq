@@ -262,6 +262,7 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
     youtube_url: str | None = None
     upload_path: str | None = None
     player_profile: object = None
+    focus_area: str | None = None
     content_type = request.headers.get("content-type", "")
     try:
         if content_type.startswith("multipart/form-data"):
@@ -269,6 +270,7 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
             upload = form.get("file")
             youtube_url = form.get("youtube_url") or form.get("url")
             player_profile = _parse_player_profile_field(form.get("player_profile"))
+            focus_area = form.get("focus_area")
             if upload is not None:
                 suffix = Path(upload.filename or "").suffix or ".audio"
                 job_dir = get_job_dir(job_id)
@@ -301,6 +303,7 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
             if isinstance(body, dict):
                 youtube_url = body.get("url") or body.get("youtube_url")
                 player_profile = _parse_player_profile_field(body.get("player_profile"))
+                focus_area = body.get("focus_area")
     except HTTPException:
         raise
     except UploadTooLargeError:
@@ -316,7 +319,7 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
         jobs[job_id] = JobStatus(status="failed", result=None, error=ANALYSIS_FAILED_USER_MESSAGE, error_code=ANALYZE_ERROR_ANALYSIS_FAILED)
         return AnalyzeJobCreated(job_id=job_id)
     logger.info("POST /analyze created job_id=%s status=processing youtube_url=%r upload_path=%r", job_id, youtube_url, upload_path)
-    enqueue_analyze_job(job_id=job_id, youtube_url=youtube_url, upload_path=upload_path, player_profile=player_profile)
+    enqueue_analyze_job(job_id=job_id, youtube_url=youtube_url, upload_path=upload_path, player_profile=player_profile, focus_area=focus_area)
     return AnalyzeJobCreated(job_id=job_id)
 
 

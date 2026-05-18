@@ -16,6 +16,7 @@ import threading
 import time
 
 from app.schemas import (
+    CoachFocusArea,
     CoachHydrationSection,
     CoachHydrationStatus,
     JobStatus,
@@ -108,6 +109,7 @@ def _hydrate_coach_copy_job(
     job_id: str,
     *,
     player_profile: PlayerProfile | None,
+    focus_area: CoachFocusArea | None = None,
 ) -> None:
     job = jobs.get(job_id)
     if job is None or job.result is None:
@@ -122,6 +124,7 @@ def _hydrate_coach_copy_job(
         player_profile=player_profile,
         style_label=lesson.style_label,
         technique_hints=[],
+        focus_area=focus_area,
     )
     patched = lesson.model_copy(update={"sections": enriched})
     jobs[job_id] = JobStatus(status="complete", result=patched, error=None)
@@ -217,6 +220,7 @@ def _process_analyze_job(
     youtube_url: str | None,
     upload_path: str | None,
     player_profile: PlayerProfile | None = None,
+    focus_area: CoachFocusArea | None = None,
 ) -> None:
     """Worker loop for one analyze job.
 
@@ -295,7 +299,7 @@ def _process_analyze_job(
                     _set_coach_pending(job_id, len(reused.sections))
                     coach_thread = threading.Thread(
                         target=_hydrate_coach_copy_job,
-                        kwargs={"job_id": job_id, "player_profile": player_profile},
+                        kwargs={"job_id": job_id, "player_profile": player_profile, "focus_area": focus_area},
                         daemon=True,
                     )
                     coach_thread.start()
@@ -383,7 +387,7 @@ def _process_analyze_job(
         _set_coach_pending(job_id, len(skeleton_result.sections))
         coach_thread = threading.Thread(
             target=_hydrate_coach_copy_job,
-            kwargs={"job_id": job_id, "player_profile": player_profile},
+            kwargs={"job_id": job_id, "player_profile": player_profile, "focus_area": focus_area},
             daemon=True,
         )
         coach_thread.start()
@@ -445,6 +449,7 @@ def enqueue_analyze_job(
     youtube_url: str | None,
     upload_path: str | None,
     player_profile: PlayerProfile | None = None,
+    focus_area: CoachFocusArea | None = None,
 ) -> None:
     """Mark job as processing and start the worker thread."""
     jobs[job_id] = JobStatus(
@@ -470,6 +475,7 @@ def enqueue_analyze_job(
             "youtube_url": youtube_url,
             "upload_path": upload_path,
             "player_profile": player_profile,
+            "focus_area": focus_area,
         },
         daemon=True,
     )

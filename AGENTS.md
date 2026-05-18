@@ -105,13 +105,6 @@ Phases: **orient** (`listen`) → **isolate** (`study`, `slow`) → **apply** (`
 
 ---
 
-## Known bugs (Phase 1 blockers)
-
-- **BUG-01**: Analyze polling infinite loop — frontend keeps polling after backend returns `complete`.
-- **BUG-02**: Jam Mode AlphaTab crash — typed array error (-2) in WebView tab rendering.
-
----
-
 ## Design system notes
 
 - **Real color palette** lives in `src/constants/colors.ts` (not `constants/Colors.ts`, which has the Expo template palette).

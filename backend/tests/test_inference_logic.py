@@ -47,7 +47,17 @@ def test_snap_to_grid_logic():
 
 def test_chord_inference_silence_threshold(monkeypatch, tmp_path, mock_beat_grid):
     """Ensure loud audio gets a chord, but silent audio gets 'N'."""
-    
+
+    class _MockInterp:
+        def get_input_details(self): return [{"index": 0}]
+        def get_output_details(self): return [{"index": 1}]
+        def set_tensor(self, *a): pass
+        def invoke(self): pass
+        def get_tensor(self, i): return np.zeros((1, 278), dtype=np.float32)
+        def allocate_tensors(self): pass
+
+    monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
+
     def mock_load(path, sr=None, mono=True):
         # Create 2 seconds of audio: 
         # First second is LOUD (0.5 amplitude), second second is SILENT (0.0)
@@ -81,7 +91,17 @@ def test_chord_inference_silence_threshold(monkeypatch, tmp_path, mock_beat_grid
 
 def test_chord_majority_vote_pooling(monkeypatch, tmp_path, mock_beat_grid):
     """Ensure flickering ML predictions are smoothed by the BeatGrid."""
-    
+
+    class _MockInterp:
+        def get_input_details(self): return [{"index": 0}]
+        def get_output_details(self): return [{"index": 1}]
+        def set_tensor(self, *a): pass
+        def invoke(self): pass
+        def get_tensor(self, i): return np.zeros((1, 278), dtype=np.float32)
+        def allocate_tensors(self): pass
+
+    monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
+
     monkeypatch.setattr("librosa.load", lambda *a, **k: (np.full(44100, 0.5), 44100))
     
     def mock_flickering_tflite(y, sr):
