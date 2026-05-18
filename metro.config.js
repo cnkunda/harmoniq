@@ -31,6 +31,7 @@ config.resolver.blockList = [
   /[/\\]backend[/\\]\.venv(?:[/\\]|$)/,
   /[/\\]\.venv-wsl(?:[/\\]|$)/,
   /[/\\]\.venv(?:[/\\]|$)/,
+  /[/\\]\.opencode(?:[/\\]|$)/,
 ]
 
 module.exports = withNativeWind(config, { input: './global.css' })

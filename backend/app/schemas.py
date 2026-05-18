@@ -582,6 +582,10 @@ class ChordEvent(BaseModel):
 
 class ChordTimeline(BaseModel):
     events: list[ChordEvent]
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        description="Commit 99: Viterbi decoding metrics (flicker rate, beat alignment, etc.)",
+    )
 
 class SoloNote(BaseModel):
     start_time: float = Field(..., description="Quantized start time in seconds")
