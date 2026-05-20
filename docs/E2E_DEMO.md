@@ -139,6 +139,57 @@ Run this checkpoint twice, once per mode:
 
 ---
 
+## Chord Model & Transcription Quality (Commits 98-100)
+
+### Checkpoint: Extended chord recognition (commit 98)
+
+1. Analyze a jazz or blues song with known extended chords (e.g., "All of Me" with 7ths, "Autumn Leaves" with maj7/min7)
+2. After analysis completes, navigate to the chord timeline in the session
+3. Confirm extended chord symbols appear: D7, Cmaj7, Am7, G9, etc. (not just major/minor)
+4. Confirm chord symbols match the expected harmony of the song
+5. FAIL if only major/minor chords appear for a song with known extended harmony
+
+### Checkpoint: Viterbi chord smoothing (commit 99)
+
+1. Analyze a song with a known progression (e.g., ii-V-I in jazz)
+2. Inspect the chord timeline for the progression section
+3. Confirm:
+   - Chord symbols transition smoothly (no rapid flickering between adjacent beats)
+   - Chord changes land on beat boundaries (>90% alignment)
+   - No improbable chord movements (e.g., C → F# → C in key of C major)
+4. FAIL if chord symbols flicker rapidly (change every 1-2 beats)
+5. FAIL if >10% of chord changes fall off beat boundaries
+
+### Checkpoint: Half-beat chord resolution (commit 99)
+
+1. Analyze a song with 8th-note chord changes (e.g., bossa nova, fast swing)
+2. Inspect chord timeline at a section with rapid changes
+3. Confirm two chord events are emitted per beat where appropriate
+4. Confirm timestamps are correctly spaced at half-beat intervals
+5. FAIL if rapid chord changes are collapsed into a single event
+
+### Checkpoint: Segment boundary continuity — chords (commit 100)
+
+1. Analyze a song longer than 30 seconds (triggers segmentation)
+2. Identify a chord that spans a segment boundary (listen for sustained chord)
+3. Inspect chord timeline at the boundary
+4. Confirm:
+   - The chord is emitted as a **single** event, not duplicated
+   - No gap or silence in chord coverage at the boundary
+   - Confidence is slightly reduced near the boundary (visible in dev mode)
+5. FAIL if chord is duplicated or dropped at segment boundary
+
+### Checkpoint: Segment boundary continuity — solo (commit 100)
+
+1. Analyze a song with a sustained solo note crossing a segment boundary
+2. Inspect the solo notation in the score (Study step or MusicXML export)
+3. Confirm the note continues across the boundary without:
+   - Duplicate note onset at boundary
+   - Premature note offset at boundary
+4. FAIL if note is split or dropped at segment boundary
+
+---
+
 ## Jam Mode
 
 ### Checkpoint: Jam Mode happy path (offline / bundled) — BUG-02 resolved
@@ -170,7 +221,7 @@ Run this checkpoint twice, once per mode:
 
 ## Phase 1 E2E Completion Summary
 
-All Phase 1 commit acceptance criteria (commits 1–97) are exercised by the above checkpoints:
+All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above checkpoints. Commits 98-100 (chord model expansion, Viterbi decoding, boundary tie) have dedicated checkpoints in the [Chord Model & Transcription Quality](#chord-model--transcription-quality-commits-98-100) section.
 
 | Commit | Feature | Checkpoint |
 |--------|---------|------------|
@@ -186,12 +237,17 @@ All Phase 1 commit acceptance criteria (commits 1–97) are exercised by the abo
 | 95 | ML inference stability & diagnostics | (backend — no model warnings in logs) |
 | 96 | Unified Player UX parity | Cross-step Unified UX layout |
 | 97 | Orient-as-hint / AsyncStorage / seek sync | Global Audio Manager & Seek-to-start |
+| 98 | Advanced Extension Recognition | Extended chord recognition |
+| 98a-d | Chord model architecture (CQT, CRNN, Attention) | (backend — chord accuracy metrics) |
+| 99 | Viterbi Decoding | Viterbi chord smoothing + half-beat resolution |
+| 100 | Segment Boundary Tie | Segment boundary continuity — chords + solo |
 
 ## Known Limitations
 
 - **Analysis timeout (>5 min)**: No push notification infrastructure. Jobs taking >5 min will timeout with a manual Retry button. Push notifications are deferred to post-Phase 1.
 - **Tab catalog**: `GET /tabs/{id}/gp5` returns 501 until a licensed provider is configured.
 - **Jam Mode AlphaTab**: May show "No tab available" if tab loading fails (expected until licensed provider).
+- **Chord model on-device**: TFLite model with SELECT_TF_OPS requires Flex delegate on Android for BiLSTM + attention layers (commit 98c).
 
 ---
 

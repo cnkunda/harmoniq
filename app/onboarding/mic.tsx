@@ -1,14 +1,19 @@
 import { Audio } from 'expo-av'
 import * as Linking from 'expo-linking'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
+import { ONBOARDING_STEP_WITHOUT_QUIZ, ONBOARDING_WITHOUT_QUIZ_TOTAL } from '@/src/constants/onboardingSteps'
 
 export default function OnboardingMicScreen() {
   const router = useRouter()
+  const { quizTaken } = useLocalSearchParams<{ quizTaken?: string }>()
+  const hasQuiz = quizTaken === '1'
+  const currentStep = hasQuiz ? 3 : ONBOARDING_STEP_WITHOUT_QUIZ.mic
+  const totalSteps = hasQuiz ? 7 : ONBOARDING_WITHOUT_QUIZ_TOTAL
   const [status, setStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown')
   const [busy, setBusy] = useState(false)
 
@@ -53,7 +58,8 @@ export default function OnboardingMicScreen() {
 
   return (
     <OnboardingScreenShell
-      currentStep={2}
+      currentStep={currentStep}
+      totalSteps={totalSteps}
       showBack
       onBack={() => router.back()}
       footer={
@@ -71,7 +77,7 @@ export default function OnboardingMicScreen() {
         </Text>
 
         {status === 'denied' ? (
-          <View className="mt-6 w-full rounded-lg border border-danger/35 bg-danger/10 px-3 py-3">
+          <View className="mt-6 w-full rounded-xl border border-danger/35 bg-danger/10 px-3 py-3">
             <Text className="text-center font-sans text-sm text-cream">Microphone access is off for this app.</Text>
             <Text className="mt-2 text-center font-sans text-xs text-muted-brown">
               Enable the mic in system settings, then tap Refresh below.
@@ -91,7 +97,7 @@ export default function OnboardingMicScreen() {
           <AnimatedPressable haptic="light"
             onPress={() => void request()}
             disabled={busy || status === 'granted'}
-            className="rounded-lg bg-amber-accent px-4 py-3 disabled:opacity-40"
+            className="rounded-xl bg-amber-accent px-4 py-3 disabled:opacity-50"
             accessibilityRole="button"
           >
             <Text className="text-center font-sans-medium text-wood-900">
@@ -101,7 +107,7 @@ export default function OnboardingMicScreen() {
           {Platform.OS !== 'web' ? (
             <AnimatedPressable haptic="light"
               onPress={() => void refresh()}
-              className="rounded-lg border border-wood-600/50 px-4 py-3"
+              className="rounded-xl border border-wood-600/50 px-4 py-3"
               accessibilityRole="button"
             >
               <Text className="text-center font-sans-medium text-cream">Refresh status</Text>
@@ -110,9 +116,9 @@ export default function OnboardingMicScreen() {
         </View>
 
         <AnimatedPressable haptic="light"
-          onPress={() => router.push({ pathname: '/onboarding/phrase/[index]', params: { index: '0' } })}
+          onPress={() => router.push({ pathname: '/onboarding/phrase/[index]', params: { index: '0', quizTaken: hasQuiz ? '1' : undefined } })}
           disabled={status !== 'granted'}
-          className="mt-10 w-full rounded-lg border border-amber-accent/60 bg-wood-800/80 px-4 py-3 disabled:opacity-35"
+          className="mt-10 w-full rounded-xl border border-amber-accent/60 bg-wood-800/80 px-4 py-3 disabled:opacity-50"
           accessibilityRole="button"
         >
           <Text className="text-center font-sans-medium text-amber-light">Next: placement phrases</Text>

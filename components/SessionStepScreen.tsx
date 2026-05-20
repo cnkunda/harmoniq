@@ -38,8 +38,8 @@ export function SessionStepScreen({
   nextButtonClassName,
 }: SessionStepScreenProps) {
   const footerRow = footerContainerClassName ?? 'flex-row gap-3 border-t border-wood-600/25 bg-ivory px-6 pb-8 pt-4'
-  const backClass = backButtonClassName ?? 'flex-1 rounded-lg border border-wood-600/55 bg-cream-dark/60 py-3'
-  const nextClass = nextButtonClassName ?? 'flex-1 rounded-lg bg-amber-accent/90 py-3'
+  const backClass = backButtonClassName ?? 'flex-1 rounded-xl border border-wood-600/55 bg-cream-dark/60 py-3'
+  const nextClass = nextButtonClassName ?? 'flex-1 rounded-xl bg-amber-accent/90 py-3'
 
   return (
     <View className="flex-1">

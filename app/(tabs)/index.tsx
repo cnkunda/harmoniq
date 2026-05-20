@@ -357,7 +357,7 @@ export default function HomeScreen() {
             <Text className="font-sans text-base text-muted-brown">Ready to play?</Text>
           </View>
 
-          <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Your practice path</Text>
+          {/* <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Your practice path</Text> */}
 
           <LinearGradient
             colors={['rgba(74, 55, 40, 0.98)', 'rgba(44, 24, 16, 0.99)']}
@@ -393,37 +393,9 @@ export default function HomeScreen() {
                     </View>
                     <Text className="mt-6 text-center font-serif text-2xl text-cream">Kick off your practice</Text>
                     <Text className="mt-4 max-w-sm text-center font-sans text-base leading-7 text-muted-brown">
-                      Let's get your playing faster. Take a quick style quiz, try a demo session, add a song, or connect Spotify—whatever gets you playing first.
+                      Take a style quiz, try a demo session, add a song, or connect to your Spotify.
                     </Text>
                   </View>
-
-                  {/* {tasteSongHints.length > 0 ? (
-                    <View className="mt-6 w-full">
-                      <Text className="mb-2 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
-                        Ideas for your style (add as lessons)
-                      </Text>
-                      <View className="gap-2">
-                        {tasteSongHints.map((hint) => (
-                          <Pressable
-                            key={hint}
-                            onPress={() =>
-                              void Linking.openURL(
-                                `https://www.youtube.com/results?search_query=${encodeURIComponent(hint)}`,
-                              )
-                            }
-                            className="rounded-lg border border-wood-600/40 bg-wood-800/25 px-3 py-2.5 active:opacity-90"
-                            accessibilityRole="button"
-                            accessibilityLabel={`Search YouTube for ${hint}`}
-                          >
-                            <Text className="font-sans text-sm text-cream">{hint}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                      <Text className="mt-2 font-sans text-xs leading-5 text-muted-brown">
-                        Pick a result, copy the link, then use Add song to turn it into tabs in Harmoniq.
-                      </Text>
-                    </View>
-                  ) : null} */}
 
                   <View className="mt-8 w-full">
                     <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">

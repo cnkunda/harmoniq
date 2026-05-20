@@ -14,3 +14,7 @@ build/
 # Demucs / yt-dlp / runtime artifacts (keep directory via .gitkeep)
 data/*
 !data/.gitkeep
+
+# Model artifacts (regenerate from training script)
+*.keras
+*.weights.h5

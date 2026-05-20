@@ -40,6 +40,7 @@ def isolated_data_dir(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def allow_subsecond_wavs_in_analyze_tests(monkeypatch):
     """Fixture WAVs are ~0.25s; production rejects under 30s (README / MANUAL_QA)."""
+    monkeypatch.setattr("app.routers.analyze.MIN_ANALYZE_DURATION_SECONDS", 0.01)
     monkeypatch.setattr("app.ingest.MIN_ANALYZE_DURATION_SECONDS", 0.01)
 
 
@@ -68,6 +69,7 @@ def test_post_analyze_returns_job_id():
 
 
 def test_post_analyze_rejects_wav_under_min_duration_with_readme_message(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.routers.analyze.MIN_ANALYZE_DURATION_SECONDS", 30.0)
     monkeypatch.setattr("app.ingest.MIN_ANALYZE_DURATION_SECONDS", 30.0)
     input_wav = tmp_path / "short.wav"
     _write_test_wav(input_wav, sample_rate=44100, channels=1, duration_seconds=5.0)
@@ -105,7 +107,67 @@ def _write_test_wav(
 
 
 def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path, monkeypatch):
+    from app import jobs as jobs_mod
+    from app.stem_quality import StemClassification
+
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    def fake_classify(*args, **kwargs):
+        return StemClassification(guitar_stem_usable=True, analysis_audio_role="guitar_stem", flags=(), user_warning=None)
+
+    def fake_separate(song_wav_path, job_dir):
+        import wave as _wave
+        stems_dir = job_dir / "stems"
+        stems_dir.mkdir(parents=True, exist_ok=True)
+        stem_names = ("guitar", "bass", "drums", "vocals", "piano", "other")
+        out: dict[str, str] = {}
+        for name in stem_names:
+            p = stems_dir / f"{name}.wav"
+            with _wave.open(str(p), "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(44100)
+                wf.writeframes(b"\x00" * 8820)
+            out[name] = p.relative_to(get_data_dir().parent).as_posix()
+        return out
+
+    def fake_analyze(
+        job_id,
+        *,
+        guitar_stem_path,
+        vocals_stem_path,
+        stems,
+        wav_path,
+        source_url=None,
+        player_profile=None,
+        source_metadata=None,
+        stem_classification=None,
+        mix_wav_path=None,
+        piano_stem_path=None,
+    ):
+        from app.schemas import LessonJSON, LessonSectionStub
+
+        return LessonJSON(
+            job_id=job_id,
+            song_title="Upload Test",
+            artist="Test",
+            key="G major",
+            key_confidence=0.9,
+            tempo=120.0,
+            tempo_confidence=0.9,
+            transcription_confidence=0.5,
+            beat_grid=[0.0, 0.5, 1.0],
+            bar_timestamps=[0.0],
+            stems=stems,
+            lyrics_aligned=[],
+            sections=[LessonSectionStub(label="Verse", confidence=0.5)],
+            wav_path=wav_path,
+        )
+
+    monkeypatch.setattr(jobs_mod, "separate_song_to_stems", fake_separate)
+    monkeypatch.setattr(jobs_mod, "classify_stems_for_lesson", fake_classify)
+    monkeypatch.setattr(jobs_mod, "build_lesson_json_from_librosa", fake_analyze)
+
     input_wav = tmp_path / "upload_input.wav"
     _write_test_wav(input_wav, sample_rate=48000, channels=2)
 
@@ -217,6 +279,7 @@ def test_get_analyze_unknown_job_returns_404_json():
 
 def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
     from app import jobs as jobs_mod
+    from app.stem_quality import StemClassification
 
     call_counts = {"separate": 0, "analyze": 0}
 
@@ -231,6 +294,9 @@ def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
             p.write_bytes(b"RIFF")
             out[name] = p.relative_to(get_data_dir().parent).as_posix()
         return out
+
+    def fake_classify(*args, **kwargs):
+        return StemClassification(guitar_stem_usable=True, analysis_audio_role="guitar_stem", flags=(), user_warning=None)
 
     def fake_analyze(
         job_id,
@@ -267,6 +333,7 @@ def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(jobs_mod, "separate_song_to_stems", fake_separate)
+    monkeypatch.setattr(jobs_mod, "classify_stems_for_lesson", fake_classify)
     monkeypatch.setattr(jobs_mod, "build_lesson_json_from_librosa", fake_analyze)
 
     input_wav = tmp_path / "repeat.wav"
@@ -289,6 +356,7 @@ def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
 def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
     from app import cache as cache_mod
     from app import jobs as jobs_mod
+    from app.stem_quality import StemClassification
 
     call_counts = {"separate": 0, "analyze": 0}
 
@@ -303,6 +371,9 @@ def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
             p.write_bytes(b"RIFF")
             out[name] = p.relative_to(get_data_dir().parent).as_posix()
         return out
+
+    def fake_classify(*args, **kwargs):
+        return StemClassification(guitar_stem_usable=True, analysis_audio_role="guitar_stem", flags=(), user_warning=None)
 
     def fake_analyze(
         job_id,
@@ -339,6 +410,7 @@ def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(jobs_mod, "separate_song_to_stems", fake_separate)
+    monkeypatch.setattr(jobs_mod, "classify_stems_for_lesson", fake_classify)
     monkeypatch.setattr(jobs_mod, "build_lesson_json_from_librosa", fake_analyze)
 
     input_wav = tmp_path / "version.wav"
@@ -361,6 +433,7 @@ def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
 
 def test_missing_cached_artifact_forces_recompute(monkeypatch, tmp_path):
     from app import jobs as jobs_mod
+    from app.stem_quality import StemClassification
 
     call_counts = {"separate": 0, "analyze": 0}
 
@@ -375,6 +448,9 @@ def test_missing_cached_artifact_forces_recompute(monkeypatch, tmp_path):
             p.write_bytes(b"RIFF")
             out[name] = p.relative_to(get_data_dir().parent).as_posix()
         return out
+
+    def fake_classify(*args, **kwargs):
+        return StemClassification(guitar_stem_usable=True, analysis_audio_role="guitar_stem", flags=(), user_warning=None)
 
     def fake_analyze(
         job_id,
@@ -411,6 +487,7 @@ def test_missing_cached_artifact_forces_recompute(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(jobs_mod, "separate_song_to_stems", fake_separate)
+    monkeypatch.setattr(jobs_mod, "classify_stems_for_lesson", fake_classify)
     monkeypatch.setattr(jobs_mod, "build_lesson_json_from_librosa", fake_analyze)
 
     input_wav = tmp_path / "missing-artifact.wav"

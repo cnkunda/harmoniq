@@ -71,7 +71,7 @@ export function SessionChromeBar() {
               <Text className="font-serif text-lg text-wood-900">Harmoniq</Text>
             </AnimatedPressable>
             {isDemoLesson ? (
-              <View className="rounded-full border border-amber-accent/45 bg-amber-accent/12 px-2 py-0.5">
+              <View className="rounded-full border border-amber-accent/50 bg-amber-accent/10 px-2 py-0.5">
                 <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-wood-800">Demo</Text>
               </View>
             ) : null}

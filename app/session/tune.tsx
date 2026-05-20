@@ -214,7 +214,7 @@ export default function TuneScreen() {
                 key={id}
                 haptic="light"
                 onPress={() => void setActiveMicProfile(id)}
-                className={`rounded-full border px-3 py-2 ${
+                className={`rounded-xl border px-3 py-2 ${
                   selected ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/35'
                 }`}
                 accessibilityRole="button"
@@ -250,7 +250,7 @@ export default function TuneScreen() {
           haptic="light"
           onPress={beginCalibration}
           disabled={calibrating || !hydrated}
-          className={`mt-4 rounded-lg border border-wood-600/55 bg-cream-dark/60 py-3 ${calibrating ? 'opacity-60' : ''}`}
+          className={`mt-4 rounded-xl border border-wood-600/55 bg-cream-dark/60 py-3 ${calibrating ? 'opacity-50' : ''}`}
           accessibilityRole="button"
         >
           <Text className="text-center font-sans-medium text-sm text-wood-900">
@@ -272,7 +272,7 @@ export default function TuneScreen() {
           haptic="medium"
           onPress={() => void forwardToListen()}
           disabled={!canContinue}
-          className={`rounded-lg py-3 ${canContinue ? 'bg-amber-accent/90' : 'bg-wood-600/30'}`}
+          className={`rounded-xl py-3 ${canContinue ? 'bg-amber-accent/90' : 'bg-wood-600/30'}`}
           accessibilityRole="button"
         >
           <Text

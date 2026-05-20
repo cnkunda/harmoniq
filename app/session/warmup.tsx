@@ -234,8 +234,8 @@ export default function WarmupScreen() {
         nextLabel="Next section"
        onNext={goNextSection}
        footerContainerClassName="flex-row gap-3 border-t border-wood-600/20 bg-ivory px-6 pb-8 pt-4"
-       backButtonClassName="flex-1 rounded-2xl border border-wood-600/45 bg-cream py-3.5"
-       nextButtonClassName="flex-1 rounded-2xl border border-amber-accent/55 bg-amber-accent/35 py-3.5 whitespace-nowrap"
+       backButtonClassName="flex-1 rounded-xl border border-wood-600/45 bg-cream py-3"
+       nextButtonClassName="flex-1 rounded-xl border border-amber-accent/55 bg-amber-accent/35 py-3 whitespace-nowrap"
     >
       <View className={`mt-1 ${colClass}`}>
         <View className={leftColClass}>
@@ -272,7 +272,7 @@ export default function WarmupScreen() {
           {!completed && !warmupStarted ? (
             <AnimatedPressable haptic="light"
               onPress={() => setWarmupStarted(true)}
-              className="mt-6 w-full rounded-2xl bg-amber-accent/90 py-3.5"
+              className="mt-6 w-full rounded-xl bg-amber-accent/90 py-3"
               accessibilityRole="button"
               accessibilityLabel="Start warm-up exercise timer"
             >
@@ -282,7 +282,7 @@ export default function WarmupScreen() {
           {!completed && warmupStarted ? (
             <AnimatedPressable haptic="light"
               onPress={stopExercise}
-              className="mt-6 w-full rounded-2xl border-2 border-wood-600/45 bg-cream-dark/50 py-3.5"
+              className="mt-6 w-full rounded-xl border-2 border-wood-600/45 bg-cream-dark/50 py-3"
               accessibilityRole="button"
               accessibilityLabel="Stop warm-up exercise timer"
             >
@@ -292,7 +292,7 @@ export default function WarmupScreen() {
         </View>
 
         <View className={rightColClass}>
-          <View className="rounded-2xl border border-wood-600/20 bg-white px-4 pb-4 pt-3.5 shadow-sm">
+          <View className="rounded-2xl border border-wood-600/20 bg-cream-dark/45 px-4 pb-4 pt-3.5">
             <View className="flex-row items-center justify-between">
               <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
                 Exercise {completed ? exercises.length : exerciseIndex + 1} of {exercises.length}

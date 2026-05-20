@@ -4,7 +4,10 @@ import pytest
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+
+from app.chord_vocab import CHORD_INTERVALS, ROOT_NOTES
 
 import os
 os.environ["KERAS_BACKEND"] = "tensorflow"
@@ -17,34 +20,6 @@ CHROMA_BINS = BINS_PER_OCTAVE * NUM_OCTAVES  # 36
 BASS_BINS = 4
 FEATURE_DIM = CHROMA_BINS + BASS_BINS         # 40
 WINDOW = 128
-
-ROOT_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
-CHORD_INTERVALS = {
-    "maj":  [0, 4, 7],
-    "min":  [0, 3, 7],
-    "7":    [0, 4, 7, 10],
-    "maj7": [0, 4, 7, 11],
-    "min7": [0, 3, 7, 10],
-    "9":    [0, 4, 7, 10, 14],
-    "min9": [0, 3, 7, 10, 14],
-    "maj9": [0, 4, 7, 11, 14],
-    "11":   [0, 4, 7, 10, 14, 17],
-    "13":   [0, 4, 7, 10, 14, 17, 21],
-    "7#9":  [0, 4, 7, 10, 15],
-    "7b9":  [0, 4, 7, 10, 13],
-    "7#5":  [0, 4, 8, 10],
-    "7b5":  [0, 4, 6, 10],
-    "alt7": [0, 4, 6, 8, 10, 13, 15],
-    "sus2":  [0, 2, 7],
-    "sus4":  [0, 5, 7],
-    "7sus4": [0, 5, 7, 10],
-    "dim":   [0, 3, 6],
-    "dim7":  [0, 3, 6, 9],
-    "aug":   [0, 4, 8],
-    "6":     [0, 4, 7, 9],
-    "min6":  [0, 3, 7, 9],
-}
 
 
 def make_cqt_template(root: int, quality: str, bass_octave: int = 1) -> np.ndarray:

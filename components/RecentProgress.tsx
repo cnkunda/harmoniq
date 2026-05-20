@@ -152,9 +152,6 @@ export function RecentProgress({
 
       {totalSessions > 0 ? (
         <View className="gap-2">
-        <Text className="font-sans text-sm text-muted-brown">
-          No completed sessions yet.
-        </Text>
           {sessions.slice(0, 5).map((s) => (
             <AnimatedPressable
               key={s.id}

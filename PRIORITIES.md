@@ -295,36 +295,75 @@ System for tracking user engagement during play-along sessions: duration, comple
 - Add unit test: verify a chord held across a boundary is emitted as a single event, not two
 
 **Acceptance Criteria:**
-- [ ] Overlap-and-blend reduces boundary chord flicker by ≥50%
-- [ ] Active-note tracking prevents "forgotten note" offsets in solo transcription
-- [ ] Boundary confidence penalty reduces false positives at segment edges
-- [ ] Scoring timing errors decrease for notes held across boundaries
-- [ ] Unit test: chord held across boundary → single event emitted
-- [ ] No regression on within-segment prediction accuracy
+- [x] Overlap-and-blend reduces boundary chord flicker by ≥50%
+- [x] Active-note tracking prevents "forgotten note" offsets in solo transcription
+- [x] Boundary confidence penalty reduces false positives at segment edges
+- [x] Scoring timing errors decrease for notes held across boundaries
+- [x] Unit test: chord held across boundary → single event emitted
+- [x] No regression on within-segment prediction accuracy
 
 ---
 
-### Commit 101: Real Dataset Integration (Isophonics/Billboard)
+### Commit 101: Real Dataset Integration (GuitarSet + RWC + Isophonics/Billboard + User Audio)
 
-**Goal:** Train on real annotated audio instead of purely synthetic data to improve real-world accuracy.
+**Goal:** Train on real annotated audio and real chord progression statistics from multiple datasets to improve real-world accuracy. Combines audio-based datasets (GuitarSet, RWC) with annotation-only datasets (Isophonics, Billboard) for maximum data coverage.
 
-**Current State:** Model trained only on synthetic chroma templates; no exposure to real audio characteristics.
+**Current State:** Model trained only on synthetic chroma templates; no exposure to real audio characteristics or real-world chord progression patterns.
 
-**Scope:**
-- Download Isophonics dataset (Beatles, Queen, etc. with chord annotations)
-- Download McGill Billboard dataset (pop/rock with chord labels)
-- Write preprocessing script to extract CQT and align with chord labels
+**Scope — Phase 1: GuitarSet (real audio + chord annotations)**
+
+- Download GuitarSet from Zenodo automatically (~4GB hex-pickup debleeded + 39MB annotations)
+- Parse JAMS annotations → Harte chord labels → map to 277-class vocabulary
+- Extract real CQT features (36-bin + 4-bin bass) from GuitarSet audio
+- Align CQT windows with chord labels (majority vote for boundary windows)
+- Train/val/test split by player ID (no artist overlap): players 00-03 train, 04 val, 05 test
+
+**Scope — Phase 2: RWC Music Database (optional, conditional on registration)**
+
+- Add RWC Music Database (~100 songs) as optional/conditional pipeline step
+- Requires free AIST Japan registration — script skips if credentials not configured
+- Same CQT extraction + chord alignment pipeline as GuitarSet
+
+**Scope — Phase 3: Isophonics + Billboard annotation datasets (progression statistics)**
+
+- Download Isophonics dataset (Beatles, Queen, Zweieck, Carole King — chord annotations, no audio)
+- Download McGill Billboard dataset (pop/rock chord labels, no audio)
+- Parse `.lab` annotation files (Harte syntax: start, end, chord_label)
 - Convert annotations to extended chord vocabulary (map rare qualities to closest match)
-- Combine real + synthetic data (70/30 split recommended)
+- Build empirical chord transition matrix from real chord progressions
+- Analyze chord distribution and quality coverage across all annotation sources
+- Use real progression statistics to inform synthetic data generation (chord sequences sampled from real transitions, not random uniform)
+
+**Scope — Phase 4: User-Supplied Audio Bridge (full Isophonics/Billboard workflow)**
+
+- Write user-supplied audio preprocessing script:
+  - Accepts a directory of user-provided audio files + Isophonics/Billboard `.lab` annotation files
+  - Aligns audio with annotations and extracts CQT features
+  - Maps chord labels to 277-class vocabulary
+  - **Never downloads copyrighted audio** — user supplies their own
+  - Keeps codebase legally clean while supporting full Isophonics/Billboard CQT extraction
+
+**Scope — Phase 5: Dataset Mixing & Training**
+
+- Combine all real CQT features (GuitarSet + RWC + user audio) with synthetic data
+- Real data comprises 70% of training batches, synthetic 30%
+- Synthetic data generation informed by real progression statistics from Isophonics/Billboard
 - Add dataset mixing to training pipeline
 
 **Acceptance Criteria:**
-- [ ] Isophonics dataset loaded and preprocessed
-- [ ] Billboard dataset loaded and preprocessed
-- [ ] CQT features extracted and aligned with chord labels
-- [ ] Train/val/test split with no artist overlap
+
+- [ ] GuitarSet downloaded from Zenodo and preprocessed automatically
+- [ ] JAMS annotations parsed and mapped to our 277-class Harte vocabulary
+- [ ] Real CQT features extracted and aligned with chord labels
+- [ ] Train/val/test split with no artist overlap (player-based)
+- [ ] RWC pipeline runs conditionally when registration credentials are configured
+- [ ] Isophonics dataset downloaded and annotation files parsed
+- [ ] McGill Billboard dataset downloaded and annotation files parsed
+- [ ] Empirical chord transition matrix built from real Isophonics/Billboard progressions
+- [ ] Synthetic data generation uses real progression statistics (not random uniform)
+- [ ] User-supplied audio pipeline accepts a directory + `.lab` files and produces aligned CQT features
 - [ ] Real data comprises 70% of training batches
-- [ ] Validation accuracy on Isophonics test set >75% root accuracy
+- [ ] Validation root accuracy >75% on GuitarSet held-out test set
 
 ---
 

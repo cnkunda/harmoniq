@@ -76,13 +76,13 @@ export function WaveformPlaybackActions({ userWavBase64, referenceWavBase64, use
   )
 
   return (
-    <View className="mt-3 rounded-lg border border-wood-600/45 bg-cream-dark/35 px-3 py-3">
+    <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/35 px-3 py-3">
       <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Waveforms</Text>
       <View className="mt-2 flex-row flex-wrap gap-2">
         <AnimatedPressable
           haptic="light"
           onPress={() => void play('user')}
-          className="rounded-lg border border-wood-600/50 bg-ivory px-3 py-2"
+          className="rounded-xl border border-wood-600/50 bg-ivory px-3 py-2"
           accessibilityRole="button"
           accessibilityLabel="Play your take"
         >
@@ -91,7 +91,7 @@ export function WaveformPlaybackActions({ userWavBase64, referenceWavBase64, use
         <AnimatedPressable
           haptic="light"
           onPress={() => void play('ref')}
-          className="rounded-lg border border-wood-600/50 bg-ivory px-3 py-2"
+          className="rounded-xl border border-wood-600/50 bg-ivory px-3 py-2"
           accessibilityRole="button"
           accessibilityLabel="Play reference"
         >

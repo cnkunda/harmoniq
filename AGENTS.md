@@ -47,7 +47,7 @@ For optimal development experience, run each component in its own terminal:
 | Command | What it does |
 |---------|-------------|
 | `npm run lint` | `tsc --noEmit` — no ESLint in this repo |
-| `npm run test` | `vitest run` — unit tests only |
+| `npm run test` | `vitest run` — all unit tests (34 files) |
 | `npm run test:ui` | Playwright structural tests (non-visual) |
 | `npm run test:visual` | Playwright visual regression |
 | `npm run test:visual:update` | Update visual snapshots |
@@ -55,10 +55,13 @@ For optimal development experience, run each component in its own terminal:
 | `npm run test:mobile:ios` | Detox E2E on iOS simulator |
 | `npm run audit:inventory` | Generate screen/component inventory |
 | `npm run audit:platform` | Generate platform health audit |
-| `python -m pytest -q` | Backend tests (from `backend/`) |
+| `python -m pytest -q` | Backend tests (from `backend/`, 39 files) |
+| `python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py` | Chord model tests (commits 98-98d) |
+| `python -m pytest -q tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py` | Viterbi decoding tests (commit 99) |
+| `python -m pytest -q tests/test_boundary_tie.py` | Boundary tie tests (commit 100) |
 | `python scripts/clear_analysis_cache.py` | Clear cached song analyses |
 
-**CI workflow** (`scoring-tests.yml`): runs `pytest tests/test_jam_score.py tests/test_score.py` (backend) + `vitest run` on 3 specific test files (frontend).
+**CI workflow** (`scoring-tests.yml`): runs `pytest` on scoring + chord model + Viterbi + boundary tie tests (backend, 10 files) + `vitest run` on all frontend test files (34 files).
 
 ---
 

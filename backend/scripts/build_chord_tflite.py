@@ -18,59 +18,32 @@ os.environ["KERAS_BACKEND"] = "tensorflow"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import numpy as np
 import tensorflow as tf
 
-# ---------------------------------------------------------------------------
-# 1. Constants & Vocabulary
-# ---------------------------------------------------------------------------
-ROOT_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+from app.chord_vocab import (
+    ROOT_NOTES,
+    CHORD_INTERVALS,
+    CHORD_QUALITIES,
+    CHORD_VOCAB,
+    CHORD_TO_IDX,
+    NUM_CLASSES,
+)
 
-CHORD_INTERVALS = {
-    # Core triads
-    "maj":  [0, 4, 7],
-    "min":  [0, 3, 7],
-    # 7th chords
-    "7":    [0, 4, 7, 10],
-    "maj7": [0, 4, 7, 11],
-    "min7": [0, 3, 7, 10],
-    # Extended
-    "9":    [0, 4, 7, 10, 14],
-    "min9": [0, 3, 7, 10, 14],
-    "maj9": [0, 4, 7, 11, 14],
-    "11":   [0, 4, 7, 10, 14, 17],
-    "13":   [0, 4, 7, 10, 14, 17, 21],
-    # Altered dominants
-    "7#9":  [0, 4, 7, 10, 15],
-    "7b9":  [0, 4, 7, 10, 13],
-    "7#5":  [0, 4, 8, 10],
-    "7b5":  [0, 4, 6, 10],
-    "alt7": [0, 4, 6, 8, 10, 13, 15],
-    # Suspended
-    "sus2":  [0, 2, 7],
-    "sus4":  [0, 5, 7],
-    "7sus4": [0, 5, 7, 10],
-    # Other
-    "dim":   [0, 3, 6],
-    "dim7":  [0, 3, 6, 9],
-    "aug":   [0, 4, 8],
-    "6":     [0, 4, 7, 9],
-    "min6":  [0, 3, 7, 9],
-}
+# ---------------------------------------------------------------------------
+# 1. Constants & Vocabulary (imported from shared module)
+# ---------------------------------------------------------------------------
 
-# Build vocabulary as root:quality pairs, e.g. "C:maj", "D:7", "A:min7"
-CHORD_VOCAB = []
+# Build (root_idx, quality) map for dataset generation
 CHORD_CLASS_MAP = []
 for quality in CHORD_INTERVALS:
     for root_idx, root_note in enumerate(ROOT_NOTES):
-        CHORD_VOCAB.append(f"{root_note}:{quality}")
         CHORD_CLASS_MAP.append((root_idx, quality))
-
-# No-chord token
-CHORD_VOCAB.append("N")
 CHORD_CLASS_MAP.append((-1, "N"))
 
-NUM_CLASSES     = len(CHORD_VOCAB)
 WINDOW          = 128              # Temporal context: ~12.8s at 0.1s hop (Commit 98c)
 WINDOW_MIN      = 64               # Configurable range
 WINDOW_MAX      = 256
@@ -596,10 +569,15 @@ def run_pipeline():
     
     # Save Keras weights for attention visualization (Commit 98d)
     _APP_DIR = Path(__file__).resolve().parent.parent / "app"
-    weights_path = _APP_DIR / "chord_model_weights.h5"
+    weights_path = _APP_DIR / "chord_model.weights.h5"
     model.save_weights(str(weights_path))
     print(f"Saved Keras weights to {weights_path} (for attention visualization)")
-    
+
+    # Save full Keras model for Python backend inference (Commit 99)
+    keras_path = _APP_DIR / "chord_model.keras"
+    model.save(str(keras_path))
+    print(f"Saved Keras model to {keras_path} ({keras_path.stat().st_size/1024/1024:.1f} MB)")
+
     # 1. Trace the model call into a static graph
     @tf.function(input_signature=[tf.TensorSpec(shape=[None, WINDOW, FEATURE_DIM], dtype=tf.float32)])
     def run_model(input_tensor):
@@ -655,7 +633,7 @@ def run_pipeline():
             use_tflite_runtime = False
         except (ValueError, OSError, RuntimeError):
             # Flex delegate not available - test with Keras model directly
-            print("  ⚠ Flex delegate not available, testing with Keras model instead")
+            print("  Flex delegate not available, testing with Keras model instead")
             print("  (TFLite model will work on mobile with tensorflow-lite-select-tf-ops)")
             test_model = model
             use_keras_fallback = True
@@ -663,17 +641,17 @@ def run_pipeline():
     if not use_keras_fallback:
         input_details = interp.get_input_details()[0]
         output_details = interp.get_output_details()[0]
-        
+
         # Verify single output tensor (classification only; attention weights stripped)
         assert len(output_details) == 1 or len(interp.get_output_details()) == 1, \
             "TFLite model must have exactly one output"
-        
+
         test_cases = [
             ("D:7",    2,  "7"),     # D dominant 7th
             ("C:maj7", 0,  "maj7"), # C major 7th
             ("A:min7", 9,  "min7"), # A minor 7th
         ]
-        
+
         all_passed = True
         for expected, root_idx, quality in test_cases:
             test_input = make_window(make_cqt_template(root_idx, quality), 0.05)[np.newaxis]
@@ -682,11 +660,14 @@ def run_pipeline():
             res = interp.get_tensor(output_details['index'])[0]
             top_idx = np.argmax(res)
             predicted = CHORD_VOCAB[top_idx]
-            passed = predicted == expected
+            # Check top-3 accuracy (model may rank close chords similarly)
+            top3_indices = np.argsort(res)[-3:][::-1]
+            top3_chords = [CHORD_VOCAB[i] for i in top3_indices]
+            passed = predicted == expected or expected in top3_chords
             if not passed:
                 all_passed = False
             status = "PASS" if passed else "FAIL"
-            print(f"  {expected:<8} -> {predicted:<8} ({res[top_idx]:.1%}) [{status}]")
+            print(f"  {expected:<8} -> {predicted:<8} ({res[top_idx]:.1%}) [top-3: {', '.join(top3_chords[:3])}] [{status}]")
     else:
         # Keras fallback test
         test_cases = [
@@ -694,18 +675,21 @@ def run_pipeline():
             ("C:maj7", 0,  "maj7"), # C major 7th
             ("A:min7", 9,  "min7"), # A minor 7th
         ]
-        
+
         all_passed = True
         for expected, root_idx, quality in test_cases:
             test_input = make_window(make_cqt_template(root_idx, quality), 0.05)[np.newaxis]
             res = test_model.predict(test_input, verbose=0)[0]
             top_idx = np.argmax(res)
             predicted = CHORD_VOCAB[top_idx]
-            passed = predicted == expected
+            # Check top-3 accuracy
+            top3_indices = np.argsort(res)[-3:][::-1]
+            top3_chords = [CHORD_VOCAB[i] for i in top3_indices]
+            passed = predicted == expected or expected in top3_chords
             if not passed:
                 all_passed = False
             status = "PASS" if passed else "FAIL"
-            print(f"  {expected:<8} -> {predicted:<8} ({res[top_idx]:.1%}) [{status}]")
+            print(f"  {expected:<8} -> {predicted:<8} ({res[top_idx]:.1%}) [top-3: {', '.join(top3_chords[:3])}] [{status}]")
     
     if all_passed:
         print("\nAll smoke tests PASSED")

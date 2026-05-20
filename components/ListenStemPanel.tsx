@@ -17,6 +17,7 @@ import { useMetronome } from '@/src/audio/useMetronome'
 import colors from '@/src/constants/colors'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { SESSION_PLAYBACK_CARD_CLASS } from '@/src/constants/sessionPlaybackCard'
+import { CHOICE_CHIP_BASE, CHOICE_CHIP_OFF, CHOICE_CHIP_ON, CHOICE_LABEL_MONO_OFF, CHOICE_LABEL_MONO_ON, CHOICE_LABEL_SANS_OFF, CHOICE_LABEL_SANS_ON } from '@/src/constants/uiTokens'
 import { logFirstAudioPlay } from '@/src/analytics/firstAudioPlay'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { useLessonStore } from '@/src/stores/lessonStore'
@@ -46,19 +47,6 @@ const METRO_SUBDIV_OPTIONS: { value: MetronomeSubdivision; label: string }[] = [
   { value: 2, label: '1/8' },
   { value: 4, label: '1/16' },
 ]
-
-/**
- * Choice chips (speed %, subdivide, sections): one inactive/active system — filled accent
- * when selected, neutral surface + hairline border when not (standard segmented / filter-chip pattern).
- */
-const CHOICE_CHIP_BASE =
-  'min-w-0 items-center justify-center rounded-full border px-3 py-1.5'
-const CHOICE_CHIP_OFF = 'border-wood-600/40 bg-wood-900/10'
-const CHOICE_CHIP_ON = 'border-amber-accent bg-amber-accent'
-const CHOICE_LABEL_MONO_OFF = 'font-mono text-[11px] font-medium text-muted-brown'
-const CHOICE_LABEL_MONO_ON = 'font-mono text-[11px] font-medium text-wood-900'
-const CHOICE_LABEL_SANS_OFF = 'font-sans text-xs text-muted-brown'
-const CHOICE_LABEL_SANS_ON = 'font-sans text-xs font-sans-medium text-wood-900'
 
 function orderedStemIds(stems: Record<string, string>): string[] {
   const keys = Object.keys(stems)

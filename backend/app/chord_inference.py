@@ -1,8 +1,13 @@
-"""TFLite Chord Inference with Viterbi Decoding (Commit 99).
+"""Chord Inference with Viterbi Decoding (Commit 99).
 
 Pipeline:
-  Audio → TFLite → enriched beat pooling → half-beat tie-detection
-       → Viterbi decoding → metrics → ChordTimeline
+  Audio → CRNN (Keras or TFLite) → enriched beat pooling
+       → half-beat tie-detection → Viterbi decoding → metrics → ChordTimeline
+
+Inference chain (auto-selects best available):
+  1. Keras model (.keras) — full CRNN, Python backend only
+  2. TFLite model (.tflite) — mobile-optimized, requires Flex delegate
+  3. Chroma template matching — pure librosa, always available
 
 Replaces the old _smooth_chords median filter with statistically optimal
 Viterbi sequence decoding using a music-theory transition matrix.
@@ -19,6 +24,7 @@ import numpy as np
 
 from app.schemas import BeatGrid, ChordEvent, ChordTimeline
 from app.pipeline_proof import TARGET_SR
+from app.chord_vocab import CHORD_INTERVALS as _CHORD_INTERVALS
 
 logger = logging.getLogger("harmoniq.inference.chord")
 
@@ -36,8 +42,10 @@ CHORD_VOCAB = [f"{root}:{qual}" for qual in _CHORD_QUALITIES for root in _ROOTS]
 _CHORD_TO_IDX = {chord: i for i, chord in enumerate(CHORD_VOCAB)}
 _NUM_CLASSES = len(CHORD_VOCAB)  # 277
 
-_MODEL_PATH = Path(__file__).parent / "chord_model.tflite"
+_TFLITE_PATH = Path(__file__).parent / "chord_model.tflite"
+_KERAS_PATH = Path(__file__).parent / "chord_model.keras"
 _WINDOW = 128
+_HOP_FRAMES = 64  # 50% overlap (Commit 100)
 _HOP_SEC = 0.1
 _BINS_PER_OCTAVE = 12
 _NUM_OCTAVES = 3
@@ -45,6 +53,12 @@ _CHROMA_BINS = _BINS_PER_OCTAVE * _NUM_OCTAVES  # 36
 _BASS_BINS = 4
 _FEATURE_DIM = _CHROMA_BINS + _BASS_BINS         # 40
 _BATCH_CHUNK = 512
+
+# Precomputed triangular window for overlap-and-blend (Commit 100)
+_TRIANGULAR_WINDOW = np.minimum(
+    np.arange(_WINDOW) / (_WINDOW / 2),
+    (_WINDOW - 1 - np.arange(_WINDOW)) / (_WINDOW / 2 - 1)
+).astype(np.float32)
 
 TIE_THRESHOLD = 0.15
 SUBDIVISION_RATIO = 0.65
@@ -77,12 +91,34 @@ def _smooth_chords(events: list[ChordEvent]) -> list[ChordEvent]:
     return smoothed
 
 
+# ---------------------------------------------------------------------------
+# Model loading: Keras (primary) → TFLite (mobile) → Chroma (fallback)
+# ---------------------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def _get_keras_model():
+    """Load the full Keras CRNN model for Python backend inference.
+
+    Returns the model or raises if .keras file is missing/unloadable.
+    """
+    if not _KERAS_PATH.exists():
+        raise FileNotFoundError(f"Keras model not found at {_KERAS_PATH}")
+
+    import os
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+    import tensorflow as tf
+
+    model = tf.keras.models.load_model(str(_KERAS_PATH))
+    logger.info("Chord model loaded via Keras (%s)", _KERAS_PATH.name)
+    return model
+
+
 @lru_cache(maxsize=1)
 def _get_interpreter():
     """Load the TFLite interpreter once and cache it for the process lifetime."""
-    path = str(_MODEL_PATH)
-    if not _MODEL_PATH.exists():
-        raise FileNotFoundError(f"Chord model not found at {_MODEL_PATH}")
+    path = str(_TFLITE_PATH)
+    if not _TFLITE_PATH.exists():
+        raise FileNotFoundError(f"TFLite model not found at {_TFLITE_PATH}")
 
     try:
         import tflite_runtime.interpreter as tflite
@@ -114,26 +150,15 @@ def _get_interpreter():
     return interp
 
 
-def _build_windows(features: np.ndarray) -> np.ndarray:
-    """Build batched sliding windows from feature sequence.
+def _extract_features(y: np.ndarray, sr: int) -> tuple[np.ndarray, int]:
+    """Extract CQT features and build sliding windows.
 
-    Returns array of shape [T, _WINDOW, _FEATURE_DIM].
+    Returns:
+        (windows, hop) where windows has shape [T_overlap, _WINDOW, _FEATURE_DIM]
     """
-    T = len(features)
-    half = _WINDOW // 2
-    pad = np.zeros((half, _FEATURE_DIM), dtype=np.float32)
-    padded = np.concatenate([pad, features, pad], axis=0)
-    windows = np.zeros((T, _WINDOW, _FEATURE_DIM), dtype=np.float32)
-    for i in range(T):
-        windows[i] = padded[i : i + _WINDOW]
-    return windows
-
-
-def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
     import librosa
 
     hop = int(sr * _HOP_SEC)
-
     cqt = librosa.cqt(y=y, sr=sr, hop_length=hop, n_bins=36, bins_per_octave=12)
     cqt = np.abs(cqt)
     cqt = cqt.T.astype(np.float32)
@@ -144,32 +169,278 @@ def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
     bass = cqt[:, :4]
     features = np.concatenate([cqt, bass], axis=1)
     windows = _build_windows(features)
+    return windows, hop
+
+
+def _build_windows(features: np.ndarray) -> np.ndarray:
+    """Build overlapping sliding windows from feature sequence.
+
+    Uses 50% overlap (hop = _HOP_FRAMES) with symmetric padding.
+
+    Returns array of shape [T_overlap, _WINDOW, _FEATURE_DIM].
+    """
+    T = len(features)
+    pad = np.zeros((_WINDOW // 2, _FEATURE_DIM), dtype=np.float32)
+    padded = np.concatenate([pad, features, pad], axis=0)
+
+    T_overlap = (T + _HOP_FRAMES - 1) // _HOP_FRAMES
+    windows = np.zeros((T_overlap, _WINDOW, _FEATURE_DIM), dtype=np.float32)
+    for k in range(T_overlap):
+        start = k * _HOP_FRAMES
+        windows[k] = padded[start : start + _WINDOW]
+    return windows
+
+
+def _merge_overlapping_predictions(
+    window_probs: np.ndarray,
+    num_frames: int,
+) -> np.ndarray:
+    """Merge per-window predictions using triangular windowing overlap-and-blend.
+
+    Args:
+        window_probs: Shape [T_overlap, _WINDOW, _NUM_CLASSES], per-frame
+            probability distributions from each overlapping window.
+        num_frames: Original frame count T (before padding/overlap).
+
+    Returns:
+        Merged probabilities of shape [T, _NUM_CLASSES].
+    """
+    T_overlap, W, N = window_probs.shape
+    accum_probs = np.zeros((num_frames, N), dtype=np.float64)
+    accum_weights = np.zeros(num_frames, dtype=np.float64)
+
+    for k in range(T_overlap):
+        for p in range(W):
+            f = k * _HOP_FRAMES + p - _WINDOW // 2
+            if 0 <= f < num_frames:
+                w = float(_TRIANGULAR_WINDOW[p])
+                accum_weights[f] += w
+                accum_probs[f] += w * window_probs[k, p]
+
+    merged = accum_probs / accum_weights[:, None].clip(1e-8)
+    return merged.astype(np.float32)
+
+
+_BOUNDARY_PENALTY_FRAMES = 2
+_BOUNDARY_PENALTY_MIN = 0.7
+
+
+def _apply_boundary_penalty(probs: np.ndarray) -> np.ndarray:
+    """Apply multiplicative confidence penalty near internal window boundaries.
+
+    Reduces confidence for frames within _BOUNDARY_PENALTY_FRAMES of every
+    original non-overlapping window edge (every _WINDOW frames). This makes
+    the Viterbi decoder prefer self-transitions at boundaries, reducing
+    spurious chord changes.
+
+    Probabilities are re-normalized after penalty to preserve emission strength.
+
+    Args:
+        probs: Shape [T, _NUM_CLASSES], merged probability distributions.
+
+    Returns:
+        Penalized and re-normalized probabilities (rows sum to 1.0).
+    """
+    T = probs.shape[0]
+    result = probs.copy()
+
+    boundary_indices = list(range(_WINDOW, T, _WINDOW))
+
+    for b in boundary_indices:
+        for d in range(-_BOUNDARY_PENALTY_FRAMES, _BOUNDARY_PENALTY_FRAMES + 1):
+            idx = b + d
+            if 0 <= idx < T:
+                distance = abs(d)
+                if distance == 0:
+                    penalty = _BOUNDARY_PENALTY_MIN
+                else:
+                    penalty = _BOUNDARY_PENALTY_MIN + (1.0 - _BOUNDARY_PENALTY_MIN) * (distance / _BOUNDARY_PENALTY_FRAMES)
+                result[idx] *= penalty
+
+    # Re-normalize to preserve emission strength
+    row_sums = result.sum(axis=1, keepdims=True)
+    row_sums = np.where(row_sums == 0, 1.0, row_sums)
+    result = result / row_sums
+
+    return result
+
+
+def _run_keras_raw(y: np.ndarray, sr: int) -> list[dict]:
+    """Run inference using the full Keras CRNN model."""
+    windows, hop = _extract_features(y, sr)
+    model = _get_keras_model()
+
+    T_overlap = len(windows)
+    T = T_overlap * _HOP_FRAMES - _WINDOW // 2
+
+    window_outputs = np.empty((T_overlap, _WINDOW, _NUM_CLASSES), dtype=np.float32)
+
+    for start in range(0, T_overlap, _BATCH_CHUNK):
+        end = min(start + _BATCH_CHUNK, T_overlap)
+        chunk = windows[start:end]
+        pred = model.predict(chunk, verbose=0)
+        window_outputs[start:end] = pred.reshape(end - start, _WINDOW, _NUM_CLASSES)
+
+    merged_probs = _merge_overlapping_predictions(window_outputs, T)
+
+    results = []
+    for i in range(T):
+        pred_idx = int(np.argmax(merged_probs[i]))
+        results.append({
+            "time": i * _HOP_SEC,
+            "chord": CHORD_VOCAB[pred_idx],
+            "confidence": float(merged_probs[i][pred_idx]),
+            "probs": merged_probs[i],
+        })
+    return results
+
+
+def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
+    """Run inference using the TFLite model (requires Flex delegate for CRNN)."""
+    windows, hop = _extract_features(y, sr)
 
     interp = _get_interpreter()
     inp_detail = interp.get_input_details()[0]
     outp_detail = interp.get_output_details()[0]
 
-    T = len(windows)
-    all_probs = np.empty((T, _NUM_CLASSES), dtype=np.float32)
+    T_overlap = len(windows)
+    T = T_overlap * _HOP_FRAMES - _WINDOW // 2
 
-    for start in range(0, T, _BATCH_CHUNK):
-        end = min(start + _BATCH_CHUNK, T)
+    window_outputs = np.empty((T_overlap, _WINDOW, _NUM_CLASSES), dtype=np.float32)
+
+    for start in range(0, T_overlap, _BATCH_CHUNK):
+        end = min(start + _BATCH_CHUNK, T_overlap)
         chunk = windows[start:end]
         interp.set_tensor(inp_detail["index"], chunk)
         interp.invoke()
-        all_probs[start:end] = interp.get_tensor(outp_detail["index"])
+        output = interp.get_tensor(outp_detail["index"])
+        window_outputs[start:end] = output.reshape(end - start, _WINDOW, _NUM_CLASSES)
+
+    merged_probs = _merge_overlapping_predictions(window_outputs, T)
+
+    results = []
+    for i in range(T):
+        pred_idx = int(np.argmax(merged_probs[i]))
+        results.append({
+            "time": i * _HOP_SEC,
+            "chord": CHORD_VOCAB[pred_idx],
+            "confidence": float(merged_probs[i][pred_idx]),
+            "probs": merged_probs[i],
+        })
+    return results
+
+
+def _run_chroma_raw(y: np.ndarray, sr: int, hop_length: int = 512) -> list[dict]:
+    """Run chord estimation via chroma template matching (no neural model needed).
+
+    Uses cosine similarity between per-frame chroma vectors and chord templates
+    built from music-theory intervals. Less accurate than the CRNN but always
+    available.
+    """
+    import librosa
+
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length)
+    chroma = chroma.T.astype(np.float32)
+
+    templates = _build_chroma_templates()
+
+    T = len(chroma)
+    all_probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+
+    for i in range(T):
+        frame = chroma[i]
+        norm = np.linalg.norm(frame)
+        if norm < 1e-8:
+            all_probs[i, _CHORD_TO_IDX["N"]] = 1.0
+            continue
+
+        frame_norm = frame / norm
+        similarities = templates @ frame_norm
+
+        softmax_sim = similarities - similarities.max()
+        exp_sim = np.exp(softmax_sim * 5.0)
+        exp_sim /= exp_sim.sum()
+        all_probs[i] = exp_sim
+
+    chroma_times = librosa.frames_to_time(np.arange(T), sr=sr, hop_length=hop_length)
 
     results = []
     for i in range(T):
         pred_idx = int(np.argmax(all_probs[i]))
         results.append({
-            "time": i * _HOP_SEC,
+            "time": float(chroma_times[i]),
             "chord": CHORD_VOCAB[pred_idx],
             "confidence": float(all_probs[i][pred_idx]),
             "probs": all_probs[i],
         })
     return results
 
+
+def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
+    """Run chord inference using the best available model.
+
+    Chain: Keras → TFLite → Chroma template matching.
+    """
+    try:
+        raw_frames = _run_keras_raw(y, sr)
+        logger.info("Chord inference: %d frames (Keras CRNN)", len(raw_frames))
+        return raw_frames
+    except Exception as exc:
+        logger.warning("Keras inference unavailable: %s", exc)
+
+    try:
+        raw_frames = _run_tflite_raw(y, sr)
+        logger.info("Chord inference: %d frames (TFLite CRNN)", len(raw_frames))
+        return raw_frames
+    except Exception as exc:
+        logger.warning("TFLite inference unavailable: %s", exc)
+
+    raw_frames = _run_chroma_raw(y, sr)
+    logger.warning("Falling back to chroma template matching (%d frames)", len(raw_frames))
+    return raw_frames
+
+
+# ---------------------------------------------------------------------------
+# Chroma template cache
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def _build_chroma_templates() -> np.ndarray:
+    """Build 12-bin chroma templates for all 277 chord classes.
+
+    Returns:
+        np.ndarray of shape [277, 12], row-normalized.
+    """
+    templates = np.zeros((_NUM_CLASSES, 12), dtype=np.float32)
+
+    for idx, chord_label in enumerate(CHORD_VOCAB):
+        if chord_label == "N":
+            templates[idx] = 1.0 / 12
+            continue
+
+        root_str, quality = chord_label.split(":")
+        root_idx = _ROOTS.index(root_str)
+        intervals = _CHORD_INTERVALS.get(quality, [0, 4, 7])
+
+        template = np.zeros(12, dtype=np.float32)
+        for semitone in intervals:
+            pitch_class = (root_idx + semitone) % 12
+            weight = 1.0 if semitone <= 12 else 0.7
+            template[pitch_class] += weight
+            template[(pitch_class + 7) % 12] += 0.3
+
+        norm = np.linalg.norm(template)
+        if norm > 0:
+            template /= norm
+        templates[idx] = template
+
+    return templates
+
+
+# ---------------------------------------------------------------------------
+# Beat pooling, half-beat detection, key estimation
+# ---------------------------------------------------------------------------
 
 def _detect_resolution_mode(beats: list[float], bpm: float) -> str:
     """Detect if the beat grid is already at half-beat (8th-note) resolution.
@@ -195,7 +466,7 @@ def _pool_beat_window(
     start_t: float,
     end_t: float,
 ) -> dict:
-    """Pool TFLite frame predictions within a beat window into a full distribution.
+    """Pool frame predictions within a beat window into a full distribution.
 
     Returns:
         Dict with timestamp, probs [277], top candidates, confidence gap,
@@ -328,6 +599,10 @@ def _estimate_key_from_audio(y: np.ndarray, sr: int) -> tuple[int, str, float]:
     return best[0], best[1], confidence
 
 
+# ---------------------------------------------------------------------------
+# Main inference entry point
+# ---------------------------------------------------------------------------
+
 def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
     try:
         import librosa
@@ -342,14 +617,16 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
     except Exception as exc:
         raise RuntimeError(f"Error loading audio file {audio_path}: {exc}") from exc
 
-    try:
-        _get_interpreter()
-    except (FileNotFoundError, RuntimeError) as exc:
-        logger.error("Chord model unavailable: %s. Returning empty timeline.", exc)
-        return ChordTimeline(events=[])
+    raw_frames = _run_inference(y, sr)
 
-    raw_frames = _run_tflite_raw(y, sr)
-    logger.info("Chord inference: %d raw frames from %s", len(raw_frames), audio_path.name)
+    if raw_frames and "probs" in raw_frames[0]:
+        all_probs = np.array([f["probs"] for f in raw_frames])
+        penalized_probs = _apply_boundary_penalty(all_probs)
+        for i, f in enumerate(raw_frames):
+            f["probs"] = penalized_probs[i]
+            pred_idx = int(np.argmax(penalized_probs[i]))
+            f["chord"] = CHORD_VOCAB[pred_idx]
+            f["confidence"] = float(penalized_probs[i][pred_idx])
 
     track_peak_db = _get_segment_db(y)
     relative_threshold_db = track_peak_db - 30.0
@@ -531,18 +808,3 @@ def _fallback_to_pooling(beat_data_list: list[dict]) -> list[ChordEvent]:
             confidence=round(bd["top_confidence"], 3),
         ))
     return events
-
-
-def _infer_chords_fallback(
-    audio_path: Path,
-    beat_grid: BeatGrid,
-    y: np.ndarray,
-    sr: int,
-) -> ChordTimeline:
-    """Fallback inference when TFLite model is unavailable.
-
-    NOTE: Currently unreachable — _get_interpreter() failure returns
-    empty timeline directly. Kept as a scaffold for future non-ML
-    chord estimation (e.g., chroma-based heuristic).
-    """
-    return ChordTimeline(events=[])

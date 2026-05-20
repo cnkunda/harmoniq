@@ -34,29 +34,31 @@ export function ScoreSummaryCard({ score }: { score: ScoreResult }) {
         Percentages are 0–100 for pitch, phrasing, and timing; bend error is mean cents off target.
       </Text>
       <View className="mt-3 gap-2 border-t border-success/20 pt-3">
-        <Text className="font-sans text-sm text-wood-900">
-          <Text className="font-sans-medium">Pitch accuracy</Text>
-          {' · '}
-          {(score.pitch_accuracy * 100).toFixed(0)}%
-          <Text className="font-mono text-[11px] text-muted-brown"> ({score.pitch_accuracy.toFixed(3)})</Text>
-        </Text>
-        <Text className="font-sans text-sm text-wood-900">
-          <Text className="font-sans-medium">Phrasing</Text>
-          {' · '}
-          {(score.phrasing_score * 100).toFixed(0)}%
-          <Text className="font-mono text-[11px] text-muted-brown"> ({score.phrasing_score.toFixed(3)})</Text>
-        </Text>
-        <Text className="font-sans text-sm text-wood-900">
-          <Text className="font-sans-medium">Timing</Text>
-          {' · '}
-          {(score.rushing_score * 100).toFixed(0)}%
-          <Text className="font-mono text-[11px] text-muted-brown"> ({score.rushing_score.toFixed(3)})</Text>
-        </Text>
-        <Text className="font-sans text-sm text-wood-900">
-          <Text className="font-sans-medium">Bend error</Text>
-          {' · '}
-          {score.bend_pitch_error_cents.toFixed(1)}¢
-        </Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="font-sans-medium text-sm text-wood-900">Pitch accuracy</Text>
+          <Text className="font-sans text-sm text-wood-900">
+            {(score.pitch_accuracy * 100).toFixed(0)}%
+            <Text className="font-mono text-xs text-muted-brown"> ({score.pitch_accuracy.toFixed(3)})</Text>
+          </Text>
+        </View>
+        <View className="flex-row items-center justify-between">
+          <Text className="font-sans-medium text-sm text-wood-900">Phrasing</Text>
+          <Text className="font-sans text-sm text-wood-900">
+            {(score.phrasing_score * 100).toFixed(0)}%
+            <Text className="font-mono text-xs text-muted-brown"> ({score.phrasing_score.toFixed(3)})</Text>
+          </Text>
+        </View>
+        <View className="flex-row items-center justify-between">
+          <Text className="font-sans-medium text-sm text-wood-900">Timing</Text>
+          <Text className="font-sans text-sm text-wood-900">
+            {(score.rushing_score * 100).toFixed(0)}%
+            <Text className="font-mono text-xs text-muted-brown"> ({score.rushing_score.toFixed(3)})</Text>
+          </Text>
+        </View>
+        <View className="flex-row items-center justify-between">
+          <Text className="font-sans-medium text-sm text-wood-900">Bend error</Text>
+          <Text className="font-sans text-sm text-wood-900">{score.bend_pitch_error_cents.toFixed(1)}¢</Text>
+        </View>
       </View>
       <Text className="mt-3 font-mono text-[10px] leading-4 text-muted-brown">
         Skill model (this session): pitch {score.node_scores.pitch_accuracy?.toFixed(3) ?? '—'} · phrasing{' '}

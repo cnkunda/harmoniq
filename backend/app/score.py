@@ -38,6 +38,31 @@ from app.scoring_constants import (
 TARGET_SR = 22050
 logger = logging.getLogger("harmoniq.score")
 
+_ONSET_DEDUP_MIN_GAP_MS = 50
+
+
+def _deduplicate_onsets(onsets: np.ndarray, min_gap_ms: float = _ONSET_DEDUP_MIN_GAP_MS) -> np.ndarray:
+    """Remove phantom duplicate onsets within min_gap_ms of each other.
+
+    Keeps the first onset in each cluster. Used to clean up reference
+    onsets after boundary tie merging (Commit 100).
+
+    Args:
+        onsets: Sorted or unsorted onset times in seconds.
+        min_gap_ms: Minimum gap between onsets to keep both.
+
+    Returns:
+        Deduplicated onset array, sorted.
+    """
+    if onsets.size == 0:
+        return onsets
+
+    sorted_onsets = np.sort(onsets)
+    min_gap_s = min_gap_ms / 1000.0
+
+    mask = np.concatenate([[True], np.diff(sorted_onsets) >= min_gap_s])
+    return sorted_onsets[mask]
+
 
 def _decode_recording(request: ScoreRequest) -> tuple[np.ndarray, int]:
     try:
@@ -137,8 +162,16 @@ def _score_timing(
     # Use MIDI note events as reference timing if available
     reference_onsets = None
     if solo_notes and hasattr(solo_notes, 'notes') and solo_notes.notes:
-        reference_onsets = np.array([note.start_time for note in solo_notes.notes])
-        logger.info("score.timing using %d MIDI note events as reference", len(reference_onsets))
+        raw_onsets = np.array([note.start_time for note in solo_notes.notes])
+        reference_onsets = _deduplicate_onsets(raw_onsets)
+        dedup_count = len(raw_onsets) - len(reference_onsets)
+        if dedup_count > 0:
+            logger.info(
+                "score.timing using %d MIDI note events as reference (%d boundary duplicates removed)",
+                len(reference_onsets), dedup_count,
+            )
+        else:
+            logger.info("score.timing using %d MIDI note events as reference", len(reference_onsets))
     
     if onset_times.size < 2:
         return 0.25, 0.25, [], 0.0, 0.0

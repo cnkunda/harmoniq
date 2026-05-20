@@ -36,6 +36,15 @@ jobs:
       - name: Run scoring tests
         run: python -m pytest -q tests/test_jam_score.py tests/test_score.py
 
+      - name: Run chord model tests (commits 98-98d)
+        run: python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py
+
+      - name: Run Viterbi tests (commit 99)
+        run: python -m pytest -q tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py
+
+      - name: Run boundary tie tests (commit 100)
+        run: python -m pytest -q tests/test_boundary_tie.py
+
   frontend-scoring:
     name: Vitest (placement + SM-2 + progress signals)
     runs-on: ubuntu-latest
@@ -54,9 +63,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run scoring unit tests
-        run: >
-          npx vitest run
-          src/onboarding/aggregatePlacementScores.test.ts
-          src/spaced/sm2.test.ts
-          src/session/scoreProgressSignals.test.ts
+      - name: Run all frontend unit tests
+        run: npx vitest run

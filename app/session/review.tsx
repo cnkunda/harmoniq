@@ -549,21 +549,21 @@ export default function ReviewScreen() {
         <AnimatedPressable haptic="light"
           onPress={() => void runScore()}
           disabled={busy}
-          className="rounded-lg bg-amber-accent/90 px-4 py-2 disabled:opacity-40"
+          className="rounded-xl bg-amber-accent/90 px-5 py-2.5 disabled:opacity-50"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">{busy ? 'Scoring…' : 'Run score'}</Text>
         </AnimatedPressable>
         <AnimatedPressable
           onPress={() => void exportMidi()}
-          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
+          className="rounded-xl border border-wood-600/45 bg-cream-dark/45 px-4 py-2.5"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">Export MIDI</Text>
         </AnimatedPressable>
         <AnimatedPressable
           onPress={() => void exportMusicXml()}
-          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
+          className="rounded-xl border border-wood-600/45 bg-cream-dark/45 px-4 py-2.5"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">Export MusicXML</Text>
@@ -571,14 +571,14 @@ export default function ReviewScreen() {
         <AnimatedPressable haptic="light"
           onPress={() => void saveLick()}
           disabled={savingLick}
-          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2 disabled:opacity-40"
+          className="rounded-xl border border-wood-600/45 bg-cream-dark/45 px-4 py-2.5 disabled:opacity-50"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">{savingLick ? 'Saving…' : 'Save to Library'}</Text>
         </AnimatedPressable>
         <AnimatedPressable haptic="light"
           onPress={() => router.push('/library')}
-          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
+          className="rounded-xl border border-wood-600/45 bg-cream-dark/45 px-4 py-2.5"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">Open Library</Text>

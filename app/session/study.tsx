@@ -482,7 +482,7 @@ function StudyScreenInner() {
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.study}</DemoTourCallout> : null}
 
       {showTranscriptionWarningModal && (
-        <View className="mx-4 rounded-lg border border-amber-accent/50 bg-amber-accent/10 p-4">
+        <View className="mx-4 rounded-xl border border-amber-accent/50 bg-amber-accent/10 p-4">
           <Text className="mb-2 font-sans-medium text-amber-accent">
             Transcription Uncertainty
           </Text>
@@ -501,7 +501,7 @@ function StudyScreenInner() {
                 {Object.keys(lesson.stems).map((stemName) => (
                   <AnimatedPressable
                     key={stemName}
-                    className={`rounded-md border px-3 py-1.5 ${stemRoutingOverride === stemName
+                    className={`rounded-xl border px-3 py-1.5 ${stemRoutingOverride === stemName
                       ? 'border-amber-accent bg-amber-accent/20'
                       : 'border-wood-600/30 bg-wood-800/50'
                       }`}
@@ -525,7 +525,7 @@ function StudyScreenInner() {
 
           <View className="flex-row gap-2">
             <AnimatedPressable
-              className="flex-1 rounded-md border border-amber-accent/30 bg-amber-accent/20 px-3 py-2"
+              className="flex-1 rounded-xl border border-amber-accent/30 bg-amber-accent/20 px-3 py-2.5"
               onPress={() => {
                 setShowTranscriptionWarningModal(false)
                 // Slow down playback to 50%
@@ -538,7 +538,7 @@ function StudyScreenInner() {
               </Text>
             </AnimatedPressable>
             <AnimatedPressable
-              className="flex-1 rounded-md border border-wood-600/30 bg-wood-800/50 px-3 py-2"
+              className="flex-1 rounded-xl border border-wood-600/30 bg-wood-800/50 px-3 py-2.5"
               onPress={() => {
                 setShowTranscriptionWarningModal(false)
               }}
@@ -648,7 +648,7 @@ function StudyScreenInner() {
                       accessibilityRole="button"
                       accessibilityHint={`${chordLabel} at bar ${bar}. Tap to seek; long press to save a practice note`}
                     >
-                      <Text className={`font-mono text-[10px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-brown'}`}>
+                      <Text className={`font-mono text-[11px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-brown'}`}>
                         {chordLabel}
                       </Text>
                     </AnimatedPressable>

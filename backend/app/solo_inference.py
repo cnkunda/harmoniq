@@ -12,11 +12,126 @@ from __future__ import annotations
 
 import bisect
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.schemas import BeatGrid, SoloNote, SoloNotes
 
 logger = logging.getLogger("harmoniq.inference.solo")
+
+
+@dataclass
+class ActiveNote:
+    """A note still ringing at a segment boundary (Commit 100 tie mechanism)."""
+    start_time: float
+    pitch: int
+    velocity: float
+    end_time: float
+
+
+class TieRegistry:
+    """Tracks active notes across segment boundaries and resolves ties.
+
+    Inspired by MT3's tie section mechanism: notes not re-declared in the
+    next segment are gracefully ended; matching notes are merged.
+    """
+
+    def __init__(
+        self,
+        bpm: float,
+        tie_epsilon_s: float = 0.050,
+        velocity_tolerance: float = 0.3,
+        max_sustain_beats: int = 4,
+    ):
+        self.active_notes: list[ActiveNote] = []
+        self.last_segment_end: float = 0.0
+        self.beat_duration = 60.0 / bpm if bpm > 0 else 0.5
+        self.tie_epsilon_s = tie_epsilon_s
+        self.velocity_tolerance = velocity_tolerance
+        self.max_sustain_beats = max_sustain_beats
+
+    def register_segment_end(self, notes: list[SoloNote], segment_end: float):
+        """Collect notes still ringing at the segment boundary."""
+        self.active_notes = []
+        for note in notes:
+            note_end = note.start_time + note.duration
+            if note_end > segment_end:
+                self.active_notes.append(ActiveNote(
+                    start_time=note.start_time,
+                    pitch=note.pitch,
+                    velocity=float(note.velocity),
+                    end_time=note_end,
+                ))
+        self.last_segment_end = segment_end
+
+    def resolve_segment_start(self, notes: list[SoloNote]) -> list[SoloNote]:
+        """Merge tied notes, close truncated ones, keep new notes.
+
+        Returns deduplicated note list with cross-boundary ties resolved.
+        """
+        output: list[SoloNote] = []
+        matched_indices: set[int] = set()
+
+        for active in self.active_notes:
+            max_duration = self.max_sustain_beats * self.beat_duration
+            if active.end_time - active.start_time > max_duration:
+                active.end_time = active.start_time + max_duration
+
+            match_idx = self._find_matching_note(notes, active)
+
+            if match_idx is not None:
+                matched_indices.add(match_idx)
+                new_note = notes[match_idx]
+                merged_duration = new_note.start_time + new_note.duration - active.start_time
+                output.append(SoloNote(
+                    start_time=round(active.start_time, 3),
+                    duration=round(merged_duration, 3),
+                    pitch=active.pitch,
+                    velocity=int(max(active.velocity, new_note.velocity)),
+                ))
+            else:
+                truncated_duration = min(self.last_segment_end, active.end_time) - active.start_time
+                if truncated_duration > 0:
+                    output.append(SoloNote(
+                        start_time=round(active.start_time, 3),
+                        duration=round(truncated_duration, 3),
+                        pitch=active.pitch,
+                        velocity=int(active.velocity),
+                    ))
+
+        for i, note in enumerate(notes):
+            if i not in matched_indices:
+                output.append(note)
+
+        output.sort(key=lambda n: n.start_time)
+        return output
+
+    def _find_matching_note(
+        self,
+        notes: list[SoloNote],
+        active: ActiveNote,
+    ) -> int | None:
+        """Find a note in the next segment that matches the active note.
+
+        Criteria: same pitch (±1 semitone), onset within epsilon of boundary,
+        velocity within tolerance.
+        """
+        for i, note in enumerate(notes):
+            pitch_match = abs(note.pitch - active.pitch) <= 1
+            onset_near_boundary = abs(note.start_time - self.last_segment_end) <= self.tie_epsilon_s
+            if not (pitch_match and onset_near_boundary):
+                continue
+
+            if active.velocity > 0:
+                vel_ratio = abs(note.velocity - active.velocity) / active.velocity
+                velocity_match = vel_ratio <= self.velocity_tolerance
+            else:
+                velocity_match = True
+
+            if velocity_match:
+                return i
+
+        return None
 
 
 def _snap_to_grid(time_s: float, grid_beats: list[float]) -> float:
@@ -111,7 +226,7 @@ def infer_solo(melodic_stem_path: Path, beat_grid: BeatGrid) -> SoloNotes:
         return SoloNotes(notes=[])
 
     # Minimum duration threshold
-    min_duration_s = (60.0 / beat_grid.bpm) * (beat_grid.tick_value * 0.5)
+    min_duration_s = 0.01
 
     MIN_MIDI_VELOCITY = 40
     MAX_MIDI_VELOCITY = 120
@@ -158,5 +273,71 @@ def infer_solo(melodic_stem_path: Path, beat_grid: BeatGrid) -> SoloNotes:
             velocity=midi_velocity,
         ))
 
+    cleaned_notes = _merge_boundary_notes(cleaned_notes, beat_grid.bpm)
+
     logger.info("Solo inference complete: %d notes (model=%s)", len(cleaned_notes), model_label)
     return SoloNotes(notes=cleaned_notes)
+
+
+def _merge_boundary_notes(
+    notes: list[SoloNote],
+    bpm: float,
+    window_sec: float = 12.8,
+) -> list[SoloNote]:
+    """Post-inference merge pass: resolve ties at chord window boundaries.
+
+    Applies the TieRegistry mechanism to notes that span virtual segment
+    boundaries (every 128 chord frames = 12.8s at _HOP_SEC=0.1).
+
+    Args:
+        notes: Quantized solo notes from Basic Pitch.
+        bpm: Tempo for sustain timeout calculation.
+        window_sec: Duration of one non-overlapping chord window.
+
+    Returns:
+        Deduplicated note list with cross-boundary ties merged.
+    """
+    if not notes:
+        return []
+
+    registry = TieRegistry(bpm=bpm)
+    all_notes = list(notes)
+    result: list[SoloNote] = []
+
+    boundaries = []
+    b = window_sec
+    max_time = max(n.start_time + n.duration for n in all_notes)
+    while b < max_time:
+        boundaries.append(b)
+        b += window_sec
+
+    segment_start = 0.0
+    pending_notes: list[SoloNote] = []
+
+    for boundary in boundaries:
+        segment_notes = [n for n in all_notes if n.start_time < boundary]
+        remaining = [n for n in all_notes if n.start_time >= boundary]
+
+        if not segment_notes:
+            segment_start = boundary
+            continue
+
+        registry.register_segment_end(segment_notes, boundary)
+        resolved = registry.resolve_segment_start(remaining)
+
+        closed_notes = [n for n in segment_notes if n.start_time + n.duration <= boundary]
+        result.extend(closed_notes)
+
+        all_notes = remaining
+        segment_start = boundary
+
+    result.extend(all_notes)
+    result.sort(key=lambda n: (n.start_time, n.pitch))
+
+    if len(result) < len(notes):
+        logger.info(
+            "Boundary tie merge: %d notes → %d notes (%d merged)",
+            len(notes), len(result), len(notes) - len(result),
+        )
+
+    return result

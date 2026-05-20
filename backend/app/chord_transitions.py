@@ -29,7 +29,7 @@ _CHORD_TO_IDX: dict[str, int] = {chord: i for i, chord in enumerate(CHORD_VOCAB)
 
 # Root interval weights (semitone distance → prior weight)
 _ROOT_INTERVAL_WEIGHTS = {
-    0: 3.0,   # unison / sustain
+    0: 1.8,   # unison / sustain
     1: 0.3,   # minor 2nd (chromatic)
     2: 1.5,   # major 2nd (stepwise)
     3: 1.2,   # minor 3rd (mediant)
@@ -282,7 +282,7 @@ def apply_key_constraint(
 
     penalty = np.ones((n, n), dtype=np.float32)
     penalty[one] = 0.4
-    penalty[neither] = 0.15
+    penalty[neither] = 0.4
 
     # Extra tritone penalty for non-diatonic pairs
     for i in range(n):

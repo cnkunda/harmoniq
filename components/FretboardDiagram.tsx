@@ -1,4 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient'
+import { Lightbulb, Link, Music } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Platform,
@@ -33,6 +34,7 @@ import {
 
 import { spring } from '@/src/constants/animations'
 import colors from '@/src/constants/colors'
+import { SECTION_EYEBROW_CLASS } from '@/src/constants/uiTokens'
 import {
   NUM_FRETS,
   OPEN_MIDI_BY_ROW,
@@ -433,9 +435,9 @@ export function FretboardDiagram({
     const rootPc = noteToPitchClass(parsed.root)
     const intervals = [...new Set(chordCells.map(c => c.interval))]
     return intervals
-      .sort((a, b) => a - b)
-      .filter(iv => iv >= 0 && iv <= 12)
-      .map(iv => NOTE_NAMES[(rootPc + iv) % 12])
+      .sort((a, b) => (a ?? 0) - (b ?? 0))
+      .filter((iv) => iv != null && iv >= 0 && iv <= 12)
+      .map((iv) => NOTE_NAMES[(rootPc + iv!) % 12])
   }, [musicState?.currentChord, chordCells])
 
   const chordFullName = useMemo(() => {
@@ -556,11 +558,11 @@ export function FretboardDiagram({
     <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/45 p-3">
       <View className="flex-row items-start justify-between gap-5">
         <View className="gap-1" style={{ minWidth: 130 }}>
-          <Text className="font-sans-medium text-[10px] uppercase tracking-[0.14em] text-amber-accent">Position map</Text>
+          <Text className={SECTION_EYEBROW_CLASS}>Position map</Text>
           <View className="flex-row items-baseline gap-2">
             <Text className="font-sans text-base font-semibold text-wood-900">{keyLabel}</Text>
             {capoText ? (
-              <View className="rounded-full border border-amber-accent/25 bg-amber-accent/10 px-[7px] py-0.5">
+              <View className="rounded-full border border-amber-accent/25 bg-amber-accent/10 px-2 py-0.5">
                 <Text className="text-[10px] font-medium text-amber-accent/70">{capoText}</Text>
               </View>
             ) : null}
@@ -675,31 +677,22 @@ export function FretboardDiagram({
             <Pressable
               onPress={onToggleTune}
               disabled={tuneDisabled}
-              className={`h-[34px] w-[34px] items-center justify-center rounded-lg border ${tuneActive ? 'border-success bg-success/25' : 'border-wood-600/45'} ${tuneDisabled ? 'opacity-45' : ''}`}
+              className={`h-[34px] w-[34px] items-center justify-center rounded-full border ${tuneActive ? 'border-success bg-success/25' : 'border-wood-600/45'} ${tuneDisabled ? 'opacity-50' : ''}`}
               accessibilityRole="button"
               accessibilityLabel={tuneActive ? 'Disable fretboard tuner' : 'Enable fretboard tuner'}
             >
-              <Svg viewBox="0 0 24 24" width={16} height={16}>
-                <Circle cx={12} cy={12} r={3} stroke={colors.muted.brown} strokeWidth={1.5} fill="none" />
-                <Path
-                  d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"
-                  stroke={colors.muted.brown} strokeWidth={1.5} strokeLinecap="round" fill="none"
-                />
-              </Svg>
+              <Music size={16} color={colors.muted.brown} />
             </Pressable>
           ) : null}
 
           {showOrientControl ? (
             <Pressable
               onPress={() => { setOrientPanelOpen((o) => !o); onToggleOrient?.() }}
-              className={`h-[34px] w-[34px] items-center justify-center rounded-lg border ${orientPanelOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45'}`}
+              className={`h-[34px] w-[34px] items-center justify-center rounded-full border ${orientPanelOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45'}`}
               accessibilityRole="button"
               accessibilityLabel={orientPanelOpen ? 'Hide technique hint' : 'Show technique hint'}
             >
-              <Svg viewBox="0 0 24 24" width={16} height={16}>
-                <Circle cx={12} cy={12} r={10} stroke={colors.muted.brown} strokeWidth={1.5} fill="none" />
-                <Path d="M12 16v-4m0-4h.01" stroke={colors.muted.brown} strokeWidth={1.5} strokeLinecap="round" fill="none" />
-              </Svg>
+              <Lightbulb size={16} color={colors.muted.brown} />
             </Pressable>
           ) : null}
 
@@ -707,28 +700,22 @@ export function FretboardDiagram({
             <Pressable
               onPress={onCopyShareLink}
               disabled={!onCopyShareLink}
-              className={`h-[34px] w-[34px] items-center justify-center rounded-lg border border-wood-600/45 ${onCopyShareLink ? '' : 'opacity-50'}`}
+              className={`h-[34px] w-[34px] items-center justify-center rounded-full border border-wood-600/45 ${onCopyShareLink ? '' : 'opacity-50'}`}
               accessibilityRole="button"
               accessibilityLabel="Copy share link"
             >
-              <Svg viewBox="0 0 24 24" width={16} height={16}>
-                <Path
-                  d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8m-4-6-4-4-4 4m4-4v13"
-                  stroke={colors.muted.brown} strokeWidth={1.5} strokeLinecap="round"
-                  strokeLinejoin="round" fill="none"
-                />
-              </Svg>
+              <Link size={16} color={colors.muted.brown} />
             </Pressable>
           ) : null}
         </View>
       </View>
       {tuneActive && tunerState ? (
         <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
-          <Text className="font-mono text-[11px] text-wood-900">
+          <Text className="font-mono text-xs text-wood-900">
             {tunerState.noteName || '—'} · {typeof tunerState.cents === 'number' ? `${Math.round(tunerState.cents)}¢` : '—'} ·{' '}
             {tunerState.hz != null ? `${tunerState.hz.toFixed(1)} Hz` : 'no pitch'}
           </Text>
-          <Text className={`mt-1 font-sans text-[11px] ${tunerState.inTune ? 'text-success' : 'text-muted-brown'}`}>
+          <Text className={`mt-1 font-sans text-xs ${tunerState.inTune ? 'text-success' : 'text-muted-brown'}`}>
             {tunerState.statusText}
           </Text>
         </View>
@@ -736,9 +723,9 @@ export function FretboardDiagram({
 
       {orientPanelOpen && showOrientControl ? (
         <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
-          <Text className="font-sans-medium text-[11px] text-wood-900">Technique Hint</Text>
+          <Text className={SECTION_EYEBROW_CLASS}>Technique Hint</Text>
           {orientAnnotation ? (
-            <Text className="mt-1 font-sans text-[11px] text-muted-brown">{orientAnnotation}</Text>
+            <Text className="mt-1 font-sans text-xs text-muted-brown">{orientAnnotation}</Text>
           ) : null}
           {orientClipUrl ? (
             <Pressable
@@ -747,12 +734,12 @@ export function FretboardDiagram({
               accessibilityRole="button"
               accessibilityLabel={orientIsPlaying ? 'Pause technique clip' : 'Play technique clip'}
             >
-              <Text className="font-sans-medium text-[11px] text-wood-900">
+              <Text className="font-sans-medium text-xs text-wood-900">
                 {orientIsPlaying ? 'Pause' : 'Play Clip'}
               </Text>
             </Pressable>
           ) : (
-            <Text className="mt-1 font-sans text-[11px] text-muted-brown">No hint clip available</Text>
+            <Text className="mt-1 font-sans text-xs text-muted-brown">No hint clip available</Text>
           )}
         </View>
       ) : null}

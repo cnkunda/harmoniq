@@ -244,7 +244,7 @@ function MetronomeArcReadoutInner({
       {stage}
       {showBpm ? (
         <View className="mt-0.5 flex-row items-baseline justify-center gap-1 px-1">
-          <Text className="font-mono text-2xl font-medium leading-none tabular-nums text-wood-900">
+          <Text className="font-mono-medium text-2xl leading-none tabular-nums text-wood-900">
             {effectiveBpm}
           </Text>
           <Text className="pb-0.5 font-sans text-sm text-muted-brown">BPM</Text>

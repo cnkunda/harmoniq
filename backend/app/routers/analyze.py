@@ -331,8 +331,8 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
 async def analyze_status(job_id: str) -> JobStatus:
     job = jobs.get(job_id)
     if job is None:
-        logger.info("GET /analyze/%s — job not yet in store, returning queued", job_id)
-        return JobStatus(status="queued", result=None, error=None, error_code=None)
+        logger.info("GET /analyze/%s — job not found, returning 404", job_id)
+        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
     logger.info("GET /analyze/%s status=%s", job_id, job.status)
     return job
 

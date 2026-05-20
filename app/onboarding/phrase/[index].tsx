@@ -16,6 +16,7 @@ import { createSessionRecorder } from '@/src/audio/recordSession'
 import type { RecordedTake } from '@/src/audio/recordSession.types'
 import { BACKING_TRACKS } from '@/src/constants/backingTracks'
 import colors from '@/src/constants/colors'
+import { ONBOARDING_STEP_WITHOUT_QUIZ, ONBOARDING_WITHOUT_QUIZ_TOTAL, ONBOARDING_WITH_QUIZ_TOTAL } from '@/src/constants/onboardingSteps'
 import { getAppPref } from '@/src/db/client'
 import { PREF_MUSICAL_TOLERANCE_MODE } from '@/src/db/schema'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
@@ -37,9 +38,16 @@ function parsePhraseIndex(raw: string | string[] | undefined): number {
 
 export default function OnboardingPhraseScreen() {
   const router = useRouter()
-  const { index: indexParam } = useLocalSearchParams<{ index: string }>()
+  const { index: indexParam, quizTaken } = useLocalSearchParams<{ index: string; quizTaken?: string }>()
   const phraseIndex = parsePhraseIndex(indexParam)
   const setPhraseResult = useOnboardingPlacementStore((s) => s.setPhraseResult)
+  const hasQuiz = quizTaken === '1'
+
+  const phraseStepKey = `phrase-${phraseIndex}` as 'phrase-0' | 'phrase-1' | 'phrase-2'
+  const currentStep = hasQuiz
+    ? 4 + phraseIndex
+    : ONBOARDING_STEP_WITHOUT_QUIZ[phraseStepKey] ?? (3 + phraseIndex)
+  const totalSteps = hasQuiz ? ONBOARDING_WITH_QUIZ_TOTAL : ONBOARDING_WITHOUT_QUIZ_TOTAL
 
   const recorderRef = useRef(createSessionRecorder())
   const soundRef = useRef<Audio.Sound | null>(null)
@@ -164,9 +172,9 @@ export default function OnboardingPhraseScreen() {
       setPhraseResult(phraseIndex, result)
       const next = phraseIndex + 1
       if (next < PLACEMENT_PHRASES.length) {
-        router.replace({ pathname: '/onboarding/phrase/[index]', params: { index: String(next) } })
+        router.replace({ pathname: '/onboarding/phrase/[index]', params: { index: String(next), quizTaken: hasQuiz ? '1' : undefined } })
       } else {
-        router.replace('/onboarding/results')
+        router.replace({ pathname: '/onboarding/results', params: { quizTaken: hasQuiz ? '1' : undefined } })
       }
     },
     [phrase, phraseIndex, router, setPhraseResult],
@@ -209,7 +217,8 @@ export default function OnboardingPhraseScreen() {
 
   return (
     <OnboardingScreenShell
-      currentStep={3 + phraseIndex}
+      currentStep={currentStep}
+      totalSteps={totalSteps}
       showBack
       onBack={() => router.back()}
       scrollable
@@ -235,7 +244,7 @@ export default function OnboardingPhraseScreen() {
           <AnimatedPressable haptic="light"
             onPress={() => void toggleReference()}
             disabled={!soundReady}
-            className="w-full rounded-lg border border-wood-600/50 bg-wood-800/80 px-4 py-3 disabled:opacity-40"
+            className="w-full rounded-xl border border-wood-600/50 bg-wood-800/80 px-4 py-3 disabled:opacity-50"
             accessibilityRole="button"
           >
             <Text className="text-center font-sans-medium text-cream">
@@ -245,7 +254,7 @@ export default function OnboardingPhraseScreen() {
           <AnimatedPressable haptic="light"
             onPress={() => void startRecord()}
             disabled={recording || busy}
-            className="w-full rounded-lg bg-amber-accent px-4 py-3 disabled:opacity-40"
+            className="w-full rounded-xl bg-amber-accent px-4 py-3 disabled:opacity-50"
             accessibilityRole="button"
           >
             <Text className="text-center font-sans-medium text-wood-900">{recording ? 'Recording…' : 'Record take'}</Text>
@@ -253,7 +262,7 @@ export default function OnboardingPhraseScreen() {
           <AnimatedPressable haptic="light"
             onPress={() => void stopAndScore()}
             disabled={!recording || busy}
-            className="w-full rounded-lg border border-amber-accent/60 px-4 py-3 disabled:opacity-40"
+            className="w-full rounded-xl border border-amber-accent/60 px-4 py-3 disabled:opacity-50"
             accessibilityRole="button"
           >
             <Text className="text-center font-sans-medium text-amber-light">{busy ? 'Scoring…' : 'Stop & score'}</Text>

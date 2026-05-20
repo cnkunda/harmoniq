@@ -32,7 +32,7 @@ export function SettingsSegmented({
               key={option}
               onPress={() => onValueChange(option)}
               haptic="light"
-              className={`flex-1 rounded-lg border px-3 py-2.5 ${
+              className={`flex-1 rounded-xl border px-3 py-2.5 ${
                 isSelected
                   ? 'border-amber-accent bg-amber-accent/20'
                   : 'border-wood-600/50 bg-wood-900/40'

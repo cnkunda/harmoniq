@@ -8,6 +8,7 @@ import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenS
 import { toast } from '@/components/ToastConfig'
 import { deriveTasteProfile } from '@/src/api/analyze'
 import colors from '@/src/constants/colors'
+import { ONBOARDING_STEP_WITH_QUIZ, ONBOARDING_WITH_QUIZ_TOTAL } from '@/src/constants/onboardingSteps'
 import { commitTasteQuizProfile } from '@/src/db/client'
 import {
   TASTE_QUIZ_ARTISTS,
@@ -107,7 +108,7 @@ export default function TasteQuizScreen() {
         if (isUpdateFlow) {
           router.back()
         } else {
-          router.replace('/onboarding/mic')
+          router.replace({ pathname: '/onboarding/mic', params: { quizTaken: '1' } })
         }
       } catch (e) {
         toast.error(e instanceof Error ? e.message : 'Could not save preferences. Try again.')
@@ -137,8 +138,8 @@ export default function TasteQuizScreen() {
 
   return (
     <OnboardingScreenShell
-      currentStep={step + 1}
-      totalSteps={3}
+      currentStep={ONBOARDING_STEP_WITH_QUIZ['taste-quiz']}
+      totalSteps={ONBOARDING_WITH_QUIZ_TOTAL}
       showBack
       onBack={goBack}
       scrollable
@@ -204,7 +205,7 @@ export default function TasteQuizScreen() {
           <AnimatedPressable
             onPress={goNext}
             disabled={!canNextStep0}
-            className={`mt-6 w-full rounded-lg px-4 py-3 ${canNextStep0 ? 'bg-amber-accent' : 'bg-wood-700'}`}
+            className={`mt-6 w-full rounded-xl px-4 py-3 ${canNextStep0 ? 'bg-amber-accent' : 'bg-wood-700'}`}
             accessibilityRole="button"
             accessibilityLabel="Continue to vibe step"
           >
@@ -250,7 +251,7 @@ export default function TasteQuizScreen() {
           <AnimatedPressable
             onPress={goNext}
             disabled={!canNextStep1}
-            className={`mt-8 w-full rounded-lg px-4 py-3 ${canNextStep1 ? 'bg-amber-accent' : 'bg-wood-700'}`}
+            className={`mt-8 w-full rounded-xl px-4 py-3 ${canNextStep1 ? 'bg-amber-accent' : 'bg-wood-700'}`}
             accessibilityRole="button"
           >
             <Text
@@ -295,7 +296,7 @@ export default function TasteQuizScreen() {
           <AnimatedPressable
             onPress={submit}
             disabled={!canSubmit || busy}
-            className={`mt-8 w-full rounded-lg px-4 py-3 ${canSubmit && !busy ? 'bg-amber-accent' : 'bg-wood-700'}`}
+            className={`mt-8 w-full rounded-xl px-4 py-3 ${canSubmit && !busy ? 'bg-amber-accent' : 'bg-wood-700'}`}
             accessibilityRole="button"
             accessibilityLabel="Save preferences and continue"
           >

@@ -73,7 +73,7 @@ export function PlayCaptureCard({
   const micDot = recording ? colors.danger : status.startsWith('Capture error') ? colors.danger : colors.success
 
   const rowWrap =
-    'flex-row items-center justify-between gap-2 rounded-lg border border-wood-600/35 bg-cream-dark/40 px-3 py-2'
+    'flex-row items-center justify-between gap-2 border border-wood-600/35 bg-cream-dark/40 px-3 py-2'
 
   return (
     <View className="gap-3">
@@ -92,7 +92,7 @@ export function PlayCaptureCard({
         </View>
         <View className="flex-row items-center gap-1.5">
           <Circle size={8} fill={backingDot} color={backingDot} />
-          <Text className="font-mono text-[11px] font-medium text-wood-900">{backing}</Text>
+          <Text className="font-mono text-[11px] text-wood-900">{backing}</Text>
         </View>
       </View>
 
@@ -103,9 +103,7 @@ export function PlayCaptureCard({
         </View>
         <View className="flex-row items-center gap-1.5">
           <Circle size={8} fill={micDot} color={micDot} />
-          <Text
-            className={`font-mono text-[11px] font-medium ${recording ? 'text-danger' : 'text-wood-900'}`}
-          >
+          <Text className={`font-mono text-[11px] ${recording ? 'text-danger' : 'text-wood-900'}`}>
             {mic}
           </Text>
         </View>

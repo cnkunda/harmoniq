@@ -328,31 +328,38 @@ function buildFullVoicing(
   // Select the best template by finding which string naturally has the root
   // A template's bassString indicates which string the root is designed to sit on
   // For open position, prefer templates where the root string is open (fret 0)
-  let template = templates[0];
+  let template = templates[0]
 
   if (position === "open" && templates.length > 1) {
     // For open position, find a template whose bassString naturally has the root
     // in a low fret position (preferably 0)
     const rootOnString = (stringIndex: number): number => {
       // String indices: 1=high E(4), 2=B(11), 3=G(7), 4=D(2), 5=A(9), 6=low E(4)
-      const stringPc = [4, 11, 7, 2, 9, 4][stringIndex - 1] ?? 4;
-      const semitones = (rootPc - stringPc + 12) % 12;
-      return semitones;
-    };
+      const stringPc = [4, 11, 7, 2, 9, 4][stringIndex - 1] ?? 4
+      const semitones = (rootPc - stringPc + 12) % 12
+      return semitones
+    }
 
     // Find template with bassString closest to 0 frets from root
-    let bestTemplate = templates[0];
-    let bestDistance = Math.abs(rootOnString(templates[0].bassString));
+    let bestTemplate = templates[0]
+    let bestDistance = Math.abs(rootOnString(templates[0].bassString))
 
     for (let i = 1; i < templates.length; i++) {
-      const dist = Math.abs(rootOnString(templates[i].bassString));
+      const dist = Math.abs(rootOnString(templates[i].bassString))
       if (dist < bestDistance) {
-        bestDistance = dist;
-        bestTemplate = templates[i];
+        bestDistance = dist
+        bestTemplate = templates[i]
       }
     }
 
-    template = bestTemplate;
+    template = bestTemplate
+  }
+
+  // Recalculate baseFret based on the selected template's bassString for "low" position
+  if (position === "low") {
+    const stringPc = [4, 11, 7, 2, 9, 4][template.bassString - 1]
+    const semitonesToRoot = (rootPc - stringPc + 12) % 12
+    baseFret = Math.min(baseFret, semitonesToRoot)
   }
 
   // Build voicing from template using the intervalMap

@@ -2,7 +2,7 @@
 
 Single reference for release and pipeline gates: stem quality, pitch kill-switch, error-copy verification, Phase 5 session realism, telemetry, Slow & loop residual risks, and lightweight regression smokes.
 
-**MVP Status:** Phase 1 (commits 1-97) complete. See [PRIORITIES.md](../PRIORITIES.md) for Phase 2 roadmap.
+**MVP Status:** Phase 1 (commits 1-97) complete. Commits 98-100 (chord model expansion, Viterbi, boundary tie) complete. See [PRIORITIES.md](../PRIORITIES.md) for Phase 2 roadmap.
 
 **Cold start:** [E2E_DEMO.md](./E2E_DEMO.md).
 
@@ -123,18 +123,54 @@ Manual QA sign-off for commits 86–97 acceptance criteria. Fill on Phase 1 clos
 
 ---
 
+## Phase 1.1 Gated Items — Chord Model & Transcription (Commits 98-100)
+
+These commits upgraded the chord transcription pipeline from 25-class major/minor to a 277-class extended vocabulary with temporal smoothing and boundary continuity. Run these checks when modifying chord inference, CQT extraction, or solo transcription.
+
+### Phase 1.1 Delivered Features
+
+| Feature | Location | QA Notes |
+|---------|----------|----------|
+| Advanced Extension Recognition (98) | `backend/app/build_chord_tflite.py` | 277-class vocab: 7ths, 9ths, 11ths, 13ths, altered dominants (7#9, 7b13, alt7), sus2/4, dim/dim7/aug. Smoke: D7, Cmaj7, Am7 recognized. |
+| Chord Data Generation (98a) | `backend/app/build_chord_tflite.py` | Inversion simulation (1st/2nd), missing note dropout 15%, pitch shift ±2 semitones, time stretch 0.9-1.1x, pink noise, transition samples at chord boundaries. |
+| 36-Bin CQT Features (98b) | `backend/app/build_chord_tflite.py` | Model input `(WINDOW, 40)`: 36 CQT bins + 4 bass-channel bins. Bass chroma separated for bass-note detection. val_acc 82.9% @ 19 epochs. |
+| CRNN + BiLSTM (98c) | `backend/app/build_chord_tflite.py` | 128-frame temporal windows (~2.5-6s). CNN → BiLSTM architecture. SELECT_TF_OPS for TFLite conversion. val_acc 82.9% @ 19 epochs. |
+| Multi-Head Attention (98d) | `backend/app/build_chord_tflite.py` | 4 heads, key_dim=64. Attention weights visualizable via `build_attention_vis_model()`. Model size 1.1MB. Overall accuracy 81.4%. |
+| Viterbi Decoding (99) | `backend/app/chord_inference.py` | Chord flicker <5%. Beat-alignment >90%. Half-beat (8th-note) resolution with tie-detection (confidence diff <0.15). Key-constrained transitions. Duration-aware filtering. |
+| Segment Boundary Tie (100) | `backend/app/chord_inference.py`, `backend/app/solo_inference.py` | 50% overlap processing with triangular windowing. Active-note tracking between segments (MT3-style). Boundary confidence penalty (2-frame edge zone). |
+
+### Commits 98-100 Verification Checklist
+
+| # | Feature (Commit) | Manual Check | PASS/FAIL | Notes |
+|---|-------------------|--------------|-----------|-------|
+| 15 | Advanced Extension Recognition (98) | Analyze jazz/blues song with known 7th/9th chords → chord timeline shows extended symbols (D7, Cmaj7, Am7), not just major/minor | | |
+| 16 | Chord Data Generation (98a) | Backend training logs show inversion/missing-note/pitch-shift augmentation active; transition samples improve boundary detection | | |
+| 17 | 36-Bin CQT Features (98b) | Backend logs show CQT extraction with 36 bins + 4 bass-channel bins; chord accuracy on bass-heavy songs improved vs 12-bin baseline | | |
+| 18 | CRNN + BiLSTM (98c) | Chord timeline shows smooth transitions across 2.5-6s windows; no rapid flickering on sustained chords | | |
+| 19 | Multi-Head Attention (98d) | Extended chords (7#9, alt7, dim7) recognized in jazz audio; attention diagnostics available in dev mode | | |
+| 20 | Viterbi Decoding (99) | Analyze ii-V-I progression → chord timeline shows smooth Dm7→G7→Cmaj7 without flicker; >90% changes on beat boundaries | | |
+| 21 | Half-beat resolution (99) | Song with 8th-note chord changes → two chord events emitted per beat with correct timestamps when confidence diff <0.15 | | |
+| 22 | Duration-aware filtering (99) | Sub-1-beat chord outliers suppressed unless legitimate transition; chord-change rate histogram reportable in metadata | | |
+| 23 | Segment Boundary Tie — chords (100) | Chord held across segment boundary → emitted as single event, not duplicated; no gap in chord coverage at boundary | | |
+| 24 | Segment Boundary Tie — solo (100) | Sustained solo note crossing boundary → no duplicate onset or premature offset; active-note tracking preserves continuity | | |
+| 25 | Boundary confidence penalty (100) | Predictions within 2 frames of segment edges show reduced confidence; scoring timing errors decrease for boundary-crossing notes | | |
+| 26 | Overlap-and-blend (100) | 50% overlap processing merges predictions by higher-confidence in overlap zone; boundary chord flicker reduced ≥50% | | |
+
+---
+
 ## Purpose and scope
 
 | When | What to run |
 |------|----------------|
 | Demucs/model/ingest changed | Stem separation gate |
 | Pitch/score pipeline changed | Note accuracy + phrasing regression (listen tab + play tab session) |
+| Chord model / CQT / Viterbi / boundary tie changed | Extended chord recognition + Viterbi smoothing + boundary continuity (commits 98-100) |
 | UX/copy or `mapErrorToUi` touched | Error states matrix (spot-check affected rows) |
 | AlphaTab harness, Listen/Play sync, Jam backing, metronome | Feel Real (waived items, telemetry, STOP rules) |
 | Slow UI or loop metadata logic changed | Slow & loop residual risks + optional cross-step smoke |
 | `expo-av` / bundled assets / Jam backing changed | Design tab backing-track smoke + [expo-av & Design dev playback](#expo-av--design-dev-playback) |
 
-Phase 1 gated items (BUG-01, BUG-02, GAP-01/02, QA-01) — see [Phase 1 Gated Items](#phase-1-gated-items--resolution-verification) above for resolution verification steps. See [PRIORITIES.md](../PRIORITIES.md) for Phase 2 roadmap.
+Phase 1 gated items (BUG-01, BUG-02, GAP-01/02, QA-01) — see [Phase 1 Gated Items](#phase-1-gated-items--resolution-verification) above for resolution verification steps. Phase 1.1 gated items (commits 98-100) — see [Phase 1.1 Gated Items](#phase-11-gated-items--chord-model--transcription-commits-98-100) above. See [PRIORITIES.md](../PRIORITIES.md) for Phase 2 roadmap.
 
 ---
 
@@ -298,7 +334,8 @@ The following backend tests have pre-existing failures unrelated to recent chang
 - `test_solo_micro_note_filtering` - min_duration filter removes micro-note (test expects 2 notes)
 - `test_analyze_api.py` (5 tests) - Tests expect 404 for unknown jobs, code returns "queued" (200)
 
-Total: **121/122 pass** (excluding pre-existing analyze API tests which assert different behavior)
+Total: **39 test files** in `backend/tests/`. CI runs 10 files: `test_jam_score.py`, `test_score.py`, chord model (4 files), Viterbi (3 files), boundary tie (1 file).
+Full suite: `cd backend && python3 -m pytest -q`
 
 ## Regression smokes
 
@@ -315,12 +352,42 @@ Quick paths that do not duplicate full PASS grids:
 9. **Musical Tolerance toggle:** In Play step, switch between Expressive and Technique modes; confirm scoring feedback changes to match.
 10. **Discovery suggestions:** After mastering a song, check Home/Explore for discovery recommendations based on mastered content.
 11. **Predictive rendering:** During Listen playback, verify cursor highlights notes ~50ms before audio position (DevTools console logs confirm look-ahead).
+12. **Extended chord recognition:** Analyze a jazz song (e.g., "All of Me") → chord timeline shows 7ths, 9ths, maj7 (not just major/minor).
+13. **Viterbi smoothing:** Analyze ii-V-I progression → no rapid chord flickering; changes land on beat boundaries.
+14. **Boundary continuity:** Analyze song >30s → sustained chord at segment boundary appears as single event, not duplicated.
 
 ---
 
-## Future — MusicXML lead sheet (PRIORITIES 78–81)
+## Automated test coverage — Commits 98-100
 
-Run when the Demucs → beat grid → chord + solo → MusicXML → alphaTab path is integrated (replaces stub-only expectations).
+These backend test files cover the chord model expansion, Viterbi decoding, and boundary tie mechanism. Run when modifying chord inference or solo transcription:
+
+```bash
+# Chord model (commits 98-98d): CQT features, augmentation, CRNN, attention
+cd backend && python -m pytest -q \
+  tests/test_cqt_features.py \
+  tests/test_chord_augmentation.py \
+  tests/test_chord_metrics.py \
+  tests/test_inference_logic.py
+
+# Viterbi decoding (commit 99): smoothing, transitions, half-beat resolution
+cd backend && python -m pytest -q \
+  tests/test_viterbi_decoder.py \
+  tests/test_viterbi_chord_progression.py \
+  tests/test_chord_transitions.py
+
+# Boundary tie (commit 100): overlap-and-blend, active-note tracking
+cd backend && python -m pytest -q \
+  tests/test_boundary_tie.py
+```
+
+**CI status:** These 8 test files are now included in `scoring-tests.yml` alongside `test_jam_score.py` and `test_score.py` (10 backend files total in CI).
+
+---
+
+## Future — MusicXML lead sheet (PRIORITIES 78-81, 106-107)
+
+Run when the Demucs → beat grid → chord + solo → MusicXML → alphaTab path is fully integrated (replaces stub-only expectations). Chord model (commits 98-98d), Viterbi decoding (99), and boundary tie (100) are complete — the chord inference pipeline now produces extended chord vocabulary with temporal smoothing and boundary continuity.
 
 | Check | PASS criteria |
 |--------|----------------|
