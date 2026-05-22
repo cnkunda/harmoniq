@@ -326,11 +326,24 @@ export interface SkillNode {
   next_review_date: string
 }
 
+export interface Annotation {
+  bar: number
+  text: string
+}
+
 export interface Lick {
   id: string
   song_title: string
   artist: string
   key: string
+  scale: string
+  position: string
+  tab_gp5_base64: string
+  audio_segment_path?: string
+  coach_oneliner: string
+  technique_tags: string[]
+  user_annotations: Annotation[]
+  date_saved: string
 }
 
 /** Discovery agent suggestions (commit 91). */

@@ -13,6 +13,7 @@ import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { PitchIndicator } from '@/components/PitchIndicator'
 
 import { SkillGraph } from '@/components/SkillGraph'
+import type { Lick } from '@/src/types'
 import { StemMixer } from '@/components/StemMixer'
 import { TabView } from '@/components/TabView'
 import { toast } from '@/components/ToastConfig'
@@ -545,7 +546,19 @@ export default function DesignPreviewScreen() {
               <WaveformVisualizer />
               <StemMixer />
               <PitchIndicator />
-              <LickCard />
+              <LickCard lick={{
+                id: 'preview-lick',
+                song_title: 'Gravity',
+                artist: 'John Mayer',
+                key: 'G major',
+                scale: 'G Major Pentatonic',
+                position: 'Position 2',
+                tab_gp5_base64: '',
+                coach_oneliner: 'A masterclass in tension and release — hold that bend until it hurts.',
+                technique_tags: ['pre-bend', 'vibrato', 'space'],
+                user_annotations: [],
+                date_saved: '2026-03-25',
+              }} />
               <SkillGraph />
               <TabView />
             </View>

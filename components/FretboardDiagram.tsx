@@ -403,17 +403,22 @@ export function FretboardDiagram({
   const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
   const CHORD_FULL_NAMES: Record<string, string> = {
-    maj: 'Major', min: 'Minor', dim: 'Diminished', aug: 'Augmented',
+    maj: 'Major', min: 'Minor', dim: 'Diminished', dim7: 'Diminished 7th',
+    aug: 'Augmented',
     '7': 'Dominant 7th', maj7: 'Major 7th', min7: 'Minor 7th',
     '7sus4': '7th Sus 4', sus4: 'Sus 4', sus2: 'Sus 2',
     '6': 'Major 6th', min6: 'Minor 6th',
     '9': 'Dominant 9th', maj9: 'Major 9th', min9: 'Minor 9th',
+    '7b9': '7th ♭9', '7#9': '7th ♯9', '7b5': '7th ♭5', '7#5': '7th ♯5',
+    alt7: 'Altered 7th',
+    '11': 'Dominant 11th', '13': 'Dominant 13th',
   }
 
   const EXTENSIONS: Record<string, string[]> = {
     maj: ['7', 'maj7', '6', '9', 'maj9'],
     min: ['m7', 'm9', 'm11', 'm13', 'mM7'],
     dim: ['dim7', 'm7b5'],
+    dim7: ['m7b5'],
     aug: ['aug7', 'maj7#5'],
     '7': ['9', '13', '7sus4', '7#9', '7b9'],
     maj7: ['9', '13', 'maj9', '#11'],
@@ -424,8 +429,15 @@ export function FretboardDiagram({
     '6': ['7', 'maj7', '9'],
     min6: ['m7', 'm9'],
     '9': ['13', '7#9', '7b9'],
+    '7b9': ['13', '7#9', 'alt7'],
+    '7#9': ['13', '7b9', 'alt7'],
+    '7b5': ['9', '13'],
+    '7#5': ['9', '13'],
+    alt7: ['7b9', '7#9', '7b5', '7#5'],
     maj9: ['13', '#11'],
     min9: ['11', '13'],
+    '11': ['13'],
+    '13': ['11', '7#9', '7b9'],
   }
 
   const chordNotes = useMemo(() => {

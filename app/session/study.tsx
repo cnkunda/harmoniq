@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { ChordsAndLyrics } from '@/components/ChordsAndLyrics'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
@@ -138,9 +139,6 @@ function toLyricWords(input: unknown): Array<{ word: string; timeSec: number }> 
     .filter((x): x is { word: string; timeSec: number } => x != null)
 }
 
-/** Cap long songs — chips wrap; keep count reasonable for layout. */
-const STUDY_BAR_CHIP_MAX = 64
-
 export default function StudyScreen() {
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
@@ -174,8 +172,6 @@ function StudyScreenInner() {
   const [showTranscriptionWarningModal, setShowTranscriptionWarningModal] = useState(false);
   const [stemRoutingOverride, setStemRoutingOverride] = useState<string | null>(null);
   const [theoryAnnotation, setTheoryAnnotation] = useState<{ chordName: string; chordFunction: string; romanNumeral: string; rationale: string } | null>(null);
-  const [showChordDebug, setShowChordDebug] = useState(false)
-
   // Intelligent fretboard display mode (auto-detect or manual override)
   const [fretboardMode, setFretboardMode] = useState<'auto' | 'chords' | 'solo' | 'both'>('auto')
   const [voicingMode, setVoicingMode] = useState<'full' | 'compact'>('compact')
@@ -393,9 +389,26 @@ function StudyScreenInner() {
   )
 
   const sectionKey = `${lesson?.job_id ?? 'no-job'}:${lessonSectionIndex}`
-  const notesBySection = useSessionAnnotationsStore((s) => s.notesBySection)
   const setAnnotation = useSessionAnnotationsStore((s) => s.setNote)
-  const sectionNotes = notesBySection[sectionKey] ?? {}
+  const sectionNotes = useSessionAnnotationsStore((s) => s.notesBySection[sectionKey] ?? {})
+
+  const chordTimelineEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events ?? null
+  const barsData = useMemo(() => {
+    const timestamps = lesson?.bar_timestamps
+    if (!timestamps || !chordTimelineEvents) return []
+    const words = toLyricWords(lesson?.lyrics_aligned)
+    return timestamps.map((barTime, i) => {
+      const nextBarTime = i + 1 < timestamps.length ? timestamps[i + 1] : Infinity
+      const chordEvent = [...chordTimelineEvents]
+        .reverse()
+        .find((e) => e.timestamp >= barTime && e.timestamp < nextBarTime && e.chord !== 'N')
+      const chord = chordEvent ? formatChordDisplay(chordEvent.chord) : ''
+      const barWords = words
+        .filter((w) => w.timeSec >= barTime && w.timeSec < nextBarTime)
+        .map((w) => w.word)
+      return { chord, text: barWords.join(' ') }
+    })
+  }, [chordTimelineEvents, lesson?.bar_timestamps, lesson?.lyrics_aligned])
 
   const [variant, setVariant] = useState<TabVariant>('full')
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
@@ -688,176 +701,27 @@ function StudyScreenInner() {
             />
 
             <View className="mt-2">
-              <View className="flex-row items-center justify-between mb-2">
-                <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
-                  Annotations (long-press bar)
-                </Text>
-                <AnimatedPressable
-                  onPress={() => setShowChordDebug(d => !d)}
-                  className="rounded-full border border-wood-600/35 px-2 py-0.5"
-                >
-                  <Text className="font-mono text-[10px] text-muted-brown">
-                    {showChordDebug ? 'Debug ON' : 'Debug'}
-                  </Text>
-                </AnimatedPressable>
-              </View>
-              <View className="flex-row flex-wrap gap-2">
-                {[...Array(Math.max(1, Math.min(lesson?.bar_timestamps?.length ?? 0, STUDY_BAR_CHIP_MAX))).keys()].map((bar) => {
-                  // Bar chips span the full song — use lesson-level chord timeline
-                  const barTime = lesson?.bar_timestamps?.[bar] ?? 0
-                  const chordEvents = lesson?.chord_timeline?.events ?? section?.chord_timeline?.events
-                  const chordForBar = chordEvents
-                    ?.slice()
-                    ?.reverse()
-                    ?.find((e: ChordEvent) => e.timestamp <= barTime && e.chord !== 'N')
-                  const chordLabel = chordForBar ? formatChordDisplay(chordForBar.chord) : '—'
-                  const confidence = chordForBar?.confidence ?? 0
-
-                  return (
-                    <AnimatedPressable
-                      key={`bar-${bar}`}
-                      haptic="none"
-                      onPress={() => {
-                        const stamps = lesson?.bar_timestamps
-                        const t = Array.isArray(stamps) && typeof stamps[bar] === 'number' ? stamps[bar]! : 0
-                        void (async () => {
-                          await sessionStemRef.current?.seekTransportToSeconds(t)
-                          sessionStemRef.current?.scrollMasterBarIntoView(bar)
-                        })()
-                      }}
-                      onLongPress={() => {
-                        const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
-                        setAnnotation(sectionKey, bar, text)
-                      }}
-                      className={`min-w-[40px] items-center rounded-full border px-2 py-1 ${bar === currentBar ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/35'
-                        }`}
-                      accessibilityRole="button"
-                      accessibilityHint={`${chordLabel} at bar ${bar}. Tap to seek; long press to save a practice note`}
-                    >
-                      <Text className={`font-mono text-[11px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-brown'}`}>
-                        {chordLabel}
-                      </Text>
-                      {showChordDebug && confidence > 0 && (
-                        <Text className={`font-mono text-[8px] ${confidence >= 0.8 ? 'text-success' : confidence >= 0.5 ? 'text-amber-accent' : 'text-danger'}`}>
-                          {confidence.toFixed(2)}
-                        </Text>
-                      )}
-                    </AnimatedPressable>
-                  )
-                })}
-              </View>
+              <ChordsAndLyrics
+                bars={barsData}
+                currentBar={currentBar}
+                bpm={lesson?.tempo ?? 92}
+                onBarPress={(bar) => {
+                  const stamps = lesson?.bar_timestamps
+                  const t = Array.isArray(stamps) && typeof stamps[bar] === 'number' ? stamps[bar]! : 0
+                  void (async () => {
+                    await sessionStemRef.current?.seekTransportToSeconds(t)
+                    sessionStemRef.current?.scrollMasterBarIntoView(bar)
+                  })()
+                }}
+                onBarLongPress={(bar) => {
+                  const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
+                  setAnnotation(sectionKey, bar, text)
+                }}
+              />
               <Text className="mt-1 font-sans text-[11px] text-muted-brown">
                 Saved notes in this section: {Object.keys(sectionNotes).length}
               </Text>
             </View>
-
-            {showChordDebug && (() => {
-              const chordTimeline = section?.chord_timeline ?? lesson?.chord_timeline
-              const metadata = chordTimeline?.metadata
-              const events = chordTimeline?.events ?? []
-
-              return (
-                <View className="mt-3 rounded-lg border border-wood-600/35 bg-wood-900/50 p-3">
-                  <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent mb-2">
-                    Chord Inference Debug
-                  </Text>
-
-                  {metadata ? (
-                    <>
-                      <View className="flex-row flex-wrap gap-2 mb-2">
-                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
-                          <Text className="font-mono text-[10px] text-cream/70">Flicker: </Text>
-                          <Text className={`font-mono text-[10px] ${metadata.flicker_rate > 0.05 ? 'text-danger' : 'text-success'}`}>
-                            {metadata.flicker_rate.toFixed(4)}
-                          </Text>
-                        </View>
-                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
-                          <Text className="font-mono text-[10px] text-cream/70">Beat align: </Text>
-                          <Text className={`font-mono text-[10px] ${metadata.beat_alignment_pct < 0.90 ? 'text-danger' : 'text-success'}`}>
-                            {(metadata.beat_alignment_pct * 100).toFixed(1)}%
-                          </Text>
-                        </View>
-                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
-                          <Text className="font-mono text-[10px] text-cream/70">Downbeat: </Text>
-                          <Text className={`font-mono text-[10px] ${metadata.downbeat_alignment_pct < 0.60 ? 'text-danger' : 'text-success'}`}>
-                            {(metadata.downbeat_alignment_pct * 100).toFixed(1)}%
-                          </Text>
-                        </View>
-                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
-                          <Text className="font-mono text-[10px] text-cream/70">Events: </Text>
-                          <Text className="font-mono text-[10px] text-cream">{metadata.total_events}</Text>
-                        </View>
-                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
-                          <Text className="font-mono text-[10px] text-cream/70">Unique: </Text>
-                          <Text className="font-mono text-[10px] text-cream">{metadata.unique_chords}</Text>
-                        </View>
-                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
-                          <Text className="font-mono text-[10px] text-cream/70">Sub-beat: </Text>
-                          <Text className={`font-mono text-[10px] ${metadata.duration_filtering.sub_beat_ratio > 20 ? 'text-danger' : 'text-success'}`}>
-                            {metadata.duration_filtering.sub_beat_ratio.toFixed(1)}%
-                          </Text>
-                        </View>
-                      </View>
-
-                      {metadata.chord_change_histogram && (
-                        <View className="mb-2">
-                          <Text className="font-mono text-[10px] text-cream/50 mb-1">Chord duration distribution (beats):</Text>
-                          <View className="flex-row gap-1">
-                            {metadata.chord_change_histogram.bins.map((bin: string, i: number) => {
-                              const count = metadata.chord_change_histogram.counts[i] ?? 0
-                              const total = metadata.chord_change_histogram.total_changes || 1
-                              const pct = (count / total) * 100
-                              return (
-                                <View key={bin} className="flex-1">
-                                  <View className="h-8 bg-wood-800/30 rounded-sm overflow-hidden">
-                                    <View
-                                      className="bg-amber-accent/60"
-                                      style={{ height: '100%', width: `${Math.min(pct, 100)}%` }}
-                                    />
-                                  </View>
-                                  <Text className="font-mono text-[8px] text-cream/50 text-center">{bin}</Text>
-                                  <Text className="font-mono text-[8px] text-cream/70 text-center">{count}</Text>
-                                </View>
-                              )
-                            })}
-                          </View>
-                        </View>
-                      )}
-
-                      {metadata.duration_filtering.sub_beat_events.length > 0 && (
-                        <View className="mb-2">
-                          <Text className="font-mono text-[10px] text-cream/50 mb-1">
-                            Sub-beat events ({metadata.duration_filtering.sub_beat_count}):
-                          </Text>
-                          {metadata.duration_filtering.sub_beat_events.slice(0, 5).map((e: any, i: number) => (
-                            <Text key={i} className="font-mono text-[9px] text-cream/60">
-                              {e.chord} @ {e.timestamp.toFixed(2)}s, {e.duration_beats.toFixed(2)} beats, conf={e.confidence.toFixed(3)}
-                            </Text>
-                          ))}
-                        </View>
-                      )}
-                    </>
-                  ) : (
-                    <Text className="font-mono text-[10px] text-cream/50">No metadata available</Text>
-                  )}
-
-                  <Text className="font-mono text-[10px] text-cream/50 mb-1">Chord events (first 20):</Text>
-                  <View className="flex-row flex-wrap gap-1">
-                    {events.slice(0, 20).map((e: ChordEvent, i: number) => (
-                      <View key={i} className={`rounded-sm px-1.5 py-0.5 ${e.chord === 'N' ? 'bg-wood-700/30' : e.confidence >= 0.8 ? 'bg-success/20' : e.confidence >= 0.5 ? 'bg-amber-accent/20' : 'bg-danger/20'}`}>
-                        <Text className="font-mono text-[9px] text-cream">
-                          {e.timestamp.toFixed(1)}s: {e.chord !== 'N' ? formatChordDisplay(e.chord) : 'N'}
-                        </Text>
-                        <Text className={`font-mono text-[8px] ${e.confidence >= 0.8 ? 'text-success' : e.confidence >= 0.5 ? 'text-amber-accent' : 'text-danger'}`}>
-                          {e.confidence.toFixed(2)}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )
-            })()}
-
 
           </>
         }

@@ -85,7 +85,7 @@ export function PitchIndicator({
       : null
 
   return (
-    <View className="relative overflow-hidden rounded-lg border border-dashed border-wood-600 p-4">
+    <View className="relative overflow-hidden rounded-lg border border-wood-700/40 bg-wood-800/40 p-4">
       {windowResult && windowResult !== 'ignored' ? (
         <Animated.View
           pointerEvents="none"

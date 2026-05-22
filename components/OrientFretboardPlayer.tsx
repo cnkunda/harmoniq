@@ -81,9 +81,13 @@ export function OrientFretboardPlayer({
   const noteDots = useMemo(() => {
     return fretCells.map((cell) => {
       const row = 6 - cell.string
-      const x = PAD_X + cell.fret * CELL_W + CELL_W / 2
-      const y = PAD_Y + row * CELL_H + CELL_H / 2
-      return { x, y, interval: cell.interval }
+      // Pull open string (fret 0) notes to the left of the nut
+      const x = cell.fret === 0
+        ? PAD_X - CELL_W / 2
+        : PAD_X + (cell.fret - 1) * CELL_W + CELL_W / 2
+      // Align with string lines (no CELL_H/2 offset)
+      const y = PAD_Y + row * CELL_H
+      return { x, y, fret: cell.fret, interval: cell.interval }
     })
   }, [fretCells])
 
@@ -103,7 +107,7 @@ export function OrientFretboardPlayer({
 
       {/* Fretboard SVG */}
       <View className="items-center px-2 pt-3">
-        <Svg width={SVG_W} height={SVG_H} viewBox={`0 0 ${SVG_W} ${SVG_H}`}>
+        <Svg width={SVG_W} height={SVG_H} viewBox={`${-CELL_W / 2} 0 ${SVG_W + CELL_W} ${SVG_H}`}>
           {stringEndpoints.map((line, i) => (
             <Line
               key={`s${i}`}
@@ -128,17 +132,20 @@ export function OrientFretboardPlayer({
               strokeLinecap="round"
             />
           ))}
-          {noteDots.map((dot, i) => (
-            <Circle
-              key={i}
-              cx={dot.x}
-              cy={dot.y}
-              r={7}
-              fill={dot.interval === 0 ? colors.amber.accent : `${colors.amber.accent}80`}
-              stroke={colors.amber.accent}
-              strokeWidth={1}
-            />
-          ))}
+          {noteDots.map((dot, i) => {
+            const isOpen = dot.fret === 0
+            return (
+              <Circle
+                key={i}
+                cx={dot.x}
+                cy={dot.y}
+                r={7}
+                fill={isOpen ? 'none' : (dot.interval === 0 ? colors.amber.accent : `${colors.amber.accent}80`)}
+                stroke={colors.amber.accent}
+                strokeWidth={isOpen ? 2 : 1}
+              />
+            )
+          })}
         </Svg>
       </View>
 
