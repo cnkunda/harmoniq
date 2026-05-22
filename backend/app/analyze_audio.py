@@ -438,6 +438,7 @@ def build_lesson_json_from_librosa(
         wav_path=wav_path,
         low_snr_warning=low_snr_warning,
         musicxml=musicxml_str,
+        chord_timeline=chord_timeline,
         **stem_fields,
     )
     full_gp5 = tab_artifacts.get("tab_full_gp5_base64") if tab_artifacts else None

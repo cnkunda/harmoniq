@@ -364,6 +364,37 @@ System for tracking user engagement during play-along sessions: duration, comple
 - [ ] User-supplied audio pipeline accepts a directory + `.lab` files and produces aligned CQT features
 - [ ] Real data comprises 70% of training batches
 - [ ] Validation root accuracy >75% on GuitarSet held-out test set
+- [ ] **Note for debugging: Monitor chord distribution in predictions to ensure reduced bias toward extended chords (13ths, 9ths) and more realistic harmonic rhythm**
+
+---
+
+### Commit 101a: Chord Prediction Stability & Metadata Generation Debug
+
+**Goal:** Address observed issues in chord inference output including excessive extended chord bias, unrealistic harmonic rhythm, and missing metadata generation.
+
+**Current State:** Debug output shows frequent 13th chords repeating every 0.1-0.8 seconds, "No metadata available", and saved notes count of 0, indicating potential issues with:
+1. Model bias toward extended chords
+2. Over-aggressive half-beat splitting
+3. Metadata computation failures
+4. Chord timeline smoothing
+
+**Scope:**
+
+- **Chord Distribution Analysis**: Add logging to monitor chord quality distribution in predictions during training and inference to detect bias toward extended chords (13ths, 9ths, etc.)
+- **Half-Beat Splitting Tuning**: Evaluate and potentially adjust TIE_THRESHOLD (currently 0.15) and related conditions in `_split_half_beat()` to reduce excessive chord changes
+- **Metadata Generation Reliability**: Add defensive error handling and logging around `assemble_chord_metrics()` call to ensure metadata is generated or errors are properly reported
+- **Viterbi Smoothing Evaluation**: Review duration-aware filtering and transition matrix effectiveness in preventing unrealistic chord transitions
+- **Boundary Confidence Penalty**: Verify `_apply_boundary_penalty()` effectiveness in reducing spurious chord changes at segment edges
+- **Beat Grid Validation**: Ensure beat detection produces realistic BPM and beat spacing appropriate for musical content
+
+**Acceptance Criteria:**
+
+- [ ] Add chord quality distribution logging to training and inference pipelines
+- [ ] Analyze and document optimal TIE_THRESHOLD value for reducing false half-beat splits
+- [ ] Ensure metadata is reliably generated or errors are properly logged and visible to users
+- [ ] Validate that chord change frequency aligns with expected harmonic rhythm (typically 1-4 changes per bar in most genres)
+- [ ] Confirm reduced frequency of extended chord dominance in predictions when not musically warranted
+- [ ] Verify saved notes functionality works correctly in debug mode
 
 ---
 
@@ -944,6 +975,191 @@ provides dedicated structural segmentation (intro/verse/chorus/bridge/outro).
 - [ ] Label confidence reported per section
 - [ ] Fallback to unlabeled RMS boundaries when refinement confidence < 0.6
 - [ ] Integration test: 4-section verse-chorus-verse-chorus song correctly segmented
+
+---
+
+### Commit 115b: Repetition-Aware Section Detection via Self-Similarity Matrix
+
+**Goal:** Extend `librosa_summarize()` to detect repeated sections (e.g., "Chorus 1 = Chorus 2 = Chorus 3")
+using chroma-based self-similarity matrix analysis, replacing the current cyclic label assignment
+with actual repetition grouping.
+
+**Current State:** `librosa_summarize()` assigns labels positionally (`labels[i % 6]`), so a song with
+structure `Intro-Verse-Chorus-Verse-Chorus-Bridge-Chorus` gets labeled `Intro-Verse-Chorus-Solo` —
+completely wrong after the first three sections. No repeated section detection exists.
+
+**Scope:**
+- Compute chroma features from the analyzed stem:
+  ```python
+  chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+  ```
+- Build recurrence matrix to detect repeated material:
+  ```python
+  R = librosa.segment.recurrence_matrix(chroma, mode='affinity', sym=True)
+  ```
+- Use diagonal structure in R to identify repeated sections:
+  - Off-diagonal blocks = repeated material at different time offsets
+  - Extract repetition groups via connected component analysis
+- Assign consistent labels to repeated sections:
+  - First occurrence: "Verse", "Chorus", etc.
+  - Subsequent occurrences: "Verse (2)", "Chorus (2)", etc.
+  - Group ID links all instances together
+- Add `repeat_group_id: int | None` to `LessonSectionStub` schema
+- Add `is_repeated: bool` flag to `LessonSectionStub` schema
+- Frontend updates:
+  - `ListenStemPanel.tsx`: Show "Chorus (1 of 3)" for repeated sections
+  - `study.tsx`: Coach can reference "You played Chorus 2 better than Chorus 1"
+  - `review.tsx`: Compare performance across repeated instances
+- Preserve existing novelty-based boundaries as the primary signal;
+  repetition detection adds labels and grouping, not new boundaries
+
+**Acceptance Criteria:**
+- [ ] Self-similarity matrix correctly identifies repeated sections in test songs
+- [ ] Repeated sections share consistent labels (Chorus 1, Chorus 2, Chorus 3)
+- [ ] `repeat_group_id` links all instances of the same section
+- [ ] `is_repeated` flag true for sections that appear more than once
+- [ ] Frontend displays repetition count ("Chorus (2 of 3)")
+- [ ] No regression: non-repeated sections still labeled correctly
+- [ ] Integration test: verse-chorus-verse-chorus song correctly grouped
+
+**Implementation:**
+- Modify `librosa_summarize()` in `backend/app/pipeline_proof.py`
+- Add `detect_repeated_sections()` helper function
+- Update `LessonSectionStub` schema in `backend/app/schemas.py`
+- Update frontend section chip rendering in `ListenStemPanel.tsx`
+
+---
+
+### Commit 115c: Semantic Section Label Classification
+
+**Goal:** Replace cyclic label assignment with audio-feature-based classification that distinguishes
+Intro, Verse, Chorus, Bridge, Solo, and Outro by their actual musical characteristics.
+
+**Current State:** Labels are assigned from a fixed list cyclically (`labels[i % 6]`), ignoring
+actual musical content. A bridge and a verse get different labels only because of position,
+not because the algorithm detected a bridge.
+
+**Scope:**
+- Extract per-section audio features for classification:
+  - **Energy**: RMS mean and variance (chorus = high, intro/outro = low)
+  - **Spectral centroid**: brightness indicator (solo = high, verse = moderate)
+  - **Chord change density**: chords per second (bridge = high, intro = low)
+  - **Harmonic stability**: chroma variance over section (intro = unstable, verse = stable)
+  - **Position in song**: first/last section, relative duration
+- Build rule-based classifier (no ML training needed):
+  ```python
+  def classify_section(features, position, duration):
+      if position == 'first' and duration < 15 and energy < threshold:
+          return 'Intro'
+      if position == 'last' and energy_declining:
+          return 'Outro'
+      if energy > chorus_threshold and is_repeated:
+          return 'Chorus'
+      if harmonic_shift and not is_repeated:
+          return 'Bridge'
+      if spectral_centroid > solo_threshold and chord_density < verse_threshold:
+          return 'Solo'
+      return 'Verse'  # default
+  ```
+- Add `label_confidence: float` (0-1) to `LessonSectionStub` schema
+- If confidence < 0.6, fall back to generic "Section N" label
+- Add pre-chorus detection:
+  - Short section (< 10s) between Verse and Chorus
+  - Rising energy profile, increasing chord density
+  - Label as "Pre-Chorus" when detected
+- Add instrumental section detection:
+  - Low vocal energy (from Demucs vocals stem)
+  - High instrumental energy
+  - Label as "Instrumental" or "Solo" accordingly
+- Preserve existing labels as fallback when classification confidence is low
+
+**Acceptance Criteria:**
+- [ ] Intro detected as low-energy opening section (< 15s typical)
+- [ ] Chorus detected as high-energy repeated section
+- [ ] Bridge detected as harmonically distinct non-repeated section
+- [ ] Pre-chorus detected as short rising-energy section before chorus
+- [ ] Outro detected as declining-energy final section
+- [ ] Solo/instrumental sections distinguished from vocal sections
+- [ ] `label_confidence` reported per section
+- [ ] Fallback to "Section N" when confidence < 0.6
+- [ ] Integration test: real song with known structure correctly labeled
+
+**Implementation:**
+- Add `classify_section()` function in `backend/app/pipeline_proof.py`
+- Update `librosa_summarize()` to call classifier after boundary detection
+- Update `LessonSectionStub` schema with `label_confidence` field
+- Update frontend to display confidence indicator for uncertain labels
+
+---
+
+### Commit 115d: Authentic Chord Diagrams via chords-db Integration
+
+**Goal:** Replace algorithmic fretboard chord shapes with authentic finger-position diagrams from
+`@tombatossals/chords-db`, displaying traditional chord-box diagrams across all session screens
+with multiple position alternatives and capo-aware transposition.
+
+**Current State:** `FretboardDiagram.tsx` computes fret positions algorithmically from hardcoded
+templates (E-shape, A-shape, C-shape, etc.). No traditional chord-box diagrams are rendered.
+Users see colored dots on the fretboard but not the small vertical chord diagrams found in
+chord books. No multiple position alternatives are offered.
+
+**Scope:**
+- Install dependencies:
+  ```bash
+  npm install @tombatossals/chords-db @tombatossals/react-chords
+  ```
+- Create chord name normalization layer (`src/music/chordDbAdapter.ts`):
+  - Map Harmoniq backend format (`C:maj`, `F#:min7`) to chords-db format (`C/major`, `Fsharp/m7`)
+  - Handle flat-to-sharp normalization (Bb → A#, Eb → D#, etc.)
+  - Handle quality renames: `min7 → m7`, `min9 → m9`, `min6 → m6`, `alt7 → alt`, `7#5 → aug7`
+  - Return `{ key, suffix }` for database lookup
+- Create `ChordDiagram` component (`components/ChordDiagram.tsx`):
+  - Wraps `@tombatossals/react-chords` for SVG chord-box rendering
+  - Accepts `chordSymbol` prop (e.g., `"C:maj"`)
+  - Retrieves all positions from chords-db for the chord
+  - Default to open/low position (fret 0-5) for beginner-friendly display
+  - Position cycling UI: `< 2/5 >` to browse alternative voicings
+  - Displays finger numbers, barre indicators, and base fret
+  - Falls back to algorithmic shapes if chord not in database
+- Add chord diagrams to all session screens:
+  - **study.tsx**: Small diagram above fretboard, next to current chord symbol
+  - **slow.tsx**: Diagram above fretboard during slow practice
+  - **play.tsx**: Compact diagram near pitch indicator during play-along
+  - **review.tsx**: Diagram in playback summary for chord reference
+- Layout pattern on each screen:
+  ```
+  ┌─────────────────────────────────┐
+  │  [Diagram]  Cmaj7               │
+  │           I - Tonic             │
+  │           < 2/5 >               │
+  └─────────────────────────────────┘
+  ```
+- Optional: enhance `chordToFretboardCells()` in `src/music/chordVoicing.ts`
+  to use chords-db positions for fretboard dot rendering (more authentic shapes)
+- Handle edge cases:
+  - Slash chords: chords-db has limited `/E`, `/F`, `/G` support — fall back to algorithmic
+  - Rare qualities (`7#9`, `alt7`): may not exist in database — fall back gracefully
+  - Web vs native: `react-chords` renders SVG — verify on React Native,
+    fall back to custom SVG rendering if needed
+
+**Acceptance Criteria:**
+- [ ] `@tombatossals/chords-db` and `@tombatossals/react-chords` installed
+- [ ] `chordDbAdapter.ts` correctly maps all 277 chord types to database format
+- [ ] `ChordDiagram` component renders traditional chord-box diagrams
+- [ ] Position cycling works for chords with multiple voicings
+- [ ] Chord diagrams displayed on study, slow, play, and review screens
+- [ ] Fallback to algorithmic shapes for chords not in database
+- [ ] Flat-to-sharp normalization works (Bb → A#, etc.)
+- [ ] Finger numbers and barre indicators render correctly
+- [ ] No regression: existing fretboard dot rendering unchanged
+- [ ] Web rendering verified; native rendering verified or fallback active
+
+**Implementation:**
+- New file: `src/music/chordDbAdapter.ts` — normalization and lookup layer
+- New file: `components/ChordDiagram.tsx` — chord diagram component
+- New file: `components/ChordPositionSelector.tsx` — position carousel UI
+- Modify: `app/session/study.tsx`, `app/session/slow.tsx`, `app/session/play.tsx`, `app/session/review.tsx`
+- Optional: `src/music/chordVoicing.ts` — add chords-db fallback to `chordToFretboardCells()`
 
 ---
 

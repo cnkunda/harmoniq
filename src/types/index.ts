@@ -144,8 +144,35 @@ export interface ChordEvent {
   confidence: number
 }
 
+export interface ChordTimelineMetadata {
+  flicker_rate: number
+  beat_alignment_pct: number
+  downbeat_alignment_pct: number
+  chord_change_histogram: {
+    bins: string[]
+    counts: number[]
+    total_changes: number
+    flicker_pct: number
+    median_duration_beats: number
+  }
+  duration_filtering: {
+    sub_beat_count: number
+    total_chord_events: number
+    sub_beat_ratio: number
+    sub_beat_events: Array<{
+      chord: string
+      duration_beats: number
+      confidence: number
+      timestamp: number
+    }>
+  }
+  total_events: number
+  unique_chords: number
+}
+
 export interface ChordTimeline {
   events: ChordEvent[]
+  metadata?: ChordTimelineMetadata | null
 }
 
 export interface SoloNote {
@@ -190,7 +217,7 @@ export interface LessonJSON {
   beat_align_offset_sec?: number | null
   bar_timestamps?: number[]
   /** Chord timeline from transcription analysis - may be at lesson level or section level. */
-  chord_timeline?: { events: Array<{ timestamp: number; chord: string; confidence: number }> } | null
+  chord_timeline?: { events: Array<{ timestamp: number; chord: string; confidence: number }>; metadata?: ChordTimelineMetadata | null } | null
   /** Solo notes from transcription analysis - may be at lesson level or section level. */
   solo_notes?: { notes: Array<{ start_time: number; duration: number; pitch: number; velocity?: number }> } | null
   stems?: Record<string, string>

@@ -367,6 +367,8 @@ class LessonJSON(BaseModel):
     tabs_unavailable_reason: str | None = None
     # Commit 82: Low SNR warning for pre-emptive transcription quality warning
     low_snr_warning: bool | None = None
+    # Full chord timeline for bar chip rendering (section-scoped timelines are for section views)
+    chord_timeline: ChordTimeline | None = None
 
 
 class JobStatus(BaseModel):

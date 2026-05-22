@@ -54,8 +54,35 @@ interface ChordEvent {
   confidence: number
 }
 
+interface ChordTimelineMetadata {
+  flicker_rate: number
+  beat_alignment_pct: number
+  downbeat_alignment_pct: number
+  chord_change_histogram: {
+    bins: string[]
+    counts: number[]
+    total_changes: number
+    flicker_pct: number
+    median_duration_beats: number
+  }
+  duration_filtering: {
+    sub_beat_count: number
+    total_chord_events: number
+    sub_beat_ratio: number
+    sub_beat_events: Array<{
+      chord: string
+      duration_beats: number
+      confidence: number
+      timestamp: number
+    }>
+  }
+  total_events: number
+  unique_chords: number
+}
+
 interface ChordTimeline {
   events: ChordEvent[]
+  metadata?: ChordTimelineMetadata | null
 }
 
 interface SoloNote {
@@ -147,6 +174,7 @@ function StudyScreenInner() {
   const [showTranscriptionWarningModal, setShowTranscriptionWarningModal] = useState(false);
   const [stemRoutingOverride, setStemRoutingOverride] = useState<string | null>(null);
   const [theoryAnnotation, setTheoryAnnotation] = useState<{ chordName: string; chordFunction: string; romanNumeral: string; rationale: string } | null>(null);
+  const [showChordDebug, setShowChordDebug] = useState(false)
 
   // Intelligent fretboard display mode (auto-detect or manual override)
   const [fretboardMode, setFretboardMode] = useState<'auto' | 'chords' | 'solo' | 'both'>('auto')
@@ -181,6 +209,53 @@ function StudyScreenInner() {
       setShowTranscriptionWarningModal(false)
     }
   }, [lesson?.sections, lessonSectionIndex, lesson?.transcription_confidence])
+
+  // Debug: log chord timeline metadata when section changes
+  useEffect(() => {
+    const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
+    const chordTimeline = section?.chord_timeline ?? lesson?.chord_timeline
+    if (!chordTimeline) {
+      console.log('[ChordDebug] No chord timeline for section', lessonSectionIndex)
+      return
+    }
+
+    const events = chordTimeline.events
+    const metadata = chordTimeline.metadata
+
+    console.log('[ChordDebug] === Chord Timeline Metadata ===')
+    console.log('[ChordDebug] Section index:', lessonSectionIndex)
+    console.log('[ChordDebug] Total events:', events.length)
+    console.log('[ChordDebug] Unique chords:', new Set(events.filter(e => e.chord !== 'N').map(e => e.chord)).size)
+
+    if (metadata) {
+      console.log('[ChordDebug] Flicker rate:', metadata.flicker_rate, metadata.flicker_rate > 0.05 ? '⚠️ HIGH' : '✅')
+      console.log('[ChordDebug] Beat alignment:', metadata.beat_alignment_pct, metadata.beat_alignment_pct < 0.90 ? '⚠️ LOW' : '✅')
+      console.log('[ChordDebug] Downbeat alignment:', metadata.downbeat_alignment_pct, metadata.downbeat_alignment_pct < 0.60 ? '⚠️ LOW' : '✅')
+      console.log('[ChordDebug] Chord change histogram:', JSON.stringify(metadata.chord_change_histogram))
+      console.log('[ChordDebug] Sub-beat ratio:', metadata.duration_filtering.sub_beat_ratio, metadata.duration_filtering.sub_beat_ratio > 20 ? '⚠️ HIGH' : '✅')
+
+      if (metadata.duration_filtering.sub_beat_events.length > 0) {
+        console.log('[ChordDebug] Sub-beat events (first 5):')
+        metadata.duration_filtering.sub_beat_events.slice(0, 5).forEach((e: any) => {
+          console.log(`  ${e.chord} @ ${e.timestamp.toFixed(2)}s, ${e.duration_beats.toFixed(2)} beats, conf=${e.confidence}`)
+        })
+      }
+    }
+
+    // Log chord distribution
+    const chordCounts: Record<string, number> = {}
+    events.forEach(e => {
+      chordCounts[e.chord] = (chordCounts[e.chord] || 0) + 1
+    })
+    console.log('[ChordDebug] Chord distribution:', chordCounts)
+
+    // Log first 10 events
+    console.log('[ChordDebug] First 10 events:')
+    events.slice(0, 10).forEach(e => {
+      console.log(`  ${e.timestamp.toFixed(2)}s: ${e.chord} (conf: ${e.confidence.toFixed(3)})`)
+    })
+    console.log('[ChordDebug] === End Chord Debug ===')
+  }, [lesson?.sections, lessonSectionIndex, lesson?.chord_timeline])
 
   // Fetch orient clip when lesson changes
   useEffect(() => {
@@ -613,19 +688,30 @@ function StudyScreenInner() {
             />
 
             <View className="mt-2">
-              <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
-                Annotations (long-press bar)
-              </Text>
+              <View className="flex-row items-center justify-between mb-2">
+                <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+                  Annotations (long-press bar)
+                </Text>
+                <AnimatedPressable
+                  onPress={() => setShowChordDebug(d => !d)}
+                  className="rounded-full border border-wood-600/35 px-2 py-0.5"
+                >
+                  <Text className="font-mono text-[10px] text-muted-brown">
+                    {showChordDebug ? 'Debug ON' : 'Debug'}
+                  </Text>
+                </AnimatedPressable>
+              </View>
               <View className="flex-row flex-wrap gap-2">
                 {[...Array(Math.max(1, Math.min(lesson?.bar_timestamps?.length ?? 0, STUDY_BAR_CHIP_MAX))).keys()].map((bar) => {
-                  // Get chord for this bar - check section level first, then lesson level
+                  // Bar chips span the full song — use lesson-level chord timeline
                   const barTime = lesson?.bar_timestamps?.[bar] ?? 0
-                  const chordEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events
+                  const chordEvents = lesson?.chord_timeline?.events ?? section?.chord_timeline?.events
                   const chordForBar = chordEvents
                     ?.slice()
                     ?.reverse()
                     ?.find((e: ChordEvent) => e.timestamp <= barTime && e.chord !== 'N')
                   const chordLabel = chordForBar ? formatChordDisplay(chordForBar.chord) : '—'
+                  const confidence = chordForBar?.confidence ?? 0
 
                   return (
                     <AnimatedPressable
@@ -651,6 +737,11 @@ function StudyScreenInner() {
                       <Text className={`font-mono text-[11px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-brown'}`}>
                         {chordLabel}
                       </Text>
+                      {showChordDebug && confidence > 0 && (
+                        <Text className={`font-mono text-[8px] ${confidence >= 0.8 ? 'text-success' : confidence >= 0.5 ? 'text-amber-accent' : 'text-danger'}`}>
+                          {confidence.toFixed(2)}
+                        </Text>
+                      )}
                     </AnimatedPressable>
                   )
                 })}
@@ -659,6 +750,113 @@ function StudyScreenInner() {
                 Saved notes in this section: {Object.keys(sectionNotes).length}
               </Text>
             </View>
+
+            {showChordDebug && (() => {
+              const chordTimeline = section?.chord_timeline ?? lesson?.chord_timeline
+              const metadata = chordTimeline?.metadata
+              const events = chordTimeline?.events ?? []
+
+              return (
+                <View className="mt-3 rounded-lg border border-wood-600/35 bg-wood-900/50 p-3">
+                  <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent mb-2">
+                    Chord Inference Debug
+                  </Text>
+
+                  {metadata ? (
+                    <>
+                      <View className="flex-row flex-wrap gap-2 mb-2">
+                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
+                          <Text className="font-mono text-[10px] text-cream/70">Flicker: </Text>
+                          <Text className={`font-mono text-[10px] ${metadata.flicker_rate > 0.05 ? 'text-danger' : 'text-success'}`}>
+                            {metadata.flicker_rate.toFixed(4)}
+                          </Text>
+                        </View>
+                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
+                          <Text className="font-mono text-[10px] text-cream/70">Beat align: </Text>
+                          <Text className={`font-mono text-[10px] ${metadata.beat_alignment_pct < 0.90 ? 'text-danger' : 'text-success'}`}>
+                            {(metadata.beat_alignment_pct * 100).toFixed(1)}%
+                          </Text>
+                        </View>
+                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
+                          <Text className="font-mono text-[10px] text-cream/70">Downbeat: </Text>
+                          <Text className={`font-mono text-[10px] ${metadata.downbeat_alignment_pct < 0.60 ? 'text-danger' : 'text-success'}`}>
+                            {(metadata.downbeat_alignment_pct * 100).toFixed(1)}%
+                          </Text>
+                        </View>
+                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
+                          <Text className="font-mono text-[10px] text-cream/70">Events: </Text>
+                          <Text className="font-mono text-[10px] text-cream">{metadata.total_events}</Text>
+                        </View>
+                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
+                          <Text className="font-mono text-[10px] text-cream/70">Unique: </Text>
+                          <Text className="font-mono text-[10px] text-cream">{metadata.unique_chords}</Text>
+                        </View>
+                        <View className="rounded-md bg-wood-800/50 px-2 py-1">
+                          <Text className="font-mono text-[10px] text-cream/70">Sub-beat: </Text>
+                          <Text className={`font-mono text-[10px] ${metadata.duration_filtering.sub_beat_ratio > 20 ? 'text-danger' : 'text-success'}`}>
+                            {metadata.duration_filtering.sub_beat_ratio.toFixed(1)}%
+                          </Text>
+                        </View>
+                      </View>
+
+                      {metadata.chord_change_histogram && (
+                        <View className="mb-2">
+                          <Text className="font-mono text-[10px] text-cream/50 mb-1">Chord duration distribution (beats):</Text>
+                          <View className="flex-row gap-1">
+                            {metadata.chord_change_histogram.bins.map((bin: string, i: number) => {
+                              const count = metadata.chord_change_histogram.counts[i] ?? 0
+                              const total = metadata.chord_change_histogram.total_changes || 1
+                              const pct = (count / total) * 100
+                              return (
+                                <View key={bin} className="flex-1">
+                                  <View className="h-8 bg-wood-800/30 rounded-sm overflow-hidden">
+                                    <View
+                                      className="bg-amber-accent/60"
+                                      style={{ height: '100%', width: `${Math.min(pct, 100)}%` }}
+                                    />
+                                  </View>
+                                  <Text className="font-mono text-[8px] text-cream/50 text-center">{bin}</Text>
+                                  <Text className="font-mono text-[8px] text-cream/70 text-center">{count}</Text>
+                                </View>
+                              )
+                            })}
+                          </View>
+                        </View>
+                      )}
+
+                      {metadata.duration_filtering.sub_beat_events.length > 0 && (
+                        <View className="mb-2">
+                          <Text className="font-mono text-[10px] text-cream/50 mb-1">
+                            Sub-beat events ({metadata.duration_filtering.sub_beat_count}):
+                          </Text>
+                          {metadata.duration_filtering.sub_beat_events.slice(0, 5).map((e: any, i: number) => (
+                            <Text key={i} className="font-mono text-[9px] text-cream/60">
+                              {e.chord} @ {e.timestamp.toFixed(2)}s, {e.duration_beats.toFixed(2)} beats, conf={e.confidence.toFixed(3)}
+                            </Text>
+                          ))}
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <Text className="font-mono text-[10px] text-cream/50">No metadata available</Text>
+                  )}
+
+                  <Text className="font-mono text-[10px] text-cream/50 mb-1">Chord events (first 20):</Text>
+                  <View className="flex-row flex-wrap gap-1">
+                    {events.slice(0, 20).map((e: ChordEvent, i: number) => (
+                      <View key={i} className={`rounded-sm px-1.5 py-0.5 ${e.chord === 'N' ? 'bg-wood-700/30' : e.confidence >= 0.8 ? 'bg-success/20' : e.confidence >= 0.5 ? 'bg-amber-accent/20' : 'bg-danger/20'}`}>
+                        <Text className="font-mono text-[9px] text-cream">
+                          {e.timestamp.toFixed(1)}s: {e.chord !== 'N' ? formatChordDisplay(e.chord) : 'N'}
+                        </Text>
+                        <Text className={`font-mono text-[8px] ${e.confidence >= 0.8 ? 'text-success' : e.confidence >= 0.5 ? 'text-amber-accent' : 'text-danger'}`}>
+                          {e.confidence.toFixed(2)}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )
+            })()}
 
 
           </>

@@ -54,6 +54,21 @@ _BASS_BINS = 4
 _FEATURE_DIM = _CHROMA_BINS + _BASS_BINS         # 40
 _BATCH_CHUNK = 512
 
+
+def _circular_cqt_pad(x):
+    """Circular padding on CQT portion (bins 0-35), zero pad bass.
+
+    Replicates the Lambda layer from the training script (build_chord_tflite.py).
+    Required for Keras model deserialization — the function must be available
+    in the inference module so Keras can resolve the Lambda layer reference.
+    """
+    import tensorflow as tf
+    cqt = x[:, :, :_CHROMA_BINS]
+    bass = x[:, :, _CHROMA_BINS:]
+    cqt_padded = tf.concat([cqt[:, :, -1:], cqt, cqt[:, :, :1]], axis=-1)
+    bass_padded = tf.pad(bass, [[0, 0], [0, 0], [1, 1]])
+    return tf.concat([cqt_padded, bass_padded], axis=-1)
+
 # Precomputed triangular window for overlap-and-blend (Commit 100)
 _TRIANGULAR_WINDOW = np.minimum(
     np.arange(_WINDOW) / (_WINDOW / 2),
@@ -99,6 +114,9 @@ def _smooth_chords(events: list[ChordEvent]) -> list[ChordEvent]:
 def _get_keras_model():
     """Load the full Keras CRNN model for Python backend inference.
 
+    Uses custom_objects to resolve the _circular_cqt_pad Lambda layer
+    that was saved during model training (build_chord_tflite.py).
+
     Returns the model or raises if .keras file is missing/unloadable.
     """
     if not _KERAS_PATH.exists():
@@ -106,9 +124,14 @@ def _get_keras_model():
 
     import os
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Force CPU-only (GPU crashes on WSL2)
     import tensorflow as tf
 
-    model = tf.keras.models.load_model(str(_KERAS_PATH))
+    model = tf.keras.models.load_model(
+        str(_KERAS_PATH),
+        custom_objects={"_circular_cqt_pad": _circular_cqt_pad},
+        safe_mode=False,
+    )
     logger.info("Chord model loaded via Keras (%s)", _KERAS_PATH.name)
     return model
 
@@ -266,22 +289,51 @@ def _apply_boundary_penalty(probs: np.ndarray) -> np.ndarray:
 
 
 def _run_keras_raw(y: np.ndarray, sr: int) -> list[dict]:
-    """Run inference using the full Keras CRNN model."""
+    """Run inference using the full Keras CRNN model.
+
+    The model outputs (batch, 277) — a single classification per window.
+    We expand these per-window predictions to a per-frame timeline by
+    accumulating votes from all windows that cover each frame position.
+    """
     windows, hop = _extract_features(y, sr)
     model = _get_keras_model()
 
     T_overlap = len(windows)
-    T = T_overlap * _HOP_FRAMES - _WINDOW // 2
 
-    window_outputs = np.empty((T_overlap, _WINDOW, _NUM_CLASSES), dtype=np.float32)
+    # Model outputs (batch, 277) — single classification per window
+    all_probs = np.zeros((T_overlap, _NUM_CLASSES), dtype=np.float32)
 
     for start in range(0, T_overlap, _BATCH_CHUNK):
         end = min(start + _BATCH_CHUNK, T_overlap)
         chunk = windows[start:end]
         pred = model.predict(chunk, verbose=0)
-        window_outputs[start:end] = pred.reshape(end - start, _WINDOW, _NUM_CLASSES)
+        all_probs[start:end] = pred
 
-    merged_probs = _merge_overlapping_predictions(window_outputs, T)
+    # Diagnostic: check per-window prediction diversity
+    window_preds = np.argmax(all_probs, axis=1)
+    unique_preds = np.unique(window_preds, return_counts=True)
+    top_indices = np.argsort(-np.bincount(window_preds))[:5]
+    logger.info("Keras per-window predictions: %d windows, %d unique chords", T_overlap, len(unique_preds[0]))
+    for idx in top_indices:
+        count = unique_preds[1][np.where(unique_preds[0] == idx)[0][0]]
+        logger.info("  %s: %d windows (%.1f%%)", CHORD_VOCAB[idx], count, 100.0 * count / T_overlap)
+
+    # Expand per-window predictions to per-frame timeline
+    # Each window covers _WINDOW frames at _HOP_FRAMES stride
+    T = T_overlap * _HOP_FRAMES - _WINDOW // 2
+    merged_probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+    counts = np.zeros(T, dtype=np.float32)
+
+    for i in range(T_overlap):
+        frame_start = i * _HOP_FRAMES
+        frame_end = frame_start + _WINDOW
+        for f in range(frame_start, min(frame_end, T)):
+            merged_probs[f] += all_probs[i]
+            counts[f] += 1
+
+    # Normalize by vote count
+    valid = counts > 0
+    merged_probs[valid] /= counts[valid, np.newaxis]
 
     results = []
     for i in range(T):
@@ -770,6 +822,25 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
             duration_beats=duration_beats_arr,
             duration_penalty_weight=0.5,
         )
+
+        # Diagnostic: compare emission predictions vs Viterbi path
+        emission_preds = np.argmax(emission_probs, axis=1)
+        emission_unique = np.unique(emission_preds, return_counts=True)
+        viterbi_unique = np.unique(optimal_path, return_counts=True)
+        emission_changes = np.sum(np.diff(emission_preds) != 0)
+        viterbi_changes = np.sum(np.diff(optimal_path) != 0)
+        logger.info("Viterbi diagnostic: emission=%d unique chords, %d changes; viterbi=%d unique chords, %d changes",
+                     len(emission_unique[0]), emission_changes, len(viterbi_unique[0]), viterbi_changes)
+        # Top-5 emission
+        emit_top = np.argsort(-np.bincount(emission_preds))[:5]
+        for idx in emit_top:
+            cnt = emission_unique[1][np.where(emission_unique[0] == idx)[0][0]]
+            logger.info("  emit: %s %.1f%%", CHORD_VOCAB[idx], 100.0 * cnt / T)
+        # Top-5 Viterbi
+        vit_top = np.argsort(-np.bincount(optimal_path))[:5]
+        for idx in vit_top:
+            cnt = viterbi_unique[1][np.where(viterbi_unique[0] == idx)[0][0]]
+            logger.info("  viterbi: %s %.1f%%", CHORD_VOCAB[idx], 100.0 * cnt / T)
 
         events: list[ChordEvent] = []
         for t in range(T):
