@@ -68,6 +68,7 @@
     "@playwright/test": "^1.59.1",
     "@types/react": "~19.1.0",
     "@types/react-test-renderer": "^19.1.0",
+    "babel-preset-expo": "^56.0.11",
     "detox": "^20.50.1",
     "jest": "^30.3.0",
     "jest-circus": "^30.3.0",

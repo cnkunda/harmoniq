@@ -7,6 +7,8 @@ import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptu
 import { TabViewport } from '@/components/TabViewport'
 import { useResolvedSoundFontProfile } from '@/src/audio/useResolvedSoundFontProfile'
 import { isAlphaTabRuntimeDiagEnabled } from '@/src/constants/alphaTabRuntimeDiag'
+import { getAppPref, setAppPref } from '@/src/db/client'
+import { PREF_TAB_VARIANT } from '@/src/db/schema'
 import { logListenTransportWrap } from '@/src/session/listenTransportDebug'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import type { TabRenderPresetName } from '@/src/session/tabThemePresets'
@@ -17,9 +19,6 @@ import type { LessonJSON } from '@/src/types'
 import { firstLessonStemRelPath, lessonStemUrl, sectionSeekSeconds, stemRelPathToPlaybackUri } from '@/src/utils/lessonAudio'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { AlphaTabSurfaceRef, NoteEventMessage, SongScoreMeta, TabLoopBarRegion } from '@/types/tabMessage'
-import type { LyricWord } from './LyricsStrip'
-import { getAppPref, setAppPref } from '@/src/db/client'
-import { PREF_TAB_VARIANT, PREF_SHOW_LYRICS } from '@/src/db/schema'
 
 const DEFAULT_TICK: PlaybackTickContext = {
   positionSec: 0,
@@ -74,7 +73,6 @@ export type SessionStemAndTabProps = {
   ghostStemPlaybackUri?: string | null
   ghostAnchorSec?: number | null
   playGhostWhileRecording?: boolean
-  lyricWords?: LyricWord[]
   onTabVariantChange?: (v: SessionTabVariant) => void
   onSeekToStart?: () => void
 }
@@ -117,7 +115,6 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     ghostStemPlaybackUri = null,
     ghostAnchorSec = null,
     playGhostWhileRecording = false,
-    lyricWords,
     onTabVariantChange,
     onSeekToStart,
   },
@@ -316,7 +313,6 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
             showStemPanel ? (ms) => void stemPanelRef.current?.seekTransportToSeconds(ms / 1000) : undefined
           }
           style={{ flex: 1, height: '100%', width: '100%' }}
-          lyricWords={lyricWords}
           playbackSec={tickRef.current?.positionSec ?? 0}
           songTitle={lesson?.song_title ?? undefined}
           songArtist={lesson?.artist ?? undefined}

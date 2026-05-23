@@ -6,7 +6,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated'
-import { Lock, Minus, Play, Plus, Pause, Unlock } from 'lucide-react-native'
+import { Guitar, Lock, Minus, Play, Plus, Pause, Unlock } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { BeatCounter } from './BeatCounter'
@@ -61,7 +61,7 @@ export function ChordsAndLyrics({
   const [isPlaying, setIsPlaying] = useState(false)
   const [internalBar, setInternalBar] = useState(0)
   const [transpose, setTranspose] = useState(0)
-  const [capo, setCapo] = useState(0)
+  const [showShapes, setShowShapes] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
   const [scrollViewHeight, setScrollViewHeight] = useState(0)
 
@@ -120,7 +120,7 @@ export function ChordsAndLyrics({
   )
 
   return (
-    <View className="mt-3 rounded-xl border border-wood-700/40 bg-wood-800/40 p-4">
+    <View className="mt-3 rounded-xl border border-wood-600/40 bg-cream-dark/45 p-4">
       {/* Header */}
       <View className="flex-row items-center justify-between mb-3">
         <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
@@ -158,8 +158,10 @@ export function ChordsAndLyrics({
         />
       </View>
 
-      {/* Toolbar: Transpose, Capo, Auto-scroll */}
-      <View className="flex-row items-center justify-between rounded-lg border border-wood-700/30 bg-wood-900/30 p-2 mb-4">
+      <View className="h-px bg-wood-600/10 mb-3" />
+
+      {/* Toolbar: Key, Shapes, Auto-scroll */}
+      <View className="flex-row items-center justify-between rounded-lg border border-wood-600/25 bg-wood-900/5 p-2 mb-4">
         <ToolControl
           label="Key"
           value={transpose === 0 ? '0' : `${transpose > 0 ? '+' : ''}${transpose}`}
@@ -167,12 +169,24 @@ export function ChordsAndLyrics({
           onIncrement={() => setTranspose((t) => t + 1)}
         />
 
-        <ToolControl
-          label="Capo"
-          value={capo === 0 ? 'Off' : `${capo}fr`}
-          onDecrement={() => setCapo((c) => Math.max(0, c - 1))}
-          onIncrement={() => setCapo((c) => Math.min(12, c + 1))}
-        />
+        <AnimatedPressable
+          haptic="none"
+          onPress={() => setShowShapes((s) => !s)}
+          className={`flex-row items-center gap-1 rounded-md border px-2 py-1 ${
+            showShapes
+              ? 'border-amber-accent/30 bg-amber-accent/10'
+              : 'border-wood-600/25 bg-wood-900/5'
+          }`}
+        >
+          <Guitar size={10} color={showShapes ? colors.amber.light : colors.muted.brown} />
+          <Text
+            className={`font-mono text-[9px] uppercase tracking-wider ${
+              showShapes ? 'text-amber-light' : 'text-muted-brown'
+            }`}
+          >
+            Shapes
+          </Text>
+        </AnimatedPressable>
 
         <AnimatedPressable
           haptic="none"
@@ -180,7 +194,7 @@ export function ChordsAndLyrics({
           className={`flex-row items-center gap-1 rounded-md border px-2 py-1 ${
             autoScroll
               ? 'border-amber-accent/30 bg-amber-accent/10'
-              : 'border-wood-700/50 bg-wood-900/40'
+              : 'border-wood-600/25 bg-wood-900/5'
           }`}
         >
           {autoScroll ? (
@@ -205,102 +219,100 @@ export function ChordsAndLyrics({
         className="max-h-[260px]"
         onLayout={(e) => setScrollViewHeight(e.nativeEvent.layout.height)}
       >
-        <View className="flex-row flex-wrap py-2" style={{ gap: 16 }}>
-          {bars.map((bar, idx) => {
+        <View className="flex-row flex-wrap py-1">
+          {bars.flatMap((bar, idx) => {
             const isActive = idx === activeBar
             const chord = displayedChord(bar.chord)
             const chord2 = bar.chord2 ? displayedChord(bar.chord2) : undefined
 
-            return (
+            const barEl = (
               <AnimatedPressable
-                key={idx}
+                key={`bar-${idx}`}
                 haptic="none"
                 onPress={() => handleBarPress(idx)}
                 onLongPress={onBarLongPress ? () => onBarLongPress(idx) : undefined}
                 onLayout={(e: LayoutChangeEvent) => handleBarLayout(idx, e)}
                 accessibilityRole="button"
                 accessibilityHint={`Bar ${idx + 1}: ${bar.chord || '—'}. Tap to seek; long press to annotate`}
-                className="relative"
+                className={`relative px-2 py-1.5 min-w-[56px] ${isActive ? 'bg-amber-accent/5 rounded-sm' : ''}`}
               >
-                {/* Chord row */}
-                <View className="flex-row items-end mb-1" style={{ gap: 6 }}>
-                  <Text
-                    className={`font-mono text-xs leading-none tracking-tight ${
-                      isActive ? 'text-amber-light' : 'text-amber-accent/80'
-                    }`}
-                  >
-                    {chord}
+                <Text
+                  className={`font-mono text-xs leading-tight tracking-tight text-center ${
+                    isActive ? 'text-amber-light' : 'text-amber-accent/80'
+                  }`}
+                >
+                  {chord}
+                </Text>
+                {chord2 && (
+                  <Text className="font-mono text-xs leading-tight tracking-tight text-center text-amber-accent/60">
+                    {chord2}
                   </Text>
-                  {chord2 && (
-                    <Text
-                      className={`font-mono text-xs leading-none tracking-tight ${
-                        isActive ? 'text-amber-light' : 'text-amber-accent/60'
-                      }`}
-                    >
-                      {chord2}
-                    </Text>
-                  )}
-                </View>
-
-                {/* Lyric */}
+                )}
                 {bar.text ? (
                   <Text
-                    className={`font-serif text-base leading-snug ${
-                      isActive ? 'text-ivory' : 'text-cream/70'
+                    className={`font-serif text-sm leading-snug mt-0.5 ${
+                      isActive ? 'text-wood-900' : 'text-muted-brown'
                     }`}
                   >
                     {bar.text}
                   </Text>
                 ) : null}
-
-                {/* Active bar underline marker */}
-                {isActive && (
-                  <ActiveBarMarker />
-                )}
+                {isActive && <ActiveBarMarker />}
               </AnimatedPressable>
             )
+
+            if (idx === 0) return [barEl]
+            return [
+              <View
+                key={`sep-${idx}`}
+                className="w-px self-stretch bg-wood-600/10"
+              />,
+              barEl,
+            ]
           })}
         </View>
       </ScrollView>
 
       {/* Active / Next Chord Diagram Preview */}
-      <View className="mt-4 pt-3 border-t border-wood-700/40">
-        <View className="flex-row gap-4">
-          {/* Now Playing */}
-          <View className="flex-1">
-            <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/80 mb-2">
-              Now Playing
-            </Text>
-            <View className="flex-row items-end gap-3">
-              <FadeView fadeKey={`active-${activeChord}`}>
-                <ChordDiagram name={activeChord} size="md" isActive />
-              </FadeView>
-              <View className="opacity-60">
-                <Text className="font-mono text-[9px] uppercase tracking-wider text-muted-brown mb-1">
-                  Next
-                </Text>
-                <FadeView fadeKey={`next-${nextChord}`}>
-                  <ChordDiagram name={nextChord} size="sm" />
+      {showShapes && (
+        <View className="mt-4 pt-3 border-t border-wood-600/15">
+          <View className="flex-row gap-4">
+            {/* Now Playing */}
+            <View className="flex-1">
+              <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/80 mb-2">
+                Now Playing
+              </Text>
+              <View className="flex-row items-end gap-3">
+                <FadeView fadeKey={`active-${activeChord}`}>
+                  <ChordDiagram name={activeChord} size="md" isActive />
                 </FadeView>
+                <View className="opacity-60">
+                  <Text className="font-mono text-[9px] uppercase tracking-wider text-muted-brown mb-1">
+                    Next
+                  </Text>
+                  <FadeView fadeKey={`next-${nextChord}`}>
+                    <ChordDiagram name={nextChord} size="sm" />
+                  </FadeView>
+                </View>
+              </View>
+            </View>
+
+            {/* Used In Song */}
+            <View className="flex-1 min-w-0">
+              <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/80 mb-2">
+                Used In Song
+              </Text>
+              <View className="flex-row flex-wrap gap-2">
+                {uniqueChords.map((c) => (
+                  <View key={c} className={c === activeChord ? '' : 'opacity-50'}>
+                    <ChordDiagram name={c} size="sm" isActive={c === activeChord} />
+                  </View>
+                ))}
               </View>
             </View>
           </View>
-
-          {/* Used In Song */}
-          <View className="flex-1 min-w-0">
-            <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/80 mb-2">
-              Used In Song
-            </Text>
-            <View className="flex-row flex-wrap gap-2">
-              {uniqueChords.map((c) => (
-                <View key={c} className={c === activeChord ? '' : 'opacity-50'}>
-                  <ChordDiagram name={c} size="sm" isActive={c === activeChord} />
-                </View>
-              ))}
-            </View>
-          </View>
         </View>
-      </View>
+      )}
     </View>
   )
 }
@@ -321,7 +333,7 @@ function ToolControl({
       <Text className="font-mono text-[9px] uppercase tracking-wider text-muted-brown">
         {label}
       </Text>
-      <View className="flex-row items-center rounded-md border border-wood-700/50 bg-wood-900/60">
+      <View className="flex-row items-center rounded-md border border-wood-600/25 bg-wood-900/5">
         <AnimatedPressable
           haptic="none"
           onPress={onDecrement}
@@ -329,7 +341,7 @@ function ToolControl({
         >
           <Minus size={10} color={colors.muted.brown} />
         </AnimatedPressable>
-        <Text className="font-mono text-[10px] text-cream w-8 text-center tabular-nums">
+        <Text className="font-mono text-[10px] text-wood-900 w-8 text-center tabular-nums">
           {value}
         </Text>
         <AnimatedPressable

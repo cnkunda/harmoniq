@@ -77,6 +77,7 @@ _TRIANGULAR_WINDOW = np.minimum(
 
 TIE_THRESHOLD = 0.15
 SUBDIVISION_RATIO = 0.65
+MIN_HALF_BEAT_DURATION = 0.3  # seconds — skip split for beats shorter than this
 
 
 def _get_segment_db(y_segment: np.ndarray) -> float:
@@ -582,7 +583,12 @@ def _split_half_beat(beat_data: dict) -> list[dict]:
 
     Returns:
         List of two beat-data dicts (first half, second half).
+        Returns original beat as single-element list if duration < MIN_HALF_BEAT_DURATION.
     """
+    if beat_data["duration_sec"] < MIN_HALF_BEAT_DURATION:
+        logger.debug("Skipping half-beat split at t=%.2f: duration=%.3fs < min=%.1fs",
+                     beat_data["timestamp"], beat_data["duration_sec"], MIN_HALF_BEAT_DURATION)
+        return [beat_data]
     duration = beat_data["duration_sec"]
     half_dur = duration / 2
 
@@ -674,6 +680,9 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
     if raw_frames and "probs" in raw_frames[0]:
         all_probs = np.array([f["probs"] for f in raw_frames])
         penalized_probs = _apply_boundary_penalty(all_probs)
+        boundary_changes = int(np.sum(np.abs(np.diff(np.argmax(penalized_probs, axis=1))) != 0) -
+                                np.sum(np.abs(np.diff(np.argmax(all_probs, axis=1))) != 0))
+        logger.debug("Boundary penalty applied: %d fewer frame-level chord changes", max(0, -boundary_changes))
         for i, f in enumerate(raw_frames):
             f["probs"] = penalized_probs[i]
             pred_idx = int(np.argmax(penalized_probs[i]))
@@ -686,6 +695,9 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
     beats = beat_grid.beats
     if len(beats) < 2:
         return ChordTimeline(events=[])
+
+    if beat_grid.bpm < 30 or beat_grid.bpm > 240:
+        logger.warning("Unusual BPM detected: %.1f (range 30-240 expected)", beat_grid.bpm)
 
     frame_times = np.array([f["time"] for f in raw_frames])
 
@@ -829,8 +841,11 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
         viterbi_unique = np.unique(optimal_path, return_counts=True)
         emission_changes = np.sum(np.diff(emission_preds) != 0)
         viterbi_changes = np.sum(np.diff(optimal_path) != 0)
-        logger.info("Viterbi diagnostic: emission=%d unique chords, %d changes; viterbi=%d unique chords, %d changes",
-                     len(emission_unique[0]), emission_changes, len(viterbi_unique[0]), viterbi_changes)
+        changes_per_bar_vit = viterbi_changes / (T / 4) if T >= 4 else 0.0
+        logger.info("Viterbi diagnostic: emission=%d unique chords, %d changes; viterbi=%d unique chords, %d changes (%.1f/bar)",
+                     len(emission_unique[0]), emission_changes, len(viterbi_unique[0]), viterbi_changes, changes_per_bar_vit)
+        if changes_per_bar_vit > 3.0:
+            logger.warning("Viterbi chord change rate high (%.1f/bar) — consider tuning duration_penalty_weight or TIE_THRESHOLD", changes_per_bar_vit)
         # Top-5 emission
         emit_top = np.argsort(-np.bincount(emission_preds))[:5]
         for idx in emit_top:
@@ -863,7 +878,7 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
         from app.chord_metrics import assemble_chord_metrics
         metadata = assemble_chord_metrics(events, beat_grid)
     except Exception as exc:
-        logger.warning("Failed to compute chord metrics: %s", exc)
+        logger.warning("Failed to compute chord metrics for %s: %s", audio_path, exc)
         metadata = None
 
     return ChordTimeline(events=events, metadata=metadata)

@@ -15,6 +15,7 @@ import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
 import { fetchTheoryAnnotation } from '@/src/api/analyze'
 import { sessionHref } from '@/src/constants/sessionFlow'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
 import { getAppPref } from '@/src/db/client'
 import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
@@ -22,7 +23,6 @@ import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { capoSuggestion, parseKey } from '@/src/music/capoSuggestion'
 import { getChordFunction } from '@/src/music/chordFunction'
-import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
 import { formatChordDisplay } from '@/src/music/chordVoicing'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
@@ -376,7 +376,6 @@ function StudyScreenInner() {
   }, [tick.positionSec, section?.chord_timeline, lesson?.chord_timeline, lesson?.key]);
 
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
-  const lyricWords = useMemo(() => toLyricWords(lesson?.lyrics_aligned), [lesson?.lyrics_aligned])
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()
   const positionLabel = typeof (section as Record<string, unknown> | undefined)?.primary_position === 'string'
     ? ((section as Record<string, unknown>).primary_position as string)
@@ -390,7 +389,6 @@ function StudyScreenInner() {
 
   const sectionKey = `${lesson?.job_id ?? 'no-job'}:${lessonSectionIndex}`
   const setAnnotation = useSessionAnnotationsStore((s) => s.setNote)
-  const sectionNotes = useSessionAnnotationsStore((s) => s.notesBySection[sectionKey] ?? {})
 
   const chordTimelineEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events ?? null
   const barsData = useMemo(() => {
@@ -643,7 +641,6 @@ function StudyScreenInner() {
         ref={sessionStemRef}
         tabRenderPreset="light"
         tabVariant={variant}
-        lyricWords={lyricWords}
         onPlaybackTick={handleStemPlaybackTick}
         onNoteEvent={onTabNoteEvent}
         onTabVariantChange={setVariant}
@@ -718,9 +715,6 @@ function StudyScreenInner() {
                   setAnnotation(sectionKey, bar, text)
                 }}
               />
-              <Text className="mt-1 font-sans text-[11px] text-muted-brown">
-                Saved notes in this section: {Object.keys(sectionNotes).length}
-              </Text>
             </View>
 
           </>
