@@ -1,5 +1,6 @@
-import { Modal, Pressable, View } from 'react-native'
+import { Modal, View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { NoteDetailCard } from '@/components/NoteDetailCard'
 import type { NoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 
@@ -13,7 +14,7 @@ export function SessionNoteDetailModal({ detail, visible, onClose }: SessionNote
   return (
     <Modal visible={visible && detail != null} transparent animationType="fade" onRequestClose={onClose}>
       <View className="flex-1">
-        <Pressable
+        <AnimatedPressable
           className="absolute inset-0 bg-wood-900/50"
           onPress={onClose}
           accessibilityRole="button"
@@ -22,7 +23,7 @@ export function SessionNoteDetailModal({ detail, visible, onClose }: SessionNote
         <View className="absolute inset-0 bg-wood-900/35" pointerEvents="none" />
 
         <View className="flex-1 justify-center px-8 pb-12 pt-12">
-          <Pressable className="absolute inset-0" onPress={onClose} />
+          <AnimatedPressable className="absolute inset-0" onPress={onClose} />
           {detail ? (
             <View className="w-full max-w-lg self-center rounded-3xl border border-wood-600/70 bg-wood-900 p-4">
               <NoteDetailCard

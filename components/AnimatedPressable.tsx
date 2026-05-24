@@ -42,7 +42,7 @@ export function AnimatedPressable({
 
   const handlePressOut: NonNullable<PressableProps['onPressOut']> = (e) => {
     onPressOut?.(e)
-    scale.value = withSpring(1, { damping: 15, stiffness: 300 })
+    scale.value = withSpring(1, spring.gentle)
   }
 
   const handlePress: PressableProps['onPress'] = (e) => {

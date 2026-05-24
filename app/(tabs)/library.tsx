@@ -332,27 +332,27 @@ export default function LibraryScreen() {
               </Text>
             </View>
 
-            <View className="mb-6 flex-row rounded-xl border border-wood-700 bg-wood-800/50 p-1">
+            <View className="mb-6 flex-row rounded-xl border border-wood-600 bg-wood-800/60 p-1">
               <AnimatedPressable haptic="light"
                 onPress={() => setLibraryTab('lessons')}
-                className={`flex-1 rounded-lg py-2.5 ${libraryTab === 'lessons' ? 'bg-wood-700' : ''}`}
+                className={`flex-1 rounded-lg py-2.5 ${libraryTab === 'lessons' ? 'bg-amber-accent' : ''}`}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: libraryTab === 'lessons' }}
               >
                 <Text
-                  className={`text-center font-sans-medium text-sm ${libraryTab === 'lessons' ? 'text-amber-light' : 'text-muted-brown'}`}
+                  className={`text-center font-sans-medium text-sm ${libraryTab === 'lessons' ? 'text-wood-900' : 'text-muted-brown'}`}
                 >
                   Songs
                 </Text>
               </AnimatedPressable>
               <AnimatedPressable haptic="light"
                 onPress={() => setLibraryTab('licks')}
-                className={`flex-1 rounded-lg py-2.5 ${libraryTab === 'licks' ? 'bg-wood-700' : ''}`}
+                className={`flex-1 rounded-lg py-2.5 ${libraryTab === 'licks' ? 'bg-amber-accent' : ''}`}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: libraryTab === 'licks' }}
               >
                 <Text
-                  className={`text-center font-sans-medium text-sm ${libraryTab === 'licks' ? 'text-amber-light' : 'text-muted-brown'}`}
+                  className={`text-center font-sans-medium text-sm ${libraryTab === 'licks' ? 'text-wood-900' : 'text-muted-brown'}`}
                 >
                   Licks
                 </Text>

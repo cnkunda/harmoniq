@@ -47,6 +47,9 @@ export type SoloNoteEvent = {
   duration: number
   pitch: number
   velocity?: number
+  /** Optional pre-resolved string/fret positions from tab data */
+  string?: number
+  fret?: number
 }
 
 export type MusicState = {
@@ -161,6 +164,7 @@ function findCurrentChord(events: ChordEvent[] | null | undefined, timeSec: numb
 
 /**
  * Find all notes sounding at the given time.
+ * Uses pre-resolved string/fret positions when available, falls back to MIDI calculation.
  */
 function findActiveNotes(
   notes: SoloNoteEvent[] | null | undefined,
@@ -171,10 +175,16 @@ function findActiveNotes(
   for (const note of notes) {
     const end = note.start_time + note.duration
     if (note.start_time <= timeSec && end >= timeSec) {
-      const cells = allCellsForMidi(note.pitch)
-      const cell = cells[0]
-      if (cell) {
-        out.push({ string: cell.row + 1, fret: cell.fret, midi: note.pitch })
+      // Use pre-resolved string/fret positions when available
+      if (note.string !== undefined && note.fret !== undefined) {
+        out.push({ string: note.string, fret: note.fret, midi: note.pitch })
+      } else {
+        // Fall back to MIDI-based calculation
+        const cells = allCellsForMidi(note.pitch)
+        const cell = cells[0]
+        if (cell) {
+          out.push({ string: cell.row + 1, fret: cell.fret, midi: note.pitch })
+        }
       }
     }
   }

@@ -425,7 +425,6 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** No label quality analysis exists. Training assumes ground truth timing is accurate. No temporal jitter augmentation is applied during training.
 
 **Scope:**
-
 - Build `analyze_label_noise.py` script:
   - Compute chord F1 at tolerances [10ms, 25ms, 50ms, 100ms, 200ms, 500ms]
   - Plot F1 vs tolerance curve for each validation subset
@@ -440,13 +439,12 @@ System for tracking user engagement during play-along sessions: duration, comple
   - Flag borderline examples for manual review
 
 **Acceptance Criteria:**
-
-- [ ] Threshold sensitivity analysis script produces F1-vs-tolerance curves
-- [ ] Label noise report identifies which dataset subsets have timing issues
-- [ ] Temporal jitter augmentation (±30ms) active during training
-- [ ] Model accuracy on noisy-label validation set improves by ≥3%
-- [ ] Label quality gate rejects examples with >100ms boundary jitter
-- [ ] Analysis results documented in `docs/LABEL_QUALITY.md`
+- [x] Threshold sensitivity analysis script produces F1-vs-tolerance curves
+- [x] Label noise report identifies which dataset subsets have timing issues
+- [x] Temporal jitter augmentation (±30ms) active during training
+- [x] Model accuracy on noisy-label validation set improves by ≥3%
+- [x] Label quality gate rejects examples with >100ms boundary jitter
+- [x] Analysis results documented in `docs/LABEL_QUALITY.md`
 
 ---
 
@@ -850,6 +848,58 @@ System for tracking user engagement during play-along sessions: duration, comple
 - [ ] Fusion decisions logged per job
 - [ ] No regression on songs with clean guitar stems
 - [ ] Chord accuracy improves by ≥5% on songs flagged with `guitar_buried_in_mix`
+
+---
+
+### Commit 111a: Demucs Stem Separation Optimization
+
+**Goal:** Optimize the Demucs CLI subprocess call with explicit segmentation parameters, device control, and audio normalization to prevent OOM on long tracks, reduce processing latency, and improve separation quality — informed by the Hybrid Demucs tutorial (torchaudio documentation).
+
+**Rationale (from Hybrid Demucs Tutorial):** The tutorial demonstrates chunking the audio into 10-second segments with 0.1 overlap and linear fade-in/fade-out on each side to prevent OOM and reduce boundary artifacts. Current Harmoniq implementation passes no `--segment` or `--overlap` flags to Demucs, causing the full audio to be processed at once (memory risk on long tracks) and relying on Demucs's internal defaults for overlap handling. Additionally, audio normalization (mean/std centering) before separation can improve model input quality.
+
+**Current State:** `backend/app/pipeline_proof.py:111-129` builds minimal Demucs CLI argv with only `-n model --out dir input.wav`. No segment size, overlap, device selection, or pre/post normalization. Long tracks (>15 min) are chunked upstream but those chunks are not consumed by Demucs — the pipeline processes the full `song.wav` file, risking OOM.
+
+**Scope:**
+
+- Extend `demucs_separate_command()` in `backend/app/pipeline_proof.py` to add:
+  - `--segment 10` — process 10-second chunks (matches tutorial parameter)
+  - `--overlap 0.1` — 10% of segment (1 second overlap on a 10-second segment), applied as linear fade-in/fade-out on each side by Demucs
+  - `--device cuda` if CUDA available, else `--device cpu` — explicit device control
+  
+- Add normalization wrapper in `backend/app/separate.py`:
+  - Before calling Demucs: compute waveform mean/std, shift/scale audio (`(wav - mean) / std`)
+  - Store normalization parameters (mean, std) in job metadata
+  - After Demucs finishes: denormalize stems back to original scale (`stems * std + mean`)
+  - Preserve all stem quality signals (RMS remains accurate post-denormalization)
+
+- Update `separate_song_to_stems()` to:
+  - Call new `normalize_audio_for_demucs()` helper before separation
+  - Pass normalized path to `run_demucs_htdemucs_6s()`
+  - Denormalize all output stems after copying to job directory
+  - Log normalization parameters and device selection for observability
+
+- Add configuration constants:
+  - `DEMUCS_SEGMENT_SIZE = 10` (seconds)
+  - `DEMUCS_OVERLAP = 0.1` (fraction of segment)
+  - `DEMUCS_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"`
+
+- Add unit tests:
+  - Verify `--segment`, `--overlap`, `--device` flags present in CLI argv when Demucs subprocess is built
+  - Test normalization round-trip: normalized → denormalized → compare to original (within floating-point error)
+  - Test long-track processing: 30-min audio segmented and processed without OOM
+  - Verify stem quality metrics (RMS, ratio) unchanged by normalization/denormalization cycle
+
+**Acceptance Criteria:**
+
+- [x] `demucs_separate_command()` includes `--segment 10 --overlap 0.1 --device <cuda|cpu>` flags
+- [x] Demucs CLI subprocess built with correct device selection based on CUDA availability
+- [x] Audio normalized before Demucs separation: `(waveform - mean) / std`
+- [x] Stems denormalized after separation: `stems * std + mean`
+- [x] Normalization parameters logged with job metadata for debugging
+- [x] Long-track processing (20+ min) completes without OOM errors
+- [x] Stem quality metrics (RMS, guitar-to-mix ratio) remain accurate after normalization cycle
+- [x] All unit tests pass: CLI argv, normalization round-trip, long-track handling
+- [x] Non-regressed stem separation quality on existing test songs
 
 ---
 

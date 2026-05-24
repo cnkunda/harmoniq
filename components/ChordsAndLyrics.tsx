@@ -212,65 +212,96 @@ export function ChordsAndLyrics({
         </AnimatedPressable>
       </View>
 
-      {/* Scrollable bar list */}
+      {/* Scrollable bar list — chord-over-lyrics alternating rows */}
       <ScrollView
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         className="max-h-[260px]"
         onLayout={(e) => setScrollViewHeight(e.nativeEvent.layout.height)}
       >
-        <View className="flex-row flex-wrap py-1">
-          {bars.flatMap((bar, idx) => {
-            const isActive = idx === activeBar
-            const chord = displayedChord(bar.chord)
-            const chord2 = bar.chord2 ? displayedChord(bar.chord2) : undefined
+        {(() => {
+          if (!bars.length) return null
 
-            const barEl = (
-              <AnimatedPressable
-                key={`bar-${idx}`}
-                haptic="none"
-                onPress={() => handleBarPress(idx)}
-                onLongPress={onBarLongPress ? () => onBarLongPress(idx) : undefined}
-                onLayout={(e: LayoutChangeEvent) => handleBarLayout(idx, e)}
-                accessibilityRole="button"
-                accessibilityHint={`Bar ${idx + 1}: ${bar.chord || '—'}. Tap to seek; long press to annotate`}
-                className={`relative px-2 py-1.5 min-w-[56px] ${isActive ? 'bg-amber-accent/5 rounded-sm' : ''}`}
-              >
-                <Text
-                  className={`font-mono text-xs leading-tight tracking-tight text-center ${
-                    isActive ? 'text-amber-light' : 'text-amber-accent/80'
-                  }`}
-                >
-                  {chord}
-                </Text>
-                {chord2 && (
-                  <Text className="font-mono text-xs leading-tight tracking-tight text-center text-amber-accent/60">
-                    {chord2}
-                  </Text>
-                )}
-                {bar.text ? (
-                  <Text
-                    className={`font-serif text-sm leading-snug mt-0.5 ${
-                      isActive ? 'text-wood-900' : 'text-muted-brown'
-                    }`}
-                  >
-                    {bar.text}
-                  </Text>
-                ) : null}
-                {isActive && <ActiveBarMarker />}
-              </AnimatedPressable>
+          const BARS_PER_LINE = 4
+          const lines: { startIdx: number; bars: BarData[] }[] = []
+          for (let i = 0; i < bars.length; i += BARS_PER_LINE) {
+            lines.push({ startIdx: i, bars: bars.slice(i, i + BARS_PER_LINE) })
+          }
+
+          const activeLineIdx = Math.floor(activeBar / BARS_PER_LINE)
+          const activeBarInLine = activeBar % BARS_PER_LINE
+
+          return lines.map((line, li) => {
+            const isActiveLine = li === activeLineIdx
+
+            return (
+              <View key={`line-${li}`} className="mb-3 last:mb-0">
+                {/* Chord row */}
+                <View className="flex-row">
+                  {line.bars.map((bar, bi) => {
+                    const idx = line.startIdx + bi
+                    const isActive = isActiveLine && bi === activeBarInLine
+                    const chord = displayedChord(bar.chord)
+                    const chord2 = bar.chord2 ? displayedChord(bar.chord2) : undefined
+
+                    return (
+                      <AnimatedPressable
+                        key={`chord-${idx}`}
+                        haptic="none"
+                        onPress={() => handleBarPress(idx)}
+                        onLongPress={onBarLongPress ? () => onBarLongPress(idx) : undefined}
+                        onLayout={(e: LayoutChangeEvent) => handleBarLayout(idx, e)}
+                        accessibilityRole="button"
+                        accessibilityHint={`Bar ${idx + 1}: ${bar.chord || '—'}. Tap to seek; long press to annotate`}
+                        className={`flex-1 items-center py-1 rounded-sm ${
+                          isActive ? 'bg-amber-accent/10' : ''
+                        }`}
+                      >
+                        <Text
+                          className={`font-mono text-xs leading-tight tracking-tight ${
+                            isActive
+                              ? 'text-amber-light font-sans-bold'
+                              : 'text-amber-accent/80'
+                          }`}
+                        >
+                          {chord}
+                        </Text>
+                        {chord2 && (
+                          <Text className="font-mono text-[10px] leading-tight tracking-tight text-amber-accent/50">
+                            {chord2}
+                          </Text>
+                        )}
+                        {isActive && (
+                          <View className="mt-1 h-0.5 w-6 self-center rounded-full bg-amber-accent" />
+                        )}
+                      </AnimatedPressable>
+                    )
+                  })}
+                </View>
+
+                {/* Lyrics row */}
+                <View className="flex-row flex-wrap">
+                  {line.bars.map((bar, bi) => {
+                    const idx = line.startIdx + bi
+                    if (!bar.text) return null
+                    return (
+                      <Text
+                        key={`lyric-${idx}`}
+                        className={`font-serif text-sm leading-relaxed ${
+                          isActiveLine && bi === activeBarInLine
+                            ? 'text-wood-900'
+                            : 'text-muted-brown'
+                        }`}
+                      >
+                        {bar.text}{' '}
+                      </Text>
+                    )
+                  })}
+                </View>
+              </View>
             )
-
-            if (idx === 0) return [barEl]
-            return [
-              <View
-                key={`sep-${idx}`}
-                className="w-px self-stretch bg-wood-600/10"
-              />,
-              barEl,
-            ]
-          })}
-        </View>
+          })
+        })()}
       </ScrollView>
 
       {/* Active / Next Chord Diagram Preview */}

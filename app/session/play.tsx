@@ -34,6 +34,7 @@ import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useAppStore } from '@/src/stores/useAppStore'
+import { MusicProvider } from '@/src/context/MusicContext'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import * as FileSystem from 'expo-file-system/legacy'
@@ -46,6 +47,12 @@ export default function PlayScreen() {
   const lesson = useLessonStore((s) => s.lesson)
   const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const section = lesson?.sections?.[sectionIndex] as Record<string, unknown> | undefined
+
+  // Extract timeline data for MusicProvider (prefer section-level, fall back to lesson-level)
+  const chordEvents = (section as any)?.chord_timeline?.events ?? lesson?.chord_timeline?.events ?? null
+  const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
+
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()
   const positionLabel =
     section && typeof section.primary_position === 'string'
@@ -202,103 +209,108 @@ export default function PlayScreen() {
   }
 
   return (
-    <SessionStepScreen
-      title="Play"
-      subtitle={
-        isDemo
-          ? DEMO_TOUR_SUBTITLE.play
-          : 'Mute the guitar stem, follow the tab, and capture your take — scoring tracks pitch against each tab note and beat.'
-      }
-      showBack
-      onBack={() => router.back()}
-      showNext
-      nextLabel="Next: Review"
-      onNext={() => {
-        void commitPendingGhostTakeIfNeeded({ lesson, sectionIndex }).finally(() =>
-          router.push(sessionHref('review')),
-        )
-      }}
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
     >
-      <View className="gap-5">
-        {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
-        {typeof __DEV__ !== 'undefined' && __DEV__ ? (
-          <Text className="rounded-lg border border-dashed border-wood-600/35 bg-cream-dark/40 px-3 py-2 font-mono text-xs text-muted-brown">
-            noiseGateThresholdRms ({activeMicProfile}):{' '}
-            {micNoiseGateRms != null ? micNoiseGateRms.toFixed(4) : '—'} (Commit 62 calibration)
-          </Text>
-        ) : null}
-        <SessionStemAndTab
-          ref={stemTabRef}
-          tabRenderPreset="light"
-          lessonPlaybackCardVariant="play"
-          captureRecording={recording}
-          playCaptureSlot={(ctx) => (
-            <PlayCaptureCard
-              {...ctx}
-              recording={recording}
-              status={status}
-              take={take}
-              autostopTriggered={autostopTriggered}
-              onToggleCapture={handleToggleCapture}
-              recordingWallClockStartedAtMs={recordingWallClockStartedAtMs}
-            />
-          )}
-          stemsColumnReplacement={
-            <PlayStemRowScoringCard
-              currentStreak={currentStreak}
-              adaptedCentsTolerance={adaptedCentsTolerance}
-              innerToleranceCents={innerTol}
-              queue={tabNoteQueue}
-              beats={accuracyBeats}
-              noteLabels={beatNoteLabels}
-              recording={recording}
-              centsFromTarget={centsFromTarget}
-              targetMidi={targetMidi}
-              nextPreviewMidi={nextPreviewMidi}
-              windowResult={lastWindowResult}
-              windowFlashToken={windowFlashToken}
-            />
-          }
-          initialMetronomeOn={initialMetronomeOn}
-          initialStemMuteById={{ guitar: true, bass: false, drums: false, vocals: true, piano: true, other: true }}
-          ghostStemPlaybackUri={ghostPlaybackUri}
-          ghostAnchorSec={ghostAnchorSecForMix}
-          playGhostWhileRecording={Boolean(playWithGhost && ghostPlaybackUri)}
-          tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
-          insertBetweenStemAndTab={
-            <View className="gap-5">
-              <View className="w-full min-w-0">
-                <FretboardDiagram
-                  keyLabel={keyLabel}
-                  positionLabel={positionLabel}
-                  capoText={capoText}
-                  selectedNote={selectedNote}
-                  pulseKey={fretPulseKey}
-                  lastCellResult={lastFretResult}
-                  enableKeyboardInput
-                  showTuneControl
-                  tuneActive={tunerState.active}
-                  tuneDisabled={recording}
-                  tuneCalibrating={tunerState.calibrating}
-                  onToggleTune={toggleFretboardTuner}
-                  onCalibrateTune={startCalibration}
-                  tunerState={tunerState}
-                  onSelectNote={(note) => {
-                    setSelectedNote(note)
-                    setFretPulseKey((k) => k + 1)
-                    setNoteModalOpen(true)
-                  }}
-                />
-              </View>
-              {quickCoachText ? (
-                <Animated.View entering={FadeIn.duration(320)}>
-                  <CoachNote text={quickCoachText} />
-                  <CoachFeedbackPrompt
-                    focusArea={(section?.coach_note ? section.focus_area as string | null : null) ?? null}
-                    onFeedbackSubmitted={(rating: 'helpful' | 'repetitive' | 'neutral' | 'skipped') => {
-                      console.log('Coach feedback submitted:', rating)
+      <SessionStepScreen
+        title="Play"
+        subtitle={
+          isDemo
+            ? DEMO_TOUR_SUBTITLE.play
+            : 'Mute the guitar stem, follow the tab, and capture your take — scoring tracks pitch against each tab note and beat.'
+        }
+        showBack
+        onBack={() => router.back()}
+        showNext
+        nextLabel="Next: Review"
+        onNext={() => {
+          void commitPendingGhostTakeIfNeeded({ lesson, sectionIndex }).finally(() =>
+            router.push(sessionHref('review')),
+          )
+        }}
+      >
+        <View className="gap-5">
+          {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
+          {typeof __DEV__ !== 'undefined' && __DEV__ ? (
+            <Text className="rounded-lg border border-dashed border-wood-600/35 bg-cream-dark/40 px-3 py-2 font-mono text-xs text-muted-brown">
+              noiseGateThresholdRms ({activeMicProfile}):{' '}
+              {micNoiseGateRms != null ? micNoiseGateRms.toFixed(4) : '—'} (Commit 62 calibration)
+            </Text>
+          ) : null}
+          <SessionStemAndTab
+            ref={stemTabRef}
+            tabRenderPreset="light"
+            lessonPlaybackCardVariant="play"
+            captureRecording={recording}
+            playCaptureSlot={(ctx) => (
+              <PlayCaptureCard
+                {...ctx}
+                recording={recording}
+                status={status}
+                take={take}
+                autostopTriggered={autostopTriggered}
+                onToggleCapture={handleToggleCapture}
+                recordingWallClockStartedAtMs={recordingWallClockStartedAtMs}
+              />
+            )}
+            stemsColumnReplacement={
+              <PlayStemRowScoringCard
+                currentStreak={currentStreak}
+                adaptedCentsTolerance={adaptedCentsTolerance}
+                innerToleranceCents={innerTol}
+                queue={tabNoteQueue}
+                beats={accuracyBeats}
+                noteLabels={beatNoteLabels}
+                recording={recording}
+                centsFromTarget={centsFromTarget}
+                targetMidi={targetMidi}
+                nextPreviewMidi={nextPreviewMidi}
+                windowResult={lastWindowResult}
+                windowFlashToken={windowFlashToken}
+              />
+            }
+            initialMetronomeOn={initialMetronomeOn}
+            initialStemMuteById={{ guitar: true, bass: false, drums: false, vocals: true, piano: true, other: true }}
+            ghostStemPlaybackUri={ghostPlaybackUri}
+            ghostAnchorSec={ghostAnchorSecForMix}
+            playGhostWhileRecording={Boolean(playWithGhost && ghostPlaybackUri)}
+            tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
+            insertBetweenStemAndTab={
+              <View className="gap-5">
+                <View className="w-full min-w-0">
+                  <FretboardDiagram
+                    keyLabel={keyLabel}
+                    positionLabel={positionLabel}
+                    capoText={capoText}
+                    selectedNote={selectedNote}
+                    pulseKey={fretPulseKey}
+                    lastCellResult={lastFretResult}
+                    enableKeyboardInput
+                    showTuneControl
+                    tuneActive={tunerState.active}
+                    tuneDisabled={recording}
+                    tuneCalibrating={tunerState.calibrating}
+                    onToggleTune={toggleFretboardTuner}
+                    onCalibrateTune={startCalibration}
+                    tunerState={tunerState}
+                    onSelectNote={(note) => {
+                      setSelectedNote(note)
+                      setFretPulseKey((k) => k + 1)
+                      setNoteModalOpen(true)
                     }}
                   />
+                </View>
+                {quickCoachText ? (
+                  <Animated.View entering={FadeIn.duration(320)}>
+                    <CoachNote text={quickCoachText} />
+                    <CoachFeedbackPrompt
+                      focusArea={(section?.coach_note ? section.focus_area as string | null : null) ?? null}
+                      onFeedbackSubmitted={(rating: 'helpful' | 'repetitive' | 'neutral' | 'skipped') => {
+                        console.log('Coach feedback submitted:', rating)
+                      }}
+                    />
                 </Animated.View>
               ) : null}
             </View>
@@ -313,14 +325,12 @@ export default function PlayScreen() {
             }
           }}
         />
-
         <GhostPlayerControl
           playWithGhost={playWithGhost}
           onTogglePlayWithGhost={setPlayWithGhost}
           ghostRecordedAtLabel={ghostRecordedLabel}
           hasGhost={Boolean(ghostPlaybackUri)}
         />
-
         {take && take.audioBytes.length > 0 ? (
           <View className="rounded-xl border border-wood-600/35 bg-cream-dark/25 px-3 py-2">
             <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-muted-brown">
@@ -345,7 +355,6 @@ export default function PlayScreen() {
             </View>
           </View>
         ) : null}
-
         {micError ? (
           <ErrorBanner
             dismissible={false}
@@ -372,5 +381,6 @@ export default function PlayScreen() {
         ) : null}
       </View>
     </SessionStepScreen>
+    </MusicProvider>
   )
 }

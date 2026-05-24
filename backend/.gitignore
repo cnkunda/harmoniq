@@ -15,6 +15,12 @@ build/
 data/*
 !data/.gitkeep
 
+# Log files (runtime artifacts)
+*.log
+
+# Temporary test data
+.tmp_test_data_*
+
 # Model artifacts (regenerate from training script)
 *.keras
 *.weights.h5

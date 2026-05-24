@@ -12,7 +12,7 @@ import {
   Plus
 } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
@@ -370,17 +370,17 @@ export default function HomeScreen() {
             <View className="relative z-10 p-6">
               {suggestion == null ? (
                 loadError ? (
-                  <View>
-                    <Text className="font-sans text-sm text-cream">Could not load your suggestion.</Text>
-                    <Pressable
-                      onPress={refresh}
-                      className="mt-4 rounded-xl border border-amber-accent/60 bg-wood-900/50 px-4 py-3"
-                      accessibilityRole="button"
-                      accessibilityLabel="Retry loading suggestion"
-                    >
-                      <Text className="text-center font-sans-medium text-amber-light">Retry</Text>
-                    </Pressable>
-                  </View>
+                   <View>
+                     <Text className="font-sans text-sm text-cream">Could not load your suggestion.</Text>
+                     <AnimatedPressable
+                       onPress={refresh}
+                       className="mt-4 rounded-xl border border-amber-accent/60 bg-wood-900/50 px-4 py-3"
+                       accessibilityRole="button"
+                       accessibilityLabel="Retry loading suggestion"
+                     >
+                       <Text className="text-center font-sans-medium text-amber-light">Retry</Text>
+                     </AnimatedPressable>
+                   </View>
                 ) : (
                   <Text className="font-sans text-sm text-cream">Loading suggestion…</Text>
                 )
@@ -432,40 +432,40 @@ export default function HomeScreen() {
                     <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
                       More ways to begin
                     </Text>
-                    <View className="gap-2">
-                      <Pressable
-                        onPress={goAnalyze}
-                        className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
-                        accessibilityRole="button"
-                        accessibilityLabel="Add a song"
-                      >
-                        <Plus color={colors.amber.light} size={20} strokeWidth={2} />
-                        <Text className="flex-1 font-sans-medium text-sm text-cream">Add a song</Text>
-                      </Pressable>
-                      {spotifyLinked ? (
-                        <Pressable
-                          onPress={() => router.push('/(tabs)/settings')}
-                          className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
-                          accessibilityRole="button"
-                          accessibilityLabel="Spotify connected, open Settings"
-                        >
-                          <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
-                          <Text className="flex-1 font-sans-medium text-sm text-cream">Spotify · Connected</Text>
-                          <ChevronRight color={colors.amber.light} size={20} strokeWidth={2} />
-                        </Pressable>
-                      ) : (
-                        <Pressable
-                          onPress={onConnectSpotify}
-                          disabled={spotifyBusy}
-                          className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90 disabled:opacity-50"
-                          accessibilityRole="button"
-                          accessibilityLabel="Connect to Spotify"
-                        >
-                          <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
-                          <Text className="flex-1 font-sans-medium text-sm text-cream">
-                            {spotifyBusy ? 'Connecting…' : 'Connect to Spotify'}
-                          </Text>
-                        </Pressable>
+                     <View className="gap-2">
+                       <AnimatedPressable
+                         onPress={goAnalyze}
+                         className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
+                         accessibilityRole="button"
+                         accessibilityLabel="Add a song"
+                       >
+                         <Plus color={colors.amber.light} size={20} strokeWidth={2} />
+                         <Text className="flex-1 font-sans-medium text-sm text-cream">Add a song</Text>
+                       </AnimatedPressable>
+                       {spotifyLinked ? (
+                         <AnimatedPressable
+                           onPress={() => router.push('/(tabs)/settings')}
+                           className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
+                           accessibilityRole="button"
+                           accessibilityLabel="Spotify connected, open Settings"
+                         >
+                           <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
+                           <Text className="flex-1 font-sans-medium text-sm text-cream">Spotify · Connected</Text>
+                           <ChevronRight color={colors.amber.light} size={20} strokeWidth={2} />
+                         </AnimatedPressable>
+                       ) : (
+                         <AnimatedPressable
+                           onPress={onConnectSpotify}
+                           disabled={spotifyBusy}
+                           className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90 disabled:opacity-50"
+                           accessibilityRole="button"
+                           accessibilityLabel="Connect to Spotify"
+                         >
+                           <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
+                           <Text className="flex-1 font-sans-medium text-sm text-cream">
+                             {spotifyBusy ? 'Connecting…' : 'Connect to Spotify'}
+                           </Text>
+                         </AnimatedPressable>
                       )}
                     </View>
                   </View>
@@ -612,21 +612,21 @@ export default function HomeScreen() {
               <View className="gap-2">
                 {recentItems.length === 0 ? (
                   <Text className="font-sans text-sm text-muted-brown">No songs added yet.</Text>
-                ) : (
-                  recentItems.map((item) => (
-                    <Pressable
-                      key={item.id}
-                      onPress={item.open}
-                      className="flex-row items-center justify-between rounded-xl border border-wood-700/50 bg-wood-800/40 px-3 py-2.5 active:bg-wood-800/60"
-                      accessibilityRole="button"
-                      accessibilityLabel={`Open session ${item.title}`}
-                    >
-                      <View className="flex-1 pr-2">
-                        <Text className="font-sans-medium text-[15px] text-cream">{item.title}</Text>
-                        <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{item.focus}</Text>
-                      </View>
-                      <Text className="font-sans text-[11px] text-muted-brown">{item.dateLabel}</Text>
-                    </Pressable>
+                 ) : (
+                   recentItems.map((item) => (
+                     <AnimatedPressable
+                       key={item.id}
+                       onPress={item.open}
+                       className="flex-row items-center justify-between rounded-xl border border-wood-700/50 bg-wood-800/40 px-3 py-2.5 active:bg-wood-800/60"
+                       accessibilityRole="button"
+                       accessibilityLabel={`Open session ${item.title}`}
+                     >
+                       <View className="flex-1 pr-2">
+                         <Text className="font-sans-medium text-[15px] text-cream">{item.title}</Text>
+                         <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{item.focus}</Text>
+                       </View>
+                       <Text className="font-sans text-[11px] text-muted-brown">{item.dateLabel}</Text>
+                     </AnimatedPressable>
                   ))
                 )}
               </View>
@@ -634,29 +634,29 @@ export default function HomeScreen() {
 
             <View>
               <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Quick actions</Text>
-              <View className="flex-row gap-3">
-                <Pressable
-                  onPress={goAnalyze}
-                  className="min-h-[128px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 py-4 active:bg-wood-700/50"
-                  accessibilityRole="button"
-                  accessibilityLabel="Add a song"
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
-                    <Plus color={colors.amber.light} size={20} strokeWidth={2} />
-                  </View>
-                  <Text className="text-center font-sans-medium text-sm text-cream">Add Song</Text>
-                </Pressable>
-                <Pressable
-                  onPress={goLibrary}
-                  className="min-h-[128px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 py-4 active:bg-wood-700/50"
-                  accessibilityRole="button"
-                  accessibilityLabel="Open library"
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
-                    <LibraryIcon color={colors.amber.light} size={20} strokeWidth={2} />
-                  </View>
-                  <Text className="text-center font-sans-medium text-sm text-cream">Open Library</Text>
-                </Pressable>
+               <View className="flex-row gap-3">
+                 <AnimatedPressable
+                   onPress={goAnalyze}
+                   className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                   accessibilityRole="button"
+                   accessibilityLabel="Add a song"
+                 >
+                   <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                     <Plus color={colors.amber.light} size={22} strokeWidth={2} />
+                   </View>
+                   <Text className="text-center font-sans-medium text-sm text-cream">Add Song</Text>
+                  </AnimatedPressable>
+                 <AnimatedPressable
+                   onPress={goLibrary}
+                   className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                   accessibilityRole="button"
+                   accessibilityLabel="Open library"
+                 >
+                   <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                     <LibraryIcon color={colors.amber.light} size={22} strokeWidth={2} />
+                   </View>
+                   <Text className="text-center font-sans-medium text-sm text-cream">Open Library</Text>
+                 </AnimatedPressable>
               </View>
               {/* <Pressable
                 onPress={goListening}

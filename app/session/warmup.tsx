@@ -22,6 +22,7 @@ import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
 import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
+import { MusicProvider } from '@/src/context/MusicContext'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import colors from '@/src/constants/colors'
 
@@ -61,6 +62,11 @@ export default function WarmupScreen() {
   const lesson = useLessonStore((s) => s.lesson)
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
+
+  // Extract timeline data for MusicProvider (prefer section-level, fall back to lesson-level)
+  const chordEvents = lesson?.chord_timeline?.events ?? null
+  const soloNotesArr = lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
 
   const slot = plan?.slots[idx]
   const wp = slot?.warmup_plan
@@ -223,6 +229,11 @@ export default function WarmupScreen() {
   const rightColClass = twoColumn ? 'flex-1' : 'mt-6 w-full'
 
   return (
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
+    >
     <SessionStepScreen
       title="Session warm-up"
       subtitle="Short moves before the rest of your plan."
@@ -451,6 +462,7 @@ export default function WarmupScreen() {
       ) : null}
 
       <SessionNoteDetailModal detail={selectionDetail} visible={noteModalOpen} onClose={() => setNoteModalOpen(false)} />
-    </SessionStepScreen>
+      </SessionStepScreen>
+    </MusicProvider>
   )
 }

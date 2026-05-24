@@ -1,0 +1,24 @@
+# Label Noise Analysis Configuration
+# Following MT3 paper Appendix D.2 methodology
+
+evaluation:
+  # Tolerance windows in milliseconds for sensitivity analysis
+  tolerance_windows_ms: [10, 25, 50, 100, 200, 500]
+  # Threshold where we consider labels too noisy for training
+  rejection_gate_ms: 100
+  # Chord types to analyze separately (from PRIORITIES.md)
+  chord_types:
+    - triad
+    - extended
+    - altered
+    - suspended_other
+    - no_chord
+
+training_augmentations:
+  # Maximum boundary shift during training to build robustness (±30ms)
+  temporal_jitter_ms: 30
+
+data_ingestion:
+  # Label quality gate parameters
+  max_boundary_jitter_ms: 100  # Reject examples with >100ms jitter
+  flag_boundary_jitter_ms: 50   # Flag examples with >50ms jitter for review

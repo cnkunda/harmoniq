@@ -26,7 +26,12 @@ import wave
 from pathlib import Path
 
 from app.ingest import get_data_dir
-from app.pipeline_proof import TARGET_SR, run_demucs_htdemucs_6s
+from app.pipeline_proof import (
+    TARGET_SR,
+    denormalize_stems,
+    normalize_audio_for_demucs,
+    run_demucs_htdemucs_6s,
+)
 
 logger = logging.getLogger("harmoniq.separate")
 logger.setLevel(logging.INFO)
@@ -234,6 +239,8 @@ def separate_song_to_stems(
     - Checks stem cache by audio hash to avoid re-running Demucs
     - Uses htdemucs_ft when HARMONIQ_FAST_STEMS=1 (faster but lower quality)
     - Skips separation when HARMONIQ_SKIP_STEMS=1 (placeholder stems)
+    - Normalizes audio before Demucs (Commit 111a optimization)
+    - Denormalizes stems after separation to restore original scale
     """
     if not song_wav_path.exists():
         raise SeparationError(f"Input song.wav missing: {song_wav_path}")
@@ -273,8 +280,31 @@ def separate_song_to_stems(
     )
     
     start_time = time.time()
+    
+    # Normalize audio before Demucs (Commit 111a optimization)
+    normalized_wav_path = job_dir / "_normalized.wav"
     try:
-        stems_track_dir = run_demucs_htdemucs_6s(song_wav_path, demucs_out_dir, model=model)
+        mean, std = normalize_audio_for_demucs(song_wav_path, normalized_wav_path)
+        logger.info(
+            "Audio normalized: mean=%.6f, std=%.6f (job_dir=%s)",
+            mean,
+            std,
+            job_dir,
+        )
+    except Exception as e:
+        logger.warning(
+            "Audio normalization failed, using original audio: %s (job_dir=%s)",
+            e,
+            job_dir,
+        )
+        normalized_wav_path = song_wav_path
+        mean, std = 0.0, 1.0
+    
+    try:
+        # Run Demucs on normalized audio (with optimized segment/overlap/device)
+        stems_track_dir = run_demucs_htdemucs_6s(
+            normalized_wav_path, demucs_out_dir, model=model
+        )
         elapsed = time.time() - start_time
         logger.info("Demucs separation completed in %.2fs (model=%s)", elapsed, model)
 
@@ -287,6 +317,18 @@ def separate_song_to_stems(
             if not _is_readable_nonempty_wav(dest):
                 raise SeparationError(f"Demucs output {dest} is missing or not a readable WAV.")
             mapping[key] = _rel_to_backend_root(dest)
+        
+        # Denormalize stems back to original scale (Commit 111a optimization)
+        if mean != 0.0 or std != 1.0:
+            try:
+                denormalize_stems(stems_dir, mean, std, stem_keys=STEM_KEYS)
+                logger.info("Stems denormalized (job_dir=%s)", job_dir)
+            except Exception as e:
+                logger.warning(
+                    "Stem denormalization failed, using normalized stems: %s (job_dir=%s)",
+                    e,
+                    job_dir,
+                )
         
         # Save to cache for future runs
         try:
@@ -306,4 +348,6 @@ def separate_song_to_stems(
     finally:
         if cleanup_demucs_outputs:
             shutil.rmtree(demucs_out_dir, ignore_errors=True)
+        # Clean up normalized audio if it was created
+        normalized_wav_path.unlink(missing_ok=True)
 

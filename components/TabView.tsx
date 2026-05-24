@@ -25,7 +25,7 @@ const SKELETON_TAB = [
 
 export function TabView({ isSkeleton = false, label }: TabViewProps) {
   return (
-    <View className="w-full overflow-hidden rounded-xl border border-wood-600/50 bg-[#1E1E1E] p-4">
+    <View className="w-full overflow-hidden rounded-xl border border-wood-600/50 bg-wood-900 p-4">
       <View className="mb-3 flex-row items-center justify-between">
         {label && (
           <Text className="font-sans text-xs uppercase tracking-wider text-muted-brown">

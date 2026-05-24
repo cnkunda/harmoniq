@@ -19,6 +19,7 @@ import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { MusicProvider } from '@/src/context/MusicContext'
 import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
 export default function SlowScreen() {
@@ -31,13 +32,17 @@ export default function SlowScreen() {
 
   const sections = (lesson?.sections ?? []) as Array<Record<string, unknown>>
   const section = sections[lessonSectionIndex]
+  // Extract timeline data for MusicProvider (prefer section-level, fall back to lesson-level)
+  const chordEvents = (section as any)?.chord_timeline?.events ?? lesson?.chord_timeline?.events ?? null
+  const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? []
+
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()
   const positionLabel =
     section && typeof section.primary_position === 'string'
       ? section.primary_position
       : 'Tap a note to infer position'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
-  const barTimestamps = lesson?.bar_timestamps ?? []
   const beatSec = lesson?.tempo && lesson.tempo > 0 ? 60 / lesson.tempo : 0.5
 
   const derived = useMemo(
@@ -92,80 +97,86 @@ export default function SlowScreen() {
   }
 
   return (
-    <SessionStepScreen
-      title="Slow"
-      subtitle={
-        isDemo
-          ? DEMO_TOUR_SUBTITLE.slow
-          : 'Starts at 65% speed, loops a bar-aligned region, and keeps the tab cursor synced to slowed stems.'
-      }
-      showBack
-      onBack={() => router.back()}
-      showNext
-      nextLabel="Next: Play"
-      onNext={() => router.push(sessionHref('play'))}
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
     >
-      {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.slow}</DemoTourCallout> : null}
-      {playbackLoop ? (
-        <View className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-3 py-2">
-          <Text className="font-sans text-xs text-wood-900">
-            Slow loop: {playbackLoop.label} ({playbackLoop.startSec.toFixed(2)}s – {playbackLoop.endSec.toFixed(2)}s)
-          </Text>
-          {__DEV__ && derived ? (
-            <Text className="mt-1 font-mono text-[10px] text-muted-brown">Source: {derived.source}</Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      {loopBars && barTimestamps.length >= 2 ? (
-        <LoopRegionControl
-          barCount={barTimestamps.length}
-          value={loopBars}
-          onChange={setLoopBars}
-        />
-      ) : null}
-
-      <SessionStemAndTab
-        tabRenderPreset="light"
-        initialRate={0.65}
-        initialMetronomeOn={initialMetronomeOn}
-        autoLoopRegion={playbackLoop}
-        loopHighlight={loopHighlight}
-        tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
-        insertBetweenStemAndTab={
-          <FretboardDiagram
-            keyLabel={keyLabel}
-            positionLabel={positionLabel}
-            capoText={capoText}
-            selectedNote={selectedNote}
-            pulseKey={fretPulseKey}
-            enableKeyboardInput
-            showTuneControl
-            tuneActive={tunerState.active}
-            tuneCalibrating={tunerState.calibrating}
-            onToggleTune={toggleFretboardTuner}
-            onCalibrateTune={startCalibration}
-            tunerState={tunerState}
-            onSelectNote={(note) => {
-              setSelectedNote(note)
-              setFretPulseKey((k) => k + 1)
-              setNoteModalOpen(true)
-            }}
-          />
+      <SessionStepScreen
+        title="Slow"
+        subtitle={
+          isDemo
+            ? DEMO_TOUR_SUBTITLE.slow
+            : 'Starts at 65% speed, loops a bar-aligned region, and keeps the tab cursor synced to slowed stems.'
         }
-        onNoteEvent={(evt: NoteEventMessage) => {
-          setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
-          setFretPulseKey((k) => k + 1)
-          if (evt.fromScoreTap) {
-            setNoteModalOpen(true)
+        showBack
+        onBack={() => router.back()}
+        showNext
+        nextLabel="Next: Play"
+        onNext={() => router.push(sessionHref('play'))}
+      >
+        {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.slow}</DemoTourCallout> : null}
+        {playbackLoop ? (
+          <View className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-3 py-2">
+            <Text className="font-sans text-xs text-wood-900">
+              Slow loop: {playbackLoop.label} ({playbackLoop.startSec.toFixed(2)}s – {playbackLoop.endSec.toFixed(2)}s)
+            </Text>
+            {__DEV__ && derived ? (
+              <Text className="mt-1 font-mono text-[10px] text-muted-brown">Source: {derived.source}</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {loopBars && barTimestamps.length >= 2 ? (
+          <LoopRegionControl
+            barCount={barTimestamps.length}
+            value={loopBars}
+            onChange={setLoopBars}
+          />
+        ) : null}
+
+        <SessionStemAndTab
+          tabRenderPreset="light"
+          initialRate={0.65}
+          initialMetronomeOn={initialMetronomeOn}
+          autoLoopRegion={playbackLoop}
+          loopHighlight={loopHighlight}
+          tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
+          insertBetweenStemAndTab={
+            <FretboardDiagram
+              keyLabel={keyLabel}
+              positionLabel={positionLabel}
+              capoText={capoText}
+              selectedNote={selectedNote}
+              pulseKey={fretPulseKey}
+              enableKeyboardInput
+              showTuneControl
+              tuneActive={tunerState.active}
+              tuneCalibrating={tunerState.calibrating}
+              onToggleTune={toggleFretboardTuner}
+              onCalibrateTune={startCalibration}
+              tunerState={tunerState}
+              onSelectNote={(note) => {
+                setSelectedNote(note)
+                setFretPulseKey((k) => k + 1)
+                setNoteModalOpen(true)
+              }}
+            />
           }
-        }}
-      />
-      <SessionNoteDetailModal
-        detail={selectionDetail}
-        visible={noteModalOpen}
-        onClose={() => setNoteModalOpen(false)}
-      />
-    </SessionStepScreen>
+          onNoteEvent={(evt: NoteEventMessage) => {
+            setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
+            setFretPulseKey((k) => k + 1)
+            if (evt.fromScoreTap) {
+              setNoteModalOpen(true)
+            }
+          }}
+        />
+        <SessionNoteDetailModal
+          detail={selectionDetail}
+          visible={noteModalOpen}
+          onClose={() => setNoteModalOpen(false)}
+        />
+      </SessionStepScreen>
+    </MusicProvider>
   )
 }

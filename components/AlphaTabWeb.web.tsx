@@ -3,8 +3,9 @@
  * Uses the AlphaTab library: https://alphatab.net/docs/introduction
  */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import colors from '@/src/constants/colors'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { resolveBundledSoundFontUrlForProfile } from '@/src/audio/soundfontBundled'
@@ -1335,9 +1336,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         {(bootError || engineError) && (
           <View className="border-b border-amber-accent/30 bg-amber-accent/10 px-3 py-2">
             <Text className="font-sans text-xs text-wood-900">{bootError ?? engineError}</Text>
-            <Pressable onPress={onRetry} className="mt-2 self-start" accessibilityRole="button">
-              <Text className="font-sans-medium text-xs text-amber-accent underline">Retry</Text>
-            </Pressable>
+             <AnimatedPressable onPress={onRetry} className="mt-2 self-start" accessibilityRole="button">
+               <Text className="font-sans-medium text-xs text-amber-accent underline">Retry</Text>
+             </AnimatedPressable>
           </View>
         )}
         {!mounted ? (

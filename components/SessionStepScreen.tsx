@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { ScrollView, Text, View } from 'react-native'
+
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 export interface SessionStepScreenProps {
   title: string
@@ -38,8 +40,8 @@ export function SessionStepScreen({
   nextButtonClassName,
 }: SessionStepScreenProps) {
   const footerRow = footerContainerClassName ?? 'flex-row gap-3 border-t border-wood-600/25 bg-ivory px-6 pb-8 pt-4'
-  const backClass = backButtonClassName ?? 'flex-1 rounded-xl border border-wood-600/55 bg-cream-dark/60 py-3'
-  const nextClass = nextButtonClassName ?? 'flex-1 rounded-xl bg-amber-accent/90 py-3'
+  const backClass = backButtonClassName ?? 'flex-1 rounded-xl border border-wood-600/55 bg-cream-dark/60 px-6 py-3'
+  const nextClass = nextButtonClassName ?? 'flex-1 rounded-xl bg-amber-accent/90 px-6 py-3'
 
   return (
     <View className="flex-1">
@@ -69,25 +71,25 @@ export function SessionStepScreen({
 
       {hideFooter ? null : (
         <View className={footerRow}>
-          {showBack ? (
-            <Pressable
-              onPress={onBack}
-              className={backClass}
-              accessibilityRole="button"
-            >
-              <Text className="text-center font-sans-medium text-wood-900">{backLabel}</Text>
-            </Pressable>
+           {showBack ? (
+             <AnimatedPressable
+               onPress={onBack}
+               className={backClass}
+               accessibilityRole="button"
+             >
+               <Text className="text-center font-sans-medium text-wood-900">{backLabel}</Text>
+             </AnimatedPressable>
           ) : (
             <View className="flex-1" />
           )}
-           {showNext ? (
-             <Pressable
-               onPress={onNext}
-               className={`${nextClass} flex-nowrap items-center`}
-               accessibilityRole="button"
-             >
-                <Text className="text-center font-sans-medium text-wood-900 whitespace-nowrap">{nextLabel}</Text>
-             </Pressable>
+            {showNext ? (
+              <AnimatedPressable
+                onPress={onNext}
+                className={`${nextClass} flex-nowrap items-center`}
+                accessibilityRole="button"
+              >
+                 <Text className="text-center font-sans-medium text-wood-900 whitespace-nowrap">{nextLabel}</Text>
+              </AnimatedPressable>
            ) : null}
         </View>
       )}

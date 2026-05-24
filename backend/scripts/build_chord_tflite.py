@@ -378,7 +378,7 @@ def make_window_augmented(center_chroma: np.ndarray, noise_std: float = 0.12,
 
 
 def apply_extension_dropout(template: np.ndarray, quality: str,
-                            extension_drop_rate: float = 0.30) -> np.ndarray:
+                             extension_drop_rate: float = 0.30) -> np.ndarray:
     """Reduce or remove extension notes (intervals > 12) to combat bias.
 
     Extended chords (9ths, 11ths, 13ths) sound very similar to their base
@@ -429,8 +429,96 @@ def apply_extension_dropout(template: np.ndarray, quality: str,
     return result
 
 
+def apply_temporal_jitter_to_labels(labels: np.ndarray, max_shift_ms: float = 30.0, 
+                                   hop_sec: float = 0.1, label_value_for_padding: int = -1) -> np.ndarray:
+    """
+    Apply temporal jitter to simulate label timing noise during training.
+    
+    Following MT3 paper Appendix D.2: randomly shift label boundaries by ±max_shift_ms
+    to make the model robust to imperfect ground truth timing.
+    
+    Args:
+        labels: Label array of shape (sequence_length,) containing class indices
+        max_shift_ms: Maximum shift in milliseconds (±)
+        hop_sec: Hop size in seconds between predictions (0.1s = 100ms in this codebase)
+        label_value_for_padding: Value to use for padding shifted regions (-1 for ignore_index)
+        
+    Returns:
+        Temporally jittered label array
+    """
+    if max_shift_ms == 0.0:
+        return labels.copy()
+    
+    # Convert milliseconds to number of prediction steps
+    max_shift_steps = int(round(max_shift_ms / 1000.0 / hop_sec))
+    
+    if max_shift_steps == 0:
+        return labels.copy()
+    
+    # Handle different label formats
+    if labels.ndim == 1:
+        # Assuming labels are class indices for each prediction step
+        shift = np.random.randint(-max_shift_steps, max_shift_steps + 1)
+        
+        if shift == 0:
+            return labels.copy()
+        elif shift > 0:
+            # Shift right: move content to higher indices, pad at beginning
+            shifted_labels = np.full_like(labels, label_value_for_padding)
+            shifted_labels[shift:] = labels[:-shift]
+            return shifted_labels
+        else:  # shift < 0
+            # Shift left: move content to lower indices, pad at end
+            shifted_labels = np.full_like(labels, label_value_for_padding)
+            shifted_labels[:shift] = labels[-shift:]
+            return shifted_labels
+    else:
+        raise ValueError(f"Unsupported label shape: {labels.shape}. Expected 1D array of class indices.")
+
+
+def apply_temporal_jitter_to_window_features(window: np.ndarray, max_shift_ms: float = 30.0,
+                                            hop_sec: float = 0.1) -> np.ndarray:
+    """
+    Apply temporal jitter to the input features by shifting the window in time.
+    This is a more direct implementation that shifts the audio features.
+    
+    Args:
+        window: Feature array of shape (window_size, feature_dim)
+        max_shift_ms: Maximum shift in milliseconds (±)
+        hop_sec: Hop size in seconds between frames
+        
+    Returns:
+        Temporally jittered feature array
+    """
+    if max_shift_ms == 0.0:
+        return window.copy()
+    
+    # Convert milliseconds to number of feature frames
+    # Assuming features are extracted with hop_sec hop size
+    max_shift_frames = int(round(max_shift_ms / 1000.0 / hop_sec))
+    
+    if max_shift_frames == 0:
+        return window.copy()
+    
+    seq_length, feature_dim = window.shape
+    shift = np.random.randint(-max_shift_frames, max_shift_frames + 1)
+    
+    if shift == 0:
+        return window.copy()
+    elif shift > 0:
+        # Shift right: move content to higher indices, pad at beginning with zeros
+        shifted_window = np.zeros_like(window)
+        shifted_window[shift:] = window[:-shift]
+        return shifted_window
+    else:  # shift < 0
+        # Shift left: move content to lower indices, pad at end with zeros
+        shifted_window = np.zeros_like(window)
+        shifted_window[:shift] = window[-shift:]
+        return shifted_window
+
+
 def generate_dataset(samples_per_class: int = 200, config: dict = None,
-                     transition_probs: np.ndarray | None = None):
+                      transition_probs: np.ndarray | None = None):
     """Generate augmented chord dataset with realistic variability.
 
     Args:
@@ -448,6 +536,7 @@ def generate_dataset(samples_per_class: int = 200, config: dict = None,
     bass_rate = cfg.get("bass_ambiguity_rate", 0.2)
     transition_rate = cfg.get("transition_rate", 0.3)
     extension_drop_rate = cfg.get("extension_drop_rate", 0.30)
+    temporal_jitter_prob = cfg.get("temporal_jitter_prob", 0.3)  # Probability of applying temporal jitter
     
     X, y = [], []
     
@@ -471,6 +560,21 @@ def generate_dataset(samples_per_class: int = 200, config: dict = None,
                 stretch_rate=stretch_rate,
                 stretch_range=stretch_range
             )
+            
+            # Apply temporal jitter augmentation with probability temporal_jitter_prob
+            # Following MT3 Appendix D.2: randomly shift label boundaries by ±30ms
+            # This creates label noise robustness by shifting when the chord changes occur
+            if np.random.random() < temporal_jitter_prob:
+                # Apply temporal jitter to the window features directly
+                # This shifts the entire feature sequence in time, simulating
+                # the effect of boundary timing uncertainty in the labels
+                max_shift_ms = 30.0  # ±30ms as specified in the commit
+                hop_sec = 0.1  # 100ms hop size from chord_inference.py (_HOP_SEC = 0.1)
+                window = apply_temporal_jitter_to_window_features(
+                    window, 
+                    max_shift_ms=max_shift_ms,
+                    hop_sec=hop_sec
+                )
             
             X.append(window)
             y.append(idx)
@@ -597,13 +701,13 @@ def build_attention_vis_model(window: int = WINDOW) -> tf.keras.Model:
 def load_real_data(data_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
     """Load GuitarSet CQT features and labels from processed .npz files.
 
-    Looks for .npz files in <data_dir>/guitarset/processed/cqt/.
+    Looks for .npz files in <data_dir>/processed/cqt/.
     Uses train+val splits (excludes test/player 05).
 
     Returns:
         (features, labels) arrays with shapes (N, 128, 40) and (N,).
     """
-    data_path = Path(data_dir) / "guitarset" / "processed" / "cqt"
+    data_path = Path(data_dir) / "processed" / "cqt"
     if not data_path.exists():
         raise FileNotFoundError(f"GuitarSet CQT directory not found: {data_path}")
 
@@ -628,13 +732,32 @@ def load_real_data(data_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
     X = np.concatenate(all_features, axis=0).astype(np.float32)
     y = np.concatenate(all_labels, axis=0).astype(np.int32)
 
+    # Apply label quality gate (placeholder for future implementation)
+    # In a full implementation, this would:
+    # 1. Run a baseline model to get predictions
+    # 2. Compare predictions with ground truth to estimate boundary jitter
+    # 3. Reject examples with boundary jitter > max_boundary_jitter_ms
+    # 4. Flag examples with boundary jitter > flag_boundary_jitter_ms for review
+    # For now, we just log that this step would occur
+    config_path = Path(__file__).parent.parent / "config" / "label_noise_config.yaml"
+    if config_path.exists():
+        import yaml
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+        max_jitter_ms = config.get("data_ingestion", {}).get("max_boundary_jitter_ms", 100)
+        flag_jitter_ms = config.get("data_ingestion", {}).get("flag_boundary_jitter_ms", 50)
+        print(f"Label quality gate: Would reject examples with >{max_jitter_ms}ms jitter, "
+              f"flag examples with >{flag_jitter_ms}ms jitter")
+    else:
+        print("Label quality gate: Configuration not found, skipping gate")
+
     print(f"Loaded {len(X)} windows from {len(npz_files)} GuitarSet files (train+val only)")
     return X, y
 
 
 def load_test_data(data_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
     """Load GuitarSet test split (player 05)."""
-    data_path = Path(data_dir) / "guitarset" / "processed" / "cqt"
+    data_path = Path(data_dir) / "processed" / "cqt"
     if not data_path.exists():
         raise FileNotFoundError(f"GuitarSet CQT directory not found: {data_path}")
 

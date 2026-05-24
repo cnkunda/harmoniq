@@ -15,6 +15,7 @@ import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
+import { MusicProvider } from '@/src/context/MusicContext'
 import colors from '@/src/constants/colors'
 import { Film, Pause, Play, X } from 'lucide-react-native'
 
@@ -28,6 +29,11 @@ export default function ListenScreen() {
   const lessonJobId = lesson?.job_id ?? ''
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const stemTabRef = useRef<ListenStemPanelHandle>(null)
+
+  // Extract timeline data for MusicProvider (prefer section-level, fall back to lesson-level)
+  const chordEvents = lesson?.chord_timeline?.events ?? null
+  const soloNotesArr = lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
 
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
   const [orientAnnotation, setOrientAnnotation] = useState<string | null>(null)
@@ -147,7 +153,12 @@ export default function ListenScreen() {
   }
 
   return (
-    <SessionStepScreen
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
+    >
+      <SessionStepScreen
       title="Listen"
       subtitle={
         isDemo ? DEMO_TOUR_SUBTITLE.listen : 'Familiarize yourself with the piece before playing'
@@ -260,5 +271,6 @@ export default function ListenScreen() {
         </SafeAreaView>
       </Modal>
     </SessionStepScreen>
+    </MusicProvider>
   )
 }

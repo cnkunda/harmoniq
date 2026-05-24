@@ -6,7 +6,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import colors from '@/src/constants/colors'

@@ -2,7 +2,7 @@ import { Asset } from 'expo-asset'
 import { Audio, type AVPlaybackStatus } from 'expo-av'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native'
+import { ActivityIndicator, Platform, ScrollView, Text, View } from 'react-native'
 import Animated, {
     cancelAnimation,
     useAnimatedStyle,

@@ -9,6 +9,7 @@ platform notes (Basic Pitch + TensorFlow on Windows/Linux Python 3.11+).
 
 from __future__ import annotations
 
+import logging
 import math
 import subprocess
 import sys
@@ -17,10 +18,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+logger = logging.getLogger("harmoniq.pipeline_proof")
+
 # --- Constants aligned with README / PRIORITIES --------------------------------
 
 DEMUCS_MODEL = "htdemucs_6s"
 TARGET_SR = 44100
+
+# Demucs stem separation optimization (Commit 111a)
+# Segment size and overlap to prevent OOM on long tracks, matching Hybrid Demucs tutorial
+DEMUCS_SEGMENT_SIZE = 10  # seconds
+DEMUCS_OVERLAP = 0.1  # fraction of segment (0.1 = 1 second overlap per side)
 
 # Long-running CLIs may print a lot of stderr; only the tail is attached to failures.
 _SUBPROCESS_FAIL_SNIP = 8000
@@ -115,18 +123,130 @@ def demucs_separate_command(
     model: str = DEMUCS_MODEL,
     python_executable: str | None = None,
 ) -> list[str]:
-    """Argv to run Demucs with the ``htdemucs_6s`` six-stem checkpoint."""
+    """Argv to run Demucs with the ``htdemucs_6s`` six-stem checkpoint.
+    
+    Includes optimization flags (Commit 111a):
+    - --segment: process in chunks to prevent OOM on long tracks
+    - --overlap: overlap ratio for smooth boundaries
+    - --device: explicit CUDA/CPU selection
+    """
     py = python_executable or sys.executable
+    
+    # Detect CUDA availability for --device flag
+    try:
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    except (ImportError, RuntimeError):
+        device = "cpu"
+    
     return [
         py,
         "-m",
         "demucs",
         "-n",
         model,
+        "--segment",
+        str(DEMUCS_SEGMENT_SIZE),
+        "--overlap",
+        str(DEMUCS_OVERLAP),
+        "--device",
+        device,
         "--out",
         str(out_dir),
         str(input_wav),
     ]
+
+
+def normalize_audio_for_demucs(input_wav: Path, output_wav: Path) -> tuple[float, float]:
+    """Normalize audio (mean/std) before Demucs separation for improved quality.
+    
+    Optimization (Commit 111a): Following the Hybrid Demucs tutorial, normalize the waveform
+    by subtracting its mean and dividing by its standard deviation. This centers the audio
+    around zero and scales it to unit variance, which can improve the model's input quality.
+    
+    Args:
+        input_wav: Path to input WAV file (44.1 kHz mono from ingest)
+        output_wav: Path where normalized WAV will be written
+        
+    Returns:
+        Tuple of (mean, std) for denormalization after Demucs separation
+    """
+    try:
+        import numpy as np
+        import soundfile as sf
+    except ImportError as e:
+        raise RuntimeError(f"normalize_audio_for_demucs requires numpy and soundfile: {e}")
+    
+    # Load audio
+    waveform, sr = sf.read(str(input_wav))
+    
+    # Ensure mono
+    if waveform.ndim == 2:
+        waveform = waveform.mean(axis=1)
+    
+    # Compute mean and std
+    mean = float(np.mean(waveform))
+    std = float(np.std(waveform))
+    
+    # Avoid division by zero
+    if std < 1e-8:
+        std = 1.0
+    
+    # Normalize: (waveform - mean) / std
+    normalized = (waveform - mean) / std
+    
+    # Write normalized WAV
+    sf.write(str(output_wav), normalized, sr)
+    
+    return mean, std
+
+
+def denormalize_stems(
+    stems_dir: Path,
+    mean: float,
+    std: float,
+    stem_keys: Sequence[str] = ("guitar", "bass", "drums", "vocals", "piano", "other"),
+) -> None:
+    """Denormalize stems after Demucs separation to restore original scale.
+    
+    Optimization (Commit 111a): After Demucs has processed the normalized audio,
+    denormalize the output stems by reversing the normalization:
+    stems * std + mean
+    
+    Args:
+        stems_dir: Directory containing the separated stems
+        mean: Mean value used for normalization
+        std: Std value used for normalization
+        stem_keys: Names of stem files to denormalize
+    """
+    try:
+        import numpy as np
+        import soundfile as sf
+    except ImportError as e:
+        raise RuntimeError(f"denormalize_stems requires numpy and soundfile: {e}")
+    
+    for stem_key in stem_keys:
+        stem_path = stems_dir / f"{stem_key}.wav"
+        if not stem_path.exists():
+            continue
+        
+        # Load stem
+        waveform, sr = sf.read(str(stem_path))
+        
+        # Denormalize: stems * std + mean
+        denormalized = waveform * std + mean
+
+        # Clip to float32 WAV range to avoid encoding artifacts
+        clipped = np.clip(denormalized, -1.0, 1.0).astype(np.float32)
+        clipped_count = int(np.sum(np.abs(denormalized) > 1.0))
+        if clipped_count > 0:
+            logger.warning(
+                "Clipped %d samples in %s (max=%.4f)",
+                clipped_count, stem_key, float(np.max(np.abs(denormalized))),
+            )
+
+        # Write back
+        sf.write(str(stem_path), clipped, sr)
 
 
 def run_demucs_htdemucs_6s(

@@ -3,6 +3,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { useEffect } from 'react'
 
 import { SESSION_STEPS, type SessionStep } from '@/src/constants/sessionFlow'
+import { spring } from '@/src/constants/animations'
 
 export interface SessionStepperProps {
   currentStep: number
@@ -28,10 +29,7 @@ export function SessionStepper({
   const trackWidth = useSharedValue(0)
 
   useEffect(() => {
-    trackWidth.value = withSpring(trackPercent, {
-      damping: 18,
-      stiffness: 160,
-    })
+    trackWidth.value = withSpring(trackPercent, spring.gentle)
   }, [trackPercent, trackWidth])
 
   const animatedTrackStyle = useAnimatedStyle(() => ({
