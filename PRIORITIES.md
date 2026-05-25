@@ -467,12 +467,12 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 **Acceptance Criteria:**
 
-- [ ] Early stopping prevents overfitting
-- [ ] Learning rate reduces automatically on plateau
-- [ ] Time stretch and pitch shift augmentations active
-- [ ] Confusion matrix identifies confused chord pairs
-- [ ] Per-class metrics reveal rare chord performance
-- [ ] Training completes in <2 hours on available hardware
+- [x] Early stopping prevents overfitting
+- [x] Learning rate reduces automatically on plateau
+- [x] Time stretch and pitch shift augmentations active
+- [x] Confusion matrix identifies confused chord pairs
+- [x] Per-class metrics reveal rare chord performance
+- [x] Training completes in <2 hours on available hardware
 
 ---
 

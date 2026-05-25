@@ -23,6 +23,7 @@ import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
 import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
 import { MusicProvider } from '@/src/context/MusicContext'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import colors from '@/src/constants/colors'
 
@@ -63,8 +64,8 @@ export default function WarmupScreen() {
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
 
-  // Extract timeline data for MusicProvider (prefer section-level, fall back to lesson-level)
-  const chordEvents = lesson?.chord_timeline?.events ?? null
+  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
+  const chordEvents = getLessonWideChordEvents(lesson)
   const soloNotesArr = lesson?.solo_notes?.notes ?? null
   const barTimestamps = lesson?.bar_timestamps ?? null
 

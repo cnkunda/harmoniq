@@ -1,6 +1,6 @@
 import { usePathname, useRouter } from 'expo-router'
-import { ArrowRight } from 'lucide-react-native'
-import { Text, View, useWindowDimensions } from 'react-native'
+import { ArrowRight, X } from 'lucide-react-native'
+import { Alert, Text, View, useWindowDimensions } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 import colors from '@/src/constants/colors'
@@ -39,8 +39,27 @@ export function SessionChromeBar() {
   const onTuneScreen = pathname.replace(/\/+$/, '').split('/').pop() === 'tune'
 
   const closeSessionOrHome = () => {
-    if (router.canGoBack()) router.back()
-    else router.replace('/(tabs)')
+    router.replace('/(tabs)')
+  }
+
+  const handleClose = () => {
+    console.log('[SessionChromeBar] handleClose called, active=', active)
+    if (active >= 2) {
+      Alert.alert(
+        'Leave lesson?',
+        'Your progress in this lesson will be saved.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Leave', style: 'destructive', onPress: () => {
+            console.log('[SessionChromeBar] Leave pressed')
+            closeSessionOrHome()
+          } },
+        ]
+      )
+    } else {
+      console.log('[SessionChromeBar] closeSessionOrHome called directly')
+      closeSessionOrHome()
+    }
   }
   const slot = plan?.slots?.[idx]
   const slots = plan?.slots
@@ -104,12 +123,13 @@ export function SessionChromeBar() {
             <View className="items-end gap-1">
               <AnimatedPressable
                 haptic="light"
-                onPress={closeSessionOrHome}
+                onPress={handleClose}
                 accessibilityRole="button"
-                accessibilityLabel="Close"
+                accessibilityLabel="Close session"
                 hitSlop={10}
+                className="h-10 w-10 items-center justify-center rounded-full bg-wood-800/10 active:bg-wood-800/20"
               >
-                <Text className="font-sans-medium text-sm text-wood-900">Close</Text>
+                <X color={colors.wood[900]} size={20} strokeWidth={2} />
               </AnimatedPressable>
               {hasPlan && hasNext ? (
                 <AnimatedPressable
@@ -125,32 +145,44 @@ export function SessionChromeBar() {
                 </AnimatedPressable>
               ) : null}
             </View>
-          ) : hasPlan ? (
-            hasNext ? (
-              <AnimatedPressable
-                haptic="light"
-                onPress={goNextSection}
-                accessibilityRole="button"
-                accessibilityLabel="Go to next section in practice plan"
-                hitSlop={10}
-                className="flex-row items-center gap-0.5"
-              >
-                <Text className="font-sans-medium text-sm text-wood-900">Next section</Text>
-                <ArrowRight color={colors.wood[900]} size={16} style={{ marginTop: 2 }} />
-              </AnimatedPressable>
-            ) : (
-              <AnimatedPressable
-                haptic="light"
-                onPress={() => clearPlan()}
-                accessibilityRole="button"
-                accessibilityLabel="Clear practice plan"
-                hitSlop={10}
-              >
-                <Text className="font-sans-medium text-sm text-wood-900 text-right">End plan</Text>
-              </AnimatedPressable>
-            )
           ) : (
-            <View />
+            <View className="flex-row items-center gap-2">
+              {hasPlan ? (
+                hasNext ? (
+                  <AnimatedPressable
+                    haptic="light"
+                    onPress={goNextSection}
+                    accessibilityRole="button"
+                    accessibilityLabel="Go to next section in practice plan"
+                    hitSlop={10}
+                    className="flex-row items-center gap-0.5"
+                  >
+                    <Text className="font-sans-medium text-sm text-wood-900">Next section</Text>
+                    <ArrowRight color={colors.wood[900]} size={16} style={{ marginTop: 2 }} />
+                  </AnimatedPressable>
+                ) : (
+                  <AnimatedPressable
+                    haptic="light"
+                    onPress={() => clearPlan()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear practice plan"
+                    hitSlop={10}
+                  >
+                    <Text className="font-sans-medium text-sm text-wood-900 text-right">End plan</Text>
+                  </AnimatedPressable>
+                )
+              ) : null}
+               <AnimatedPressable
+                 haptic="light"
+                 onPress={handleClose}
+                 accessibilityRole="button"
+                 accessibilityLabel="Close session"
+                 hitSlop={10}
+                 className="h-10 w-10 items-center justify-center rounded-full bg-wood-800/10 active:bg-wood-800/20"
+               >
+                 <X color={colors.wood[900]} size={20} strokeWidth={2} />
+               </AnimatedPressable>
+            </View>
           )}
         </View>
       </View>

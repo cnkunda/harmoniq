@@ -20,6 +20,7 @@ import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { MusicProvider } from '@/src/context/MusicContext'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
 export default function SlowScreen() {
@@ -32,8 +33,8 @@ export default function SlowScreen() {
 
   const sections = (lesson?.sections ?? []) as Array<Record<string, unknown>>
   const section = sections[lessonSectionIndex]
-  // Extract timeline data for MusicProvider (prefer section-level, fall back to lesson-level)
-  const chordEvents = (section as any)?.chord_timeline?.events ?? lesson?.chord_timeline?.events ?? null
+  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
+  const chordEvents = getLessonWideChordEvents(lesson)
   const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
   const barTimestamps = lesson?.bar_timestamps ?? []
 

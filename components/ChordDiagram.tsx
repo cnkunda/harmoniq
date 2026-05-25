@@ -35,7 +35,7 @@ export function ChordDiagram({ name, size = 'md', isActive = false }: ChordDiagr
 
   const noteDots = useMemo(() => {
     return cells.map((cell) => {
-      const row = 6 - cell.string
+      const row = cell.string - 1
       const x = cell.fret === 0
         ? cfg.padX - cfg.cellW / 2
         : cfg.padX + (cell.fret - 1) * cfg.cellW + cfg.cellW / 2

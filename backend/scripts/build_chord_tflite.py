@@ -33,6 +33,10 @@ from app.chord_vocab import (
     NUM_CLASSES,
 )
 
+from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.utils.class_weight import compute_class_weight
+from sklearn.model_selection import train_test_split
+
 # ---------------------------------------------------------------------------
 # 1. Constants & Vocabulary (imported from shared module)
 # ---------------------------------------------------------------------------
@@ -43,6 +47,24 @@ for quality in CHORD_INTERVALS:
     for root_idx, root_note in enumerate(ROOT_NOTES):
         CHORD_CLASS_MAP.append((root_idx, quality))
 CHORD_CLASS_MAP.append((-1, "N"))
+
+N_CLASSES_PER_QUALITY = 12  # Each quality has 12 root positions
+N_CHORD_CLASSES = len(CHORD_INTERVALS) * N_CLASSES_PER_QUALITY  # 23 * 12 = 276
+
+
+def _find_class_index(root: int, quality: str) -> int:
+    """Find class index for a given (root, quality) pair.
+
+    CHORD_CLASS_MAP is ordered as: for each quality (insertion order of CHORD_INTERVALS),
+    iterate roots 0-11. So index = quality_position * 12 + root.
+
+    Returns the class index, or -1 if not found (should not happen for valid pairs).
+    """
+    if quality == "N":
+        return len(CHORD_CLASS_MAP) - 1
+    quality_position = list(CHORD_INTERVALS.keys()).index(quality)
+    return quality_position * N_CLASSES_PER_QUALITY + root
+
 
 WINDOW          = 128              # Temporal context: ~12.8s at 0.1s hop (Commit 98c)
 WINDOW_MIN      = 64               # Configurable range
@@ -599,6 +621,128 @@ def generate_dataset(samples_per_class: int = 200, config: dict = None,
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32)
 
 # ---------------------------------------------------------------------------
+# 2b. On-the-Fly Augmentation Generator (Commit 103)
+# ---------------------------------------------------------------------------
+
+
+class AugmentedDataGenerator(tf.keras.utils.Sequence):
+    """Generates batches with on-the-fly augmentations.
+
+    Wraps pre-generated data (real + synthetic) and applies fresh
+    augmentations per batch so the model sees different variations
+    each epoch. Augmentations are applied to copies — original data
+    is never modified.
+
+    Key features:
+    - Pitch shift (±2 semitones) with **label adjustment**: when a CQT
+      window is shifted by N semitones, the chord root is also shifted
+      so the label stays correct. Fixes the critical bug where pitch-
+      shifted data had wrong labels.
+    - Time stretch (0.9x-1.1x) via temporal interpolation
+    - Pink noise injection (low amplitude) for spectral robustness
+    - Async batch generation via `workers` + `use_multiprocessing`
+    """
+
+    def __init__(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        batch_size: int = 64,
+        p_pitch_shift: float = 0.5,
+        pitch_range: int = 2,
+        p_time_stretch: float = 0.3,
+        stretch_range: tuple[float, float] = (0.9, 1.1),
+        noise_std: float = 0.05,
+        shuffle: bool = True,
+    ):
+        self.X = X
+        self.y = y
+        self.batch_size = batch_size
+        self.p_pitch_shift = p_pitch_shift
+        self.pitch_range = pitch_range
+        self.p_time_stretch = p_time_stretch
+        self.stretch_range = stretch_range
+        self.noise_std = noise_std
+        self.shuffle = shuffle
+        self.indices = np.arange(len(X))
+        self._n_chord_classes = len(CHORD_INTERVALS) * N_CLASSES_PER_QUALITY
+        if shuffle:
+            np.random.shuffle(self.indices)
+
+    def __len__(self) -> int:
+        return int(np.ceil(len(self.X) / self.batch_size))
+
+    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
+        if idx < 0:
+            idx += len(self)
+        batch_indices = self.indices[
+            idx * self.batch_size : (idx + 1) * self.batch_size
+        ]
+        batch_X = self.X[batch_indices].copy()
+        batch_y = self.y[batch_indices].copy()
+
+        batch_X, batch_y = self._apply_on_the_fly_augmentations(batch_X, batch_y)
+
+        return batch_X, batch_y
+
+    def on_epoch_end(self):
+        if self.shuffle:
+            np.random.shuffle(self.indices)
+
+    def _apply_on_the_fly_augmentations(
+        self, batch_X: np.ndarray, batch_y: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        for i in range(len(batch_X)):
+            sample = batch_X[i]
+
+            # --- Pitch shift with label adjustment ---
+            if np.random.random() < self.p_pitch_shift:
+                shift = np.random.randint(
+                    -self.pitch_range, self.pitch_range + 1
+                )
+                if shift != 0:
+                    sample = apply_pitch_shift(sample, shift)
+                    batch_y[i] = self._label_after_pitch_shift(batch_y[i], shift)
+
+            # --- Time stretch ---
+            if np.random.random() < self.p_time_stretch:
+                factor = np.random.uniform(*self.stretch_range)
+                sample = apply_time_stretch(sample, factor)
+
+            # --- Pink noise ---
+            noise = generate_pink_noise(sample.shape, self.noise_std)
+            sample = np.clip(sample + noise, 0, 1)
+
+            batch_X[i] = sample
+
+        return batch_X, batch_y
+
+    def _label_after_pitch_shift(self, label_idx: int, shift: int) -> int:
+        """Adjust label to match the pitch-shifted chord root.
+
+        When we shift CQT bins by +2 semitones, a C:maj window
+        becomes a D:maj window — so the label must change from
+        C:maj to D:maj.
+
+        The class-index layout is:
+          [quality_0_root_0, quality_0_root_1, …, quality_0_root_11,
+           quality_1_root_0, …, quality_N_root_11]
+        So label_idx // 12  -> quality position
+           label_idx % 12   -> root
+        """
+        if label_idx >= self._n_chord_classes:
+            return label_idx  # N class — no shift
+        quality_pos = label_idx // N_CLASSES_PER_QUALITY
+        root = label_idx % N_CLASSES_PER_QUALITY
+        new_root = (root + shift) % N_CLASSES_PER_QUALITY
+        return quality_pos * N_CLASSES_PER_QUALITY + new_root
+
+    def get_all_labels(self) -> np.ndarray:
+        """Return the original (un-augmented) labels for class-weight computation."""
+        return self.y.copy()
+
+
+# ---------------------------------------------------------------------------
 # 3. Architecture
 # ---------------------------------------------------------------------------
 def _circular_cqt_pad(x):
@@ -693,6 +837,168 @@ def build_attention_vis_model(window: int = WINDOW) -> tf.keras.Model:
         probs, attn = vis_model.predict(input_data)
     """
     return build_model(window=window, return_attention_scores=True)
+
+
+# ---------------------------------------------------------------------------
+# 3b. Evaluation Metrics (Commit 103)
+# ---------------------------------------------------------------------------
+
+
+def compute_confusion_matrix_report(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    top_k: int = 10,
+) -> np.ndarray:
+    """Compute and report most-confused chord pairs.
+
+    Prints the top-K chord pairs that the model most frequently
+    confuses, which helps identify harmonic similarities the model
+    is struggling with (e.g. C:maj ↔ A:min sharing two of three notes).
+
+    Args:
+        y_true: Ground truth class indices, shape (N,).
+        y_pred: Predicted class indices, shape (N,).
+        top_k: Number of confused pairs to report.
+
+    Returns:
+        Full confusion matrix, shape (NUM_CLASSES, NUM_CLASSES).
+    """
+    cm = confusion_matrix(y_true, y_pred, labels=range(NUM_CLASSES))
+
+    cm_no_diag = cm.copy()
+    np.fill_diagonal(cm_no_diag, 0)
+    confused_pairs = np.argwhere(cm_no_diag > 0)
+
+    if len(confused_pairs) == 0:
+        print("  No confused pairs found (perfect or single-class predictions).")
+        return cm
+
+    confused_counts = cm_no_diag[confused_pairs[:, 0], confused_pairs[:, 1]]
+    top_indices = np.argsort(confused_counts)[-top_k:][::-1]
+
+    print(f"\n--- Top {top_k} Most Confused Chord Pairs ---")
+    actual_top_k = min(top_k, len(top_indices))
+    for rank in range(actual_top_k):
+        idx = top_indices[rank]
+        i, j = confused_pairs[idx]
+        count = int(confused_counts[idx])
+        true_chord = CHORD_VOCAB[i]
+        pred_chord = CHORD_VOCAB[j]
+        print(f"  {rank + 1:2d}. {true_chord:<12} → {pred_chord:<12}  ({count} errors)")
+
+    return cm
+
+
+def compute_per_class_metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    f1_threshold: float = 0.3,
+) -> dict:
+    """Compute and report per-class precision, recall, and F1.
+
+    Groups results by chord quality category (triad, extended, altered,
+    suspended_other, no_chord) and flags classes with F1 below the
+    threshold for targeted data collection.
+
+    Args:
+        y_true: Ground truth class indices, shape (N,).
+        y_pred: Predicted class indices, shape (N,).
+        f1_threshold: Flag classes with F1 below this value.
+
+    Returns:
+        Full classification report dict from sklearn.
+    """
+    report = classification_report(
+        y_true,
+        y_pred,
+        labels=range(NUM_CLASSES),
+        target_names=CHORD_VOCAB,
+        output_dict=True,
+        zero_division=0,
+    )
+
+    print("\n--- Per-Class Metrics Summary ---")
+
+    quality_to_group: dict[str, str] = {}
+    for group_name, qualities in QUALITY_GROUPS.items():
+        for q in qualities:
+            quality_to_group[q] = group_name
+
+    group_f1s: dict[str, list[float]] = {}
+    low_performers: list[tuple[str, float]] = []
+
+    for chord_name, metrics in report.items():
+        if chord_name == "accuracy" or chord_name == "macro avg" or \
+           chord_name == "weighted avg" or chord_name == "micro avg":
+            continue
+        try:
+            int(chord_name)
+            continue
+        except (ValueError, TypeError):
+            pass
+
+        if not isinstance(metrics, dict) or "f1-score" not in metrics:
+            continue
+
+        f1 = metrics["f1-score"]
+
+        if chord_name == "N":
+            group = "no_chord"
+        else:
+            quality_str = chord_name.split(":")[1] if ":" in chord_name else chord_name
+            group = quality_to_group.get(quality_str, "unknown")
+
+        if group not in group_f1s:
+            group_f1s[group] = []
+        group_f1s[group].append(f1)
+
+        if f1 < f1_threshold:
+            low_performers.append((chord_name, f1))
+
+    for group in ["triad", "extended", "altered", "suspended_other", "no_chord", "overall"]:
+        if group == "overall":
+            all_f1s = [m["f1-score"] for m in report.values()
+                       if isinstance(m, dict) and "f1-score" in m]
+            if all_f1s:
+                print(f"  {group:20s}: mean F1 = {np.mean(all_f1s):.3f}")
+            continue
+        f1s = group_f1s.get(group, [])
+        if f1s:
+            print(f"  {group:20s}: mean F1 = {np.mean(f1s):.3f}  "
+                  f"(min={np.min(f1s):.3f}, max={np.max(f1s):.3f})")
+
+    if low_performers:
+        print(f"\n  Classes with F1 < {f1_threshold} ({len(low_performers)} total):")
+        for chord_name, f1 in sorted(low_performers, key=lambda x: x[1])[:20]:
+            print(f"    {chord_name:<12} F1 = {f1:.3f}")
+        if len(low_performers) > 20:
+            print(f"    ... and {len(low_performers) - 20} more")
+
+    return report
+
+
+def compute_training_class_weights(
+    y_train: np.ndarray,
+) -> dict[int, float]:
+    """Compute balanced class weights for imbalanced training data.
+
+    Uses sklearn's ``compute_class_weight('balanced')`` which assigns
+    weight inversely proportional to class frequency:
+      weight_i = n_samples / (n_classes * n_i)
+
+    This prevents the model from biasing toward common chord types
+    (maj, min) at the expense of rare ones (alt7, dim7, aug, etc.).
+
+    Args:
+        y_train: Training labels, shape (N,).
+
+    Returns:
+        Dict mapping class index -> weight value.
+    """
+    classes = np.unique(y_train)
+    weights = compute_class_weight("balanced", classes=classes, y=y_train)
+    return dict(zip(classes, weights))
+
 
 # ---------------------------------------------------------------------------
 # 4a. Real dataset loading (Commit 101)
@@ -871,13 +1177,27 @@ def run_pipeline(
 ):
     """Run the full training pipeline with optional real data mixing.
 
+    Commit 103 additions:
+    - On-the-fly augmentation via AugmentedDataGenerator (pitch shift + label
+      adjustment, time stretch, pink noise)
+    - Training callbacks: EarlyStopping (patience=10), ReduceLROnPlateau,
+      ModelCheckpoint, CSVLogger
+    - Class weighting for imbalanced chord distribution
+    - 50 training epochs
+    - Confusion matrix analysis on validation set
+    - Per-class precision / recall / F1 metrics with low-performer flagging
+
     Args:
         real_data_dir: Path to GuitarSet CQT data directory (or None for synthetic-only).
         empirical_matrix_path: Path to empirical transition matrix .npy (or None).
         real_ratio: Fraction of real data in training mix (0.0–1.0).
     """
+    _APP_DIR = Path(__file__).resolve().parent.parent / "app"
+    _SCRIPTS_DIR = Path(__file__).resolve().parent
+
     # --- Load real data (if available) ---
     has_real_data = False
+    test_X, test_y = np.array([]), np.array([])
     if real_data_dir is not None:
         data_path = Path(real_data_dir)
         if data_path.exists():
@@ -898,10 +1218,6 @@ def run_pipeline(
         if emp_path.exists():
             matrix = np.load(str(emp_path))
             if matrix.shape == (NUM_CLASSES, NUM_CLASSES):
-                # Use row-normalized matrix as sampling distribution
-                row_sums = matrix.sum(axis=1, keepdims=True)
-                normalized = np.divide(matrix, row_sums, where=row_sums > 0)
-                # Compute source distribution from empirical marginals
                 transition_probs = matrix.sum(axis=1)
                 if transition_probs.sum() > 0:
                     transition_probs = transition_probs / transition_probs.sum()
@@ -921,38 +1237,117 @@ def run_pipeline(
     # --- Mix real + synthetic ---
     if has_real_data and real_ratio > 0:
         print("Mixing real and synthetic data...")
-        X_train, y_train = mix_datasets(real_X, real_y, synth_X, synth_y, real_ratio=real_ratio)
+        X_all, y_all = mix_datasets(real_X, real_y, synth_X, synth_y, real_ratio=real_ratio)
     else:
-        X_train, y_train = synth_X, synth_y
+        X_all, y_all = synth_X, synth_y
         if has_real_data:
             print("  real_ratio=0, using synthetic data only")
         else:
             print("  No real data available, using synthetic data only")
 
-    # --- Build and train model ---
+    # --- Train / validation split ---
+    print("Splitting into train / validation sets (85/15)...")
+    try:
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_all, y_all, test_size=0.15, random_state=42, stratify=y_all,
+        )
+    except ValueError:
+        # Stratify may fail with very small classes — fall back to random split
+        X_train, X_val, y_train, y_val = train_test_split(
+            X_all, y_all, test_size=0.15, random_state=42,
+        )
+    print(f"  Train: {len(X_train)} samples, Val: {len(X_val)} samples")
+
+    # --- Build model ---
     model = build_model()
     model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 
-    print("\nTraining...")
-    history = model.fit(X_train, y_train, epochs=20, batch_size=64, validation_split=0.15, verbose=1)
+    # --- Class weights ---
+    print("\nComputing class weights for imbalanced training data...")
+    class_weight_dict = compute_training_class_weights(y_train)
+    n_classes_with_data = len(class_weight_dict)
+    print(f"  Computed weights for {n_classes_with_data}/{NUM_CLASSES} classes present in training set")
 
-    # Per-group accuracy tracking (Commit 98d)
+    # --- Training callbacks (Commit 103) ---
+    callbacks = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=10,
+            restore_best_weights=True,
+            verbose=1,
+        ),
+        tf.keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss",
+            factor=0.5,
+            patience=3,
+            min_lr=1e-6,
+            verbose=1,
+        ),
+        tf.keras.callbacks.ModelCheckpoint(
+            filepath=str(_APP_DIR / "chord_model_best.keras"),
+            monitor="val_loss",
+            save_best_only=True,
+            verbose=1,
+        ),
+        tf.keras.callbacks.CSVLogger(
+            filename=str(_SCRIPTS_DIR / "training_log.csv"),
+        ),
+    ]
+
+    # --- On-the-fly augmented data generator ---
+    train_generator = AugmentedDataGenerator(
+        X_train, y_train,
+        batch_size=64,
+        p_pitch_shift=0.5,
+        pitch_range=2,
+        p_time_stretch=0.3,
+        stretch_range=(0.9, 1.1),
+        noise_std=0.05,
+        shuffle=True,
+    )
+
+    # --- Train ---
+    print(f"\nTraining for up to 50 epochs with on-the-fly augmentation...")
+    print(f"  EarlyStopping patience={10}, ReduceLROnPlateau patience={3}")
+    print(f"  Batch size=64")
+    history = model.fit(
+        train_generator,
+        epochs=50,
+        validation_data=(X_val, y_val),
+        callbacks=callbacks,
+        class_weight=class_weight_dict,
+        verbose=1,
+    )
+
+    # Restore best weights (EarlyStopping with restore_best_weights already does this)
+    print(f"\nTraining completed. "
+          f"Best val_loss: {min(history.history['val_loss']):.4f}, "
+          f"Best val_accuracy: {max(history.history['val_accuracy']):.1%}")
+
+    # --- Per-group validation accuracy (Commit 98d) ---
     print("\n--- Per-Group Validation Accuracy ---")
-    val_split = int(len(X_train) * 0.85)
-    X_val, y_val = X_train[val_split:], y_train[val_split:]
     y_pred = np.argmax(model.predict(X_val, verbose=0), axis=1)
     grouped_acc = compute_grouped_accuracy(y_val, y_pred)
     for group, acc in sorted(grouped_acc.items()):
         pct = acc * 100
         arrow = ""
         if group == "overall":
-            best_val = max(history.history["val_accuracy"])
-            arrow = f"  (best val: {best_val:.1%})"
+            arrow = f"  (best val: {max(history.history['val_accuracy']):.1%})"
         elif group == "extended":
             arrow = "  ← target +3% improvement"
         print(f"  {group:20s}: {pct:5.1f}%{arrow}")
 
-    # GuitarSet test set validation (if available)
+    # --- Confusion matrix (Commit 103) ---
+    print("\n--- Confusion Matrix Analysis ---")
+    cm = compute_confusion_matrix_report(y_val, y_pred, top_k=10)
+    cm_path = _SCRIPTS_DIR / "confusion_matrix.npy"
+    np.save(str(cm_path), cm)
+    print(f"  Full confusion matrix saved to {cm_path}")
+
+    # --- Per-class metrics (Commit 103) ---
+    _ = compute_per_class_metrics(y_val, y_pred, f1_threshold=0.3)
+
+    # --- GuitarSet test set validation (if available) ---
     if has_real_data and len(test_X) > 0:
         print("\n--- GuitarSet Test Set (Player 05) ---")
         test_pred = np.argmax(model.predict(test_X, verbose=0), axis=1)

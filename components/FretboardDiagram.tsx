@@ -386,7 +386,7 @@ export function FretboardDiagram({
   const chordCells = useMemo(() => {
     if (chordCellsProp && chordCellsProp.length > 0) return chordCellsProp
     if (musicState?.currentChord && musicState.currentChord !== 'N') {
-      const cells = chordToFretboardCells(musicState.currentChord, voicingMode ?? 'compact', 'low')
+      const cells = chordToFretboardCells(musicState.currentChord, voicingMode ?? 'full', 'low')
       return cells.map(c => ({ string: c.string, fret: c.fret, interval: c.interval }))
     }
     return []

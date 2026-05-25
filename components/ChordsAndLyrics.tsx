@@ -6,10 +6,9 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated'
-import { Guitar, Lock, Minus, Play, Plus, Pause, Unlock } from 'lucide-react-native'
+import { Guitar, Lock, Minus, Plus, Unlock } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import { BeatCounter } from './BeatCounter'
 import { ChordDiagram } from './ChordDiagram'
 import { SectionNavigator } from './SectionNavigator'
 
@@ -26,8 +25,16 @@ interface ChordsAndLyricsProps {
   bars: BarData[]
   currentBar?: number
   bpm?: number
+  /** timeSignature[0] is numerator (beats per bar). Default [4,4] */
+  timeSignature?: [number, number]
   onBarPress?: (barIndex: number) => void
   onBarLongPress?: (barIndex: number) => void
+  /** Number of bars per line in the chord sheet (default: 4) */
+  barsPerLine?: number
+  /** Optional section label to display above the chord sheet */
+  label?: string
+  /** Layout mode: 'grid' keeps barsPerLine grouping, 'flow' uses flex-wrap */
+  layoutMode?: 'grid' | 'flow'
 }
 
 const CHROMATIC = [
@@ -55,8 +62,12 @@ export function ChordsAndLyrics({
   bars,
   currentBar,
   bpm = 92,
+  timeSignature = [4, 4],
   onBarPress,
   onBarLongPress,
+  barsPerLine = 4,
+  label,
+  layoutMode = 'flow',
 }: ChordsAndLyricsProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [internalBar, setInternalBar] = useState(0)
@@ -71,25 +82,34 @@ export function ChordsAndLyrics({
   const scrollRef = useRef<ScrollView>(null)
   const barLayouts = useRef<Record<number, { y: number; height: number }>>({})
 
-  // Auto-advance bars when playing
+  // Auto-advance bars when playing (supports varying time signatures)
   useEffect(() => {
     if (isControlled || !isPlaying) return
-    const beatsPerBar = 4
+    const beatsPerBar = timeSignature?.[0] ?? 4
     const interval = (60000 / bpm) * beatsPerBar
     const id = setInterval(() => {
       setInternalBar((b) => (b + 1) % bars.length)
     }, interval)
     return () => clearInterval(id)
-  }, [isPlaying, bars.length, isControlled, bpm])
+  }, [isPlaying, bars.length, isControlled, bpm, timeSignature])
 
-  // Auto-scroll active bar into view
+  // Auto-scroll active item into view. Uses per-bar layouts in 'flow' mode
+  // and per-line layouts in 'grid' mode.
   useEffect(() => {
     if (!autoScroll || !scrollRef.current) return
-    const layout = barLayouts.current[activeBar]
-    if (!layout || !scrollViewHeight) return
-    const target = layout.y - scrollViewHeight / 2 + layout.height / 2
-    scrollRef.current.scrollTo({ y: Math.max(0, target), animated: true })
-  }, [activeBar, autoScroll, scrollViewHeight])
+    if (layoutMode === 'flow') {
+      const layout = barLayouts.current[activeBar]
+      if (!layout || !scrollViewHeight) return
+      const target = layout.y - scrollViewHeight / 2 + layout.height / 2
+      scrollRef.current.scrollTo({ y: Math.max(0, target), animated: true })
+    } else {
+      const activeLineIndex = Math.floor(activeBar / barsPerLine)
+      const layout = lineLayouts.current[activeLineIndex]
+      if (!layout || !scrollViewHeight) return
+      const target = layout.y - scrollViewHeight / 2 + layout.height / 2
+      scrollRef.current.scrollTo({ y: Math.max(0, target), animated: true })
+    }
+  }, [activeBar, autoScroll, scrollViewHeight, barsPerLine, layoutMode])
 
   const handleBarPress = useCallback((bar: number) => {
     if (!isControlled) setInternalBar(bar)
@@ -99,6 +119,11 @@ export function ChordsAndLyrics({
   const handleBarLayout = useCallback((barIdx: number, event: LayoutChangeEvent) => {
     const { y, height } = event.nativeEvent.layout
     barLayouts.current[barIdx] = { y, height }
+  }, [])
+
+  const handleLineLayout = useCallback((lineIdx: number, event: LayoutChangeEvent) => {
+    const { y, height } = event.nativeEvent.layout
+    lineLayouts.current[lineIdx] = { y, height }
   }, [])
 
   const displayedChord = useCallback(
@@ -119,6 +144,18 @@ export function ChordsAndLyrics({
     bars[(activeBar + 1) % bars.length]?.chord || '',
   )
 
+  // Group bars into lines of barsPerLine
+  const lines = useMemo<BarData[][]>(() => {
+    const grouped: BarData[][] = []
+    for (let i = 0; i < bars.length; i += barsPerLine) {
+      grouped.push(bars.slice(i, i + barsPerLine))
+    }
+    return grouped
+  }, [bars, barsPerLine])
+
+  // Track layouts for each line (for auto-scroll)
+  const lineLayouts = useRef<Record<number, { y: number; height: number }>>({})
+
   return (
     <View className="mt-3 rounded-xl border border-wood-600/40 bg-cream-dark/45 p-4">
       {/* Header */}
@@ -128,24 +165,9 @@ export function ChordsAndLyrics({
         </Text>
 
         <View className="flex-row items-center gap-3">
-          <BeatCounter bpm={bpm} isPlaying={isPlaying} resetKey={activeBar} />
           <Text className="font-mono text-[10px] text-muted-brown/70 tabular-nums">
             Bar {activeBar + 1}/{bars.length}
           </Text>
-          {!isControlled && (
-            <AnimatedPressable
-              haptic="none"
-              onPress={() => setIsPlaying((p) => !p)}
-              accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
-              className="w-7 h-7 items-center justify-center rounded-full border border-wood-600/60 bg-wood-900/70"
-            >
-              {isPlaying ? (
-                <Pause size={12} color={colors.amber.accent} />
-              ) : (
-                <Play size={12} color={colors.amber.accent} style={{ marginLeft: 1 }} />
-              )}
-            </AnimatedPressable>
-          )}
         </View>
       </View>
 
@@ -212,124 +234,165 @@ export function ChordsAndLyrics({
         </AnimatedPressable>
       </View>
 
-      {/* Scrollable bar list — chord-over-lyrics alternating rows */}
-      <ScrollView
-        ref={scrollRef}
-        showsVerticalScrollIndicator={false}
-        className="max-h-[260px]"
-        onLayout={(e) => setScrollViewHeight(e.nativeEvent.layout.height)}
-      >
-        {(() => {
-          if (!bars.length) return null
+       {/* Section label (if provided) */}
+       {label && (
+         <View className="mb-2">
+           <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/60">
+             [{label}]
+           </Text>
+         </View>
+       )}
 
-          const BARS_PER_LINE = 4
-          const lines: { startIdx: number; bars: BarData[] }[] = []
-          for (let i = 0; i < bars.length; i += BARS_PER_LINE) {
-            lines.push({ startIdx: i, bars: bars.slice(i, i + BARS_PER_LINE) })
-          }
-
-          const activeLineIdx = Math.floor(activeBar / BARS_PER_LINE)
-          const activeBarInLine = activeBar % BARS_PER_LINE
-
-          return lines.map((line, li) => {
-            const isActiveLine = li === activeLineIdx
-
-            return (
-              <View key={`line-${li}`} className="mb-3 last:mb-0">
-                {/* Chord row */}
-                <View className="flex-row">
-                  {line.bars.map((bar, bi) => {
-                    const idx = line.startIdx + bi
-                    const isActive = isActiveLine && bi === activeBarInLine
+        {/* Main content: scrollable sheet + optional right sidebar for used chords */}
+        <View className="flex-row items-start gap-4">
+          <View className="flex-1">
+            <ScrollView
+              ref={scrollRef}
+              showsVerticalScrollIndicator={false}
+              className="max-h-[260px]"
+              onLayout={(e) => setScrollViewHeight(e.nativeEvent.layout.height)}
+            >
+              {layoutMode === 'flow' ? (
+                <View className="flex-row flex-wrap pb-4">
+                  {bars.map((bar, globalBarIdx) => {
+                    const isActive = globalBarIdx === activeBar
                     const chord = displayedChord(bar.chord)
                     const chord2 = bar.chord2 ? displayedChord(bar.chord2) : undefined
 
                     return (
                       <AnimatedPressable
-                        key={`chord-${idx}`}
+                        key={`bar-${globalBarIdx}`}
                         haptic="none"
-                        onPress={() => handleBarPress(idx)}
-                        onLongPress={onBarLongPress ? () => onBarLongPress(idx) : undefined}
-                        onLayout={(e: LayoutChangeEvent) => handleBarLayout(idx, e)}
+                        onPress={() => handleBarPress(globalBarIdx)}
+                        onLongPress={onBarLongPress ? () => onBarLongPress(globalBarIdx) : undefined}
+                        onLayout={(e: LayoutChangeEvent) => handleBarLayout(globalBarIdx, e)}
                         accessibilityRole="button"
-                        accessibilityHint={`Bar ${idx + 1}: ${bar.chord || '—'}. Tap to seek; long press to annotate`}
-                        className={`flex-1 items-center py-1 rounded-sm ${
-                          isActive ? 'bg-amber-accent/10' : ''
-                        }`}
+                        accessibilityHint={`Bar ${globalBarIdx + 1}: ${bar.chord || '—'}. Tap to seek; long press to annotate`}
+                        className="mr-3 mb-3"
                       >
+                        {/* Chord container - left aligned */}
+                        <View className="mb-0.5 flex-row items-baseline gap-1.5">
+                          <Text
+                            className={`font-mono text-sm leading-tight tracking-tight text-left ${
+                              isActive ? 'text-amber-light font-sans-bold' : 'text-amber-accent/80'
+                            }`}
+                          >
+                            {chord || ' '}
+                          </Text>
+                          {chord2 && (
+                            <Text className="font-mono text-xs leading-tight tracking-tight text-left text-amber-accent/50">
+                              {chord2}
+                            </Text>
+                          )}
+                        </View>
+
+                        {/* Lyrics */}
                         <Text
-                          className={`font-mono text-xs leading-tight tracking-tight ${
-                            isActive
-                              ? 'text-amber-light font-sans-bold'
-                              : 'text-amber-accent/80'
+                          className={`font-serif text-sm leading-snug text-left ${
+                            isActive ? 'text-wood-900' : 'text-muted-brown'
                           }`}
                         >
-                          {chord}
+                          {bar.text ?? ' '}
                         </Text>
-                        {chord2 && (
-                          <Text className="font-mono text-[10px] leading-tight tracking-tight text-amber-accent/50">
-                            {chord2}
-                          </Text>
-                        )}
-                        {isActive && (
-                          <View className="mt-1 h-0.5 w-6 self-center rounded-full bg-amber-accent" />
-                        )}
+
+                        <ActiveBarMarker isActive={isActive} />
                       </AnimatedPressable>
                     )
                   })}
                 </View>
+              ) : (
+                // grid layout (legacy) - keep existing per-line rendering
+                <View>
+                  {lines.map((line, lineIdx) => (
+                    <View
+                      key={`line-${lineIdx}`}
+                      onLayout={(e: LayoutChangeEvent) => handleLineLayout(lineIdx, e)}
+                      className="flex-row mb-2"
+                    >
+                      {line.map((bar, barIdx) => {
+                        const globalBarIdx = lineIdx * barsPerLine + barIdx
+                        const isActive = globalBarIdx === activeBar
+                        const chord = displayedChord(bar.chord)
+                        const chord2 = bar.chord2 ? displayedChord(bar.chord2) : undefined
 
-                {/* Lyrics row */}
-                <View className="flex-row flex-wrap">
-                  {line.bars.map((bar, bi) => {
-                    const idx = line.startIdx + bi
-                    if (!bar.text) return null
-                    return (
-                      <Text
-                        key={`lyric-${idx}`}
-                        className={`font-serif text-sm leading-relaxed ${
-                          isActiveLine && bi === activeBarInLine
-                            ? 'text-wood-900'
-                            : 'text-muted-brown'
-                        }`}
-                      >
-                        {bar.text}{' '}
-                      </Text>
-                    )
-                  })}
+                        return (
+                          <AnimatedPressable
+                            key={`bar-${globalBarIdx}`}
+                            haptic="none"
+                            onPress={() => handleBarPress(globalBarIdx)}
+                            onLongPress={onBarLongPress ? () => onBarLongPress(globalBarIdx) : undefined}
+                            onLayout={(e: LayoutChangeEvent) => handleBarLayout(globalBarIdx, e)}
+                            accessibilityRole="button"
+                            accessibilityHint={`Bar ${globalBarIdx + 1}: ${bar.chord || '—'}. Tap to seek; long press to annotate`}
+                            className="flex-1 px-1"
+                          >
+                            {/* Chord line */}
+                            <View className="mb-0.5">
+                              <Text
+                                className={`font-mono text-xs leading-tight tracking-tight text-center ${
+                                  isActive ? 'text-amber-light font-sans-bold' : 'text-amber-accent/80'
+                                }`}
+                              >
+                                {chord || '—'}
+                              </Text>
+                            </View>
+                            {chord2 && (
+                              <View className="mb-0.5">
+                                <Text className="font-mono text-[10px] leading-tight tracking-tight text-center text-amber-accent/50">
+                                  {chord2}
+                                </Text>
+                              </View>
+                            )}
+
+                            {/* Lyrics line */}
+                            {bar.text ? (
+                              <Text
+                                className={`font-serif text-sm leading-snug text-center ${
+                                  isActive ? 'text-wood-900' : 'text-muted-brown'
+                                }`}
+                              >
+                                {bar.text}
+                              </Text>
+                            ) : (
+                              <Text className="font-serif text-sm leading-snug opacity-0"> </Text>
+                            )}
+
+                            <ActiveBarMarker isActive={isActive} />
+                          </AnimatedPressable>
+                        )
+                      })}
+                    </View>
+                  ))}
                 </View>
-              </View>
-            )
-          })
-        })()}
-      </ScrollView>
+              )}
+            </ScrollView>
 
-      {/* Active / Next Chord Diagram Preview */}
-      {showShapes && (
-        <View className="mt-4 pt-3 border-t border-wood-600/15">
-          <View className="flex-row gap-4">
-            {/* Now Playing */}
-            <View className="flex-1">
-              <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/80 mb-2">
-                Now Playing
-              </Text>
-              <View className="flex-row items-end gap-3">
-                <FadeView fadeKey={`active-${activeChord}`}>
-                  <ChordDiagram name={activeChord} size="md" isActive />
-                </FadeView>
-                <View className="opacity-60">
-                  <Text className="font-mono text-[9px] uppercase tracking-wider text-muted-brown mb-1">
-                    Next
-                  </Text>
-                  <FadeView fadeKey={`next-${nextChord}`}>
-                    <ChordDiagram name={nextChord} size="sm" />
+            {/* Now Playing preview under the sheet */}
+            {showShapes && (
+              <View className="mt-4 pt-3 border-t border-wood-600/15">
+                <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/80 mb-2">
+                  Now Playing
+                </Text>
+                <View className="flex-row items-end gap-3">
+                  <FadeView fadeKey={`active-${activeChord}`}>
+                    <ChordDiagram name={activeChord} size="md" isActive />
                   </FadeView>
+                  <View className="opacity-60">
+                    <Text className="font-mono text-[9px] uppercase tracking-wider text-muted-brown mb-1">
+                      Next
+                    </Text>
+                    <FadeView fadeKey={`next-${nextChord}`}>
+                      <ChordDiagram name={nextChord} size="sm" />
+                    </FadeView>
+                  </View>
                 </View>
               </View>
-            </View>
+            )}
+          </View>
 
-            {/* Used In Song */}
-            <View className="flex-1 min-w-0">
+          {/* Right-hand sidebar with used chord shapes */}
+          {showShapes && (
+            <View className="w-36 min-w-0 pt-1">
               <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/80 mb-2">
                 Used In Song
               </Text>
@@ -341,9 +404,8 @@ export function ChordsAndLyrics({
                 ))}
               </View>
             </View>
-          </View>
+          )}
         </View>
-      )}
     </View>
   )
 }
@@ -387,14 +449,14 @@ function ToolControl({
   )
 }
 
-function ActiveBarMarker() {
-  const opacity = useSharedValue(0)
-  const scaleX = useSharedValue(0.3)
+function ActiveBarMarker({ isActive }: { isActive?: boolean }) {
+  const opacity = useSharedValue(isActive ? 1 : 0)
+  const scaleX = useSharedValue(isActive ? 1 : 0.3)
 
   useEffect(() => {
-    opacity.value = withTiming(1, { duration: ACTIVE_BAR_ANIM_DURATION })
-    scaleX.value = withSpring(1, spring.gentle)
-  }, [opacity, scaleX])
+    opacity.value = withTiming(isActive ? 1 : 0, { duration: ACTIVE_BAR_ANIM_DURATION })
+    scaleX.value = withSpring(isActive ? 1 : 0.3, spring.gentle)
+  }, [isActive, opacity, scaleX])
 
   const style = useAnimatedStyle(() => ({
     opacity: opacity.value,

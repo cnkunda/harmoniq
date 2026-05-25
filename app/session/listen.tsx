@@ -16,6 +16,7 @@ import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
 import { MusicProvider } from '@/src/context/MusicContext'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import colors from '@/src/constants/colors'
 import { Film, Pause, Play, X } from 'lucide-react-native'
 
@@ -30,8 +31,8 @@ export default function ListenScreen() {
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const stemTabRef = useRef<ListenStemPanelHandle>(null)
 
-  // Extract timeline data for MusicProvider (prefer section-level, fall back to lesson-level)
-  const chordEvents = lesson?.chord_timeline?.events ?? null
+  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
+  const chordEvents = getLessonWideChordEvents(lesson)
   const soloNotesArr = lesson?.solo_notes?.notes ?? null
   const barTimestamps = lesson?.bar_timestamps ?? null
 

@@ -29,14 +29,17 @@ const CHORD_QUALITY_INTERVALS: Record<string, number[]> = {
   "13": [0, 4, 7, 10, 14, 17, 21], // Dominant 13th
 };
 
-/** Common guitar chord voicing templates (string set + fret pattern) */
-const FULL_VOICING_TEMPLATES: Array<{
+type VoicingTemplate = {
   name: string;
   strings: number[]; // 1-6 (1 = high E)
   pattern: number[]; // Frets relative to root position, -1 = muted
   bassString: number;
   intervalMap: number[]; // Musical intervals for each string in the pattern
-}> = [
+  shiftable: boolean; // true = can be shifted up/down like a barre; false = position-specific (open strings)
+};
+
+/** Common guitar chord voicing templates (string set + fret pattern) */
+const FULL_VOICING_TEMPLATES: VoicingTemplate[] = [
   // E-shape barre (root on string 6, E open = root) - plays: R, 5, M3, R, 5, R
   {
     name: "E-shape",
@@ -44,6 +47,7 @@ const FULL_VOICING_TEMPLATES: Array<{
     pattern: [0, 0, 1, 2, 2, 0],
     bassString: 6,
     intervalMap: [0, 7, 4, 0, 7, 0],
+    shiftable: true,
   },
   // A-shape barre (root on string 5, A open = root) - plays: 5, M3, R, 5, R
   {
@@ -52,6 +56,7 @@ const FULL_VOICING_TEMPLATES: Array<{
     pattern: [0, 2, 2, 2, 0],
     bassString: 5,
     intervalMap: [7, 4, 0, 7, 0],
+    shiftable: true,
   },
   // C-shape (root on string 5) - plays: M3, R, 5, M3, R
   {
@@ -60,6 +65,7 @@ const FULL_VOICING_TEMPLATES: Array<{
     pattern: [0, 1, 0, 2, 3],
     bassString: 5,
     intervalMap: [4, 0, 7, 4, 0],
+    shiftable: false,
   },
   // D-shape (root on string 4, higher voicing) - plays: M3, R, 5, R
   {
@@ -68,6 +74,7 @@ const FULL_VOICING_TEMPLATES: Array<{
     pattern: [2, 3, 2, 0],
     bassString: 4,
     intervalMap: [4, 0, 7, 0],
+    shiftable: false,
   },
   // G-shape (root on string 6) - plays: R, 5, R, 5, M3, R
   {
@@ -76,17 +83,12 @@ const FULL_VOICING_TEMPLATES: Array<{
     pattern: [3, 3, 0, 0, 2, 3],
     bassString: 6,
     intervalMap: [0, 7, 0, 7, 4, 0],
+    shiftable: false,
   },
 ];
 
 /** Templates for minor chords (m3 instead of M3) */
-const MINOR_VOICING_TEMPLATES: Array<{
-  name: string;
-  strings: number[];
-  pattern: number[];
-  bassString: number;
-  intervalMap: number[];
-}> = [
+const MINOR_VOICING_TEMPLATES: VoicingTemplate[] = [
   // E-minor shape (root on string 6, E open = root) - plays: R, 5, m3, R, 5, R
   {
     name: "Em-shape",
@@ -94,6 +96,7 @@ const MINOR_VOICING_TEMPLATES: Array<{
     pattern: [0, 0, 0, 2, 2, 0],
     bassString: 6,
     intervalMap: [0, 7, 3, 0, 7, 0],
+    shiftable: true,
   },
   // A-minor shape (root on string 5, A open = root) - plays: 5, m3, R, 5, R
   {
@@ -102,17 +105,12 @@ const MINOR_VOICING_TEMPLATES: Array<{
     pattern: [0, 1, 2, 2, 0],
     bassString: 5,
     intervalMap: [7, 3, 0, 7, 0],
+    shiftable: true,
   },
 ];
 
 /** Templates for minor 7th chords (R, m3, 5, m7) */
-const MINOR7_VOICING_TEMPLATES: Array<{
-  name: string;
-  strings: number[];
-  pattern: number[];
-  bassString: number;
-  intervalMap: number[];
-}> = [
+const MINOR7_VOICING_TEMPLATES: VoicingTemplate[] = [
   // Dm7 shape (root on string 4, D open = root) - plays: m3, m7, 5, R
   {
     name: "Dm7-shape",
@@ -120,6 +118,7 @@ const MINOR7_VOICING_TEMPLATES: Array<{
     pattern: [1, 1, 2, 0],
     bassString: 4,
     intervalMap: [3, 10, 7, 0],
+    shiftable: false,
   },
   // Em7 shape (root on string 6, E open = root) - plays: R, 5, m3, m7, 5, R
   {
@@ -128,6 +127,7 @@ const MINOR7_VOICING_TEMPLATES: Array<{
     pattern: [0, 0, 0, 0, 2, 0],
     bassString: 6,
     intervalMap: [0, 7, 3, 10, 7, 0],
+    shiftable: true,
   },
   // Am7 shape (root on string 5, A open = root) - plays: 5, m3, m7, 5, R
   {
@@ -136,6 +136,7 @@ const MINOR7_VOICING_TEMPLATES: Array<{
     pattern: [0, 1, 0, 2, 0],
     bassString: 5,
     intervalMap: [7, 3, 10, 7, 0],
+    shiftable: true,
   },
 ];
 
@@ -322,11 +323,11 @@ function buildFullVoicing(
   const isMinor = intervals.includes(3) && !intervals.includes(4);
   const isMinor7 = isMinor && intervals.includes(10);
 
-  let templates = FULL_VOICING_TEMPLATES;
+  let allTemplates = FULL_VOICING_TEMPLATES;
   if (isMinor7) {
-    templates = MINOR7_VOICING_TEMPLATES;
+    allTemplates = MINOR7_VOICING_TEMPLATES;
   } else if (isMinor) {
-    templates = MINOR_VOICING_TEMPLATES;
+    allTemplates = MINOR_VOICING_TEMPLATES;
   }
 
   const getStringPc = (stringIndex: number): number => {
@@ -335,53 +336,84 @@ function buildFullVoicing(
   };
 
   // Calculate baseFret per template: semitones from open bass string to root
-  const baseFretForTemplate = (t: typeof templates[number]): number =>
+  const baseFretForTemplate = (t: VoicingTemplate): number =>
     (rootPc - getStringPc(t.bassString) + 12) % 12;
 
-  // Select the best template based on position
-  let template = templates[0];
-  let baseFret = baseFretForTemplate(template);
+  // Check if a non-shiftable template's fixed pattern produces the correct root
+  const templateMatchesRoot = (t: VoicingTemplate): boolean => {
+    const bassIdx = t.strings.indexOf(t.bassString);
+    if (bassIdx < 0) return false;
+    const patternFret = t.pattern[bassIdx];
+    if (patternFret < 0) return false;
+    const stringRow = t.bassString - 1;
+    const notePc = (OPEN_MIDI_BY_ROW[stringRow] + patternFret) % 12;
+    return notePc === rootPc;
+  };
 
-  if (templates.length > 1) {
-    if (position === "low") {
-      // Find template with the lowest base fret (closest to nut)
-      let bestBf = baseFret;
-      let bestT = template;
-      for (let i = 1; i < templates.length; i++) {
-        const bf = baseFretForTemplate(templates[i]);
-        if (bf < bestBf) { bestBf = bf; bestT = templates[i]; }
-      }
-      template = bestT;
-      baseFret = bestBf;
-    } else if (position === "open") {
-      // For open position, find a template whose bassString naturally has the root
-      // in a low fret position (preferably 0)
-      let bestT = templates[0];
-      const bf0 = baseFretForTemplate(templates[0]);
-      let bestDist = Math.min(bf0, 12 - bf0); // circular distance
-      for (let i = 1; i < templates.length; i++) {
-        const bf = baseFretForTemplate(templates[i]);
-        const dist = Math.min(bf, 12 - bf);
-        if (dist < bestDist) {
-          bestDist = dist;
-          bestT = templates[i];
+  // Select template: prefer non-shiftable (position-specific) first when they match,
+  // otherwise fall back to shiftable (barre-able) templates
+  const nonShiftableMatch = allTemplates.find(
+    (t) => !t.shiftable && templateMatchesRoot(t),
+  );
+
+  let template: VoicingTemplate;
+  let baseFret: number;
+
+  if (nonShiftableMatch) {
+    // Non-shiftable templates encode absolute fret positions in their pattern
+    template = nonShiftableMatch;
+    baseFret = 0;
+  } else {
+    // Use only shiftable (barre-able) templates for the position-based selection
+    const shiftableTemplates = allTemplates.filter((t) => t.shiftable);
+    if (shiftableTemplates.length === 0) {
+      return buildCompactVoicing(rootMidi, intervals, position);
+    }
+
+    template = shiftableTemplates[0];
+    baseFret = baseFretForTemplate(template);
+
+    if (shiftableTemplates.length > 1) {
+      if (position === "low") {
+        // Find template with the lowest base fret (closest to nut)
+        let bestBf = baseFret;
+        let bestT = template;
+        for (let i = 1; i < shiftableTemplates.length; i++) {
+          const bf = baseFretForTemplate(shiftableTemplates[i]);
+          if (bf < bestBf) { bestBf = bf; bestT = shiftableTemplates[i]; }
         }
+        template = bestT;
+        baseFret = bestBf;
+      } else if (position === "open") {
+        // For open position, find a template whose bassString naturally has the root
+        // in a low fret position (preferably 0)
+        let bestT = shiftableTemplates[0];
+        const bf0 = baseFretForTemplate(shiftableTemplates[0]);
+        let bestDist = Math.min(bf0, 12 - bf0); // circular distance
+        for (let i = 1; i < shiftableTemplates.length; i++) {
+          const bf = baseFretForTemplate(shiftableTemplates[i]);
+          const dist = Math.min(bf, 12 - bf);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestT = shiftableTemplates[i];
+          }
+        }
+        template = bestT;
+        baseFret = baseFretForTemplate(template);
+      } else if (position === "mid") {
+        // Find template with base fret in the 5-8 range, or lowest above 5
+        let bestT = template;
+        let bestBf = baseFret;
+        for (let i = 1; i < shiftableTemplates.length; i++) {
+          const bf = baseFretForTemplate(shiftableTemplates[i]);
+          const adj = bf < 5 ? bf + 12 : bf;
+          const bestAdj = bestBf < 5 ? bestBf + 12 : bestBf;
+          if (adj < bestAdj) { bestBf = bf; bestT = shiftableTemplates[i]; }
+        }
+        template = bestT;
+        baseFret = baseFretForTemplate(template);
+        if (baseFret < 5) baseFret += 12;
       }
-      template = bestT;
-      baseFret = baseFretForTemplate(template);
-    } else if (position === "mid") {
-      // Find template with base fret in the 5-8 range, or lowest above 5
-      let bestT = template;
-      let bestBf = baseFret;
-      for (let i = 1; i < templates.length; i++) {
-        const bf = baseFretForTemplate(templates[i]);
-        const adj = bf < 5 ? bf + 12 : bf;
-        const bestAdj = bestBf < 5 ? bestBf + 12 : bestBf;
-        if (adj < bestAdj) { bestBf = bf; bestT = templates[i]; }
-      }
-      template = bestT;
-      baseFret = baseFretForTemplate(template);
-      if (baseFret < 5) baseFret += 12;
     }
   }
 

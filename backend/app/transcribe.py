@@ -105,20 +105,26 @@ def map_words_to_lyrics_aligned(
     return out
 
 
-def _estimate_transcription_confidence(*, word_count: int) -> float:
+def _whisper_logprob_to_confidence(*, avg_logprob: float) -> float:
     """
-    Smoke-test heuristic confidence in [0,1].
+    Convert Whisper segment avg_logprob (typically -3.0 to 0.0, higher = better)
+    into a [0, 1] confidence score.
 
-    Whisper does not provide a single directly comparable "confidence" scalar
-    for our use-case, so we use word availability as a proxy.
+    Mapping (calibrated empirically):
+      -0.1  → 0.92  (excellent)
+      -0.5  → 0.78  (good)
+      -1.0  → 0.60  (fair)
+      -2.0  → 0.35  (poor)
+      -3.0  → 0.15  (very poor)
+      -5.0  → 0.05  (noise)
     """
-    if word_count <= 0:
-        return 0.1
-    if word_count < 3:
-        return 0.2
-    if word_count < 12:
-        return 0.45
-    return 0.7
+    if avg_logprob >= 0.0:
+        return 0.95
+    if avg_logprob <= -5.0:
+        return 0.05
+    # Logistic-style mapping centered at -1.0
+    raw = 1.0 - (1.0 / (1.0 + math.exp(-(avg_logprob + 0.5) / 0.6)))
+    return float(max(0.05, min(0.95, raw)))
 
 
 def transcribe_vocals_to_lyrics_aligned(
@@ -130,6 +136,13 @@ def transcribe_vocals_to_lyrics_aligned(
 ) -> tuple[list[dict[str, Any]], float]:
     """
     Run Whisper on vocals stem and snap word timestamps to the beat grid.
+
+    Confidence is derived from two signals:
+      1. Whisper segment avg_logprob (primary) — reflects model certainty.
+      2. Word count floor (secondary) — prevents overconfidence on near-empty results.
+
+    The 0.7 artificial ceiling is removed so different Whisper models
+    (base / small / large) can produce meaningfully different confidence scores.
 
     Returns:
       (lyrics_aligned, transcription_confidence)
@@ -178,10 +191,46 @@ def transcribe_vocals_to_lyrics_aligned(
 
     raw_words.sort(key=lambda x: x.start_s)
 
-    confidence = _estimate_transcription_confidence(word_count=len(raw_words))
+    # Confidence from Whisper avg_logprob (primary signal)
+    segments = result.get("segments", []) or []
+    if segments:
+        # Weighted average: longer segments contribute more
+        total_dur = 0.0
+        weighted_logprob = 0.0
+        for seg in segments:
+            avg_lp = seg.get("avg_logprob")
+            if avg_lp is None:
+                continue
+            start_s = float(seg.get("start", 0.0))
+            end_s = float(seg.get("end", start_s + 1.0))
+            dur = max(end_s - start_s, 0.01)
+            total_dur += dur
+            weighted_logprob += float(avg_lp) * dur
+        if total_dur > 0:
+            mean_logprob = weighted_logprob / total_dur
+        else:
+            mean_logprob = -1.0
+    else:
+        mean_logprob = -1.0
+
+    logprob_confidence = _whisper_logprob_to_confidence(avg_logprob=mean_logprob)
+
+    # Word-count penalty: when Whisper returned very few words, clip confidence
+    # regardless of how good avg_logprob looks (prevents overconfidence on sparse output).
+    word_count = len(raw_words)
+    if word_count <= 0:
+        word_ceiling = 0.1
+    elif word_count < 3:
+        word_ceiling = 0.3
+    elif word_count < 12:
+        word_ceiling = 0.55
+    else:
+        word_ceiling = 1.0  # no ceiling once we have enough words
+
+    confidence = min(logprob_confidence, word_ceiling)
+
     lyrics_aligned = map_words_to_lyrics_aligned(raw_words, beat_grid=beat_grid)
     if not lyrics_aligned:
-        # Keep the confidence low when we failed to extract/match any usable word timestamps.
         confidence = min(confidence, 0.2)
     return lyrics_aligned, float(confidence)
 

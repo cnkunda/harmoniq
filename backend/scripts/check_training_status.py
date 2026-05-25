@@ -101,16 +101,16 @@ def main() -> int:
             capture_output=True, text=True, timeout=5
         )
         sessions = result.stdout.strip()
-        if "harmoniq-train" in sessions:
+        if "harmoniq-training" in sessions:
             # Get window info
             win = subprocess.run(
-                ["tmux", "list-windows", "-t", "harmoniq-train"],
+                ["tmux", "list-windows", "-t", "harmoniq-training"],
                 capture_output=True, text=True, timeout=5
             )
-            print(f"  {PASS} Tmux session 'harmoniq-train' is running")
+            print(f"  {PASS} Tmux session 'harmoniq-training' is running")
             print(f"    Windows: {win.stdout.strip()}")
         else:
-            print(f"  {FAIL} No 'harmoniq-train' tmux session found")
+            print(f"  {FAIL} No 'harmoniq-training' tmux session found")
             all_pass = False
     except (subprocess.TimeoutExpired, FileNotFoundError):
         print(f"  {FAIL} tmux not available or session check timed out")

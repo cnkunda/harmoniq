@@ -1,7 +1,7 @@
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { useRouter } from 'expo-router'
 import { useCallback, useMemo } from 'react'
 import { Text, View } from 'react-native'
-import { AnimatedPressable } from '@/components/AnimatedPressable'
 import Animated, { FadeIn } from 'react-native-reanimated'
 import Svg, { Polyline } from 'react-native-svg'
 
@@ -176,11 +176,11 @@ export function RecentProgress({
         </Text>
       )}
 
-      {planNote ? (
+      {/* {planNote ? (
         <Text className="mt-2 font-sans text-xs text-muted-brown">
           Latest plan wrap-up: {planNote}.
         </Text>
-      ) : null}
+      ) : null} */}
     </View>
   )
 }

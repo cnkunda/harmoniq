@@ -3,11 +3,11 @@ import { Audio } from 'expo-av'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
+import { X } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ChordsAndLyrics } from '@/components/ChordsAndLyrics'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
-import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
@@ -20,7 +20,6 @@ import { getAppPref } from '@/src/db/client'
 import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
-import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { capoSuggestion, parseKey } from '@/src/music/capoSuggestion'
 import { getChordFunction } from '@/src/music/chordFunction'
 import { formatChordDisplay } from '@/src/music/chordVoicing'
@@ -38,6 +37,7 @@ import {
 } from '@/src/utils/fretboardShareState'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { NoteEventMessage } from '@/types/tabMessage'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 
 // Transcription types (matching backend schemas)
 interface BeatGrid {
@@ -144,8 +144,10 @@ export default function StudyScreen() {
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
 
-  // Extract timeline data for MusicProvider (prefer section-level, fall back to lesson-level)
-  const chordEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events ?? null
+  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
+  // Use helper to ensure consistent whole-song chord events are provided to MusicProvider
+  // so consumers (fretboard, chords UI) update as playback crosses sections.
+  const chordEvents = getLessonWideChordEvents(lesson)
   const soloNotesArr = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
   const barTimestamps = lesson?.bar_timestamps ?? null
 
@@ -169,12 +171,11 @@ function StudyScreenInner() {
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const [tick, setTick] = useState<PlaybackTickContext>(DEFAULT_TICK)
-  const [showTranscriptionWarningModal, setShowTranscriptionWarningModal] = useState(false);
   const [stemRoutingOverride, setStemRoutingOverride] = useState<string | null>(null);
   const [theoryAnnotation, setTheoryAnnotation] = useState<{ chordName: string; chordFunction: string; romanNumeral: string; rationale: string } | null>(null);
   // Intelligent fretboard display mode (auto-detect or manual override)
   const [fretboardMode, setFretboardMode] = useState<'auto' | 'chords' | 'solo' | 'both'>('auto')
-  const [voicingMode, setVoicingMode] = useState<'full' | 'compact'>('compact')
+  const [voicingMode, setVoicingMode] = useState<'full' | 'compact'>('full')
 
   // Orient clip states (moved from separate orient.tsx screen)
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
@@ -185,73 +186,26 @@ function StudyScreenInner() {
   const orientSoundRef = useRef<any>(null)
   const orientSoundInstanceId = useRef(`study-orient-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`)
 
-  // Show transcription warning modal when section confidence is low
+  // Debug: log lesson-wide chord timeline when lesson metadata changes
   useEffect(() => {
-    const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
-    if (!section) return
-
-    const sectionConfidence = typeof section.confidence === 'number' ? section.confidence : 1.0
-    const transcriptionConfidence = typeof lesson?.transcription_confidence === 'number' ? lesson.transcription_confidence : 1.0
-    const isLowConfidence = sectionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX ||
-      transcriptionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX
-
-    // Check transcription metadata for validation flags
-    const validationMetadata = section.transcription_metadata?.validation
-    const hasValidationFlag = validationMetadata?.flag_reason != null
-
-    if (isLowConfidence || hasValidationFlag) {
-      setShowTranscriptionWarningModal(true)
-    } else {
-      setShowTranscriptionWarningModal(false)
-    }
-  }, [lesson?.sections, lessonSectionIndex, lesson?.transcription_confidence])
-
-  // Debug: log chord timeline metadata when section changes
-  useEffect(() => {
-    const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
-    const chordTimeline = section?.chord_timeline ?? lesson?.chord_timeline
-    if (!chordTimeline) {
-      console.log('[ChordDebug] No chord timeline for section', lessonSectionIndex)
+    const events = getLessonWideChordEvents(lesson)
+    if (!events || events.length === 0) {
+      console.log('[ChordDebug] No chord timeline for lesson')
       return
     }
 
-    const events = chordTimeline.events
-    const metadata = chordTimeline.metadata
-
     console.log('[ChordDebug] === Chord Timeline Metadata ===')
-    console.log('[ChordDebug] Section index:', lessonSectionIndex)
+    console.log('[ChordDebug] Section index (store):', lessonSectionIndex)
     console.log('[ChordDebug] Total events:', events.length)
-    console.log('[ChordDebug] Unique chords:', new Set(events.filter(e => e.chord !== 'N').map(e => e.chord)).size)
-
-    if (metadata) {
-      console.log('[ChordDebug] Flicker rate:', metadata.flicker_rate, metadata.flicker_rate > 0.05 ? '⚠️ HIGH' : '✅')
-      console.log('[ChordDebug] Beat alignment:', metadata.beat_alignment_pct, metadata.beat_alignment_pct < 0.90 ? '⚠️ LOW' : '✅')
-      console.log('[ChordDebug] Downbeat alignment:', metadata.downbeat_alignment_pct, metadata.downbeat_alignment_pct < 0.60 ? '⚠️ LOW' : '✅')
-      console.log('[ChordDebug] Chord change histogram:', JSON.stringify(metadata.chord_change_histogram))
-      console.log('[ChordDebug] Sub-beat ratio:', metadata.duration_filtering.sub_beat_ratio, metadata.duration_filtering.sub_beat_ratio > 20 ? '⚠️ HIGH' : '✅')
-
-      if (metadata.duration_filtering.sub_beat_events.length > 0) {
-        console.log('[ChordDebug] Sub-beat events (first 5):')
-        metadata.duration_filtering.sub_beat_events.slice(0, 5).forEach((e: any) => {
-          console.log(`  ${e.chord} @ ${e.timestamp.toFixed(2)}s, ${e.duration_beats.toFixed(2)} beats, conf=${e.confidence}`)
-        })
-      }
-    }
-
-    // Log chord distribution
-    const chordCounts: Record<string, number> = {}
-    events.forEach(e => {
-      chordCounts[e.chord] = (chordCounts[e.chord] || 0) + 1
-    })
-    console.log('[ChordDebug] Chord distribution:', chordCounts)
+    console.log('[ChordDebug] Unique chords:', new Set(events.filter((e) => e.chord !== 'N').map((e) => e.chord)).size)
 
     // Log first 10 events
     console.log('[ChordDebug] First 10 events:')
-    events.slice(0, 10).forEach(e => {
-      console.log(`  ${e.timestamp.toFixed(2)}s: ${e.chord} (conf: ${e.confidence.toFixed(3)})`)
+    events.slice(0, 10).forEach((e) => {
+      console.log(`  ${e.timestamp.toFixed(2)}s: ${e.chord} (conf: ${typeof e.confidence === 'number' ? e.confidence.toFixed(3) : 'n/a'})`)
     })
     console.log('[ChordDebug] === End Chord Debug ===')
-  }, [lesson?.sections, lessonSectionIndex, lesson?.chord_timeline])
+  }, [lesson?.job_id, lesson?.sections])
 
   // Fetch orient clip when lesson changes
   useEffect(() => {
@@ -320,15 +274,15 @@ function StudyScreenInner() {
   // Update theory annotation based on current chord during playback
   useEffect(() => {
     const updateTheoryAnnotation = async () => {
-      // Check both section level and lesson level for chord_timeline
-      const chordEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events
+    // Use lesson-wide chord events so theory annotations track across section boundaries
+    const chordEvents = getLessonWideChordEvents(lesson)
       if (!chordEvents || !lesson?.key) return;
 
       // Find current chord based on playback position
       const currentChordEvent = chordEvents
         .slice()
         .reverse()
-        .find((event: ChordEvent) => event.timestamp <= tick.positionSec);
+        .find((event) => event.timestamp <= tick.positionSec);
 
       if (!currentChordEvent || currentChordEvent.chord === 'N') {
         setTheoryAnnotation(null);
@@ -390,7 +344,7 @@ function StudyScreenInner() {
   const sectionKey = `${lesson?.job_id ?? 'no-job'}:${lessonSectionIndex}`
   const setAnnotation = useSessionAnnotationsStore((s) => s.setNote)
 
-  const chordTimelineEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events ?? null
+    const chordTimelineEvents = getLessonWideChordEvents(lesson) ?? null
   const barsData = useMemo(() => {
     const timestamps = lesson?.bar_timestamps
     if (!timestamps || !chordTimelineEvents) return []
@@ -414,7 +368,7 @@ function StudyScreenInner() {
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [overlayMode, setOverlayMode] = useState<FretboardOverlayMode>('off')
   const [preferSimplerTabs, setPreferSimplerTabs] = useState(false)
-  const [lowConfBannerDismissed, setLowConfBannerDismissed] = useState(false)
+  const [transcriptionWarningDismissed, setTranscriptionWarningDismissed] = useState(false)
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
 
   const onTabNoteEvent = useCallback((evt: NoteEventMessage) => {
@@ -428,10 +382,13 @@ function StudyScreenInner() {
   const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
 
   const transcriptionConfidence = lesson?.transcription_confidence
-  const showLowTranscriptionBanner =
-    typeof transcriptionConfidence === 'number' &&
-    transcriptionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX &&
-    !lowConfBannerDismissed
+  const sectionConfidence = typeof section?.confidence === 'number' ? section.confidence : 1.0
+  const hasValidationFlag = !!(section?.transcription_metadata?.validation?.flag_reason)
+  const isLowConfidence =
+    (typeof transcriptionConfidence === 'number' && transcriptionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX)
+    || sectionConfidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX
+  const showTranscriptionWarning =
+    !transcriptionWarningDismissed && (isLowConfidence || hasValidationFlag)
 
   useFocusEffect(
     useCallback(() => {
@@ -440,7 +397,7 @@ function StudyScreenInner() {
   )
 
   useEffect(() => {
-    setLowConfBannerDismissed(false)
+    setTranscriptionWarningDismissed(false)
   }, [lesson?.job_id, lessonSectionIndex])
 
   useEffect(() => {
@@ -567,14 +524,24 @@ function StudyScreenInner() {
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.study}</DemoTourCallout> : null}
 
-      {showTranscriptionWarningModal && (
+      {showTranscriptionWarning && (
         <View className="mx-4 rounded-xl border border-amber-accent/50 bg-amber-accent/10 p-4">
-          <Text className="mb-2 font-sans-medium text-amber-accent">
-            Transcription Uncertainty
-          </Text>
+          <View className="mb-2 flex-row items-center justify-between">
+            <Text className="font-sans-medium text-amber-accent">
+              Transcription Uncertainty
+            </Text>
+            <AnimatedPressable
+              haptic="light"
+              onPress={() => setTranscriptionWarningDismissed(true)}
+              hitSlop={8}
+            >
+              <X color="#d4a853" size={16} />
+            </AnimatedPressable>
+          </View>
           <Text className="mb-3 font-sans text-sm text-wood-900">
             We're {Math.round((lesson?.transcription_confidence ?? 1.0) * 100)}% sure about this transcription.
-            Want to slow it down to 50% speed and verify?
+            {'\n'}
+            This part is a rough approximation — use it as a guide, not a rule.
           </Text>
 
           {/* Stem routing override UI */}
@@ -593,7 +560,6 @@ function StudyScreenInner() {
                       }`}
                     onPress={() => {
                       setStemRoutingOverride(stemName)
-                      // Trigger re-render with new stem
                       console.log('Stem routing override:', stemName)
                     }}
                   >
@@ -613,8 +579,7 @@ function StudyScreenInner() {
             <AnimatedPressable
               className="flex-1 rounded-xl border border-amber-accent/30 bg-amber-accent/20 px-3 py-2.5"
               onPress={() => {
-                setShowTranscriptionWarningModal(false)
-                // Slow down playback to 50%
+                setTranscriptionWarningDismissed(true)
                 const tabSurface = sessionStemRef.current?.getTabSurface()
                 tabSurface?.setPlaybackRate(0.5)
               }}
@@ -625,9 +590,7 @@ function StudyScreenInner() {
             </AnimatedPressable>
             <AnimatedPressable
               className="flex-1 rounded-xl border border-wood-600/30 bg-wood-800/50 px-3 py-2.5"
-              onPress={() => {
-                setShowTranscriptionWarningModal(false)
-              }}
+              onPress={() => setTranscriptionWarningDismissed(true)}
             >
               <Text className="text-center font-sans-medium text-sm text-cream">
                 Continue Anyway
@@ -647,19 +610,6 @@ function StudyScreenInner() {
         tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
         insertBetweenStemAndTab={
           <>
-            {showLowTranscriptionBanner ? (
-              <ErrorBanner
-                className="mt-3"
-                dismissible
-                {...toErrorBannerProps(mapLowTranscriptionConfidenceBanner(), {
-                  onRetry: () => setLowConfBannerDismissed(true),
-                  onDismiss: () => setLowConfBannerDismissed(true),
-                  onOpenSettings: () => setLowConfBannerDismissed(true),
-                  onContinue: () => setLowConfBannerDismissed(true),
-                })}
-              />
-            ) : null}
-
             {/* Fretboard Mode Controls */}
 
             <FretboardDiagram
@@ -698,23 +648,25 @@ function StudyScreenInner() {
             />
 
             <View className="mt-2">
-              <ChordsAndLyrics
-                bars={barsData}
-                currentBar={currentBar}
-                bpm={lesson?.tempo ?? 92}
-                onBarPress={(bar) => {
-                  const stamps = lesson?.bar_timestamps
-                  const t = Array.isArray(stamps) && typeof stamps[bar] === 'number' ? stamps[bar]! : 0
-                  void (async () => {
-                    await sessionStemRef.current?.seekTransportToSeconds(t)
-                    sessionStemRef.current?.scrollMasterBarIntoView(bar)
-                  })()
-                }}
-                onBarLongPress={(bar) => {
-                  const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
-                  setAnnotation(sectionKey, bar, text)
-                }}
-              />
+             <ChordsAndLyrics
+                 bars={barsData}
+                 currentBar={currentBar}
+                 bpm={lesson?.tempo ?? 92}
+                 onBarPress={(bar) => {
+                   const stamps = lesson?.bar_timestamps
+                   const t = Array.isArray(stamps) && typeof stamps[bar] === 'number' ? stamps[bar]! : 0
+                   void (async () => {
+                     await sessionStemRef.current?.seekTransportToSeconds(t)
+                     sessionStemRef.current?.scrollMasterBarIntoView(bar)
+                   })()
+                 }}
+                 onBarLongPress={(bar) => {
+                   const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
+                   setAnnotation(sectionKey, bar, text)
+                 }}
+                 barsPerLine={4}
+                 label={(section?.label ?? '') as string}
+               />
             </View>
 
           </>

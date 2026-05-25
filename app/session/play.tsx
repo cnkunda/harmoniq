@@ -38,6 +38,7 @@ import { MusicProvider } from '@/src/context/MusicContext'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import * as FileSystem from 'expo-file-system/legacy'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 
 export default function PlayScreen() {
   const isDemo = useIsDemoLesson()
@@ -48,8 +49,9 @@ export default function PlayScreen() {
   const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const section = lesson?.sections?.[sectionIndex] as Record<string, unknown> | undefined
 
-  // Extract timeline data for MusicProvider (prefer section-level, fall back to lesson-level)
-  const chordEvents = (section as any)?.chord_timeline?.events ?? lesson?.chord_timeline?.events ?? null
+  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
+  // Use helper so UI consumers follow playback across sections without needing per-section logic.
+  const chordEvents = getLessonWideChordEvents(lesson)
   const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
   const barTimestamps = lesson?.bar_timestamps ?? null
 

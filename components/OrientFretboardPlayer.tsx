@@ -6,6 +6,7 @@ import { Circle, Line, Svg } from 'react-native-svg'
 import colors from '@/src/constants/colors'
 import { chordToFretboardCells, formatChordDisplay } from '@/src/music/chordVoicing'
 import type { LessonJSON } from '@/src/types'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 
 const FRET_COUNT = 5
 const STRING_COUNT = 6
@@ -41,7 +42,9 @@ export function OrientFretboardPlayer({
   orientAnnotation,
   onSeek,
 }: OrientFretboardPlayerProps) {
-  const chordEvents = lesson.chord_timeline?.events ?? []
+  // Prefer lesson-wide merged chord timeline so the orient player follows the whole song
+  // rather than a single section. Use helper for consistency with other screens.
+  const chordEvents = getLessonWideChordEvents(lesson) ?? []
   const currentChord = useMemo(
     () => currentChordAtPosition(chordEvents, positionSec),
     [chordEvents, positionSec],
@@ -80,7 +83,7 @@ export function OrientFretboardPlayer({
 
   const noteDots = useMemo(() => {
     return fretCells.map((cell) => {
-      const row = 6 - cell.string
+      const row = cell.string - 1
       // Pull open string (fret 0) notes to the left of the nut
       const x = cell.fret === 0
         ? PAD_X - CELL_W / 2
