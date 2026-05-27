@@ -1,0 +1,18 @@
+{
+  "model_name": "H-GAIN",
+  "version": "1.0.2",
+  "architecture": "CRNN",
+  "pipeline": {
+    "demucs_version": "4.0",
+    "librosa_version": "0.10.0"
+  },
+  "hyperparameters": {
+    "epochs": 50,
+    "initial_lr": 0.0010000000474974513
+  },
+  "metrics": {
+    "val_accuracy": 0.684467077255249,
+    "val_loss": 0.9716387391090393
+  },
+  "timestamp": "2026-05-27T01:41:24Z"
+}

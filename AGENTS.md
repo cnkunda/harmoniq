@@ -1,129 +1,328 @@
-# AGENTS.md — Harmoniq
+# AGENTS.md — Harmoniq Factory Floor Manual
 
-> AI-powered adaptive guitar learning app. React Native + Expo (iOS, Android, Web).
+AI-powered adaptive guitar learning app. React Native + Expo (iOS, Android, Web).
+
+**One rule above all: if anything is unclear, ask. Do not guess.**
 
 ---
 
-## Dev setup
+## TL;DR for agents
+
+| Thing | Rule |
+|-------|------|
+| **Stack** | React Native + Expo (iOS, Android, Web) + FastAPI backend |
+| **Path alias** | `@/*` maps to repo root — no relative imports like `../../foo` |
+| **Lint** | `npm run lint` = `tsc --noEmit` (no ESLint) — **must pass 0 errors before commit** |
+| **Pascal of camel?** | Component files = PascalCase. Modules, hooks, utils = camelCase. Constants = SCREAMING_SNAKE. |
+| **Golden rules** | Never combine two commits. Never future-proof. Never silence an error. Ask when uncertain. |
+
+---
+
+## Setup & key commands
 
 ```bash
-# 1. Frontend deps (macOS / Linux)
+# Frontend
 npm install
+npx expo start               # native (iOS/Android)
+expo start --web              # browser
 
-# 2. Backend (requires WSL on Windows; Python 3.11+)
-cd backend && python -m venv .venv && source .venv/bin/activate
+# Backend (Python 3.11+, from backend/)
+python -m venv .venv-wsl && source .venv-wsl/bin/activate
 pip install -e ".[dev]"
-
-# 3. Copy env files
-cp .env.example .env            # root: set EXPO_PUBLIC_API_URL
-cp backend/.env.example backend/.env
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
-
-```bash
-# 4. Start backend (hot-reload)
-cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# 5. Start frontend
-npx expo start        # native (iOS/Android)
-expo start --web      # browser
-```
-
-- **Backend must be running before the app starts** — the app pings `EXPO_PUBLIC_API_URL` on launch.
-- Default API URL is `http://localhost:8000`. Change in `.env` or `app.config.ts` → `extra.apiBaseUrl`.
-- For WSL: use your LAN IP (`192.168.x.x`) in both `.env` and `backend/.env` (`HARMONIQ_CORS_ORIGINS`) so a physical phone can reach it.
-
-## Typical development workflow
-
-For optimal development experience, run each component in its own terminal:
-
-1. **Frontend (Git Bash)**: Run `npx expo start` for native or `expo start --web` for browser
-2. **Backend (WSL)**: Activate `.venv-wsl` and run `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000`
-3. **Agent**: Use opencode in a separate terminal for code modifications
-
----
-
-## Key commands
 
 | Command | What it does |
 |---------|-------------|
-| `npm run lint` | `tsc --noEmit` — no ESLint in this repo |
-| `npm run test` | `vitest run` — all unit tests (34 files) |
+| `npm run lint` | `tsc --noEmit` — zero errors required before every commit |
+| `npm run test` | `vitest run` — all 34 unit test files |
 | `npm run test:ui` | Playwright structural tests (non-visual) |
 | `npm run test:visual` | Playwright visual regression |
-| `npm run test:visual:update` | Update visual snapshots |
+| `npm run test:visual:update` | Update Playwright visual snapshots |
 | `npm run test:mobile` | Detox E2E on Android emulator |
 | `npm run test:mobile:ios` | Detox E2E on iOS simulator |
 | `npm run audit:inventory` | Generate screen/component inventory |
 | `npm run audit:platform` | Generate platform health audit |
-| `python -m pytest -q` | Backend tests (from `backend/`, 39 files) |
-| `python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py` | Chord model tests (commits 98-98d) |
-| `python -m pytest -q tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py` | Viterbi decoding tests (commit 99) |
-| `python -m pytest -q tests/test_boundary_tie.py` | Boundary tie tests (commit 100) |
+| `python -m pytest -q` | All backend tests (from `backend/`) |
+| `python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py` | Chord model tests |
+| `python -m pytest -q tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py` | Viterbi decoding tests |
+| `python -m pytest -q tests/test_boundary_tie.py` | Boundary tie tests |
 | `python scripts/clear_analysis_cache.py` | Clear cached song analyses |
 
-**CI workflow** (`scoring-tests.yml`): runs `pytest` on scoring + chord model + Viterbi + boundary tie tests (backend, 10 files) + `vitest run` on all frontend test files (34 files).
+**CI** (`.github/workflows/scoring-tests.yml`): runs frontend `vitest run` + backend pytest on 10 specific test files. Triggered on push to `main`/`master` and on all PRs.
 
 ---
 
-## Architecture traps an agent will miss
+## Code conventions
 
-### Platform-specific file resolution
-- `.native.ts` / `.web.ts` suffixes are resolved by Metro at bundle time.
-- `src/db/client.ts` is a **type-only re-export** — it does not contain logic. Metro swaps in `client.native.ts` or `client.web.ts`.
-- Shared hooks (e.g. `usePitchStream.ts`) follow the same pattern: shared file for types, `.native.ts` and `.web.ts` for implementations, with a stub `.ts` for TypeScript-only.
+### TypeScript / React Native
 
-### Path alias
-- `@/*` maps to `./*` (the repo root). Used ubiquitously as `@/src/...`, `@/components/...`.
-- Vitest config has a matching alias — if you add new test files, the alias must resolve.
+**Naming**
+| What | Convention | Example |
+|------|-----------|---------|
+| Component files | PascalCase | `AnimatedPressable.tsx` |
+| Module / util files | camelCase | `chordFunction.ts`, `sm2.ts` |
+| Hook files | camelCase with `use` prefix | `usePitchStream.ts` |
+| Functions | camelCase | `getChordFunction()`, `sessionEntryHref()` |
+| Types & interfaces | PascalCase | `ChordEvent`, `AnimatedPressableProps` |
+| Exported constants | SCREAMING_SNAKE | `SESSION_STEPS`, `CENTS_TOLERANCE` |
+| Local constants | camelCase | `const maxRetries = 3` |
 
-### Expo Router file-based routing
-- Every file under `app/` becomes a route. No manual route registration.
-- Hidden tabs (`design-preview`, `analyze-debug`) have `href: null` — reachable via `router.push()` only.
-- Dynamic routes use `[param]` directories, e.g. `app/onboarding/phrase/[index].tsx`.
+**Imports**
+- Always use `@/` absolute imports — never `../` or `../../`.
+- Group: (1) third-party / Expo, blank line, (2) internal modules.
+- Named exports preferred everywhere. Default exports **only** for Expo Router screen files (`app/` directory).
+- Type-only imports: `import type { Foo } from '@/src/types'`.
 
-### Session flow (7 steps, 4 phases)
-Pre-flight steps (**not** in any phase): `tune` → `musical-tolerance`
-Phases: **orient** (`listen`) → **isolate** (`study`, `slow`) → **apply** (`play`) → **reflect** (`review`)
-- Defined in `src/constants/sessionFlow.ts` (`SESSION_STEPS`) and `src/constants/sessionPhases.ts`.
-- Mood check gates the first daily session (see `sessionEntryHrefWithMoodCheck`).
-- `warmup` URL maps to the `slow` step index (alias, not a real step).
+**TypeScript**
+- `strict: true` — no `any` unless unavoidable for interop (rare).
+- Interfaces preferred for object shapes; unions for discriminated variants.
+- `as const` for literal arrays/objects to derive union types.
+- Explicit return types on all exported functions.
+
+**Platform-specific files**
+- Metro resolves `.native.ts` / `.web.ts` at bundle time.
+- A plain `.ts` file acts as a type-only re-export stub (see `src/db/client.ts`, `src/pitch/usePitchStream.ts`).
+- Shared interface goes in the `.ts` stub; implementations go in `.native.ts` and `.web.ts`.
+
+**State management (Zustand)**
+```typescript
+// Store definition — src/stores/useAppStore.ts
+import { create } from 'zustand'
+
+interface AppState {
+  volume: number
+  setVolume: (v: number) => void
+}
+
+export const useAppStore = create<AppState>((set) => ({
+  volume: 0.8,
+  setVolume: (volume) => set({ volume }),
+}))
+
+// Subscription — always use selectors to avoid wasted re-renders
+const volume = useAppStore((s) => s.volume)
+```
+
+**Comments**
+- `/** JSDoc */` for all exported APIs, types, and public functions.
+- `// Commit N:` reference to trace back to PRIORITIES.md spec.
+- Section dividers: `// ---- Section ----`.
+- No inline comments explaining *what* the code does (the code should be clear). Inline comments explain *why* a non-obvious choice was made.
+
+**Error handling — fail loudly**
+- No bare `catch (e) {}` — never silence errors.
+- User-facing errors: `toast.error('Something went wrong: ' + message)`.
+- Dev logging: `console.log('[ModuleName]', message)`.
+- Backend: raise `HarmoniqAPIError` for known failure modes (caught by global handler).
+- Backend feature toggles: `if os.getenv("HARMONIQ_SKIP_FOO", "").strip() == "1": raise HTTPException(503, ...)`.
+
+### Python / FastAPI
+
+| What | Convention | Example |
+|------|-----------|---------|
+| Files | snake_case | `viterbi_decoder.py` |
+| Functions / variables | snake_case | `compute_flicker_rate()` |
+| Classes | PascalCase | `ViterbiChordDecoder` |
+| Constants | SCREAMING_SNAKE | `TIE_THRESHOLD = 0.3` |
+
+- `from __future__ import annotations` at module top.
+- Type hints on all function parameters and return values.
+- Pydantic v2 models: `model_config = ConfigDict(extra="ignore")`.
+- FastAPI routers in `app/routers/`.
+- Imports order: stdlib, blank line, third-party, blank line, local.
+
+---
+
+## Architecture
+
+### Session flow (7 steps, 4 phases + pre-flight)
+
+Pre-flight: `tune` → `musical-tolerance`
+Phase 1 (Orient): `listen`
+Phase 2 (Isolate): `study`
+Phase 3 (Refine): `slow` (`warmup` is a URL alias for `slow`)
+Phase 4 (Apply): `play`
+Phase 5 (Reflect): `review`
+
+Defined in `src/constants/sessionFlow.ts` and `sessionPhases.ts`. Mood check gates the first daily session (`sessionEntryHrefWithMoodCheck`).
 
 ### Dual database
-- **Mobile**: SQLite via `expo-sqlite`, full migration system with rollback (14 versions).
-- **Web**: IndexedDB + in-memory arrays, simpler persistence, separate versioning (v4).
-- Migrations: `src/db/schema.ts` (SQL constants), `src/db/client.native.ts` (runner), `src/db/migrations.ts` (validation).
-- DB interface: `src/db/harmoniqDbClient.ts`.
+
+| Platform | Engine | Versions |
+|----------|--------|----------|
+| Mobile | SQLite via `expo-sqlite` | 14 migration versions |
+| Web | IndexedDB + in-memory arrays | v4 (separate versioning) |
+
+Shared contract: `HarmoniqDbClient` interface in `src/db/harmoniqDbClient.ts`. Platform resolution via `client.native.ts` / `client.web.ts`.
 
 ### Audio architecture
-- `src/audio/GlobalAudioManager.ts` is a **singleton** — all audio instances go through it.
-- Mic recording uses `react-native-audio-api` on mobile (requires **dev build or release build**, not Expo Go).
-- Web mic uses `getUserMedia` + `AudioWorklet` — requires HTTPS or `localhost`.
-- Ghost recordings: on-disk (native) vs inline base64 (web).
+
+- `src/audio/GlobalAudioManager.ts` is a singleton — all audio instances go through it.
+- Mobile mic: `react-native-audio-api` (dev build required, not Expo Go).
+- Web mic: `getUserMedia` + `AudioWorklet` (requires HTTPS or localhost).
+- Ghost recordings: on-disk files (native) vs inline base64 strings (web).
 
 ### Backend pipeline (stub state)
-- `POST /analyze` and `GET /analyze/{job_id}` return **in-memory stub** `LessonJSON` — no real ML pipeline yet.
-- Full pipeline (Demucs, librosa, whisper, basic-pitch, pyguitarpro) is scaffolded but gated on ML infra.
-- `basic-pitch` requires TensorFlow — **does not install on Windows/Linux** with Python 3.11+. See `backend/README.md` workaround.
-- `torch==2.5.1` / `torchaudio==2.5.1` are pinned to avoid TorchCodec issues. Do not upgrade without testing Demucs.
+
+- `POST /analyze` + `GET /analyze/{job_id}` return in-memory stub `LessonJSON`.
+- Full ML pipeline (Demucs, librosa, Whisper, basic-pitch, pyguitarpro, Claude) is scaffolded but gated.
+- `basic-pitch` requires TensorFlow — does not install on Windows/Linux Python 3.11+.
+- `torch==2.5.1` / `torchaudio==2.5.1` pinned — do not upgrade without testing Demucs.
+
+### Expo Router routing
+
+- Every file under `app/` is a route. No manual registration.
+- Hidden tabs (`design-preview`, `analyze-debug`) set `href: null` in tab config — reachable via `router.push()` only.
+- Dynamic routes: `[param]` directories, e.g. `app/onboarding/phrase/[index].tsx`.
+- Screen components in `app/` must be `export default` (Expo Router requirement).
+
+### Path alias
+
+`@/*` → repo root. Configured in `tsconfig.json` and `vitest.config.ts`. Any new test files with `@/` imports must match.
 
 ---
 
-## Design system notes
+## Design system
 
-- **Real color palette** lives in `src/constants/colors.ts` (not `constants/Colors.ts`, which has the Expo template palette).
-- Wood/amber/cream theme throughout. Animations should be slow and intentional — "jazz club lighting, not mobile game."
-- Icons: `lucide-react-native` (native + web). Do not use Phosphor or Material icons.
-- Toast config: `components/ToastConfig.tsx` — use `toast.success()` / `toast.error()` helpers.
-- Pressables: use `AnimatedPressable` from `components/AnimatedPressable.tsx`, not bare `Pressable`.
+### Colors (`src/constants/colors.ts`, not `constants/Colors.ts`)
+
+| Token | Hex | Usage |
+|-------|-----|-------|
+| `wood.900` | `#2C1810` | Deepest backgrounds |
+| `wood.800` | `#3D2317` | Surface cards |
+| `wood.700` | `#3D2B1F` | Card backgrounds |
+| `amber.accent` | `#D4A574` | Primary accent |
+| `amber.light` | `#E8B86D` | Active tint / secondary accent |
+| `cream` | `#F5E6D0` | Primary text |
+| `danger` | `#C17B5F` | Missed notes (terracotta) |
+| `success` | `#7A9B6D` | Hit notes (sage) |
+
+### Typography
+
+| Use | Font | Class |
+|-----|------|-------|
+| Display / headings | Playfair Display | `font-serif`, `font-serif-bold` |
+| Body / UI labels | DM Sans | `font-sans`, `font-sans-medium` |
+| Tab / monospace | JetBrains Mono | `font-mono` |
+
+### Component rules
+
+| Do | Don't |
+|----|-------|
+| Use `AnimatedPressable` from `components/AnimatedPressable.tsx` | Use bare `Pressable` |
+| Use `toast.success()` / `toast.error()` helpers | Use `Toast.show()` directly |
+| Use `lucide-react-native` icons | Use Phosphor or Material icons |
+| Use `react-native-reanimated` for animations | Use `Animated` from React Native core |
+| Use NativeWind `className` + Tailwind classes | Use `StyleSheet.create()` |
+| Use `NoiseOverlay` for background texture | Use solid color backgrounds |
+| Use `WoodGradient` (`expo-linear-gradient`) | Use CSS gradients |
+
+### Animation philosophy
+
+Slow and intentional — "jazz club lighting, not mobile game." Shared spring/timing presets in `src/constants/animations.ts`. Opacity modifiers: `bg-wood-800/40`, `border-wood-600/50`.
 
 ---
 
-## Testing quirks
+## Testing
 
-- **Vitest**: only 3 test files run in CI (`aggregatePlacementScores`, `sm2`, `scoreProgressSignals`). Other test files exist but are not in CI.
-- **Playwright**: Chromium only. Visual regression uses `maxDiffPixelRatio: 0.02`, `threshold: 0.2`.
-- **Detox**: Android emulator (`Pixel_7_API_34`), iOS simulator (`iPhone 15`). Jest config at `tests/mobile/jest.config.js`.
-- **Starter song**: "Gravity" by John Mayer (G major pentatonic) — the default if no song is added.
+### Framework map
+
+| Framework | What for | Where | Run command |
+|-----------|----------|-------|-------------|
+| Vitest | Unit tests | `src/` (co-located `*.test.ts`) | `npm run test` |
+| Playwright | E2E + visual regression | `tests/ui/` | `npm run test:ui` / `npm run test:visual` |
+| Detox | Mobile E2E | `tests/mobile/` | `npm run test:mobile` |
+| pytest | Backend tests | `backend/tests/` | `python -m pytest -q` |
+
+### Vitest patterns
+
+```typescript
+import { describe, it, expect } from 'vitest'
+import { getChordFunction } from './chordFunction'
+
+describe('getChordFunction', () => {
+  it('returns tonic function for I chord in C major', () => {
+    const result = getChordFunction('C major', 'C:maj')
+    expect(result).toEqual({ roman: 'I', label: 'Tonic — Home base' })
+  })
+})
+```
+
+- Tests co-located next to their source module.
+- All 34 test files run in CI (`vitest run`).
+
+### Playwright patterns
+
+- Chromium only (config in `playwright.config.ts`).
+- Visual regression uses `maxDiffPixelRatio: 0.02`, `threshold: 0.2`.
+- Tag visual tests with `@visual` in test name.
+
+### pytest patterns
+
+```python
+"""Tests for Commit 99: Viterbi chord decoder."""
+from __future__ import annotations
+import numpy as np
+import pytest
+from app.viterbi_decoder import ViterbiChordDecoder
+
+class TestViterbiDecoder:
+    def test_basic_decoding(self):
+        decoder = ViterbiChordDecoder(...)
+        result = decoder.decode(...)
+        assert len(result) > 0
+```
+
+- Fixtures defined as `@pytest.fixture` in test files.
+- 10 specific test files run in CI (scoring + chord model + Viterbi + boundary tie).
+
+### Pre-submit checklist
+
+Before every commit:
+- [ ] `npm run lint` passes (0 errors) — **mandatory even for backend-only changes**
+- [ ] `python -m pytest -q` passes from `backend/` (if backend changed)
+- [ ] New code has co-located unit tests (if adding logic)
+- [ ] No `console.log` / `print` left in production code (debug logging with prefixes is fine)
+
+---
+
+## Commit conventions
+
+### Message format
+
+Descriptive subject line. No strict conventional commits. Reference PRIORITIES.md commit numbers when applicable.
+
+```
+feat: Commit 99 — Viterbi Decoding for Chord Progressions
+Fix button padding regression: revert AnimatedPressable migration in 3 files
+Backend API modularization — feature-specific routers
+```
+
+### Scope discipline
+
+- One commit = one spec from PRIORITIES.md. Never combine two.
+- No refactoring of unrelated code — the diff must be minimal.
+- No future-proofing abstractions ("we might need this later").
+
+### Workflow
+
+Full 6-phase process in `docs/CODER.md` (read before implementing a commit):
+1. Extract & restate the spec
+2. Plan (TODO list — no code yet)
+3. Build (lint after every file)
+4. Test (happy path + complex + failure)
+5. Audit (scope, quality, correctness, acceptance criteria)
+6. Complete (verify, update PRIORITIES.md)
+
+### Anti-patterns — never do these
+
+- Write code before planning
+- Swallow exceptions silently
+- Add "it might be useful later" abstractions
+- Combine two commits into one
+- Refactor unrelated code while implementing
+- Guess when the spec is ambiguous — ask instead
 
 ---
 
@@ -136,8 +335,19 @@ Phases: **orient** (`listen`) → **isolate** (`study`, `slow`) → **apply** (`
 | `docs/E2E_DEMO.md` | End-to-end walkthrough with checkpoints |
 | `docs/MIGRATIONS.md` | Database migration strategy and version history |
 | `README.md` | Product spec, backend pipeline, DB schema, 5-step loop |
-| `.github/copilot-instructions.md` | Legacy copilot context (partially stale) |
 | `src/config.ts` | API URL resolution and feature flags |
 | `src/constants/sessionFlow.ts` | Session step ordering and entry logic |
 | `src/constants/sessionPhases.ts` | 4-phase pedagogical model |
+| `src/constants/colors.ts` | Real color palette (not `constants/Colors.ts`) |
 | `src/db/harmoniqDbClient.ts` | DB interface contract |
+
+---
+
+## Appendix: Common traps
+
+- **Expo Router default exports**: Screen files under `app/` must use `export default`. Everything else uses named exports.
+- **Env var prefixes**: Frontend uses `EXPO_PUBLIC_HARMONIQ_SKIP_*`, backend uses `HARMONIQ_SKIP_*`. Mixing them up = silent no-op.
+- **Ghost recording paths**: Native stores recordings on disk; web stores inline base64. Test assertions must account for both.
+- **basic-pitch / TensorFlow**: Does not install on Windows or Linux with Python 3.11+. macOS only. Do not gate CI on it.
+- **CSS grid**: Not available in React Native. Use `flex-row flex-wrap` instead.
+- **WSL networking**: Use LAN IP (`192.168.x.x`) in both `EXPO_PUBLIC_API_URL` and `HARMONIQ_CORS_ORIGINS` so physical devices can reach the backend.

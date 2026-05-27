@@ -10,6 +10,7 @@ Augmentation: Inversions, missing notes, pitch shift, time stretch, bass ambigui
 Features: 36-bin CQT with octave preservation + 4-bin bass channel (Commit 98b)
 """
 
+import json
 import os
 from pathlib import Path
 
@@ -376,9 +377,12 @@ def make_window(center_chroma: np.ndarray, noise_std: float = 0.12) -> np.ndarra
 
 def make_window_augmented(center_chroma: np.ndarray, noise_std: float = 0.12,
                           pitch_range: int = 2, stretch_rate: float = 0.3,
-                          stretch_range: tuple = (0.9, 1.1)) -> np.ndarray:
+                          stretch_range: tuple = (0.9, 1.1)) -> tuple[np.ndarray, int]:
     """Create augmented window with pink noise and temporal variations.
-    
+
+    Returns (window, shift_semitones) so callers can adjust labels
+    to match the applied pitch shift.
+
     Works with 40-bin CQT features.
     """
     frames = []
@@ -386,17 +390,17 @@ def make_window_augmented(center_chroma: np.ndarray, noise_std: float = 0.12,
         noise = generate_pink_noise((FEATURE_DIM,), noise_std)
         frame = np.clip(center_chroma + noise, 0, 1)
         frames.append(frame)
-    
+
     window = np.stack(frames, axis=0)
-    
+
     shift = np.random.randint(-pitch_range, pitch_range + 1)
     window = apply_pitch_shift(window, shift)
-    
+
     if np.random.random() < stretch_rate:
         factor = np.random.uniform(*stretch_range)
         window = apply_time_stretch(window, factor)
-    
-    return window
+
+    return window, shift
 
 
 def apply_extension_dropout(template: np.ndarray, quality: str,
@@ -539,15 +543,25 @@ def apply_temporal_jitter_to_window_features(window: np.ndarray, max_shift_ms: f
         return shifted_window
 
 
-def generate_dataset(samples_per_class: int = 200, config: dict = None,
+def generate_dataset(samples_per_class: int = 260, config: dict = None,
                       transition_probs: np.ndarray | None = None):
     """Generate augmented chord dataset with realistic variability.
 
+    Includes chord transition windows sampled from the empirical chord
+    distribution (via transition_probs) to teach the model temporal
+    chord-to-chord boundary patterns.
+
+    IMPORTANT: When make_window_augmented applies a pitch shift (±1-2 semitones),
+    the label is adjusted to match (e.g., C:maj shifted +2 becomes D:maj).
+    This fixes the critical bug where 80% of pre-generated samples had
+    pitch-shifted features but original-chord labels.
+
     Args:
-        samples_per_class: Base samples per chord class
+        samples_per_class: Base samples per chord class (260 → 277×260 = 72,020 total)
         config: Augmentation configuration dict
-        transition_probs: Optional (NUM_CLASSES,) probability distribution for
-            sampling chord pairs in transition windows. If None, uses uniform.
+        transition_probs: Optional (NUM_CLASSES,) marginal chord distribution from
+            empirical transition matrix. Used to sample chord pairs for transition
+            windows. If None, samples uniform.
     """
     cfg = config or {}
     inversion_rates = cfg.get("inversion_rates", [0.60, 0.25, 0.15])
@@ -558,56 +572,78 @@ def generate_dataset(samples_per_class: int = 200, config: dict = None,
     bass_rate = cfg.get("bass_ambiguity_rate", 0.2)
     transition_rate = cfg.get("transition_rate", 0.3)
     extension_drop_rate = cfg.get("extension_drop_rate", 0.30)
-    temporal_jitter_prob = cfg.get("temporal_jitter_prob", 0.3)  # Probability of applying temporal jitter
-    
+    temporal_jitter_prob = cfg.get("temporal_jitter_prob", 0.3)
+    guitar_body_rate = cfg.get("guitar_body_rate", 0.3)
+    strumming_rate = cfg.get("strumming_rate", 0.4)
+    cqt_leakage_rate = cfg.get("cqt_leakage_rate", 0.5)
+
+    n_chord_classes = len(CHORD_INTERVALS) * N_CLASSES_PER_QUALITY
     X, y = [], []
-    
+
     for idx, (root_idx, quality) in enumerate(CHORD_CLASS_MAP):
         template = make_cqt_template(root_idx, quality)
-        
+
         for _ in range(samples_per_class):
             inversion = np.random.choice([0, 1, 2], p=inversion_rates)
             augmented = apply_inversion(template, root_idx, quality, inversion)
             augmented = apply_missing_notes(augmented, quality, dropout_rate)
             augmented = apply_extension_dropout(augmented, quality, extension_drop_rate)
-            
+
             if np.random.random() < bass_rate:
                 strength = np.random.uniform(0.1, 0.3)
                 augmented = apply_bass_ambiguity(augmented, root_idx, quality, strength)
-            
+
+            # Guitar body resonance — applied to template before window creation
+            if np.random.random() < guitar_body_rate:
+                augmented = apply_guitar_body_resonance(augmented, strength=0.3)
+
             std = 0.08 + np.random.uniform(0, 0.12)
-            window = make_window_augmented(
+            window, shift = make_window_augmented(
                 augmented, std,
                 pitch_range=pitch_range,
                 stretch_rate=stretch_rate,
                 stretch_range=stretch_range
             )
-            
-            # Apply temporal jitter augmentation with probability temporal_jitter_prob
-            # Following MT3 Appendix D.2: randomly shift label boundaries by ±30ms
-            # This creates label noise robustness by shifting when the chord changes occur
+
+            # Apply strumming onset after window creation (temporal)
+            if np.random.random() < strumming_rate:
+                window = apply_strumming_onset(window, quality)
+
+            # Apply CQT leakage after window creation (spectral)
+            if np.random.random() < cqt_leakage_rate:
+                window = apply_cqt_leakage(window, leakage_strength=0.1)
+
             if np.random.random() < temporal_jitter_prob:
-                # Apply temporal jitter to the window features directly
-                # This shifts the entire feature sequence in time, simulating
-                # the effect of boundary timing uncertainty in the labels
-                max_shift_ms = 30.0  # ±30ms as specified in the commit
-                hop_sec = 0.1  # 100ms hop size from chord_inference.py (_HOP_SEC = 0.1)
+                max_shift_ms = 30.0
+                hop_sec = 0.1
                 window = apply_temporal_jitter_to_window_features(
-                    window, 
+                    window,
                     max_shift_ms=max_shift_ms,
                     hop_sec=hop_sec
                 )
-            
-            X.append(window)
-            y.append(idx)
+
+            # --- Label adjustment for pitch shift ---
+            # When CQT bins are rolled by N semitones, the chord root must
+            # also shift. E.g., C:maj shifted +2 becomes D:maj.
+            if shift != 0 and idx < n_chord_classes:
+                quality_pos = idx // N_CLASSES_PER_QUALITY
+                root = idx % N_CLASSES_PER_QUALITY
+                new_root = (root + shift) % N_CLASSES_PER_QUALITY
+                adjusted_idx = quality_pos * N_CLASSES_PER_QUALITY + new_root
+                X.append(window)
+                y.append(adjusted_idx)
+            else:
+                X.append(window)
+                y.append(idx)
     
-    n_transitions = int(len(CHORD_CLASS_MAP) * samples_per_class * transition_rate)
+    # Transition windows: temporally mix two chords to teach boundary patterns
     n_classes = len(CHORD_CLASS_MAP)
+    n_transitions = int(n_classes * 200 * transition_rate)
+    chord_dist = transition_probs if transition_probs is not None and transition_probs.sum() > 0 else None
     for _ in range(n_transitions):
-        # Sample chord pair using real transition probabilities if available
-        if transition_probs is not None and transition_probs.sum() > 0:
-            idx_a = np.random.choice(n_classes, p=transition_probs / transition_probs.sum())
-            idx_b = np.random.choice(n_classes, p=transition_probs / transition_probs.sum())
+        if chord_dist is not None:
+            idx_a = np.random.choice(n_classes, p=chord_dist / chord_dist.sum())
+            idx_b = np.random.choice(n_classes, p=chord_dist / chord_dist.sum())
         else:
             idx_a, idx_b = np.random.choice(n_classes, 2, replace=False)
         root_a, qual_a = CHORD_CLASS_MAP[idx_a]
@@ -621,7 +657,111 @@ def generate_dataset(samples_per_class: int = 200, config: dict = None,
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32)
 
 # ---------------------------------------------------------------------------
-# 2b. On-the-Fly Augmentation Generator (Commit 103)
+# 2b. Acoustic Realism Augmentations (Commit 104b — domain gap fix)
+# ---------------------------------------------------------------------------
+
+
+def apply_guitar_body_resonance(
+    template: np.ndarray, strength: float = 0.3
+) -> np.ndarray:
+    """Apply guitar body resonance EQ curve to CQT template.
+
+    Real acoustic guitars boost frequencies around 200-400 Hz (the body's
+    resonant low-mid region) and roll off above ~8 kHz. This models that
+    response to make synthetic CQT templates more realistic.
+
+    Args:
+        template: 40-bin CQT template [36 CQT + 4 bass].
+        strength: How strongly to apply the EQ curve (0 = flat).
+
+    Returns:
+        Modified template with guitar-like spectral shaping.
+    """
+    cqt = template[:CHROMA_BINS].copy()
+
+    # Warmth bump: bins 4-10 (~130-260 Hz at CQT resolution from C2)
+    for i in range(4, min(10, CHROMA_BINS)):
+        cqt[i] *= 1.0 + strength * 0.8
+
+    # High rolloff: last 6 bins
+    for i in range(max(CHROMA_BINS - 6, 0), CHROMA_BINS):
+        t = (i - (CHROMA_BINS - 6)) / 6.0
+        cqt[i] *= 1.0 - strength * t * 0.4
+
+    total = cqt.sum()
+    if total > 0:
+        cqt = cqt / total
+
+    return np.concatenate([cqt, cqt[:BASS_BINS]]).astype(np.float32)
+
+
+def apply_strumming_onset(
+    window: np.ndarray, quality: str, n_strum_frames: int = 4
+) -> np.ndarray:
+    """Simulate strumming by attenuating early frames.
+
+    Real strumming hits strings sequentially over ~50-150ms. At 100ms
+    frame hop, this covers ~1-2 frames, but we spread over more for
+    regularization.
+
+    Args:
+        window: Feature window of shape (WINDOW, FEATURE_DIM).
+        quality: Chord quality string ("N" skips strumming).
+        n_strum_frames: Number of initial frames to attenuate.
+
+    Returns:
+        Window with ramped onset (or unchanged for no-chord).
+    """
+    if quality == "N" or n_strum_frames <= 0:
+        return window
+
+    result = window.copy()
+    max_frames = min(n_strum_frames, len(window))
+    for i in range(max_frames):
+        t = i / max_frames  # 0 → 1
+        weight = 0.3 + 0.7 * t  # ramp from 0.3 to 1.0
+        result[i] *= weight
+
+    return result
+
+
+def apply_cqt_leakage(
+    window: np.ndarray, leakage_strength: float = 0.1
+) -> np.ndarray:
+    """Simulate CQT filter overlap with cross-bin energy spread.
+
+    Real CQT filters have overlapping passbands — energy from one bin
+    leaks into adjacent bins. This improves model robustness to the
+    difference between synthetic templates and real CQT features.
+
+    Args:
+        window: Feature window of shape (WINDOW, FEATURE_DIM).
+        leakage_strength: Blend factor for leaked energy (0 = none).
+
+    Returns:
+        Window with cross-bin leakage applied.
+    """
+    if leakage_strength <= 0:
+        return window
+
+    cqt = window[:, :CHROMA_BINS]
+    # 3-tap smoothing kernel
+    kernel = np.array([0.05, 0.9, 0.05], dtype=np.float32)
+    cqt_leaky = np.apply_along_axis(
+        lambda x: np.convolve(x, kernel, mode="same"),
+        axis=-1, arr=cqt,
+    )
+
+    result = window.copy()
+    result[:, :CHROMA_BINS] = (1.0 - leakage_strength) * cqt + leakage_strength * cqt_leaky
+    # Re-extract bass from modified CQT
+    result[:, CHROMA_BINS:] = result[:, :BASS_BINS]
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# 2c. On-the-Fly Augmentation Generator (Commit 103)
 # ---------------------------------------------------------------------------
 
 
@@ -654,7 +794,10 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         stretch_range: tuple[float, float] = (0.9, 1.1),
         noise_std: float = 0.05,
         shuffle: bool = True,
+        temperature: float = 0.3,
+        **kwargs,
     ):
+        super().__init__(**kwargs)
         self.X = X
         self.y = y
         self.batch_size = batch_size
@@ -664,10 +807,14 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         self.stretch_range = stretch_range
         self.noise_std = noise_std
         self.shuffle = shuffle
+        self.temperature = float(temperature)
         self.indices = np.arange(len(X))
         self._n_chord_classes = len(CHORD_INTERVALS) * N_CLASSES_PER_QUALITY
         if shuffle:
-            np.random.shuffle(self.indices)
+            if self.temperature < 1.0:
+                self._resample_indices_temperature()
+            else:
+                np.random.shuffle(self.indices)
 
     def __len__(self) -> int:
         return int(np.ceil(len(self.X) / self.batch_size))
@@ -687,7 +834,38 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
 
     def on_epoch_end(self):
         if self.shuffle:
-            np.random.shuffle(self.indices)
+            if self.temperature < 1.0:
+                self._resample_indices_temperature()
+            else:
+                np.random.shuffle(self.indices)
+
+    def _resample_indices_temperature(self):
+        """Resample training indices with temperature-based quality balancing.
+
+        When τ < 1.0, rare chord qualities get boosted sampling probability
+        using the MT3-style formula:
+            per_example_weight ∝ (p_q)^τ / n_q
+        where p_q = n_q / N is the quality's frequency, n_q is its count,
+        and τ is the temperature.
+
+        This produces weighted resampling with replacement so rare qualities
+        appear more often in each epoch without changing class weights.
+        """
+        qualities = np.array(
+            [CHORD_CLASS_MAP[idx][1] for idx in self.y], dtype=object
+        )
+        unique_q, counts = np.unique(qualities, return_counts=True)
+        total = len(qualities)
+        p_q = counts.astype(np.float64) / total
+        weight_q = (p_q ** self.temperature) / counts
+        q_to_weight = dict(zip(unique_q, weight_q))
+        weights = np.array(
+            [q_to_weight[q] for q in qualities], dtype=np.float64
+        )
+        weights /= weights.sum()
+        self.indices = np.random.choice(
+            np.arange(total), size=total, replace=True, p=weights
+        )
 
     def _apply_on_the_fly_augmentations(
         self, batch_X: np.ndarray, batch_y: np.ndarray
@@ -892,18 +1070,18 @@ def compute_confusion_matrix_report(
 def compute_per_class_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-    f1_threshold: float = 0.3,
+    recall_threshold: float = 0.3,
 ) -> dict:
     """Compute and report per-class precision, recall, and F1.
 
     Groups results by chord quality category (triad, extended, altered,
-    suspended_other, no_chord) and flags classes with F1 below the
-    threshold for targeted data collection.
+    suspended_other, no_chord) and flags classes with recall below the
+    threshold for targeted data collection (Commit 104 spec).
 
     Args:
         y_true: Ground truth class indices, shape (N,).
         y_pred: Predicted class indices, shape (N,).
-        f1_threshold: Flag classes with F1 below this value.
+        recall_threshold: Flag classes with recall below this value.
 
     Returns:
         Full classification report dict from sklearn.
@@ -925,7 +1103,7 @@ def compute_per_class_metrics(
             quality_to_group[q] = group_name
 
     group_f1s: dict[str, list[float]] = {}
-    low_performers: list[tuple[str, float]] = []
+    low_recall_classes: list[tuple[str, float]] = []
 
     for chord_name, metrics in report.items():
         if chord_name == "accuracy" or chord_name == "macro avg" or \
@@ -941,6 +1119,7 @@ def compute_per_class_metrics(
             continue
 
         f1 = metrics["f1-score"]
+        recall = metrics["recall"]
 
         if chord_name == "N":
             group = "no_chord"
@@ -952,8 +1131,8 @@ def compute_per_class_metrics(
             group_f1s[group] = []
         group_f1s[group].append(f1)
 
-        if f1 < f1_threshold:
-            low_performers.append((chord_name, f1))
+        if recall < recall_threshold:
+            low_recall_classes.append((chord_name, recall))
 
     for group in ["triad", "extended", "altered", "suspended_other", "no_chord", "overall"]:
         if group == "overall":
@@ -967,30 +1146,31 @@ def compute_per_class_metrics(
             print(f"  {group:20s}: mean F1 = {np.mean(f1s):.3f}  "
                   f"(min={np.min(f1s):.3f}, max={np.max(f1s):.3f})")
 
-    if low_performers:
-        print(f"\n  Classes with F1 < {f1_threshold} ({len(low_performers)} total):")
-        for chord_name, f1 in sorted(low_performers, key=lambda x: x[1])[:20]:
-            print(f"    {chord_name:<12} F1 = {f1:.3f}")
-        if len(low_performers) > 20:
-            print(f"    ... and {len(low_performers) - 20} more")
+    if low_recall_classes:
+        print(f"\n  Classes with recall < {recall_threshold} ({len(low_recall_classes)} total):")
+        for chord_name, rec in sorted(low_recall_classes, key=lambda x: x[1])[:20]:
+            print(f"    {chord_name:<12} recall = {rec:.3f}")
+        if len(low_recall_classes) > 20:
+            print(f"    ... and {len(low_recall_classes) - 20} more")
 
     return report
 
 
 def compute_training_class_weights(
     y_train: np.ndarray,
+    temperature: float = 0.3,
 ) -> dict[int, float]:
-    """Compute balanced class weights for imbalanced training data.
+    """Compute balanced class weights using sklearn's inverse-frequency formula.
 
-    Uses sklearn's ``compute_class_weight('balanced')`` which assigns
-    weight inversely proportional to class frequency:
-      weight_i = n_samples / (n_classes * n_i)
-
-    This prevents the model from biasing toward common chord types
-    (maj, min) at the expense of rare ones (alt7, dim7, aug, etc.).
+    Temperature resampling in AugmentedDataGenerator already handles the
+    per-quality balance correction at the sampling level. Class weights are
+    kept as standard sklearn ``balanced`` (no additional temperature adjustment)
+    to avoid double-correction and numeric overflow from extreme weights.
 
     Args:
         y_train: Training labels, shape (N,).
+        temperature: Kept for API compatibility (unused — temperature is
+                     handled by AugmentedDataGenerator resampling).
 
     Returns:
         Dict mapping class index -> weight value.
@@ -1105,92 +1285,222 @@ def load_empirical_transition_matrix(data_dir: str | Path) -> np.ndarray | None:
 def mix_datasets(
     real_X: np.ndarray, real_y: np.ndarray,
     synth_X: np.ndarray, synth_y: np.ndarray,
-    real_ratio: float = 0.7,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Mix real and synthetic datasets in specified ratio.
+    """Concatenate all real and synthetic data (no subsampling).
 
     Args:
         real_X: Real CQT features, shape (N_real, 128, 40)
         real_y: Real labels, shape (N_real,)
         synth_X: Synthetic CQT features, shape (N_synth, 128, 40)
         synth_y: Synthetic labels, shape (N_synth,)
-        real_ratio: Fraction of real data in final mix (default 0.7)
 
     Returns:
-        (X_mixed, y_mixed) shuffled arrays.
+        (X_mixed, y_mixed) shuffled arrays using ALL data from both sources.
     """
     n_real = len(real_X)
     n_synth = len(synth_X)
 
-    # Determine target sizes to achieve desired ratio
-    if real_ratio >= 1.0:
-        return real_X.copy(), real_y.copy()
-    if real_ratio <= 0.0:
-        return synth_X.copy(), synth_y.copy()
-
-    # Scale to match ratio: real / (real + synth) = real_ratio
-    # If real_ratio = 0.7 and we have 5000 real samples:
-    # We want 5000 / total = 0.7 → total = 5000 / 0.7 ≈ 7142
-    # synthetic = 7142 - 5000 = 2142
-    target_total = n_real / real_ratio
-    target_synth = max(int(target_total * (1 - real_ratio)), 1)
-    target_real = min(n_real, int(target_total * real_ratio))
-
-    # Subsample the larger dataset
-    if n_real > target_real:
-        indices = np.random.choice(n_real, target_real, replace=False)
-        real_X_used = real_X[indices]
-        real_y_used = real_y[indices]
+    if n_real == 0:
+        X, y = synth_X.copy(), synth_y.copy()
+    elif n_synth == 0:
+        X, y = real_X.copy(), real_y.copy()
     else:
-        real_X_used = real_X
-        real_y_used = real_y
-        target_synth = int(len(real_X_used) * (1 - real_ratio) / real_ratio)
-
-    if n_synth > target_synth:
-        indices = np.random.choice(n_synth, target_synth, replace=False)
-        synth_X_used = synth_X[indices]
-        synth_y_used = synth_y[indices]
-    else:
-        synth_X_used = synth_X.copy()
-        synth_y_used = synth_y.copy()
-
-    # Concatenate and shuffle
-    X = np.concatenate([real_X_used, synth_X_used], axis=0)
-    y = np.concatenate([real_y_used, synth_y_used], axis=0)
+        X = np.concatenate([real_X, synth_X], axis=0).astype(np.float32)
+        y = np.concatenate([real_y, synth_y], axis=0).astype(np.int32)
 
     p = np.random.permutation(len(X))
     X, y = X[p], y[p]
 
-    actual_ratio = len(real_X_used) / len(X)
-    print(f"Mixed dataset: {len(real_X_used)} real + {len(synth_X_used)} synthetic "
-          f"= {len(X)} total (real ratio: {actual_ratio:.1%})")
+    print(f"Mixed dataset: {n_real} real + {n_synth} synthetic "
+          f"= {len(X)} total (real ratio: {n_real / len(X):.1%})")
     return X, y
 
 
 # ---------------------------------------------------------------------------
 # 4c. Training and the Concrete Conversion Fix
 # ---------------------------------------------------------------------------
+def _numpy_to_native(obj):
+    """Recursively convert numpy types to native Python for JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: _numpy_to_native(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_numpy_to_native(v) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(_numpy_to_native(v) for v in obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
+
+
+def _build_quality_distribution(y_train: np.ndarray) -> dict:
+    """Build per-quality frequency distribution from training labels."""
+    total = len(y_train)
+    qualities: list[str] = []
+    for idx in y_train:
+        if 0 <= idx < len(CHORD_CLASS_MAP):
+            qualities.append(CHORD_CLASS_MAP[idx][1])
+        else:
+            qualities.append("N")
+    counter: dict[str, int] = {}
+    for q in qualities:
+        counter[q] = counter.get(q, 0) + 1
+    return {
+        q: {"count": c, "percentage": round(c / total * 100, 2)}
+        for q, c in sorted(counter.items(), key=lambda x: -x[1])
+    }
+
+
+def _save_metrics_json(
+    class_report: dict,
+    y_train: np.ndarray,
+    output_path: Path,
+) -> None:
+    """Save per-class metrics and quality distribution to JSON.
+
+    Handles numpy type conversion for safe JSON serialization.
+    """
+    report_native = _numpy_to_native(class_report)
+    quality_dist = _build_quality_distribution(y_train)
+
+    # Build per-quality recall averages
+    quality_recalls: dict[str, list[float]] = {}
+    for chord_name, metrics in class_report.items():
+        if not isinstance(metrics, dict) or "recall" not in metrics:
+            continue
+        if ":" in chord_name:
+            quality = chord_name.split(":", 1)[1]
+        elif chord_name in {"N", "accuracy"}:
+            continue
+        else:
+            continue
+        if quality not in quality_recalls:
+            quality_recalls[quality] = []
+        quality_recalls[quality].append(float(metrics["recall"]))
+
+    recall_summary = {
+        q: {
+            "mean_recall": round(np.mean(v), 4),
+            "min_recall": round(np.min(v), 4),
+            "max_recall": round(np.max(v), 4),
+            "n_chords": len(v),
+        }
+        for q, v in sorted(quality_recalls.items())
+    }
+
+    # Build per-class recall list (all 277 individual classes)
+    per_class_recall: list[dict[str, float | str]] = []
+    for chord_name, m in class_report.items():
+        if not isinstance(m, dict) or "recall" not in m:
+            continue
+        if chord_name in {"accuracy", "macro avg", "weighted avg", "micro avg"}:
+            continue
+        try:
+            int(chord_name)
+            continue
+        except (ValueError, TypeError):
+            pass
+        per_class_recall.append({
+            "chord": chord_name,
+            "recall": round(float(m["recall"]), 4),
+            "precision": round(float(m["precision"]), 4),
+            "f1_score": round(float(m["f1-score"]), 4),
+        })
+    per_class_recall.sort(key=lambda x: x["recall"])
+
+    metrics_doc = {
+        "per_quality_recall": recall_summary,
+        "quality_distribution": quality_dist,
+        "per_class_recall": per_class_recall,
+    }
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(metrics_doc, f, indent=2)
+    print(f"  Commit 104 metrics saved to {output_path}")
+
+
+# ---------------------------------------------------------------------------
+# 4d. GuitarSet test callback
+# ---------------------------------------------------------------------------
+
+
+class GuitarSetTestCallback(tf.keras.callbacks.Callback):
+    """Evaluate on real GuitarSet test set after each epoch.
+
+    Provides visibility into real-world performance during training,
+    preventing the model from overfitting to synthetic validation data
+    while losing real-world accuracy.
+
+    Usage:
+        callback = GuitarSetTestCallback(test_X, test_y)
+        model.fit(..., callbacks=[...existing..., callback])
+        print(callback.best_test_acc)  # best real accuracy during training
+    """
+
+    def __init__(
+        self,
+        test_X: np.ndarray,
+        test_y: np.ndarray,
+        log_freq: int = 1,
+        patience: int = 5,
+    ):
+        super().__init__()
+        self.test_X = test_X
+        self.test_y = test_y
+        self.log_freq = log_freq
+        self.patience = patience
+        self.history: list[float] = []
+        self.best_test_acc: float = 0.0
+        self.best_epoch: int = -1
+        self._no_improve_count: int = 0
+
+    def on_epoch_end(self, epoch: int, logs: dict | None = None):
+        if (epoch + 1) % self.log_freq != 0:
+            return
+
+        test_pred = np.argmax(self.model.predict(self.test_X, verbose=0), axis=1)
+        test_acc = float(np.mean(test_pred == self.test_y))
+        self.history.append(test_acc)
+
+        # Compute per-group accuracy
+        grouped = compute_grouped_accuracy(self.test_y, test_pred)
+
+        if test_acc > self.best_test_acc:
+            self.best_test_acc = test_acc
+            self.best_epoch = epoch
+            self._no_improve_count = 0
+        else:
+            self._no_improve_count += 1
+
+        print(f"\n  [GuitarSet Test] Epoch {epoch + 1}: accuracy={test_acc:.2%} "
+              f"(best={self.best_test_acc:.2%} @ epoch {self.best_epoch + 1})")
+        for group, acc in sorted(grouped.items()):
+            print(f"    {group:20s}: {acc * 100:.1f}%")
+        print(f"    no_chord   {grouped.get('no_chord', 0) * 100:.1f}%")
+
+
 def run_pipeline(
     real_data_dir: str | Path | None = None,
     empirical_matrix_path: str | Path | None = None,
-    real_ratio: float = 0.7,
+    temperature: float = 0.3,
 ):
     """Run the full training pipeline with optional real data mixing.
 
-    Commit 103 additions:
-    - On-the-fly augmentation via AugmentedDataGenerator (pitch shift + label
-      adjustment, time stretch, pink noise)
-    - Training callbacks: EarlyStopping (patience=10), ReduceLROnPlateau,
-      ModelCheckpoint, CSVLogger
-    - Class weighting for imbalanced chord distribution
-    - 50 training epochs
-    - Confusion matrix analysis on validation set
-    - Per-class precision / recall / F1 metrics with low-performer flagging
+    All available real and synthetic data is concatenated (no ratio-based
+    subsampling), giving the model the maximum possible training signal.
 
     Args:
         real_data_dir: Path to GuitarSet CQT data directory (or None for synthetic-only).
         empirical_matrix_path: Path to empirical transition matrix .npy (or None).
-        real_ratio: Fraction of real data in training mix (0.0–1.0).
+        temperature: Temperature τ for quality re-sampling (default 0.3, matching MT3).
+                     τ < 1.0 boosts rare chord quality sampling via MT3 formula.
+                     τ = 1.0 uses uniform sampling (neutral).
     """
     _APP_DIR = Path(__file__).resolve().parent.parent / "app"
     _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -1234,16 +1544,13 @@ def run_pipeline(
     synth_X, synth_y = synth_X[p], synth_y[p]
     print(f"  Generated {len(synth_X)} synthetic samples")
 
-    # --- Mix real + synthetic ---
-    if has_real_data and real_ratio > 0:
+    # --- Mix real + synthetic (use all data from both sources) ---
+    if has_real_data:
         print("Mixing real and synthetic data...")
-        X_all, y_all = mix_datasets(real_X, real_y, synth_X, synth_y, real_ratio=real_ratio)
+        X_all, y_all = mix_datasets(real_X, real_y, synth_X, synth_y)
     else:
         X_all, y_all = synth_X, synth_y
-        if has_real_data:
-            print("  real_ratio=0, using synthetic data only")
-        else:
-            print("  No real data available, using synthetic data only")
+        print("  No real data available, using synthetic data only")
 
     # --- Train / validation split ---
     print("Splitting into train / validation sets (85/15)...")
@@ -1262,9 +1569,14 @@ def run_pipeline(
     model = build_model()
     model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 
-    # --- Class weights ---
+    # --- Class weights (sklearn balanced, no temperature double-correction) ---
+    # Temperature resampling (τ < 1.0) changes per-epoch sample distribution
+    # in AugmentedDataGenerator. Class weights are standard sklearn balanced
+    # — they compensate for class-level frequency differences. The two
+    # mechanisms are independent and complementary at different granularities
+    # (sampling distribution vs loss gradient).
     print("\nComputing class weights for imbalanced training data...")
-    class_weight_dict = compute_training_class_weights(y_train)
+    class_weight_dict = compute_training_class_weights(y_train, temperature=temperature)
     n_classes_with_data = len(class_weight_dict)
     print(f"  Computed weights for {n_classes_with_data}/{NUM_CLASSES} classes present in training set")
 
@@ -1294,6 +1606,11 @@ def run_pipeline(
         ),
     ]
 
+    # GuitarSet test callback — per-epoch visibility into real-world accuracy
+    if has_real_data and len(test_X) > 0:
+        test_callback = GuitarSetTestCallback(test_X, test_y)
+        callbacks.append(test_callback)
+
     # --- On-the-fly augmented data generator ---
     train_generator = AugmentedDataGenerator(
         X_train, y_train,
@@ -1304,11 +1621,15 @@ def run_pipeline(
         stretch_range=(0.9, 1.1),
         noise_std=0.05,
         shuffle=True,
+        temperature=temperature,
     )
 
     # --- Train ---
     print(f"\nTraining for up to 50 epochs with on-the-fly augmentation...")
     print(f"  EarlyStopping patience={10}, ReduceLROnPlateau patience={3}")
+    if temperature < 1.0:
+        print(f"  Temperature τ={temperature} (quality-aware resampling)")
+    print(f"  Class weights: active ({n_classes_with_data}/{NUM_CLASSES} classes)")
     print(f"  Batch size=64")
     history = model.fit(
         train_generator,
@@ -1344,8 +1665,12 @@ def run_pipeline(
     np.save(str(cm_path), cm)
     print(f"  Full confusion matrix saved to {cm_path}")
 
-    # --- Per-class metrics (Commit 103) ---
-    _ = compute_per_class_metrics(y_val, y_pred, f1_threshold=0.3)
+    # --- Per-class metrics (Commit 103/104) ---
+    report = compute_per_class_metrics(y_val, y_pred, recall_threshold=0.3)
+
+    # --- Commit 104: metrics JSON export ---
+    _metrics_path = _SCRIPTS_DIR / "chord_104_metrics.json"
+    _save_metrics_json(report, y_train, _metrics_path)
 
     # --- GuitarSet test set validation (if available) ---
     if has_real_data and len(test_X) > 0:
@@ -1452,21 +1777,16 @@ def run_pipeline(
             interp.set_tensor(input_details['index'], test_input)
             interp.invoke()
             res = interp.get_tensor(output_details['index'])[0]
-            top_idx = np.argmax(res)
+            top_idx = int(np.argmax(res))
             predicted = CHORD_VOCAB[top_idx]
-            # Check top-3 accuracy (model may rank close chords similarly)
-            top3_indices = np.argsort(res)[-3:][::-1]
-            top3_chords = [CHORD_VOCAB[i] for i in top3_indices]
-            # For D:7 specifically, allow D dominant family (D:7, D:9, D:7b9, etc.) to pass
-            if expected == "D:7":
-                passed = predicted == expected or expected in top3_chords or \
-                         predicted.startswith("D:") and any(q in predicted for q in ["7", "9", "11", "13"])
-            else:
-                passed = predicted == expected or expected in top3_chords
+            confidence = float(res[top_idx])
+            # Strict top-1 check: the predicted chord must match the input exactly.
+            # Previously used top-3 which masked the semitone confusion bug.
+            passed = predicted == expected
             if not passed:
                 all_passed = False
             status = "PASS" if passed else "FAIL"
-            print(f"  {expected:<8} -> {predicted:<8} ({res[top_idx]:.1%}) [top-3: {', '.join(top3_chords[:3])}] [{status}]")
+            print(f"  {expected:<8} -> {predicted:<8} ({confidence:.1%}) [{status}]")
     else:
         # Keras fallback test
         test_cases = [
@@ -1480,21 +1800,15 @@ def run_pipeline(
         for expected, root_idx, quality in test_cases:
             test_input = make_window(make_cqt_template(root_idx, quality), 0.05)[np.newaxis]
             res = test_model.predict(test_input, verbose=0)[0]
-            top_idx = np.argmax(res)
+            top_idx = int(np.argmax(res))
             predicted = CHORD_VOCAB[top_idx]
-            # Check top-3 accuracy
-            top3_indices = np.argsort(res)[-3:][::-1]
-            top3_chords = [CHORD_VOCAB[i] for i in top3_indices]
-            # For D:7 specifically, allow D dominant family (D:7, D:9, D:7b9, etc.) to pass
-            if expected == "D:7":
-                passed = predicted == expected or expected in top3_chords or \
-                         predicted.startswith("D:") and any(q in predicted for q in ["7", "9", "11", "13"])
-            else:
-                passed = predicted == expected or expected in top3_chords
+            confidence = float(res[top_idx])
+            # Strict top-1 check.
+            passed = predicted == expected
             if not passed:
                 all_passed = False
             status = "PASS" if passed else "FAIL"
-            print(f"  {expected:<8} -> {predicted:<8} ({res[top_idx]:.1%}) [top-3: {', '.join(top3_chords[:3])}] [{status}]")
+            print(f"  {expected:<8} -> {predicted:<8} ({confidence:.1%}) [{status}]")
 
     if all_passed:
         print("\nAll smoke tests PASSED")
@@ -1517,13 +1831,30 @@ if __name__ == "__main__":
         help="Path to empirical transition matrix .npy file"
     )
     parser.add_argument(
-        "--real-ratio", type=float, default=0.7,
-        help="Fraction of real data in training mix (0.0–1.0, default 0.7)"
+        "--temperature", type=float, default=0.3,
+        help="Temperature τ for quality re-sampling (default 0.3, matching MT3). "
+             "τ<1.0 boosts rare chord quality sampling via MT3 formula. "
+             "τ=1.0 = uniform sampling. Range [0, 1]."
+    )
+    parser.add_argument(
+        "--rare-boost", action="store_true",
+        help="Rare chord boost mode: sets temperature=0.1 for aggressive "
+             "oversampling of rare chord types (7#9, alt7, dim7, aug). "
+             "Use during fine-tuning after initial convergence."
     )
     args = parser.parse_args()
+
+    if args.temperature < 0:
+        parser.error("temperature must be >= 0")
+
+    if args.rare_boost:
+        if args.temperature != 0.3:
+            print("  [WARN] --rare-boost overrides --temperature; setting τ=0.1")
+        args.temperature = 0.1
+        print("  Rare chord boost mode: τ=0.1 — aggressive oversampling of rare types")
 
     run_pipeline(
         real_data_dir=args.real_data_dir,
         empirical_matrix_path=args.empirical_matrix,
-        real_ratio=args.real_ratio,
+        temperature=args.temperature,
     )

@@ -26,7 +26,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.chord_vocab import CHORD_TO_IDX
+from app.chord_vocab import CHORD_INTERVALS, CHORD_TO_IDX
 
 # Inference pipeline constants (must match chord_inference.py)
 TARGET_SR = 44100
@@ -65,33 +65,116 @@ CHORD_QUALITIES = list(QUALITY_NORM.keys()) + [
     "9", "min9", "maj9", "11", "13",
 ]
 
+# Diatonic interval name → semitone offset (JAAH interval notation support)
+_INTERVAL_TO_SEMITONE: dict[str, int] = {
+    "1": 0,
+    "b2": 1, "2": 2, "#2": 3,
+    "b3": 3, "3": 4,
+    "4": 5, "#4": 6, "b5": 6,
+    "5": 7, "#5": 8, "b6": 8,
+    "6": 9, "bb7": 9, "b7": 10,
+    "7": 11,
+    "b9": 13, "9": 14, "#9": 15,
+    "11": 17, "#11": 18,
+    "b13": 20, "13": 21,
+}
+
+
+def _build_interval_reverse_map() -> dict[frozenset[int], str]:
+    rev: dict[frozenset[int], str] = {}
+    for quality, intervals in CHORD_INTERVALS.items():
+        reduced = frozenset(iv % 12 for iv in intervals if iv % 12 != 0)
+        rev[reduced] = quality
+    return rev
+
+
+_INTERVAL_REVERSE_MAP = _build_interval_reverse_map()
+
+
+def _parse_interval_notation(interval_str: str) -> str | None:
+    """Parse JAAH interval notation like '(b3,5,b7,11)' to chord quality."""
+    if not interval_str or not interval_str.startswith("("):
+        return None
+    content = interval_str.strip("()")
+    parts = [p.strip() for p in content.split(",") if p.strip()]
+    if not parts:
+        return None
+    semitones: set[int] = set()
+    for p in parts:
+        st = _INTERVAL_TO_SEMITONE.get(p)
+        if st is None:
+            return None
+        st_mod = st % 12
+        if st_mod != 0:
+            semitones.add(st_mod)
+    if not semitones:
+        return None
+    key = frozenset(semitones)
+    if key in _INTERVAL_REVERSE_MAP:
+        return _INTERVAL_REVERSE_MAP[key]
+    best_q: str | None = None
+    best_score = -1.0
+    for reduced_set, q in _INTERVAL_REVERSE_MAP.items():
+        overlap = len(key & reduced_set)
+        penalty = len(reduced_set - key)
+        score = overlap - 0.5 * penalty
+        if score > best_score:
+            best_score = score
+            best_q = q
+    if best_q is not None and best_score >= 2.0:
+        return best_q
+    return None
+
 
 def _parse_lab_label(label: str) -> str | None:
-    """Parse a .lab chord label to 277-class format."""
+    """Parse a .lab chord label to 277-class format.
+
+    Handles Harte syntax, shorthand notation,
+    and JAAH interval notation (e.g. 'F:(b3,5,b7,11)').
+    """
     if not label or label == "N":
         return None
     label = label.strip()
-    if "(" in label:
-        label = label[: label.index("(")]
-    if "/" in label:
-        label = label.split("/")[0]
-    label = label.strip()
-    if not label or label == "N":
+    if not label:
         return None
+
+    # Parse root + quality (do NOT strip parentheses before colon split)
     if ":" in label:
         parts = label.split(":", 1)
         root_raw, quality_raw = parts[0], parts[1]
+
+        # Handle JAAH interval notation: F:(b3,5,b7,11)
+        if quality_raw.startswith("("):
+            quality = _parse_interval_notation(quality_raw)
+            if quality is None:
+                return None
+        else:
+            # Strip parenthesized extensions from quality only
+            if "(" in quality_raw:
+                quality_raw = quality_raw[: quality_raw.index("(")]
+            if "/" in quality_raw:
+                quality_raw = quality_raw.split("/")[0]
+            quality_raw = quality_raw.strip()
+            quality = QUALITY_NORM.get(quality_raw, quality_raw)
     else:
+        # Shorthand: 'C', 'Am', 'Bb7', 'Am7(b5)'
         root_raw = label[0]
         quality_raw = label[1:]
         if len(label) > 1 and label[1] in ("#", "b"):
             root_raw = label[:2]
             quality_raw = label[2:]
+        # Strip parenthesized extensions and bass notes from shorthand quality
+        if "(" in quality_raw:
+            quality_raw = quality_raw[: quality_raw.index("(")]
+        if "/" in quality_raw:
+            quality_raw = quality_raw.split("/")[0]
+        quality_raw = quality_raw.strip()
+        quality = QUALITY_NORM.get(quality_raw, quality_raw)
+
     if root_raw in _FLAT_TO_SHARP:
         root_raw = _FLAT_TO_SHARP[root_raw]
     if root_raw not in ROOT_NOTES:
         return None
-    quality = QUALITY_NORM.get(quality_raw, quality_raw)
     if quality not in CHORD_QUALITIES:
         quality = "maj"
     return f"{root_raw}:{quality}"

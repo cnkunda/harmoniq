@@ -91,6 +91,49 @@ class TestParseLabLabel:
     def test_maj11_mapped(self):
         assert _parse_lab_label("C:maj11") == "C:11"
 
+    # --- JAAH interval notation tests ---
+
+    def test_interval_7sharp9(self):
+        """C:(3,5,b7,#9) should parse as C:7#9 (exact match)."""
+        assert _parse_lab_label("C:(3,5,b7,#9)") == "C:7#9"
+
+    def test_interval_min7(self):
+        """F:(b3,5,b7) should parse as F:min7 (exact match)."""
+        assert _parse_lab_label("F:(b3,5,b7)") == "F:min7"
+
+    def test_interval_min7_add11(self):
+        """F:(b3,5,b7,11) should parse as F:min7 (subset match, 3 overlapping intervals)."""
+        assert _parse_lab_label("F:(b3,5,b7,11)") == "F:min7"
+
+    def test_interval_maj7(self):
+        """C:(3,5,7) should parse as C:maj7."""
+        assert _parse_lab_label("C:(3,5,7)") == "C:maj7"
+
+    def test_interval_min(self):
+        """C:(b3,5) should parse as C:min."""
+        assert _parse_lab_label("C:(b3,5)") == "C:min"
+
+    def test_interval_maj(self):
+        """C:(3,5) should parse as C:maj."""
+        assert _parse_lab_label("C:(3,5)") == "C:maj"
+
+    def test_interval_no_chord(self):
+        """N should be None even with parens."""
+        assert _parse_lab_label("N") is None
+
+    def test_interval_still_strips_normal_parens(self):
+        """C:maj7(#11) should still parse correctly (quality before parens)."""
+        assert _parse_lab_label("C:maj7(#11)") == "C:maj7"
+
+    def test_interval_still_strips_slash(self):
+        """C:maj7/E with interval notation restored."""
+        assert _parse_lab_label("C:maj/E") == "C:maj"
+
+    def test_interval_unknown_gives_none(self):
+        """Unparseable interval notation should return None, not silently map to maj."""
+        # () with no content
+        assert _parse_lab_label("C:()") is None
+
 
 # ---------------------------------------------------------------------------
 # _parse_lab_file

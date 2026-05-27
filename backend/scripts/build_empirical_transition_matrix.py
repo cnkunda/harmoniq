@@ -21,7 +21,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.chord_vocab import ROOT_NOTES, CHORD_QUALITIES, CHORD_TO_IDX, NUM_CLASSES
+from app.chord_vocab import CHORD_INTERVALS, ROOT_NOTES, CHORD_QUALITIES, CHORD_TO_IDX, NUM_CLASSES
 
 N_CHORD_IDX = CHORD_TO_IDX.get("N", NUM_CLASSES - 1)
 
@@ -55,6 +55,65 @@ _FLAT_TO_SHARP = {
     "Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#", "Fb": "E", "Cb": "B",
 }
 
+# Diatonic interval name → semitone offset from root
+_INTERVAL_TO_SEMITONE: dict[str, int] = {
+    "1": 0,
+    "b2": 1, "2": 2, "#2": 3,
+    "b3": 3, "3": 4,
+    "4": 5, "#4": 6, "b5": 6,
+    "5": 7, "#5": 8, "b6": 8,
+    "6": 9, "bb7": 9, "b7": 10,
+    "7": 11,
+    "b9": 13, "9": 14, "#9": 15,
+    "11": 17, "#11": 18,
+    "b13": 20, "13": 21,
+}
+
+
+def _build_interval_reverse_map() -> dict[frozenset[int], str]:
+    rev: dict[frozenset[int], str] = {}
+    for quality, intervals in CHORD_INTERVALS.items():
+        reduced = frozenset(iv % 12 for iv in intervals if iv % 12 != 0)
+        rev[reduced] = quality
+    return rev
+
+
+_INTERVAL_REVERSE_MAP = _build_interval_reverse_map()
+
+
+def _parse_interval_notation(interval_str: str) -> str | None:
+    if not interval_str or not interval_str.startswith("("):
+        return None
+    content = interval_str.strip("()")
+    parts = [p.strip() for p in content.split(",") if p.strip()]
+    if not parts:
+        return None
+    semitones: set[int] = set()
+    for p in parts:
+        st = _INTERVAL_TO_SEMITONE.get(p)
+        if st is None:
+            return None
+        st_mod = st % 12
+        if st_mod != 0:
+            semitones.add(st_mod)
+    if not semitones:
+        return None
+    key = frozenset(semitones)
+    if key in _INTERVAL_REVERSE_MAP:
+        return _INTERVAL_REVERSE_MAP[key]
+    best_q: str | None = None
+    best_score = -1.0
+    for reduced_set, q in _INTERVAL_REVERSE_MAP.items():
+        overlap = len(key & reduced_set)
+        penalty = len(reduced_set - key)
+        score = overlap - 0.5 * penalty
+        if score > best_score:
+            best_score = score
+            best_q = q
+    if best_q is not None and best_score >= 2.0:
+        return best_q
+    return None
+
 
 def _normalize_root(root: str) -> str | None:
     if root in ROOT_NOTES:
@@ -68,7 +127,8 @@ def _normalize_root(root: str) -> str | None:
 def _parse_lab_label(label: str, prev_label: str | None = None) -> str | None:
     """Parse a single .lab chord label to our 277-class format.
 
-    Handles Harte syntax, Billboard special markers, and shorthand notation.
+    Handles Harte syntax, Billboard special markers, shorthand notation,
+    and JAAH interval notation (e.g. 'F:(b3,5,b7,11)').
     """
     if not label or label == "N":
         return None
@@ -77,7 +137,7 @@ def _parse_lab_label(label: str, prev_label: str | None = None) -> str | None:
 
     # Billboard repeat convention
     if label == ".":
-        return prev_label  # keep previous label
+        return prev_label
 
     # Billboard special markers
     if label in BILLBOARD_MAP:
@@ -87,40 +147,59 @@ def _parse_lab_label(label: str, prev_label: str | None = None) -> str | None:
         if mapped == "__REPEAT__":
             return prev_label
 
-    # Strip extensions: parentheses, bass notes
-    if "(" in label:
-        label = label[: label.index("(")]
-    if "/" in label:
-        label = label.split("/")[0]
+    # Parse root + quality (do NOT strip parentheses before colon split)
+    root_raw: str
+    quality_raw: str
 
-    label = label.strip()
-    if not label or label == "N":
-        return None
-
-    # Parse root + quality
     if ":" in label:
         parts = label.split(":", 1)
         root_raw = parts[0]
         quality_raw = parts[1]
+
+        # Handle JAAH interval notation: F:(b3,5,b7,11)
+        if quality_raw.startswith("("):
+            quality = _parse_interval_notation(quality_raw)
+            if quality is None:
+                return None
+        else:
+            # Strip parenthesized extensions from quality only
+            if "(" in quality_raw:
+                quality_raw = quality_raw[: quality_raw.index("(")]
+            if "/" in quality_raw:
+                quality_raw = quality_raw.split("/")[0]
+            quality_raw = quality_raw.strip()
+            if not quality_raw:
+                quality = "maj"
+            else:
+                quality = QUALITY_NORM.get(quality_raw)
+                if quality is None:
+                    if quality_raw in CHORD_QUALITIES:
+                        quality = quality_raw
+                    else:
+                        return None
     else:
-        # Shorthand: 'C', 'Am', 'Bb7'
+        # Shorthand: 'C', 'Am', 'Bb7', 'Am7(b5)'
         root_raw = label[0]
         quality_raw = label[1:]
         if len(label) > 1 and label[1] in ("#", "b"):
             root_raw = label[:2]
             quality_raw = label[2:]
+        # Strip parenthesized extensions and bass notes from shorthand quality
+        if "(" in quality_raw:
+            quality_raw = quality_raw[: quality_raw.index("(")]
+        if "/" in quality_raw:
+            quality_raw = quality_raw.split("/")[0]
+        quality_raw = quality_raw.strip()
+        quality = QUALITY_NORM.get(quality_raw)
+        if quality is None:
+            if quality_raw in CHORD_QUALITIES:
+                quality = quality_raw
+            else:
+                return None
 
     root = _normalize_root(root_raw)
     if root is None:
         return None
-
-    quality = QUALITY_NORM.get(quality_raw)
-    if quality is None:
-        # Try direct match
-        if quality_raw in CHORD_QUALITIES:
-            quality = quality_raw
-        else:
-            return None
 
     if quality not in CHORD_QUALITIES:
         return None
@@ -238,7 +317,7 @@ def build_empirical_matrix(
 
 
 def gather_lab_files(annot_dir: Path) -> list[Path]:
-    """Find all .lab files across Isophonics and Billboard directories."""
+    """Find all .lab files across Isophonics, Billboard, and JAAH directories."""
     lab_files: list[Path] = []
 
     # Isophonics
@@ -251,6 +330,11 @@ def gather_lab_files(annot_dir: Path) -> list[Path]:
     bb_dir = annot_dir / "billboard"
     if bb_dir.exists():
         lab_files.extend(bb_dir.glob("*.lab"))
+
+    # JAAH (files may be nested under labs/ subdirectory)
+    jaah_dir = annot_dir / "jaah"
+    if jaah_dir.exists():
+        lab_files.extend(jaah_dir.rglob("*.lab"))
 
     return lab_files
 
