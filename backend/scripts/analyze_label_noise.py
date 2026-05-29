@@ -11,7 +11,6 @@ to identify if ground truth labels have significant timing alignment issues.
 
 import argparse
 import logging
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -26,9 +25,6 @@ from app.chord_inference import infer_chords, CHORD_VOCAB
 from app.chord_metrics import assemble_chord_metrics
 from app.schemas import BeatGrid, ChordEvent, ChordTimeline
 from app.pipeline_proof import TARGET_SR
-
-sys.path.append(str(Path(__file__).parent))
-from build_chord_tflite import load_real_data, load_test_data
 
 logger = logging.getLogger("harmoniq.label_noise")
 

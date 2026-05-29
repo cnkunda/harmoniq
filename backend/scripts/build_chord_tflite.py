@@ -787,6 +787,7 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         self,
         X: np.ndarray,
         y: np.ndarray,
+        w: np.ndarray | None = None,
         batch_size: int = 64,
         p_pitch_shift: float = 0.5,
         pitch_range: int = 2,
@@ -800,6 +801,7 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         super().__init__(**kwargs)
         self.X = X
         self.y = y
+        self.w = w
         self.batch_size = batch_size
         self.p_pitch_shift = p_pitch_shift
         self.pitch_range = pitch_range
@@ -819,7 +821,7 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
     def __len__(self) -> int:
         return int(np.ceil(len(self.X) / self.batch_size))
 
-    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
+    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray]:
         if idx < 0:
             idx += len(self)
         batch_indices = self.indices[
@@ -830,6 +832,8 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
 
         batch_X, batch_y = self._apply_on_the_fly_augmentations(batch_X, batch_y)
 
+        if self.w is not None:
+            return batch_X, batch_y, self.w[batch_indices].copy()
         return batch_X, batch_y
 
     def on_epoch_end(self):
@@ -1181,73 +1185,95 @@ def compute_training_class_weights(
 
 
 # ---------------------------------------------------------------------------
-# 4a. Real dataset loading (Commit 101)
+# 4a. Multi-source dataset loading (Commit 105)
 # ---------------------------------------------------------------------------
 
-def load_real_data(data_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
-    """Load GuitarSet CQT features and labels from processed .npz files.
+def load_dataset_dir(data_path: Path) -> tuple[np.ndarray, np.ndarray, float | None]:
+    """Load CQT features, labels, and loss weight from a dataset .npz directory.
 
-    Looks for .npz files in <data_dir>/processed/cqt/.
-    Uses train+val splits (excludes test/player 05).
+    Reads all .npz files from <data_path>/processed/cqt/.
+    Filters out GuitarSet test split (player_05) by checking the 'split' field.
 
     Returns:
-        (features, labels) arrays with shapes (N, 128, 40) and (N,).
+        (features, labels, loss_weight) where loss_weight is read from
+        the .npz metadata or None if not present.
     """
-    data_path = Path(data_dir) / "processed" / "cqt"
-    if not data_path.exists():
-        raise FileNotFoundError(f"GuitarSet CQT directory not found: {data_path}")
+    cqt_dir = data_path / "processed" / "cqt"
+    if not cqt_dir.exists():
+        raise FileNotFoundError(f"CQT directory not found: {cqt_dir}")
 
-    npz_files = sorted(data_path.glob("*.npz"))
+    npz_files = sorted(cqt_dir.glob("*.npz"))
     if not npz_files:
-        raise FileNotFoundError(f"No .npz files found in {data_path}")
+        raise FileNotFoundError(f"No .npz files found in {cqt_dir}")
 
     all_features: list[np.ndarray] = []
     all_labels: list[np.ndarray] = []
+    loss_weight: float | None = None
 
     for npz_path in npz_files:
         data = np.load(npz_path)
-        split = str(data.get("split", b"train"))
+        split = str(data.get("split", b""))
+        # GuitarSet test split (player_05) is excluded from training
         if split == "test":
             continue
+        # Read loss_weight from the first file (all files from same source
+        # should have the same loss_weight)
+        if "loss_weight" in data and loss_weight is None:
+            loss_weight = float(data["loss_weight"])
         all_features.append(data["features"])
         all_labels.append(data["labels"])
 
     if not all_features:
-        raise ValueError("No training/validation data found in GuitarSet CQT directory")
+        raise ValueError(f"No training files found in {cqt_dir}")
 
     X = np.concatenate(all_features, axis=0).astype(np.float32)
     y = np.concatenate(all_labels, axis=0).astype(np.int32)
 
-    # Apply label quality gate (placeholder for future implementation)
-    # In a full implementation, this would:
-    # 1. Run a baseline model to get predictions
-    # 2. Compare predictions with ground truth to estimate boundary jitter
-    # 3. Reject examples with boundary jitter > max_boundary_jitter_ms
-    # 4. Flag examples with boundary jitter > flag_boundary_jitter_ms for review
-    # For now, we just log that this step would occur
-    config_path = Path(__file__).parent.parent / "config" / "label_noise_config.yaml"
-    if config_path.exists():
-        import yaml
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
-        max_jitter_ms = config.get("data_ingestion", {}).get("max_boundary_jitter_ms", 100)
-        flag_jitter_ms = config.get("data_ingestion", {}).get("flag_boundary_jitter_ms", 50)
-        print(f"Label quality gate: Would reject examples with >{max_jitter_ms}ms jitter, "
-              f"flag examples with >{flag_jitter_ms}ms jitter")
-    else:
-        print("Label quality gate: Configuration not found, skipping gate")
-
-    print(f"Loaded {len(X)} windows from {len(npz_files)} GuitarSet files (train+val only)")
-    return X, y
+    print(f"  Loaded {len(X)} windows from {len(npz_files)} files ({data_path.name}, "
+          f"loss_weight={loss_weight})")
+    return X, y, loss_weight
 
 
-def load_test_data(data_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
-    """Load GuitarSet test split (player 05)."""
-    data_path = Path(data_dir) / "processed" / "cqt"
-    if not data_path.exists():
-        raise FileNotFoundError(f"GuitarSet CQT directory not found: {data_path}")
+def load_datasets(sources: list[tuple[Path, str, float]]) -> tuple[
+    list[np.ndarray], list[np.ndarray], list[np.ndarray],
+]:
+    """Load multiple datasets with per-source loss weights.
 
-    npz_files = sorted(data_path.glob("*.npz"))
+    Args:
+        sources: List of (data_dir, source_name, default_loss_weight) tuples.
+                 source_name is used for logging only.
+                 default_loss_weight is used if not present in .npz metadata.
+
+    Returns:
+        (features_list, labels_list, weights_list) where each element is
+        a list of arrays, one per source.
+    """
+    features_list: list[np.ndarray] = []
+    labels_list: list[np.ndarray] = []
+    weights_list: list[np.ndarray] = []
+
+    for data_dir, source_name, default_weight in sources:
+        try:
+            X, y, lw = load_dataset_dir(data_dir)
+            lw = lw if lw is not None else default_weight
+            features_list.append(X)
+            labels_list.append(y)
+            # Create per-sample weights for this source
+            weights_list.append(np.full(len(X), lw, dtype=np.float32))
+        except Exception as e:
+            print(f"  [SKIP] {source_name}: {e}")
+            continue
+
+    return features_list, labels_list, weights_list
+
+
+def load_guitarset_test(data_dir: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Load GuitarSet test split (player 05) for evaluation."""
+    cqt_dir = data_dir / "processed" / "cqt"
+    if not cqt_dir.exists():
+        raise FileNotFoundError(f"GuitarSet CQT directory not found: {cqt_dir}")
+
+    npz_files = sorted(cqt_dir.glob("*.npz"))
     all_features: list[np.ndarray] = []
     all_labels: list[np.ndarray] = []
 
@@ -1259,11 +1285,11 @@ def load_test_data(data_dir: str | Path) -> tuple[np.ndarray, np.ndarray]:
             all_labels.append(data["labels"])
 
     if not all_features:
-        raise ValueError("No test data found (player 05)")
+        raise ValueError("No GuitarSet test data found (player 05)")
 
     X = np.concatenate(all_features, axis=0).astype(np.float32)
     y = np.concatenate(all_labels, axis=0).astype(np.int32)
-    print(f"Loaded {len(X)} test windows from GuitarSet player-05")
+    print(f"  Loaded {len(X)} test windows from GuitarSet player-05")
     return X, y
 
 
@@ -1283,37 +1309,46 @@ def load_empirical_transition_matrix(data_dir: str | Path) -> np.ndarray | None:
 # ---------------------------------------------------------------------------
 
 def mix_datasets(
-    real_X: np.ndarray, real_y: np.ndarray,
-    synth_X: np.ndarray, synth_y: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Concatenate all real and synthetic data (no subsampling).
+    dataset_sources: list[tuple[np.ndarray, np.ndarray, np.ndarray]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Mix multiple datasets by concatenation with per-source sample weights.
+
+    Each source provides (X, y, sample_weights). The arrays are concatenated
+    and the sample_weights are preserved for loss weighting during training.
 
     Args:
-        real_X: Real CQT features, shape (N_real, 128, 40)
-        real_y: Real labels, shape (N_real,)
-        synth_X: Synthetic CQT features, shape (N_synth, 128, 40)
-        synth_y: Synthetic labels, shape (N_synth,)
+        dataset_sources: List of (features, labels, sample_weights) tuples,
+                         one per data source.
 
     Returns:
-        (X_mixed, y_mixed) shuffled arrays using ALL data from both sources.
+        (X, y, sample_weights) concatenated and shuffled arrays.
     """
-    n_real = len(real_X)
-    n_synth = len(synth_X)
+    if len(dataset_sources) == 0:
+        raise ValueError("At least one dataset source is required")
 
-    if n_real == 0:
-        X, y = synth_X.copy(), synth_y.copy()
-    elif n_synth == 0:
-        X, y = real_X.copy(), real_y.copy()
-    else:
-        X = np.concatenate([real_X, synth_X], axis=0).astype(np.float32)
-        y = np.concatenate([real_y, synth_y], axis=0).astype(np.int32)
+    X_parts: list[np.ndarray] = []
+    y_parts: list[np.ndarray] = []
+    w_parts: list[np.ndarray] = []
 
+    for X_src, y_src, w_src in dataset_sources:
+        X_parts.append(X_src)
+        y_parts.append(y_src)
+        w_parts.append(w_src)
+
+    X = np.concatenate(X_parts, axis=0).astype(np.float32)
+    y = np.concatenate(y_parts, axis=0).astype(np.int32)
+    w = np.concatenate(w_parts, axis=0).astype(np.float32)
+
+    # Shuffle consistently
     p = np.random.permutation(len(X))
-    X, y = X[p], y[p]
+    X, y, w = X[p], y[p], w[p]
 
-    print(f"Mixed dataset: {n_real} real + {n_synth} synthetic "
-          f"= {len(X)} total (real ratio: {n_real / len(X):.1%})")
-    return X, y
+    total = len(X)
+    print(f"  Mixed {len(dataset_sources)} sources: {total} total samples")
+    for i, (X_src, _, _) in enumerate(dataset_sources):
+        print(f"    Source {i}: {len(X_src)} samples")
+
+    return X, y, w
 
 
 # ---------------------------------------------------------------------------
@@ -1486,17 +1521,41 @@ class GuitarSetTestCallback(tf.keras.callbacks.Callback):
 
 
 def run_pipeline(
-    real_data_dir: str | Path | None = None,
+    guitarset_data_dir: str | Path | None = None,
+    idmt_data_dir: str | Path | None = None,
+    vst_data_dir: str | Path | None = None,
+    youtube_data_dir: str | Path | None = None,
+    damp_data_dir: str | Path | None = None,
+    pseudo_data_dir: str | Path | None = None,
+    guitarset_loss_weight: float = 1.0,
+    vst_loss_weight: float = 0.3,
+    damp_loss_weight: float = 0.15,
     empirical_matrix_path: str | Path | None = None,
     temperature: float = 0.3,
 ):
-    """Run the full training pipeline with optional real data mixing.
+    """Run the full training pipeline with multi-source weighted data mixing.
 
-    All available real and synthetic data is concatenated (no ratio-based
-    subsampling), giving the model the maximum possible training signal.
+    All available data from all configured sources is loaded, mixed, and
+    trained with per-source loss weighting (sample_weight in Keras).
+
+    Source weights (from PRIORITIES.md Commit 105):
+      - GuitarSet (real):       1.0  (highest confidence, real recordings)
+      - IDMT-SMT-Guitar:        1.0  (real recordings, good labels)
+      - VST synthetic:          0.3  (lower confidence, synthetic audio)
+      - DAMP-VPB:               0.15 (lowest confidence, heuristic labels)
+      - YouTube crawl:          1.0  (real recordings, TFLite-filtered)
+      - Pseudo-label:           same as vst_loss_weight (model-generated labels)
 
     Args:
-        real_data_dir: Path to GuitarSet CQT data directory (or None for synthetic-only).
+        guitarset_data_dir: Path to GuitarSet CQT data directory.
+        idmt_data_dir: Path to IDMT-SMT-Guitar CQT data directory.
+        vst_data_dir: Path to VST synthetic CQT data directory.
+        youtube_data_dir: Path to YouTube crawl CQT data directory.
+        damp_data_dir: Path to DAMP-VPB CQT data directory.
+        pseudo_data_dir: Path to pseudo-labeled CQT data directory.
+        guitarset_loss_weight: Per-sample loss weight for GuitarSet (default 1.0).
+        vst_loss_weight: Per-sample loss weight for VST synthetic (default 0.3).
+        damp_loss_weight: Per-sample loss weight for DAMP-VPB (default 0.15).
         empirical_matrix_path: Path to empirical transition matrix .npy (or None).
         temperature: Temperature τ for quality re-sampling (default 0.3, matching MT3).
                      τ < 1.0 boosts rare chord quality sampling via MT3 formula.
@@ -1505,21 +1564,67 @@ def run_pipeline(
     _APP_DIR = Path(__file__).resolve().parent.parent / "app"
     _SCRIPTS_DIR = Path(__file__).resolve().parent
 
-    # --- Load real data (if available) ---
-    has_real_data = False
-    test_X, test_y = np.array([]), np.array([])
-    if real_data_dir is not None:
-        data_path = Path(real_data_dir)
-        if data_path.exists():
-            try:
-                real_X, real_y = load_real_data(data_path)
-                test_X, test_y = load_test_data(data_path)
-                has_real_data = len(real_X) > 0
-            except (FileNotFoundError, ValueError) as e:
-                print(f"  [WARN] Could not load real data: {e}")
-                has_real_data = False
+    # --- Load all dataset sources ---
+    source_configs: list[tuple[Path, str, float]] = []
+    has_any_real_data = False
+
+    if guitarset_data_dir is not None:
+        gs_path = Path(guitarset_data_dir)
+        if gs_path.exists():
+            source_configs.append((gs_path, "GuitarSet", guitarset_loss_weight))
+            has_any_real_data = True
         else:
-            print(f"  [WARN] Real data dir not found: {data_path}")
+            print(f"  [WARN] GuitarSet data dir not found: {gs_path}")
+
+    if idmt_data_dir is not None:
+        idmt_path = Path(idmt_data_dir)
+        if idmt_path.exists():
+            source_configs.append((idmt_path, "IDMT-SMT-Guitar", 1.0))
+            has_any_real_data = True
+        else:
+            print(f"  [WARN] IDMT-SMT-Guitar data dir not found: {idmt_path}")
+
+    if vst_data_dir is not None:
+        vst_path = Path(vst_data_dir)
+        if vst_path.exists():
+            source_configs.append((vst_path, "VST-Synthetic", vst_loss_weight))
+        else:
+            print(f"  [WARN] VST synthetic data dir not found: {vst_path}")
+
+    if youtube_data_dir is not None:
+        yt_path = Path(youtube_data_dir)
+        if yt_path.exists():
+            source_configs.append((yt_path, "YouTube-Crawl", 1.0))
+            has_any_real_data = True
+        else:
+            print(f"  [WARN] YouTube crawl data dir not found: {yt_path}")
+
+    if damp_data_dir is not None:
+        damp_path = Path(damp_data_dir)
+        if damp_path.exists():
+            source_configs.append((damp_path, "DAMP-VPB", damp_loss_weight))
+        else:
+            print(f"  [WARN] DAMP-VPB data dir not found: {damp_path}")
+
+    if pseudo_data_dir is not None:
+        pseudo_path = Path(pseudo_data_dir)
+        if pseudo_path.exists():
+            source_configs.append((pseudo_path, "Pseudo-Label", vst_loss_weight))
+        else:
+            print(f"  [WARN] Pseudo-label data dir not found: {pseudo_path}")
+
+    print(f"Loading {len(source_configs)} data source(s)...")
+    features_list, labels_list, weights_list = load_datasets(source_configs)
+
+    # --- Load GuitarSet test data (if available) ---
+    test_X, test_y = np.array([]), np.array([])
+    if guitarset_data_dir is not None:
+        gs_path = Path(guitarset_data_dir)
+        if gs_path.exists():
+            try:
+                test_X, test_y = load_guitarset_test(gs_path)
+            except (FileNotFoundError, ValueError) as e:
+                print(f"  [WARN] Could not load GuitarSet test data: {e}")
 
     # --- Load empirical transition matrix ---
     transition_probs = None
@@ -1542,26 +1647,29 @@ def run_pipeline(
     synth_X, synth_y = generate_dataset(transition_probs=transition_probs)
     p = np.random.permutation(len(synth_X))
     synth_X, synth_y = synth_X[p], synth_y[p]
-    print(f"  Generated {len(synth_X)} synthetic samples")
+    print(f"  Generated {len(synth_X)} synthetic samples (weight=1.0)")
 
-    # --- Mix real + synthetic (use all data from both sources) ---
-    if has_real_data:
-        print("Mixing real and synthetic data...")
-        X_all, y_all = mix_datasets(real_X, real_y, synth_X, synth_y)
-    else:
-        X_all, y_all = synth_X, synth_y
-        print("  No real data available, using synthetic data only")
+    # --- Add synthetic data as another weighted source ---
+    synth_weight = np.ones(len(synth_X), dtype=np.float32)
+    features_list.append(synth_X)
+    labels_list.append(synth_y)
+    weights_list.append(synth_weight)
+
+    # --- Mix all sources ---
+    print("Mixing all dataset sources with per-source loss weighting...")
+    dataset_sources = list(zip(features_list, labels_list, weights_list))
+    X_all, y_all, sample_weights = mix_datasets(dataset_sources)
 
     # --- Train / validation split ---
     print("Splitting into train / validation sets (85/15)...")
     try:
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_all, y_all, test_size=0.15, random_state=42, stratify=y_all,
+        X_train, X_val, y_train, y_val, w_train, w_val = train_test_split(
+            X_all, y_all, sample_weights, test_size=0.15, random_state=42,
+            stratify=y_all,
         )
     except ValueError:
-        # Stratify may fail with very small classes — fall back to random split
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_all, y_all, test_size=0.15, random_state=42,
+        X_train, X_val, y_train, y_val, w_train, w_val = train_test_split(
+            X_all, y_all, sample_weights, test_size=0.15, random_state=42,
         )
     print(f"  Train: {len(X_train)} samples, Val: {len(X_val)} samples")
 
@@ -1579,6 +1687,23 @@ def run_pipeline(
     class_weight_dict = compute_training_class_weights(y_train, temperature=temperature)
     n_classes_with_data = len(class_weight_dict)
     print(f"  Computed weights for {n_classes_with_data}/{NUM_CLASSES} classes present in training set")
+
+    # If we already have per-sample weights (from per-source loss weighting),
+    # Keras does not allow passing both `class_weight` and `sample_weight`
+    # to model.fit. Merge class-based weights into the per-sample weights and
+    # avoid passing `class_weight` to model.fit in that case.
+    if w_train is not None:
+        # Build per-sample class weight vector and fold into sample weights.
+        # Any class missing from class_weight_dict gets weight 1.0.
+        class_weights_vector = np.array([
+            float(class_weight_dict.get(int(lbl), 1.0)) for lbl in y_train
+        ], dtype=np.float32)
+        w_train = w_train.astype(np.float32) * class_weights_vector
+        # We cleared class_weight to signal it should not be passed to model.fit.
+        merged_class_weight = None
+        print("  Merged class_weight into per-sample sample_weights; will not pass `class_weight` to model.fit")
+    else:
+        merged_class_weight = class_weight_dict
 
     # --- Training callbacks (Commit 103) ---
     callbacks = [
@@ -1607,13 +1732,13 @@ def run_pipeline(
     ]
 
     # GuitarSet test callback — per-epoch visibility into real-world accuracy
-    if has_real_data and len(test_X) > 0:
+    if has_any_real_data and len(test_X) > 0:
         test_callback = GuitarSetTestCallback(test_X, test_y)
         callbacks.append(test_callback)
 
     # --- On-the-fly augmented data generator ---
     train_generator = AugmentedDataGenerator(
-        X_train, y_train,
+        X_train, y_train, w_train,
         batch_size=64,
         p_pitch_shift=0.5,
         pitch_range=2,
@@ -1631,14 +1756,21 @@ def run_pipeline(
         print(f"  Temperature τ={temperature} (quality-aware resampling)")
     print(f"  Class weights: active ({n_classes_with_data}/{NUM_CLASSES} classes)")
     print(f"  Batch size=64")
-    history = model.fit(
-        train_generator,
+
+    # If we've merged class weights into per-sample weights, don't pass
+    # class_weight to model.fit (it conflicts with sample_weight). Otherwise,
+    # pass the computed class_weight_dict as before.
+    fit_kwargs = dict(
+        x=train_generator,
         epochs=50,
         validation_data=(X_val, y_val),
         callbacks=callbacks,
-        class_weight=class_weight_dict,
         verbose=1,
     )
+    if merged_class_weight is not None:
+        fit_kwargs["class_weight"] = merged_class_weight
+
+    history = model.fit(**fit_kwargs)
 
     # Restore best weights (EarlyStopping with restore_best_weights already does this)
     print(f"\nTraining completed. "
@@ -1673,7 +1805,7 @@ def run_pipeline(
     _save_metrics_json(report, y_train, _metrics_path)
 
     # --- GuitarSet test set validation (if available) ---
-    if has_real_data and len(test_X) > 0:
+    if has_any_real_data and len(test_X) > 0:
         print("\n--- GuitarSet Test Set (Player 05) ---")
         test_pred = np.argmax(model.predict(test_X, verbose=0), axis=1)
         test_acc = np.mean(test_pred == test_y)
@@ -1820,11 +1952,43 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Build chord recognition model with optional real data mixing"
+        description="Build chord recognition model with multi-source weighted data mixing (Commit 105)"
     )
     parser.add_argument(
-        "--real-data-dir", type=str, default=None,
+        "--guitarset-data-dir", type=str, default=None,
         help="Path to GuitarSet CQT data directory (contains guitarset/processed/cqt/)"
+    )
+    parser.add_argument(
+        "--idmt-data-dir", type=str, default=None,
+        help="Path to IDMT-SMT-Guitar CQT data directory"
+    )
+    parser.add_argument(
+        "--vst-data-dir", type=str, default=None,
+        help="Path to VST synthetic CQT data directory"
+    )
+    parser.add_argument(
+        "--youtube-data-dir", type=str, default=None,
+        help="Path to YouTube crawl CQT data directory"
+    )
+    parser.add_argument(
+        "--damp-data-dir", type=str, default=None,
+        help="Path to DAMP-VPB CQT data directory"
+    )
+    parser.add_argument(
+        "--pseudo-data-dir", type=str, default=None,
+        help="Path to pseudo-labeled CQT data directory (uses vst-loss-weight)"
+    )
+    parser.add_argument(
+        "--guitarset-loss-weight", type=float, default=1.0,
+        help="Per-sample loss weight for GuitarSet (default 1.0)"
+    )
+    parser.add_argument(
+        "--vst-loss-weight", type=float, default=0.3,
+        help="Per-sample loss weight for VST synthetic (default 0.3, per Commit 105)"
+    )
+    parser.add_argument(
+        "--damp-loss-weight", type=float, default=0.15,
+        help="Per-sample loss weight for DAMP-VPB (default 0.15, per Commit 105)"
     )
     parser.add_argument(
         "--empirical-matrix", type=str, default=None,
@@ -1854,7 +2018,15 @@ if __name__ == "__main__":
         print("  Rare chord boost mode: τ=0.1 — aggressive oversampling of rare types")
 
     run_pipeline(
-        real_data_dir=args.real_data_dir,
+        guitarset_data_dir=args.guitarset_data_dir,
+        idmt_data_dir=args.idmt_data_dir,
+        vst_data_dir=args.vst_data_dir,
+        youtube_data_dir=args.youtube_data_dir,
+        damp_data_dir=args.damp_data_dir,
+        pseudo_data_dir=args.pseudo_data_dir,
+        guitarset_loss_weight=args.guitarset_loss_weight,
+        vst_loss_weight=args.vst_loss_weight,
+        damp_loss_weight=args.damp_loss_weight,
         empirical_matrix_path=args.empirical_matrix,
         temperature=args.temperature,
     )

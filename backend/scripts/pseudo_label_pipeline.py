@@ -178,12 +178,14 @@ def run_pseudo_label(
 def retrain_with_pseudo_labels(
     pseudo_X: np.ndarray,
     pseudo_y: np.ndarray,
-    real_data_dir: str | None = None,
+    guitarset_data_dir: str | None = None,
     temperature: float = 0.3,
 ):
-    """Retrain the chord model with mixed real + pseudo-labeled data.
+    """Retrain the chord model with mixed GuitarSet + pseudo-labeled data.
 
-    Uses the improved training pipeline with label sync fixes.
+    Saves pseudo-labels to a temporary structured CQT directory and passes
+    it to the multi-source training pipeline with loss_weight=vst_loss_weight
+    (default 0.3, matching VST synthetic confidence level).
     """
     from scripts.build_chord_tflite import run_pipeline
 
@@ -192,22 +194,29 @@ def retrain_with_pseudo_labels(
     print(f"  Pseudo-labeled frames: {len(pseudo_X)}")
     print(f"{'=' * 50}")
 
-    # Save pseudo-labels as a temp CQT dataset that run_pipeline can load
-    # run_pipeline loads from data/guitarset/processed/cqt/ directory.
-    # We save our pseudo-labels alongside the real data.
-    script_dir = Path(__file__).resolve().parent
-    pseudo_path = script_dir / "pseudo_labels.npz"
+    # Save pseudo-labels to a temporary structured CQT directory
+    import tempfile
+    pseudo_dir = Path(tempfile.mkdtemp(prefix="pseudo_labels_"))
+    cqt_dir = pseudo_dir / "processed" / "cqt"
+    cqt_dir.mkdir(parents=True, exist_ok=True)
+    pseudo_path = cqt_dir / "pseudo_labels.npz"
     np.savez_compressed(
         str(pseudo_path),
         features=pseudo_X,
         labels=pseudo_y,
         split=b"train",
+        source=b"pseudo",
     )
     print(f"\n  Saved pseudo-labels to {pseudo_path}")
 
-    # Run the full training pipeline
+    # Run the full training pipeline with pseudo-labels as a dedicated source
+    # (loss_weight is applied by run_pipeline via vst_loss_weight)
     run_pipeline(
-        real_data_dir=real_data_dir,
+        guitarset_data_dir=guitarset_data_dir,
+        pseudo_data_dir=str(pseudo_dir),
+        youtube_data_dir=None,
+        damp_data_dir=None,
+        vst_loss_weight=0.3,
         empirical_matrix_path=None,
         temperature=temperature,
     )
@@ -289,7 +298,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n[2/2] Hybrid retraining...")
         retrain_with_pseudo_labels(
             X, y,
-            real_data_dir=args.real_data_dir,
+            guitarset_data_dir=args.real_data_dir,
             temperature=args.temperature,
         )
 
