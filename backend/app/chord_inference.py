@@ -78,6 +78,7 @@ _TRIANGULAR_WINDOW = np.minimum(
 TIE_THRESHOLD = 0.15
 SUBDIVISION_RATIO = 0.65
 MIN_HALF_BEAT_DURATION = 0.3  # seconds — skip split for beats shorter than this
+N_CONFIDENCE_THRESHOLD = 0.5  # Default to N when model confidence is below this
 
 
 def _get_segment_db(y_segment: np.ndarray) -> float:
@@ -87,6 +88,31 @@ def _get_segment_db(y_segment: np.ndarray) -> float:
     if rms < 1e-9:
         return -100.0
     return float(20 * math.log10(rms))
+
+
+def _apply_confidence_threshold(
+    probs: np.ndarray, threshold: float = N_CONFIDENCE_THRESHOLD
+) -> np.ndarray:
+    """Apply confidence threshold: default to N when model is uncertain.
+
+    When the model's top prediction has confidence below the threshold,
+    override the prediction to N (no-chord). This catches the "unsure"
+    cases where the model can't reliably distinguish a chord from silence.
+
+    Args:
+        probs: Shape [T, _NUM_CLASSES], probability distributions.
+        threshold: Minimum confidence to accept a chord prediction.
+
+    Returns:
+        Adjusted probabilities with uncertain frames defaulting to N.
+    """
+    n_idx = _CHORD_TO_IDX.get("N", _NUM_CLASSES - 1)
+    result = probs.copy()
+    max_probs = np.max(result, axis=1)
+    uncertain = max_probs < threshold
+    result[uncertain] = 0.0
+    result[uncertain, n_idx] = 1.0
+    return result
 
 
 def _smooth_chords(events: list[ChordEvent]) -> list[ChordEvent]:
@@ -336,6 +362,9 @@ def _run_keras_raw(y: np.ndarray, sr: int) -> list[dict]:
     valid = counts > 0
     merged_probs[valid] /= counts[valid, np.newaxis]
 
+    # Apply confidence threshold: default to N when uncertain
+    merged_probs = _apply_confidence_threshold(merged_probs)
+
     results = []
     for i in range(T):
         pred_idx = int(np.argmax(merged_probs[i]))
@@ -370,6 +399,9 @@ def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
         window_outputs[start:end] = output.reshape(end - start, _WINDOW, _NUM_CLASSES)
 
     merged_probs = _merge_overlapping_predictions(window_outputs, T)
+
+    # Apply confidence threshold: default to N when uncertain
+    merged_probs = _apply_confidence_threshold(merged_probs)
 
     results = []
     for i in range(T):

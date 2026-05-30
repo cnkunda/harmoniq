@@ -229,7 +229,7 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 - [x] Rare chord type (7#9, alt7, dim7, aug) recall improves by ≥15% — *v1.0.3: extended group 84.5% val accuracy, mean F1=0.860*
 - [x] Common chord type (maj, min) accuracy degrades by <2% — *v1.0.3: triad 81.0%, no regression vs v1.0.2*
 
-### Commit 106: Quantization-Aware Training
+### Commit 106: Quantization-Aware Training [DEFERRED]
 
 **Goal:** Improve TFLite quantization accuracy by training with quantization constraints rather than post-training quantization.
 
@@ -285,19 +285,19 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 **Acceptance Criteria:**
 
-- [ ] Note durations quantized to standard types (whole through 64th) with correct `<type>` elements
-- [ ] Triplet detection correctly groups 3-in-the-time-of-2 patterns
-- [ ] Measure fill validation: total note+rest duration equals measure length within 1-tick tolerance
-- [ ] Measure overflow clips notes at bar line and ties to next measure
-- [ ] Unfilled measure time produces rests at beat/sub-beat boundaries (not arbitrary positions)
-- [ ] `<beam>` groupings follow beat structure (no cross-beat beams) and tuplet groups
-- [ ] `infer_solo()` selects at most one note per beat slot, preferring highest amplitude (matching `build_gp5_from_note_events` behavior)
-- [ ] Test suite covers syncopation, triplets, 5-tuplets, dotted quarters, and maximal/minimal durations
-- [ ] Existing solo duration filtering (sub-32nd note removal) remains active and non-regressed
-- [ ] `_add_technical_elements()` produces valid XML when notes have `<tie>`
+- [x] Note durations quantized to standard types (whole through 64th) with correct `<type>` elements
+- [x] Triplet detection correctly groups 3-in-the-time-of-2 patterns
+- [x] Measure fill validation: total note+rest duration equals measure length within 1-tick tolerance
+- [x] Measure overflow clips notes at bar line and ties to next measure
+- [x] Unfilled measure time produces rests at beat/sub-beat boundaries (not arbitrary positions)
+- [x] `<beam>` groupings follow beat structure (no cross-beam beams) and tuplet groups
+- [x] `infer_solo()` selects at most one note per beat slot, preferring highest amplitude (matching `build_gp5_from_note_events` behavior)
+- [x] Test suite covers syncopation, triplets, 5-tuplets, dotted quarters, and maximal/minimal durations
+- [x] Existing solo duration filtering (sub-32nd note removal) remains active and non-regressed
+- [x] `_add_technical_elements()` produces valid XML when notes have `<tie>`
       elements: single `<notations>` block contains both `<technical>` and `<tie>`
-- [ ] `<divisions>480</divisions>` present in every measure's `<attributes>`
-- [ ] Minor key signatures generate correct MusicXML (`<key><fifths>0</fifths><mode>minor</mode></key>`)
+- [x] `<divisions>480</divisions>` present in every measure's `<attributes>`
+- [x] Minor key signatures generate correct MusicXML (`<key><fifths>0</fifths><mode>minor</mode></key>`)
 
 ---
 
@@ -496,7 +496,7 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 ---
 
-### Commit 111: Stem Routing Fix — Wire Bass+Other for Chords, Dynamic Melodic Stem for Solo
+### Commit 111: Stem Routing Fix — Wire Bass+Other for Chords, Dynamic Melodic Stem for Solo [DEFERRED]
 
 **Goal:** Wire `build_stem_routing_hints()` output into the main analysis pipeline so chords are inferred from the `bass + other` stem mix (cleaner harmonic signal) and solo is inferred from a dynamically selected melodic stem, not always the guitar stem.
 
@@ -529,7 +529,7 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 ---
 
-### Commit 112: Dual-Path Confidence-Weighted Stem Fusion (MT3 Paper Insight)
+### Commit 112: Dual-Path Confidence-Weighted Stem Fusion (MT3 Paper Insight) [DEFERRED]
 
 **Goal:** Run chord inference on both the guitar stem AND the full mix simultaneously, then fuse predictions weighted by stem quality confidence — mimicking MT3's multi-instrument attention without needing the model.
 
@@ -700,7 +700,7 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 ---
 
-### Commit 116: LLM-Enhanced Chord Correction & Roman Numeral Analysis
+### Commit 116: LLM-Enhanced Chord Correction & Roman Numeral Analysis [DEFERRED]
 
 **Goal:** Post-process raw ChordTimeline through a lightweight LLM (Claude Haiku or
 Gemini Flash) to correct improbable chord changes based on key context and add

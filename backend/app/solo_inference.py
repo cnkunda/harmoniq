@@ -6,12 +6,17 @@ Fixed for ML Inference Stability & Diagnostics (Commit 95):
   - Adds graceful fallback chain: default → TF SavedModel → ONNX → empty.
   - Replaces print() with structured logging for diagnostics.
   - Logs which model format is in use on each inference call.
+
+Commit 107: Amplitude-based beat-slot selection and improved duration filtering.
+  - Groups raw notes by beat slot, keeping only highest amplitude per slot.
+  - Filters sub-32nd note durations for cleaner notation.
 """
 
 from __future__ import annotations
 
 import bisect
 import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -148,6 +153,26 @@ def _snap_to_grid(time_s: float, grid_beats: list[float]) -> float:
     return before if abs(time_s - before) < abs(time_s - after) else after
 
 
+def _beat_slot_index(start_s: float, beat_times: list[float], bpm: float) -> int:
+    """Map wall-clock seconds to a beat slot index.
+
+    When beat_times has at least two samples, assign each note to the
+    beat interval containing it. Otherwise fall back to uniform quarter spacing.
+    """
+    s = float(start_s)
+    if not beat_times or len(beat_times) < 2:
+        spq = 60.0 / max(bpm, 1.0)
+        return max(0, int(s / spq))
+    if s <= beat_times[0]:
+        return 0
+    for i in range(len(beat_times) - 1):
+        if beat_times[i] <= s < beat_times[i + 1]:
+            return i
+    span = max(beat_times[-1] - beat_times[-2], 1e-3)
+    extra = max(0, int((s - beat_times[-1]) / span))
+    return len(beat_times) - 1 + extra
+
+
 def _detect_model_type(model_path: Path) -> str:
     """Return a human-readable label for the model format."""
     if not model_path.exists():
@@ -225,8 +250,9 @@ def infer_solo(melodic_stem_path: Path, beat_grid: BeatGrid) -> SoloNotes:
         logger.error("All solo model formats failed — returning empty solo notes. (model=%s)", model_label)
         return SoloNotes(notes=[])
 
-    # Minimum duration threshold
-    min_duration_s = 0.01
+    # Minimum duration threshold: filter sub-32nd notes
+    seconds_per_32nd = (60.0 / beat_grid.bpm) / 8.0
+    min_duration_s = max(0.01, seconds_per_32nd * 0.4)
 
     MIN_MIDI_VELOCITY = 40
     MAX_MIDI_VELOCITY = 120
@@ -243,16 +269,35 @@ def infer_solo(melodic_stem_path: Path, beat_grid: BeatGrid) -> SoloNotes:
         logger.info("No solo notes after duration filtering (min_duration=%.3fs)", min_duration_s)
         return SoloNotes(notes=[])
 
-    max_input_velocity = max(n[3] for n in raw_notes)
+    # Amplitude-based beat-slot selection: keep only highest amplitude note per slot
+    # This enforces monophony and removes polyphonic overlap (mirrors build_gp5_from_note_events)
+    grid_beats = beat_grid.beats
+    by_slot: dict[int, list[tuple[float, float, float, float]]] = defaultdict(list)
+    for start_time, end_time, pitch, velocity in raw_notes:
+        slot = _beat_slot_index(start_time, grid_beats, beat_grid.bpm)
+        by_slot[slot].append((start_time, end_time, pitch, velocity))
+
+    selected_notes: list[tuple[float, float, float, float]] = []
+    for slot in sorted(by_slot.keys()):
+        candidates = by_slot[slot]
+        best = max(candidates, key=lambda n: (n[3], n[2]))  # amplitude, then pitch
+        selected_notes.append(best)
+
+    if len(selected_notes) < len(raw_notes):
+        logger.info(
+            "Beat-slot selection: %d notes → %d notes (%d removed as non-dominant)",
+            len(raw_notes), len(selected_notes), len(raw_notes) - len(selected_notes),
+        )
+
+    max_input_velocity = max(n[3] for n in selected_notes)
     if max_input_velocity < 0.01:
         max_input_velocity = 0.5
 
     velocity_range = MAX_MIDI_VELOCITY - MIN_MIDI_VELOCITY
     cleaned_notes: list[SoloNote] = []
-    grid_beats = beat_grid.beats
     LEGATO_OVERLAP_S = 0.010
 
-    for start_time, end_time, pitch, velocity in raw_notes:
+    for start_time, end_time, pitch, velocity in selected_notes:
         duration = end_time - start_time
         q_start = _snap_to_grid(start_time, grid_beats)
         q_end = _snap_to_grid(end_time, grid_beats)

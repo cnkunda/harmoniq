@@ -112,6 +112,66 @@ def compute_grouped_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str
 
 
 # ---------------------------------------------------------------------------
+# 1b. No-Chord (N) Silence Templates (Phase 1a)
+# ---------------------------------------------------------------------------
+_N_SILENCE_VARIANTS = [
+    "near_silence",   # Near-zero energy everywhere
+    "muted_string",   # 1-2 random bins at low energy
+    "bg_noise",       # Uniform low energy with random fluctuations
+    "single_pluck",   # One bin at moderate energy, rest near zero
+]
+
+
+def _make_n_silence_template() -> np.ndarray:
+    """Generate a no-chord template that resembles real quiet guitar passages.
+
+    Replaces the old flat uniform vector with diverse near-silence profiles
+    so the model learns to distinguish silence from low-energy chords.
+
+    Returns:
+        40-bin feature vector [36 CQT + 4 bass].
+    """
+    variant = np.random.choice(_N_SILENCE_VARIANTS)
+    cqt = np.zeros(CHROMA_BINS, dtype=np.float32)
+
+    if variant == "near_silence":
+        # Very low energy across all bins with pink noise
+        cqt = np.random.uniform(0.001, 0.01, CHROMA_BINS).astype(np.float32)
+        noise = generate_pink_noise((CHROMA_BINS,), 0.003)
+        cqt = np.clip(cqt + noise, 0, 0.02)
+
+    elif variant == "muted_string":
+        # 1-2 random bins at low energy, rest near zero
+        n_bins = np.random.randint(1, 3)
+        active_bins = np.random.choice(CHROMA_BINS, size=n_bins, replace=False)
+        cqt[active_bins] = np.random.uniform(0.05, 0.15, size=n_bins)
+        noise = generate_pink_noise((CHROMA_BINS,), 0.005)
+        cqt = np.clip(cqt + noise, 0, 0.2)
+
+    elif variant == "bg_noise":
+        # Uniform low energy with random per-bin fluctuations
+        base = np.random.uniform(0.01, 0.03)
+        cqt = np.full(CHROMA_BINS, base, dtype=np.float32)
+        noise = generate_pink_noise((CHROMA_BINS,), 0.008)
+        cqt = np.clip(cqt + noise, 0, 0.05)
+
+    elif variant == "single_pluck":
+        # One bin at moderate energy, rest near zero
+        active_bin = np.random.randint(CHROMA_BINS)
+        cqt[active_bin] = np.random.uniform(0.1, 0.3)
+        noise = generate_pink_noise((CHROMA_BINS,), 0.005)
+        cqt = np.clip(cqt + noise, 0, 0.35)
+
+    # Normalize
+    total = cqt.sum()
+    if total > 0:
+        cqt = cqt / total
+
+    bass = cqt[:BASS_BINS].copy()
+    return np.concatenate([cqt, bass]).astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
 # 2. Data Generation (Harmonic Overtones with Extension Attenuation)
 # ---------------------------------------------------------------------------
 def make_cqt_template(root: int, quality: str, bass_octave: int = 1) -> np.ndarray:
@@ -128,9 +188,7 @@ def make_cqt_template(root: int, quality: str, bass_octave: int = 1) -> np.ndarr
     cqt = np.zeros(CHROMA_BINS, dtype=np.float32)
 
     if quality == "N":
-        cqt = np.full(CHROMA_BINS, 1.0 / CHROMA_BINS, dtype=np.float32)
-        bass = np.full(BASS_BINS, 1.0 / BASS_BINS, dtype=np.float32)
-        return np.concatenate([cqt, bass])
+        return _make_n_silence_template()
 
     intervals = CHORD_INTERVALS[quality]
 
@@ -543,7 +601,7 @@ def apply_temporal_jitter_to_window_features(window: np.ndarray, max_shift_ms: f
         return shifted_window
 
 
-def generate_dataset(samples_per_class: int = 260, config: dict = None,
+def generate_dataset(samples_per_class: int = 80, config: dict = None,
                       transition_probs: np.ndarray | None = None):
     """Generate augmented chord dataset with realistic variability.
 
@@ -557,7 +615,8 @@ def generate_dataset(samples_per_class: int = 260, config: dict = None,
     pitch-shifted features but original-chord labels.
 
     Args:
-        samples_per_class: Base samples per chord class (260 → 277×260 = 72,020 total)
+        samples_per_class: Base samples per chord class (80 → 277×80 = 22,160 total).
+                           Reduced from 260 to balance real/synthetic ratio.
         config: Augmentation configuration dict
         transition_probs: Optional (NUM_CLASSES,) marginal chord distribution from
             empirical transition matrix. Used to sample chord pairs for transition
@@ -611,7 +670,23 @@ def generate_dataset(samples_per_class: int = 260, config: dict = None,
 
             # Apply CQT leakage after window creation (spectral)
             if np.random.random() < cqt_leakage_rate:
-                window = apply_cqt_leakage(window, leakage_strength=0.1)
+                window = apply_cqt_leakage(window, leakage_strength=0.2)
+
+            # Apply domain gap augmentations to bridge synthetic-real gap
+            if quality != "N":
+                if np.random.random() < 0.4:
+                    window = apply_cqt_reverb(window, strength=0.3)
+                if np.random.random() < 0.3:
+                    window = apply_fine_detune(window, max_cents=30.0)
+                if np.random.random() < 0.5:
+                    window = apply_spectral_tilt(window)
+                if np.random.random() < 0.5:
+                    window = apply_random_gain(window)
+
+            # N-specific augmentations for diverse silence profiles
+            if quality == "N":
+                if np.random.random() < 0.6:
+                    window = apply_n_augmentation(window)
 
             if np.random.random() < temporal_jitter_prob:
                 max_shift_ms = 30.0
@@ -761,6 +836,209 @@ def apply_cqt_leakage(
 
 
 # ---------------------------------------------------------------------------
+# 2b1. Domain Gap Augmentations (Phase 3 — heavier synthetic augmentation)
+# ---------------------------------------------------------------------------
+
+
+def apply_cqt_reverb(
+    window: np.ndarray, strength: float = 0.3
+) -> np.ndarray:
+    """Simulate reverb effects in the CQT domain.
+
+    Reverb causes temporal smearing (energy spreads forward in time) and
+    spectral spread (energy spreads to adjacent frequency bins). This
+    function approximates both effects on CQT features.
+
+    Args:
+        window: Feature window of shape (WINDOW, FEATURE_DIM).
+        strength: Reverb intensity (0 = dry, 1 = fully wet).
+
+    Returns:
+        Window with simulated reverb.
+    """
+    if strength <= 0:
+        return window
+
+    result = window.copy()
+
+    # Temporal smearing: exponential decay kernel convolved along time axis
+    decay_len = max(1, int(strength * 8))  # 1-8 frames (~100-800ms)
+    decay_kernel = np.exp(-np.linspace(0, 3, decay_len)).astype(np.float32)
+    decay_kernel /= decay_kernel.sum()
+
+    for bin_idx in range(FEATURE_DIM):
+        channel = result[:, bin_idx].copy()
+        smeared = np.convolve(channel, decay_kernel, mode="same")
+        result[:, bin_idx] = (1.0 - strength) * channel + strength * smeared
+
+    # Spectral spread: widen each bin's energy to neighbors
+    spectral_kernel = np.array([0.15, 0.7, 0.15], dtype=np.float32)
+    for t in range(len(result)):
+        cqt_row = result[t, :CHROMA_BINS].copy()
+        spread = np.convolve(cqt_row, spectral_kernel, mode="same")
+        result[t, :CHROMA_BINS] = (
+            (1.0 - strength * 0.5) * cqt_row + strength * 0.5 * spread
+        )
+
+    # Re-extract bass
+    result[:, CHROMA_BINS:] = result[:, :BASS_BINS]
+    return result
+
+
+def apply_fine_detune(
+    window: np.ndarray, max_cents: float = 30.0
+) -> np.ndarray:
+    """Apply fractional semitone shift to simulate real guitar detuning.
+
+    Real guitars are never perfectly in tune. This applies a fine pitch
+    shift (0-30 cents) by interpolating between adjacent CQT bins.
+
+    Args:
+        window: Feature window of shape (WINDOW, FEATURE_DIM).
+        max_cents: Maximum detuning in cents (100 cents = 1 semitone).
+
+    Returns:
+        Detuned window.
+    """
+    cents = np.random.uniform(-max_cents, max_cents)
+    if abs(cents) < 1.0:
+        return window
+
+    # Convert cents to fractional bin shift
+    bin_shift = cents / 100.0  # fractional bins
+
+    result = window.copy()
+    cqt = result[:, :CHROMA_BINS].copy()
+
+    # Shift each frame's CQT by fractional bin amount
+    for t in range(len(cqt)):
+        shifted = np.roll(cqt[t], int(np.sign(bin_shift)))
+        # Interpolate between original and shifted
+        alpha = abs(bin_shift) % 1.0
+        cqt[t] = (1.0 - alpha) * cqt[t] + alpha * shifted
+
+    result[:, :CHROMA_BINS] = cqt
+    result[:, CHROMA_BINS:] = result[:, :BASS_BINS]
+    return result
+
+
+def apply_spectral_tilt(
+    window: np.ndarray, tilt_range: tuple[float, float] = (-0.3, 0.3)
+) -> np.ndarray:
+    """Apply linear spectral tilt to simulate different mic positions.
+
+    Mic placement dramatically changes the spectral balance. This applies
+    a linear gain ramp across frequency bins (boost low + cut high, or
+    vice versa).
+
+    Args:
+        window: Feature window of shape (WINDOW, FEATURE_DIM).
+        tilt_range: (min_tilt, max_tilt) where positive = bright, negative = dark.
+
+    Returns:
+        Spectrally tilted window.
+    """
+    tilt = np.random.uniform(*tilt_range)
+    if abs(tilt) < 0.05:
+        return window
+
+    # Linear ramp from low to high frequencies: tilt > 0 boosts highs
+    ramp = np.linspace(1.0 - tilt, 1.0 + tilt, CHROMA_BINS).astype(np.float32)
+    # Ensure no negative gains
+    ramp = np.clip(ramp, 0.3, 2.0)
+    # Normalize to preserve average energy
+    ramp = ramp / ramp.mean()
+
+    result = window.copy()
+    result[:, :CHROMA_BINS] *= ramp[np.newaxis, :]
+    result[:, CHROMA_BINS:] = result[:, :BASS_BINS]
+    return result
+
+
+def apply_random_gain(
+    window: np.ndarray, db_range: tuple[float, float] = (-4.0, 4.0)
+) -> np.ndarray:
+    """Apply random gain normalization to simulate different recording levels.
+
+    Args:
+        window: Feature window of shape (WINDOW, FEATURE_DIM).
+        db_range: Gain range in dB.
+
+    Returns:
+        Gain-normalized window.
+    """
+    db = np.random.uniform(*db_range)
+    gain = 10.0 ** (db / 20.0)
+    result = window * gain
+    # Clip to valid range
+    result = np.clip(result, 0.0, 1.0)
+    return result
+
+
+def apply_n_augmentation(window: np.ndarray) -> np.ndarray:
+    """Apply no-chord-specific augmentations to make N windows more diverse.
+
+    Randomly applies sparse masking and noise injection to model real
+    quiet guitar passages (muted strings, finger noise, room tone).
+
+    Args:
+        window: Feature window of shape (WINDOW, FEATURE_DIM).
+
+    Returns:
+        Augmented N window.
+    """
+    result = window.copy()
+    variant = np.random.choice(["sparse_mask", "low_noise", "fade_out"])
+
+    if variant == "sparse_mask":
+        # Zero out 50-80% of random bins across all frames
+        mask_frac = np.random.uniform(0.5, 0.8)
+        n_mask = int(CHROMA_BINS * mask_frac)
+        mask_bins = np.random.choice(CHROMA_BINS, size=n_mask, replace=False)
+        result[:, mask_bins] = 0.0
+
+    elif variant == "low_noise":
+        # Add very low amplitude noise
+        noise = generate_pink_noise(result.shape, 0.005)
+        result = np.clip(result + noise, 0, 1)
+
+    elif variant == "fade_out":
+        # Gradual fade to silence over the window
+        fade = np.linspace(1.0, 0.0, WINDOW).astype(np.float32)
+        result *= fade[:, np.newaxis]
+
+    return result
+
+
+def apply_mixup(
+    X_batch: np.ndarray, y_batch: np.ndarray, alpha: float = 0.2
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """Apply Mixup augmentation to a batch of samples.
+
+    Mixup creates virtual training examples by convexly combining pairs
+    of samples and their labels. This regularizes the model and smooths
+    decision boundaries, especially helpful for N vs chord confusion.
+
+    Args:
+        X_batch: Feature batch of shape (batch, WINDOW, FEATURE_DIM).
+        y_batch: Label batch of shape (batch,).
+        alpha: Beta distribution parameter (higher = more mixing).
+
+    Returns:
+        (X_mixed, y_a, y_b, lam) where:
+        - X_mixed: Mixed features
+        - y_a, y_b: Original labels for the two mixed samples
+        - lam: Mixing coefficient
+    """
+    lam = np.random.beta(alpha, alpha)
+    batch_size = len(X_batch)
+    indices = np.random.permutation(batch_size)
+
+    X_mixed = lam * X_batch + (1.0 - lam) * X_batch[indices]
+    return X_mixed, y_batch, y_batch[indices], lam
+
+
+# ---------------------------------------------------------------------------
 # 2c. On-the-Fly Augmentation Generator (Commit 103)
 # ---------------------------------------------------------------------------
 
@@ -795,7 +1073,9 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         stretch_range: tuple[float, float] = (0.9, 1.1),
         noise_std: float = 0.05,
         shuffle: bool = True,
-        temperature: float = 0.3,
+        temperature: float = 1.0,
+        p_mixup: float = 0.3,
+        mixup_alpha: float = 0.2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -810,6 +1090,8 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         self.noise_std = noise_std
         self.shuffle = shuffle
         self.temperature = float(temperature)
+        self.p_mixup = p_mixup
+        self.mixup_alpha = mixup_alpha
         self.indices = np.arange(len(X))
         self._n_chord_classes = len(CHORD_INTERVALS) * N_CLASSES_PER_QUALITY
         if shuffle:
@@ -1181,7 +1463,16 @@ def compute_training_class_weights(
     """
     classes = np.unique(y_train)
     weights = compute_class_weight("balanced", classes=classes, y=y_train)
-    return dict(zip(classes, weights))
+    weight_dict = dict(zip(classes, weights))
+
+    # Cap N (no-chord) class weight to prevent over-penalization.
+    # N has only 1 class vs 276 chord classes, so sklearn balanced gives it
+    # an extremely high weight. Capping at 3.0 keeps it reasonable.
+    n_idx = NUM_CLASSES - 1  # N is the last class index
+    if n_idx in weight_dict:
+        weight_dict[n_idx] = min(weight_dict[n_idx], 3.0)
+
+    return weight_dict
 
 
 # ---------------------------------------------------------------------------
@@ -1310,7 +1601,7 @@ def load_empirical_transition_matrix(data_dir: str | Path) -> np.ndarray | None:
 
 def mix_datasets(
     dataset_sources: list[tuple[np.ndarray, np.ndarray, np.ndarray]],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Mix multiple datasets by concatenation with per-source sample weights.
 
     Each source provides (X, y, sample_weights). The arrays are concatenated
@@ -1321,7 +1612,8 @@ def mix_datasets(
                          one per data source.
 
     Returns:
-        (X, y, sample_weights) concatenated and shuffled arrays.
+        (X, y, sample_weights, source_ids) concatenated and shuffled arrays.
+        source_ids tracks which source each sample came from (for stratified splitting).
     """
     if len(dataset_sources) == 0:
         raise ValueError("At least one dataset source is required")
@@ -1329,26 +1621,29 @@ def mix_datasets(
     X_parts: list[np.ndarray] = []
     y_parts: list[np.ndarray] = []
     w_parts: list[np.ndarray] = []
+    source_parts: list[np.ndarray] = []
 
-    for X_src, y_src, w_src in dataset_sources:
+    for i, (X_src, y_src, w_src) in enumerate(dataset_sources):
         X_parts.append(X_src)
         y_parts.append(y_src)
         w_parts.append(w_src)
+        source_parts.append(np.full(len(X_src), i, dtype=np.int32))
 
     X = np.concatenate(X_parts, axis=0).astype(np.float32)
     y = np.concatenate(y_parts, axis=0).astype(np.int32)
     w = np.concatenate(w_parts, axis=0).astype(np.float32)
+    source_ids = np.concatenate(source_parts, axis=0).astype(np.int32)
 
     # Shuffle consistently
     p = np.random.permutation(len(X))
-    X, y, w = X[p], y[p], w[p]
+    X, y, w, source_ids = X[p], y[p], w[p], source_ids[p]
 
     total = len(X)
     print(f"  Mixed {len(dataset_sources)} sources: {total} total samples")
     for i, (X_src, _, _) in enumerate(dataset_sources):
         print(f"    Source {i}: {len(X_src)} samples")
 
-    return X, y, w
+    return X, y, w, source_ids
 
 
 # ---------------------------------------------------------------------------
@@ -1658,24 +1953,77 @@ def run_pipeline(
     # --- Mix all sources ---
     print("Mixing all dataset sources with per-source loss weighting...")
     dataset_sources = list(zip(features_list, labels_list, weights_list))
-    X_all, y_all, sample_weights = mix_datasets(dataset_sources)
+    X_all, y_all, sample_weights, source_ids = mix_datasets(dataset_sources)
 
-    # --- Train / validation split ---
-    print("Splitting into train / validation sets (85/15)...")
+    # --- Source-aware train / validation split (Phase 2a) ---
+    # Force validation set to have higher real-world audio percentage.
+    # Real sources: indices 0..N_real-1, Synthetic: index N_real (last).
+    n_real_sources = len(features_list) - 1  # synthetic is last source
+    real_mask = source_ids < n_real_sources
+    synth_mask = ~real_mask
+
+    X_real, y_real, w_real = X_all[real_mask], y_all[real_mask], sample_weights[real_mask]
+    X_synth, y_synth, w_synth = X_all[synth_mask], y_all[synth_mask], sample_weights[synth_mask]
+
+    print(f"  Real samples: {len(X_real)}, Synthetic samples: {len(X_synth)}")
+
+    # Real: 70/30 split (higher val fraction ensures real data representation)
     try:
-        X_train, X_val, y_train, y_val, w_train, w_val = train_test_split(
-            X_all, y_all, sample_weights, test_size=0.15, random_state=42,
-            stratify=y_all,
+        X_real_tr, X_real_val, y_real_tr, y_real_val, w_real_tr, w_real_val = train_test_split(
+            X_real, y_real, w_real, test_size=0.30, random_state=42,
+            stratify=y_real,
         )
     except ValueError:
-        X_train, X_val, y_train, y_val, w_train, w_val = train_test_split(
-            X_all, y_all, sample_weights, test_size=0.15, random_state=42,
+        X_real_tr, X_real_val, y_real_tr, y_real_val, w_real_tr, w_real_val = train_test_split(
+            X_real, y_real, w_real, test_size=0.30, random_state=42,
         )
-    print(f"  Train: {len(X_train)} samples, Val: {len(X_val)} samples")
+
+    # Synthetic: 90/10 split (less val needed since they're easier)
+    if len(X_synth) > 10:
+        try:
+            X_synth_tr, X_synth_val, y_synth_tr, y_synth_val, w_synth_tr, w_synth_val = train_test_split(
+                X_synth, y_synth, w_synth, test_size=0.10, random_state=42,
+                stratify=y_synth,
+            )
+        except ValueError:
+            X_synth_tr, X_synth_val, y_synth_tr, y_synth_val, w_synth_tr, w_synth_val = train_test_split(
+                X_synth, y_synth, w_synth, test_size=0.10, random_state=42,
+            )
+    else:
+        X_synth_tr, y_synth_tr, w_synth_tr = X_synth, y_synth, w_synth
+        X_synth_val = np.zeros((0, WINDOW, FEATURE_DIM), dtype=np.float32)
+        y_synth_val = np.zeros(0, dtype=np.int32)
+        w_synth_val = np.zeros(0, dtype=np.float32)
+
+    # Concatenate splits
+    X_train = np.concatenate([X_real_tr, X_synth_tr])
+    y_train = np.concatenate([y_real_tr, y_synth_tr])
+    w_train = np.concatenate([w_real_tr, w_synth_tr])
+    X_val = np.concatenate([X_real_val, X_synth_val])
+    y_val = np.concatenate([y_real_val, y_synth_val])
+    w_val = np.concatenate([w_real_val, w_synth_val])
+
+    # Track validation source breakdown for reporting
+    val_source_tags = np.concatenate([
+        np.ones(len(X_real_val), dtype=np.int32),  # 1 = real
+        np.zeros(len(X_synth_val), dtype=np.int32),  # 0 = synthetic
+    ])
+
+    # Shuffle validation set
+    val_perm = np.random.permutation(len(X_val))
+    X_val, y_val, w_val, val_source_tags = X_val[val_perm], y_val[val_perm], w_val[val_perm], val_source_tags[val_perm]
+
+    real_val_pct = len(X_real_val) / max(len(X_val), 1) * 100
+    print(f"  Train: {len(X_train)} samples, Val: {len(X_val)} samples "
+          f"({real_val_pct:.0f}% real)")
 
     # --- Build model ---
     model = build_model()
-    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+    model.compile(
+        optimizer="adam",
+        loss=tf.keras.losses.SparseCategoricalCrossentropy(label_smoothing=0.05),
+        metrics=["accuracy"],
+    )
 
     # --- Class weights (sklearn balanced, no temperature double-correction) ---
     # Temperature resampling (τ < 1.0) changes per-epoch sample distribution
@@ -1789,6 +2137,19 @@ def run_pipeline(
         elif group == "extended":
             arrow = "  ← target +3% improvement"
         print(f"  {group:20s}: {pct:5.1f}%{arrow}")
+
+    # --- Per-source validation accuracy (Phase 2b) ---
+    print("\n--- Per-Source Validation Accuracy ---")
+    real_val_mask = val_source_tags == 1
+    synth_val_mask = val_source_tags == 0
+    if real_val_mask.sum() > 0:
+        real_acc = float(np.mean(y_pred[real_val_mask] == y_val[real_val_mask]))
+        print(f"  Real-world val:   {real_acc:.1%}  ({real_val_mask.sum()} samples)")
+    if synth_val_mask.sum() > 0:
+        synth_acc = float(np.mean(y_pred[synth_val_mask] == y_val[synth_val_mask]))
+        print(f"  Synthetic val:    {synth_acc:.1%}  ({synth_val_mask.sum()} samples)")
+    domain_gap = float(np.mean(y_pred[synth_val_mask] == y_val[synth_val_mask])) - float(np.mean(y_pred[real_val_mask] == y_val[real_val_mask]))
+    print(f"  Domain gap:       {domain_gap:.1%}  (synthetic - real)")
 
     # --- Confusion matrix (Commit 103) ---
     print("\n--- Confusion Matrix Analysis ---")
@@ -1995,8 +2356,8 @@ if __name__ == "__main__":
         help="Path to empirical transition matrix .npy file"
     )
     parser.add_argument(
-        "--temperature", type=float, default=0.3,
-        help="Temperature τ for quality re-sampling (default 0.3, matching MT3). "
+        "--temperature", type=float, default=1.0,
+        help="Temperature τ for quality re-sampling (default 1.0 = uniform). "
              "τ<1.0 boosts rare chord quality sampling via MT3 formula. "
              "τ=1.0 = uniform sampling. Range [0, 1]."
     )
@@ -2012,7 +2373,7 @@ if __name__ == "__main__":
         parser.error("temperature must be >= 0")
 
     if args.rare_boost:
-        if args.temperature != 0.3:
+        if args.temperature != 1.0:
             print("  [WARN] --rare-boost overrides --temperature; setting τ=0.1")
         args.temperature = 0.1
         print("  Rare chord boost mode: τ=0.1 — aggressive oversampling of rare types")
