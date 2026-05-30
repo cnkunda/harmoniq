@@ -17,6 +17,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
   function TabViewport(
     {
       gp5Base64,
+      musicXml,
       prerenderArtifactUrl,
       audioSrc,
       transposeSemitones,
@@ -154,6 +155,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
           <AlphaTabWebView
             ref={ref}
             gp5Base64={gp5Base64}
+            musicXml={musicXml}
             prerenderArtifactUrl={prerenderArtifactUrl}
             audioSrc={audioSrc}
             transposeSemitones={transposeSemitones}

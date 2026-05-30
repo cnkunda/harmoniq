@@ -6,6 +6,8 @@ import type { NoteEventMessage, SongScoreMeta, TabThemeColors } from '@/types/ta
 
 export type AlphaTabWebProps = {
   gp5Base64?: string | null
+  /** Commit 108: MusicXML score string (canonical render format, preferred over gp5Base64). */
+  musicXml?: string | null
   /** Fetch URL for server prerender JSON — static SVG overlay until AlphaTab finishes layout (PRIORITIES §59). */
   prerenderArtifactUrl?: string | null
   audioSrc?: string | null

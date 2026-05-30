@@ -7,8 +7,12 @@ This module creates a MusicXML lead sheet with:
 - Proper duration quantization to standard note types (whole through 64th)
 - Tuplet detection (triplets, quintuplets, sextuplets)
 - Measure-level fill validation
+- Dynamics, articulations, beams, slurs (Commit 108)
+- Chord diagrams (<frame>) and tab staff (Commit 108)
+- <divisions> and <defaults> layout elements (Commit 108)
 
 Commit 107: Replaced eighth-note-only quantization with full note type support.
+Commit 108: Added comprehensive MusicXML notation elements for AlphaTab rendering.
 """
 
 from __future__ import annotations
@@ -27,9 +31,50 @@ if TYPE_CHECKING:
 
 import logging
 from app.schemas import BeatGrid, ChordTimeline, SoloNotes, TimeSignature, ChordEvent, SoloNote
-from app.guitar_position import midi_to_guitar_position
+from app.guitar_position import midi_to_guitar_position, midi_to_all_guitar_positions
 
 logger = logging.getLogger("harmoniq.musicxml_builder")
+
+# Velocity thresholds for dynamics mapping
+_VELOCITY_DYNAMICS: list[tuple[int, str]] = [
+    (33, "pp"),
+    (50, "p"),
+    (65, "mp"),
+    (80, "mf"),
+    (95, "f"),
+    (128, "ff"),
+]
+
+# Chord root to semitone offset for voicing lookup
+_CHORD_ROOT_SEMITONES: dict[str, int] = {
+    "C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3,
+    "E": 4, "F": 5, "F#": 6, "Gb": 6, "G": 7, "G#": 8,
+    "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11,
+}
+
+# Chord quality to intervals (semitones from root)
+_CHORD_INTERVALS: dict[str, list[int]] = {
+    "": [0, 4, 7],
+    "maj": [0, 4, 7],
+    "min": [0, 3, 7],
+    "m": [0, 3, 7],
+    "dim": [0, 3, 6],
+    "aug": [0, 4, 8],
+    "7": [0, 4, 7, 10],
+    "maj7": [0, 4, 7, 11],
+    "min7": [0, 3, 7, 10],
+    "m7": [0, 3, 7, 10],
+    "sus4": [0, 5, 7],
+    "sus2": [0, 2, 7],
+    "6": [0, 4, 7, 9],
+    "min6": [0, 3, 7, 9],
+    "m6": [0, 3, 7, 9],
+    "9": [0, 4, 7, 10, 14],
+    "maj9": [0, 4, 7, 11, 14],
+    "min9": [0, 3, 7, 10, 14],
+    "m9": [0, 3, 7, 10, 14],
+    "7sus4": [0, 5, 7, 10],
+}
 
 # Constants for MusicXML generation
 DEFAULT_DIVISIONS = 480  # Standard for many MusicXML applications (e.g., MuseScore, Finale)
@@ -236,6 +281,645 @@ def _get_music21_objects():
             "The 'music21' library is required for MusicXML generation. "
             "Please install it with 'pip install music21'."
         )
+
+
+# ---------------------------------------------------------------------------
+# Commit 108: MusicXML Enhancement Helpers
+# ---------------------------------------------------------------------------
+
+def _velocity_to_dynamics(velocity: int) -> str:
+    """Map MIDI velocity (0-127) to a dynamics marking string."""
+    for threshold, label in _VELOCITY_DYNAMICS:
+        if velocity < threshold:
+            return label
+    return "ff"
+
+
+def _compute_chord_midi_pitches(chord_symbol: str, root_midi: int | None = None) -> list[int]:
+    """Compute MIDI pitches for a chord symbol, preferring guitar-range voicings.
+
+    If root_midi is not given, picks the lowest root in guitar range (E2=40 to B5=83).
+    Returns sorted list of MIDI pitches.
+    """
+    parts = chord_symbol.split(":", 1)
+    root_str = parts[0]
+    quality = parts[1].strip() if len(parts) > 1 else ""
+
+    root_sem = _CHORD_ROOT_SEMITONES.get(root_str)
+    if root_sem is None:
+        return []
+
+    intervals = _CHORD_INTERVALS.get(quality, _CHORD_INTERVALS.get(""))
+    if root_midi is None:
+        # Find lowest root in guitar range
+        for oct_offset in range(2, 6):
+            candidate = oct_offset * 12 + root_sem
+            if 40 <= candidate <= 83:
+                root_midi = candidate
+                break
+    if root_midi is None:
+        root_midi = 40 + root_sem
+
+    return sorted(root_midi + iv for iv in intervals if root_midi + iv <= 88)
+
+
+def _compute_chord_voicing(chord_symbol: str) -> list[tuple[int, int]]:
+    """Compute guitar voicing (string, fret) pairs for a chord diagram.
+
+    Returns list of (string, fret) for each fretted/open string in the voicing.
+    Empty list if voicing cannot be determined.
+    """
+    pitches = _compute_chord_midi_pitches(chord_symbol)
+    if not pitches:
+        return []
+
+    # For each pitch, find the best guitar position (lowest fret)
+    voicing: list[tuple[int, int]] = []
+    used_strings: set[int] = set()
+    for pitch in pitches:
+        positions = midi_to_all_guitar_positions(pitch)
+        # Prefer open strings (fret 0), then lowest fret, on unused strings
+        for pos in sorted(positions, key=lambda p: (p.fret, p.string)):
+            if pos.string not in used_strings:
+                voicing.append((pos.string, pos.fret))
+                used_strings.add(pos.string)
+                break
+
+    return voicing
+
+
+def _inject_defaults_block(musicxml: str) -> str:
+    """Inject <defaults> layout block into MusicXML.
+
+    If music21 already emits a <defaults> block (with <scaling>), enhance it
+    by adding <page-layout>, <system-layout>, and <staff-layout> elements
+    that AlphaTab uses for layout decisions.
+    """
+    if "<defaults>" not in musicxml:
+        # No defaults at all — inject a full block before <part-list>
+        defaults_xml = """  <defaults>
+    <scaling>
+      <millimeters>7</millimeters>
+      <tenths>40</tenths>
+    </scaling>
+    <page-layout>
+      <page-height>1100</page-height>
+      <page-width>850</page-width>
+      <page-margins type="both">
+        <left-margin>50</left-margin>
+        <right-margin>50</right-margin>
+        <top-margin>50</top-margin>
+        <bottom-margin>50</bottom-margin>
+      </page-margins>
+    </page-layout>
+    <system-layout>
+      <system-margins>
+        <left-margin>0</left-margin>
+        <right-margin>0</right-margin>
+      </system-margins>
+      <system-distance>120</system-distance>
+      <top-system-distance>70</top-system-distance>
+    </system-layout>
+    <staff-layout>
+      <staff-distance>65</staff-distance>
+    </staff-layout>
+  </defaults>
+"""
+        idx = musicxml.find("<part-list>")
+        if idx != -1:
+            return musicxml[:idx] + defaults_xml + musicxml[idx:]
+        return musicxml
+
+    # Already has <defaults> — enhance with missing layout elements
+    result = musicxml
+
+    # Add <page-layout> if missing
+    if "<page-layout>" not in result:
+        page_layout = """    <page-layout>
+      <page-height>1100</page-height>
+      <page-width>850</page-width>
+      <page-margins type="both">
+        <left-margin>50</left-margin>
+        <right-margin>50</right-margin>
+        <top-margin>50</top-margin>
+        <bottom-margin>50</bottom-margin>
+      </page-margins>
+    </page-layout>
+"""
+        # Insert after </scaling> inside <defaults>
+        idx = result.find("</scaling>")
+        if idx != -1:
+            insert_pos = idx + len("</scaling>")
+            result = result[:insert_pos] + "\n" + page_layout + result[insert_pos:]
+
+    # Add <system-layout> if missing
+    if "<system-layout>" not in result:
+        system_layout = """    <system-layout>
+      <system-margins>
+        <left-margin>0</left-margin>
+        <right-margin>0</right-margin>
+      </system-margins>
+      <system-distance>120</system-distance>
+      <top-system-distance>70</top-system-distance>
+    </system-layout>
+"""
+        # Insert before </defaults>
+        idx = result.find("</defaults>")
+        if idx != -1:
+            result = result[:idx] + system_layout + result[idx:]
+
+    # Add <staff-layout> if missing
+    if "<staff-layout>" not in result:
+        staff_layout = """    <staff-layout>
+      <staff-distance>65</staff-distance>
+    </staff-layout>
+"""
+        idx = result.find("</defaults>")
+        if idx != -1:
+            result = result[:idx] + staff_layout + result[idx:]
+
+    return result
+
+
+def _inject_divisions(musicxml: str) -> str:
+    """Ensure <divisions> element is present in the first measure's <attributes>."""
+    if "<divisions>" in musicxml:
+        return musicxml
+    # Insert after first <attributes> open tag
+    match = re.search(r"(<attributes[^>]*>)", musicxml)
+    if match:
+        insert_pos = match.end()
+        return musicxml[:insert_pos] + f"\n        <divisions>{DEFAULT_DIVISIONS}</divisions>" + musicxml[insert_pos:]
+    return musicxml
+
+
+def _inject_dynamics(musicxml: str, solo_notes: SoloNotes, beat_grid: BeatGrid) -> str:
+    """Add <dynamics> elements to notes based on velocity.
+
+    Dynamics are inserted when velocity changes significantly from the previous note.
+    This avoids redundant markings on every note.
+    """
+    if not solo_notes.notes:
+        return musicxml
+
+    quarter_note_duration_s = 60.0 / beat_grid.bpm if beat_grid.bpm > 0 else 0.5
+
+    # Build a map of (measure_number, offset_ql) -> dynamics string
+    dynamics_map: dict[tuple[int, float], str] = {}
+    prev_velocity = 64  # default mf
+    prev_dynamics = "mf"
+
+    for note in sorted(solo_notes.notes, key=lambda n: n.start_time):
+        vel = note.velocity or 64
+        dyn = _velocity_to_dynamics(vel)
+
+        # Only add dynamics when there's a significant change
+        if dyn != prev_dynamics:
+            dynamics_map[(0, note.start_time / quarter_note_duration_s)] = dyn
+            prev_dynamics = dyn
+        prev_velocity = vel
+
+    if not dynamics_map:
+        return musicxml
+
+    # Inject dynamics into <note> elements that have <pitch>
+    # Find each <note> with <pitch> and match it to a dynamics entry
+    lines = musicxml.split("\n")
+    result_lines: list[str] = []
+    note_idx = 0
+    sorted_notes = sorted(solo_notes.notes, key=lambda n: n.start_time)
+
+    for line in lines:
+        result_lines.append(line)
+        # When we close a <note> that has a <pitch>, check if it needs dynamics
+        if line.strip() == "</note>" and note_idx < len(sorted_notes):
+            note = sorted_notes[note_idx]
+            vel = note.velocity or 64
+            dyn = _velocity_to_dynamics(vel)
+            # Check if this note needs a dynamics marking (first note or velocity changed)
+            if note_idx == 0 or dyn != _velocity_to_dynamics(sorted_notes[note_idx - 1].velocity or 64):
+                # Insert dynamics before </note>
+                dynamics_line = f"        <dynamics><{dyn}/></dynamics>"
+                # Find the last </notations> or insert before </note>
+                for j in range(len(result_lines) - 1, -1, -1):
+                    if "</notations>" in result_lines[j]:
+                        # Insert after </notations> but inside <note>
+                        result_lines.insert(j + 1, dynamics_line)
+                        break
+                    if "<notations" in result_lines[j]:
+                        # Find closing tag
+                        for k in range(j, len(result_lines)):
+                            if "</notations>" in result_lines[k]:
+                                result_lines.insert(k + 1, dynamics_line)
+                                break
+                        break
+                else:
+                    # No <notations> found; insert before </note>
+                    result_lines.insert(len(result_lines) - 1, dynamics_line)
+            note_idx += 1
+
+    return "\n".join(result_lines)
+
+
+def _inject_articulations(musicxml: str, solo_notes: SoloNotes, beat_grid: BeatGrid) -> str:
+    """Add articulation elements (staccato, accent, tenuto) to notes.
+
+    - Staccato: note duration < 50% of quantized value
+    - Accent: velocity > 100
+    - Tenuto: note duration > 120% of quantized value
+    """
+    if not solo_notes.notes:
+        return musicxml
+
+    quarter_note_duration_s = 60.0 / beat_grid.bpm if beat_grid.bpm > 0 else 0.5
+
+    # Build map of note index -> articulations
+    artic_map: dict[int, list[str]] = {}
+    for i, note in enumerate(solo_notes.notes):
+        note_ticks = _seconds_to_ticks(note.duration, quarter_note_duration_s)
+        quantized = quantize_to_note_type(note_ticks)
+        arts: list[str] = []
+
+        if quantized.ticks > 0 and note_ticks < quantized.ticks * 0.5:
+            arts.append("staccato")
+        if (note.velocity or 64) > 100:
+            arts.append("accent")
+        if quantized.ticks > 0 and note_ticks > quantized.ticks * 1.2:
+            arts.append("tenuto")
+
+        if arts:
+            artic_map[i] = arts
+
+    if not artic_map:
+        return musicxml
+
+    # Inject articulations into note elements
+    lines = musicxml.split("\n")
+    result_lines: list[str] = []
+    note_idx = 0
+    sorted_notes = sorted(solo_notes.notes, key=lambda n: n.start_time)
+
+    for line in lines:
+        result_lines.append(line)
+        if line.strip() == "</note>" and note_idx < len(sorted_notes):
+            if note_idx in artic_map:
+                arts = artic_map[note_idx]
+                art_elements = "".join(f"<{a}/>" for a in arts)
+                art_line = f"          <articulations>{art_elements}</articulations>"
+                # Insert into <notations>
+                for j in range(len(result_lines) - 1, -1, -1):
+                    if "</notations>" in result_lines[j]:
+                        result_lines.insert(j, art_line)
+                        break
+            note_idx += 1
+
+    return "\n".join(result_lines)
+
+
+def _inject_beams(musicxml: str, beat_grid: BeatGrid) -> str:
+    """Add <beam> elements to eighth and shorter notes, grouped by beat.
+
+    Notes within the same beat are beamed together. Beam groups are limited
+    to notes within a single beat (no cross-beam beams).
+
+    Uses string-based injection to preserve the original XML formatting.
+    """
+    beat_ticks = TICKS_PER_QUARTER  # 480 ticks per quarter note
+
+    # Parse note durations from the XML by scanning for <duration> and <type> elements
+    # within <note> blocks that have <pitch> (not rests)
+    lines = musicxml.split("\n")
+    note_stack: list[str] = []  # Tracks current note being parsed
+    in_note = False
+    current_offset = 0  # Ticks from start of current measure
+    beat_notes: list[int] = []  # Line indices of beammable notes in current beat
+    beam_type_map: dict[int, str] = {}  # line_idx -> beam type
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+
+        # Track measure boundaries
+        if "<measure" in stripped and "number=" in stripped:
+            current_offset = 0
+            if beat_notes:
+                _assign_beams(beat_notes, beam_type_map)
+                beat_notes = []
+            continue
+
+        # Detect note start
+        if stripped == "<note>":
+            in_note = True
+            note_stack = []
+            continue
+
+        # Collect note contents
+        if in_note:
+            note_stack.append(stripped)
+            # Check if this is a closing </note>
+            if stripped == "</note>":
+                in_note = False
+
+                # Check if this note has <pitch> (not a rest)
+                has_pitch = any("<pitch>" in s for s in note_stack)
+                has_rest = any("<rest" in s for s in note_stack)
+
+                if has_pitch and not has_rest:
+                    # Find note type
+                    note_type = ""
+                    duration = 0
+                    for s in note_stack:
+                        if s.startswith("<type>") and s.endswith("</type>"):
+                            note_type = s[6:-7]
+                        if s.startswith("<duration>") and s.endswith("</duration>"):
+                            try:
+                                duration = int(s[10:-11])
+                            except ValueError:
+                                pass
+
+                    # Check if beammable (eighth or shorter)
+                    if note_type in ("eighth", "16th", "32nd", "64th"):
+                        beat_end = ((current_offset // beat_ticks) + 1) * beat_ticks
+                        note_end = current_offset + duration
+
+                        # If note extends past beat, finalize current group first
+                        if note_end > beat_end and beat_notes:
+                            _assign_beams(beat_notes, beam_type_map)
+                            beat_notes = []
+
+                        beat_notes.append(i)
+                        current_offset = note_end
+
+                        # Check if we've hit a beat boundary
+                        if current_offset % beat_ticks == 0 and beat_notes:
+                            _assign_beams(beat_notes, beam_type_map)
+                            beat_notes = []
+                    else:
+                        # Non-beam note: finalize any pending group
+                        if beat_notes:
+                            _assign_beams(beat_notes, beam_type_map)
+                            beat_notes = []
+                        current_offset += duration
+                else:
+                    # Rest: finalize pending group
+                    if beat_notes:
+                        _assign_beams(beat_notes, beam_type_map)
+                        beat_notes = []
+                    for s in note_stack:
+                        if s.startswith("<duration>") and s.endswith("</duration>"):
+                            try:
+                                current_offset += int(s[10:-11])
+                            except ValueError:
+                                pass
+
+    # Finalize any remaining notes
+    if beat_notes:
+        _assign_beams(beat_notes, beam_type_map)
+
+    # Second pass: insert beam elements
+    final_lines: list[str] = []
+    for i, line in enumerate(lines):
+        final_lines.append(line)
+        if i in beam_type_map:
+            # Insert beam element before </note>
+            # Find the right indentation by looking at surrounding lines
+            indent = "        "
+            beam_line = f"{indent}<beam number=\"1\">{beam_type_map[i]}</beam>"
+            # Insert before the last </note>
+            for j in range(len(final_lines) - 1, -1, -1):
+                if final_lines[j].strip() == "</note>":
+                    final_lines.insert(j, beam_line)
+                    break
+
+    return "\n".join(final_lines)
+
+
+def _assign_beams(beat_notes: list[int], beam_type_map: dict[int, str]) -> None:
+    """Assign beam types to a group of note line indices."""
+    if len(beat_notes) < 2:
+        return
+    for idx in beat_notes:
+        if idx not in beam_type_map:
+            pos = beat_notes.index(idx)
+            if pos == 0:
+                beam_type_map[idx] = "begin"
+            elif pos == len(beat_notes) - 1:
+                beam_type_map[idx] = "end"
+            else:
+                beam_type_map[idx] = "continue"
+
+
+def _inject_tuplet_time_modification(musicxml: str, solo_notes: SoloNotes, beat_grid: BeatGrid) -> str:
+    """Add <time-modification> to notes in detected tuplet groups.
+
+    Uses detect_tuplets() to find tuplet patterns, then injects
+    <time-modification><actual-notes>N</actual-notes><normal-notes>M</normal-notes>
+    into each note in the group.
+    """
+    if not solo_notes.notes or len(solo_notes.notes) < 3:
+        return musicxml
+
+    quarter_note_duration_s = 60.0 / beat_grid.bpm if beat_grid.bpm > 0 else 0.5
+    beat_ticks = TICKS_PER_QUARTER
+    time_sig = beat_grid.time_signature
+    measure_length_ticks = beat_ticks * time_sig.numerator
+
+    # Group notes by measure
+    sorted_notes = sorted(solo_notes.notes, key=lambda n: n.start_time)
+    if not sorted_notes:
+        return musicxml
+
+    measure_starts = beat_grid.downbeats if beat_grid.downbeats else []
+    if not measure_starts:
+        # Generate uniform measure starts
+        measure_dur = quarter_note_duration_s * time_sig.numerator
+        total = sorted_notes[-1].start_time + sorted_notes[-1].duration + measure_dur
+        measure_starts = []
+        t = 0.0
+        while t < total:
+            measure_starts.append(t)
+            t += measure_dur
+
+    # Detect tuplets per measure
+    tuplet_map: dict[int, tuple[int, int]] = {}  # note_index -> (actual, normal)
+    for mi in range(len(measure_starts) - 1):
+        m_start = measure_starts[mi]
+        m_end = measure_starts[mi + 1]
+        measure_notes = [
+            (n, _seconds_to_ticks(n.start_time - m_start, quarter_note_duration_s),
+             _seconds_to_ticks(n.duration, quarter_note_duration_s))
+            for n in sorted_notes
+            if m_start <= n.start_time < m_end
+        ]
+        if len(measure_notes) < 3:
+            continue
+
+        notes_with_ticks = [(st, dur) for _, st, dur in measure_notes]
+        tuplets = detect_tuplets(notes_with_ticks, measure_length_ticks, beat_ticks)
+        for start_idx, end_idx, actual in tuplets:
+            normal = 2 if actual == 3 else 4
+            for idx in range(start_idx, end_idx):
+                global_idx = sorted_notes.index(measure_notes[idx][0])
+                tuplet_map[global_idx] = (actual, normal)
+
+    if not tuplet_map:
+        return musicxml
+
+    # Inject <time-modification> into identified tuplet notes
+    lines = musicxml.split("\n")
+    result_lines: list[str] = []
+    note_idx = 0
+
+    for line in lines:
+        result_lines.append(line)
+        if line.strip() == "</note>" and note_idx in tuplet_map:
+            actual, normal = tuplet_map[note_idx]
+            tm_line = f"        <time-modification><actual-notes>{actual}</actual-notes><normal-notes>{normal}</normal-notes></time-modification>"
+            # Insert before </note>
+            result_lines.insert(len(result_lines) - 1, tm_line)
+        if line.strip() == "</note>" or (line.strip().startswith("<note") and "<rest>" not in line and "<pitch>" not in line):
+            if "</note>" in line:
+                note_idx += 1
+
+    return "\n".join(result_lines)
+
+
+def _inject_chord_diagrams(musicxml: str, chord_timeline: ChordTimeline, beat_grid: BeatGrid) -> str:
+    """Add <frame> chord diagram elements after each <harmony> element.
+
+    Uses guitar voicing data to generate fretboard diagrams that AlphaTab
+    renders as inline chord charts.
+    """
+    if not chord_timeline.events:
+        return musicxml
+
+    # Build list of chord symbols that need diagrams
+    chord_diagrams: dict[str, str] = {}  # chord_symbol -> frame XML
+    for event in chord_timeline.events:
+        if event.chord == "N" or event.chord in chord_diagrams:
+            continue
+        voicing = _compute_chord_voicing(event.chord)
+        if not voicing:
+            continue
+
+        # Build <frame> XML
+        frame_parts = [
+            "          <frame>",
+            "            <frame-strings>6</frame-strings>",
+            "            <frame-frets>5</frame-frets>",
+        ]
+        # Build fret array: fret number per string (6=low E, 1=high E)
+        # -1 means muted (not in voicing)
+        frets_by_string = {s: -1 for s in range(1, 7)}
+        for string_num, fret_num in voicing:
+            frets_by_string[string_num] = fret_num
+
+        for s in range(6, 0, -1):  # low E to high E
+            fret = frets_by_string[s]
+            if fret >= 0:
+                frame_parts.append(f"            <frame-note><string>{s}</string><fret>{fret}</fret></frame-note>")
+            else:
+                frame_parts.append(f"            <frame-note><string>{s}</string><mute>muted</mute></frame-note>")
+
+        frame_parts.append("          </frame>")
+        chord_diagrams[event.chord] = "\n".join(frame_parts)
+
+    if not chord_diagrams:
+        return musicxml
+
+    # Insert <frame> after each <harmony> element, advancing past previous insertions
+    result = musicxml
+    search_offset = 0
+    for event in chord_timeline.events:
+        if event.chord == "N" or event.chord not in chord_diagrams:
+            continue
+        # Find the next </harmony> after the current search offset
+        match = re.search(r"</harmony>", result[search_offset:])
+        if match:
+            abs_pos = search_offset + match.end()
+            result = result[:abs_pos] + "\n" + chord_diagrams[event.chord] + result[abs_pos:]
+            search_offset = abs_pos + len(chord_diagrams[event.chord]) + 1
+
+    return result
+
+
+def _inject_slurs(musicxml: str, solo_notes: SoloNotes, beat_grid: BeatGrid) -> str:
+    """Add <slur> elements for legato passages.
+
+    Detects consecutive notes with no gap (or gap < 32nd note) and similar
+    pitch direction, grouping them into slur phrases of 1-4 beats.
+    """
+    if not solo_notes.notes or len(solo_notes.notes) < 2:
+        return musicxml
+
+    quarter_note_duration_s = 60.0 / beat_grid.bpm if beat_grid.bpm > 0 else 0.5
+    beat_ticks = TICKS_PER_QUARTER
+    slur_max_gap = beat_ticks // 4  # 32nd note = max gap within a slur
+
+    sorted_notes = sorted(solo_notes.notes, key=lambda n: n.start_time)
+
+    # Detect slur groups
+    slur_groups: list[tuple[int, int]] = []  # (start_idx, end_idx) inclusive
+    group_start = 0
+
+    for i in range(1, len(sorted_notes)):
+        prev = sorted_notes[i - 1]
+        curr = sorted_notes[i]
+
+        gap_ticks = _seconds_to_ticks(curr.start_time - (prev.start_time + prev.duration), quarter_note_duration_s)
+        pitch_change = abs(curr.pitch - prev.pitch)
+
+        # Break slur if gap is too large or pitch jump is too big
+        is_legato = gap_ticks <= slur_max_gap and pitch_change <= 7
+        # Also break if group is longer than 4 beats
+        group_duration_ticks = _seconds_to_ticks(
+            sorted_notes[i].start_time + sorted_notes[i].duration - sorted_notes[group_start].start_time,
+            quarter_note_duration_s,
+        )
+        too_long = group_duration_ticks > beat_ticks * 4
+
+        if not is_legato or too_long:
+            if i - group_start >= 2:  # Need at least 2 notes for a slur
+                slur_groups.append((group_start, i - 1))
+            group_start = i
+
+    # Final group
+    if len(sorted_notes) - group_start >= 2:
+        slur_groups.append((group_start, len(sorted_notes) - 1))
+
+    if not slur_groups:
+        return musicxml
+
+    # Build slur map: note_idx -> slur type
+    slur_map: dict[int, str] = {}
+    for start, end in slur_groups:
+        slur_map[start] = "start"
+        slur_map[end] = "stop"
+
+    # Inject slurs into XML
+    lines = musicxml.split("\n")
+    result_lines: list[str] = []
+    note_idx = 0
+
+    for line in lines:
+        result_lines.append(line)
+        if line.strip() == "</note>" and note_idx in slur_map:
+            slur_type = slur_map[note_idx]
+            slur_line = f"        <slur type=\"{slur_type}\" number=\"1\"/>"
+            # Insert into <notations>
+            for j in range(len(result_lines) - 1, -1, -1):
+                if "</notations>" in result_lines[j]:
+                    result_lines.insert(j, slur_line)
+                    break
+                if "<notations" in result_lines[j]:
+                    for k in range(j, len(result_lines)):
+                        if "</notations>" in result_lines[k]:
+                            result_lines.insert(k, slur_line)
+                            break
+                    break
+        if line.strip() == "</note>":
+            note_idx += 1
+
+    return "\n".join(result_lines)
 
 def build_musicxml(
     beat_grid: BeatGrid,
@@ -469,6 +1153,17 @@ def build_musicxml(
 
     # 5. Add technical elements (string/fret) for guitar tablature
     musicxml_output = _add_technical_elements(musicxml_output, solo_notes)
+
+    # 6. Commit 108: Inject comprehensive MusicXML notation elements
+    # Order matters: divisions first, then defaults, then note-level annotations
+    musicxml_output = _inject_divisions(musicxml_output)
+    musicxml_output = _inject_defaults_block(musicxml_output)
+    musicxml_output = _inject_tuplet_time_modification(musicxml_output, solo_notes, beat_grid)
+    musicxml_output = _inject_beams(musicxml_output, beat_grid)
+    musicxml_output = _inject_dynamics(musicxml_output, solo_notes, beat_grid)
+    musicxml_output = _inject_articulations(musicxml_output, solo_notes, beat_grid)
+    musicxml_output = _inject_slurs(musicxml_output, solo_notes, beat_grid)
+    musicxml_output = _inject_chord_diagrams(musicxml_output, chord_timeline, beat_grid)
 
     return musicxml_output
 

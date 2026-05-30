@@ -337,6 +337,8 @@ class LessonSectionStub(BaseModel):
     start_time_seconds: float | None = None
     # Transcription validation metadata (commit #82)
     transcription_metadata: dict[str, Any] | None = None
+    # Commit 108: MusicXML score for this section (canonical render format)
+    musicxml: str | None = None
 
 
 class LessonJSON(BaseModel):
@@ -369,6 +371,12 @@ class LessonJSON(BaseModel):
     low_snr_warning: bool | None = None
     # Full chord timeline for bar chip rendering (section-scoped timelines are for section views)
     chord_timeline: ChordTimeline | None = None
+    # Commit 108: MusicXML lead sheet string (canonical render format)
+    musicxml: str | None = None
+    # Commit 108: Structured solo notes at top level
+    solo_notes: SoloNotes | None = None
+    # Commit 108: Structured BeatGrid at top level (flat beat_grid preserved for backward compat)
+    beat_grid_structured: BeatGrid | None = None
 
 
 class JobStatus(BaseModel):

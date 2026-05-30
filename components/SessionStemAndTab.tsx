@@ -168,6 +168,18 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     return tabs.full ?? tabs.skeleton ?? null
   }, [gp5Base64Override, tabVariant, tabs])
 
+  // Commit 108: Resolve MusicXML from section or lesson level
+  const musicXml = useMemo(() => {
+    // Section-level MusicXML (generated per-section by backend)
+    const sec = section as Record<string, unknown> | undefined
+    const sectionXml = sec && typeof sec === 'object' && typeof sec.musicxml === 'string' ? sec.musicxml : undefined
+    if (sectionXml?.trim()) return sectionXml.trim()
+    // Lesson-level MusicXML (fallback)
+    const lessonXml = lesson?.musicxml
+    if (typeof lessonXml === 'string' && lessonXml.trim()) return lessonXml.trim()
+    return null
+  }, [section, lesson?.musicxml])
+
   const gp5Key = useMemo(() => gp5Base64?.slice(0, 24) ?? '', [gp5Base64])
 
   const audioSrc = useMemo(() => {
@@ -298,6 +310,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
         <TabViewport
           ref={tabRef}
           gp5Base64={gp5Base64}
+          musicXml={musicXml}
           prerenderArtifactUrl={prerenderArtifactUrl}
           audioSrc={audioSrc}
           transposeSemitones={transposeSemitones}

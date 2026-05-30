@@ -32,6 +32,8 @@ const HARNESS_HTML = require('../assets/alphatab-harness/index.html') as number
 
 export type AlphaTabWebViewProps = {
   gp5Base64?: string | null
+  /** Commit 108: MusicXML score string (canonical render format, preferred over gp5Base64). */
+  musicXml?: string | null
   /** Native harness does not consume server prerender JSON yet — prop exists for API parity with web. */
   prerenderArtifactUrl?: string | null
   audioSrc?: string | null
@@ -66,6 +68,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
   function AlphaTabWebView(
     {
       gp5Base64,
+      musicXml,
       prerenderArtifactUrl: _prerenderArtifactUrl,
       audioSrc,
       transposeSemitones = 0,
@@ -239,18 +242,22 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
       })
       postInbound({ type: 'setRenderPreset', presetName: renderPreset })
       postInbound({ type: 'setTranspose', semitones: Math.max(-12, Math.min(12, Math.round(transposeSemitones))) })
+      // Commit 108: Prefer MusicXML over GP5 for score loading
+      const xml = musicXml?.trim()
       const raw = gp5Base64?.trim()
-      if (raw) {
+      if (xml) {
+        postInbound({ type: 'setMusicXml', musicXml: xml })
+      } else if (raw) {
         postInbound({ type: 'setScore', gp5Base64: raw })
-        const stemSrc = audioSrc?.trim()
-        if (stemSrc) {
-          // Score first, then wire external media source for cursor sync.
-          setTimeout(() => {
-            postInbound({ type: 'setAudioSrc', audioSrc: stemSrc })
-          }, 0)
-        }
       }
-    }, [audioSrc, harnessReady, gp5Base64, postInbound, transposeSemitones, renderPreset, soundFontProfile])
+      // Wire external media source for cursor sync (applies to both MusicXML and GP5)
+      const stemSrc = audioSrc?.trim()
+      if (stemSrc) {
+        setTimeout(() => {
+          postInbound({ type: 'setAudioSrc', audioSrc: stemSrc })
+        }, 0)
+      }
+    }, [audioSrc, harnessReady, gp5Base64, musicXml, postInbound, transposeSemitones, renderPreset, soundFontProfile])
 
     useEffect(() => {
       if (!harnessReady) return
@@ -444,14 +451,14 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
             <LoadingSkeleton height={10} borderRadius={6} />
           </View>
         ) : null}
-        {!gp5Base64?.trim() ? (
+        {!gp5Base64?.trim() && !musicXml?.trim() ? (
           <View
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
             <Text className="text-center font-sans text-[11px] text-muted-brown">
               {
-                "Tab preview isn't available for this song yet. Try analyzing a song or another tab variant."
+                "Score isn't available for this song yet. Try analyzing a song or another tab variant."
               }
             </Text>
           </View>

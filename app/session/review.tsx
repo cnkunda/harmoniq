@@ -53,7 +53,7 @@ import type { MusicalToleranceMode, ScoreResult } from '@/src/types'
 import { bytesToBase64 } from '@/src/utils/bytesToBase64'
 import { shareExportedBlob } from '@/src/utils/exportShare'
 import { firstLessonStemRelPath, serializeLessonStemsJson } from '@/src/utils/lessonAudio'
-import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
+import { readSectionMusicXml, readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import { BPM_DRIFT_NOTE_MINIMUM } from '@/src/utils/practiceConfig'
 
 function midiVarLen(value: number): number[] {
@@ -359,8 +359,29 @@ export default function ReviewScreen() {
   }, [gp5ForExport, midiBase64, sectionIndex, songTitleBase])
 
   const exportMusicXml = useCallback(async () => {
+    // Commit 108: Prefer section-level MusicXML over GP5→MusicXML conversion
+    const sectionXml = readSectionMusicXml(section)
+    if (sectionXml) {
+      try {
+        setExportState('Exporting MusicXML…')
+        const blob = new Blob([sectionXml], { type: 'application/vnd.recordare.musicxml+xml' })
+        await shareExportedBlob({
+          blob,
+          mimeType: 'application/vnd.recordare.musicxml+xml',
+          contentDisposition: `attachment; filename="${songTitleBase}.musicxml"`,
+          fallbackBase: songTitleBase,
+          dialogTitle: 'Export MusicXML',
+        })
+        setExportState('MusicXML exported.')
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setExportState(`Export failed: ${msg}`)
+      }
+      return
+    }
+    // Fallback: GP5→MusicXML conversion via server
     if (!gp5ForExport) {
-      setExportState('No GP5 tab payload for MusicXML export.')
+      setExportState('No score available for MusicXML export.')
       return
     }
     try {
@@ -382,7 +403,7 @@ export default function ReviewScreen() {
       const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
       setExportState(`Export failed: ${msg}`)
     }
-  }, [gp5ForExport, songTitleBase])
+  }, [gp5ForExport, section, songTitleBase])
 
   const finish = useCallback(async () => {
     clearLatestTake()

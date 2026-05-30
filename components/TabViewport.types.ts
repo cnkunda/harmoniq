@@ -6,6 +6,8 @@ import type { LyricWord } from './LyricsStrip'
 
 export type TabViewportProps = {
   gp5Base64?: string | null
+  /** Commit 108: MusicXML score string (canonical render format, preferred over gp5Base64). */
+  musicXml?: string | null
   prerenderArtifactUrl?: string | null
   audioSrc?: string | null
   transposeSemitones?: number

@@ -26,3 +26,23 @@ export function firstGp5Base64FromLessonSections(sections: unknown): string | nu
   }
   return null
 }
+
+// Commit 108: MusicXML reader utilities
+
+/** Read MusicXML string from a section object. */
+export function readSectionMusicXml(section: unknown): string | null {
+  if (!section || typeof section !== 'object') return null
+  const o = section as Record<string, unknown>
+  if (typeof o.musicxml === 'string' && o.musicxml.trim()) return o.musicxml.trim()
+  return null
+}
+
+/** First MusicXML string on any section, for fallback rendering. */
+export function firstMusicXmlFromLessonSections(sections: unknown): string | null {
+  if (!Array.isArray(sections)) return null
+  for (const sec of sections) {
+    const xml = readSectionMusicXml(sec)
+    if (xml) return xml
+  }
+  return null
+}

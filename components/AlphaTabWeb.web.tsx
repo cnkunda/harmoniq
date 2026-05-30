@@ -194,6 +194,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
   function AlphaTabWeb(
     {
       gp5Base64,
+      musicXml,
       prerenderArtifactUrl,
       audioSrc,
       transposeSemitones = 0,
@@ -1267,10 +1268,32 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       transposeSemitones,
     ])
 
+    // Commit 108: Prefer MusicXML over GP5 for score loading
     useEffect(() => {
       if (!engineReady) return
       const api = apiRef.current
       if (!api) return
+      const xml = musicXml?.trim()
+      if (!xml) return
+      try {
+        const encoder = new TextEncoder()
+        const bytes = encoder.encode(xml)
+        const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+        resetSongMetaRefs()
+        api.load(buf)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Invalid MusicXML payload'
+        setEngineError(msg)
+        onError?.(msg)
+      }
+    }, [engineReady, musicXml, onError, resetSongMetaRefs])
+
+    useEffect(() => {
+      if (!engineReady) return
+      const api = apiRef.current
+      if (!api) return
+      // Skip GP5 loading if MusicXML is available (loaded via effect above)
+      if (musicXml?.trim()) return
       const raw = gp5Base64?.trim()
       if (!raw) return
       try {
@@ -1284,7 +1307,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         setEngineError(msg)
         onError?.(msg)
       }
-    }, [engineReady, gp5Base64, onError, resetSongMetaRefs])
+    }, [engineReady, gp5Base64, musicXml, onError, resetSongMetaRefs])
 
     useEffect(() => {
       if (!engineReady) return
@@ -1421,14 +1444,14 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             <LoadingSkeleton height={10} borderRadius={6} />
           </View>
         ) : null}
-        {!gp5Base64?.trim() && mounted ? (
+        {!gp5Base64?.trim() && !musicXml?.trim() && mounted ? (
           <View
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
             <Text className="text-center font-sans text-[11px] text-muted-brown">
               {
-                "Tab preview isn't available for this song yet. Try analyzing a song or another tab variant."
+                "Score isn't available for this song yet. Try analyzing a song or another tab variant."
               }
             </Text>
           </View>

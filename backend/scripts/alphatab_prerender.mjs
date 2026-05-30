@@ -1,7 +1,9 @@
 /**
  * AlphaTab Node-side SVG layout prerender (PRIORITIES §59).
- * Reads JSON stdin: { gp5_base64: string, preset?: { scale?: number, stretchForce?: number } }
+ * Reads JSON stdin: { gp5_base64?: string, musicxml?: string, preset?: { scale?: number, stretchForce?: number } }
  * Writes JSON stdout: { ok, master_bar_count, total_width, total_height, partial_count, partials }
+ *
+ * Commit 108: Accepts MusicXML input alongside GP5. MusicXML is preferred when provided.
  */
 import * as fs from 'node:fs'
 import * as path from 'node:path'
@@ -23,12 +25,23 @@ function readStdinUtf8() {
 function main() {
   return readStdinUtf8().then((raw) => {
     const input = JSON.parse(raw)
-    const b64 = input.gp5_base64
-    if (typeof b64 !== 'string' || !b64.trim()) {
-      throw new Error('gp5_base64 missing')
-    }
     const preset = input.preset && typeof input.preset === 'object' ? input.preset : {}
-    const buf = Buffer.from(String(b64), 'base64')
+
+    // Commit 108: Prefer MusicXML over GP5 for prerender
+    const xml = typeof input.musicxml === 'string' ? input.musicxml.trim() : ''
+    const b64 = typeof input.gp5_base64 === 'string' ? input.gp5_base64.trim() : ''
+
+    if (!xml && !b64) {
+      throw new Error('Either musicxml or gp5_base64 must be provided')
+    }
+
+    let buf
+    if (xml) {
+      // Convert MusicXML string to UTF-8 bytes
+      buf = Buffer.from(xml, 'utf8')
+    } else {
+      buf = Buffer.from(String(b64), 'base64')
+    }
 
     const pkgPath = path.join(__dirname, '..', 'node_modules', '@coderline', 'alphatab', 'package.json')
     let alphatabVersion = 'unknown'

@@ -199,6 +199,8 @@ export interface LessonSection {
   tab_alt_position_gp5_base64?: string | null
   coach_note?: string | null
   coach_explanation?: string | null
+  /** Commit 108: MusicXML score for this section (canonical render format). */
+  musicxml?: string | null
   [key: string]: unknown
 }
 
@@ -245,6 +247,8 @@ export interface LessonJSON {
   } | null
   /** MusicXML lead sheet with chord symbols (<harmony>) and tab notes (<technical> string/fret). */
   musicxml?: string | null
+  /** Commit 108: Structured BeatGrid at top level (flat beat_grid preserved for backward compat). */
+  beat_grid_structured?: BeatGrid | null
 }
 
 export interface AnalyzeJob {

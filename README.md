@@ -375,11 +375,9 @@ Mic listens passively while the user noodles freely — over a backing track, a 
 
 Target experience: **beat-aligned chord symbols**, a **clean monophonic solo line**, and **fretboard sync** to the current chord and note — matching the modular pattern (stems → beat grid → chord model + Basic Pitch → score) described in the product PRD.
 
-* **Canonical score format:** MusicXML (partwise) with `<harmony>` for chords and `<note>` for the solo line; optional `<frame>` for chord diagrams. **alphaTab** loads the file via its **MusicXML importer** for notation + diagrams.
+* **Canonical score format:** MusicXML (partwise) with `<harmony>` for chords and `<note>` for the solo line; `<frame>` for chord diagrams; `<dynamics>`, `<articulations>`, `<beam>`, `<slur>`, and `<technical>` (string/fret) for full notation. **alphaTab** loads the file via its **MusicXML importer** for notation + diagrams. (Commit 108: MusicXML is now the primary render format; GP5 is retained as export-only fallback.)
 * **Machine-readable analysis:** `BeatGrid`, `ChordTimeline`, and `SoloNotes` JSON alongside the score for edits and recomputation.
 * **Engineering roadmap:** [PRIORITIES.md](PRIORITIES.md) commits **78–81** (Demucs `htdemucs_6s` + beat grid → TFLite chords + Basic Pitch solo → MusicXML → alphaTab + fretboard), then **82** for confidence and manual stem overrides.
-
-**Until 78–81 ship**, the app continues to use the **LessonJSON / Guitar Pro (`.gp5`)** pipeline documented below — same ingest and stems, lead-sheet assembly is not yet the primary output path.
 
 ---
 

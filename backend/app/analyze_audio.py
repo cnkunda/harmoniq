@@ -343,6 +343,24 @@ def build_lesson_json_from_librosa(
         if section_beat_grid:
             section_dict["beat_grid"] = section_beat_grid.model_dump()
         
+        # Commit 108: Generate per-section MusicXML
+        if section_beat_grid and section_chord_timeline and section_solo_notes:
+            try:
+                section_musicxml = build_musicxml(
+                    beat_grid=section_beat_grid,
+                    chord_timeline=section_chord_timeline,
+                    solo_notes=section_solo_notes,
+                    title=song_title or "Harmoniq Score",
+                    artist=artist or "Harmoniq AI",
+                    key_signature=summary.key_name,
+                )
+                section_dict["musicxml"] = section_musicxml
+            except Exception:
+                logger.exception(
+                    "Per-section MusicXML generation failed for section %d of job_id=%s",
+                    i, job_id,
+                )
+        
         sections[i] = LessonSectionStub(**section_dict)
 
     lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
@@ -439,9 +457,25 @@ def build_lesson_json_from_librosa(
         low_snr_warning=low_snr_warning,
         musicxml=musicxml_str,
         chord_timeline=chord_timeline,
+        solo_notes=solo_notes,
+        beat_grid_structured=beat_grid,
         **stem_fields,
     )
+
+    # Commit 108: Persist score.musicxml as standalone file in job directory
+    if musicxml_str:
+        try:
+            job_dir = Path("data") / "jobs" / job_id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "score.musicxml").write_text(musicxml_str, encoding="utf-8")
+            logger.info("Persisted score.musicxml for job_id=%s", job_id)
+        except Exception:
+            logger.exception("Failed to persist score.musicxml for job_id=%s", job_id)
+
     full_gp5 = tab_artifacts.get("tab_full_gp5_base64") if tab_artifacts else None
     if isinstance(full_gp5, str) and full_gp5.strip():
-        lesson = enrich_lesson_with_prerender_hints(lesson, job_id=job_id, gp5_base64=full_gp5)
+        lesson = enrich_lesson_with_prerender_hints(lesson, job_id=job_id, gp5_base64=full_gp5, musicxml=musicxml_str)
+    elif musicxml_str:
+        # Commit 108: Even without GP5, try prerendering from MusicXML
+        lesson = enrich_lesson_with_prerender_hints(lesson, job_id=job_id, musicxml=musicxml_str)
     return lesson

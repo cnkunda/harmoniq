@@ -454,3 +454,124 @@ class TestBuildMusicXML:
 
         xml = build_musicxml(bg, ct, sn)
         assert "C" in xml  # At minimum, chord root should appear
+
+
+# ---------------------------------------------------------------------------
+# Commit 108: MusicXML Enhancement Tests
+# ---------------------------------------------------------------------------
+
+class TestCommit108Enhancements:
+    """Tests for the Commit 108 MusicXML notation enhancements."""
+
+    def test_divisions_in_output(self):
+        """<divisions> element should be present."""
+        bg = _make_beat_grid(bpm=120, n_measures=1)
+        sn = _make_solo_notes([(0.0, 0.5, 60, 80)])
+        ct = _make_chord_timeline()
+        xml = build_musicxml(bg, ct, sn)
+        assert "<divisions>" in xml
+
+    def test_defaults_block_present(self):
+        """<defaults> block with scaling, page-layout, system-layout should be present."""
+        bg = _make_beat_grid(bpm=120, n_measures=1)
+        sn = _make_solo_notes([(0.0, 0.5, 60, 80)])
+        ct = _make_chord_timeline()
+        xml = build_musicxml(bg, ct, sn)
+        assert "<defaults>" in xml
+        assert "<scaling>" in xml
+        assert "<page-layout>" in xml
+        assert "<system-layout>" in xml
+
+    def test_dynamics_in_output(self):
+        """Dynamics elements should be present for notes with varying velocity."""
+        bg = _make_beat_grid(bpm=120, n_measures=1)
+        sn = _make_solo_notes([
+            (0.0, 0.5, 60, 30),   # pp
+            (0.5, 0.5, 62, 100),  # f
+            (1.0, 0.5, 64, 60),   # mp
+        ])
+        ct = _make_chord_timeline()
+        xml = build_musicxml(bg, ct, sn)
+        assert "<dynamics>" in xml
+
+    def test_chord_diagrams_in_output(self):
+        """Chord diagrams (<frame>) should be present when chord symbols exist."""
+        bg = _make_beat_grid(bpm=120, n_measures=2)
+        sn = _make_solo_notes([(0.0, 0.5, 60, 80)])
+        ct = _make_chord_timeline([(0.0, "C:maj")])
+        xml = build_musicxml(bg, ct, sn)
+        assert "<frame>" in xml
+        assert "<frame-strings>" in xml
+        assert "<frame-note>" in xml
+
+    def test_beams_in_output(self):
+        """Beams should be present for eighth note groups."""
+        bg = _make_beat_grid(bpm=120, n_measures=1)
+        # Create 4 eighth notes within one beat
+        sn = _make_solo_notes([
+            (0.0, 0.25, 60, 80),
+            (0.25, 0.25, 62, 80),
+            (0.5, 0.25, 64, 80),
+            (0.75, 0.25, 65, 80),
+        ])
+        ct = _make_chord_timeline()
+        xml = build_musicxml(bg, ct, sn)
+        assert "<beam" in xml
+
+    def test_slurs_in_output(self):
+        """Slurs should be present for legato passages."""
+        bg = _make_beat_grid(bpm=120, n_measures=2)
+        # Create legato passage: consecutive notes with no gap, similar pitch
+        sn = _make_solo_notes([
+            (0.0, 0.5, 60, 80),
+            (0.5, 0.5, 62, 80),
+            (1.0, 0.5, 64, 80),
+        ])
+        ct = _make_chord_timeline()
+        xml = build_musicxml(bg, ct, sn)
+        assert "<slur" in xml
+
+    def test_technical_elements_preserved(self):
+        """Existing guitar technical elements (string/fret) should still be present."""
+        bg = _make_beat_grid(bpm=120, n_measures=1)
+        sn = _make_solo_notes([(0.0, 0.5, 60, 80)])
+        ct = _make_chord_timeline()
+        xml = build_musicxml(bg, ct, sn)
+        assert "<technical>" in xml
+        assert "<string>" in xml
+        assert "<fret>" in xml
+
+    def test_empty_solo_notes_still_valid(self):
+        """Empty solo notes should still produce valid MusicXML with enhancements."""
+        bg = _make_beat_grid(bpm=120, n_measures=1)
+        sn = _make_solo_notes([])
+        ct = _make_chord_timeline()
+        xml = build_musicxml(bg, ct, sn)
+        assert "<score-partwise" in xml
+        assert "<divisions>" in xml
+        assert "<defaults>" in xml
+
+    def test_comprehensive_output(self):
+        """Full output should contain all Commit 108 enhancements."""
+        bg = _make_beat_grid(bpm=120, n_measures=2)
+        sn = _make_solo_notes([
+            (0.0, 0.25, 60, 80),
+            (0.25, 0.25, 62, 90),
+            (0.5, 0.5, 64, 70),
+            (1.0, 0.5, 67, 110),
+        ])
+        ct = _make_chord_timeline([(0.0, "C:maj"), (1.0, "G:min")])
+        xml = build_musicxml(bg, ct, sn)
+
+        checks = {
+            "divisions": "<divisions>" in xml,
+            "defaults": "<defaults>" in xml,
+            "scaling": "<scaling>" in xml,
+            "page-layout": "<page-layout>" in xml,
+            "system-layout": "<system-layout>" in xml,
+            "technical": "<technical>" in xml,
+            "frame": "<frame>" in xml,
+            "beam": "<beam" in xml,
+        }
+        for name, present in checks.items():
+            assert present, f"Missing {name} in enhanced MusicXML output"
