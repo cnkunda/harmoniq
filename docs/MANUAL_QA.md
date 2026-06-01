@@ -440,6 +440,63 @@ cd backend && python -m pytest -q \
 
 ---
 
+## Phase 2.1 Gated Items — Analysis Persistence & Correction Editor (Commit 110)
+
+User-facing correction editor for chords, solo notes, and voicings with backend persistence. Run these checks when modifying chord inference, solo transcription, correction endpoints, or the correction UI.
+
+### Phase 2.1 Delivered Features
+
+| Feature | Location | QA Notes |
+|---------|----------|----------|
+| Job Persistence | `backend/app/jobs.py` | Completed/failed jobs saved as `JobStatus.json` in job directory. Reloaded on server startup via `load_jobs_from_disk()`. |
+| Chord Correction Endpoint | `backend/app/routers/analyze.py` | `PATCH /analyze/{job_id}/chord/{beat_index}` — accepts chord symbol, updates timeline, rebuilds MusicXML. |
+| Note Correction Endpoint | `backend/app/routers/analyze.py` | `PATCH /analyze/{job_id}/solo-note/{note_index}` — partial update of pitch/duration/start_time/velocity. |
+| Voicing Override Endpoint | `backend/app/routers/analyze.py` | `PATCH /analyze/{job_id}/chord/{beat_index}/voicing` — stores CAGED shape (E/A/D/C/G). |
+| Correction History | `backend/app/routers/analyze.py` | `GET /analyze/{job_id}/corrections` — returns all corrections with count and coverage. |
+| Correction Export | `backend/app/routers/analyze.py` | `GET /analyze/{job_id}/corrections/export` — JSON format for ML retraining pipeline. |
+| Correction Store | `src/stores/correctionStore.ts` | Zustand store persisted to `app_prefs` via `getAppPref`/`setAppPref`. Undo via revert. |
+| Diatonic Chord Helper | `src/music/diatonicChords.ts` | `getDiatonicChords(key)` — returns diatonic chords filtered by key with Roman numerals. |
+| Chord Correction Modal | `components/ChordCorrectionModal.tsx` | Modal with diatonic + chromatic chord picker, fretboard preview, confirm/cancel. |
+| Chord Strip | `components/ChordStrip.tsx` | Horizontal scrollable chord strip for Listen screen. Tap chord → correction modal. |
+| Note Correction Panel | `components/NoteCorrectionPanel.tsx` | Modal with pitch stepper, string/fret selector, duration slider. |
+| Voicing Selector | `components/VoicingSelector.tsx` | Chip-based CAGED shape picker. |
+| Correction History UI | `components/CorrectionHistory.tsx` | List of corrections with revert button per entry. |
+| Lesson Merge Helper | `src/utils/applyCorrections.ts` | `applyCorrectionsToLesson()` — patches chord timeline + solo notes from corrections. |
+
+### Commit 110 Verification Checklist
+
+| # | Feature | Manual Check | PASS/FAIL | Notes |
+|---|---------|--------------|-----------|-------|
+| 40 | Job persistence | Complete analysis → restart backend → `GET /analyze/{job_id}` returns cached result | | |
+| 41 | Chord correction (backend) | `PATCH /analyze/{id}/chord/0` with valid chord → returns updated timeline, confidence=1.0 | | |
+| 42 | Chord correction (frontend, Listen) | Tap chord in chord strip → modal opens → select new chord → confirm → chord updates | | |
+| 43 | Chord correction (frontend, Study) | Tap chord symbol in chord sheet → modal opens → select diatonic chord → confirm | | |
+| 44 | Note correction (backend) | `PATCH /analyze/{id}/solo-note/0` with pitch=62 → returns updated note | | |
+| 45 | Note correction (frontend) | Tap red note on fretboard → panel opens → adjust pitch → confirm → note updates | | |
+| 46 | Voicing override | `PATCH /analyze/{id}/chord/0/voicing` with "E-shape" → stored on event | | |
+| 47 | Correction history | After corrections, `GET /analyze/{id}/corrections` returns all with correct counts | | |
+| 48 | Correction revert | In CorrectionHistory, tap Revert → correction removed, lesson reverts | | |
+| 49 | Correction metrics | `correction_count` and `correction_coverage` appear in lesson metadata | | |
+| 50 | Corrections export | `GET /analyze/{id}/corrections/export` returns JSON with chord_corrections array | | |
+| 51 | Fretboard sync | After chord correction, fretboard shows new chord voicing during playback | | |
+| 52 | Cross-session persistence | Apply correction → navigate away → return → correction still applied | | |
+
+---
+
+## Automated test coverage — Commit 110
+
+Backend correction tests: schema behavior, persistence, and metrics.
+
+```bash
+# Correction schemas, persistence, and merge logic
+cd backend && python -m pytest -q \
+  tests/test_corrections.py
+```
+
+**CI status:** `test_corrections.py` (8 tests) — not yet in `scoring-tests.yml`.
+
+---
+
 ## Future — MusicXML lead sheet (PRIORITIES 78-81, 106-107)
 
 Run when the Demucs → beat grid → chord + solo → MusicXML → alphaTab path is fully integrated (replaces stub-only expectations). Chord model (commits 98-98d), Viterbi decoding (99), and boundary tie (100) are complete — the chord inference pipeline now produces extended chord vocabulary with temporal smoothing and boundary continuity.

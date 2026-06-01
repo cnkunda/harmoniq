@@ -5,6 +5,8 @@ import { Modal, ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { ChordCorrectionModal } from '@/components/ChordCorrectionModal'
+import { ChordStrip } from '@/components/ChordStrip'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
@@ -13,8 +15,10 @@ import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
+import { useCorrectionStore } from '@/src/stores/correctionStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
+import { applyCorrectionsToChordTimeline } from '@/src/utils/applyCorrections'
 import { MusicProvider } from '@/src/context/MusicContext'
 import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import colors from '@/src/constants/colors'
@@ -31,11 +35,7 @@ export default function ListenScreen() {
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const stemTabRef = useRef<ListenStemPanelHandle>(null)
 
-  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
-  const chordEvents = getLessonWideChordEvents(lesson)
-  const soloNotesArr = lesson?.solo_notes?.notes ?? null
-  const barTimestamps = lesson?.bar_timestamps ?? null
-
+  // Commit 110: chord correction state — declare early so chordEvents can use them
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
   const [orientAnnotation, setOrientAnnotation] = useState<string | null>(null)
   const [orientIsPlaying, setOrientIsPlaying] = useState(false)
@@ -43,6 +43,34 @@ export default function ListenScreen() {
   const [orientIsLoading, setOrientIsLoading] = useState(false)
   const [orientError, setOrientError] = useState<string | null>(null)
   const orientSoundRef = useRef<Audio.Sound | null>(null)
+
+  // Commit 110: chord correction state
+  const [chordModalVisible, setChordModalVisible] = useState(false)
+  const [chordModalIndex, setChordModalIndex] = useState(0)
+  const [chordModalChord, setChordModalChord] = useState('N')
+  const jobId = lesson?.job_id ?? ''
+  const corrections = useCorrectionStore((s) => s.corrections[jobId])
+  const applyChordCorrection = useCorrectionStore((s) => s.applyChordCorrection)
+
+  // Extract timeline data for MusicProvider
+  const rawChordEvents = getLessonWideChordEvents(lesson)
+  // Commit 110: apply chord corrections for display (normalize confidence to required number)
+  const chordEvents: Array<{ timestamp: number; chord: string; confidence: number }> | null = (() => {
+    if (!rawChordEvents?.length) return null
+    const normalized: Array<{ timestamp: number; chord: string; confidence: number }> = rawChordEvents.map((e) => ({
+      timestamp: e.timestamp,
+      chord: e.chord,
+      confidence: e.confidence ?? 0,
+    }))
+    if (!jobId || !corrections?.chordCorrections?.length) return normalized
+    const patched = applyCorrectionsToChordTimeline(
+      { events: normalized, metadata: null },
+      corrections.chordCorrections,
+    )
+    return patched?.events ?? normalized
+  })()
+  const soloNotesArr = lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
 
   useEffect(() => {
     const raw = params.section
@@ -176,6 +204,41 @@ export default function ListenScreen() {
       <ListenStemPanel
         ref={stemTabRef}
         autoPlayOnReady={lesson?.job_id === DEMO_LESSON_JOB_ID}
+      />
+
+      {/* Commit 110: Chord strip for chord correction */}
+      {chordEvents && chordEvents.length > 0 && (
+        <ChordStrip
+          chordEvents={chordEvents}
+          barTimestamps={barTimestamps ?? []}
+          onChordTap={(idx, chord) => {
+            setChordModalIndex(idx)
+            setChordModalChord(chord)
+            setChordModalVisible(true)
+          }}
+        />
+      )}
+
+      <ChordCorrectionModal
+        visible={chordModalVisible}
+        currentChord={chordModalChord}
+        songKey={lesson?.key ?? null}
+        eventIndex={chordModalIndex}
+        onSelect={async (idx, newChord) => {
+          const original = chordEvents?.[idx]?.chord ?? 'N'
+          await applyChordCorrection(jobId, idx, original, newChord)
+          // Re-apply to lesson for immediate display
+          if (lesson && jobId) {
+            const updatedCorrections = useCorrectionStore.getState().getCorrections(jobId)
+            const patched = applyCorrectionsToChordTimeline(
+              { events: chordEvents ?? [], metadata: null },
+              updatedCorrections.chordCorrections,
+            )
+            const updatedLesson = { ...lesson, chord_timeline: patched }
+            useLessonStore.getState().saveLesson(updatedLesson)
+          }
+        }}
+        onClose={() => setChordModalVisible(false)}
       />
 
       <View className="mt-6">

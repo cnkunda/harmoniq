@@ -7,6 +7,8 @@ This implements PRIORITIES §4:
 * failed jobs store a user-safe error string
 
 Scope note: single-process in-memory store is intentional for v1.
+Commit 110: completed/failed jobs are persisted to disk as JobStatus.json
+so they survive server restarts.
 """
 
 from __future__ import annotations
@@ -59,6 +61,66 @@ ANALYZE_ERROR_ANALYSIS_FAILED = "analysis_failed"
 # In-memory job store (single process).
 jobs: dict[str, JobStatus] = {}
 coach_hydration: dict[str, CoachHydrationStatus] = {}
+
+
+# ---- Commit 110: Disk persistence for completed/failed jobs ----
+
+def save_job_to_disk(job_id: str) -> None:
+    """Persist a completed or failed job to disk so it survives server restarts."""
+    job = jobs.get(job_id)
+    if job is None or job.status not in ("complete", "failed"):
+        return
+    try:
+        job_dir = get_job_dir(job_id)
+        payload = job.model_dump(exclude_none=True)
+        (job_dir / "JobStatus.json").write_text(
+            __import__("json").dumps(payload, indent=2, default=str),
+            encoding="utf-8",
+        )
+        logger.info("job persisted to disk job_id=%s status=%s", job_id, job.status)
+    except Exception:
+        logger.exception("Failed to persist job to disk job_id=%s", job_id)
+
+
+def load_jobs_from_disk() -> int:
+    """Reload completed/failed jobs from disk on server startup. Returns count loaded."""
+    data_dir = get_data_dir()
+    jobs_dir = data_dir / "jobs"
+    if not jobs_dir.exists():
+        return 0
+    loaded = 0
+    import json as _json
+    for job_dir in jobs_dir.iterdir():
+        if not job_dir.is_dir():
+            continue
+        status_file = job_dir / "JobStatus.json"
+        if not status_file.exists():
+            continue
+        try:
+            raw = _json.loads(status_file.read_text(encoding="utf-8"))
+            job_id = job_dir.name
+            job_status = JobStatus.model_validate(raw)
+            if job_status.status in ("complete", "failed"):
+                jobs[job_id] = job_status
+                loaded += 1
+        except Exception:
+            logger.exception("Failed to reload job from disk: %s", job_dir.name)
+    logger.info("loaded %d jobs from disk", loaded)
+    return loaded
+
+
+def _delete_job_from_disk(job_id: str) -> None:
+    """Remove persisted job file from disk."""
+    try:
+        job_dir = get_job_dir(job_id)
+        status_file = job_dir / "JobStatus.json"
+        if status_file.exists():
+            status_file.unlink()
+            logger.info("job removed from disk job_id=%s", job_id)
+    except Exception:
+        logger.exception("Failed to remove job from disk job_id=%s", job_id)
+
+# ---- End Commit 110 ----
 
 
 def _set_job_processing_progress(job_id: str, progress: float, stage_label: str) -> None:
@@ -157,6 +219,7 @@ def _hydrate_coach_copy_job(
     )
     patched = lesson.model_copy(update={"sections": enriched})
     jobs[job_id] = JobStatus(status="complete", result=patched, error=None)
+    save_job_to_disk(job_id)
     coach_hydration[job_id] = CoachHydrationStatus(
         status=status,
         sections=[
@@ -311,6 +374,7 @@ def _process_analyze_job(
             
             if reused is not None:
                 jobs[job_id] = JobStatus(status="complete", result=reused, error=None)
+                save_job_to_disk(job_id)
                 if _lesson_has_hydrated_coach(reused):
                     coach_hydration[job_id] = CoachHydrationStatus(
                         status="complete",
@@ -416,6 +480,7 @@ def _process_analyze_job(
         logger.info("lesson cache save completed in %.2fs job_id=%s", cache_save_elapsed, job_id)
         
         jobs[job_id] = JobStatus(status="complete", result=skeleton_result, error=None, analysis_stage="complete")
+        save_job_to_disk(job_id)
         _set_coach_pending(job_id, len(skeleton_result.sections))
         coach_thread = threading.Thread(
             target=_hydrate_coach_copy_job,
@@ -440,6 +505,7 @@ def _process_analyze_job(
             error=YOUTUBE_URL_INVALID_USER_MESSAGE,
             error_code=ANALYZE_ERROR_YOUTUBE_INVALID,
         )
+        save_job_to_disk(job_id)
     except AudioTooShortError:
         logger.warning("worker failed job_id=%s audio too short", job_id)
         jobs[job_id] = JobStatus(
@@ -448,6 +514,7 @@ def _process_analyze_job(
             error=AUDIO_TOO_SHORT_USER_MESSAGE,
             error_code=ANALYZE_ERROR_AUDIO_TOO_SHORT,
         )
+        save_job_to_disk(job_id)
     except IngestError:
         logger.exception("worker failed job_id=%s ingest error", job_id)
         jobs[job_id] = JobStatus(
@@ -456,6 +523,7 @@ def _process_analyze_job(
             error=ANALYSIS_FAILED_USER_MESSAGE,
             error_code=ANALYZE_ERROR_INGEST_FAILED,
         )
+        save_job_to_disk(job_id)
     except SeparationError:
         logger.exception("worker failed job_id=%s stem separation error", job_id)
         jobs[job_id] = JobStatus(
@@ -464,6 +532,7 @@ def _process_analyze_job(
             error=STEM_SEPARATION_FAILED_USER_MESSAGE,
             error_code=ANALYZE_ERROR_STEM_SEPARATION_FAILED,
         )
+        save_job_to_disk(job_id)
     except Exception:
         # Fail loudly in logs; user sees a warm, safe message.
         logger.exception("worker failed job_id=%s", job_id)
@@ -473,6 +542,7 @@ def _process_analyze_job(
             error=ANALYSIS_FAILED_USER_MESSAGE,
             error_code=ANALYZE_ERROR_ANALYSIS_FAILED,
         )
+        save_job_to_disk(job_id)
 
 
 def enqueue_analyze_job(

@@ -6,9 +6,11 @@ import { Text, View } from 'react-native'
 import { X } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { ChordCorrectionModal } from '@/components/ChordCorrectionModal'
 import { ChordsAndLyrics } from '@/components/ChordsAndLyrics'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
+import { NoteCorrectionPanel } from '@/components/NoteCorrectionPanel'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
@@ -28,6 +30,7 @@ import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
+import { useCorrectionStore } from '@/src/stores/correctionStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
 import {
@@ -176,6 +179,38 @@ function StudyScreenInner() {
   // Intelligent fretboard display mode (auto-detect or manual override)
   const [fretboardMode, setFretboardMode] = useState<'auto' | 'chords' | 'solo' | 'both'>('auto')
   const [voicingMode, setVoicingMode] = useState<'full' | 'compact'>('full')
+
+  // Commit 110: chord correction state
+  const jobId = lesson?.job_id ?? ''
+  const corrections = useCorrectionStore((s) => s.corrections[jobId])
+  const applyChordCorrectionStore = useCorrectionStore((s) => s.applyChordCorrection)
+  const [chordModalVisible, setChordModalVisible] = useState(false)
+  const [chordModalIndex, setChordModalIndex] = useState(0)
+  const [chordModalChord, setChordModalChord] = useState('N')
+  // Commit 110: note correction state
+  const [noteModalVisible, setNoteModalVisible] = useState(false)
+  const [noteModalIndex, setNoteModalIndex] = useState(0)
+  const [noteModalPitch, setNoteModalPitch] = useState(60)
+  const [noteModalDuration, setNoteModalDuration] = useState(0.5)
+  const [noteModalStartTime, setNoteModalStartTime] = useState(0)
+  const [noteModalString, setNoteModalString] = useState<number | undefined>(undefined)
+  const [noteModalFret, setNoteModalFret] = useState<number | undefined>(undefined)
+  const applyNoteCorrectionStore = useCorrectionStore((s) => s.applyNoteCorrection)
+  // Correction-aware chord events for display
+  const correctedChordEvents = useMemo(() => {
+    const raw = getLessonWideChordEvents(lesson)
+    if (!raw?.length) return raw
+    const normalized: Array<{ timestamp: number; chord: string; confidence: number }> = raw.map((e) => ({
+      timestamp: e.timestamp,
+      chord: e.chord,
+      confidence: e.confidence ?? 0,
+    }))
+    if (!corrections?.chordCorrections?.length) return normalized
+    return normalized.map((ev, idx) => {
+      const c = corrections.chordCorrections.find((cc) => cc.eventIndex === idx)
+      return c ? { ...ev, chord: c.correctedChord, confidence: 1.0 } : ev
+    })
+  }, [lesson, corrections])
 
   // Orient clip states (moved from separate orient.tsx screen)
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
@@ -645,28 +680,55 @@ function StudyScreenInner() {
                 setFretPulseKey((k) => k + 1)
                 setNoteModalOpen(true)
               }}
+              onNoteTap={(noteIndex, note) => {
+                // Find the original solo note by matching MIDI pitch
+                const soloNotes = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? []
+                const matchIdx = soloNotes.findIndex((n) => n.pitch === note.midi)
+                if (matchIdx >= 0) {
+                  const sn = soloNotes[matchIdx]
+                  setNoteModalIndex(matchIdx)
+                  setNoteModalPitch(sn.pitch)
+                  setNoteModalDuration(sn.duration)
+                  setNoteModalStartTime(sn.start_time)
+                  setNoteModalString(note.string)
+                  setNoteModalFret(note.fret)
+                  setNoteModalVisible(true)
+                }
+              }}
             />
 
             <View className="mt-2">
              <ChordsAndLyrics
-                 bars={barsData}
-                 currentBar={currentBar}
-                 bpm={lesson?.tempo ?? 92}
-                 onBarPress={(bar) => {
-                   const stamps = lesson?.bar_timestamps
-                   const t = Array.isArray(stamps) && typeof stamps[bar] === 'number' ? stamps[bar]! : 0
-                   void (async () => {
-                     await sessionStemRef.current?.seekTransportToSeconds(t)
-                     sessionStemRef.current?.scrollMasterBarIntoView(bar)
-                   })()
-                 }}
-                 onBarLongPress={(bar) => {
-                   const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
-                   setAnnotation(sectionKey, bar, text)
-                 }}
-                 barsPerLine={4}
-                 label={(section?.label ?? '') as string}
-               />
+                  bars={barsData}
+                  currentBar={currentBar}
+                  bpm={lesson?.tempo ?? 92}
+                  onBarPress={(bar) => {
+                    const stamps = lesson?.bar_timestamps
+                    const t = Array.isArray(stamps) && typeof stamps[bar] === 'number' ? stamps[bar]! : 0
+                    void (async () => {
+                      await sessionStemRef.current?.seekTransportToSeconds(t)
+                      sessionStemRef.current?.scrollMasterBarIntoView(bar)
+                    })()
+                  }}
+                  onBarLongPress={(bar) => {
+                    const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
+                    setAnnotation(sectionKey, bar, text)
+                  }}
+                  onChordTap={(barIdx, chord) => {
+                    // Find the event index in chordEvents that corresponds to this bar
+                    const barTime = lesson?.bar_timestamps?.[barIdx] ?? 0
+                    const eventIdx = correctedChordEvents
+                      ?.slice()
+                      .reverse()
+                      .findIndex((ev) => ev.timestamp <= barTime)
+                    const idx = eventIdx != null && eventIdx >= 0 ? correctedChordEvents!.length - 1 - eventIdx : 0
+                    setChordModalIndex(idx)
+                    setChordModalChord(chord)
+                    setChordModalVisible(true)
+                  }}
+                  barsPerLine={4}
+                  label={(section?.label ?? '') as string}
+                />
             </View>
 
           </>
@@ -677,6 +739,66 @@ function StudyScreenInner() {
         detail={selectionDetail}
         visible={noteModalOpen}
         onClose={() => setNoteModalOpen(false)}
+      />
+
+      {/* Commit 110: Chord correction modal */}
+      <ChordCorrectionModal
+        visible={chordModalVisible}
+        currentChord={chordModalChord}
+        songKey={lesson?.key ?? null}
+        eventIndex={chordModalIndex}
+        onSelect={async (idx, newChord) => {
+          const original = correctedChordEvents?.[idx]?.chord ?? 'N'
+          await applyChordCorrectionStore(jobId, idx, original, newChord)
+          // Re-apply to lesson for immediate display
+          if (lesson && jobId) {
+            const updatedCorrections = useCorrectionStore.getState().getCorrections(jobId)
+            const patched = correctedChordEvents?.map((ev, i) => {
+              const c = updatedCorrections.chordCorrections.find((cc) => cc.eventIndex === i)
+              return c ? { ...ev, chord: c.correctedChord, confidence: 1.0 } : ev
+            })
+            const updatedLesson = { ...lesson, chord_timeline: { events: patched ?? [], metadata: lesson.chord_timeline?.metadata ?? null } as import('@/src/types').ChordTimeline }
+            useLessonStore.getState().saveLesson(updatedLesson)
+          }
+        }}
+        onClose={() => setChordModalVisible(false)}
+      />
+
+      {/* Commit 110: Note correction panel */}
+      <NoteCorrectionPanel
+        visible={noteModalVisible}
+        noteIndex={noteModalIndex}
+        originalPitch={noteModalPitch}
+        originalDuration={noteModalDuration}
+        originalStartTime={noteModalStartTime}
+        currentString={noteModalString}
+        currentFret={noteModalFret}
+        onSelect={async (idx, corrected) => {
+          await applyNoteCorrectionStore(
+            jobId,
+            idx,
+            { pitch: noteModalPitch, duration: noteModalDuration, start_time: noteModalStartTime },
+            corrected,
+          )
+          // Re-apply to lesson
+          if (lesson && jobId) {
+            const updatedCorrections = useCorrectionStore.getState().getCorrections(jobId)
+            const soloNotes = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? []
+            const patchedNotes = soloNotes.map((n, i) => {
+              const c = updatedCorrections.noteCorrections.find((nc) => nc.noteIndex === i)
+              if (!c) return n
+              return {
+                start_time: c.correctedStartTime ?? n.start_time,
+                duration: c.correctedDuration ?? n.duration,
+                pitch: c.correctedPitch ?? n.pitch,
+                velocity: n.velocity,
+              }
+            })
+            const updatedLesson = { ...lesson, solo_notes: { notes: patchedNotes } }
+            useLessonStore.getState().saveLesson(updatedLesson)
+          }
+        }}
+        onClose={() => setNoteModalVisible(false)}
       />
     </SessionStepScreen>
   )

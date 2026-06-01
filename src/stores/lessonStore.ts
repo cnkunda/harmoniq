@@ -4,6 +4,8 @@ import { ApiError, pollAnalyzeJob, pollCoachHydration, submitAnalyzeJob } from '
 import { clearCachedLessonIfWeb, persistCachedLessonIfWeb } from '@/src/db/persistCachedLesson'
 import { getNextFocusArea } from '@/src/session'
 import type { AnalyzeJobStatus, LessonJSON } from '@/src/types'
+import { applyCorrectionsToLesson } from '@/src/utils/applyCorrections'
+import { useCorrectionStore } from '@/src/stores/correctionStore'
 
 /** Idle / in-flight UI states plus server-reported job status from `AnalyzeJob`. */
 export type LessonStoreStatus = 'idle' | 'submitting' | AnalyzeJobStatus
@@ -21,7 +23,7 @@ export interface LessonStoreState {
   /** Starts file upload analyze; cancels any in-flight poll from a previous call. */
   analyzeFromFile: (file: Blob, filename?: string) => Promise<void>
   /** Persist a resolved lesson payload in store for downstream session screens. */
-  saveLesson: (lesson: LessonJSON) => void
+  saveLesson: (lesson: LessonJSON) => Promise<void>
   clearError: () => void
   /** Clears in-memory lesson (e.g. after “clear all practice data”). */
   resetLesson: () => void
@@ -56,11 +58,21 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
     set({ lesson: null, jobId: null, status: 'idle', error: null, lessonSectionIndex: 0 })
     void clearCachedLessonIfWeb().catch(() => {})
   },
-  saveLesson: (lesson: LessonJSON) => {
-    set({ lesson, status: 'complete', error: null })
-    void persistCachedLessonIfWeb(lesson).catch(() => {})
+  saveLesson: async (lesson: LessonJSON) => {
+    // Commit 110: hydrate corrections from DB then apply before persisting
+    const jobId = lesson.job_id
+    let finalLesson = lesson
+    if (jobId) {
+      await useCorrectionStore.getState().hydrate(jobId)
+      const corrections = useCorrectionStore.getState().getCorrections(jobId)
+      if (corrections.chordCorrections.length > 0 || corrections.noteCorrections.length > 0) {
+        finalLesson = applyCorrectionsToLesson(lesson, corrections)
+      }
+    }
+    set({ lesson: finalLesson, status: 'complete', error: null })
+    void persistCachedLessonIfWeb(finalLesson).catch(() => {})
     void import('@/src/db/client')
-      .then(({ upsertLessonFromAnalysis }) => upsertLessonFromAnalysis(lesson))
+      .then(({ upsertLessonFromAnalysis }) => upsertLessonFromAnalysis(finalLesson))
       .catch(() => {})
   },
 

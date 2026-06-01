@@ -29,6 +29,8 @@ interface ChordsAndLyricsProps {
   timeSignature?: [number, number]
   onBarPress?: (barIndex: number) => void
   onBarLongPress?: (barIndex: number) => void
+  /** Commit 110: Tap a chord symbol to open correction UI. */
+  onChordTap?: (barIndex: number, chord: string) => void
   /** Number of bars per line in the chord sheet (default: 4) */
   barsPerLine?: number
   /** Optional section label to display above the chord sheet */
@@ -65,6 +67,7 @@ export function ChordsAndLyrics({
   timeSignature = [4, 4],
   onBarPress,
   onBarLongPress,
+  onChordTap,
   barsPerLine = 4,
   label,
   layoutMode = 'flow',
@@ -272,13 +275,31 @@ export function ChordsAndLyrics({
                       >
                         {/* Chord container - left aligned */}
                         <View className="mb-0.5 flex-row items-baseline gap-1.5">
-                          <Text
-                            className={`font-mono text-sm leading-tight tracking-tight text-left ${
-                              isActive ? 'text-amber-light font-sans-bold' : 'text-amber-accent/80'
-                            }`}
-                          >
-                            {chord || ' '}
-                          </Text>
+                          {onChordTap ? (
+                            <AnimatedPressable
+                              haptic="light"
+                              onPress={(e) => {
+                                e.stopPropagation()
+                                onChordTap(globalBarIdx, bar.chord)
+                              }}
+                            >
+                              <Text
+                                className={`font-mono text-sm leading-tight tracking-tight text-left ${
+                                  isActive ? 'text-amber-light font-sans-bold' : 'text-amber-accent/80'
+                                }`}
+                              >
+                                {chord || ' '}
+                              </Text>
+                            </AnimatedPressable>
+                          ) : (
+                            <Text
+                              className={`font-mono text-sm leading-tight tracking-tight text-left ${
+                                isActive ? 'text-amber-light font-sans-bold' : 'text-amber-accent/80'
+                              }`}
+                            >
+                              {chord || ' '}
+                            </Text>
+                          )}
                           {chord2 && (
                             <Text className="font-mono text-xs leading-tight tracking-tight text-left text-amber-accent/50">
                               {chord2}

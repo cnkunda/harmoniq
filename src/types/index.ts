@@ -252,7 +252,55 @@ export interface LessonJSON {
   musicxml?: string | null
   /** Commit 108: Structured BeatGrid at top level (flat beat_grid preserved for backward compat). */
   beat_grid_structured?: BeatGrid | null
+  /** Commit 110: Correction metrics. */
+  correction_count?: number | null
+  correction_coverage?: number | null
 }
+
+// ---- Commit 110: Correction types ----
+
+export interface ChordCorrection {
+  id: string
+  /** Index into chord_timeline.events at the time of correction. */
+  eventIndex: number
+  originalChord: string
+  correctedChord: string
+  /** Epoch ms when correction was made. */
+  timestamp: number
+}
+
+export interface NoteCorrection {
+  id: string
+  /** Index into solo_notes.notes at the time of correction. */
+  noteIndex: number
+  originalPitch: number
+  originalDuration: number
+  originalStartTime: number
+  correctedPitch?: number
+  correctedDuration?: number
+  correctedStartTime?: number
+  correctedString?: number
+  correctedFret?: number
+  timestamp: number
+}
+
+export interface VoicingOverride {
+  id: string
+  /** Matches ChordEvent.timestamp to identify the chord. */
+  chordTimestamp: number
+  originalShape: string
+  correctedShape: string
+  /** Epoch ms when override was made. */
+  timestamp: number
+}
+
+export interface CorrectionSet {
+  chordCorrections: ChordCorrection[]
+  noteCorrections: NoteCorrection[]
+  voicingOverrides: VoicingOverride[]
+}
+
+// ---- End Commit 110 ----
 
 export interface AnalyzeJob {
   status: AnalyzeJobStatus

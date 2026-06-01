@@ -84,6 +84,12 @@ async def _run_startup_cleanup():
 async def lifespan(application: FastAPI):
     """Run startup cleanup and yield."""
     asyncio.create_task(_run_startup_cleanup())
+    # Commit 110: reload completed/failed jobs from disk
+    try:
+        from app.jobs import load_jobs_from_disk
+        load_jobs_from_disk()
+    except Exception:
+        logger.exception("Failed to load jobs from disk on startup")
     yield
 
 

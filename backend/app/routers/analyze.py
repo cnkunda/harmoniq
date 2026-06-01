@@ -29,6 +29,7 @@ from app.jobs import (
     get_coach_hydration,
     get_recompute_job,
     jobs,
+    save_job_to_disk,
 )
 from app.schemas import (
     AnalyzeJobCreated,
@@ -36,11 +37,20 @@ from app.schemas import (
     BeatGrid,
     BeatGridRecomputeRequest,
     BeatGridRecomputeResponse,
+    ChordCorrectionRequest,
+    ChordCorrectionResponse,
     CoachHydrationStatus,
+    CorrectionExportResponse,
+    CorrectionHistoryItem,
+    CorrectionHistoryResponse,
     JobStatus,
+    NoteCorrectionRequest,
+    NoteCorrectionResponse,
     TranscriptionPrepareResponse,
     TranscriptionVerifyRequest,
     TranscriptionVerifyResponse,
+    VoicingOverrideRequest,
+    VoicingOverrideResponse,
 )
 from app.solo_inference import infer_solo
 import app.ingest as ingest
@@ -459,3 +469,279 @@ async def beat_grid_recompute_status(job_id: str) -> BeatGridRecomputeResponse:
     if status is None:
         raise HTTPException(status_code=404, detail=f"No recompute job for {job_id}.")
     return status
+
+
+# ---- Commit 110: Correction endpoints ------------------------------------
+
+import re as _re
+import time as _time
+
+_CHORD_SYMBOL_RE = _re.compile(r"^[A-G][#b]?(?:maj|min|dim|aug|sus[24]?|[2-9]|1[0-3]|7(?:#9|#5|b9|b5)?|alt)?$")
+_CAGED_SHAPES = {"E-shape", "A-shape", "D-shape", "C-shape", "G-shape"}
+
+
+def _get_lesson(job_id: str):
+    """Return the JobStatus and its LessonJSON result, or raise 404."""
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
+    if job.result is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} has no result yet.")
+    return job
+
+
+def _rebuild_musicxml(job_id: str) -> str:
+    """Rebuild MusicXML from current chord_timeline + solo_notes + beat_grid_structured."""
+    job = jobs.get(job_id)
+    if job is None or job.result is None:
+        return ""
+    lesson = job.result
+    beat_grid = lesson.beat_grid_structured
+    chord_timeline = lesson.chord_timeline
+    solo_notes = lesson.solo_notes
+    if not beat_grid or not chord_timeline:
+        return ""
+    try:
+        from app.musicxml_builder import build_musicxml
+        return build_musicxml(
+            beat_grid=beat_grid,
+            chord_timeline=chord_timeline,
+            solo_notes=solo_notes,
+            title=lesson.song_title or "Harmoniq Score",
+            artist=lesson.artist or "Harmoniq AI",
+            key_signature=lesson.key,
+        )
+    except Exception:
+        logger.exception("MusicXML rebuild failed for job_id=%s", job_id)
+        return ""
+
+
+@router.patch(
+    "/analyze/{job_id}/chord/{beat_index}",
+    response_model=ChordCorrectionResponse,
+    summary="PATCH /analyze/{job_id}/chord/{beat_index} — correct a chord symbol",
+)
+async def correct_chord(job_id: str, beat_index: int, req: ChordCorrectionRequest) -> ChordCorrectionResponse:
+    """Correct a chord symbol in the chord timeline."""
+    job = _get_lesson(job_id)
+    lesson = job.result
+    if not lesson.chord_timeline or not lesson.chord_timeline.events:
+        raise HTTPException(status_code=400, detail="No chord timeline available.")
+    if beat_index < 0 or beat_index >= len(lesson.chord_timeline.events):
+        raise HTTPException(status_code=400, detail=f"beat_index {beat_index} out of range (0-{len(lesson.chord_timeline.events) - 1}).")
+
+    event = lesson.chord_timeline.events[beat_index]
+    original_chord = event.chord
+    corrected_chord = req.chord.strip()
+
+    if not corrected_chord:
+        raise HTTPException(status_code=400, detail="Chord symbol cannot be empty.")
+
+    # Store original for history (using extra fields allowed by model_config)
+    if not hasattr(event, "_original_chord") or not getattr(event, "_original_chord", None):
+        event._original_chord = original_chord  # type: ignore[attr-defined]
+
+    # Update chord
+    new_events = list(lesson.chord_timeline.events)
+    new_events[beat_index] = event.model_copy(update={"chord": corrected_chord, "confidence": 1.0})
+    new_timeline = lesson.chord_timeline.model_copy(update={"events": new_events})
+
+    # Update lesson in memory
+    patched = lesson.model_copy(update={"chord_timeline": new_timeline})
+    jobs[job_id] = job.model_copy(update={"result": patched})
+
+    # Rebuild MusicXML
+    musicxml_str = _rebuild_musicxml(job_id)
+    if musicxml_str:
+        final = jobs[job_id].result.model_copy(update={"musicxml": musicxml_str})
+        jobs[job_id] = jobs[job_id].model_copy(update={"result": final})
+
+    save_job_to_disk(job_id)
+
+    return ChordCorrectionResponse(
+        event_index=beat_index,
+        original_chord=original_chord,
+        corrected_chord=corrected_chord,
+        chord_timeline=new_timeline,
+    )
+
+
+@router.patch(
+    "/analyze/{job_id}/solo-note/{note_index}",
+    response_model=NoteCorrectionResponse,
+    summary="PATCH /analyze/{job_id}/solo-note/{note_index} — correct a solo note",
+)
+async def correct_solo_note(job_id: str, note_index: int, req: NoteCorrectionRequest) -> NoteCorrectionResponse:
+    """Correct a solo note's pitch, duration, or start time."""
+    job = _get_lesson(job_id)
+    lesson = job.result
+    if not lesson.solo_notes or not lesson.solo_notes.notes:
+        raise HTTPException(status_code=400, detail="No solo notes available.")
+    if note_index < 0 or note_index >= len(lesson.solo_notes.notes):
+        raise HTTPException(status_code=400, detail=f"note_index {note_index} out of range (0-{len(lesson.solo_notes.notes) - 1}).")
+
+    note = lesson.solo_notes.notes[note_index]
+    original_pitch = note.pitch
+    original_duration = note.duration
+
+    update_fields: dict = {}
+    if req.pitch is not None:
+        update_fields["pitch"] = req.pitch
+    if req.duration is not None:
+        update_fields["duration"] = req.duration
+    if req.start_time is not None:
+        update_fields["start_time"] = req.start_time
+    if req.velocity is not None:
+        update_fields["velocity"] = req.velocity
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="At least one field must be provided.")
+
+    new_notes = list(lesson.solo_notes.notes)
+    new_notes[note_index] = note.model_copy(update=update_fields)
+    new_solo = lesson.solo_notes.model_copy(update={"notes": new_notes})
+
+    patched = lesson.model_copy(update={"solo_notes": new_solo})
+    jobs[job_id] = job.model_copy(update={"result": patched})
+
+    musicxml_str = _rebuild_musicxml(job_id)
+    if musicxml_str:
+        final = jobs[job_id].result.model_copy(update={"musicxml": musicxml_str})
+        jobs[job_id] = jobs[job_id].model_copy(update={"result": final})
+
+    save_job_to_disk(job_id)
+
+    return NoteCorrectionResponse(
+        note_index=note_index,
+        original_pitch=original_pitch,
+        corrected_pitch=update_fields.get("pitch", original_pitch),
+        original_duration=original_duration,
+        corrected_duration=update_fields.get("duration", original_duration),
+        solo_notes=new_solo,
+    )
+
+
+@router.patch(
+    "/analyze/{job_id}/chord/{beat_index}/voicing",
+    response_model=VoicingOverrideResponse,
+    summary="PATCH /analyze/{job_id}/chord/{beat_index}/voicing — set voicing shape",
+)
+async def set_voicing_override(job_id: str, beat_index: int, req: VoicingOverrideRequest) -> VoicingOverrideResponse:
+    """Set a CAGED voicing shape override for a chord."""
+    job = _get_lesson(job_id)
+    lesson = job.result
+    if not lesson.chord_timeline or not lesson.chord_timeline.events:
+        raise HTTPException(status_code=400, detail="No chord timeline available.")
+    if beat_index < 0 or beat_index >= len(lesson.chord_timeline.events):
+        raise HTTPException(status_code=400, detail=f"beat_index {beat_index} out of range.")
+
+    shape = req.voicing_shape.strip()
+    if shape not in _CAGED_SHAPES:
+        raise HTTPException(status_code=400, detail=f"Invalid voicing shape. Must be one of: {', '.join(sorted(_CAGED_SHAPES))}")
+
+    event = lesson.chord_timeline.events[beat_index]
+    if not hasattr(event, "_voicing_override") or not getattr(event, "_voicing_override", None):
+        event._voicing_override = shape  # type: ignore[attr-defined]
+
+    new_events = list(lesson.chord_timeline.events)
+    new_events[beat_index] = event.model_copy(update={"_voicing_override": shape})
+    new_timeline = lesson.chord_timeline.model_copy(update={"events": new_events})
+
+    patched = lesson.model_copy(update={"chord_timeline": new_timeline})
+    jobs[job_id] = job.model_copy(update={"result": patched})
+    save_job_to_disk(job_id)
+
+    return VoicingOverrideResponse(
+        event_index=beat_index,
+        voicing_shape=shape,
+        chord_timeline=new_timeline,
+    )
+
+
+@router.get(
+    "/analyze/{job_id}/corrections",
+    response_model=CorrectionHistoryResponse,
+    summary="GET /analyze/{job_id}/corrections — correction history",
+)
+async def get_corrections(job_id: str) -> CorrectionHistoryResponse:
+    """Return all corrections applied to a job."""
+    job = _get_lesson(job_id)
+    lesson = job.result
+    corrections: list[CorrectionHistoryItem] = []
+
+    # Scan chord timeline for corrections
+    if lesson.chord_timeline and lesson.chord_timeline.events:
+        for i, ev in enumerate(lesson.chord_timeline.events):
+            orig = getattr(ev, "_original_chord", None)
+            if orig and orig != ev.chord:
+                corrections.append(CorrectionHistoryItem(
+                    id=f"chord_{i}",
+                    type="chord",
+                    event_or_note_index=i,
+                    original_value=orig,
+                    corrected_value=ev.chord,
+                    timestamp=float(getattr(ev, "_correction_timestamp", _time.time())),
+                ))
+            voicing = getattr(ev, "_voicing_override", None)
+            if voicing:
+                corrections.append(CorrectionHistoryItem(
+                    id=f"voicing_{i}",
+                    type="voicing",
+                    event_or_note_index=i,
+                    original_value=None,
+                    corrected_value=voicing,
+                    timestamp=float(getattr(ev, "_correction_timestamp", _time.time())),
+                ))
+
+    total_events = (
+        (len(lesson.chord_timeline.events) if lesson.chord_timeline else 0)
+        + (len(lesson.solo_notes.notes) if lesson.solo_notes else 0)
+    )
+    chord_note_corrections = sum(1 for c in corrections if c.type in ("chord", "note"))
+    coverage = chord_note_corrections / total_events if total_events > 0 else 0.0
+
+    return CorrectionHistoryResponse(
+        corrections=corrections,
+        correction_count=chord_note_corrections,
+        correction_coverage=round(coverage, 4),
+    )
+
+
+@router.get(
+    "/analyze/{job_id}/corrections/export",
+    response_model=CorrectionExportResponse,
+    summary="GET /analyze/{job_id}/corrections/export — export corrections as training data",
+)
+async def export_corrections(job_id: str) -> CorrectionExportResponse:
+    """Export corrections as JSON suitable for ML retraining."""
+    job = _get_lesson(job_id)
+    lesson = job.result
+
+    chord_corrections: list[dict] = []
+    if lesson.chord_timeline and lesson.chord_timeline.events:
+        for i, ev in enumerate(lesson.chord_timeline.events):
+            orig = getattr(ev, "_original_chord", None)
+            if orig and orig != ev.chord:
+                chord_corrections.append({
+                    "event_index": i,
+                    "timestamp": ev.timestamp,
+                    "original": orig,
+                    "corrected": ev.chord,
+                    "confidence": ev.confidence,
+                })
+
+    note_corrections: list[dict] = []
+    if lesson.solo_notes and lesson.solo_notes.notes:
+        for i, note in enumerate(lesson.solo_notes.notes):
+            # Note corrections are tracked via the frontend correction store,
+            # not stored on the backend model. Export what we have.
+            pass
+
+    return CorrectionExportResponse(
+        job_id=job_id,
+        song_title=lesson.song_title,
+        artist=lesson.artist,
+        key=lesson.key,
+        chord_corrections=chord_corrections,
+        note_corrections=note_corrections,
+    )

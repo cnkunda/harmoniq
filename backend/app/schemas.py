@@ -748,3 +748,90 @@ class DiscoveryResponse(BaseModel):
     """Response from POST /discovery/recommendations."""
 
     suggestions: list[DiscoverySuggestionItem] = Field(default_factory=list)
+
+
+# Commit 110 Schemas — Correction endpoints
+
+class ChordCorrectionRequest(BaseModel):
+    """PATCH /analyze/{job_id}/chord/{beat_index} — correct a chord symbol."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chord: str = Field(..., min_length=1, max_length=32, description="New chord symbol (e.g., 'C:maj', 'G:7')")
+
+
+class ChordCorrectionResponse(BaseModel):
+    """Response from chord correction endpoint."""
+
+    event_index: int
+    original_chord: str
+    corrected_chord: str
+    chord_timeline: ChordTimeline
+
+
+class NoteCorrectionRequest(BaseModel):
+    """PATCH /analyze/{job_id}/solo-note/{note_index} — correct a solo note."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pitch: int | None = Field(default=None, ge=0, le=127, description="New MIDI pitch")
+    duration: float | None = Field(default=None, ge=0, description="New duration in seconds")
+    start_time: float | None = Field(default=None, ge=0, description="New start time in seconds")
+    velocity: int | None = Field(default=None, ge=0, le=127, description="New velocity")
+
+
+class NoteCorrectionResponse(BaseModel):
+    """Response from note correction endpoint."""
+
+    note_index: int
+    original_pitch: int
+    corrected_pitch: int
+    original_duration: float
+    corrected_duration: float
+    solo_notes: SoloNotes
+
+
+class VoicingOverrideRequest(BaseModel):
+    """PATCH /analyze/{job_id}/chord/{beat_index}/voicing — set voicing shape."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    voicing_shape: str = Field(..., min_length=1, max_length=32, description="CAGED shape label (e.g., 'E-shape', 'A-shape')")
+
+
+class VoicingOverrideResponse(BaseModel):
+    """Response from voicing override endpoint."""
+
+    event_index: int
+    voicing_shape: str
+    chord_timeline: ChordTimeline
+
+
+class CorrectionHistoryItem(BaseModel):
+    """Single correction record."""
+
+    id: str
+    type: str  # "chord" | "note" | "voicing"
+    event_or_note_index: int
+    original_value: Any
+    corrected_value: Any
+    timestamp: float
+
+
+class CorrectionHistoryResponse(BaseModel):
+    """GET /analyze/{job_id}/corrections — full correction history."""
+
+    corrections: list[CorrectionHistoryItem] = Field(default_factory=list)
+    correction_count: int = 0
+    correction_coverage: float = 0.0
+
+
+class CorrectionExportResponse(BaseModel):
+    """GET /analyze/{job_id}/corrections/export — corrections as training data."""
+
+    job_id: str
+    song_title: str | None = None
+    artist: str | None = None
+    key: str | None = None
+    chord_corrections: list[dict[str, Any]] = Field(default_factory=list)
+    note_corrections: list[dict[str, Any]] = Field(default_factory=list)

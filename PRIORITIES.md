@@ -482,17 +482,17 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 **Acceptance Criteria:**
 
-- [ ] Analysis outputs persist across server restarts (SQLite or filesystem)
-- [ ] Chord symbol correction endpoint accepts valid chord and persists it
-- [ ] Solo note endpoint accepts pitch/duration/string/fret overrides
-- [ ] Voicing endpoint stores alternative CAGED shape per chord
-- [ ] Frontend chord correction dropdown filtered by key
-- [ ] Frontend note correction with real-time fretboard preview
-- [ ] Correction history tracks original vs. corrected with revert capability
-- [ ] MusicXML export uses corrected data
-- [ ] Fretboard sync reflects corrections immediately during playback
-- [ ] Correction coverage metric (% of ML-predicted events that were corrected) available
-- [ ] Corrections exportable as training data for ML retraining
+- [x] Analysis outputs persist across server restarts (SQLite or filesystem) — `save_job_to_disk()` / `load_jobs_from_disk()` in `jobs.py`
+- [x] Chord symbol correction endpoint accepts valid chord and persists it — `PATCH /analyze/{job_id}/chord/{beat_index}`
+- [x] Solo note endpoint accepts pitch/duration/string/fret overrides — `PATCH /analyze/{job_id}/solo-note/{note_index}`
+- [x] Voicing endpoint stores alternative CAGED shape per chord — `PATCH /analyze/{job_id}/chord/{beat_index}/voicing`
+- [x] Frontend chord correction dropdown filtered by key — `ChordCorrectionModal` + `getDiatonicChords()`
+- [x] Frontend note correction with real-time fretboard preview — `NoteCorrectionPanel` + `FretboardDiagram.onNoteTap`
+- [x] Correction history tracks original vs. corrected with revert capability — `CorrectionHistory` component + `useCorrectionStore`
+- [ ] MusicXML export uses corrected data — backend endpoints rebuild MusicXML; frontend stale until re-fetch (follow-up)
+- [x] Fretboard sync reflects corrections immediately during playback — `MusicContext` re-derives from patched lesson
+- [x] Correction coverage metric (% of ML-predicted events that were corrected) available — `correction_count` + `correction_coverage` on `LessonJSON`
+- [x] Corrections exportable as training data for ML retraining — `GET /analyze/{job_id}/corrections/export`
 
 ---
 

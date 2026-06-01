@@ -774,3 +774,127 @@ export async function pollBeatGridRecompute(
     await new Promise((r) => setTimeout(r, intervalMs))
   }
 }
+
+// ---- Commit 110: Correction API functions ----
+
+/** Correct a chord symbol at a specific beat index. */
+export async function correctChord(
+  jobId: string,
+  beatIndex: number,
+  chord: string,
+): Promise<{
+  event_index: number
+  original_chord: string
+  corrected_chord: string
+  chord_timeline: import('@/src/types').ChordTimeline
+}> {
+  const url = `${API_BASE_URL}/analyze/${encodeURIComponent(jobId)}/chord/${beatIndex}`
+  const resp = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chord }),
+  })
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '')
+    throw new ApiError(resp.status, body || `Chord correction failed (${resp.status})`)
+  }
+  return resp.json() as Promise<{
+    event_index: number
+    original_chord: string
+    corrected_chord: string
+    chord_timeline: import('@/src/types').ChordTimeline
+  }>
+}
+
+/** Correct a solo note at a specific index. */
+export async function correctSoloNote(
+  jobId: string,
+  noteIndex: number,
+  overrides: { pitch?: number; duration?: number; start_time?: number; velocity?: number },
+): Promise<{
+  note_index: number
+  original_pitch: number
+  corrected_pitch: number
+  original_duration: number
+  corrected_duration: number
+  solo_notes: import('@/src/types').SoloNotes
+}> {
+  const url = `${API_BASE_URL}/analyze/${encodeURIComponent(jobId)}/solo-note/${noteIndex}`
+  const resp = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(overrides),
+  })
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '')
+    throw new ApiError(resp.status, body || `Note correction failed (${resp.status})`)
+  }
+  return resp.json() as Promise<{
+    note_index: number
+    original_pitch: number
+    corrected_pitch: number
+    original_duration: number
+    corrected_duration: number
+    solo_notes: import('@/src/types').SoloNotes
+  }>
+}
+
+/** Set a voicing shape override for a chord. */
+export async function setVoicingOverride(
+  jobId: string,
+  beatIndex: number,
+  voicingShape: string,
+): Promise<{
+  event_index: number
+  voicing_shape: string
+  chord_timeline: import('@/src/types').ChordTimeline
+}> {
+  const url = `${API_BASE_URL}/analyze/${encodeURIComponent(jobId)}/chord/${beatIndex}/voicing`
+  const resp = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ voicing_shape: voicingShape }),
+  })
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '')
+    throw new ApiError(resp.status, body || `Voicing override failed (${resp.status})`)
+  }
+  return resp.json() as Promise<{
+    event_index: number
+    voicing_shape: string
+    chord_timeline: import('@/src/types').ChordTimeline
+  }>
+}
+
+/** Get correction history for a job. */
+export async function getCorrectionHistory(jobId: string): Promise<{
+  corrections: Array<{
+    id: string
+    type: string
+    event_or_note_index: number
+    original_value: unknown
+    corrected_value: unknown
+    timestamp: number
+  }>
+  correction_count: number
+  correction_coverage: number
+}> {
+  const url = `${API_BASE_URL}/analyze/${encodeURIComponent(jobId)}/corrections`
+  const resp = await fetch(url)
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '')
+    throw new ApiError(resp.status, body || `Failed to get corrections (${resp.status})`)
+  }
+  return resp.json() as Promise<{
+    corrections: Array<{
+      id: string
+      type: string
+      event_or_note_index: number
+      original_value: unknown
+      corrected_value: unknown
+      timestamp: number
+    }>
+    correction_count: number
+    correction_coverage: number
+  }>
+}

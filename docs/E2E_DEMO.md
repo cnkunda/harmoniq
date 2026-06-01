@@ -207,6 +207,70 @@ Run this checkpoint twice, once per mode:
 
 ---
 
+## Analysis Persistence & Correction Editor (Commit 110)
+
+### Checkpoint: Chord correction (backend)
+
+1. After analysis completes, note the job_id from the response
+2. `PATCH /analyze/{job_id}/chord/0` with body `{"chord": "F:maj"}`
+3. Confirm response shows `original_chord` and `corrected_chord`
+4. Confirm `chord_timeline.events[0].chord` is "F:maj" and `confidence` is 1.0
+5. `GET /analyze/{job_id}/corrections` — confirm correction appears in history
+6. FAIL if chord is not updated or confidence is not 1.0
+
+### Checkpoint: Chord correction (frontend — Listen)
+
+1. Navigate to the Listen screen after analysis
+2. Locate the chord strip below the metronome card
+3. Tap a chord symbol → chord correction modal opens
+4. Confirm diatonic chords are shown (filtered by song key)
+5. Tap "Show all chords…" → chromatic grid appears
+6. Select a new chord → fretboard preview updates
+7. Tap Confirm → chord strip updates with new chord
+8. FAIL if modal does not open or chord does not update
+
+### Checkpoint: Chord correction (frontend — Study)
+
+1. Navigate to the Study screen
+2. Tap a chord symbol in the chord sheet (ChordsAndLyrics)
+3. Confirm chord correction modal opens with the tapped chord
+4. Select a diatonic chord → confirm → chord sheet updates
+5. FAIL if chord sheet does not reflect the correction
+
+### Checkpoint: Note correction (frontend)
+
+1. Navigate to the Study screen with a song that has solo notes
+2. During playback, tap a red note on the fretboard
+3. Note correction panel opens with pitch, string, fret, duration
+4. Tap +1 on pitch stepper → pitch increments by 1 semitone
+5. Tap a different string chip → fret auto-updates
+6. Tap Confirm → note updates on fretboard
+7. FAIL if panel does not open or note does not update
+
+### Checkpoint: Correction persistence
+
+1. Apply a chord correction in the Listen screen
+2. Navigate away from the session (back to Home)
+3. Re-enter the session → chord correction is still applied
+4. FAIL if correction is lost on navigation
+
+### Checkpoint: Correction history & revert
+
+1. Apply 2-3 corrections (chord + note)
+2. Open the CorrectionHistory component (if visible)
+3. Confirm each correction is listed with original → corrected
+4. Tap Revert on one correction → it is removed, lesson reverts
+5. FAIL if revert does not restore original value
+
+### Checkpoint: Correction metrics
+
+1. After applying corrections, check lesson metadata
+2. Confirm `correction_count` matches the number of corrections
+3. Confirm `correction_coverage` is > 0 and <= 1.0
+4. FAIL if metrics are missing or incorrect
+
+---
+
 ## Jam Mode
 
 ### Checkpoint: Jam Mode happy path (offline / bundled) — BUG-02 resolved
@@ -238,7 +302,7 @@ Run this checkpoint twice, once per mode:
 
 ## Phase 1 & 2 E2E Completion Summary
 
-All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above checkpoints. Commits 98-100 (chord model expansion, Viterbi decoding, boundary tie) have dedicated checkpoints in the [Chord Model & Transcription Quality](#chord-model--transcription-quality-commits-98-100) section. Commit 109 (beat grid editor) has dedicated checkpoints in the [Beat Grid Editor](#checkpoint-beat-grid-editor-commit-109) section.
+All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above checkpoints. Commits 98-100 (chord model expansion, Viterbi decoding, boundary tie) have dedicated checkpoints in the [Chord Model & Transcription Quality](#chord-model--transcription-quality-commits-98-100) section. Commit 109 (beat grid editor) has dedicated checkpoints in the [Beat Grid Editor](#checkpoint-beat-grid-editor-commit-109) section. Commit 110 (correction editor) has dedicated checkpoints in the [Analysis Persistence & Correction Editor](#analysis-persistence--correction-editor-commit-110) section.
 
 | Commit | Feature | Checkpoint |
 |--------|---------|------------|
@@ -259,6 +323,7 @@ All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above
 | 99 | Viterbi Decoding | Viterbi chord smoothing + half-beat resolution |
 | 100 | Segment Boundary Tie | Segment boundary continuity — chords + solo |
 | 109 | Beat Grid Editor | Beat grid editor (timeline, BPM, time sig, recompute) |
+| 110 | Correction Editor | Chord/note/voicing correction + persistence + history |
 
 ## Known Limitations
 
@@ -266,8 +331,10 @@ All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above
 - **Tab catalog**: `GET /tabs/{id}/gp5` returns 501 until a licensed provider is configured.
 - **Jam Mode AlphaTab**: May show "No tab available" if tab loading fails (expected until licensed provider).
 - **Chord model on-device**: TFLite model with SELECT_TF_OPS requires Flex delegate on Android for BiLSTM + attention layers (commit 98c).
-- **Beat grid editor persistence**: Overrides live in Zustand in-memory store — navigating away from the Listen screen clears them. DB persistence is planned for commit 110.
+- **Beat grid editor persistence**: ✅ Resolved (commit 110). Overrides persist via `app_prefs` key-value store.
 - **Beat grid editor scope**: Single-section editing only. Variable BPM per section is deferred to commit 140.
+- **Correction MusicXML sync**: Backend endpoints rebuild MusicXML after corrections, but frontend-applied corrections do not automatically trigger MusicXML re-export (follow-up).
+- **Voicing overrides (frontend)**: Backend endpoint exists but frontend VoicingSelector UI is not yet wired into session screens (follow-up).
 
 ---
 
