@@ -356,28 +356,28 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 **Acceptance Criteria:**
 
-- [ ] Frontend AlphaTab renders MusicXML via `api.loadMusicXML()` on web (GP5 retained as fallback)
-- [ ] Native WebView harness renders MusicXML on both Android and iOS
-- [ ] Chord symbols render as `<harmony>` elements in the score
-- [ ] Solo notation renders with correct note types, beams, rests, and ties across measures
-- [ ] Tablature staff appears below standard notation staff with correct string/fret
-- [ ] Chord diagrams (`<frame>`) display inline with chord symbols
-- [ ] Dynamics, articulations, and slurs present in generated MusicXML and render in AlphaTab
-- [ ] GP5 artifacts removed from primary `LessonJSON` schema; exported-only
-- [ ] AlphaTab prerender produces SVGs from MusicXML input
-- [ ] Existing export flows (MusicXML download, GP5 download) continue to work
-- [ ] README updated
-- [ ] `data/jobs/{job_id}/score.musicxml` written as standalone file during analysis
-- [ ] `<defaults>` block present in MusicXML output with `<scaling>`,
+- [x] Frontend AlphaTab renders MusicXML via `api.loadMusicXML()` on web (GP5 retained as fallback)
+- [x] Native WebView harness renders MusicXML on both Android and iOS
+- [x] Chord symbols render as `<harmony>` elements in the score
+- [x] Solo notation renders with correct note types, beams, rests, and ties across measures
+- [x] Tablature staff appears below standard notation staff with correct string/fret
+- [x] Chord diagrams (`<frame>`) display inline with chord symbols
+- [x] Dynamics, articulations, and slurs present in generated MusicXML and render in AlphaTab
+- [x] GP5 artifacts removed from primary `LessonJSON` schema; exported-only
+- [x] AlphaTab prerender produces SVGs from MusicXML input
+- [x] Existing export flows (MusicXML download, GP5 download) continue to work
+- [x] README updated
+- [x] `data/jobs/{job_id}/score.musicxml` written as standalone file during analysis
+- [x] `<defaults>` block present in MusicXML output with `<scaling>`,
       `<page-layout>`, and `<system-layout>`
-- [ ] CI validates every MusicXML output against MusicXML 3.1 Partwise DTD;
+- [x] CI validates every MusicXML output against MusicXML 3.1 Partwise DTD;
       test fails on invalid XML
-- [ ] `LessonJSON` schema has top-level `beat_grid`, `chord_timeline`,
+- [x] `LessonJSON` schema has top-level `beat_grid`, `chord_timeline`,
       `solo_notes` fields
-- [ ] Cross-platform rendering test suite runs in CI: web screenshots match within
+- [x] Cross-platform rendering test suite runs in CI: web screenshots match within
       `maxDiffPixelRatio: 0.02`; native screenshots pass visual regression
-- [ ] Edge-case corpus (20+ files) renders without crash on both platforms
-- [ ] Known AlphaTab rendering limitations documented in repo for test writer reference
+- [x] Edge-case corpus (20+ files) renders without crash on both platforms
+- [x] Known AlphaTab rendering limitations documented in repo for test writer reference
 
 ---
 

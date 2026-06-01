@@ -21,7 +21,7 @@ import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 import type { DiscoverySuggestion, LessonJSON, SpotifyPlaybackStatePayload } from '@/src/types'
 import { lessonStemUrl, stemRelPathToPlaybackUri } from '@/src/utils/lessonAudio'
-import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
+import { readSectionMusicXml, readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
 
 function spotifySearchUrls(query: string): string[] {
@@ -220,6 +220,7 @@ export default function DiscoverScreen() {
   const section = selectedLesson?.sections?.[0]
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
   const gp5Base64 = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
+  const musicXml = useMemo(() => readSectionMusicXml(section), [section])
   const audioSrc = useMemo(() => {
     const rel = selectedLesson?.stems?.guitar
     if (!rel || typeof rel !== 'string') return null
@@ -383,6 +384,7 @@ export default function DiscoverScreen() {
           <TabViewport
             ref={tabRef}
             gp5Base64={gp5Base64}
+            musicXml={musicXml}
             audioSrc={audioSrc}
             renderPreset="listen"
             runtimeDiagnosticsEnabled={false}

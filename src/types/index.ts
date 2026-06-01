@@ -194,8 +194,11 @@ export interface LessonSection {
   beat_grid?: BeatGrid | null
   chord_timeline?: ChordTimeline | null
   solo_notes?: SoloNotes | null
+  /** @deprecated Export-only (GP5→MIDI conversion). Use `musicxml` for rendering. */
   tab_full_gp5_base64?: string | null
+  /** @deprecated Export-only (GP5→MIDI conversion). Use `musicxml` for rendering. */
   tab_skeleton_gp5_base64?: string | null
+  /** @deprecated Export-only (GP5→MIDI conversion). Use `musicxml` for rendering. */
   tab_alt_position_gp5_base64?: string | null
   coach_note?: string | null
   coach_explanation?: string | null
