@@ -16,6 +16,8 @@ import threading
 import time
 
 from app.schemas import (
+    BeatGrid,
+    BeatGridRecomputeResponse,
     CoachFocusArea,
     CoachHydrationSection,
     CoachHydrationStatus,
@@ -74,6 +76,33 @@ def _set_job_processing_progress(job_id: str, progress: float, stage_label: str)
         progress=max(0.0, min(1.0, float(progress))),
         stage_label=stage_label,
         processing_started_at=float(started),
+        analysis_stage=current.analysis_stage,
+    )
+
+
+def _set_job_analysis_stage(
+    job_id: str,
+    analysis_stage: str,
+    progress: float,
+    stage_label: str,
+    *,
+    result: LessonJSON | None = None,
+) -> None:
+    """Update analysis_stage for an in-flight job; preserves existing result if not provided."""
+    current = jobs.get(job_id)
+    if current is None or current.status != "processing":
+        return
+    started = current.processing_started_at
+    if started is None:
+        started = time.time()
+    jobs[job_id] = JobStatus(
+        status="processing",
+        result=result if result is not None else current.result,
+        error=None,
+        progress=max(0.0, min(1.0, float(progress))),
+        stage_label=stage_label,
+        processing_started_at=float(started),
+        analysis_stage=analysis_stage,
     )
 
 
@@ -316,12 +345,12 @@ def _process_analyze_job(
             invalidate_cache_for_wav(wav_path_obj, player_profile=player_profile)
 
         job_dir = get_job_dir(job_id)
-        _set_job_processing_progress(job_id, 0.4, "Separating stems…")
+        _set_job_analysis_stage(job_id, "stems_separating", 0.4, "Separating stems…")
         stem_start = time.time()
         stems = separate_song_to_stems(wav_path_obj, job_dir)
         stem_elapsed = time.time() - stem_start
         logger.info("stem separation completed in %.2fs job_id=%s", stem_elapsed, job_id)
-        _set_job_processing_progress(job_id, 0.62, "Stems ready")
+        _set_job_analysis_stage(job_id, "stems_separating", 0.62, "Stems ready")
         backend_root = get_data_dir().parent
         stem_abs_paths = {k: backend_root / rel for k, rel in stems.items()}
         classify_start = time.time()
@@ -352,7 +381,7 @@ def _process_analyze_job(
             logger.info("stub lesson generated in %.2fs job_id=%s", stub_elapsed, job_id)
             result = stub
         else:
-            _set_job_processing_progress(job_id, 0.78, "Analyzing structure & tabs…")
+            _set_job_analysis_stage(job_id, "chords_inferring", 0.62, "Inferring chords…")
             guitar_stem_path = backend_root / guitar_rel_path
             vocals_stem_path = backend_root / vocals_rel_path if vocals_rel_path else None
             piano_rel = stems.get("piano")
@@ -370,6 +399,9 @@ def _process_analyze_job(
                 stem_classification=stem_classification,
                 mix_wav_path=wav_path_obj,
                 piano_stem_path=piano_stem_path,
+                on_stage=lambda stage, prog, label: _set_job_analysis_stage(
+                    job_id, stage, prog, label
+                ),
             )
             analyze_elapsed = time.time() - analyze_start
             logger.info("librosa analysis completed in %.2fs job_id=%s", analyze_elapsed, job_id)
@@ -383,7 +415,7 @@ def _process_analyze_job(
         cache_save_elapsed = time.time() - cache_save_start
         logger.info("lesson cache save completed in %.2fs job_id=%s", cache_save_elapsed, job_id)
         
-        jobs[job_id] = JobStatus(status="complete", result=skeleton_result, error=None)
+        jobs[job_id] = JobStatus(status="complete", result=skeleton_result, error=None, analysis_stage="complete")
         _set_coach_pending(job_id, len(skeleton_result.sections))
         coach_thread = threading.Thread(
             target=_hydrate_coach_copy_job,
@@ -459,6 +491,7 @@ def enqueue_analyze_job(
         progress=0.05,
         stage_label="Queued…",
         processing_started_at=time.time(),
+        analysis_stage="initializing",
     )
     coach_hydration[job_id] = CoachHydrationStatus(status="pending", sections=[], fallback_reason=None)
     logger.info(
@@ -477,6 +510,240 @@ def enqueue_analyze_job(
             "player_profile": player_profile,
             "focus_area": focus_area,
         },
+        daemon=True,
+    )
+    t.start()
+
+
+# ---- Commit 109: Beat grid recompute jobs ----------------------------------
+
+# In-memory store for beat grid recompute job status.
+recompute_jobs: dict[str, BeatGridRecomputeResponse] = {}
+
+
+def get_recompute_job(job_id: str) -> BeatGridRecomputeResponse | None:
+    """Get recompute job status; returns None if no recompute in progress."""
+    return recompute_jobs.get(job_id)
+
+
+def _set_recompute_progress(
+    job_id: str,
+    status: BeatGridRecomputeResponse.status,  # type: ignore[name-defined]
+    *,
+    progress: float | None = None,
+    stage_label: str | None = None,
+    beat_grid: BeatGrid | None = None,
+    chord_timeline=None,
+    solo_notes=None,
+    musicxml: str | None = None,
+    bar_timestamps: list[float] | None = None,
+    error: str | None = None,
+) -> None:
+    """Update recompute job status."""
+    recompute_jobs[job_id] = BeatGridRecomputeResponse(
+        job_id=job_id,
+        status=status,
+        progress=progress,
+        stage_label=stage_label,
+        beat_grid=beat_grid if beat_grid is not None else (
+            recompute_jobs[job_id].beat_grid if job_id in recompute_jobs else None
+        ),
+        chord_timeline=chord_timeline if chord_timeline is not None else (
+            recompute_jobs[job_id].chord_timeline if job_id in recompute_jobs else None
+        ),
+        solo_notes=solo_notes if solo_notes is not None else (
+            recompute_jobs[job_id].solo_notes if job_id in recompute_jobs else None
+        ),
+        musicxml=musicxml if musicxml is not None else (
+            recompute_jobs[job_id].musicxml if job_id in recompute_jobs else None
+        ),
+        bar_timestamps=bar_timestamps if bar_timestamps is not None else (
+            recompute_jobs[job_id].bar_timestamps if job_id in recompute_jobs else []
+        ),
+        error=error,
+    )
+
+
+def _process_beat_grid_recompute(
+    job_id: str,
+    *,
+    time_signature: str | None,
+    bpm_override: float | None,
+) -> None:
+    """Worker: re-derive beat grid and all dependent artifacts for an existing job."""
+    from app.analyze_audio import build_lesson_json_from_librosa
+    from app.beat_grid import BeatGridComputationError, estimate_beat_grid
+    from app.ingest import get_data_dir, get_job_dir
+    from app.chord_inference import infer_chords
+    from app.musicxml_builder import build_musicxml
+    from app.schemas import ChordTimeline, SoloNotes
+    from app.solo_inference import infer_solo
+
+    try:
+        _set_recompute_progress(job_id, "recomputing_beats", progress=0.1, stage_label="Recomputing beat grid…")
+        job = jobs.get(job_id)
+        if job is None or job.result is None:
+            _set_recompute_progress(job_id, "failed", error="Job not found or has no result.")
+            return
+
+        job_dir = get_job_dir(job_id)
+        data_dir = get_data_dir()
+        backend_root = data_dir.parent
+
+        # Find the normalized WAV path
+        wav_path = job_dir / "song.wav"
+        if not wav_path.exists():
+            # Try to reconstruct from stems
+            _set_recompute_progress(job_id, "failed", error="Original audio not found for this job.")
+            return
+
+        # Re-estimate beat grid with overrides
+        beat_grid_dict = estimate_beat_grid(
+            wav_path,
+            time_signature=time_signature,
+            bpm_override=bpm_override,
+        )
+        beat_grid = BeatGrid.model_validate(beat_grid_dict)
+        bar_timestamps = list(beat_grid.downbeats) if beat_grid.downbeats else [0.0]
+
+        _set_recompute_progress(
+            job_id, "recomputing_beats",
+            progress=0.3,
+            stage_label="Beat grid updated",
+            beat_grid=beat_grid,
+            bar_timestamps=bar_timestamps,
+        )
+
+        # Resolve stems for re-inference
+        stems = job.result.stems or {}
+        guitar_rel = stems.get("guitar")
+        vocals_rel = stems.get("vocals")
+        guitar_stem_path = (backend_root / guitar_rel) if guitar_rel else None
+        vocals_stem_path = (backend_root / vocals_rel) if vocals_rel else None
+
+        if guitar_stem_path is None or not guitar_stem_path.exists():
+            _set_recompute_progress(job_id, "failed", error="Guitar stem not found.")
+            return
+
+        # Re-run chord inference
+        _set_recompute_progress(job_id, "recomputing_chords", progress=0.4, stage_label="Recomputing chords…")
+        try:
+            chord_mix_path = wav_path  # Use full mix for chord inference
+            chord_timeline = infer_chords(chord_mix_path, beat_grid)
+        except Exception:
+            logger.exception("recompute chord inference failed for job_id=%s", job_id)
+            chord_timeline = ChordTimeline(events=[])
+
+        _set_recompute_progress(
+            job_id, "recomputing_chords",
+            progress=0.6,
+            stage_label="Chords recomputed",
+            chord_timeline=chord_timeline,
+        )
+
+        # Re-run solo inference
+        _set_recompute_progress(job_id, "recomputing_solo", progress=0.65, stage_label="Recomputing solo…")
+        try:
+            solo_notes = infer_solo(guitar_stem_path, beat_grid)
+        except Exception:
+            logger.exception("recompute solo inference failed for job_id=%s", job_id)
+            solo_notes = SoloNotes(notes=[])
+
+        _set_recompute_progress(
+            job_id, "recomputing_solo",
+            progress=0.8,
+            stage_label="Solo recomputed",
+            solo_notes=solo_notes,
+        )
+
+        # Rebuild MusicXML
+        _set_recompute_progress(job_id, "rebuilding_musicxml", progress=0.85, stage_label="Rebuilding MusicXML…")
+        musicxml_str = ""
+        try:
+            if chord_timeline and solo_notes and beat_grid:
+                musicxml_str = build_musicxml(
+                    beat_grid=beat_grid,
+                    chord_timeline=chord_timeline,
+                    solo_notes=solo_notes,
+                    title=job.result.song_title or "Harmoniq Score",
+                    artist=job.result.artist or "Harmoniq AI",
+                    key_signature=job.result.key,
+                )
+        except Exception:
+            logger.exception("recompute MusicXML build failed for job_id=%s", job_id)
+
+        # Update the main job result with new artifacts
+        patched = job.result.model_copy(update={
+            "beat_grid_structured": beat_grid,
+            "beat_grid": beat_grid.beats,
+            "bar_timestamps": bar_timestamps,
+            "chord_timeline": chord_timeline,
+            "solo_notes": solo_notes,
+            "musicxml": musicxml_str,
+        })
+        jobs[job_id] = JobStatus(
+            status=job.status,
+            result=patched,
+            error=job.error,
+            error_code=job.error_code,
+            progress=job.progress,
+            stage_label=job.stage_label,
+            processing_started_at=job.processing_started_at,
+            analysis_stage=job.analysis_stage,
+        )
+
+        # Persist recompute artifacts to disk so they survive server restarts
+        try:
+            from pathlib import Path as _Path
+            job_dir = get_job_dir(job_id)
+            (job_dir / "BeatGrid.json").write_text(
+                beat_grid.model_dump_json(indent=2), encoding="utf-8"
+            )
+            if chord_timeline:
+                (job_dir / "chordTimeline.json").write_text(
+                    chord_timeline.model_dump_json(indent=2), encoding="utf-8"
+                )
+            if solo_notes:
+                (job_dir / "SoloNotes.json").write_text(
+                    solo_notes.model_dump_json(indent=2), encoding="utf-8"
+                )
+            if musicxml_str:
+                (job_dir / "score.musicxml").write_text(musicxml_str, encoding="utf-8")
+            logger.info("recompute artifacts persisted to disk for job_id=%s", job_id)
+        except Exception:
+            logger.exception("Failed to persist recompute artifacts for job_id=%s", job_id)
+
+        _set_recompute_progress(
+            job_id, "complete",
+            progress=1.0,
+            stage_label="Recompute complete",
+            beat_grid=beat_grid,
+            chord_timeline=chord_timeline,
+            solo_notes=solo_notes,
+            musicxml=musicxml_str,
+            bar_timestamps=bar_timestamps,
+        )
+        logger.info("beat grid recompute complete job_id=%s", job_id)
+
+    except BeatGridComputationError as exc:
+        logger.warning("beat grid recompute failed for job_id=%s: %s", job_id, exc)
+        _set_recompute_progress(job_id, "failed", error=str(exc))
+    except Exception:
+        logger.exception("beat grid recompute failed for job_id=%s", job_id)
+        _set_recompute_progress(job_id, "failed", error="Recompute failed unexpectedly.")
+
+
+def enqueue_beat_grid_recompute(
+    job_id: str,
+    *,
+    time_signature: str | None,
+    bpm_override: float | None,
+) -> None:
+    """Start a background thread to recompute beat grid and dependent artifacts."""
+    _set_recompute_progress(job_id, "pending", progress=0.0, stage_label="Queued…")
+    t = threading.Thread(
+        target=_process_beat_grid_recompute,
+        kwargs={"job_id": job_id, "time_signature": time_signature, "bpm_override": bpm_override},
         daemon=True,
     )
     t.start()

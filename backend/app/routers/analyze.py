@@ -25,13 +25,17 @@ from app.jobs import (
     ANALYSIS_FAILED_USER_MESSAGE,
     ANALYZE_ERROR_ANALYSIS_FAILED,
     enqueue_analyze_job,
+    enqueue_beat_grid_recompute,
     get_coach_hydration,
+    get_recompute_job,
     jobs,
 )
 from app.schemas import (
     AnalyzeJobCreated,
     AnalyzeTranscriptionResponse,
     BeatGrid,
+    BeatGridRecomputeRequest,
+    BeatGridRecomputeResponse,
     CoachHydrationStatus,
     JobStatus,
     TranscriptionPrepareResponse,
@@ -415,3 +419,43 @@ async def verify_transcription(req: TranscriptionVerifyRequest):
         with open(lesson_path, "w") as f:
             json.dump(lesson_data, f, indent=2)
     return TranscriptionVerifyResponse(success=True, message="Corrections recorded successfully" if corrections_applied else "No corrections to apply", corrections_applied=corrections_applied)
+
+
+# ---- Commit 109: Beat grid recompute endpoints ----------------------------
+
+@router.post(
+    "/analyze/{job_id}/beat-grid/recompute",
+    response_model=BeatGridRecomputeResponse,
+    summary="POST /analyze/{job_id}/beat-grid/recompute — async recompute with overrides",
+)
+async def beat_grid_recompute(job_id: str, req: BeatGridRecomputeRequest) -> BeatGridRecomputeResponse:
+    """Trigger asynchronous recomputation of beat grid and all dependent artifacts.
+
+    Poll GET /analyze/{job_id}/beat-grid/recompute for status updates.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
+    enqueue_beat_grid_recompute(
+        job_id,
+        time_signature=req.time_signature,
+        bpm_override=req.bpm_override,
+    )
+    return BeatGridRecomputeResponse(
+        job_id=job_id,
+        status="pending",
+        progress=0.0,
+        stage_label="Queued…",
+    )
+
+
+@router.get(
+    "/analyze/{job_id}/beat-grid/recompute",
+    response_model=BeatGridRecomputeResponse,
+    summary="GET /analyze/{job_id}/beat-grid/recompute — poll recompute status",
+)
+async def beat_grid_recompute_status(job_id: str) -> BeatGridRecomputeResponse:
+    """Poll recompute job status. Returns 404 if no recompute has been triggered."""
+    status = get_recompute_job(job_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail=f"No recompute job for {job_id}.")
+    return status

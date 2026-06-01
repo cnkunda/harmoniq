@@ -19,7 +19,7 @@ except ImportError:
 BEAT_TRACK_SR = 22050
 
 DEFAULT_TIME_SIGNATURE = "4/4"
-DEPENDENT_ARTIFACTS = ("chordTimeline", "SoloNotes", "Score.musicxml")
+DEPENDENT_ARTIFACTS = ("chordTimeline", "SoloNotes", "Score.musicxml", "barTimestamps")
 
 class BeatGridComputationError(RuntimeError):
     """Raised when beat grid estimation or override parsing fails."""

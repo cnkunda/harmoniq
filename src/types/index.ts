@@ -265,6 +265,32 @@ export interface AnalyzeJob {
   stage_label?: string | null
   /** Unix seconds when processing began (server); optional for older backends. */
   processing_started_at?: number | null
+  /** Commit 109: Machine-readable analysis stage for progressive rendering. */
+  analysis_stage?: string | null
+}
+
+/** Commit 109: Beat grid recompute status from GET /analyze/{id}/beat-grid/recompute */
+export type BeatGridRecomputeStatus =
+  | 'pending'
+  | 'recomputing_beats'
+  | 'recomputing_chords'
+  | 'recomputing_solo'
+  | 'rebuilding_musicxml'
+  | 'complete'
+  | 'failed'
+
+/** Commit 109: Beat grid recompute response */
+export interface BeatGridRecomputeResponse {
+  job_id: string
+  status: BeatGridRecomputeStatus
+  beat_grid?: BeatGrid | null
+  chord_timeline?: ChordTimeline | null
+  solo_notes?: SoloNotes | null
+  musicxml?: string | null
+  bar_timestamps?: number[]
+  error?: string | null
+  progress?: number | null
+  stage_label?: string | null
 }
 
 /** POST /score response — see README.md */

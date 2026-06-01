@@ -28,6 +28,7 @@ After submitting a YouTube URL for analysis:
 - Open browser DevTools Network tab
 - Confirm GET /analyze/{id} fires at most every 2–5 seconds (backoff)
 - Confirm polling stops **immediately** when status shows "complete" — zero additional requests after terminal status
+- Confirm `analysis_stage` field is present in poll responses and transitions through: `initializing` → `stems_separating` → `chords_inferring` → `solo_inferring` → `building_musicxml` → `complete`
 - FAIL if you see more than 10 requests before the ML pipeline starts (resampy/TF load is visible in the terminal)
 - FAIL if any `/analyze/{id}` request fires after status transitions to `complete` or `failed` (verifies `seenCompletedOrFailed` guard — see `src/api/analyze.ts:381`)
 
@@ -39,11 +40,27 @@ After submitting a YouTube URL for analysis:
 2. On the **Listen** screen:
    - **Playback card**: Confirm audio plays smoothly, timeline scrubber works
    - **Metronome card**: Confirm beats are audible when enabled, subdivision chips work
+   - **Beat grid editor**: Expand the beat grid panel — confirm timeline renders, BPM and time signature are editable
    - **Stems card**: Confirm stem mute/solo toggles work for each instrument
 3. Tap **Watch How It's Played** button
 4. Confirm modal opens with video placeholder and play button
 5. Confirm orient annotation text is displayed
 6. Close the modal
+
+#### Checkpoint: Beat grid editor (commit 109)
+
+1. In the Listen screen, expand the **Beat Grid** panel (below metronome controls)
+2. Confirm the beat grid timeline renders with beat ticks, downbeat accents, and bar lines
+3. Tap **+0.5** three times on the BPM editor → confirm BPM increases by 1.5 and timeline spacing adjusts in real-time
+4. Tap **−5** → confirm BPM decreases by 5
+5. Tap **Reset** → confirm BPM returns to the auto-detected value and the dirty indicator clears
+6. Change the time signature to 3/4 → confirm timeline re-renders with 3 beats per bar
+7. Change the time signature to 6/8 → confirm 6 beats per bar
+8. Tap **Undo** → confirm previous state is restored
+9. Tap **Redo** → confirm forward state is restored
+10. Edit BPM, then tap **Apply** → confirm a progress bar appears; chord timeline, solo notes, and MusicXML all update when complete
+11. FAIL if timeline does not update in real-time during BPM edits
+12. FAIL if Apply does not trigger recompute or if chord/solo/MusicXML do not update
 
 #### Checkpoint: Predictive UI rendering (commit 89)
 
@@ -219,9 +236,9 @@ Run this checkpoint twice, once per mode:
 
 ---
 
-## Phase 1 E2E Completion Summary
+## Phase 1 & 2 E2E Completion Summary
 
-All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above checkpoints. Commits 98-100 (chord model expansion, Viterbi decoding, boundary tie) have dedicated checkpoints in the [Chord Model & Transcription Quality](#chord-model--transcription-quality-commits-98-100) section.
+All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above checkpoints. Commits 98-100 (chord model expansion, Viterbi decoding, boundary tie) have dedicated checkpoints in the [Chord Model & Transcription Quality](#chord-model--transcription-quality-commits-98-100) section. Commit 109 (beat grid editor) has dedicated checkpoints in the [Beat Grid Editor](#checkpoint-beat-grid-editor-commit-109) section.
 
 | Commit | Feature | Checkpoint |
 |--------|---------|------------|
@@ -241,6 +258,7 @@ All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above
 | 98a-d | Chord model architecture (CQT, CRNN, Attention) | (backend — chord accuracy metrics) |
 | 99 | Viterbi Decoding | Viterbi chord smoothing + half-beat resolution |
 | 100 | Segment Boundary Tie | Segment boundary continuity — chords + solo |
+| 109 | Beat Grid Editor | Beat grid editor (timeline, BPM, time sig, recompute) |
 
 ## Known Limitations
 
@@ -248,6 +266,8 @@ All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above
 - **Tab catalog**: `GET /tabs/{id}/gp5` returns 501 until a licensed provider is configured.
 - **Jam Mode AlphaTab**: May show "No tab available" if tab loading fails (expected until licensed provider).
 - **Chord model on-device**: TFLite model with SELECT_TF_OPS requires Flex delegate on Android for BiLSTM + attention layers (commit 98c).
+- **Beat grid editor persistence**: Overrides live in Zustand in-memory store — navigating away from the Listen screen clears them. DB persistence is planned for commit 110.
+- **Beat grid editor scope**: Single-section editing only. Variable BPM per section is deferred to commit 140.
 
 ---
 

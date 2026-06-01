@@ -4,6 +4,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 import { Platform, ScrollView, Switch, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { BeatGridEditorPanel } from '@/components/BeatGridEditorPanel'
 import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
 import { PlayCaptureLessonCardBanner } from '@/components/play'
 import { MetronomeArcReadout } from '@/components/MetronomeArcReadout'
@@ -826,6 +827,19 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
               })}
             </View>
           </View>
+        </View>
+
+        {/* Commit 109: Beat grid editor panel — expandable within metronome card */}
+        <View className="px-1 pb-2">
+          <BeatGridEditorPanel
+            lesson={lesson}
+            beatGrid={lesson?.beat_grid_structured ?? null}
+            durationSec={durationSec}
+            playbackPositionSec={positionSec}
+            onRecomputeComplete={(updated) => {
+              useLessonStore.getState().saveLesson(updated)
+            }}
+          />
         </View>
 
         {stemsColumnReplacement != null ? (

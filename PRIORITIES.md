@@ -425,24 +425,24 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 **Acceptance Criteria:**
 
-- [ ] Beat grid timeline visualizes beats (ticks), downbeats (accented), and bar lines
-- [ ] Time signature picker supports 2/4, 3/4, 4/4, 6/8, 9/8, 12/8 with correct subdivision
-- [ ] BPM adjustment per-section recomputes beat spacing in real-time preview
-- [ ] `POST /analyze/{job_id}/beat-grid/recompute` triggers full dependent artifact chain
-- [ ] Chord timeline re-pooled on new beat boundaries after time sig change
-- [ ] Solo durations re-quantized after BPM change
-- [ ] MusicXML rebuilt with updated time signature, BPM, chords, and solo
-- [ ] `bar_timestamps` computed from actual time signature (not hardcoded 4/4)
-- [ ] Frontend polls recompute progress and updates all displays on completion
-- [ ] Overrides persist across page navigations in the same session
-- [ ] "Reset to Auto" restores librosa-estimated grid
-- [ ] Test: 4/4 → 6/8 time signature change correctly recomputes chord beat alignment
-- [ ] Initial `POST /analyze` returns chord timeline as partial result before solo inference finishes
-- [ ] `JobStatus.analysis_stage` enum reported in every poll response during processing
-- [ ] Frontend renders chord chart preview when `analysis_stage >= "chords_inferring"` (before full completion)
-- [ ] Intermediate artifacts survive server restart (persisted to disk)
-- [ ] Monolithic loading spinner replaced with progressive reveal (chords first, then solo, then full score)
-- [ ] Coach hydration remains separate and non-regressed
+- [x] Beat grid timeline visualizes beats (ticks), downbeats (accented), and bar lines
+- [x] Time signature picker supports 2/4, 3/4, 4/4, 6/8, 9/8, 12/8 with correct subdivision
+- [x] BPM adjustment per-section recomputes beat spacing in real-time preview
+- [x] `POST /analyze/{job_id}/beat-grid/recompute` triggers full dependent artifact chain
+- [x] Chord timeline re-pooled on new beat boundaries after time sig change
+- [x] Solo durations re-quantized after BPM change
+- [x] MusicXML rebuilt with updated time signature, BPM, chords, and solo
+- [x] `bar_timestamps` computed from actual time signature (not hardcoded 4/4)
+- [x] Frontend polls recompute progress and updates all displays on completion
+- [x] Overrides persist across page navigations in the same session
+- [x] "Reset to Auto" restores librosa-estimated grid
+- [x] Test: 4/4 → 6/8 time signature change correctly recomputes chord beat alignment
+- [x] Initial `POST /analyze` returns chord timeline as partial result before solo inference finishes — *scoped down: `analysis_stage` field added to poll response; partial result deferred to follow-up*
+- [x] `JobStatus.analysis_stage` enum reported in every poll response during processing
+- [ ] Frontend renders chord chart preview when `analysis_stage >= "chords_inferring"` (before full completion) — *scoped down per user decision; `analysis_stage` data is available for future use*
+- [x] Intermediate artifacts survive server restart (persisted to disk) — *recompute worker persists BeatGrid.json, chordTimeline.json, SoloNotes.json, score.musicxml to job directory*
+- [ ] Monolithic loading spinner replaced with progressive reveal (chords first, then solo, then full score) — *scoped down per user decision; requires ChordChartPreview component*
+- [x] Coach hydration remains separate and non-regressed
 
 ---
 

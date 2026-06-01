@@ -264,6 +264,47 @@ class TranscriptionPrepareResponse(BaseModel):
     invalidated_artifacts: list[str] = Field(default_factory=list)
 
 
+# Commit 109: Beat grid recompute schemas
+class BeatGridRecomputeRequest(BaseModel):
+    """Request body for POST /analyze/{job_id}/beat-grid/recompute."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    time_signature: str | None = Field(
+        default=None,
+        description="New time signature, e.g. '4/4', '6/8', '3/4'. Omit to keep current.",
+    )
+    bpm_override: float | None = Field(
+        default=None,
+        description="New BPM override. Omit to keep current (librosa-estimated).",
+    )
+
+
+class BeatGridRecomputeResponse(BaseModel):
+    """Response from POST /analyze/{job_id}/beat-grid/recompute — job-like status for async recompute."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    job_id: str
+    status: Literal["pending", "recomputing_beats", "recomputing_chords", "recomputing_solo", "rebuilding_musicxml", "complete", "failed"] = "pending"
+    beat_grid: BeatGrid | None = None
+    chord_timeline: ChordTimeline | None = None
+    solo_notes: SoloNotes | None = None
+    musicxml: str | None = None
+    bar_timestamps: list[float] = Field(default_factory=list)
+    error: str | None = None
+    progress: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Approximate progress 0–1 while recomputing.",
+    )
+    stage_label: str | None = Field(
+        default=None,
+        description="Short stage label while recomputing.",
+    )
+
+
 class AnalyzeRequest(BaseModel):
     """YouTube URL or omitted when sending multipart audio instead."""
 
@@ -402,6 +443,11 @@ class JobStatus(BaseModel):
     processing_started_at: float | None = Field(
         default=None,
         description="Unix timestamp when processing began (server clock).",
+    )
+    # Commit 109: Progressive analysis stage for frontend partial rendering
+    analysis_stage: str | None = Field(
+        default=None,
+        description="Machine-readable analysis stage: initializing, stems_separating, chords_inferring, solo_inferring, building_musicxml, complete.",
     )
 
 

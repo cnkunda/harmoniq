@@ -731,3 +731,46 @@ export async function fetchTheoryAnnotation(payload: {
     body: JSON.stringify(payload),
   })
 }
+
+// ---- Commit 109: Beat grid recompute API ----------------------------------
+
+/** Trigger async beat grid recompute. Poll with `pollBeatGridRecomputeStatus()`. */
+export async function triggerBeatGridRecompute(
+  jobId: string,
+  params: { time_signature?: string; bpm_override?: number },
+): Promise<{ job_id: string; status: string }> {
+  return request<{ job_id: string; status: string }>(
+    `/analyze/${encodeURIComponent(jobId)}/beat-grid/recompute`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    },
+  )
+}
+
+/** Poll beat grid recompute status until terminal state. */
+export async function getBeatGridRecomputeStatus(
+  jobId: string,
+): Promise<import('@/src/types').BeatGridRecomputeResponse> {
+  return request<import('@/src/types').BeatGridRecomputeResponse>(
+    `/analyze/${encodeURIComponent(jobId)}/beat-grid/recompute`,
+  )
+}
+
+/** Poll recompute status with callbacks until complete/failed. Returns final status. */
+export async function pollBeatGridRecompute(
+  jobId: string,
+  onStatus: (resp: import('@/src/types').BeatGridRecomputeResponse) => void,
+  intervalMs: number = 1500,
+): Promise<import('@/src/types').BeatGridRecomputeResponse> {
+  const terminal = new Set<string>(['complete', 'failed'])
+  let last: import('@/src/types').BeatGridRecomputeResponse | null = null
+  while (true) {
+    const resp = await getBeatGridRecomputeStatus(jobId)
+    last = resp
+    onStatus(resp)
+    if (terminal.has(resp.status)) return resp
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}

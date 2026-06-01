@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.ingest import SourceMetadata, resolve_lesson_titles
 from app.pipeline_proof import LibrosaSummary, librosa_summarize
@@ -211,6 +211,7 @@ def build_lesson_json_from_librosa(
     stem_classification: StemClassification | None = None,
     mix_wav_path: Path | None = None,
     piano_stem_path: Path | None = None,
+    on_stage: Callable[[str, float, str], None] | None = None,
 ) -> LessonJSON:
     song_title, artist = resolve_lesson_titles(source_metadata, source_url=source_url)
 
@@ -260,7 +261,9 @@ def build_lesson_json_from_librosa(
     if not beat_grid_list:
         beat_grid_list = [0.0]
 
-    bar_timestamps = _sorted_unique_floats(summary.bar_timestamps_s)
+    # Commit 109: Derive bar_timestamps from BeatGrid.downbeats (time-sig-aware)
+    # instead of pipeline_proof.py's hardcoded 4/4 assumption.
+    bar_timestamps = list(beat_grid.downbeats) if beat_grid.downbeats else [0.0]
     if not bar_timestamps:
         bar_timestamps = [0.0]
     if bar_timestamps[0] > 0.05:
@@ -270,6 +273,8 @@ def build_lesson_json_from_librosa(
     chord_timeline: ChordTimeline | None = None
     solo_notes: SoloNotes | None = None
     
+    if on_stage:
+        on_stage("chords_inferring", 0.65, "Inferring chords…")
     try:
         # Use bass+other mix for chord inference, guitar for solo
         chord_mix_path = mix_wav_path if mix_wav_path and mix_wav_path.is_file() else guitar_stem_path
@@ -279,6 +284,8 @@ def build_lesson_json_from_librosa(
         logger.exception("chord inference failed for job_id=%s; continuing without chord timeline", job_id)
         chord_timeline = ChordTimeline(events=[])
     
+    if on_stage:
+        on_stage("solo_inferring", 0.78, "Inferring solo notation…")
     try:
         solo_notes = infer_solo(guitar_stem_path, beat_grid)
         logger.info("solo inference completed for job_id=%s with %d notes", job_id, len(solo_notes.notes))
@@ -424,6 +431,8 @@ def build_lesson_json_from_librosa(
 
     # Generate MusicXML lead sheet with chords and solo notes
     musicxml_str = ""
+    if on_stage:
+        on_stage("building_musicxml", 0.88, "Building MusicXML…")
     try:
         if chord_timeline and solo_notes and beat_grid:
             musicxml_str = build_musicxml(
