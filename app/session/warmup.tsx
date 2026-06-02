@@ -43,10 +43,10 @@ function Pill({ children, emphasis }: { children: string; emphasis?: boolean }) 
   return (
     <View
       className={`rounded-full border px-2.5 py-1 ${
-        emphasis ? 'border-amber-accent/45 bg-amber-accent/20' : 'border-wood-600/25 bg-cream-dark/50'
+        emphasis ? 'border-amber-accent/45 bg-amber-accent/20' : 'border-wood-600/25 bg-wood-700/40'
       }`}
     >
-      <Text className={`font-sans text-xs ${emphasis ? 'font-sans-medium text-wood-900' : 'text-wood-800'}`}>
+      <Text className={`font-sans text-xs ${emphasis ? 'font-sans-medium text-cream' : 'text-muted-brown'}`}>
         {children}
       </Text>
     </View>
@@ -245,8 +245,8 @@ export default function WarmupScreen() {
        showNext={completed}
         nextLabel="Next section"
        onNext={goNextSection}
-       footerContainerClassName="flex-row gap-3 border-t border-wood-600/20 bg-ivory px-6 pb-8 pt-4"
-       backButtonClassName="flex-1 rounded-xl border border-wood-600/45 bg-cream py-3"
+       footerContainerClassName="flex-row gap-3 border-t border-wood-600/30 bg-wood-800/60 px-6 pb-8 pt-4"
+       backButtonClassName="flex-1 rounded-xl border border-wood-600/45 bg-wood-700/40 py-3"
        nextButtonClassName="flex-1 rounded-xl border border-amber-accent/55 bg-amber-accent/35 py-3 whitespace-nowrap"
     >
       <View className={`mt-1 ${colClass}`}>
@@ -294,17 +294,17 @@ export default function WarmupScreen() {
           {!completed && warmupStarted ? (
             <AnimatedPressable haptic="light"
               onPress={stopExercise}
-              className="mt-6 w-full rounded-xl border-2 border-wood-600/45 bg-cream-dark/50 py-3"
+              className="mt-6 w-full rounded-xl border-2 border-wood-600/45 bg-wood-700/40 py-3"
               accessibilityRole="button"
               accessibilityLabel="Stop warm-up exercise timer"
             >
-              <Text className="text-center font-sans-medium text-wood-900">Stop exercise</Text>
+              <Text className="text-center font-sans-medium text-cream">Stop exercise</Text>
             </AnimatedPressable>
           ) : null}
         </View>
 
         <View className={rightColClass}>
-          <View className="rounded-2xl border border-wood-600/20 bg-cream-dark/45 px-4 pb-4 pt-3.5">
+          <View className="rounded-2xl border border-wood-600/20 bg-wood-800/40 px-4 pb-4 pt-3.5">
             <View className="flex-row items-center justify-between">
               <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
                 Exercise {completed ? exercises.length : exerciseIndex + 1} of {exercises.length}
@@ -312,7 +312,7 @@ export default function WarmupScreen() {
               {!completed ? (
                 <View className="flex-row items-center gap-1.5 rounded-full border border-amber-accent/40 bg-amber-accent/10 px-2.5 py-1">
                   <View className="h-1.5 w-1.5 rounded-full bg-amber-accent" />
-                  <Text className="font-sans-medium text-xs text-wood-800">
+                  <Text className="font-sans-medium text-xs text-cream">
                     {warmupStarted ? 'Active' : 'Ready'}
                   </Text>
                 </View>
@@ -321,7 +321,7 @@ export default function WarmupScreen() {
               )}
             </View>
 
-            <Text className="mt-3 font-serif text-2xl text-wood-900">{ex?.name ?? '—'}</Text>
+            <Text className="mt-3 font-serif text-2xl text-cream">{ex?.name ?? '—'}</Text>
 
             <View className="mt-3 flex-row flex-wrap gap-2">
               <Pill emphasis>{`${formatClock(ex?.duration_seconds ?? 0)} duration`}</Pill>
@@ -329,11 +329,11 @@ export default function WarmupScreen() {
               <Pill>{ex ? formatTechniqueTag(ex.technique_tag) : '—'}</Pill>
             </View>
 
-            <Text className="mt-3 font-sans text-sm leading-relaxed text-wood-800">{ex?.description}</Text>
+            <Text className="mt-3 font-sans text-sm leading-relaxed text-muted-brown">{ex?.description}</Text>
 
             <View className="mt-4">
               <View className="mb-1.5 flex-row items-center justify-between">
-                <Text className="font-sans-medium text-xs text-wood-800">Playback tempo</Text>
+                <Text className="font-sans-medium text-xs text-muted-brown">Playback tempo</Text>
                 <Text className="font-sans-medium text-xs text-amber-accent">{displayBpm} BPM</Text>
               </View>
               <Slider
@@ -352,10 +352,10 @@ export default function WarmupScreen() {
             </View>
 
             {nextEx ? (
-              <View className="mt-5 rounded-xl border border-wood-600/15 bg-cream-dark/35 px-3 py-2.5">
+              <View className="mt-5 rounded-xl border border-wood-600/15 bg-wood-700/30 px-3 py-2.5">
                 <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-muted-brown">Up next</Text>
                 <View className="mt-1 flex-row items-center justify-between gap-2">
-                  <Text className="flex-1 font-sans text-sm text-wood-900" numberOfLines={2}>
+                  <Text className="flex-1 font-sans text-sm text-cream" numberOfLines={2}>
                     {nextEx.name}
                   </Text>
                   <Text className="font-sans-medium text-sm text-muted-brown">
@@ -369,19 +369,19 @@ export default function WarmupScreen() {
               <View className="mt-5 flex-row flex-wrap gap-2">
                 <AnimatedPressable haptic="light"
                   onPress={skipExercise}
-                  className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-ivory py-3"
+                  className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-wood-700/40 py-3"
                   accessibilityRole="button"
                   accessibilityLabel="Skip to next warm-up exercise"
                 >
-                  <Text className="text-center font-sans-medium text-sm text-wood-900">Skip exercise</Text>
+                  <Text className="text-center font-sans-medium text-sm text-cream">Skip exercise</Text>
                 </AnimatedPressable>
                 <AnimatedPressable haptic="light"
                   onPress={goNextSection}
-                  className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-ivory py-3"
+                  className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-wood-700/40 py-3"
                   accessibilityRole="button"
                   accessibilityLabel="Skip entire warm-up"
                 >
-                  <Text className="text-center font-sans-medium text-sm text-wood-900">Skip warm-up</Text>
+                  <Text className="text-center font-sans-medium text-sm text-cream">Skip warm-up</Text>
                 </AnimatedPressable>
               </View>
             ) : null}

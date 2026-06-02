@@ -8,6 +8,7 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ChordCorrectionModal } from '@/components/ChordCorrectionModal'
 import { ChordStrip } from '@/components/ChordStrip'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
+import { EmptyState } from '@/components/EmptyState'
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
@@ -22,7 +23,7 @@ import { applyCorrectionsToChordTimeline } from '@/src/utils/applyCorrections'
 import { MusicProvider } from '@/src/context/MusicContext'
 import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import colors from '@/src/constants/colors'
-import { Film, Pause, Play, X } from 'lucide-react-native'
+import { Film, Headphones, Pause, Play, X } from 'lucide-react-native'
 
 export default function ListenScreen() {
   useStepCoachNarration()
@@ -189,6 +190,7 @@ export default function ListenScreen() {
     >
       <SessionStepScreen
       title="Listen"
+      phaseEyebrow="Orient phase"
       subtitle={
         isDemo ? DEMO_TOUR_SUBTITLE.listen : 'Familiarize yourself with the piece before playing'
       }
@@ -201,10 +203,18 @@ export default function ListenScreen() {
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.listen}</DemoTourCallout> : null}
 
-      <ListenStemPanel
-        ref={stemTabRef}
-        autoPlayOnReady={lesson?.job_id === DEMO_LESSON_JOB_ID}
-      />
+      {!lesson ? (
+        <EmptyState
+          Icon={Headphones}
+          heading="No song loaded for the Listen step"
+          subtext="Start from the Home tab to add and analyze a song."
+        />
+      ) : (
+        <ListenStemPanel
+          ref={stemTabRef}
+          autoPlayOnReady={lesson?.job_id === DEMO_LESSON_JOB_ID}
+        />
+      )}
 
       {/* Commit 110: Chord strip for chord correction */}
       {chordEvents && chordEvents.length > 0 && (

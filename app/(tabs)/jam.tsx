@@ -113,14 +113,7 @@ export default function JamScreen() {
   const lastScaleTintRef = useRef<{ rootMidi: number; intervals: readonly number[] } | null>(null)
   const classicTrackDef = BACKING_TRACKS.find((t) => t.id === classicTrackId) ?? BACKING_TRACKS[0]
   jamBpmRef.current = classicTrackDef.bpm ?? null
-  const activeJamTrackLine =
-    backingMode === 'ai'
-      ? `AI instrumental (server · Gemini) · template: ${classicTrackDef.label} · ${classicTrackDef.key}${
-          classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'
-        }`
-      : `Offline loop (bundled) · ${classicTrackDef.label} · ${classicTrackDef.key}${
-          classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'
-        }`
+  const activeJamTrackSource = backingMode === 'ai' ? 'AI instrumental · Gemini' : 'Offline loop (bundled)'
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
 
   const currentPlan = usePlanStore((s) => s.currentPlan)
@@ -613,9 +606,14 @@ export default function JamScreen() {
         >
           <View className="mt-6 mb-4">
             <Text className="mb-1 font-serif text-3xl text-cream">Jam Mode</Text>
-            <Text className="font-sans text-sm text-cream/95">Active jam track: {activeJamTrackLine}</Text>
+            <Text className="font-sans-medium text-base text-cream">{classicTrackDef.label}</Text>
+            <Text className="mt-0.5 font-sans text-xs text-cream/80">
+              {activeJamTrackSource}
+              {classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'}
+              {classicTrackDef.key ? ` · ${classicTrackDef.key}` : ''}
+            </Text>
             {weakAreas.length > 0 ? (
-              <Text className="mt-1 font-sans text-xs text-amber-light/90">
+              <Text className="mt-2 font-sans text-xs text-amber-light/90">
                 Suggested loop from your practice focus: {weakAreas.join(', ')}
               </Text>
             ) : null}

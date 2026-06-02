@@ -2,11 +2,13 @@ import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
+import { Mic } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { CoachFeedbackPrompt } from '@/components/CoachFeedbackPrompt'
 import { CoachNote } from '@/components/CoachNote'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
+import { EmptyState } from '@/components/EmptyState'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { GhostPlayerControl } from '@/components/GhostPlayerControl'
@@ -218,6 +220,7 @@ export default function PlayScreen() {
     >
       <SessionStepScreen
         title="Play"
+        phaseEyebrow="Apply phase"
         subtitle={
           isDemo
             ? DEMO_TOUR_SUBTITLE.play
@@ -233,12 +236,19 @@ export default function PlayScreen() {
           )
         }}
       >
+        {!lesson ? (
+          <EmptyState
+            Icon={Mic}
+            heading="No song loaded for the Play step"
+            subtext="Start from the Home tab to add and analyze a song."
+          />
+        ) : null}
         <View className="gap-5">
           {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
           {typeof __DEV__ !== 'undefined' && __DEV__ ? (
-            <Text className="rounded-lg border border-dashed border-wood-600/35 bg-cream-dark/40 px-3 py-2 font-mono text-xs text-muted-brown">
+            <Text className="rounded-lg border border-dashed border-wood-600/35 bg-wood-800/40 px-3 py-2 font-mono text-xs text-muted-brown">
               noiseGateThresholdRms ({activeMicProfile}):{' '}
-              {micNoiseGateRms != null ? micNoiseGateRms.toFixed(4) : '—'} (Commit 62 calibration)
+              {micNoiseGateRms != null ? micNoiseGateRms.toFixed(4) : '—'}
             </Text>
           ) : null}
           <SessionStemAndTab
@@ -334,19 +344,19 @@ export default function PlayScreen() {
           hasGhost={Boolean(ghostPlaybackUri)}
         />
         {take && take.audioBytes.length > 0 ? (
-          <View className="rounded-xl border border-wood-600/35 bg-cream-dark/25 px-3 py-2">
+          <View className="rounded-xl border border-wood-600/35 bg-wood-800/40 px-3 py-2">
             <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-muted-brown">
               Ghost reference take
             </Text>
             <View className="flex-row items-center justify-between gap-2">
-              <Text className="min-w-0 flex-1 font-sans text-xs text-wood-900">
+              <Text className="min-w-0 flex-1 font-sans text-xs text-cream">
                 Flag this capture as your ghost reference for this section (saved when you open Review).
               </Text>
               <AnimatedPressable
                 accessibilityRole="switch"
                 accessibilityState={{ checked: pendingGhostReference }}
                 onPress={() => setPendingGhostReference(!pendingGhostReference)}
-                className={`rounded-full px-3 py-1.5 ${pendingGhostReference ? 'bg-amber-accent/90' : 'border border-wood-600/50 bg-wood-900/15'}`}
+                className={`rounded-full px-3 py-1.5 ${pendingGhostReference ? 'bg-amber-accent/90' : 'border border-wood-600/50 bg-wood-700/40'}`}
               >
                 <Text
                   className={`font-sans-medium text-xs ${pendingGhostReference ? 'text-wood-900' : 'text-muted-brown'}`}

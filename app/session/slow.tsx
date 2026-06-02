@@ -1,8 +1,10 @@
 import { useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 import { Text, View } from 'react-native'
+import { Sliders } from 'lucide-react-native'
 
 import { DemoTourCallout } from '@/components/DemoTourCallout'
+import { EmptyState } from '@/components/EmptyState'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { LoopRegionControl } from '@/components/LoopRegionControl'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
@@ -105,6 +107,7 @@ export default function SlowScreen() {
     >
       <SessionStepScreen
         title="Slow"
+        phaseEyebrow="Refine phase"
         subtitle={
           isDemo
             ? DEMO_TOUR_SUBTITLE.slow
@@ -117,9 +120,16 @@ export default function SlowScreen() {
         onNext={() => router.push(sessionHref('play'))}
       >
         {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.slow}</DemoTourCallout> : null}
+        {!lesson ? (
+          <EmptyState
+            Icon={Sliders}
+            heading="No song loaded for the Slow step"
+            subtext="Start from the Home tab to add and analyze a song."
+          />
+        ) : null}
         {playbackLoop ? (
-          <View className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-3 py-2">
-            <Text className="font-sans text-xs text-wood-900">
+          <View className="rounded-lg border border-wood-600/45 bg-wood-800/40 px-3 py-2">
+            <Text className="font-sans text-xs text-cream">
               Slow loop: {playbackLoop.label} ({playbackLoop.startSec.toFixed(2)}s – {playbackLoop.endSec.toFixed(2)}s)
             </Text>
             {__DEV__ && derived ? (

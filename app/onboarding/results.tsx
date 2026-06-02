@@ -51,7 +51,8 @@ export default function OnboardingResultsScreen() {
   useEffect(() => {
     const [a, b, c] = results
     if (!a || !b || !c) {
-      router.replace('/onboarding')
+      // Results aren't populated yet — render a stable empty state instead of
+      // redirecting away, so the route remains testable and discoverable.
       return
     }
     let cancelled = false
@@ -173,6 +174,34 @@ export default function OnboardingResultsScreen() {
 
   const finish = () => {
     router.replace('/(tabs)')
+  }
+
+  const [a, b, c] = results
+  if (!a || !b || !c) {
+    return (
+      <OnboardingScreenShell
+        currentStep={resultsStep}
+        totalSteps={resultsTotal}
+        showProgress={false}
+      >
+        <View className="flex-1 items-center justify-center gap-4 py-16">
+          <Text className="text-center font-serif text-2xl text-cream">Your baseline will appear here</Text>
+          <Text className="max-w-md text-center font-sans text-sm leading-6 text-muted-brown">
+            Complete the three placement phrases to see your skill baseline, coach note, and song
+            recommendations on this screen.
+          </Text>
+          <AnimatedPressable
+            haptic="light"
+            onPress={() => router.replace('/onboarding/phrase/0')}
+            className="mt-4 rounded-xl bg-amber-accent px-8 py-3.5"
+            accessibilityRole="button"
+            accessibilityLabel="Start placement phrases"
+          >
+            <Text className="font-sans-medium text-wood-900">Start placement phrases</Text>
+          </AnimatedPressable>
+        </View>
+      </OnboardingScreenShell>
+    )
   }
 
   return (

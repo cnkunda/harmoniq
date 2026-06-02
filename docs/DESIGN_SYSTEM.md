@@ -25,6 +25,26 @@
 | Audio | `expo-av` (`expo-audio` if SDK requires) |
 | Tab rendering | AlphaTab via WebView harness (native) / DOM (web) |
 
+---
+
+## Type Scale
+
+| Level | Size | Class | Font | Usage |
+|---|---|---|---|---|
+| Display | 30 | `text-3xl` | `font-serif` | Page titles (`Jam Mode`, `First time here`) |
+| H2 | 24 | `text-2xl` | `font-serif` | Section titles |
+| H3 | 20 | `text-xl` | `font-serif` | Card titles in lists |
+| Title | 16 | `text-base` | `font-sans-medium` | Tab labels, button labels |
+| Body | 14 | `text-sm` | `font-sans` | Body copy, list items |
+| Caption | 12 | `text-xs` | `font-sans` | Helper text, timestamps, metadata |
+| Eyebrow | 10 | `text-[10px]` uppercase `tracking-[0.18em]` | `font-sans-medium` | Phase labels (Orient, Isolate, …) |
+| Mono | 14 | `text-sm` | `font-mono` | Tuner readings, code, hashes |
+
+Color tones for text:
+- Primary: `text-cream` on dark surfaces, `text-wood-900` on light/amber surfaces
+- Secondary: `text-muted-brown` (AA contrast on `bg-wood-900`)
+- Accent: `text-amber-accent` or `text-amber-light`
+
 **NativeWind note:** `className` works directly on `View`, `Text`, `Pressable`, `TextInput`, etc. in NativeWind v4. No `styled()` wrapper needed. Opacity color modifiers (`bg-wood-800/40`) require NativeWind v4 and colors defined as hex. CSS `grid` is not available in RN — use `flex-row flex-wrap` instead.
 
 ---
@@ -2952,6 +2972,20 @@ export default function ReviewScreen() {
 ## Interaction Patterns
 
 > These patterns close the gap between "functional" and Yousician-level polished. Apply them across every screen from Phase 2 onward. The single highest-leverage change is replacing every bare `Pressable` with `AnimatedPressable`.
+
+### Elevation System
+
+The dark wood theme relies on layered translucency rather than drop shadows (which look muddy on dark backgrounds). Use these levels consistently:
+
+| Level | Recipe | Usage |
+|---|---|---|
+| `flat` | (no surface) | Tab bar background, `bg-wood-900` page |
+| `raised` | `border border-wood-600/50 bg-wood-800/80` | Settings sections, form fields |
+| `elevated` | `border border-wood-600/40 bg-wood-800/50` + `WoodGradient variant="card"` | Cards (lesson cards, stat cards) |
+| `overlay` | `bg-wood-800/95` + `border-wood-600/60` | Modals, toasts, action sheets |
+| `accent` | `bg-amber-accent/90` | Primary CTAs (taste-quiz Continue, Add Song) |
+
+When stacking levels (e.g. card on modal), never exceed 3 visible levels. Decorative amber circles (`bg-amber-accent/5 … /10`) and noise overlays add depth without raising visual weight.
 
 ### Rule: every touchable element must respond visually and haptically.
 

@@ -480,10 +480,6 @@ function FeedbackLayerDevSection() {
 }
 
 export default function DesignPreviewScreen() {
-  if (!__DEV__) {
-    return null
-  }
-
   return (
     <WoodGradient variant="background" className="flex-1">
       <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>

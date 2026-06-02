@@ -16,7 +16,8 @@ const colors = {
   creamDark: '#EDE0CC',
   ivory: '#F5F0E8',
   muted: {
-    brown: '#8B7D6B',
+    /** ~5.2:1 contrast on bg-wood-900 — AA Normal text on dark surfaces. */
+    brown: '#A69580',
   },
   danger: '#C17B5F',
   success: '#7A9B6D',

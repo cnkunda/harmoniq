@@ -8,6 +8,7 @@ import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenS
 import { toast } from '@/components/ToastConfig'
 import { deriveTasteProfile } from '@/src/api/analyze'
 import colors from '@/src/constants/colors'
+import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
 import { ONBOARDING_STEP_WITH_QUIZ, ONBOARDING_WITH_QUIZ_TOTAL } from '@/src/constants/onboardingSteps'
 import { commitTasteQuizProfile } from '@/src/db/client'
 import {
@@ -205,7 +206,7 @@ export default function TasteQuizScreen() {
           <AnimatedPressable
             onPress={goNext}
             disabled={!canNextStep0}
-            className={`mt-6 w-full rounded-xl px-4 py-3 ${canNextStep0 ? 'bg-amber-accent' : 'bg-wood-700'}`}
+            className={`mt-6 w-full rounded-xl px-4 py-3 ${canNextStep0 ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
             accessibilityRole="button"
             accessibilityLabel="Continue to vibe step"
           >
@@ -251,7 +252,7 @@ export default function TasteQuizScreen() {
           <AnimatedPressable
             onPress={goNext}
             disabled={!canNextStep1}
-            className={`mt-8 w-full rounded-xl px-4 py-3 ${canNextStep1 ? 'bg-amber-accent' : 'bg-wood-700'}`}
+            className={`mt-8 w-full rounded-xl px-4 py-3 ${canNextStep1 ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
             accessibilityRole="button"
           >
             <Text

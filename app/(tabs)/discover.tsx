@@ -9,6 +9,7 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { TabViewport } from '@/components/TabViewport'
 import { getDiscoveryRecommendations } from '@/src/api/discovery'
+import colors from '@/src/constants/colors'
 import {
   createSpotifyPlaybackBridge,
   isSpotifyPlaybackBridgeSkipped,
@@ -355,7 +356,13 @@ export default function DiscoverScreen() {
                 Sync tab cursor to Spotify playback position.
               </Text>
             </View>
-            <Switch value={followAlong} onValueChange={setFollowAlong} disabled={playbackSkipped} />
+            <Switch
+              value={followAlong}
+              onValueChange={setFollowAlong}
+              disabled={playbackSkipped}
+              trackColor={{ false: colors.wood[500], true: colors.amber.accent }}
+              thumbColor={followAlong ? colors.cream : colors.wood[600]}
+            />
           </View>
           <AnimatedPressable
             onPress={() => void listenOnSpotify()}

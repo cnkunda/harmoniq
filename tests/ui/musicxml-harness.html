@@ -15,7 +15,7 @@
     #status.error { color: #f00; }
     #status.loading { color: #ff0; }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@coderline/alphatab@latest/dist/alpha-tab.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.8.0/dist/alpha-tab.min.js"></script>
 </head>
 <body>
   <div id="status" class="loading">Loading AlphaTab...</div>
@@ -24,7 +24,7 @@
     var statusEl = document.getElementById('status');
     var api = new alphaTab.AlphaTabApi(document.getElementById('alpha-tab'), {
       core: {
-        fontDirectory: 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@latest/dist/font/',
+        fontDirectory: 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.8.0/dist/font/',
         file: null,
         logLevel: 1
       },

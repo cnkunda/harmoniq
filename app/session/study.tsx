@@ -3,12 +3,13 @@ import { Audio } from 'expo-av'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
-import { X } from 'lucide-react-native'
+import { BookOpen, X } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ChordCorrectionModal } from '@/components/ChordCorrectionModal'
 import { ChordsAndLyrics } from '@/components/ChordsAndLyrics'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
+import { EmptyState } from '@/components/EmptyState'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { NoteCorrectionPanel } from '@/components/NoteCorrectionPanel'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
@@ -546,6 +547,7 @@ function StudyScreenInner() {
   return (
     <SessionStepScreen
       title="Study"
+      phaseEyebrow="Isolate phase"
       subtitle={
         isDemo
           ? DEMO_TOUR_SUBTITLE.study
@@ -559,6 +561,14 @@ function StudyScreenInner() {
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.study}</DemoTourCallout> : null}
 
+      {!lesson ? (
+        <EmptyState
+          Icon={BookOpen}
+          heading="No song loaded for the Study step"
+          subtext="Start from the Home tab to add and analyze a song."
+        />
+      ) : (
+        <>
       {showTranscriptionWarning && (
         <View className="mx-4 rounded-xl border border-amber-accent/50 bg-amber-accent/10 p-4">
           <View className="mb-2 flex-row items-center justify-between">
@@ -573,7 +583,7 @@ function StudyScreenInner() {
               <X color="#d4a853" size={16} />
             </AnimatedPressable>
           </View>
-          <Text className="mb-3 font-sans text-sm text-wood-900">
+          <Text className="mb-3 font-sans text-sm text-cream">
             We're {Math.round((lesson?.transcription_confidence ?? 1.0) * 100)}% sure about this transcription.
             {'\n'}
             This part is a rough approximation — use it as a guide, not a rule.
@@ -582,7 +592,7 @@ function StudyScreenInner() {
           {/* Stem routing override UI */}
           {lesson?.stems && Object.keys(lesson.stems).length > 1 && (
             <View className="mb-3">
-              <Text className="mb-2 font-sans-medium text-xs text-wood-900">
+              <Text className="mb-2 font-sans-medium text-xs text-cream">
                 Re-route stem source:
               </Text>
               <View className="flex-row flex-wrap gap-2">
@@ -619,7 +629,7 @@ function StudyScreenInner() {
                 tabSurface?.setPlaybackRate(0.5)
               }}
             >
-              <Text className="text-center font-sans-medium text-sm text-wood-900">
+              <Text className="text-center font-sans-medium text-sm text-cream">
                 Slow Down & Verify
               </Text>
             </AnimatedPressable>
@@ -800,6 +810,8 @@ function StudyScreenInner() {
         }}
         onClose={() => setNoteModalVisible(false)}
       />
+        </>
+      )}
     </SessionStepScreen>
   )
 }

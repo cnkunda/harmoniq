@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router'
-import { Music } from 'lucide-react-native'
+import { ChevronRight, Music } from 'lucide-react-native'
 import { useState } from 'react'
 import { Text, View } from 'react-native'
 
@@ -52,13 +52,14 @@ export default function OnboardingWelcomeScreen() {
         <AnimatedPressable haptic="light"
           onPress={onContinue}
           disabled={routing}
-          className="mt-10 w-full rounded-lg bg-amber-accent px-4 py-3.5 disabled:opacity-60"
+          className="mt-10 w-full flex-row items-center justify-center gap-2 rounded-lg bg-amber-accent px-4 py-3.5 disabled:opacity-60"
           accessibilityRole="button"
           accessibilityLabel="Continue to microphone permission"
         >
           <Text className="text-center font-sans-medium text-wood-900">
             {routing ? 'Continue…' : 'Continue'}
           </Text>
+          {routing ? null : <ChevronRight color={colors.wood[900]} size={20} strokeWidth={2} />}
         </AnimatedPressable>
       </View>
     </OnboardingScreenShell>

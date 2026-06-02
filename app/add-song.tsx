@@ -26,6 +26,7 @@ import {
     submitAnalyzeJob,
 } from '@/src/api/analyze'
 import { searchTabs, type TabSearchHit } from '@/src/api/tabs'
+import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
 import colors from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import { getAppPref } from '@/src/db/client'
@@ -329,6 +330,8 @@ export default function AddSongScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View className="relative w-full max-w-2xl self-center px-8 py-8">
+            <View className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-amber-accent/5" />
+            <View className="pointer-events-none absolute -bottom-24 -left-16 h-48 w-48 rounded-full bg-amber-light/5" />
             <AnimatedPressable haptic="light"
               onPress={onClose}
               className="absolute right-0 top-0 z-10 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg active:opacity-70"
@@ -415,11 +418,15 @@ export default function AddSongScreen() {
                         })
                       }}
                       disabled={!canAnalyzePendingFile}
-                      className="min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3 disabled:opacity-40"
+                      className={`min-h-[48px] justify-center rounded-xl px-4 py-3 ${canAnalyzePendingFile ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
                       accessibilityRole="button"
                       accessibilityLabel="Analyze selected audio file"
                     >
-                      <Text className="text-center font-sans-medium text-base text-wood-900">Analyze file</Text>
+                      <Text
+                        className={`text-center font-sans-medium text-base ${canAnalyzePendingFile ? 'text-wood-900' : ''}`}
+                      >
+                        Analyze file
+                      </Text>
                     </AnimatedPressable>
                   </View>
                 ) : null}
@@ -441,16 +448,20 @@ export default function AddSongScreen() {
                       autoCapitalize="none"
                       autoCorrect={false}
                       editable={uiState !== 'analyzing'}
-                      className="min-h-[48px] rounded-xl border border-wood-500/80 bg-ivory px-4 py-3 font-sans text-sm text-wood-900"
+                      className="min-h-[48px] rounded-xl border border-wood-500/80 bg-wood-900/40 px-4 py-3 font-sans text-sm text-cream"
                     />
                     <AnimatedPressable haptic="light"
                       onPress={() => void runAnalyze({ youtube_url: url.trim() })}
                       disabled={!canStartFromUrl}
-                      className="min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3 disabled:opacity-40"
+                      className={`min-h-[48px] justify-center rounded-xl px-4 py-3 ${canStartFromUrl ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
                       accessibilityRole="button"
                       accessibilityLabel="Analyze YouTube URL"
                     >
-                      <Text className="text-center font-sans-medium text-base text-wood-900">Analyze URL</Text>
+                      <Text
+                        className={`text-center font-sans-medium text-base ${canStartFromUrl ? 'text-wood-900' : ''}`}
+                      >
+                        Analyze URL
+                      </Text>
                     </AnimatedPressable>
                   </View>
                 ) : null}

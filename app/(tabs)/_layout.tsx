@@ -1,12 +1,12 @@
 import { Tabs } from 'expo-router'
 import {
     BarChart3,
+    Compass,
     FlaskConical,
     Home,
     Library,
     Music,
     Palette,
-    Search,
     Settings
 } from 'lucide-react-native'
 
@@ -20,18 +20,21 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarAccessibilityLabel: 'Main navigation',
         tabBarStyle: {
           backgroundColor: colors.wood[800],
           borderTopColor: `${colors.wood[700]}80`,
-          paddingBottom: 10,
-          height: 72,
+          paddingBottom: 8,
+          paddingTop: 6,
+          height: 68,
         },
+        tabBarLabelPosition: 'below-icon',
         tabBarActiveTintColor: colors.amber.light,
         tabBarInactiveTintColor: colors.muted.brown,
         tabBarLabelStyle: {
           fontFamily: 'DMSans-Medium',
-          fontSize: 11,
-          letterSpacing: 0.5,
+          fontSize: 10,
+          letterSpacing: 0.4,
         },
       }}
     >
@@ -59,7 +62,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="jam"
         options={{
-          title: 'Jam Mode',
+          title: 'Jam',
           tabBarIcon: ({ color }) => <Music color={color} size={TAB_BAR_ICON_SIZE} strokeWidth={2} />,
         }}
       />
@@ -67,7 +70,7 @@ export default function TabLayout() {
         name="discover"
         options={{
           title: 'Discover',
-          tabBarIcon: ({ color }) => <Search color={color} size={TAB_BAR_ICON_SIZE} strokeWidth={2} />,
+          tabBarIcon: ({ color }) => <Compass color={color} size={TAB_BAR_ICON_SIZE} strokeWidth={2} />,
         }}
       />
       <Tabs.Screen

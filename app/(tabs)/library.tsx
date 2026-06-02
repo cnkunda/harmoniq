@@ -1,11 +1,12 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { useRouter, type Href } from 'expo-router'
-import { Filter, Search } from 'lucide-react-native'
+import { Filter, Music, Search, Sparkles } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
 import { Alert, Platform, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { EmptyState } from '@/components/EmptyState'
 import { WoodGradient } from '@/components/WoodGradient'
 import { ApiError, submitExportJob } from '@/src/api/analyze'
 import colors from '@/src/constants/colors'
@@ -332,10 +333,14 @@ export default function LibraryScreen() {
               </Text>
             </View>
 
-            <View className="mb-6 flex-row rounded-xl border border-wood-600 bg-wood-800/60 p-1">
+            <View className="mb-6 flex-row gap-1 rounded-xl border border-wood-600 bg-wood-800/60 p-1">
               <AnimatedPressable haptic="light"
                 onPress={() => setLibraryTab('lessons')}
-                className={`flex-1 rounded-lg py-2.5 ${libraryTab === 'lessons' ? 'bg-amber-accent' : ''}`}
+                className={`flex-1 rounded-lg border py-2.5 ${
+                  libraryTab === 'lessons'
+                    ? 'border-amber-accent bg-amber-accent'
+                    : 'border-transparent bg-transparent'
+                }`}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: libraryTab === 'lessons' }}
               >
@@ -347,7 +352,11 @@ export default function LibraryScreen() {
               </AnimatedPressable>
               <AnimatedPressable haptic="light"
                 onPress={() => setLibraryTab('licks')}
-                className={`flex-1 rounded-lg py-2.5 ${libraryTab === 'licks' ? 'bg-amber-accent' : ''}`}
+                className={`flex-1 rounded-lg border py-2.5 ${
+                  libraryTab === 'licks'
+                    ? 'border-amber-accent bg-amber-accent'
+                    : 'border-transparent bg-transparent'
+                }`}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: libraryTab === 'licks' }}
               >
@@ -437,11 +446,21 @@ export default function LibraryScreen() {
 
             {libraryTab === 'lessons' ? (
               emptyLessons ? (
-                <View className="items-center py-20">
-                  <Text className="font-sans text-muted-brown">
-                    {lessons.length === 0 ? 'No analyzed songs yet. Add one from Analyze.' : 'No songs match your search.'}
-                  </Text>
-                </View>
+                lessons.length === 0 ? (
+                  <EmptyState
+                    Icon={Music}
+                    heading="No songs yet"
+                    subtext="Add one from Analyze to start building your library."
+                    ctaLabel="Add a song"
+                    onCta={() => router.push('/add-song')}
+                  />
+                ) : (
+                  <EmptyState
+                    Icon={Search}
+                    heading="No matches"
+                    subtext="No songs match your search."
+                  />
+                )
               ) : (
                 <View className="flex-row flex-wrap gap-4">
                   {filteredLessons.map((row) => (
@@ -490,11 +509,19 @@ export default function LibraryScreen() {
                 </View>
               )
             ) : emptyLicks ? (
-              <View className="items-center py-20">
-                <Text className="font-sans text-muted-brown">
-                  {licks.length === 0 ? 'No saved licks yet.' : 'No licks found matching your search.'}
-                </Text>
-              </View>
+              licks.length === 0 ? (
+                <EmptyState
+                  Icon={Sparkles}
+                  heading="No saved licks yet"
+                  subtext="Snippets you save from a song will show up here for quick practice."
+                />
+              ) : (
+                <EmptyState
+                  Icon={Search}
+                  heading="No matches"
+                  subtext="No licks found matching your search."
+                />
+              )
             ) : (
               <View className="flex-row flex-wrap gap-4">
                 {filteredLicks.map((lick) => (

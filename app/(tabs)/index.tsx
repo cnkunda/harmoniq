@@ -3,10 +3,10 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter, type Href } from 'expo-router'
 import {
   ChevronRight,
-  ClipboardList,
   Clock,
   Library as LibraryIcon,
   Link2,
+  ListMusic,
   Music,
   Play,
   Plus
@@ -409,7 +409,7 @@ export default function HomeScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Open style quiz"
                       >
-                        <ClipboardList color={colors.wood[900]} size={20} strokeWidth={2} />
+                        <ListMusic color={colors.wood[900]} size={20} strokeWidth={2} />
                         <Text className="font-sans-medium text-base text-wood-900">Style quiz</Text>
                       </AnimatedPressable>
                       <AnimatedPressable

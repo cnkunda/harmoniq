@@ -530,6 +530,7 @@ export default function ReviewScreen() {
   return (
     <SessionStepScreen
       title="Review"
+      phaseEyebrow="Reflect phase"
       subtitle={
         isDemo
           ? DEMO_TOUR_SUBTITLE.review
@@ -577,32 +578,32 @@ export default function ReviewScreen() {
         </AnimatedPressable>
         <AnimatedPressable
           onPress={() => void exportMidi()}
-          className="rounded-xl border border-wood-600/45 bg-cream-dark/45 px-4 py-2.5"
+          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5"
           accessibilityRole="button"
         >
-          <Text className="font-sans-medium text-wood-900">Export MIDI</Text>
+          <Text className="font-sans-medium text-cream">Export MIDI</Text>
         </AnimatedPressable>
         <AnimatedPressable
           onPress={() => void exportMusicXml()}
-          className="rounded-xl border border-wood-600/45 bg-cream-dark/45 px-4 py-2.5"
+          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5"
           accessibilityRole="button"
         >
-          <Text className="font-sans-medium text-wood-900">Export MusicXML</Text>
+          <Text className="font-sans-medium text-cream">Export MusicXML</Text>
         </AnimatedPressable>
         <AnimatedPressable haptic="light"
           onPress={() => void saveLick()}
           disabled={savingLick}
-          className="rounded-xl border border-wood-600/45 bg-cream-dark/45 px-4 py-2.5 disabled:opacity-50"
+          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5 disabled:opacity-50"
           accessibilityRole="button"
         >
-          <Text className="font-sans-medium text-wood-900">{savingLick ? 'Saving…' : 'Save to Library'}</Text>
+          <Text className="font-sans-medium text-cream">{savingLick ? 'Saving…' : 'Save to Library'}</Text>
         </AnimatedPressable>
         <AnimatedPressable haptic="light"
           onPress={() => router.push('/library')}
-          className="rounded-xl border border-wood-600/45 bg-cream-dark/45 px-4 py-2.5"
+          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5"
           accessibilityRole="button"
         >
-          <Text className="font-sans-medium text-wood-900">Open Library</Text>
+          <Text className="font-sans-medium text-cream">Open Library</Text>
         </AnimatedPressable>
       </View>
 
@@ -635,12 +636,16 @@ export default function ReviewScreen() {
         </Text>
       ) : null}
 
-      <Text className="mt-3 font-sans text-[11px] text-muted-brown">
-        Recording buffer: {latestTake ? `${(latestTake.durationMs / 1000).toFixed(1)}s / ${latestTake.audioBytes.length} bytes` : 'none'}
-      </Text>
-      <Text className="mt-1 font-sans text-[11px] text-muted-brown">
-        Persisted sessions (local DB): {sessionCount ?? '...'}
-      </Text>
+      {__DEV__ ? (
+        <>
+          <Text className="mt-3 font-sans text-[11px] text-muted-brown">
+            Recording buffer: {latestTake ? `${(latestTake.durationMs / 1000).toFixed(1)}s / ${latestTake.audioBytes.length} bytes` : 'none'}
+          </Text>
+          <Text className="mt-1 font-sans text-[11px] text-muted-brown">
+            Persisted sessions: {sessionCount ?? '...'}
+          </Text>
+        </>
+      ) : null}
     </SessionStepScreen>
   )
 }

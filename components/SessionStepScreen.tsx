@@ -6,6 +6,8 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 export interface SessionStepScreenProps {
   title: string
   subtitle?: string
+  /** Small uppercase eyebrow text shown above the title (e.g. "ORIENT PHASE"). */
+  phaseEyebrow?: string | null
   /** Hide the scroll header block (warm-up uses inline section labels). */
   hideTitle?: boolean
   /** Hide the fixed bottom bar (e.g. tune step uses in-flow actions). */
@@ -26,6 +28,7 @@ export interface SessionStepScreenProps {
 export function SessionStepScreen({
   title,
   subtitle,
+  phaseEyebrow,
   hideTitle = false,
   hideFooter = false,
   children,
@@ -39,8 +42,8 @@ export function SessionStepScreen({
   backButtonClassName,
   nextButtonClassName,
 }: SessionStepScreenProps) {
-  const footerRow = footerContainerClassName ?? 'flex-row gap-3 border-t border-wood-600/25 bg-ivory px-6 pb-8 pt-4'
-  const backClass = backButtonClassName ?? 'flex-1 rounded-xl border border-wood-600/55 bg-cream-dark/60 px-6 py-3'
+  const footerRow = footerContainerClassName ?? 'flex-row gap-3 border-t border-wood-600/30 bg-wood-800/60 px-6 pb-8 pt-4'
+  const backClass = backButtonClassName ?? 'flex-1 rounded-xl border border-wood-600/55 bg-wood-700/40 px-6 py-3'
   const nextClass = nextButtonClassName ?? 'flex-1 rounded-xl bg-amber-accent/90 px-6 py-3'
 
   return (
@@ -59,7 +62,12 @@ export function SessionStepScreen({
       >
         {!hideTitle ? (
           <>
-            <Text className="text-3xl font-serif text-wood-900">{title}</Text>
+            {phaseEyebrow ? (
+              <Text className="font-sans-medium text-[10px] uppercase tracking-[0.18em] text-amber-accent">
+                {phaseEyebrow}
+              </Text>
+            ) : null}
+            <Text className={`text-3xl font-serif text-cream ${phaseEyebrow ? 'mt-1' : ''}`}>{title}</Text>
             {subtitle ? (
               <Text className="mt-2 font-sans text-sm leading-relaxed text-muted-brown">{subtitle}</Text>
             ) : null}
@@ -77,7 +85,7 @@ export function SessionStepScreen({
                className={backClass}
                accessibilityRole="button"
              >
-               <Text className="text-center font-sans-medium text-wood-900">{backLabel}</Text>
+               <Text className="text-center font-sans-medium text-cream">{backLabel}</Text>
              </AnimatedPressable>
           ) : (
             <View className="flex-1" />

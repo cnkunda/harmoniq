@@ -1,6 +1,11 @@
 import * as Haptics from 'expo-haptics'
 import { Pressable, type PressableProps } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated'
 
 import { spring } from '@/src/constants/animations'
 
@@ -29,6 +34,7 @@ export function AnimatedPressable({
   ...props
 }: AnimatedPressableProps) {
   const scale = useSharedValue(1)
+  const reducedMotion = useReducedMotion()
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -37,16 +43,24 @@ export function AnimatedPressable({
   const handlePressIn: NonNullable<PressableProps['onPressIn']> = (e) => {
     onPressIn?.(e)
     if (disabled) return
-    scale.value = withSpring(0.97, spring.snappy)
+    if (reducedMotion) {
+      scale.value = 1
+    } else {
+      scale.value = withSpring(0.97, spring.snappy)
+    }
   }
 
   const handlePressOut: NonNullable<PressableProps['onPressOut']> = (e) => {
     onPressOut?.(e)
-    scale.value = withSpring(1, spring.gentle)
+    if (reducedMotion) {
+      scale.value = 1
+    } else {
+      scale.value = withSpring(1, spring.gentle)
+    }
   }
 
   const handlePress: PressableProps['onPress'] = (e) => {
-    if (!disabled && haptic !== 'none') {
+    if (!disabled && haptic !== 'none' && !reducedMotion) {
       void Haptics.impactAsync(HAPTIC_STYLE[haptic])
     }
     onPress?.(e)

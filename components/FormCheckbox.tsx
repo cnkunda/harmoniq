@@ -38,7 +38,7 @@ export function FormCheckbox({
       haptic="none"
       onPress={() => !disabled && onCheckedChange(!checked)}
       disabled={disabled}
-      className={`flex-row items-start gap-3 ${disabled ? 'opacity-50' : ''}`}
+      className={`min-h-[44px] flex-row items-start gap-3 ${disabled ? 'opacity-50' : ''}`}
       accessibilityRole="checkbox"
       accessibilityState={{ checked, disabled }}
     >

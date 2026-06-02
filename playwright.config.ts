@@ -33,10 +33,14 @@ export default defineConfig({
   },
   webServer: useWebServer
     ? {
-        command: `npm run web -- --non-interactive --port ${port}`,
+        command: `EXPO_NO_DEV_TOOLS=1 npm run web -- --non-interactive --port ${port}`,
         url: baseURL,
         timeout: 180_000,
         reuseExistingServer: !process.env.CI,
+        env: {
+          ...process.env,
+          EXPO_NO_DEV_TOOLS: '1',
+        },
       }
     : undefined,
   projects: [

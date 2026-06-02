@@ -6,6 +6,7 @@ import { Platform, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
+import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
 import { ONBOARDING_STEP_WITHOUT_QUIZ, ONBOARDING_WITHOUT_QUIZ_TOTAL } from '@/src/constants/onboardingSteps'
 
 export default function OnboardingMicScreen() {
@@ -97,10 +98,12 @@ export default function OnboardingMicScreen() {
           <AnimatedPressable haptic="light"
             onPress={() => void request()}
             disabled={busy || status === 'granted'}
-            className="rounded-xl bg-amber-accent px-4 py-3 disabled:opacity-50"
+            className={`rounded-xl px-4 py-3 ${status === 'granted' || busy ? DISABLED_BTN_CLASS : 'bg-amber-accent'}`}
             accessibilityRole="button"
           >
-            <Text className="text-center font-sans-medium text-wood-900">
+            <Text
+              className={`text-center font-sans-medium ${status === 'granted' || busy ? 'text-muted-brown' : 'text-wood-900'}`}
+            >
               {status === 'granted' ? 'Microphone ready' : busy ? 'Requesting…' : 'Allow microphone'}
             </Text>
           </AnimatedPressable>
@@ -118,10 +121,14 @@ export default function OnboardingMicScreen() {
         <AnimatedPressable haptic="light"
           onPress={() => router.push({ pathname: '/onboarding/phrase/[index]', params: { index: '0', quizTaken: hasQuiz ? '1' : undefined } })}
           disabled={status !== 'granted'}
-          className="mt-10 w-full rounded-xl border border-amber-accent/60 bg-wood-800/80 px-4 py-3 disabled:opacity-50"
+          className={`mt-10 w-full rounded-xl border px-4 py-3 ${status === 'granted' ? 'border-amber-accent/60 bg-wood-800/80' : `${DISABLED_BTN_CLASS} border-transparent`}`}
           accessibilityRole="button"
         >
-          <Text className="text-center font-sans-medium text-amber-light">Next: placement phrases</Text>
+          <Text
+            className={`text-center font-sans-medium ${status === 'granted' ? 'text-amber-light' : 'text-muted-brown'}`}
+          >
+            Next: placement phrases
+          </Text>
         </AnimatedPressable>
       </View>
     </OnboardingScreenShell>
