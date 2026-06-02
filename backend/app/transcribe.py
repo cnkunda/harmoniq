@@ -170,8 +170,12 @@ def transcribe_vocals_to_lyrics_aligned(
         logger.warning("Whisper import failed; returning empty lyrics_aligned", exc_info=True)
         return [], 0.1
 
+    # Force CPU: the whisper base checkpoint can be serialized to CUDA tensors
+    # in a way that fails to deserialize later when torch.cuda is unavailable
+    # ("Attempting to deserialize object on CUDA device 0 but
+    # torch.cuda.device_count() is 0"). Match the chord model's policy.
     try:
-        model = whisper.load_model(os.getenv("HARMONIQ_WHISPER_MODEL", "base"))
+        model = whisper.load_model(os.getenv("HARMONIQ_WHISPER_MODEL", "base"), device="cpu")
         # word_timestamps=True is the key output we need for snapping.
         result = model.transcribe(str(vocals_stem_path), word_timestamps=True)
     except Exception:

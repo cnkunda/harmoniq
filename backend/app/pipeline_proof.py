@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import subprocess
 import sys
 from collections import defaultdict
@@ -116,6 +117,22 @@ def ffmpeg_normalize_wav(
     _run_subprocess_checked(cmd, what="ffmpeg")
 
 
+def _resolve_demucs_device() -> str:
+    """Pick the torch device for the Demucs subprocess.
+
+    Default is ``cpu`` because the WSL2 dev box's GTX 1050 (4GB) cannot
+    reliably hold htdemucs_6s + the Keras chord model + basic-pitch at
+    once, and torch's CUDA context can survive across subprocesses and
+    fail mid-load with ``No CUDA GPUs are available``. Set
+    ``HARMONIQ_DEMUCS_DEVICE=cuda`` to opt in on hardware with a real
+    GPU (>=8GB VRAM recommended).
+    """
+    override = os.getenv("HARMONIQ_DEMUCS_DEVICE", "").strip().lower()
+    if override in ("cpu", "cuda", "mps"):
+        return override
+    return "cpu"
+
+
 def demucs_separate_command(
     input_wav: Path,
     out_dir: Path,
@@ -124,21 +141,15 @@ def demucs_separate_command(
     python_executable: str | None = None,
 ) -> list[str]:
     """Argv to run Demucs with the ``htdemucs_6s`` six-stem checkpoint.
-    
+
     Includes optimization flags (Commit 111a):
     - --segment: process in chunks to prevent OOM on long tracks
     - --overlap: overlap ratio for smooth boundaries
-    - --device: explicit CUDA/CPU selection
+    - --device: explicit CUDA/CPU selection (default CPU; see _resolve_demucs_device)
     """
     py = python_executable or sys.executable
-    
-    # Detect CUDA availability for --device flag
-    try:
-        import torch
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-    except (ImportError, RuntimeError):
-        device = "cpu"
-    
+    device = _resolve_demucs_device()
+
     return [
         py,
         "-m",

@@ -1226,11 +1226,33 @@ def _midi_to_step_alter_octave(midi: int) -> tuple[str, int, int]:
     return step, alter, octave
 
 
+_HARMONIQ_TO_MUSIC21_QUALITY_MAP: dict[str, str] = {
+    # Core triads
+    "maj": "", "min": "m", "m": "m", "dim": "dim", "dim7": "dim7", "aug": "aug",
+    # 7th chords
+    "7": "7", "maj7": "maj7", "min7": "m7", "m7": "m7",
+    # Suspended
+    "7sus4": "7sus4", "sus4": "sus4", "sus2": "sus2",
+    # 6th chords
+    "6": "6", "min6": "m6", "m6": "m6",
+    # Extended
+    "9": "9", "maj9": "maj9", "min9": "m9", "m9": "m9",
+    "11": "11", "13": "13",
+    # Altered dominants
+    "7#9": "7#9", "7b9": "7b9", "7#5": "7#5", "7b5": "7b5", "alt7": "7alt",
+}
+
+
 def _harmoniq_chord_to_music21(chord_symbol: str) -> str:
     """Convert Harmoniq chord format (e.g. 'C:maj', 'F#:min7') to music21 format ('C', 'F#m7').
 
     music21's ChordSymbol expects standard chord abbreviations like 'C', 'Cm', 'C7', 'Cmaj7'.
     Harmoniq uses a 'root:quality' format that music21 cannot parse directly.
+
+    Qualities not in the map fall back to ``quality`` itself, which usually
+    causes music21 to fail and emit a "Could not parse chord symbol"
+    warning; we keep the full set in :data:`_HARMONIQ_TO_MUSIC21_QUALITY_MAP`
+    so every Harmoniq quality has an explicit, music21-compatible suffix.
     """
     if not chord_symbol:
         return chord_symbol
@@ -1241,13 +1263,6 @@ def _harmoniq_chord_to_music21(chord_symbol: str) -> str:
     quality = parts[1].strip()
     if not quality:
         return root
-    quality_map = {
-        "maj": "", "min": "m", "m": "m", "dim": "dim", "aug": "aug",
-        "7": "7", "maj7": "maj7", "min7": "m7", "m7": "m7",
-        "7sus4": "7sus4", "sus4": "sus4", "sus2": "sus2",
-        "6": "6", "min6": "m6", "m6": "m6",
-        "9": "9", "maj9": "maj9", "min9": "m9", "m9": "m9",
-    }
-    suffix = quality_map.get(quality.lower(), quality)
+    suffix = _HARMONIQ_TO_MUSIC21_QUALITY_MAP.get(quality.lower(), quality)
     return root + suffix
 

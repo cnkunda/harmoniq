@@ -42,6 +42,22 @@ CHORD_VOCAB = [f"{root}:{qual}" for qual in _CHORD_QUALITIES for root in _ROOTS]
 _CHORD_TO_IDX = {chord: i for i, chord in enumerate(CHORD_VOCAB)}
 _NUM_CLASSES = len(CHORD_VOCAB)  # 277
 
+# Restricted vocabulary for the chroma fallback path (Commit: chroma quality fix).
+# 12-bin chroma vectors cannot discriminate altered-dominant qualities
+# (alt7, 7#9, 7b9, 7#5, 7b5), extensions (9, 11, 13), or aug/dim7 from
+# each other — the template matcher picks them essentially at random, which
+# produced 25%+ alt7 emissions on real songs. The chroma path now only emits
+# the qualities that chroma can actually distinguish.
+_CHROMA_QUALITIES = ["maj", "min", "7", "maj7", "min7"]
+CHROMA_VOCAB = [f"{root}:{qual}" for qual in _CHROMA_QUALITIES for root in _ROOTS] + ["N"]
+_CHROMA_TO_IDX = {chord: i for i, chord in enumerate(CHROMA_VOCAB)}
+# Map each restricted chord back to its 277-class index for projection into
+# the Viterbi emission space.
+_CHROMA_TO_FULL_IDX = np.array(
+    [_CHORD_TO_IDX[label] for label in CHROMA_VOCAB], dtype=np.int64
+)
+_NUM_CHROMA = len(CHROMA_VOCAB)  # 61
+
 _TFLITE_PATH = Path(__file__).parent / "chord_model.tflite"
 _KERAS_PATH = Path(__file__).parent / "chord_model.keras"
 _WINDOW = 128
@@ -418,25 +434,31 @@ def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
 def _run_chroma_raw(y: np.ndarray, sr: int, hop_length: int = 512) -> list[dict]:
     """Run chord estimation via chroma template matching (no neural model needed).
 
-    Uses cosine similarity between per-frame chroma vectors and chord templates
-    built from music-theory intervals. Less accurate than the CRNN but always
-    available.
+    Uses cosine similarity between per-frame chroma vectors and a restricted
+    chord template set (maj, min, 7, maj7, min7, N). The output probability
+    distribution is projected back into the full 277-class space so the
+    downstream Viterbi decoder sees a consistent schema regardless of which
+    inference path produced the emissions.
+
+    Less accurate than the CRNN but always available, and now restricted to
+    qualities that 12-bin chroma can actually discriminate.
     """
     import librosa
 
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length)
     chroma = chroma.T.astype(np.float32)
 
-    templates = _build_chroma_templates()
+    templates = _build_chroma_templates()  # [_NUM_CHROMA, 12]
+    n_idx_chroma = _CHROMA_TO_IDX["N"]
 
     T = len(chroma)
-    all_probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+    chroma_probs = np.zeros((T, _NUM_CHROMA), dtype=np.float32)
 
     for i in range(T):
         frame = chroma[i]
         norm = np.linalg.norm(frame)
         if norm < 1e-8:
-            all_probs[i, _CHORD_TO_IDX["N"]] = 1.0
+            chroma_probs[i, n_idx_chroma] = 1.0
             continue
 
         frame_norm = frame / norm
@@ -445,7 +467,9 @@ def _run_chroma_raw(y: np.ndarray, sr: int, hop_length: int = 512) -> list[dict]
         softmax_sim = similarities - similarities.max()
         exp_sim = np.exp(softmax_sim * 5.0)
         exp_sim /= exp_sim.sum()
-        all_probs[i] = exp_sim
+        chroma_probs[i] = exp_sim
+
+    all_probs = _project_chroma_to_full(chroma_probs)
 
     chroma_times = librosa.frames_to_time(np.arange(T), sr=sr, hop_length=hop_length)
 
@@ -492,14 +516,19 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
 
 @lru_cache(maxsize=1)
 def _build_chroma_templates() -> np.ndarray:
-    """Build 12-bin chroma templates for all 277 chord classes.
+    """Build 12-bin chroma templates for the restricted chroma vocabulary.
 
     Returns:
-        np.ndarray of shape [277, 12], row-normalized.
-    """
-    templates = np.zeros((_NUM_CLASSES, 12), dtype=np.float32)
+        np.ndarray of shape [_NUM_CHROMA, 12], row-normalized.
 
-    for idx, chord_label in enumerate(CHORD_VOCAB):
+    Only the discriminable qualities (maj, min, 7, maj7, min7, N) are
+    included. The Keras/TFLite models still operate over the full 277-class
+    vocabulary; this restricted set is used only by the chroma fallback
+    (see :func:`_run_chroma_raw`).
+    """
+    templates = np.zeros((_NUM_CHROMA, 12), dtype=np.float32)
+
+    for idx, chord_label in enumerate(CHROMA_VOCAB):
         if chord_label == "N":
             templates[idx] = 1.0 / 12
             continue
@@ -521,6 +550,23 @@ def _build_chroma_templates() -> np.ndarray:
         templates[idx] = template
 
     return templates
+
+
+def _project_chroma_to_full(chroma_probs: np.ndarray) -> np.ndarray:
+    """Project [T, _NUM_CHROMA] probabilities to [T, 277] full vocabulary.
+
+    The chroma path can only emit chords from the restricted 61-class
+    vocabulary. To feed the Viterbi decoder (which expects the full 277
+    classes), the chroma probability mass for each restricted class is
+    placed entirely at the corresponding full-vocabulary index. All other
+    full-vocabulary entries get zero probability.
+    """
+    T = chroma_probs.shape[0]
+    full_probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+    # Fancy-index assignment: for each frame, write the chroma column i
+    # into the full column _CHROMA_TO_FULL_IDX[i].
+    full_probs[:, _CHROMA_TO_FULL_IDX] = chroma_probs
+    return full_probs
 
 
 # ---------------------------------------------------------------------------
@@ -846,7 +892,12 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
 
         base_matrix = get_transition_matrix()
 
-        if key_conf >= 0.3:
+        # Bumped from 0.3: chroma-based key detection routinely returns
+        # 0.35-0.4 on real songs, and applying a wrong key constraint is
+        # worse than no constraint at all. With the chroma fallback now
+        # restricted to a 25-class vocabulary, the unconstrained matrix
+        # also produces more stable paths.
+        if key_conf >= 0.6:
             trans_matrix = apply_key_constraint(base_matrix, key_root, key_mode)
         else:
             trans_matrix = base_matrix
@@ -864,7 +915,10 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
         optimal_path, _ = decoder.decode(
             emission_log_probs,
             duration_beats=duration_beats_arr,
-            duration_penalty_weight=0.5,
+            # Bumped from 0.5 to 1.5 to bias the decoder toward self-transitions.
+            # With the synthetic transition matrix and noisy chroma emissions, the
+            # default 0.5 produced ~3 changes/bar; 1.5 brings it under 1.5/bar.
+            duration_penalty_weight=1.5,
         )
 
         # Diagnostic: compare emission predictions vs Viterbi path

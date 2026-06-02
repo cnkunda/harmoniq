@@ -53,7 +53,7 @@ export function AnimatedPressable({
   }
 
   return (
-    <Animated.View style={[animStyle, style as any]}>
+    <Animated.View pointerEvents="box-none" style={[animStyle, style as any]}>
       <Pressable
         {...props}
         className={className}

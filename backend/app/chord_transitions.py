@@ -121,14 +121,20 @@ def _quality_weight(qual_i: str, qual_j: str) -> float:
 
 
 def _no_chord_weight(i: int, j: int) -> float:
-    """Special handling for N (no-chord) transitions."""
+    """Special handling for N (no-chord) transitions.
+
+    Design: N→N should be comparable to chord→chord persistence (~1.4),
+    and N→chord should be slightly lower but still reachable. If N→N is
+    too high relative to other transitions, Viterbi treats N as an
+    absorbing state and the N ratio *increases* after decoding.
+    """
     _, qi = _parse_chord(CHORD_VOCAB[i])
     _, qj = _parse_chord(CHORD_VOCAB[j])
 
     if qi == "N" and qj == "N":
-        return 50.0  # silence persists very strongly
+        return 1.5  # similar to chord→chord persistence, not absorbing
     if qi == "N" and qj != "N":
-        return 0.5  # entering from silence
+        return 0.8  # entering from silence — reachable
     if qi != "N" and qj == "N":
         return 0.1  # dropping to silence (rare mid-song)
     return 1.0
