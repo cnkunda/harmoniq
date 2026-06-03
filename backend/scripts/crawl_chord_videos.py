@@ -81,24 +81,72 @@ def _build_search_terms() -> list[str]:
     return terms
 
 
+def _extract_cqt(y: np.ndarray, sr: int) -> np.ndarray:
+    """Compute 36-bin CQT + 4-bin bass features matching chord_inference.py.
+
+    Returns an array of shape (T, FEATURE_DIM) where the first CHROMA_BINS
+    columns are L1-normalized chroma energies and the trailing BASS_BINS
+    columns duplicate the lowest chroma bins.
+    """
+    import librosa
+
+    hop = int(sr * HOP_SEC)
+    cqt = librosa.cqt(y=y, sr=sr, hop_length=hop, n_bins=CHROMA_BINS,
+                      bins_per_octave=BINS_PER_OCTAVE)
+    cqt = np.abs(cqt).T.astype(np.float32)
+    norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
+    cqt = cqt / norms
+    bass = cqt[:, :BASS_BINS]
+    return np.concatenate([cqt, bass], axis=1)
+
+
+def _build_windows(
+    features: np.ndarray, labels: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build overlapping windows with center-frame labels."""
+    num_frames = len(features)
+    pad = np.zeros((WINDOW // 2, FEATURE_DIM), dtype=np.float32)
+    padded = np.concatenate([pad, features, pad], axis=0)
+    padded_labels = np.concatenate([
+        np.full(WINDOW // 2, N_CHORD_IDX, dtype=np.int32),
+        labels,
+        np.full(WINDOW // 2, N_CHORD_IDX, dtype=np.int32),
+    ])
+
+    T_overlap = (num_frames + HOP_FRAMES - 1) // HOP_FRAMES
+    windows = np.zeros((T_overlap, WINDOW, FEATURE_DIM), dtype=np.float32)
+    window_labels = np.full(T_overlap, N_CHORD_IDX, dtype=np.int32)
+
+    for k in range(T_overlap):
+        start = k * HOP_FRAMES
+        windows[k] = padded[start: start + WINDOW]
+        center = start + WINDOW // 2
+        if center < len(padded_labels):
+            window_labels[k] = padded_labels[center]
+
+    return windows, window_labels
+
+
 def _check_quality_filters(info: dict) -> tuple[bool, str]:
     """Check if a video passes quality filters.
 
     Returns (passes, reason) tuple.
     """
-    # Duration check
-    duration = info.get("duration", 0)
-    if duration > MAX_DURATION:
-        return False, f"Duration {duration}s > {MAX_DURATION}s"
+    # Duration check — missing or zero duration means the metadata fetch
+    # failed; treat that as a hard rejection rather than a silent pass.
+    duration = info.get("duration") or 0
+    if duration <= 0 or duration > MAX_DURATION:
+        return False, f"Duration {duration}s out of range [1, {MAX_DURATION}s]"
 
-    # Resolution check — skip if not available
+    # Resolution check — 0 means metadata unavailable; 0 < MIN_RESOLUTION so
+    # this naturally fails closed.
     height = info.get("height") or 0
-    if height > 0 and height < MIN_RESOLUTION:
+    if height < MIN_RESOLUTION:
         return False, f"Resolution {height}p < {MIN_RESOLUTION}p"
 
-    # Subscriber check — skip if not available (channel may not expose this)
+    # Subscriber check — same as above; missing metadata fails closed.
     subscriber_count = info.get("channel_follower_count") or 0
-    if subscriber_count > 0 and subscriber_count < MIN_SUBSCRIBERS:
+    if subscriber_count < MIN_SUBSCRIBERS:
         return False, f"Subscribers {subscriber_count} < {MIN_SUBSCRIBERS}"
 
     return True, "Passed"

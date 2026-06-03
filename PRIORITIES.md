@@ -117,7 +117,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-### Commit 111: Stem Routing Fix — Wire Bass+Other for Chords, Dynamic Melodic Stem for Solo [DEFERRED]
+### Commit 111: Stem Routing Fix — Wire Bass+Other for Chords, Dynamic Melodic Stem for Solo [COMPLETE]
 
 **Goal:** Wire `build_stem_routing_hints()` output into the main analysis pipeline so chords are inferred from the `bass + other` stem mix (cleaner harmonic signal) and solo is inferred from a dynamically selected melodic stem, not always the guitar stem.
 
@@ -140,13 +140,13 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 **Acceptance Criteria:**
 
-- [ ] `mix_stems()` utility correctly sums 2+ stem WAVs into a single normalized WAV
-- [ ] Chord inference uses `bass + other` stem mix (not full mix) when both stems have non-zero RMS
-- [ ] Solo inference uses dynamically selected melodic stem (falls back: selected → guitar → vocals)
-- [ ] Stem quality flags (`guitar_near_silent`, `guitar_buried_in_mix`) influence routing decisions
-- [ ] Full hardcoded path fallback preserved when hints are unavailable
-- [ ] Routing decisions logged per job for observability
-- [ ] Integration test confirms multi-source chord input path
+- [x] `mix_stems()` utility correctly sums 2+ stem WAVs into a single normalized WAV
+- [x] Chord inference uses `bass + other` stem mix (not full mix) when both stems have non-zero RMS
+- [x] Solo inference uses dynamically selected melodic stem (falls back: selected → guitar → vocals)
+- [x] Stem quality flags (`guitar_near_silent`, `guitar_buried_in_mix`) influence routing decisions
+- [x] Full hardcoded path fallback preserved when hints are unavailable
+- [x] Routing decisions logged per job for observability
+- [x] Integration test confirms multi-source chord input path
 
 ---
 

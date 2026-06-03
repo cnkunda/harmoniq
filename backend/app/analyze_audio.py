@@ -16,6 +16,7 @@ from app.ingest import SourceMetadata, resolve_lesson_titles
 from app.pipeline_proof import LibrosaSummary, librosa_summarize
 from app.style_detect import infer_style_from_librosa_summary
 from app.transcribe import transcribe_vocals_to_lyrics_aligned
+from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
 from app.schemas import (
     BeatGrid,
     ChordEvent,
@@ -25,6 +26,7 @@ from app.schemas import (
     PlayerProfile,
     SoloNote,
     SoloNotes,
+    StemRoutingHints,
 )
 from app.stem_quality import StemClassification
 from app.alphatab_prerender import enrich_lesson_with_prerender_hints
@@ -212,6 +214,8 @@ def build_lesson_json_from_librosa(
     mix_wav_path: Path | None = None,
     piano_stem_path: Path | None = None,
     on_stage: Callable[[str, float, str], None] | None = None,
+    routing_hints: StemRoutingHints | None = None,
+    stem_abs_paths: dict[str, Path] | None = None,
 ) -> LessonJSON:
     song_title, artist = resolve_lesson_titles(source_metadata, source_url=source_url)
 
@@ -272,23 +276,95 @@ def build_lesson_json_from_librosa(
     # Run transcription inference for chord timeline and solo notes
     chord_timeline: ChordTimeline | None = None
     solo_notes: SoloNotes | None = None
-    
+
+    # === Commit 111: Hint-aware chord + solo routing ===
+    # Default fallback: full mix for chords, guitar stem for solo (preserves pre-Commit-111 behavior).
+    chord_mix_path = mix_wav_path if (mix_wav_path and mix_wav_path.is_file()) else guitar_stem_path
+    solo_source_path = guitar_stem_path
+
+    if routing_hints is not None and stem_abs_paths is not None:
+        # Chord: try to mix chord_mix_stems (typically ["bass", "other"])
+        valid_chord_stems = resolve_chord_stems(
+            stem_abs_paths, routing_hints.chord_mix_stems
+        )
+        if len(valid_chord_stems) >= 2:
+            try:
+                # Derive job_dir from the input song WAV path so the chord mix
+                # lands alongside the rest of the job artifacts. Using
+                # ``wav_path.parent`` keeps tests that use a tmp data dir
+                # working without forcing the analysis function to know the
+                # absolute path.
+                job_dir = Path(wav_path).parent
+                chord_mix_path = mix_stems(
+                    valid_chord_stems,
+                    job_dir / "chord_mix.wav",
+                )
+                routing_hints.resolved_chord_mix_keys = list(routing_hints.chord_mix_stems)
+                routing_hints.resolved_chord_path = str(chord_mix_path)
+                logger.info(
+                    "stem_routing job_id=%s chord_mix stems=%s → %s",
+                    job_id, routing_hints.chord_mix_stems, chord_mix_path,
+                )
+            except Exception:
+                logger.exception(
+                    "stem_routing job_id=%s chord_mix failed; falling back to %s",
+                    job_id, chord_mix_path,
+                )
+                if not routing_hints.fallback_reason:
+                    routing_hints.fallback_reason = "mix_failed"
+                routing_hints.resolved_chord_path = str(chord_mix_path)
+        else:
+            if not routing_hints.fallback_reason:
+                routing_hints.fallback_reason = "insufficient_stems"
+            routing_hints.resolved_chord_path = str(chord_mix_path)
+            logger.info(
+                "stem_routing job_id=%s chord_fallback reason=%s path=%s",
+                job_id, routing_hints.fallback_reason, chord_mix_path,
+            )
+
+        # Solo: cascade through selected → guitar → vocals
+        try:
+            resolved_solo, chosen_stem = resolve_solo_stem(
+                stem_abs_paths, routing_hints.selected_melodic_stem
+            )
+            solo_source_path = resolved_solo
+            routing_hints.resolved_solo_path = str(resolved_solo)
+            if chosen_stem != routing_hints.selected_melodic_stem:
+                if not routing_hints.fallback_reason:
+                    routing_hints.fallback_reason = f"solo_{chosen_stem}"
+                logger.info(
+                    "stem_routing job_id=%s solo_fallback selected=%s → used=%s reason=%s",
+                    job_id, routing_hints.selected_melodic_stem, chosen_stem, routing_hints.fallback_reason,
+                )
+            else:
+                logger.info(
+                    "stem_routing job_id=%s solo_stem=%s (no fallback)", job_id, chosen_stem,
+                )
+        except KeyError:
+            logger.exception(
+                "stem_routing job_id=%s solo resolution failed; using guitar stem",
+                job_id,
+            )
+            if not routing_hints.fallback_reason:
+                routing_hints.fallback_reason = "solo_resolution_failed"
+            routing_hints.resolved_solo_path = str(guitar_stem_path)
+            solo_source_path = guitar_stem_path
+    # === End Commit 111 routing block ===
+
     if on_stage:
         on_stage("chords_inferring", 0.65, "Inferring chords…")
     try:
-        # Use bass+other mix for chord inference, guitar for solo
-        chord_mix_path = mix_wav_path if mix_wav_path and mix_wav_path.is_file() else guitar_stem_path
         chord_timeline = infer_chords(chord_mix_path, beat_grid)
-        logger.info("chord inference completed for job_id=%s with %d events", job_id, len(chord_timeline.events))
+        logger.info("chord inference completed for job_id=%s with %d events (source=%s)", job_id, len(chord_timeline.events), chord_mix_path)
     except Exception:
         logger.exception("chord inference failed for job_id=%s; continuing without chord timeline", job_id)
         chord_timeline = ChordTimeline(events=[])
-    
+
     if on_stage:
         on_stage("solo_inferring", 0.78, "Inferring solo notation…")
     try:
-        solo_notes = infer_solo(guitar_stem_path, beat_grid)
-        logger.info("solo inference completed for job_id=%s with %d notes", job_id, len(solo_notes.notes))
+        solo_notes = infer_solo(solo_source_path, beat_grid)
+        logger.info("solo inference completed for job_id=%s with %d notes (stem=%s)", job_id, len(solo_notes.notes), solo_source_path)
     except Exception:
         logger.exception("solo inference failed for job_id=%s; continuing without solo notes", job_id)
         solo_notes = SoloNotes(notes=[])
@@ -468,6 +544,7 @@ def build_lesson_json_from_librosa(
         chord_timeline=chord_timeline,
         solo_notes=solo_notes,
         beat_grid_structured=beat_grid,
+        stem_routing=routing_hints,
         **stem_fields,
     )
 

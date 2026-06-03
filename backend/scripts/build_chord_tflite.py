@@ -1073,7 +1073,7 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         stretch_range: tuple[float, float] = (0.9, 1.1),
         noise_std: float = 0.05,
         shuffle: bool = True,
-        temperature: float = 1.0,
+        temperature: float = 0.3,
         p_mixup: float = 0.3,
         mixup_alpha: float = 0.2,
         **kwargs,

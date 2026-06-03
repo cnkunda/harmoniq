@@ -144,6 +144,9 @@ def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path, monkeypatch):
         stem_classification=None,
         mix_wav_path=None,
         piano_stem_path=None,
+        on_stage=None,
+        routing_hints=None,
+        stem_abs_paths=None,
     ):
         from app.schemas import LessonJSON, LessonSectionStub
 
@@ -311,6 +314,9 @@ def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
         stem_classification=None,
         mix_wav_path=None,
         piano_stem_path=None,
+        on_stage=None,
+        routing_hints=None,
+        stem_abs_paths=None,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub
@@ -388,6 +394,9 @@ def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
         stem_classification=None,
         mix_wav_path=None,
         piano_stem_path=None,
+        on_stage=None,
+        routing_hints=None,
+        stem_abs_paths=None,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub
@@ -465,6 +474,9 @@ def test_missing_cached_artifact_forces_recompute(monkeypatch, tmp_path):
         stem_classification=None,
         mix_wav_path=None,
         piano_stem_path=None,
+        on_stage=None,
+        routing_hints=None,
+        stem_abs_paths=None,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub

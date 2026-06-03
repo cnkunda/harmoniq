@@ -242,13 +242,27 @@ class BeatGrid(BaseModel):
     
 
 class StemRoutingHints(BaseModel):
-    """Stem selection hints handed off to chord/solo inference (commit 79 hook)."""
+    """Stem selection hints and resolved paths for chord/solo inference (Commit 111).
+
+    Pre-routing fields (``chord_mix_stems``, ``melodic_preference_order``,
+    ``selected_melodic_stem``) come from ``build_stem_routing_hints``.
+    Post-routing fields (``resolved_chord_path``, ``resolved_solo_path``,
+    ``resolved_chord_mix_keys``, ``fallback_reason``) are populated by the
+    analysis pipeline after the hint-aware chord/solo routing block runs.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
+    # Pre-routing hints from build_stem_routing_hints
     chord_mix_stems: list[str] = Field(default_factory=lambda: ["bass", "other"])
     melodic_preference_order: list[str] = Field(default_factory=list)
     selected_melodic_stem: str = "guitar"
+
+    # Commit 111 — populated after routing is resolved
+    resolved_chord_path: str | None = None
+    resolved_solo_path: str | None = None
+    resolved_chord_mix_keys: list[str] = Field(default_factory=list)
+    fallback_reason: str | None = None
 
 
 class TranscriptionPrepareResponse(BaseModel):
@@ -418,6 +432,8 @@ class LessonJSON(BaseModel):
     solo_notes: SoloNotes | None = None
     # Commit 108: Structured BeatGrid at top level (flat beat_grid preserved for backward compat)
     beat_grid_structured: BeatGrid | None = None
+    # Commit 111: Embedded stem routing telemetry (which stems fed chord/solo inference)
+    stem_routing: StemRoutingHints | None = None
 
 
 class JobStatus(BaseModel):

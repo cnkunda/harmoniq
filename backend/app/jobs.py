@@ -27,11 +27,14 @@ from app.schemas import (
     LessonJSON,
     LessonSectionStub,
     PlayerProfile,
+    StemRoutingHints,
 )
 
 from app.analyze_audio import build_lesson_json_from_librosa
+from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
 from app.cache import invalidate_cache_for_wav, load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
 from app.coach import hydrate_coach_copy_into_sections
+from app.demucs_engine import DemucsEngineError, build_stem_routing_hints
 from app.ingest import (
     AUDIO_TOO_SHORT_USER_MESSAGE,
     AudioTooShortError,
@@ -429,6 +432,35 @@ def _process_analyze_job(
                 stem_classification.guitar_stem_usable,
                 stem_classification.analysis_audio_role,
             )
+
+        # Commit 111: Build stem routing hints (chord: bass+other; solo: dynamic).
+        # Persist a sidecar JSON for cross-endpoint access (recompute + /transcription/analyze).
+        routing_hints: StemRoutingHints
+        try:
+            hints_raw = build_stem_routing_hints(
+                stem_abs_paths, stem_classification=stem_classification
+            )
+            routing_hints = StemRoutingHints(**hints_raw)
+            logger.info(
+                "stem_routing_built job_id=%s selected=%s chord_mix=%s fallback=%s",
+                job_id,
+                routing_hints.selected_melodic_stem,
+                routing_hints.chord_mix_stems,
+                routing_hints.fallback_reason,
+            )
+        except DemucsEngineError as exc:
+            logger.warning(
+                "stem_routing_build_failed job_id=%s err=%s; using defaults",
+                job_id, exc,
+            )
+            routing_hints = StemRoutingHints()
+        try:
+            (job_dir / "stem_routing.json").write_text(
+                routing_hints.model_dump_json(indent=2), encoding="utf-8"
+            )
+        except Exception:
+            logger.exception("stem_routing_persist_failed job_id=%s", job_id)
+
         guitar_rel_path = stems.get("guitar")
         vocals_rel_path = stems.get("vocals")
         if not guitar_rel_path:
@@ -466,6 +498,8 @@ def _process_analyze_job(
                 on_stage=lambda stage, prog, label: _set_job_analysis_stage(
                     job_id, stage, prog, label
                 ),
+                routing_hints=routing_hints,
+                stem_abs_paths=stem_abs_paths,
             )
             analyze_elapsed = time.time() - analyze_start
             logger.info("librosa analysis completed in %.2fs job_id=%s", analyze_elapsed, job_id)
@@ -695,10 +729,45 @@ def _process_beat_grid_recompute(
             _set_recompute_progress(job_id, "failed", error="Guitar stem not found.")
             return
 
-        # Re-run chord inference
+        # Commit 111: Load persisted stem routing hints (sidecar). When missing,
+        # fall back to defaults — preserve the previous recompute behavior
+        # (full mix for chord, guitar for solo) so old jobs without sidecar
+        # continue to work.
+        routing_path = job_dir / "stem_routing.json"
+        routing_hints: StemRoutingHints
+        if routing_path.exists():
+            try:
+                routing_hints = StemRoutingHints.model_validate_json(
+                    routing_path.read_text(encoding="utf-8")
+                )
+            except Exception:
+                logger.exception("recompute: stem_routing read failed; using defaults")
+                routing_hints = StemRoutingHints()
+        else:
+            routing_hints = StemRoutingHints()
+
+        stem_abs_paths_recompute = {
+            k: (backend_root / rel) for k, rel in stems.items() if rel
+        }
+
+        # Re-run chord inference with persisted routing
         _set_recompute_progress(job_id, "recomputing_chords", progress=0.4, stage_label="Recomputing chords…")
+        chord_mix_path = wav_path  # default fallback = full mix
         try:
-            chord_mix_path = wav_path  # Use full mix for chord inference
+            valid_chord_stems = resolve_chord_stems(
+                stem_abs_paths_recompute, routing_hints.chord_mix_stems
+            )
+            if len(valid_chord_stems) >= 2:
+                chord_mix_path = mix_stems(valid_chord_stems, job_dir / "chord_mix.wav")
+                logger.info(
+                    "recompute stem_routing job_id=%s chord_mix stems=%s → %s",
+                    job_id, routing_hints.chord_mix_stems, chord_mix_path,
+                )
+            else:
+                logger.info(
+                    "recompute stem_routing job_id=%s chord_fallback path=%s",
+                    job_id, chord_mix_path,
+                )
             chord_timeline = infer_chords(chord_mix_path, beat_grid)
         except Exception:
             logger.exception("recompute chord inference failed for job_id=%s", job_id)
@@ -711,10 +780,17 @@ def _process_beat_grid_recompute(
             chord_timeline=chord_timeline,
         )
 
-        # Re-run solo inference
+        # Re-run solo inference with persisted routing
         _set_recompute_progress(job_id, "recomputing_solo", progress=0.65, stage_label="Recomputing solo…")
         try:
-            solo_notes = infer_solo(guitar_stem_path, beat_grid)
+            resolved_solo, _ = resolve_solo_stem(
+                stem_abs_paths_recompute, routing_hints.selected_melodic_stem
+            )
+            solo_notes = infer_solo(resolved_solo, beat_grid)
+            logger.info(
+                "recompute stem_routing job_id=%s solo_stem=%s",
+                job_id, resolved_solo,
+            )
         except Exception:
             logger.exception("recompute solo inference failed for job_id=%s", job_id)
             solo_notes = SoloNotes(notes=[])

@@ -250,9 +250,12 @@ def infer_solo(melodic_stem_path: Path, beat_grid: BeatGrid) -> SoloNotes:
         logger.error("All solo model formats failed — returning empty solo notes. (model=%s)", model_label)
         return SoloNotes(notes=[])
 
-    # Minimum duration threshold: filter sub-32nd notes
+    # Minimum duration threshold: keep grace notes that resolve to a single
+    # tick after quantization. The 0.1 multiplier lets through notes as
+    # short as ~6ms at 120 BPM; the quantization step assigns them a
+    # one-tick duration rather than dropping them outright.
     seconds_per_32nd = (60.0 / beat_grid.bpm) / 8.0
-    min_duration_s = max(0.01, seconds_per_32nd * 0.4)
+    min_duration_s = max(0.005, seconds_per_32nd * 0.1)
 
     MIN_MIDI_VELOCITY = 40
     MAX_MIDI_VELOCITY = 120
@@ -274,7 +277,10 @@ def infer_solo(melodic_stem_path: Path, beat_grid: BeatGrid) -> SoloNotes:
     grid_beats = beat_grid.beats
     by_slot: dict[int, list[tuple[float, float, float, float]]] = defaultdict(list)
     for start_time, end_time, pitch, velocity in raw_notes:
-        slot = _beat_slot_index(start_time, grid_beats, beat_grid.bpm)
+        # Use the quantized start time so grace notes that snap to a different
+        # grid point than the surrounding long note land in their own slot.
+        q_start = _snap_to_grid(start_time, grid_beats)
+        slot = _beat_slot_index(q_start, grid_beats, beat_grid.bpm)
         by_slot[slot].append((start_time, end_time, pitch, velocity))
 
     selected_notes: list[tuple[float, float, float, float]] = []

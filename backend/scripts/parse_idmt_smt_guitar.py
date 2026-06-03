@@ -152,6 +152,82 @@ def _parse_chord_symbol(symbol: str) -> str | None:
     return f"{root}:{quality}"
 
 
+def _extract_chord_info(filename: str) -> dict | None:
+    """Parse a chord filename like 'C_major_arpeggio_acoustic.wav'.
+
+    Filename patterns:
+        {root}[#|b]_{quality}_{style}_{instrument}.wav
+        single_{root}{octave}_{style}_{instrument}.wav
+
+    Returns dict with root, quality, style, instrument, and is_single_note
+    (only present when True). Returns None if the root cannot be parsed.
+    """
+    stem = Path(filename).stem
+    parts = stem.split("_")
+    if not parts:
+        return None
+
+    info: dict = {
+        "root": None,
+        "quality": "maj",
+        "style": "strum",
+        "instrument": "acoustic",
+    }
+
+    if parts[0] == "single":
+        info["is_single_note"] = True
+        parts = parts[1:]
+
+    if not parts:
+        return None
+
+    # First token holds the root with optional sharp/flat and a possible
+    # quality/octave suffix (e.g., "G7", "C4", "Bb", "F#").
+    root_token = parts[0]
+    m = re.match(r"^([A-G][#b]?)(.*)$", root_token)
+    if m is None:
+        return None
+    root = _normalize_root(m.group(1))
+    if root is None:
+        return None
+    info["root"] = root
+    qual_suffix = m.group(2)
+
+    # In single-note clips the trailing digits are an octave number, not a
+    # quality; the quantization step assigns a one-tick duration.
+    if qual_suffix and not info.get("is_single_note"):
+        mapped = CHORD_QUALITY_MAP.get(qual_suffix.lower())
+        if mapped:
+            info["quality"] = mapped
+
+    _STYLE_TOKENS = {"arpeggio", "strum", "picked"}
+    _INSTRUMENT_TOKENS = {
+        "acoustic": "acoustic",
+        "electric": "electric_clean",
+        "distortion": "electric_distortion",
+    }
+
+    for part in parts[1:]:
+        if part in _STYLE_TOKENS:
+            info["style"] = part
+            continue
+        if part in _INSTRUMENT_TOKENS:
+            info["instrument"] = _INSTRUMENT_TOKENS[part]
+            continue
+        # Quality tokens like "major", "minor", "maj7", "dim", "aug".
+        mapped = CHORD_QUALITY_MAP.get(part.lower())
+        if mapped and mapped != info["quality"]:
+            info["quality"] = mapped
+        # Unknown tokens (e.g., "bowing") fall through to the defaults.
+
+    return info
+
+
+def _build_chord_label(root: str, quality: str) -> str:
+    """Format a chord label in the canonical Harte 'root:quality' form."""
+    return f"{root}:{quality}"
+
+
 def _extract_instrument(path_parts: list[str]) -> str:
     for part in path_parts:
         if part in INSTRUMENT_PATH_MAP:
@@ -262,9 +338,6 @@ def scan_idmt_clips(dataset_dir: Path) -> dict[str, list[dict]]:
         return clips
 
     chord_csv_files = sorted(dataset_dir.rglob("annotation/chords/*.csv"))
-    if not chord_csv_files:
-        print(f"  [WARN] No chord CSV files found in {dataset_dir}")
-        return clips
 
     import soundfile as sf
 
@@ -309,6 +382,40 @@ def scan_idmt_clips(dataset_dir: Path) -> dict[str, list[dict]]:
             seg["path"] = str(wav_path)
 
         clips[clip_id] = segments
+
+    if clips:
+        return clips
+
+    # Fallback: when no CSV annotations are present, derive single-segment
+    # timelines from audio filenames (e.g. "C_major_arpeggio_acoustic.wav").
+    wav_files = sorted(dataset_dir.rglob("*.wav"))
+    for wav_path in wav_files:
+        info = _extract_chord_info(wav_path.name)
+        if info is None or info["root"] is None:
+            print(f"  [SKIP] {wav_path.name}: filename does not encode chord info")
+            continue
+        if info.get("is_single_note"):
+            print(f"  [SKIP] {wav_path.name}: single-note clip, no chord label")
+            continue
+        try:
+            sfinfo = sf.info(str(wav_path))
+            duration = sfinfo.duration
+        except Exception as e:
+            print(f"  [WARN] {wav_path.name}: {e}")
+            continue
+        label = _build_chord_label(info["root"], info["quality"])
+        clip_id = wav_path.stem
+        clips[clip_id] = [{
+            "start": 0.0,
+            "end": duration,
+            "chord": label,
+            "instrument": info["instrument"],
+            "style": info["style"],
+            "path": str(wav_path),
+        }]
+
+    if not clips:
+        print(f"  [WARN] No chord CSV files or audio clips found in {dataset_dir}")
 
     return clips
 

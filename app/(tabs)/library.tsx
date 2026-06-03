@@ -333,13 +333,13 @@ export default function LibraryScreen() {
               </Text>
             </View>
 
-            <View className="mb-6 flex-row gap-1 rounded-xl border border-wood-600 bg-wood-800/60 p-1">
+            <View className="mb-6 flex-row rounded-2xl border border-wood-600/50 bg-transparent p-1.5 shadow-sm shadow-black/20">
               <AnimatedPressable haptic="light"
                 onPress={() => setLibraryTab('lessons')}
-                className={`flex-1 rounded-lg border py-2.5 ${
+                className={`flex-1 rounded-xl py-2.5 ${
                   libraryTab === 'lessons'
-                    ? 'border-amber-accent bg-amber-accent'
-                    : 'border-transparent bg-transparent'
+                    ? 'bg-amber-light shadow-inner-wood'
+                    : 'bg-transparent'
                 }`}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: libraryTab === 'lessons' }}
@@ -352,10 +352,10 @@ export default function LibraryScreen() {
               </AnimatedPressable>
               <AnimatedPressable haptic="light"
                 onPress={() => setLibraryTab('licks')}
-                className={`flex-1 rounded-lg border py-2.5 ${
+                className={`flex-1 rounded-xl py-2.5 ${
                   libraryTab === 'licks'
-                    ? 'border-amber-accent bg-amber-accent'
-                    : 'border-transparent bg-transparent'
+                    ? 'bg-amber-light shadow-inner-wood'
+                    : 'bg-transparent'
                 }`}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: libraryTab === 'licks' }}

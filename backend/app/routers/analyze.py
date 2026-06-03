@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Request, UploadFile
 
 from app.audio_processing import AudioPreparationError, prepare_audio_input
+from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
 from app.beat_grid import (
     BeatGridComputationError,
     dependent_artifacts_for_grid_override,
@@ -46,6 +47,7 @@ from app.schemas import (
     JobStatus,
     NoteCorrectionRequest,
     NoteCorrectionResponse,
+    StemRoutingHints,
     TranscriptionPrepareResponse,
     TranscriptionVerifyRequest,
     TranscriptionVerifyResponse,
@@ -378,12 +380,65 @@ async def analyze_transcription(job_id: str):
     with open(grid_path) as f:
         beat_grid = BeatGrid.model_validate_json(f.read())
     stems_dir = job_dir / "stems"
-    chord_mix_path = stems_dir / "other.wav"
-    melodic_stem_path = stems_dir / "guitar.wav"
-    if not chord_mix_path.exists() or not melodic_stem_path.exists():
-        raise HTTPException(status_code=400, detail="Required stems missing.")
-    chord_timeline = infer_chords(chord_mix_path, beat_grid)
-    solo_notes = infer_solo(melodic_stem_path, beat_grid)
+    if not stems_dir.exists():
+        raise HTTPException(status_code=400, detail="Stems missing. Run prepare first.")
+
+    # Commit 111: Load persisted routing hints (sidecar) so chord/solo inference
+    # uses the same stem selection as the main analysis pipeline. Fall back to
+    # defaults if the sidecar is missing or unreadable.
+    routing_path = job_dir / "stem_routing.json"
+    routing_hints: StemRoutingHints
+    if routing_path.exists():
+        try:
+            routing_hints = StemRoutingHints.model_validate_json(
+                routing_path.read_text(encoding="utf-8")
+            )
+        except Exception:
+            logger.exception("stem_routing read failed for job_id=%s; using defaults", job_id)
+            routing_hints = StemRoutingHints()
+    else:
+        routing_hints = StemRoutingHints()
+
+    stem_abs_paths = {
+        k: stems_dir / f"{k}.wav"
+        for k in ("guitar", "bass", "drums", "vocals", "piano", "other")
+    }
+
+    # Apply chord routing: try mix of bass+other, fall back to "other.wav" or full mix.
+    chord_mix_path = stems_dir / "other.wav"  # legacy fallback
+    try:
+        valid_chord_stems = resolve_chord_stems(
+            stem_abs_paths, routing_hints.chord_mix_stems
+        )
+        if len(valid_chord_stems) >= 2:
+            chord_mix_path = mix_stems(valid_chord_stems, job_dir / "chord_mix.wav")
+        elif not chord_mix_path.exists():
+            # No bass+other available and no legacy "other.wav" — try full mix fallback
+            song_wav = job_dir / "song.wav"
+            if song_wav.exists():
+                chord_mix_path = song_wav
+        chord_timeline = infer_chords(chord_mix_path, beat_grid)
+    except Exception:
+        logger.exception("chord inference failed for job_id=%s", job_id)
+        fallback = stems_dir / "other.wav"
+        if fallback.exists():
+            chord_mix_path = fallback
+        chord_timeline = infer_chords(chord_mix_path, beat_grid)
+
+    # Apply solo routing: cascade through selected → guitar → vocals.
+    try:
+        resolved_solo, _ = resolve_solo_stem(
+            stem_abs_paths, routing_hints.selected_melodic_stem
+        )
+        solo_notes = infer_solo(resolved_solo, beat_grid)
+    except Exception:
+        logger.exception("solo inference failed for job_id=%s", job_id)
+        guitar_path = stem_abs_paths.get("guitar")
+        if guitar_path is not None and guitar_path.exists():
+            solo_notes = infer_solo(guitar_path, beat_grid)
+        else:
+            raise HTTPException(status_code=400, detail="Required stems missing.")
+
     with open(job_dir / "chordTimeline.json", "w") as f:
         f.write(chord_timeline.model_dump_json(indent=2))
     with open(job_dir / "SoloNotes.json", "w") as f:
