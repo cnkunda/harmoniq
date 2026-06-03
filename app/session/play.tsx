@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
 import { Mic } from 'lucide-react-native'
@@ -36,23 +36,45 @@ import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useAppStore } from '@/src/stores/useAppStore'
-import { MusicProvider } from '@/src/context/MusicContext'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import * as FileSystem from 'expo-file-system/legacy'
 import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 
 export default function PlayScreen() {
-  const isDemo = useIsDemoLesson()
-  const router = useRouter()
-  const recordingRef = useRef(false)
-  const initialMetronomeOn = useMetronomeDefaultOn()
   const lesson = useLessonStore((s) => s.lesson)
   const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const section = lesson?.sections?.[sectionIndex] as Record<string, unknown> | undefined
 
   // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
   // Use helper so UI consumers follow playback across sections without needing per-section logic.
+  const chordEvents = getLessonWideChordEvents(lesson)
+  const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
+
+  return (
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
+    >
+      <PlayScreenInner />
+    </MusicProvider>
+  )
+}
+
+function PlayScreenInner() {
+  const isDemo = useIsDemoLesson()
+  const router = useRouter()
+  const musicActions = useMusicActions()
+  const recordingRef = useRef(false)
+  const initialMetronomeOn = useMetronomeDefaultOn()
+  const lesson = useLessonStore((s) => s.lesson)
+  const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
+  const section = lesson?.sections?.[sectionIndex] as Record<string, unknown> | undefined
+
   const chordEvents = getLessonWideChordEvents(lesson)
   const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
   const barTimestamps = lesson?.bar_timestamps ?? null
@@ -212,12 +234,21 @@ export default function PlayScreen() {
     })
   }
 
+  // Drive MusicProvider position from stem playback ticks
+  // Combine existing playbackTick (ref update) with music actions
+  const combinedPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
+    playbackTick(ctx)
+    musicActions.setPosition(ctx.positionSec * 1000)
+    musicActions.setPlaying(ctx.playing)
+  }, [playbackTick, musicActions])
+
+  // Seed initial chord/notes on mount so fretboard isn't blank before playback starts
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
-    <MusicProvider
-      chordEvents={chordEvents}
-      soloNotes={soloNotesArr}
-      barTimestamps={barTimestamps}
-    >
       <SessionStepScreen
         title="Play"
         phaseEyebrow="Apply phase"
@@ -327,7 +358,7 @@ export default function PlayScreen() {
               ) : null}
             </View>
           }
-          onPlaybackTick={playbackTick}
+          onPlaybackTick={combinedPlaybackTick}
           onNoteEvent={(evt: NoteEventMessage) => {
             hookOnNoteEvent(evt)
             setSelectedNote({ string: evt.string, fret: evt.fret, midi: Math.round(evt.midi) })
@@ -393,6 +424,5 @@ export default function PlayScreen() {
         ) : null}
       </View>
     </SessionStepScreen>
-    </MusicProvider>
   )
 }

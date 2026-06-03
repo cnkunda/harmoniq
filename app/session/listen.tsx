@@ -20,15 +20,55 @@ import { useCorrectionStore } from '@/src/stores/correctionStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
 import { applyCorrectionsToChordTimeline } from '@/src/utils/applyCorrections'
-import { MusicProvider } from '@/src/context/MusicContext'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import colors from '@/src/constants/colors'
 import { Film, Headphones, Pause, Play, X } from 'lucide-react-native'
 
 export default function ListenScreen() {
+  const lesson = useLessonStore((s) => s.lesson)
+  const lessonJobId = lesson?.job_id ?? ''
+  const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
+
+  // Extract timeline data for MusicProvider
+  const rawChordEvents = getLessonWideChordEvents(lesson)
+  const jobId = lesson?.job_id ?? ''
+  const corrections = useCorrectionStore((s) => s.corrections[jobId])
+  // Commit 110: apply chord corrections for display (normalize confidence to required number)
+  const chordEvents: Array<{ timestamp: number; chord: string; confidence: number }> | null = (() => {
+    if (!rawChordEvents?.length) return null
+    const normalized: Array<{ timestamp: number; chord: string; confidence: number }> = rawChordEvents.map((e) => ({
+      timestamp: e.timestamp,
+      chord: e.chord,
+      confidence: e.confidence ?? 0,
+    }))
+    if (!jobId || !corrections?.chordCorrections?.length) return normalized
+    const patched = applyCorrectionsToChordTimeline(
+      { events: normalized, metadata: null },
+      corrections.chordCorrections,
+    )
+    return patched?.events ?? normalized
+  })()
+  const soloNotesArr = lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
+
+  return (
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
+    >
+      <ListenScreenInner />
+    </MusicProvider>
+  )
+}
+
+function ListenScreenInner() {
   useStepCoachNarration()
   const isDemo = useIsDemoLesson()
   const router = useRouter()
+  const musicActions = useMusicActions()
   const params = useLocalSearchParams<{ section?: string }>()
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const lesson = useLessonStore((s) => s.lesson)
@@ -53,9 +93,7 @@ export default function ListenScreen() {
   const corrections = useCorrectionStore((s) => s.corrections[jobId])
   const applyChordCorrection = useCorrectionStore((s) => s.applyChordCorrection)
 
-  // Extract timeline data for MusicProvider
   const rawChordEvents = getLessonWideChordEvents(lesson)
-  // Commit 110: apply chord corrections for display (normalize confidence to required number)
   const chordEvents: Array<{ timestamp: number; chord: string; confidence: number }> | null = (() => {
     if (!rawChordEvents?.length) return null
     const normalized: Array<{ timestamp: number; chord: string; confidence: number }> = rawChordEvents.map((e) => ({
@@ -182,12 +220,19 @@ export default function ListenScreen() {
     else router.replace('/(tabs)')
   }
 
+  // Drive MusicProvider position from stem playback ticks
+  const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
+    musicActions.setPosition(ctx.positionSec * 1000)
+    musicActions.setPlaying(ctx.playing)
+  }, [musicActions])
+
+  // Seed initial chord/notes on mount so fretboard isn't blank before playback starts
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
-    <MusicProvider
-      chordEvents={chordEvents}
-      soloNotes={soloNotesArr}
-      barTimestamps={barTimestamps}
-    >
       <SessionStepScreen
       title="Listen"
       phaseEyebrow="Orient phase"
@@ -213,6 +258,7 @@ export default function ListenScreen() {
         <ListenStemPanel
           ref={stemTabRef}
           autoPlayOnReady={lesson?.job_id === DEMO_LESSON_JOB_ID}
+          onPlaybackTick={handleStemPlaybackTick}
         />
       )}
 
@@ -345,6 +391,5 @@ export default function ListenScreen() {
         </SafeAreaView>
       </Modal>
     </SessionStepScreen>
-    </MusicProvider>
   )
 }

@@ -4,8 +4,10 @@
  */
 import Slider from '@react-native-community/slider'
 import { useRouter } from 'expo-router'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, useWindowDimensions, View } from 'react-native'
+
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
@@ -22,7 +24,7 @@ import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
 import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
-import { MusicProvider } from '@/src/context/MusicContext'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
 import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import colors from '@/src/constants/colors'
@@ -54,7 +56,27 @@ function Pill({ children, emphasis }: { children: string; emphasis?: boolean }) 
 }
 
 export default function WarmupScreen() {
+  const lesson = useLessonStore((s) => s.lesson)
+
+  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
+  const chordEvents = getLessonWideChordEvents(lesson)
+  const soloNotesArr = lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
+
+  return (
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
+    >
+      <WarmupScreenInner />
+    </MusicProvider>
+  )
+}
+
+function WarmupScreenInner() {
   const router = useRouter()
+  const musicActions = useMusicActions()
   const { width } = useWindowDimensions()
   const twoColumn = width >= WIDE_BREAKPOINT
   const tabRef = useRef<SessionStemAndTabHandle>(null)
@@ -64,7 +86,6 @@ export default function WarmupScreen() {
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
 
-  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
   const chordEvents = getLessonWideChordEvents(lesson)
   const soloNotesArr = lesson?.solo_notes?.notes ?? null
   const barTimestamps = lesson?.bar_timestamps ?? null
@@ -222,6 +243,18 @@ export default function WarmupScreen() {
     return null
   }
 
+  // Drive MusicProvider position from stem playback ticks
+  const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
+    musicActions.setPosition(ctx.positionSec * 1000)
+    musicActions.setPlaying(ctx.playing)
+  }, [musicActions])
+
+  // Seed initial chord/notes on mount so fretboard isn't blank before playback starts
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const gp5 = ex?.tab_snippet_gp5_base64?.trim() || null
   const nextEx = !completed && exerciseIndex < exercises.length - 1 ? exercises[exerciseIndex + 1] : null
 
@@ -230,11 +263,6 @@ export default function WarmupScreen() {
   const rightColClass = twoColumn ? 'flex-1' : 'mt-6 w-full'
 
   return (
-    <MusicProvider
-      chordEvents={chordEvents}
-      soloNotes={soloNotesArr}
-      barTimestamps={barTimestamps}
-    >
     <SessionStepScreen
       title="Session warm-up"
       subtitle="Short moves before the rest of your plan."
@@ -434,6 +462,7 @@ export default function WarmupScreen() {
             showStemPanel={false}
             gp5Base64Override={gp5}
             initialMetronomeOn={false}
+            onPlaybackTick={handleStemPlaybackTick}
             tabFrameClassName="mt-2 h-[280px] w-full px-1"
             onTabReady={() => tabRef.current?.getTabSurface()?.setPlaybackRate(tempoMul)}
             onNoteEvent={(evt: NoteEventMessage) => {
@@ -464,6 +493,5 @@ export default function WarmupScreen() {
 
       <SessionNoteDetailModal detail={selectionDetail} visible={noteModalOpen} onClose={() => setNoteModalOpen(false)} />
       </SessionStepScreen>
-    </MusicProvider>
   )
 }
