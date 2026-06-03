@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-111** — archived. **Phase 2 commits 106, 112-147** — planned/deferred.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-111, 115** — archived. **Phase 2 commits 106, 112, 116-147** — planned/deferred.
 
 ---
 
@@ -22,7 +22,7 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 ## PHASE 2: Feedback, Retention & ML Refinement
 
-**Status:** In Progress — commits 98-111 archived. Commits 106, 112-147 remain as planned/deferred backlog below.
+**Status:** In Progress — commits 98-111, 115 archived. Commits 106, 112, 116-147 remain as planned/deferred backlog below.
 
 ### Milestone: User Feedback & Manual Overrides
 
@@ -157,48 +157,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 - [ ] No regression on songs with clean guitar stems
 - [ ] Chord accuracy improves by ≥5% on songs flagged with `guitar_buried_in_mix`
 
-
-
-### Commit 115: Input Normalization & Long-Track Chunking Fix
-
-**Goal:** Add proper loudness normalization (EBU R128), fix long-track chunking so chunks are consumed downstream, add chunk offset metadata, and secure yt-dlp with a subprocess timeout.
-
-**Current State:** `ffmpeg_normalize_wav()` in `pipeline_proof.py:74-108` does resampling and channel downmix only — no loudness normalization. Chunking in `audio_processing.py:45-90` generates 5-minute chunks for tracks ≥15 minutes, but no downstream module reads them (Demucs, librosa, beat_grid all operate on the full `song.wav`). yt-dlp subprocess at `pipeline_proof.py:201` has no timeout.
-
-**Scope:**
-
-- Upgrade `ffmpeg_normalize_wav()` to perform loudness normalization:
-  - Add `-af loudnorm=I=-16:TP=-1.5:LRA=11` (EBU R128 standard, -16 LUFS integrated target)
-  - Maintain existing resampling (44.1kHz) and downmix (mono) behavior
-  - Preserve backward compatibility for all downstream consumers
-- Fix chunk consumption: refactor `separate_song_to_stems()` and `build_lesson_json_from_librosa()` to accept chunked audio:
-  - Process each chunk through Demucs → produce per-chunk stems
-  - Stitch per-chunk stems back into full-song stems (concatenate WAVs)
-  - Run librosa/beat_grid/chord/solo on the stitched stems
-  - Add chunk offset tracking: `(chunk_index, start_time_s, end_time_s)` per chunk
-- Add chunk offset metadata to `AudioPreparationResult`:
-  - Store as `list[dict]` with `chunk_index`, `start_seconds`, `end_seconds`
-  - Pass through to job result for observability
-- Add subprocess timeout to `yt_dlp_download_wav()`:
-  - `subprocess.run(cmd, check=True, timeout=600)` (10-minute timeout for downloads)
-  - Raise `YouTubeDownloadError` on timeout with user-friendly message
-- Add test suite for:
-  - Loudness normalization: verify output LUFS meets target within ±1dB
-  - Chunking: verify chunk → separate → stitch produces same result as full-file processing
-  - Chunk offset metadata: verify timestamps are correct
-  - yt-dlp timeout: verify exception raised on timeout
-
-**Acceptance Criteria:**
-
-- [ ] `ffmpeg_normalize_wav()` applies EBU R128 loudnorm targeting -16 LUFS
-- [ ] Normalized WAV loudness measures within ±1dB of -16 LUFS
-- [ ] All downstream pipelines (Demucs, librosa, beat_grid) accept normalized audio without regression
-- [ ] Chunked tracks (≥15 min) are separated per-chunk and stitched into complete stems
-- [ ] Stitched stems reproduce identical results to non-chunked processing for sub-15-min tracks
-- [ ] Chunk offset metadata recorded and accessible in job output
-- [ ] yt-dlp download times out after 10 minutes with user-friendly error
-- [ ] Test suite covers loudness, chunking round-trip, offset accuracy, and timeout behavior
-- [ ] Minimum 30-second and maximum 300-second duration checks preserved
+---
 
 ---
 

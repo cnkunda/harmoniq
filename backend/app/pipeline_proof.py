@@ -14,6 +14,7 @@ import math
 import os
 import subprocess
 import sys
+import wave
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +34,10 @@ DEMUCS_OVERLAP = 0.1  # fraction of segment (0.1 = 1 second overlap per side)
 
 # Long-running CLIs may print a lot of stderr; only the tail is attached to failures.
 _SUBPROCESS_FAIL_SNIP = 8000
+
+
+class YouTubeDownloadError(RuntimeError):
+    """Raised when yt-dlp download fails or times out."""
 
 
 def _run_subprocess_checked(cmd: list[str], *, what: str, timeout: int | None = None) -> None:
@@ -87,7 +92,11 @@ def ffmpeg_normalize_command(
     sample_rate: int = TARGET_SR,
     mono: bool = True,
 ) -> list[str]:
-    """Argv for `ffmpeg` to normalize to ``sample_rate`` Hz and channel layout."""
+    """Argv for `ffmpeg` to normalize to ``sample_rate`` Hz and channel layout with EBU R128 loudness normalization.
+
+    Applies loudnorm targeting -16 LUFS integrated (EBU R128 standard) while
+    preserving existing resampling (44.1kHz) and downmix (mono) behavior.
+    """
     ac = "1" if mono else "2"
     return [
         "ffmpeg",
@@ -101,6 +110,8 @@ def ffmpeg_normalize_command(
         str(sample_rate),
         "-ac",
         ac,
+        "-af",
+        "loudnorm=I=-16:TP=-1.5:LRA=11",
         str(output_path),
     ]
 
@@ -112,9 +123,39 @@ def ffmpeg_normalize_wav(
     sample_rate: int = TARGET_SR,
     mono: bool = True,
 ) -> None:
-    """Resample / downmix via ffmpeg (44.1 kHz mono per Harmoniq README)."""
+    """Resample, downmix, and apply EBU R128 loudness normalization (-16 LUFS) via ffmpeg.
+
+    Produces 44.1 kHz mono WAV with loudnorm filter applied, per Harmoniq README and Commit 115.
+    """
     cmd = ffmpeg_normalize_command(input_path, output_path, sample_rate=sample_rate, mono=mono)
     _run_subprocess_checked(cmd, what="ffmpeg")
+
+
+def concatenate_wavs(
+    input_paths: Sequence[Path],
+    output_path: Path,
+    *,
+    channels: int = 1,
+    sample_width: int = 2,
+    sample_rate: int = TARGET_SR,
+) -> Path:
+    """Concatenate multiple PCM WAV files into a single file.
+
+    All inputs must share the same format (sample rate, channels, sample width).
+    Uses stdlib ``wave`` module for consistency with ``_chunk_wav_for_long_track``.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with wave.open(str(output_path), "wb") as dst:
+            dst.setnchannels(channels)
+            dst.setsampwidth(sample_width)
+            dst.setframerate(sample_rate)
+            for inp in input_paths:
+                with wave.open(str(inp), "rb") as src:
+                    dst.writeframes(src.readframes(src.getnframes()))
+        return output_path
+    except (wave.Error, OSError) as exc:
+        raise RuntimeError(f"WAV concatenation failed: {exc}") from exc
 
 
 def _resolve_demucs_device() -> str:
@@ -325,11 +366,19 @@ def yt_dlp_download_wav(url: str, work_dir: Path) -> Path:
     """
     Download audio to ``work_dir``; return path to the produced ``.wav``.
     Caller should run :func:`ffmpeg_normalize_wav` for strict 44.1 kHz mono.
+
+    Raises:
+        YouTubeDownloadError: If the subprocess times out after 10 minutes.
     """
     work_dir.mkdir(parents=True, exist_ok=True)
     template = work_dir / "yt_%(id)s.%(ext)s"
     cmd = yt_dlp_download_audio_command(url, template)
-    subprocess.run(cmd, check=True, cwd=str(work_dir))
+    try:
+        subprocess.run(cmd, check=True, timeout=600, cwd=str(work_dir))
+    except subprocess.TimeoutExpired:
+        raise YouTubeDownloadError(
+            "Download timed out after 10 minutes. Try a shorter clip or a different source."
+        )
     wavs = sorted(work_dir.glob("yt_*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not wavs:
         raise FileNotFoundError(f"yt-dlp did not produce a wav in {work_dir}")

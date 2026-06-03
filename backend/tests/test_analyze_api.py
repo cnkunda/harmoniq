@@ -115,7 +115,7 @@ def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path, monkeypatch):
     def fake_classify(*args, **kwargs):
         return StemClassification(guitar_stem_usable=True, analysis_audio_role="guitar_stem", flags=(), user_warning=None)
 
-    def fake_separate(song_wav_path, job_dir):
+    def fake_separate(song_wav_path, job_dir, **kwargs):
         import wave as _wave
         stems_dir = job_dir / "stems"
         stems_dir.mkdir(parents=True, exist_ok=True)
@@ -286,7 +286,7 @@ def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
 
     call_counts = {"separate": 0, "analyze": 0}
 
-    def fake_separate(song_wav_path, job_dir):
+    def fake_separate(song_wav_path, job_dir, **kwargs):
         call_counts["separate"] += 1
         stems_dir = job_dir / "stems"
         stems_dir.mkdir(parents=True, exist_ok=True)
@@ -366,7 +366,7 @@ def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
 
     call_counts = {"separate": 0, "analyze": 0}
 
-    def fake_separate(song_wav_path, job_dir):
+    def fake_separate(song_wav_path, job_dir, **kwargs):
         call_counts["separate"] += 1
         stems_dir = job_dir / "stems"
         stems_dir.mkdir(parents=True, exist_ok=True)
@@ -446,7 +446,7 @@ def test_missing_cached_artifact_forces_recompute(monkeypatch, tmp_path):
 
     call_counts = {"separate": 0, "analyze": 0}
 
-    def fake_separate(song_wav_path, job_dir):
+    def fake_separate(song_wav_path, job_dir, **kwargs):
         call_counts["separate"] += 1
         stems_dir = job_dir / "stems"
         stems_dir.mkdir(parents=True, exist_ok=True)

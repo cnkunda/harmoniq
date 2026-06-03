@@ -170,7 +170,11 @@ def _run_transcription_prepare_pipeline(
         youtube_url=youtube_url,
         upload_path=upload_path,
     )
-    stems = separate_with_demucs(prepared.normalized_wav_path, prepared.job_dir)
+    stems = separate_with_demucs(
+        prepared.normalized_wav_path,
+        prepared.job_dir,
+        chunk_paths=prepared.chunk_paths,
+    )
     beat_grid_payload = estimate_beat_grid(
         prepared.normalized_wav_path,
         time_signature=time_signature_override,

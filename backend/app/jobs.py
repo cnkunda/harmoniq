@@ -35,6 +35,7 @@ from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
 from app.cache import invalidate_cache_for_wav, load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
 from app.coach import hydrate_coach_copy_into_sections
 from app.demucs_engine import DemucsEngineError, build_stem_routing_hints
+from app.audio_processing import AudioPreparationError, prepare_audio_input
 from app.ingest import (
     AUDIO_TOO_SHORT_USER_MESSAGE,
     AudioTooShortError,
@@ -333,22 +334,23 @@ def _process_analyze_job(
             # Smoke-test hook for PRIORITIES §4 acceptance criteria.
             raise RuntimeError("Forced exception from request payload")
 
-        from app.ingest import ingest_youtube_or_upload_to_wav
-
         _set_job_processing_progress(job_id, 0.12, "Preparing audio…")
         ingest_start = time.time()
-        wav_path_obj, source_metadata = ingest_youtube_or_upload_to_wav(
+        prepared = prepare_audio_input(
             job_id,
             youtube_url=youtube_url,
             upload_path=upload_path,
         )
         ingest_elapsed = time.time() - ingest_start
         logger.info("ingest completed in %.2fs job_id=%s", ingest_elapsed, job_id)
+        wav_path_obj = prepared.normalized_wav_path
+        source_metadata = prepared.source_metadata
+        chunk_paths = prepared.chunk_paths
         wav_path = str(wav_path_obj)
         
         # Check audio duration before expensive processing
-        wav_duration = wav_file_duration_seconds(wav_path_obj)
-        if wav_duration is not None and wav_duration > MAX_ANALYZE_DURATION_SECONDS:
+        wav_duration = prepared.duration_seconds
+        if wav_duration > MAX_ANALYZE_DURATION_SECONDS:
             logger.warning(
                 "Audio too long: %.1fs > %ds job_id=%s",
                 wav_duration,
@@ -414,7 +416,7 @@ def _process_analyze_job(
         job_dir = get_job_dir(job_id)
         _set_job_analysis_stage(job_id, "stems_separating", 0.4, "Separating stems…")
         stem_start = time.time()
-        stems = separate_song_to_stems(wav_path_obj, job_dir)
+        stems = separate_song_to_stems(wav_path_obj, job_dir, chunk_paths=chunk_paths)
         stem_elapsed = time.time() - stem_start
         logger.info("stem separation completed in %.2fs job_id=%s", stem_elapsed, job_id)
         _set_job_analysis_stage(job_id, "stems_separating", 0.62, "Stems ready")

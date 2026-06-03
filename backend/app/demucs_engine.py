@@ -5,12 +5,21 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import time
+import wave
 from pathlib import Path
+from typing import Sequence
 
 import soundfile as sf
 
 from app.audio_mix import wav_rms as _wav_rms
-from app.pipeline_proof import DEMUCS_MODEL, run_demucs_htdemucs_6s
+from app.pipeline_proof import (
+    DEMUCS_MODEL,
+    concatenate_wavs,
+    denormalize_stems,
+    normalize_audio_for_demucs,
+    run_demucs_htdemucs_6s,
+)
 
 STEM_KEYS: tuple[str, ...] = ("guitar", "bass", "drums", "vocals", "piano", "other")
 
@@ -52,13 +61,105 @@ def _write_placeholder_stems(song_wav_path: Path, stems_dir: Path) -> dict[str, 
     return mapping
 
 
-def separate_with_demucs(song_wav_path: Path, job_dir: Path) -> dict[str, str]:
-    """Run `htdemucs_6s` and return backend-relative stem paths."""
+def _is_readable_nonempty_wav(path: Path) -> bool:
+    """Return True if `path` is a non-empty readable WAV file."""
+    try:
+        if not path.exists() or path.stat().st_size <= 0:
+            return False
+        with wave.open(str(path), "rb") as wf:
+            _ = wf.getnframes()
+            return True
+    except (wave.Error, OSError):
+        return False
+
+
+def _separate_chunked_demucs(
+    chunk_paths: Sequence[Path],
+    job_dir: Path,
+    stems_dir: Path,
+    *,
+    model: str,
+) -> None:
+    """Separate each chunk through Demucs, then stitch per-chunk stems into full-length stems."""
+    per_chunk_stems: dict[str, list[Path]] = {key: [] for key in STEM_KEYS}
+
+    for chunk_idx, chunk_path in enumerate(chunk_paths):
+        chunk_tag = f"chunk_{chunk_idx:03d}"
+        chunk_work = job_dir / f"_demucs_{chunk_tag}"
+        chunk_stems_out = job_dir / f"_stems_{chunk_tag}"
+        chunk_stems_out.mkdir(parents=True, exist_ok=True)
+        normalized = job_dir / f"_normalized_{chunk_tag}.wav"
+
+        try:
+            mean, std = normalize_audio_for_demucs(chunk_path, normalized)
+        except Exception:
+            logger.warning("Normalization failed for %s; using original", chunk_tag)
+            normalized = chunk_path
+            mean, std = 0.0, 1.0
+
+        try:
+            track_dir = run_demucs_htdemucs_6s(normalized, chunk_work, model=model)
+        except Exception as exc:
+            raise DemucsEngineError(
+                f"Demucs separation failed on chunk {chunk_idx} ({chunk_path.name}): {exc}"
+            ) from exc
+        finally:
+            shutil.rmtree(chunk_work, ignore_errors=True)
+            normalized.unlink(missing_ok=True)
+
+        for key in STEM_KEYS:
+            src = _find_stem_file(track_dir, key)
+            dest = chunk_stems_out / f"{key}.wav"
+            shutil.copyfile(src, dest)
+
+        if mean != 0.0 or std != 1.0:
+            try:
+                denormalize_stems(chunk_stems_out, mean, std, stem_keys=STEM_KEYS)
+            except Exception as e:
+                logger.warning("Denormalization failed for %s: %s", chunk_tag, e)
+
+        for key in STEM_KEYS:
+            stem_path = chunk_stems_out / f"{key}.wav"
+            if stem_path.exists():
+                per_chunk_stems[key].append(stem_path)
+
+    stems_dir.mkdir(parents=True, exist_ok=True)
+    for key in STEM_KEYS:
+        paths = per_chunk_stems[key]
+        if not paths:
+            raise DemucsEngineError(f"No stem data for {key} after chunked separation")
+        concatenate_wavs(paths, stems_dir / f"{key}.wav")
+
+
+def separate_with_demucs(
+    song_wav_path: Path,
+    job_dir: Path,
+    *,
+    chunk_paths: Sequence[Path] | None = None,
+) -> dict[str, str]:
+    """Run `htdemucs_6s` and return backend-relative stem paths.
+
+    When ``chunk_paths`` is provided, each chunk is separated independently
+    and the per-chunk stems are stitched back into full-length stems.
+    """
     if not song_wav_path.is_file():
         raise DemucsEngineError(f"Input WAV missing: {song_wav_path}")
     stems_dir = job_dir / "stems"
     if _should_skip_demucs():
         return _write_placeholder_stems(song_wav_path, stems_dir)
+
+    # When chunks are available, delegate to chunked processing.
+    if chunk_paths:
+        logger.info(
+            "Using chunked separation (prepare) for job_dir=%s (%d chunks)",
+            job_dir, len(chunk_paths),
+        )
+        _separate_chunked_demucs(chunk_paths, job_dir, stems_dir, model=DEMUCS_MODEL)
+        for key in STEM_KEYS:
+            dest = stems_dir / f"{key}.wav"
+            if not _is_readable_nonempty_wav(dest):
+                raise DemucsEngineError(f"Stitched stem {dest} is missing or invalid.")
+        return {key: _rel_to_backend(stems_dir / f"{key}.wav") for key in STEM_KEYS}
 
     demucs_out = job_dir / "_demucs_prepare"
     try:

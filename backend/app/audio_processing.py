@@ -9,6 +9,7 @@ from __future__ import annotations
 import wave
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from app.ingest import (
     AudioTooShortError,
@@ -32,14 +33,20 @@ class AudioPreparationError(RuntimeError):
 
 @dataclass(frozen=True)
 class AudioPreparationResult:
-    """Prepared normalized audio and optional chunk artifacts for long tracks."""
+    """Prepared normalized audio and optional chunk artifacts for long tracks.
+
+    When the source audio exceeds ``LONG_TRACK_CHUNK_TRIGGER_SECONDS`` (15 min),
+    ``chunk_paths`` contains the per-chunk WAV paths and ``chunk_metadata``
+    records offset info for each chunk for downstream observability.
+    """
 
     job_id: str
     job_dir: Path
     normalized_wav_path: Path
     source_metadata: SourceMetadata | None
     duration_seconds: float
-    chunk_paths: tuple[Path, ...]
+    chunk_paths: tuple[Path, ...] = ()
+    chunk_metadata: tuple[dict[str, Any], ...] = ()
 
 
 def _chunk_wav_for_long_track(
@@ -47,8 +54,14 @@ def _chunk_wav_for_long_track(
     chunk_dir: Path,
     *,
     chunk_seconds: int = LONG_TRACK_CHUNK_SECONDS,
-) -> tuple[Path, ...]:
-    """Split PCM WAV into fixed-size chunks. Returns absolute chunk paths."""
+) -> tuple[tuple[Path, ...], tuple[dict[str, Any], ...]]:
+    """Split PCM WAV into fixed-size chunks.
+
+    Returns:
+        ``(chunk_paths, chunk_metadata)`` where each metadata dict contains
+        ``chunk_index``, ``start_seconds``, and ``end_seconds`` derived from
+        the frame cursor position.
+    """
     if chunk_seconds <= 0:
         raise AudioPreparationError("chunk_seconds must be positive")
     chunk_dir.mkdir(parents=True, exist_ok=True)
@@ -63,13 +76,15 @@ def _chunk_wav_for_long_track(
                 raise AudioPreparationError("Invalid sample rate in normalized WAV")
 
             frames_per_chunk = int(chunk_seconds * sample_rate)
-            # chunk_seconds > 0 and sample_rate > 0 validated above, so frames_per_chunk is always positive
 
             out: list[Path] = []
+            metadata: list[dict[str, Any]] = []
             cursor = 0
             index = 0
             while cursor < total_frames:
                 frames_to_read = min(frames_per_chunk, total_frames - cursor)
+                start_seconds = cursor / sample_rate
+                end_seconds = (cursor + frames_to_read) / sample_rate
                 src.setpos(cursor)
                 raw = src.readframes(frames_to_read)
                 if not raw:
@@ -81,9 +96,14 @@ def _chunk_wav_for_long_track(
                     dst.setframerate(sample_rate)
                     dst.writeframes(raw)
                 out.append(chunk_path)
+                metadata.append({
+                    "chunk_index": index,
+                    "start_seconds": start_seconds,
+                    "end_seconds": end_seconds,
+                })
                 cursor += frames_to_read
                 index += 1
-            return tuple(out)
+            return tuple(out), tuple(metadata)
     except wave.Error as exc:
         raise AudioPreparationError(f"Chunking failed: invalid WAV ({exc})") from exc
     except OSError as exc:
@@ -121,8 +141,9 @@ def prepare_audio_input(
         raise AudioPreparationError("Could not read normalized WAV duration")
 
     chunk_paths: tuple[Path, ...] = ()
+    chunk_metadata: tuple[dict[str, Any], ...] = ()
     if duration >= LONG_TRACK_CHUNK_TRIGGER_SECONDS:
-        chunk_paths = _chunk_wav_for_long_track(
+        chunk_paths, chunk_metadata = _chunk_wav_for_long_track(
             wav_path,
             job_dir / "chunks",
             chunk_seconds=LONG_TRACK_CHUNK_SECONDS,
@@ -133,6 +154,7 @@ def prepare_audio_input(
         job_dir=job_dir,
         normalized_wav_path=wav_path,
         source_metadata=source_metadata,
-        duration_seconds=duration,  # already float after None check
+        duration_seconds=duration,
         chunk_paths=chunk_paths,
+        chunk_metadata=chunk_metadata,
     )
