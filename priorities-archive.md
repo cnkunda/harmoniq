@@ -1,11 +1,12 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-111), archived during ongoing development. Commits 106, 112, 114-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-114), archived during ongoing development. Commits 106, 112, 115-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
 **Phase 2 (Lick Library) Archive Date:** May 26, 2026
 **Phase 2 (Commits 104-111) Archive Date:** June 3, 2026
+**Phase 2 (Commit 114) Archive Date:** June 3, 2026
 
 ---
 
@@ -1264,6 +1265,42 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 - [x] Full hardcoded path fallback preserved when hints are unavailable
 - [x] Routing decisions logged per job for observability
 - [x] Integration test confirms multi-source chord input path
+
+---
+
+### Commit 114: Fretboard Sync Parity — Enable Chord/Note Highlighting in All Session Screens
+
+**Goal:** Extend `MusicProvider` wrapping to all session screens (`slow.tsx`, `play.tsx`, `listen.tsx`, `warmup.tsx`) so the fretboard highlights the current chord and active solo notes during every step, not only in `study.tsx`. Use tab string/fret positions from the score instead of recalculating from MIDI.
+
+**Current State:** `MusicProvider` only wraps `study.tsx` (line 128). The `slow`, `play`, `listen`, and `warmup` screens have no MusicProvider, so `FretboardDiagram` receives no chord events or solo notes — the `try/catch` at `FretboardDiagram.tsx:372-377` silently swallows the error, leaving the fretboard blank during playback. Additionally, `findActiveNotes()` in `MusicContext.tsx:165-182` always picks `cells[0]` (lowest-fret MIDI resolution), ignoring the actual string/fret positions from the tab file.
+
+**Scope:**
+
+- Add `<MusicProvider>` wrapping to `app/session/slow.tsx`:
+  - Extract `chordEvents`, `soloNotesArr`, `barTimestamps` from lesson/section data (same pattern as `study.tsx:122-125`)
+  - Wire `onPlaybackTick` → `musicActions.setPosition()` for playback-driven chord/note lookup
+- Add `<MusicProvider>` wrapping to `app/session/play.tsx`:
+  - Same pattern; position comes from reference track playback during capture
+- Add `<MusicProvider>` wrapping to `app/session/listen.tsx`:
+  - Display current chord symbol during orient (listening) phase
+- Add `<MusicProvider>` wrapping to `app/session/warmup.tsx`:
+  - Display chord/note highlights during drill exercises
+- Refactor `findActiveNotes()` in `MusicContext.tsx` to accept optional pre-resolved string/fret positions:
+  - When available from `LessonJSON` tab data, use the actual score string/fret
+  - Fall back to `allCellsForMidi()` (current behavior) when tab data is unavailable
+- Ensure `FretboardDiagram` renders correctly in all four additional screens:
+  - Verify chord circle rendering, active note dot rendering, scale degree overlays
+  - Test graceful fallback when MusicProvider is absent (existing try/catch pattern)
+
+**Acceptance Criteria:**
+
+- [x] `slow.tsx` fretboard highlights current chord and active solo notes during playback
+- [x] `play.tsx` fretboard highlights chord/notes from the reference track during capture
+- [x] `listen.tsx` displays current chord symbol during orient playback
+- [x] `warmup.tsx` fretboard responds to playback position
+- [x] `findActiveNotes()` prefers tab string/fret positions when available; falls back to MIDI resolution
+- [x] Fretboard renders gracefully when MusicProvider is absent (no crash)
+- [x] Existing `study.tsx` behavior is unchanged (non-regressed)
 
 ---
 
