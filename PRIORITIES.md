@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-110** — archived. **Phase 2 commits 106, 111-147** — planned/deferred.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-111** — archived. **Phase 2 commits 106, 112-147** — planned/deferred.
 
 ---
 
@@ -22,7 +22,7 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 ## PHASE 2: Feedback, Retention & ML Refinement
 
-**Status:** In Progress — commits 98-110 archived. Commits 106, 111-147 remain as planned/deferred backlog below.
+**Status:** In Progress — commits 98-111 archived. Commits 106, 112-147 remain as planned/deferred backlog below.
 
 ### Milestone: User Feedback & Manual Overrides
 
@@ -116,37 +116,6 @@ System for tracking user engagement during play-along sessions: duration, comple
 - [ ] Inference latency reduction confirmed on mobile device
 
 ---
-
-### Commit 111: Stem Routing Fix — Wire Bass+Other for Chords, Dynamic Melodic Stem for Solo [COMPLETE]
-
-**Goal:** Wire `build_stem_routing_hints()` output into the main analysis pipeline so chords are inferred from the `bass + other` stem mix (cleaner harmonic signal) and solo is inferred from a dynamically selected melodic stem, not always the guitar stem.
-
-**Current State:** `build_stem_routing_hints()` in `demucs_engine.py:105-139` computes correct routing hints (RMS-based melodic stem selection, bass+other for chords) but they are returned from `/transcription/prepare` as dead metadata. The main pipeline in `jobs.py` → `analyze_audio.py` ignores all hints: chords use the full mix, solo always uses the guitar stem. No audio mixing utility exists to combine stems.
-
-**Scope:**
-
-- Add audio mixing utility `mix_stems(stem_paths: list[Path], output_path: Path)` in a new module `app/audio_mix.py`:
-  - Load stem WAVs, sum waveforms, normalize to prevent clipping
-  - Handle stems of different lengths (truncate to shortest or pad with silence)
-  - Return output path for downstream inference
-- Refactor `analyze_audio.py` `build_lesson_json_from_librosa()` to accept `StemRoutingHints`:
-  - For chord inference: mix `bass` + `other` stems → pass mixed path to `infer_chords()`
-  - For solo inference: use `selected_melodic_stem` from hints (with fallback chain: selected → guitar → vocals)
-- Update `jobs.py` `_process_analyze_job()` to call `build_stem_routing_hints()` and pass hints into `build_lesson_json_from_librosa()`
-- Preserve the current hardcoded paths as fallback when hints are unavailable or all stems are silent
-- Add stem routing telemetry: log which stems were used for chord and solo per job
-- Add integration test: verify bass+other mix is used for chord inference, correct melodic stem for solo
-- Update `StemRoutingHints` schema to include the actual paths used (not just hints) after routing is resolved
-
-**Acceptance Criteria:**
-
-- [x] `mix_stems()` utility correctly sums 2+ stem WAVs into a single normalized WAV
-- [x] Chord inference uses `bass + other` stem mix (not full mix) when both stems have non-zero RMS
-- [x] Solo inference uses dynamically selected melodic stem (falls back: selected → guitar → vocals)
-- [x] Stem quality flags (`guitar_near_silent`, `guitar_buried_in_mix`) influence routing decisions
-- [x] Full hardcoded path fallback preserved when hints are unavailable
-- [x] Routing decisions logged per job for observability
-- [x] Integration test confirms multi-source chord input path
 
 ---
 

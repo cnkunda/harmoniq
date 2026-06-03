@@ -1,11 +1,11 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-110), archived during ongoing development. Commits 106, 111, 112, 114-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-111), archived during ongoing development. Commits 106, 112, 114-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
 **Phase 2 (Lick Library) Archive Date:** May 26, 2026
-**Phase 2 (Commits 104-110) Archive Date:** June 2, 2026
+**Phase 2 (Commits 104-111) Archive Date:** June 3, 2026
 
 ---
 
@@ -1229,6 +1229,41 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 - [x] Stem quality metrics (RMS, guitar-to-mix ratio) remain accurate after normalization cycle
 - [x] All unit tests pass: CLI argv, normalization round-trip, long-track handling
 - [x] Non-regressed stem separation quality on existing test songs
+
+---
+
+### Commit 111: Stem Routing Fix — Wire Bass+Other for Chords, Dynamic Melodic Stem for Solo
+
+**Status:** Complete — all 7 ACs verified.
+
+**Goal:** Wire `build_stem_routing_hints()` output into the main analysis pipeline so chords are inferred from the `bass + other` stem mix (cleaner harmonic signal) and solo is inferred from a dynamically selected melodic stem, not always the guitar stem.
+
+**Current State:** `build_stem_routing_hints()` in `demucs_engine.py:105-139` computes correct routing hints (RMS-based melodic stem selection, bass+other for chords) but they are returned from `/transcription/prepare` as dead metadata. The main pipeline in `jobs.py` → `analyze_audio.py` ignores all hints: chords use the full mix, solo always uses the guitar stem. No audio mixing utility exists to combine stems.
+
+**Scope:**
+
+- Add audio mixing utility `mix_stems(stem_paths: list[Path], output_path: Path)` in a new module `app/audio_mix.py`:
+  - Load stem WAVs, sum waveforms, normalize to prevent clipping
+  - Handle stems of different lengths (truncate to shortest or pad with silence)
+  - Return output path for downstream inference
+- Refactor `analyze_audio.py` `build_lesson_json_from_librosa()` to accept `StemRoutingHints`:
+  - For chord inference: mix `bass` + `other` stems → pass mixed path to `infer_chords()`
+  - For solo inference: use `selected_melodic_stem` from hints (with fallback chain: selected → guitar → vocals)
+- Update `jobs.py` `_process_analyze_job()` to call `build_stem_routing_hints()` and pass hints into `build_lesson_json_from_librosa()`
+- Preserve the current hardcoded paths as fallback when hints are unavailable or all stems are silent
+- Add stem routing telemetry: log which stems were used for chord and solo per job
+- Add integration test: verify bass+other mix is used for chord inference, correct melodic stem for solo
+- Update `StemRoutingHints` schema to include the actual paths used (not just hints) after routing is resolved
+
+**Acceptance Criteria:**
+
+- [x] `mix_stems()` utility correctly sums 2+ stem WAVs into a single normalized WAV
+- [x] Chord inference uses `bass + other` stem mix (not full mix) when both stems have non-zero RMS
+- [x] Solo inference uses dynamically selected melodic stem (falls back: selected → guitar → vocals)
+- [x] Stem quality flags (`guitar_near_silent`, `guitar_buried_in_mix`) influence routing decisions
+- [x] Full hardcoded path fallback preserved when hints are unavailable
+- [x] Routing decisions logged per job for observability
+- [x] Integration test confirms multi-source chord input path
 
 ---
 
