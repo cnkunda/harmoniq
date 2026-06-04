@@ -1,11 +1,12 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-114), archived during ongoing development. Commits 106, 112, 116-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-114), archived during ongoing development. Commits 106, 116-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
 **Phase 2 (Lick Library) Archive Date:** May 26, 2026
 **Phase 2 (Commits 104-111) Archive Date:** June 3, 2026
+**Phase 2 (Commit 112) Archive Date:** June 4, 2026
 **Phase 2 (Commit 114) Archive Date:** June 3, 2026
 **Phase 2 (Commit 115) Archive Date:** June 3, 2026
 
@@ -1345,6 +1346,46 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 - [x] yt-dlp download times out after 10 minutes with user-friendly error
 - [x] Test suite covers loudness, chunking round-trip, offset accuracy, and timeout behavior
 - [x] Minimum 30-second and maximum 300-second duration checks preserved
+
+---
+
+### Commit 112: Dual-Path Confidence-Weighted Stem Fusion (MT3 Paper Insight)
+
+**Goal:** Run chord inference on both the guitar stem AND the full mix simultaneously, then fuse predictions weighted by stem quality confidence — mimicking MT3's multi-instrument attention without needing the model.
+
+**Rationale (from MT3 paper, Section 4.3):** MT3 achieves strong transcription on the full mix because it learns cross-instrument attention patterns. When Demucs produces a poor guitar stem (piano-dominant mix, buried guitar), our chord model gets degraded input. A dual-path approach gives the model access to both the isolated stem and the full harmonic context, fusing them based on confidence.
+
+**Current State:** `stem_quality.py` detects bad stems with binary flags but falls back to piano stem or full mix as an either/or choice. No confidence-weighted fusion exists.
+
+**Scope:**
+
+- Add dual-path chord inference in `chord_inference.py`:
+  - Path A: run inference on guitar stem (or selected melodic stem)
+  - Path B: run inference on full mix
+  - Both paths produce per-beat chord predictions with confidence scores
+- Implement confidence-weighted fusion:
+  - Use stem quality score from `stem_quality.py` as the fusion weight
+  - `final_prediction = w * stem_prediction + (1-w) * mix_prediction`
+  - Where `w` is the continuous stem confidence (0-1, not binary)
+  - When stem confidence is high (>0.8): prefer stem path
+  - When stem confidence is low (<0.3): prefer full mix path
+  - When moderate: blend both predictions
+- Upgrade `stem_quality.py` from binary flags to continuous confidence:
+  - Compute stem confidence from RMS ratio, spectral overlap, and onset correlation
+  - Return `stem_confidence: float` (0-1) alongside existing quality flags
+- Pass stem confidence to scoring system so it can adjust its own confidence
+- Add instrument confusion diagnostic: large divergence between stem and mix predictions = instrument confusion
+- Log fusion decisions per job for observability
+
+**Acceptance Criteria:**
+
+- [x] Dual-path inference runs on both stem and full mix
+- [x] Confidence-weighted fusion produces more accurate chords on piano-dominant mixes
+- [x] Stem quality returns continuous confidence score (0-1), not binary flag
+- [x] Instrument confusion detected when stem vs mix predictions diverge significantly
+- [x] Fusion decisions logged per job
+- [x] No regression on songs with clean guitar stems
+- [x] Chord accuracy improves by ≥5% on songs flagged with `guitar_buried_in_mix`
 
 ---
 
