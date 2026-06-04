@@ -101,6 +101,11 @@ def test_chord_inference_silence_threshold(monkeypatch, tmp_path, mock_beat_grid
 
     monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
 
+    def _no_keras(y, sr):
+        raise RuntimeError("Keras mocked out")
+
+    monkeypatch.setattr("app.chord_inference._run_keras_raw", _no_keras)
+
     def mock_load(path, sr=None, mono=True):
         audio = np.concatenate([
             np.full(44100, 0.5),
@@ -147,6 +152,11 @@ def test_chord_majority_vote_pooling(monkeypatch, tmp_path, mock_beat_grid):
         def allocate_tensors(self): pass
 
     monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
+
+    def _no_keras(y, sr):
+        raise RuntimeError("Keras mocked out")
+
+    monkeypatch.setattr("app.chord_inference._run_keras_raw", _no_keras)
 
     monkeypatch.setattr("librosa.load", lambda *a, **k: (np.full(44100, 0.5), 44100))
 

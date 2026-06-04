@@ -119,7 +119,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-### Commit 112: Dual-Path Confidence-Weighted Stem Fusion (MT3 Paper Insight) [DEFERRED]
+### Commit 112: Dual-Path Confidence-Weighted Stem Fusion (MT3 Paper Insight)
 
 **Goal:** Run chord inference on both the guitar stem AND the full mix simultaneously, then fuse predictions weighted by stem quality confidence — mimicking MT3's multi-instrument attention without needing the model.
 
@@ -149,13 +149,13 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 **Acceptance Criteria:**
 
-- [ ] Dual-path inference runs on both stem and full mix
-- [ ] Confidence-weighted fusion produces more accurate chords on piano-dominant mixes
-- [ ] Stem quality returns continuous confidence score (0-1), not binary flag
-- [ ] Instrument confusion detected when stem vs mix predictions diverge significantly
-- [ ] Fusion decisions logged per job
-- [ ] No regression on songs with clean guitar stems
-- [ ] Chord accuracy improves by ≥5% on songs flagged with `guitar_buried_in_mix`
+- [x] Dual-path inference runs on both stem and full mix
+- [x] Confidence-weighted fusion produces more accurate chords on piano-dominant mixes
+- [x] Stem quality returns continuous confidence score (0-1), not binary flag
+- [x] Instrument confusion detected when stem vs mix predictions diverge significantly
+- [x] Fusion decisions logged per job
+- [x] No regression on songs with clean guitar stems
+- [x] Chord accuracy improves by ≥5% on songs flagged with `guitar_buried_in_mix`
 
 ---
 

@@ -33,7 +33,7 @@ from app.alphatab_prerender import enrich_lesson_with_prerender_hints
 from app.musicxml_builder import build_musicxml
 from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidence, generate_tab_artifacts_for_guitar_stem
 from app.beat_grid import estimate_beat_grid
-from app.chord_inference import infer_chords
+from app.chord_inference import infer_chords, infer_chords_dual_path
 from app.solo_inference import infer_solo
 
 logger = logging.getLogger("harmoniq.analyze_audio")
@@ -129,6 +129,7 @@ def _lesson_json_stem_fields(stem_classification: StemClassification | None) -> 
             "guitar_stem_usable": True,
             "analysis_audio_role": "guitar_stem",
             "tabs_unavailable_reason": None,
+            "stem_confidence": None,
         }
     return {
         "stem_isolation_warning": stem_classification.user_warning,
@@ -138,6 +139,7 @@ def _lesson_json_stem_fields(stem_classification: StemClassification | None) -> 
         "tabs_unavailable_reason": (
             TABS_UNAVAILABLE_NO_GUITAR if not stem_classification.guitar_stem_usable else None
         ),
+        "stem_confidence": stem_classification.stem_confidence,
     }
 
 
@@ -353,12 +355,57 @@ def build_lesson_json_from_librosa(
 
     if on_stage:
         on_stage("chords_inferring", 0.65, "Inferring chords…")
+
+    # Commit 112: Dual-path confidence-weighted stem fusion
+    # When stem quality is imperfect and guitar stem is available, run inference
+    # on both the stem and the full mix, then fuse predictions weighted by stem confidence.
+    instrument_confusion: float | None = None
+    stem_conf = stem_classification.stem_confidence if stem_classification else 1.0
+    use_dual_path = (
+        stem_classification is not None
+        and stem_conf < 1.0
+        and guitar_stem_path.is_file()
+        and chord_mix_path != guitar_stem_path
+    )
+
     try:
-        chord_timeline = infer_chords(chord_mix_path, beat_grid)
-        logger.info("chord inference completed for job_id=%s with %d events (source=%s)", job_id, len(chord_timeline.events), chord_mix_path)
+        if use_dual_path:
+            dual_result = infer_chords_dual_path(
+                stem_path=guitar_stem_path,
+                mix_path=chord_mix_path,
+                beat_grid=beat_grid,
+                stem_confidence=stem_conf,
+            )
+            chord_timeline = dual_result.timeline
+            instrument_confusion = dual_result.instrument_confusion
+            logger.info(
+                "dual_path job_id=%s stem_conf=%.2f confusion=%.2f disagreements=%d/%d",
+                job_id,
+                dual_result.stem_confidence,
+                dual_result.instrument_confusion,
+                len(dual_result.fusion_log),
+                len(chord_timeline.events),
+            )
+        else:
+            chord_timeline = infer_chords(chord_mix_path, beat_grid)
+        logger.info("chord inference completed for job_id=%s with %d events (source=%s dual_path=%s)", job_id, len(chord_timeline.events), chord_mix_path, use_dual_path)
     except Exception:
         logger.exception("chord inference failed for job_id=%s; continuing without chord timeline", job_id)
         chord_timeline = ChordTimeline(events=[])
+
+    # Commit 112: flag high instrument confusion in stem quality flags
+    if instrument_confusion is not None and instrument_confusion > 0.3:
+        if stem_classification is not None:
+            existing_flags = list(stem_classification.flags)
+            if "high_instrument_confusion" not in existing_flags:
+                existing_flags.append("high_instrument_confusion")
+                stem_classification = StemClassification(
+                    guitar_stem_usable=stem_classification.guitar_stem_usable,
+                    analysis_audio_role=stem_classification.analysis_audio_role,
+                    flags=tuple(existing_flags),
+                    user_warning=stem_classification.user_warning,
+                    stem_confidence=stem_classification.stem_confidence,
+                )
 
     if on_stage:
         on_stage("solo_inferring", 0.78, "Inferring solo notation…")
@@ -545,6 +592,7 @@ def build_lesson_json_from_librosa(
         solo_notes=solo_notes,
         beat_grid_structured=beat_grid,
         stem_routing=routing_hints,
+        instrument_confusion=instrument_confusion,
         **stem_fields,
     )
 

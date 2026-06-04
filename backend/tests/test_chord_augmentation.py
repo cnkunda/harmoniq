@@ -494,6 +494,7 @@ class TestAcousticRealism:
     """Tests for acoustic realism augmentations — import from production module."""
 
     def test_body_resonance_changes_spectrum(self):
+        pytest.importorskip("tensorflow")
         from scripts.build_chord_tflite import (
             apply_guitar_body_resonance,
             CHROMA_BINS,
@@ -506,6 +507,7 @@ class TestAcousticRealism:
         assert not np.allclose(result, template)
 
     def test_strumming_attenuates_early_frames(self):
+        pytest.importorskip("tensorflow")
         from scripts.build_chord_tflite import apply_strumming_onset
         feat_dim = 40
         window = np.ones((64, feat_dim), dtype=np.float32)
@@ -514,12 +516,14 @@ class TestAcousticRealism:
         assert abs(result[-1, 0] - 1.0) < 1e-6
 
     def test_strumming_skips_no_chord(self):
+        pytest.importorskip("tensorflow")
         from scripts.build_chord_tflite import apply_strumming_onset
         window = np.ones((64, 40), dtype=np.float32)
         result = apply_strumming_onset(window, "N", n_strum_frames=4)
         np.testing.assert_array_equal(result, window)
 
     def test_cqt_leakage_spreads_energy(self):
+        pytest.importorskip("tensorflow")
         from scripts.build_chord_tflite import apply_cqt_leakage, CHROMA_BINS
         window = np.zeros((9, 40), dtype=np.float32)
         window[:, 6] = 1.0
@@ -529,6 +533,7 @@ class TestAcousticRealism:
         assert result[0, 6] > result[0, 5]
 
     def test_cqt_leakage_zero_strength_unchanged(self):
+        pytest.importorskip("tensorflow")
         from scripts.build_chord_tflite import apply_cqt_leakage
         window = np.random.randn(9, 40).astype(np.float32)
         result = apply_cqt_leakage(window, leakage_strength=0.0)

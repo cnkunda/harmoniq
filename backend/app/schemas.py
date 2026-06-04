@@ -434,6 +434,9 @@ class LessonJSON(BaseModel):
     beat_grid_structured: BeatGrid | None = None
     # Commit 111: Embedded stem routing telemetry (which stems fed chord/solo inference)
     stem_routing: StemRoutingHints | None = None
+    # Commit 112: Continuous stem quality confidence (0-1) and instrument confusion metric
+    stem_confidence: float | None = None
+    instrument_confusion: float | None = None
 
 
 class JobStatus(BaseModel):
@@ -495,6 +498,10 @@ class ScoreRequest(BaseModel):
         default="technique",
         description="Musical tolerance mode for scoring: 'expressive' (lenient) or 'technique' (strict) (commit 92)",
     )
+    stem_confidence: float | None = Field(
+        default=None,
+        description="Continuous stem quality confidence (0-1) from Commit 112 dual-path fusion.",
+    )
 
 
 class ScoreWaveformComparison(BaseModel):
@@ -516,6 +523,10 @@ class ReliabilityEnvelope(BaseModel):
     confidence: Literal["low", "medium", "high"] = "low"
     signal_quality: float = Field(ge=0.0, le=1.0, default=0.0)
     reliability_flags: list[str] = Field(default_factory=list)
+    stem_confidence: float | None = Field(
+        default=None,
+        description="Continuous stem quality confidence (0-1) from Commit 112.",
+    )
 
 
 class ScoreResult(BaseModel):

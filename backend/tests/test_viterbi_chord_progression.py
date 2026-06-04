@@ -86,6 +86,11 @@ class TestIIVIPProgression:
         monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
         monkeypatch.setattr("librosa.load", lambda *a, **k: (np.full(44100 * 6, 0.3), 44100))
 
+        def _no_keras(y, sr):
+            raise RuntimeError("Keras mocked out")
+
+        monkeypatch.setattr("app.chord_inference._run_keras_raw", _no_keras)
+
         frames = []
         chord_sequence = [
             ("D:min7", 4),
@@ -119,6 +124,11 @@ class TestFlickerReduction:
     def test_viterbi_reduces_flicker(self, monkeypatch, tmp_path, mock_beat_grid_short):
         monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
         monkeypatch.setattr("librosa.load", lambda *a, **k: (np.full(44100 * 2, 0.3), 44100))
+
+        def _no_keras(y, sr):
+            raise RuntimeError("Keras mocked out")
+
+        monkeypatch.setattr("app.chord_inference._run_keras_raw", _no_keras)
 
         frames = []
         t = 0.0
@@ -315,6 +325,11 @@ class TestCIFlickerGate:
         monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
         monkeypatch.setattr("librosa.load", lambda *a, **k: (np.full(44100 * 6, 0.3), 44100))
 
+        def _no_keras(y, sr):
+            raise RuntimeError("Keras mocked out")
+
+        monkeypatch.setattr("app.chord_inference._run_keras_raw", _no_keras)
+
         frames = []
         t = 0.0
         chord_sequence = [
@@ -339,6 +354,11 @@ class TestCIBeatAlignmentGate:
     def test_alignment_above_90_percent(self, monkeypatch, tmp_path, mock_beat_grid_120):
         monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
         monkeypatch.setattr("librosa.load", lambda *a, **k: (np.full(44100 * 6, 0.3), 44100))
+
+        def _no_keras(y, sr):
+            raise RuntimeError("Keras mocked out")
+
+        monkeypatch.setattr("app.chord_inference._run_keras_raw", _no_keras)
 
         frames = []
         t = 0.0

@@ -350,6 +350,8 @@ def _coach_paragraph_from_score(
         parts.append("We saw uneven timing residuals—shorter phrases usually help.")
     if any(f in reliability_flags for f in ("signal_low", "signal_near_silence", "voiced_sparse")):
         parts.append("Signal was light—move closer to the mic on the next pass.")
+    if "low_stem_quality" in reliability_flags:
+        parts.append("The isolated guitar stem was degraded (piano bleed or low energy), so chord reference accuracy may be reduced.")
     if confidence == "low":
         parts.append("Confidence is low on this capture, so treat these numbers as directional.")
     return " ".join(parts).strip()
@@ -373,7 +375,18 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
         reliability_flags.append("voiced_sparse")
     if timing_p95_ms > 185:
         reliability_flags.append("timing_unstable")
+
+    # Commit 112: incorporate stem confidence into scoring reliability
+    stem_conf = payload.stem_confidence
+    if stem_conf is not None and stem_conf < 0.5:
+        reliability_flags.append("low_stem_quality")
+
     confidence = _confidence_from_signal(signal_quality, voiced_ratio, harmonic_ratio)
+
+    # Downgrade confidence when stem quality is poor — the transcription reference
+    # may be unreliable, making scoring numbers less trustworthy.
+    if stem_conf is not None and stem_conf < 0.3 and confidence != "low":
+        confidence = "low"
     if reliability_flags:
         logger.info(
             "score.reliability flags=%s confidence=%s signal_quality=%.3f voiced_ratio=%.3f",
@@ -428,5 +441,6 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
             confidence=confidence,
             signal_quality=round(signal_quality, 3),
             reliability_flags=reliability_flags,
+            stem_confidence=stem_conf,
         ),
     )

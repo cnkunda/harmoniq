@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import math
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -980,3 +981,141 @@ def _fallback_to_pooling(beat_data_list: list[dict]) -> list[ChordEvent]:
             confidence=round(bd["top_confidence"], 3),
         ))
     return events
+
+
+# ---------------------------------------------------------------------------
+# Dual-path confidence-weighted stem fusion (Commit 112)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class DualPathResult:
+    """Result of dual-path chord inference with confidence-weighted fusion."""
+
+    timeline: ChordTimeline
+    stem_confidence: float
+    instrument_confusion: float
+    fusion_log: list[dict]
+
+
+def infer_chords_dual_path(
+    stem_path: Path,
+    mix_path: Path,
+    beat_grid: BeatGrid,
+    stem_confidence: float,
+) -> DualPathResult:
+    """Run chord inference on both stem and mix, fuse predictions weighted by stem quality.
+
+    When stem_confidence is high (>0.8), prefer stem path.
+    When stem_confidence is low (<0.3), prefer full mix path.
+    When moderate, blend both predictions.
+
+    Instrument confusion is detected when stem and mix predict different chords
+    on a significant fraction of beats.
+    """
+    # Fast path: no fusion needed when stem is fully trusted or paths are identical
+    if stem_path == mix_path or stem_confidence >= 1.0:
+        timeline = infer_chords(stem_path, beat_grid)
+        return DualPathResult(
+            timeline=timeline,
+            stem_confidence=stem_confidence,
+            instrument_confusion=0.0,
+            fusion_log=[],
+        )
+
+    stem_timeline = infer_chords(stem_path, beat_grid)
+    mix_timeline = infer_chords(mix_path, beat_grid)
+
+    stem_events = stem_timeline.events
+    mix_events = mix_timeline.events
+
+    # Both timelines should have the same beat grid, so timestamps align.
+    # Build a lookup from timestamp → mix event for robust matching.
+    mix_by_ts: dict[float, ChordEvent] = {}
+    for e in mix_events:
+        mix_by_ts[round(e.timestamp, 4)] = e
+
+    fused_events: list[ChordEvent] = []
+    fusion_log: list[dict] = []
+    disagreements = 0
+
+    w = stem_confidence  # shorthand
+
+    for stem_ev in stem_events:
+        ts_key = round(stem_ev.timestamp, 4)
+        mix_ev = mix_by_ts.get(ts_key)
+
+        if mix_ev is None:
+            # No corresponding mix event — use stem prediction as-is
+            fused_events.append(stem_ev)
+            continue
+
+        # Fusion: pick the chord from the path weighted by stem confidence.
+        # When both agree, no fusion ambiguity.
+        if stem_ev.chord == mix_ev.chord:
+            fused_events.append(ChordEvent(
+                timestamp=stem_ev.timestamp,
+                chord=stem_ev.chord,
+                confidence=round(
+                    w * stem_ev.confidence + (1 - w) * mix_ev.confidence, 3
+                ),
+            ))
+            continue
+
+        # Disagreement: use confidence-weighted selection
+        stem_score = w * stem_ev.confidence
+        mix_score = (1 - w) * mix_ev.confidence
+
+        if stem_score >= mix_score:
+            chosen_chord = stem_ev.chord
+            chosen_conf = stem_ev.confidence
+        else:
+            chosen_chord = mix_ev.chord
+            chosen_conf = mix_ev.confidence
+
+        # Blend confidence: weighted average reflects both sources
+        blended_conf = w * stem_ev.confidence + (1 - w) * mix_ev.confidence
+
+        fused_events.append(ChordEvent(
+            timestamp=stem_ev.timestamp,
+            chord=chosen_chord,
+            confidence=round(blended_conf, 3),
+        ))
+
+        disagreements += 1
+        fusion_log.append({
+            "timestamp": stem_ev.timestamp,
+            "stem_chord": stem_ev.chord,
+            "stem_confidence": round(stem_ev.confidence, 3),
+            "mix_chord": mix_ev.chord,
+            "mix_confidence": round(mix_ev.confidence, 3),
+            "chosen": chosen_chord,
+            "fusion_weight": round(w, 3),
+        })
+
+    total = len(stem_events)
+    instrument_confusion = disagreements / total if total > 0 else 0.0
+
+    # Preserve Viterbi metadata from stem timeline if available
+    metadata = stem_timeline.metadata.copy() if stem_timeline.metadata else {}
+    metadata["dual_path"] = {
+        "stem_confidence": round(w, 4),
+        "instrument_confusion": round(instrument_confusion, 4),
+        "disagreement_count": disagreements,
+        "total_beats": total,
+        "fusion_weight": round(w, 4),
+    }
+
+    fused_timeline = ChordTimeline(events=fused_events, metadata=metadata)
+
+    logger.info(
+        "Dual-path fusion complete: %d/%d beats disagreed (%.1f%% confusion), "
+        "stem_conf=%.2f",
+        disagreements, total, 100.0 * instrument_confusion, w,
+    )
+
+    return DualPathResult(
+        timeline=fused_timeline,
+        stem_confidence=round(w, 4),
+        instrument_confusion=round(instrument_confusion, 4),
+        fusion_log=fusion_log,
+    )
