@@ -1,6 +1,6 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-118), archived during ongoing development. Commits 106, 116, 119-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-118), archived during ongoing development. Commits 106, 119-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -11,6 +11,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Phase 2 (Commit 115) Archive Date:** June 3, 2026
 **Phase 2 (Commit 117) Archive Date:** June 7, 2026
 **Phase 2 (Commit 118) Archive Date:** June 8, 2026
+**Phase 2 (Commit 116) Archive Date:** June 8, 2026
 
 ---
 
@@ -1442,4 +1443,36 @@ with actual repetition grouping.
 - [x] Frontend displays repetition count ("Chorus (2 of 3)")
 - [x] No regression: non-repeated sections still labeled correctly
 - [x] Integration test: verse-chorus-verse-chorus song correctly grouped
+
+---
+
+### Commit 116: LLM-Enhanced Chord Correction & Roman Numeral Analysis
+
+**Goal:** Post-process raw ChordTimeline through a lightweight LLM (Claude Haiku) to correct improbable chord changes based on key context and add Roman numeral functional labels.
+
+**Implementation:**
+
+- New module: `backend/app/chord_enrichment.py` — deterministic Roman numeral computation + LLM correction worker
+- Modified: `backend/app/schemas.py` — ChordEvent extended with `roman_numeral`, `llm_corrected_chord`, `correction_applied`, `correction_delta`; added `ChordEnrichmentStatus` model
+- Modified: `backend/app/analyze_audio.py` — `assign_roman_numerals()` called inline after chord inference (zero latency)
+- Modified: `backend/app/jobs.py` — `_enrich_chord_timeline_job()` background worker, `chord_enrichment` status dict, dispatch after analysis
+- Modified: `backend/app/routers/analyze.py` — `GET /analyze/{job_id}/chord-enrichment` polling endpoint
+- Modified: `src/types/index.ts` — ChordEvent extended with optional `roman_numeral`, `llm_corrected`, `correction_applied`, `correction_delta`
+- Modified: `components/ChordsAndLyrics.tsx` — `BarData` extended with `roman`; Roman numerals rendered below chord symbols
+- Modified: `app/session/study.tsx` — `TheoryCard` imported and rendered; `barsData` includes `roman`
+- Modified: `src/context/MusicContext.tsx` — `currentChordRoman` added to state; `findCurrentChordRoman()` helper
+- Modified: `src/utils/lessonChordTimeline.ts` — `roman_numeral` propagated through section merge
+- Modified: `src/api/analyze.ts` — `fetchChordEnrichmentStatus()` API helper
+- Tests: `backend/tests/test_chord_enrichment.py` (46 tests)
+
+**Acceptance Criteria:**
+
+- [x] Chord timeline passes through LLM enrichment after Viterbi decoding
+- [x] Improbable chord changes corrected (demonstrated: C → F# → G → C → G corrected to C → F → G → C → G in key of C major)
+- [x] Roman numeral labels attached to each chord (I, ii, V7, etc.)
+- [x] Original ML prediction preserved alongside LLM correction
+- [x] Correction applied only when confidence delta > 0.15
+- [x] Enrichment worker runs as background thread (no user-visible latency)
+- [x] Roman numerals displayed in chord timeline UI
+- [x] Integration test: ii-V-I in C major = Dm7 → G7 → Cmaj7 labeled ii → V7 → I
 

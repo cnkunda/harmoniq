@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-112, 115, 117, 118** — archived. **Phase 2 commits 106, 116, 119-147** — planned/deferred.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-112, 115-118** — archived. **Phase 2 commits 106, 119-147** — planned/deferred.
 
 ---
 
@@ -22,7 +22,7 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 ## PHASE 2: Feedback, Retention & ML Refinement
 
-**Status:** In Progress — commits 98-112, 115, 117, 118 archived. Commits 106, 116, 119-147 remain as planned/deferred backlog below.
+**Status:** In Progress — commits 98-112, 115-118 archived. Commits 106, 119-147 remain as planned/deferred backlog below.
 
 ### Milestone: User Feedback & Manual Overrides
 
@@ -116,58 +116,6 @@ System for tracking user engagement during play-along sessions: duration, comple
 - [ ] Inference latency reduction confirmed on mobile device
 
 ---
-
-### Commit 116: LLM-Enhanced Chord Correction & Roman Numeral Analysis [DEFERRED]
-
-**Goal:** Post-process raw ChordTimeline through a lightweight LLM (Claude Haiku or
-Gemini Flash) to correct improbable chord changes based on key context and add
-Roman numeral functional labels, inspired by ChordMini's Gemini integration.
-
-**Current State:** Chord timeline is purely ML-inferred from audio features with no
-post-processing. The Viterbi decoder (Commit 99) uses statistical transition
-probabilities but has no musical key-awareness beyond diatonic preferences.
-
-**Scope:**
-
-- Add background worker `_enrich_chord_timeline()` (similar pattern to coach
-  hydration in `jobs.py`) that runs after chord inference completes:
-  - Batch chord events by section (30–60s windows)
-  - Call Claude Haiku or Gemini Flash with prompt:
-    "Given key={key}, correct improbable chord changes in this timeline.
-    Return JSON array preserving original timestamps, with corrected chord
-    symbols and Roman numeral labels (e.g., I, ii, V7, IV)."
-  - Accept/reject logic: apply LLM correction only when confidence delta
-    between original and corrected exceeds 0.15
-  - Store corrected chord alongside original in `ChordEvent`:
-    `llm_corrected_chord: str | None`, `roman_numeral: str | None`
-- Add `roman_numeral` field to `ChordEvent` schema
-- Add `correction_applied: bool` and `correction_delta: float` fields
-- Add rate limiting: max 1 LLM call per 10s (same quota as coach hydration)
-- Add fallback: when LLM unavailable, skip enrichment silently (no regression)
-- Add metrics: correction rate, per-song accuracy delta, LLM latency P50/P95
-- Add frontend display of Roman numeral labels alongside chord symbols in
-  chord timeline UI (e.g., "G (V)" in C major)
-- Cache enrichment results with SHA256(chord_timeline + key) to avoid re-LLM
-- Add integration test: known ii-V-I progression is correctly labeled
-
-**Acceptance Criteria:**
-
-- [x] Chord timeline passes through LLM enrichment after Viterbi decoding
-- [x] Improbable chord changes corrected (demonstrated: C → F# → G → C → G
-      corrected to C → F → G → C → G in key of C major)
-- [x] Roman numeral labels attached to each chord (I, ii, V7, etc.)
-- [x] Original ML prediction preserved alongside LLM correction
-- [x] Correction applied only when confidence delta > 0.15
-- [x] Enrichment worker runs as background thread (no user-visible latency)
-- [x] Roman numerals displayed in chord timeline UI
-- [x] Integration test: ii-V-I in C major = Dm7 → G7 → Cmaj7 labeled ii → V7 → I
-
-**Implementation:**
-
-- New module: `app/chord_enrichment.py`
-- Add to `jobs.py`: enqueue enrichment after chord inference, before MusicXML build
-- Uses existing Anthropic client pattern from `coach.py`
-- Cache enrichment results with SHA256(chord_timeline + key) to avoid re-LLM
 
 ---
 
