@@ -19,6 +19,8 @@ export interface BarData {
   chord: string
   chord2?: string
   text?: string
+  /** Commit 116: Roman numeral functional label (e.g., 'I', 'ii7', 'V7') */
+  roman?: string
 }
 
 interface ChordsAndLyricsProps {
@@ -300,6 +302,11 @@ export function ChordsAndLyrics({
                               {chord || ' '}
                             </Text>
                           )}
+                          {bar.roman ? (
+                            <Text className="font-sans text-[10px] leading-tight tracking-tight text-left text-muted-brown">
+                              {bar.roman}
+                            </Text>
+                          ) : null}
                           {chord2 && (
                             <Text className="font-mono text-xs leading-tight tracking-tight text-left text-amber-accent/50">
                               {chord2}
@@ -357,6 +364,13 @@ export function ChordsAndLyrics({
                                 {chord || '—'}
                               </Text>
                             </View>
+                            {bar.roman ? (
+                              <View className="mb-0.5">
+                                <Text className="font-sans text-[10px] leading-tight tracking-tight text-center text-muted-brown">
+                                  {bar.roman}
+                                </Text>
+                              </View>
+                            ) : null}
                             {chord2 && (
                               <View className="mb-0.5">
                                 <Text className="font-mono text-[10px] leading-tight tracking-tight text-center text-amber-accent/50">

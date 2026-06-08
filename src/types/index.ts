@@ -142,6 +142,14 @@ export interface ChordEvent {
   timestamp: number
   chord: string
   confidence: number
+  /** Commit 116: Roman numeral functional label (e.g., 'I', 'ii7', 'V7') */
+  roman_numeral?: string
+  /** Commit 116: LLM-corrected chord symbol when confidence delta exceeds threshold */
+  llm_corrected?: string
+  /** Commit 116: Whether an LLM correction was applied */
+  correction_applied?: boolean
+  /** Commit 116: Confidence delta between original and LLM-corrected chord */
+  correction_delta?: number
 }
 
 export interface ChordTimelineMetadata {

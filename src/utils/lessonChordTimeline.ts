@@ -1,5 +1,13 @@
 import type { LessonJSON } from '@/src/types'
 
+/** Commit 116: Chord event with optional Roman numeral */
+type ChordEventWithRoman = {
+  timestamp: number
+  chord: string
+  confidence?: number
+  roman_numeral?: string
+}
+
 /**
  * Build a lesson-wide, beat-aligned chord events array.
  *
@@ -11,7 +19,7 @@ import type { LessonJSON } from '@/src/types'
  * Returns null when no chord events are available.
  */
 export function getLessonWideChordEvents(lesson: LessonJSON | null | undefined)
-  : Array<{ timestamp: number; chord: string; confidence?: number }> | null {
+  : ChordEventWithRoman[] | null {
   if (!lesson) return null
 
   const lessonEvents = lesson.chord_timeline?.events
@@ -21,11 +29,11 @@ export function getLessonWideChordEvents(lesson: LessonJSON | null | undefined)
   }
 
   const sections = lesson.sections ?? []
-  const merged: Array<{ timestamp: number; chord: string; confidence?: number }> = []
+  const merged: ChordEventWithRoman[] = []
 
   for (const rawSec of sections) {
     const sec = rawSec as Record<string, unknown>
-    const secTimeline = (sec?.chord_timeline as { events?: Array<{ timestamp: number; chord: string; confidence?: number }> } | undefined)
+    const secTimeline = (sec?.chord_timeline as { events?: ChordEventWithRoman[] } | undefined)
     if (!secTimeline || !Array.isArray(secTimeline.events) || secTimeline.events.length === 0) continue
 
     const events = secTimeline.events
@@ -40,7 +48,12 @@ export function getLessonWideChordEvents(lesson: LessonJSON | null | undefined)
 
     for (const e of events) {
       if (!e || typeof e.timestamp !== 'number' || !Number.isFinite(e.timestamp)) continue
-      merged.push({ timestamp: e.timestamp + offset, chord: e.chord, confidence: e.confidence })
+      merged.push({
+        timestamp: e.timestamp + offset,
+        chord: e.chord,
+        confidence: e.confidence,
+        roman_numeral: e.roman_numeral,
+      })
     }
   }
 
@@ -48,7 +61,7 @@ export function getLessonWideChordEvents(lesson: LessonJSON | null | undefined)
 
   // sort and dedupe (timestamp rounded to ms + chord)
   merged.sort((a, b) => a.timestamp - b.timestamp)
-  const out: Array<{ timestamp: number; chord: string; confidence?: number }> = []
+  const out: ChordEventWithRoman[] = []
   const seen = new Set<string>()
   for (const e of merged) {
     const key = `${e.timestamp.toFixed(3)}:${e.chord ?? ''}`

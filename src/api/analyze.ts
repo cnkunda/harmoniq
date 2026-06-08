@@ -898,3 +898,22 @@ export async function getCorrectionHistory(jobId: string): Promise<{
     correction_coverage: number
   }>
 }
+
+// ---- Commit 116: Chord enrichment status API ----------------------------------
+
+/** Chord enrichment status response from GET /analyze/{job_id}/chord-enrichment. */
+export interface ChordEnrichmentStatus {
+  status: 'pending' | 'processing' | 'complete' | 'skipped'
+  total_events: number
+  corrected_events: number
+  llm_latency_p50: number | null
+  llm_latency_p95: number | null
+  fallback_reason: string | null
+}
+
+/** Poll chord enrichment status for a completed analysis job. */
+export async function fetchChordEnrichmentStatus(jobId: string): Promise<ChordEnrichmentStatus> {
+  return request<ChordEnrichmentStatus>(
+    `/analyze/${encodeURIComponent(jobId)}/chord-enrichment`,
+  )
+}

@@ -34,6 +34,7 @@ from app.alphatab_prerender import enrich_lesson_with_prerender_hints
 from app.musicxml_builder import build_musicxml
 from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidence, generate_tab_artifacts_for_guitar_stem
 from app.beat_grid import estimate_beat_grid
+from app.chord_enrichment import assign_roman_numerals
 from app.chord_inference import infer_chords, infer_chords_dual_path
 from app.solo_inference import infer_solo
 from app.section_refinement import refine_section_boundaries
@@ -394,6 +395,10 @@ def build_lesson_json_from_librosa(
     except Exception:
         logger.exception("chord inference failed for job_id=%s; continuing without chord timeline", job_id)
         chord_timeline = ChordTimeline(events=[])
+
+    # Commit 116: Assign deterministic Roman numeral labels to all chord events
+    if chord_timeline.events and summary.key_name:
+        assign_roman_numerals(chord_timeline.events, summary.key_name)
 
     # Commit 112: flag high instrument confusion in stem quality flags
     if instrument_confusion is not None and instrument_confusion > 0.3:

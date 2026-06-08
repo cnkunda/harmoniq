@@ -152,15 +152,15 @@ probabilities but has no musical key-awareness beyond diatonic preferences.
 
 **Acceptance Criteria:**
 
-- [ ] Chord timeline passes through LLM enrichment after Viterbi decoding
-- [ ] Improbable chord changes corrected (demonstrated: C → F# → G → C → G
+- [x] Chord timeline passes through LLM enrichment after Viterbi decoding
+- [x] Improbable chord changes corrected (demonstrated: C → F# → G → C → G
       corrected to C → F → G → C → G in key of C major)
-- [ ] Roman numeral labels attached to each chord (I, ii, V7, etc.)
-- [ ] Original ML prediction preserved alongside LLM correction
-- [ ] Correction applied only when confidence delta > 0.15
-- [ ] Enrichment worker runs as background thread (no user-visible latency)
-- [ ] Roman numerals displayed in chord timeline UI
-- [ ] Integration test: ii-V-I in C major = Dm7 → G7 → Cmaj7 labeled ii → V7 → I
+- [x] Roman numeral labels attached to each chord (I, ii, V7, etc.)
+- [x] Original ML prediction preserved alongside LLM correction
+- [x] Correction applied only when confidence delta > 0.15
+- [x] Enrichment worker runs as background thread (no user-visible latency)
+- [x] Roman numerals displayed in chord timeline UI
+- [x] Integration test: ii-V-I in C major = Dm7 → G7 → Cmaj7 labeled ii → V7 → I
 
 **Implementation:**
 

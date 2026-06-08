@@ -14,6 +14,7 @@ import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { NoteCorrectionPanel } from '@/components/NoteCorrectionPanel'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
+import { TheoryCard } from '@/components/TheoryCard'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
 import { fetchTheoryAnnotation } from '@/src/api/analyze'
@@ -391,10 +392,11 @@ function StudyScreenInner() {
         .reverse()
         .find((e) => e.timestamp >= barTime && e.timestamp < nextBarTime && e.chord !== 'N')
       const chord = chordEvent ? formatChordDisplay(chordEvent.chord) : ''
+      const roman = chordEvent?.roman_numeral ?? undefined
       const barWords = words
         .filter((w) => w.timeSec >= barTime && w.timeSec < nextBarTime)
         .map((w) => w.word)
-      return { chord, text: barWords.join(' ') }
+      return { chord, text: barWords.join(' '), roman }
     })
   }, [chordTimelineEvents, lesson?.bar_timestamps, lesson?.lyrics_aligned])
 
@@ -740,6 +742,18 @@ function StudyScreenInner() {
                   label={(section?.label ?? '') as string}
                 />
             </View>
+
+            {/* Commit 116: Theory annotation card for current chord */}
+            {theoryAnnotation && (
+              <View className="mt-2 px-2">
+                <TheoryCard
+                  chordName={theoryAnnotation.chordName}
+                  chordFunction={theoryAnnotation.chordFunction}
+                  romanNumeral={theoryAnnotation.romanNumeral}
+                  rationale={theoryAnnotation.rationale}
+                />
+              </View>
+            )}
 
           </>
         }

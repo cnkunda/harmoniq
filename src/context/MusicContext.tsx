@@ -39,6 +39,8 @@ export type ChordEvent = {
   timestamp: number
   chord: string
   confidence?: number
+  /** Commit 116: Roman numeral functional label (e.g., 'I', 'ii7', 'V7') */
+  roman_numeral?: string
 }
 
 /** A solo note event (start time/duration in seconds, MIDI pitch). */
@@ -55,6 +57,8 @@ export type SoloNoteEvent = {
 export type MusicState = {
   /** Current chord symbol at playhead, e.g. "Am", "Dm". Null when in "no chord" region. */
   currentChord: string | null
+  /** Commit 116: Roman numeral for current chord (e.g., 'I', 'ii7'). Null when no chord. */
+  currentChordRoman: string | null
   /** Currently sounding notes (string/fret positions). */
   activeNotes: ActiveNote[]
   /** 0-indexed bar position at playhead. */
@@ -69,6 +73,7 @@ export type MusicState = {
 
 export const INITIAL_MUSIC_STATE: MusicState = {
   currentChord: null,
+  currentChordRoman: null,
   activeNotes: [],
   currentBar: 0,
   positionMs: 0,
@@ -84,6 +89,7 @@ export type MusicAction =
       type: 'SET_POSITION'
       positionMs: number
       currentChord: string | null
+      currentChordRoman: string | null
       activeNotes: ActiveNote[]
       currentBar: number
     }
@@ -104,6 +110,7 @@ export function musicReducer(state: MusicState, action: MusicAction): MusicState
         ...state,
         positionMs: action.positionMs,
         currentChord: action.currentChord,
+        currentChordRoman: action.currentChordRoman,
         activeNotes: action.activeNotes,
         currentBar: action.currentBar,
       }
@@ -163,6 +170,21 @@ function findCurrentChord(events: ChordEvent[] | null | undefined, timeSec: numb
 }
 
 /**
+ * Commit 116: Find the Roman numeral for the chord active at the given time.
+ */
+function findCurrentChordRoman(events: ChordEvent[] | null | undefined, timeSec: number): string | null {
+  if (!events || events.length === 0) return null
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!
+    if (e.timestamp <= timeSec) {
+      if (!e.chord || e.chord === 'N') return null
+      return e.roman_numeral ?? null
+    }
+  }
+  return null
+}
+
+/**
  * Find all notes sounding at the given time.
  * Uses pre-resolved string/fret positions when available, falls back to MIDI calculation.
  */
@@ -214,12 +236,14 @@ export function MusicProvider({
     (positionMs: number) => {
       const timeSec = positionMs / 1000
       const currentChord = findCurrentChord(chordEvents, timeSec)
+      const currentChordRoman = findCurrentChordRoman(chordEvents, timeSec)
       const activeNotes = findActiveNotes(soloNotes, timeSec)
       const currentBar = findCurrentBar(barTimestamps, timeSec)
       dispatch({
         type: 'SET_POSITION',
         positionMs,
         currentChord,
+        currentChordRoman,
         activeNotes,
         currentBar,
       })

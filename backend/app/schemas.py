@@ -493,6 +493,17 @@ class CoachHydrationStatus(BaseModel):
     fallback_reason: str | None = None
 
 
+class ChordEnrichmentStatus(BaseModel):
+    """GET /analyze/{job_id}/chord-enrichment status payload (commit 116)."""
+
+    status: Literal["pending", "processing", "complete", "skipped"] = "pending"
+    total_events: int = 0
+    corrected_events: int = 0
+    llm_latency_p50: float | None = None
+    llm_latency_p95: float | None = None
+    fallback_reason: str | None = None
+
+
 class ScoreRequest(BaseModel):
     """POST /score request payload."""
 
@@ -671,6 +682,23 @@ class ChordEvent(BaseModel):
     timestamp: float = Field(..., description="Start time of the chord in seconds")
     chord: str = Field(..., description="Chord symbol (e.g., 'C:maj', 'N')")
     confidence: float = Field(..., ge=0.0, le=1.0)
+    # Commit 116: LLM enrichment fields
+    roman_numeral: str | None = Field(
+        default=None,
+        description="Roman numeral functional label (e.g., 'I', 'ii7', 'V7')",
+    )
+    llm_corrected_chord: str | None = Field(
+        default=None,
+        description="LLM-corrected chord symbol when confidence delta exceeds threshold",
+    )
+    correction_applied: bool = Field(
+        default=False,
+        description="Whether an LLM correction was applied to this event",
+    )
+    correction_delta: float | None = Field(
+        default=None,
+        description="Confidence delta between original and LLM-corrected chord",
+    )
 
 class ChordTimeline(BaseModel):
     events: list[ChordEvent]

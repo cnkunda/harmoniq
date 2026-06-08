@@ -14,12 +14,14 @@ so they survive server restarts.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 
 from app.schemas import (
     BeatGrid,
     BeatGridRecomputeResponse,
+    ChordEnrichmentStatus,
     CoachFocusArea,
     CoachHydrationSection,
     CoachHydrationStatus,
@@ -34,6 +36,7 @@ from app.analyze_audio import build_lesson_json_from_librosa
 from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
 from app.cache import invalidate_cache_for_wav, load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
 from app.coach import hydrate_coach_copy_into_sections
+from app.chord_enrichment import enrich_chord_timeline
 from app.demucs_engine import DemucsEngineError, build_stem_routing_hints
 from app.audio_processing import AudioPreparationError, prepare_audio_input
 from app.ingest import (
@@ -65,6 +68,7 @@ ANALYZE_ERROR_ANALYSIS_FAILED = "analysis_failed"
 # In-memory job store (single process).
 jobs: dict[str, JobStatus] = {}
 coach_hydration: dict[str, CoachHydrationStatus] = {}
+chord_enrichment: dict[str, ChordEnrichmentStatus] = {}
 
 
 # ---- Commit 110: Disk persistence for completed/failed jobs ----
@@ -241,6 +245,73 @@ def _hydrate_coach_copy_job(
 
 def get_coach_hydration(job_id: str) -> CoachHydrationStatus | None:
     return coach_hydration.get(job_id)
+
+
+# ---- Commit 116: Chord enrichment (LLM correction + Roman numerals) ----
+
+def _set_chord_enrichment_pending(job_id: str) -> None:
+    chord_enrichment[job_id] = ChordEnrichmentStatus(status="pending")
+
+
+def _enrich_chord_timeline_job(
+    job_id: str,
+    *,
+    api_key: str = "",
+) -> None:
+    """Background worker: run LLM chord correction on the completed analysis."""
+    job = jobs.get(job_id)
+    if job is None or job.result is None:
+        return
+
+    chord_enrichment[job_id] = ChordEnrichmentStatus(status="processing")
+    lesson = job.result
+
+    if not lesson.chord_timeline or not lesson.chord_timeline.events:
+        chord_enrichment[job_id] = ChordEnrichmentStatus(
+            status="skipped",
+            fallback_reason="no_chord_timeline",
+        )
+        return
+
+    try:
+        enriched_events, metrics = enrich_chord_timeline(
+            list(lesson.chord_timeline.events),
+            lesson.key or "C major",
+            api_key=api_key,
+        )
+
+        # Patch lesson with enriched chord timeline
+        enriched_timeline = lesson.chord_timeline.model_copy(
+            update={"events": enriched_events}
+        )
+        patched = lesson.model_copy(update={"chord_timeline": enriched_timeline})
+        jobs[job_id] = JobStatus(status="complete", result=patched, error=None)
+        save_job_to_disk(job_id)
+
+        chord_enrichment[job_id] = ChordEnrichmentStatus(
+            status="complete",
+            total_events=len(enriched_events),
+            corrected_events=metrics.get("corrected_events", 0),
+            llm_latency_p50=metrics.get("llm_latency_p50"),
+            llm_latency_p95=metrics.get("llm_latency_p95"),
+            fallback_reason=None,
+        )
+        logger.info(
+            "chord_enrichment complete job_id=%s corrected=%d/%d",
+            job_id,
+            metrics.get("corrected_events", 0),
+            len(enriched_events),
+        )
+    except Exception:
+        logger.exception("chord_enrichment failed job_id=%s", job_id)
+        chord_enrichment[job_id] = ChordEnrichmentStatus(
+            status="skipped",
+            fallback_reason="exception",
+        )
+
+
+def get_chord_enrichment(job_id: str) -> ChordEnrichmentStatus | None:
+    return chord_enrichment.get(job_id)
 
 
 # Used by tests / smoke forcing.
@@ -524,6 +595,14 @@ def _process_analyze_job(
             daemon=True,
         )
         coach_thread.start()
+        # Commit 116: Enrich chord timeline with LLM correction (background)
+        _set_chord_enrichment_pending(job_id)
+        enrichment_thread = threading.Thread(
+            target=_enrich_chord_timeline_job,
+            kwargs={"job_id": job_id, "api_key": os.getenv("ANTHROPIC_API_KEY", "")},
+            daemon=True,
+        )
+        enrichment_thread.start()
         total_elapsed = time.time() - worker_start
         logger.info(
             "worker complete job_id=%s total=%.2fs (ingest=%.2fs, stems=%.2fs, analyze=%.2fs)",

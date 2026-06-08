@@ -27,6 +27,7 @@ from app.jobs import (
     ANALYZE_ERROR_ANALYSIS_FAILED,
     enqueue_analyze_job,
     enqueue_beat_grid_recompute,
+    get_chord_enrichment,
     get_coach_hydration,
     get_recompute_job,
     jobs,
@@ -40,6 +41,7 @@ from app.schemas import (
     BeatGridRecomputeResponse,
     ChordCorrectionRequest,
     ChordCorrectionResponse,
+    ChordEnrichmentStatus,
     CoachHydrationStatus,
     CorrectionExportResponse,
     CorrectionHistoryItem,
@@ -370,6 +372,22 @@ async def analyze_coach_status(job_id: str) -> CoachHydrationStatus:
     status = get_coach_hydration(job_id)
     if status is None:
         return CoachHydrationStatus(status="pending", sections=[], fallback_reason=None)
+    return status
+
+
+@router.get(
+    "/analyze/{job_id}/chord-enrichment",
+    response_model=ChordEnrichmentStatus,
+    summary="GET /analyze/{job_id}/chord-enrichment — chord enrichment status (commit 116)",
+)
+async def analyze_chord_enrichment_status(job_id: str) -> ChordEnrichmentStatus:
+    job = jobs.get(job_id)
+    if job is None:
+        logger.warning("GET /analyze/%s/chord-enrichment — unknown job_id (404)", job_id)
+        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
+    status = get_chord_enrichment(job_id)
+    if status is None:
+        return ChordEnrichmentStatus(status="pending")
     return status
 
 
