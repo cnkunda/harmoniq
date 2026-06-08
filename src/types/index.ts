@@ -204,6 +204,14 @@ export interface LessonSection {
   coach_explanation?: string | null
   /** Commit 108: MusicXML score for this section (canonical render format). */
   musicxml?: string | null
+  /** Commit 118: groups instances of the same musical section (0-based). */
+  repeat_group_id?: number | null
+  /** Commit 118: true if this section appears more than once in the song. */
+  is_repeated?: boolean | null
+  /** Commit 118: total number of instances in this repeat group (e.g. 3). */
+  repeat_count?: number | null
+  /** Commit 118: 1-based position within the repeat group (e.g. 2 = second of three). */
+  repeat_index?: number | null
   [key: string]: unknown
 }
 

@@ -35,6 +35,7 @@ MAX_GUITAR_PIANO_ENVELOPE_CORR = 0.88
 _ENVELOPE_FRAME_SAMPLES = 2048
 _ENVELOPE_MIN_SAMPLES = 32
 _ENVELOPE_STD_FLOOR = 1e-12
+_MAX_CHROMA_SECONDS = 30  # Truncate audio for chroma computation (speed optimization)
 
 AnalysisAudioRole = Literal["guitar_stem", "full_mix", "piano_stem"]
 
@@ -258,9 +259,13 @@ def classify_stems_for_lesson(mix_wav: Path, stem_paths: dict[str, Path]) -> Ste
     spectral_overlap = 1.0
     if mix is not None and librosa is not None:
         try:
+            # Truncate to first 30s for speed (only mean chroma vector is used)
+            max_samples = int(TARGET_SR * _MAX_CHROMA_SECONDS)
+            guitar_trunc = guitar[:max_samples]
+            mix_trunc = mix[:max_samples]
             hop = int(TARGET_SR * 0.05)  # 50ms hop for lightweight chroma
-            chroma_g = librosa.feature.chroma_cqt(y=guitar, sr=TARGET_SR, hop_length=hop)
-            chroma_m = librosa.feature.chroma_cqt(y=mix, sr=TARGET_SR, hop_length=hop)
+            chroma_g = librosa.feature.chroma_cqt(y=guitar_trunc, sr=TARGET_SR, hop_length=hop)
+            chroma_m = librosa.feature.chroma_cqt(y=mix_trunc, sr=TARGET_SR, hop_length=hop)
             # Mean chroma vectors over time → 12-dim spectral fingerprint
             fg = chroma_g.mean(axis=1)
             fm = chroma_m.mean(axis=1)

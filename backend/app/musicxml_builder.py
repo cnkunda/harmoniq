@@ -114,8 +114,15 @@ def _seconds_to_ticks(duration_s: float, quarter_note_duration_s: float) -> int:
 
 
 def _ticks_to_ql(ticks: int) -> Fraction:
-    """Convert ticks to quarter-length Fraction."""
-    return Fraction(ticks, TICKS_PER_QUARTER)
+    """Convert ticks to quarter-length Fraction.
+
+    Quantizes to nearest 64th note (15-tick boundary) to prevent music21
+    creating tuplets with unsupported durationNormal types (e.g. "2048th").
+    At 480 PPQ, all standard note types are multiples of 15 ticks.
+    """
+    # Quantize to nearest 15-tick boundary (64th note), minimum 30 ticks (64th)
+    quantized = max(round(ticks / 15) * 15, 30)
+    return Fraction(quantized, TICKS_PER_QUARTER)
 
 
 def quantize_to_note_type(duration_ticks: int) -> QuantizedDuration:

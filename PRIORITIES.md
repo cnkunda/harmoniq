@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-112, 115, 117** — archived. **Phase 2 commits 106, 116, 118-147** — planned/deferred.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-112, 115, 117, 118** — archived. **Phase 2 commits 106, 116, 119-147** — planned/deferred.
 
 ---
 
@@ -22,7 +22,7 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 ## PHASE 2: Feedback, Retention & ML Refinement
 
-**Status:** In Progress — commits 98-112, 115 archived. Commits 106, 116-147 remain as planned/deferred backlog below.
+**Status:** In Progress — commits 98-112, 115, 117, 118 archived. Commits 106, 116, 119-147 remain as planned/deferred backlog below.
 
 ### Milestone: User Feedback & Manual Overrides
 
@@ -168,65 +168,6 @@ probabilities but has no musical key-awareness beyond diatonic preferences.
 - Add to `jobs.py`: enqueue enrichment after chord inference, before MusicXML build
 - Uses existing Anthropic client pattern from `coach.py`
 - Cache enrichment results with SHA256(chord_timeline + key) to avoid re-LLM
-
----
-
-### Commit 118: Repetition-Aware Section Detection via Self-Similarity Matrix
-
-**Goal:** Extend `librosa_summarize()` to detect repeated sections (e.g., "Chorus 1 = Chorus 2 = Chorus 3")
-using chroma-based self-similarity matrix analysis, replacing the current cyclic label assignment
-with actual repetition grouping.
-
-**Current State:** `librosa_summarize()` assigns labels positionally (`labels[i % 6]`), so a song with
-structure `Intro-Verse-Chorus-Verse-Chorus-Bridge-Chorus` gets labeled `Intro-Verse-Chorus-Solo` —
-completely wrong after the first three sections. No repeated section detection exists.
-
-**Scope:**
-
-- Compute chroma features from the analyzed stem:
-
-  ```python
-  chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-  ```
-
-- Build recurrence matrix to detect repeated material:
-
-  ```python
-  R = librosa.segment.recurrence_matrix(chroma, mode='affinity', sym=True)
-  ```
-
-- Use diagonal structure in R to identify repeated sections:
-  - Off-diagonal blocks = repeated material at different time offsets
-  - Extract repetition groups via connected component analysis
-- Assign consistent labels to repeated sections:
-  - First occurrence: "Verse", "Chorus", etc.
-  - Subsequent occurrences: "Verse (2)", "Chorus (2)", etc.
-  - Group ID links all instances together
-- Add `repeat_group_id: int | None` to `LessonSectionStub` schema
-- Add `is_repeated: bool` flag to `LessonSectionStub` schema
-- Frontend updates:
-  - `ListenStemPanel.tsx`: Show "Chorus (1 of 3)" for repeated sections
-  - `study.tsx`: Coach can reference "You played Chorus 2 better than Chorus 1"
-  - `review.tsx`: Compare performance across repeated instances
-- Preserve existing novelty-based boundaries as the primary signal;
-  repetition detection adds labels and grouping, not new boundaries
-
-**Acceptance Criteria:**
-
-- [ ] Self-similarity matrix correctly identifies repeated sections in test songs
-- [ ] Repeated sections share consistent labels (Chorus 1, Chorus 2, Chorus 3)
-- [ ] `repeat_group_id` links all instances of the same section
-- [ ] `is_repeated` flag true for sections that appear more than once
-- [ ] Frontend displays repetition count ("Chorus (2 of 3)")
-- [ ] No regression: non-repeated sections still labeled correctly
-- [ ] Integration test: verse-chorus-verse-chorus song correctly grouped
-
-**Implementation:**
-
-- Modify `librosa_summarize()` in `backend/app/pipeline_proof.py`
-- Add `detect_repeated_sections()` helper function
-- Update `LessonSectionStub` schema in `backend/app/schemas.py`
-- Update frontend section chip rendering in `ListenStemPanel.tsx`
 
 ---
 

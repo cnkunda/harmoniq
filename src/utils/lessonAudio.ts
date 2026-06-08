@@ -64,9 +64,13 @@ export function stemRelPathToPlaybackUri(relPath: string): string | null {
 export function parseSectionRecord(section: Record<string, unknown> | undefined): {
   label: string
   startTimeSeconds: number | null
+  repeatGroupId: number | null
+  isRepeated: boolean | null
+  repeatCount: number | null
+  repeatIndex: number | null
 } {
   if (!section) {
-    return { label: 'Section', startTimeSeconds: null }
+    return { label: 'Section', startTimeSeconds: null, repeatGroupId: null, isRepeated: null, repeatCount: null, repeatIndex: null }
   }
   const labelRaw = section.label
   const label = typeof labelRaw === 'string' && labelRaw.trim() ? labelRaw.trim() : 'Section'
@@ -74,7 +78,11 @@ export function parseSectionRecord(section: Record<string, unknown> | undefined)
     section.start_time_seconds ?? section.start_s ?? section.startTimeSeconds
   const startTimeSeconds =
     typeof st === 'number' && Number.isFinite(st) ? Math.max(0, st) : null
-  return { label, startTimeSeconds }
+  const repeatGroupId = typeof section.repeat_group_id === 'number' ? section.repeat_group_id : null
+  const isRepeated = typeof section.is_repeated === 'boolean' ? section.is_repeated : null
+  const repeatCount = typeof section.repeat_count === 'number' ? section.repeat_count : null
+  const repeatIndex = typeof section.repeat_index === 'number' ? section.repeat_index : null
+  return { label, startTimeSeconds, repeatGroupId, isRepeated, repeatCount, repeatIndex }
 }
 
 /**

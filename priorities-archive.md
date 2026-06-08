@@ -1,6 +1,6 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-117), archived during ongoing development. Commits 106, 116, 118-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-118), archived during ongoing development. Commits 106, 116, 119-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -10,6 +10,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Phase 2 (Commit 114) Archive Date:** June 3, 2026
 **Phase 2 (Commit 115) Archive Date:** June 3, 2026
 **Phase 2 (Commit 117) Archive Date:** June 7, 2026
+**Phase 2 (Commit 118) Archive Date:** June 8, 2026
 
 ---
 
@@ -1412,4 +1413,33 @@ chord change density, Whisper word-cluster boundaries, and energy envelope.
 - [x] Label confidence reported per section
 - [x] Fallback to unlabeled RMS boundaries when refinement confidence < 0.6
 - [x] Integration test: 4-section verse-chorus-verse-chorus song correctly segmented
+
+---
+
+### Commit 118: Repetition-Aware Section Detection via Self-Similarity Matrix
+
+**Goal:** Extend `librosa_summarize()` to detect repeated sections (e.g., "Chorus 1 = Chorus 2 = Chorus 3")
+using chroma-based self-similarity matrix analysis, replacing the current cyclic label assignment
+with actual repetition grouping.
+
+**Implementation:**
+
+- New module: `backend/app/repeat_detection.py` (detect_repeated_sections, cosine fallback)
+- Modified: `backend/app/pipeline_proof.py` (LibrosaSummary exposes chroma)
+- Modified: `backend/app/schemas.py` (repeat_group_id, is_repeated, repeat_count, repeat_index on LessonSectionStub)
+- Modified: `backend/app/analyze_audio.py` (repeat detection wired into pipeline after section refinement)
+- Modified: `src/types/index.ts` (repeat fields on LessonSection)
+- Modified: `src/utils/lessonAudio.ts` (parseSectionRecord extended with repeat info)
+- Modified: `components/ListenStemPanel.tsx` (section chips display repeat suffix)
+- Tests: `backend/tests/test_repeat_detection.py` (20 unit + integration tests)
+
+**Acceptance Criteria:**
+
+- [x] Self-similarity matrix correctly identifies repeated sections in test songs
+- [x] Repeated sections share consistent labels (Chorus 1, Chorus 2, Chorus 3)
+- [x] `repeat_group_id` links all instances of the same section
+- [x] `is_repeated` flag true for sections that appear more than once
+- [x] Frontend displays repetition count ("Chorus (2 of 3)")
+- [x] No regression: non-repeated sections still labeled correctly
+- [x] Integration test: verse-chorus-verse-chorus song correctly grouped
 

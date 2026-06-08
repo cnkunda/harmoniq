@@ -394,6 +394,11 @@ class LessonSectionStub(BaseModel):
     end_time_seconds: float | None = None
     # Commit 117: confidence in the label assignment (0-1)
     label_confidence: float | None = None
+    # Commit 118: repetition-aware section grouping
+    repeat_group_id: int | None = None
+    is_repeated: bool | None = None
+    repeat_count: int | None = None
+    repeat_index: int | None = None
     # Transcription validation metadata (commit #82)
     transcription_metadata: dict[str, Any] | None = None
     # Commit 108: MusicXML score for this section (canonical render format)

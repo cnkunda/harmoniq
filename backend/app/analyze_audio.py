@@ -29,6 +29,7 @@ from app.schemas import (
     StemRoutingHints,
 )
 from app.stem_quality import StemClassification
+from app.repeat_detection import detect_repeated_sections
 from app.alphatab_prerender import enrich_lesson_with_prerender_hints
 from app.musicxml_builder import build_musicxml
 from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidence, generate_tab_artifacts_for_guitar_stem
@@ -455,6 +456,43 @@ def build_lesson_json_from_librosa(
                 job_id,
             )
 
+    # Commit 118: Detect repeated sections via chroma self-similarity
+    if (
+        summary.chroma is not None
+        and summary.times is not None
+        and len(refined_segments) >= 2
+    ):
+        try:
+            # Build boundaries: all segment start times + end time of last segment
+            seg_starts = [s.get("start", s.get("start_s", 0.0)) for s in refined_segments]
+            last_seg = refined_segments[-1]
+            last_end = last_seg.get("end", last_seg.get("end_s"))
+            if last_end is None:
+                last_end = summary.duration_s
+            boundaries = seg_starts + [float(last_end)]
+            repeat_results = detect_repeated_sections(
+                chroma=summary.chroma,
+                times=summary.times,
+                boundaries=boundaries,
+                existing_labels=[s.get("label", "Section") for s in refined_segments],
+            )
+            if repeat_results is not None:
+                for seg, ri in zip(refined_segments, repeat_results):
+                    seg["repeat_group_id"] = ri["repeat_group_id"]
+                    seg["is_repeated"] = ri["is_repeated"]
+                    seg["repeat_count"] = ri["repeat_count"]
+                    seg["repeat_index"] = ri["repeat_index"]
+                    seg["label"] = ri["label"]
+                logger.info(
+                    "repeat detection completed for job_id=%s: %d groups",
+                    job_id,
+                    len(set(ri["repeat_group_id"] for ri in repeat_results)),
+                )
+        except Exception:
+            logger.exception(
+                "repeat detection failed for job_id=%s; labels unchanged", job_id
+            )
+
     sections: list[LessonSectionStub] = []
     section_starts: list[float | None] = []
 
@@ -486,6 +524,11 @@ def build_lesson_json_from_librosa(
                 start_time_seconds=start_time_seconds,
                 end_time_seconds=end_time_seconds,
                 label_confidence=float(label_confidence) if isinstance(label_confidence, (int, float)) else None,
+                # Commit 118: repetition metadata
+                repeat_group_id=seg.get("repeat_group_id") if isinstance(seg, dict) else None,
+                is_repeated=seg.get("is_repeated") if isinstance(seg, dict) else None,
+                repeat_count=seg.get("repeat_count") if isinstance(seg, dict) else None,
+                repeat_index=seg.get("repeat_index") if isinstance(seg, dict) else None,
             )
         )
 

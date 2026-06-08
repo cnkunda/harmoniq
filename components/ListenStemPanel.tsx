@@ -874,7 +874,12 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                   <View className="flex-row flex-wrap gap-1.5 pb-1">
                     {sections.map((raw, i) => {
                       const sec = raw as Record<string, unknown>
-                      const { label } = parseSectionRecord(sec)
+                      const { label, isRepeated, repeatCount, repeatIndex } = parseSectionRecord(sec)
+                      // Backend pre-computes the suffix, but fallback if raw label lacks it
+                      const displayLabel =
+                        isRepeated && repeatCount != null && repeatIndex != null && !label.includes('(')
+                          ? `${label} (${repeatIndex} of ${repeatCount})`
+                          : label
                       const active = i === lessonSectionIndex
                       return (
                          <AnimatedPressable
@@ -887,7 +892,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                            accessibilityRole="button"
                            accessibilityState={{ selected: active }}
                          >
-                           <Text className={active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>{label}</Text>
+                           <Text className={active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>{displayLabel}</Text>
                          </AnimatedPressable>
                       )
                     })}

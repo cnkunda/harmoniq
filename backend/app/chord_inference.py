@@ -95,7 +95,7 @@ _TRIANGULAR_WINDOW = np.minimum(
 TIE_THRESHOLD = 0.15
 SUBDIVISION_RATIO = 0.65
 MIN_HALF_BEAT_DURATION = 0.3  # seconds — skip split for beats shorter than this
-N_CONFIDENCE_THRESHOLD = 0.5  # Default to N when model confidence is below this
+N_CONFIDENCE_THRESHOLD = 0.2  # Default to N when model confidence is below this
 
 
 def _get_segment_db(y_segment: np.ndarray) -> float:
@@ -356,10 +356,11 @@ def _run_keras_raw(y: np.ndarray, sr: int) -> list[dict]:
     # Diagnostic: check per-window prediction diversity
     window_preds = np.argmax(all_probs, axis=1)
     unique_preds = np.unique(window_preds, return_counts=True)
-    top_indices = np.argsort(-np.bincount(window_preds))[:5]
+    window_bc = np.bincount(window_preds)
+    top_indices = np.argsort(-window_bc)[:5]
     logger.info("Keras per-window predictions: %d windows, %d unique chords", T_overlap, len(unique_preds[0]))
     for idx in top_indices:
-        count = unique_preds[1][np.where(unique_preds[0] == idx)[0][0]]
+        count = int(window_bc[idx])
         logger.info("  %s: %d windows (%.1f%%)", CHORD_VOCAB[idx], count, 100.0 * count / T_overlap)
 
     # Expand per-window predictions to per-frame timeline
@@ -378,9 +379,6 @@ def _run_keras_raw(y: np.ndarray, sr: int) -> list[dict]:
     # Normalize by vote count
     valid = counts > 0
     merged_probs[valid] /= counts[valid, np.newaxis]
-
-    # Apply confidence threshold: default to N when uncertain
-    merged_probs = _apply_confidence_threshold(merged_probs)
 
     results = []
     for i in range(T):
@@ -416,9 +414,6 @@ def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
         window_outputs[start:end] = output.reshape(end - start, _WINDOW, _NUM_CLASSES)
 
     merged_probs = _merge_overlapping_predictions(window_outputs, T)
-
-    # Apply confidence threshold: default to N when uncertain
-    merged_probs = _apply_confidence_threshold(merged_probs)
 
     results = []
     for i in range(T):
@@ -933,15 +928,17 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
                      len(emission_unique[0]), emission_changes, len(viterbi_unique[0]), viterbi_changes, changes_per_bar_vit)
         if changes_per_bar_vit > 3.0:
             logger.warning("Viterbi chord change rate high (%.1f/bar) — consider tuning duration_penalty_weight or TIE_THRESHOLD", changes_per_bar_vit)
-        # Top-5 emission
-        emit_top = np.argsort(-np.bincount(emission_preds))[:5]
+        # Top-5 emission — use np.bincount directly (avoids unique lookup crash)
+        emit_bc = np.bincount(emission_preds)
+        emit_top = np.argsort(-emit_bc)[:5]
         for idx in emit_top:
-            cnt = emission_unique[1][np.where(emission_unique[0] == idx)[0][0]]
+            cnt = int(emit_bc[idx])
             logger.info("  emit: %s %.1f%%", CHORD_VOCAB[idx], 100.0 * cnt / T)
-        # Top-5 Viterbi
-        vit_top = np.argsort(-np.bincount(optimal_path))[:5]
+        # Top-5 Viterbi — use np.bincount directly
+        vit_bc = np.bincount(optimal_path)
+        vit_top = np.argsort(-vit_bc)[:5]
         for idx in vit_top:
-            cnt = viterbi_unique[1][np.where(viterbi_unique[0] == idx)[0][0]]
+            cnt = int(vit_bc[idx])
             logger.info("  viterbi: %s %.1f%%", CHORD_VOCAB[idx], 100.0 * cnt / T)
 
         events: list[ChordEvent] = []

@@ -24,12 +24,12 @@ logger = logging.getLogger("harmoniq.pipeline_proof")
 
 # --- Constants aligned with README / PRIORITIES --------------------------------
 
-DEMUCS_MODEL = "htdemucs_6s"
+DEMUCS_MODEL = os.getenv("HARMONIQ_DEMUCS_MODEL", "htdemucs_6s")
 TARGET_SR = 44100
 
 # Demucs stem separation optimization (Commit 111a)
 # Segment size and overlap to prevent OOM on long tracks, matching Hybrid Demucs tutorial
-DEMUCS_SEGMENT_SIZE = 10  # seconds
+DEMUCS_SEGMENT_SIZE = 7  # seconds (htdemucs_6s max is 7.8s)
 DEMUCS_OVERLAP = 0.1  # fraction of segment (0.1 = 1 second overlap per side)
 
 # Long-running CLIs may print a lot of stderr; only the tail is attached to failures.
@@ -404,6 +404,8 @@ class LibrosaSummary:
     onset_novelty: Any = None
     rms_curve: Any = None
     times: Any = None
+    # Commit 118: chroma CQT for repeat detection (12, n_frames)
+    chroma: Any = None
 
 
 def estimate_key_literal(chroma_mean: Sequence[float]) -> tuple[str, str]:
@@ -469,6 +471,7 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
 
     # librosa feature extraction assumes enough signal length. If chroma fails, we still
     # return tempo/beat info.
+    chroma = None
     try:
         chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length)
         chroma_mean = chroma.mean(axis=1)
@@ -588,6 +591,7 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
         onset_novelty=novelty,
         rms_curve=rms_frames,
         times=frame_times,
+        chroma=chroma,
     )
 
 
