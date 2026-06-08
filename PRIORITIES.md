@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-112, 115** — archived. **Phase 2 commits 106, 116-147** — planned/deferred.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-112, 115, 117** — archived. **Phase 2 commits 106, 116, 118-147** — planned/deferred.
 
 ---
 
@@ -168,46 +168,6 @@ probabilities but has no musical key-awareness beyond diatonic preferences.
 - Add to `jobs.py`: enqueue enrichment after chord inference, before MusicXML build
 - Uses existing Anthropic client pattern from `coach.py`
 - Cache enrichment results with SHA256(chord_timeline + key) to avoid re-LLM
-
----
-
-### Commit 117: Structural Segmentation Refinement
-
-**Goal:** Improve section boundary detection beyond RMS-only novelty by fusing
-chord change density, Whisper word-cluster boundaries, and energy envelope.
-
-**Current State:** `librosa_summarize()` uses RMS + onset novelty for boundary
-detection. Sections are unlabeled (just timestamps). ChordMini's SongFormer
-provides dedicated structural segmentation (intro/verse/chorus/bridge/outro).
-
-**Scope:**
-
-- Add `refine_section_boundaries()` module that fuses three signals:
-  - Chord change density: high change rate suggests section boundary
-  - Whisper word-cluster boundaries: silence/gap between vocal phrases
-  - Energy envelope novelty: existing librosa onset novelty
-  - Fusion: weighted average (0.4 chord, 0.3 vocal, 0.3 energy) → peak
-    detection for boundary candidates
-- Add section label inference from heuristics:
-  - First section → "Intro" (if < 15s) or "Verse"
-  - Sections with similar chord progression → same label
-  - Repeated chord patterns → "Chorus" when highest energy + repetition
-  - Final section → "Outro" (if last 10s declining energy)
-  - Default → "Verse" / "Chorus" alternating
-- Add confidence metric per section boundary
-- Surface section labels and confidence in `LessonSectionStub.label`
-- Preserve existing RMS boundaries as fallback when refinement fails
-- Add test: real song with known structure (e.g., "Gravity" verse/chorus)
-
-**Acceptance Criteria:**
-
-- [ ] Section boundaries refined using chord density + vocal gap + energy fusion
-- [ ] Sections labeled "Intro", "Verse", "Chorus", "Bridge", "Outro" where confident
-- [ ] Repeated chord progressions detected and grouped under same label
-- [ ] Less than 50% of boundaries moved from librosa baseline (stable at high confidence)
-- [ ] Label confidence reported per section
-- [ ] Fallback to unlabeled RMS boundaries when refinement confidence < 0.6
-- [ ] Integration test: 4-section verse-chorus-verse-chorus song correctly segmented
 
 ---
 

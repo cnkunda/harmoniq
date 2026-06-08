@@ -1,6 +1,6 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-114), archived during ongoing development. Commits 106, 116-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-117), archived during ongoing development. Commits 106, 116, 118-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -9,6 +9,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Phase 2 (Commit 112) Archive Date:** June 4, 2026
 **Phase 2 (Commit 114) Archive Date:** June 3, 2026
 **Phase 2 (Commit 115) Archive Date:** June 3, 2026
+**Phase 2 (Commit 117) Archive Date:** June 7, 2026
 
 ---
 
@@ -1388,4 +1389,27 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 - [x] Chord accuracy improves by ≥5% on songs flagged with `guitar_buried_in_mix`
 
 ---
+
+### Commit 117: Structural Segmentation Refinement
+
+**Goal:** Improve section boundary detection beyond RMS-only novelty by fusing
+chord change density, Whisper word-cluster boundaries, and energy envelope.
+
+**Implementation:**
+
+- New module: `backend/app/section_refinement.py`
+- Modified: `backend/app/analyze_audio.py` (Whisper moved earlier, refinement wired in)
+- Modified: `backend/app/pipeline_proof.py` (LibrosaSummary exports raw curves)
+- Modified: `backend/app/schemas.py` (label_confidence, end_time_seconds added)
+- Tests: `backend/tests/test_section_refinement.py` (37 unit + integration tests)
+
+**Acceptance Criteria:**
+
+- [x] Section boundaries refined using chord density + vocal gap + energy fusion
+- [x] Sections labeled "Intro", "Verse", "Chorus", "Bridge", "Outro" where confident
+- [x] Repeated chord progressions detected and grouped under same label
+- [x] Less than 50% of boundaries moved from librosa baseline (stable at high confidence)
+- [x] Label confidence reported per section
+- [x] Fallback to unlabeled RMS boundaries when refinement confidence < 0.6
+- [x] Integration test: 4-section verse-chorus-verse-chorus song correctly segmented
 
