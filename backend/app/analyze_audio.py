@@ -35,6 +35,7 @@ from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidenc
 from app.beat_grid import estimate_beat_grid
 from app.chord_inference import infer_chords, infer_chords_dual_path
 from app.solo_inference import infer_solo
+from app.section_refinement import refine_section_boundaries
 
 logger = logging.getLogger("harmoniq.analyze_audio")
 logger.setLevel(logging.INFO)
@@ -416,17 +417,66 @@ def build_lesson_json_from_librosa(
         logger.exception("solo inference failed for job_id=%s; continuing without solo notes", job_id)
         solo_notes = SoloNotes(notes=[])
 
+    # Commit 117: Run Whisper before section construction so refinement has
+    # all three signals (chords, vocals, energy).
+    lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
+        vocals_stem_path, beat_grid=beat_grid_list, bar_timestamps=bar_timestamps
+    )
+
+    # Commit 117: Refine section boundaries by fusing chord density, vocal gaps,
+    # and energy envelope novelty. Falls back to RMS boundaries on failure.
+    refined_segments: list[dict[str, Any]] = summary.segments
+    if (
+        summary.onset_novelty is not None
+        and summary.rms_curve is not None
+        and summary.times is not None
+        and chord_timeline is not None
+        and len(chord_timeline.events) > 0
+    ):
+        try:
+            chord_events = [(e.timestamp, e.chord) for e in chord_timeline.events]
+            refined_segments = refine_section_boundaries(
+                rms_boundaries=[s.get("start_s", 0.0) for s in summary.segments],
+                chord_events=chord_events,
+                lyrics_aligned=lyrics_aligned,
+                onset_novelty=summary.onset_novelty,
+                rms_curve=summary.rms_curve,
+                times=summary.times,
+                song_duration=summary.duration_s,
+            )
+            logger.info(
+                "section refinement completed for job_id=%s: %d segments",
+                job_id,
+                len(refined_segments),
+            )
+        except Exception:
+            logger.exception(
+                "section refinement failed for job_id=%s; using original segments",
+                job_id,
+            )
+
     sections: list[LessonSectionStub] = []
     section_starts: list[float | None] = []
-    
-    for seg in summary.segments:
+
+    for seg in refined_segments:
         label = seg.get("label") if isinstance(seg, dict) else None
         if not isinstance(label, str) or not label.strip():
             label = "Section"
-        start_raw = seg.get("start_s") if isinstance(seg, dict) else None
+        # Commit 117: refined segments use "start"/"end" keys; fall back to "start_s"
+        start_raw = seg.get("start") if isinstance(seg, dict) else None
+        if start_raw is None:
+            start_raw = seg.get("start_s") if isinstance(seg, dict) else None
+        end_raw = seg.get("end") if isinstance(seg, dict) else None
+        if end_raw is None:
+            end_raw = seg.get("end_s") if isinstance(seg, dict) else None
         start_time_seconds = (
             float(start_raw) if isinstance(start_raw, (int, float)) else None
         )
+        end_time_seconds = (
+            float(end_raw) if isinstance(end_raw, (int, float)) else None
+        )
+        # Commit 117: extract label_confidence from refined segments
+        label_confidence = seg.get("label_confidence") if isinstance(seg, dict) else None
         section_starts.append(start_time_seconds)
         # Placeholder confidence (overwritten once we have transcription confidence).
         sections.append(
@@ -434,6 +484,8 @@ def build_lesson_json_from_librosa(
                 label=label,
                 confidence=0.6,
                 start_time_seconds=start_time_seconds,
+                end_time_seconds=end_time_seconds,
+                label_confidence=float(label_confidence) if isinstance(label_confidence, (int, float)) else None,
             )
         )
 
@@ -444,7 +496,10 @@ def build_lesson_json_from_librosa(
     # Attach transcription data to each section
     for i, section in enumerate(sections):
         section_start = section.start_time_seconds
-        section_end = section_starts[i + 1] if i + 1 < len(section_starts) else None
+        # Commit 117: prefer end_time_seconds from refined segment, fall back to next start
+        section_end = section.end_time_seconds
+        if section_end is None:
+            section_end = section_starts[i + 1] if i + 1 < len(section_starts) else None
         
         # Filter transcription data for this section's time range
         section_chord_timeline = None
@@ -492,10 +547,6 @@ def build_lesson_json_from_librosa(
                 )
         
         sections[i] = LessonSectionStub(**section_dict)
-
-    lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
-        vocals_stem_path, beat_grid=beat_grid_list, bar_timestamps=bar_timestamps
-    )
 
     skip_tabs = stem_classification is not None and not stem_classification.guitar_stem_usable
     tab_artifacts: dict[str, str] | None = None

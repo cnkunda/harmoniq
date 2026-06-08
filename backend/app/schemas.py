@@ -390,6 +390,10 @@ class LessonSectionStub(BaseModel):
     confidence: float | None = None
     # Start time in seconds for Listen step section chips (librosa segments).
     start_time_seconds: float | None = None
+    # Commit 117: end time for section boundaries (computed from next section start)
+    end_time_seconds: float | None = None
+    # Commit 117: confidence in the label assignment (0-1)
+    label_confidence: float | None = None
     # Transcription validation metadata (commit #82)
     transcription_metadata: dict[str, Any] | None = None
     # Commit 108: MusicXML score for this section (canonical render format)

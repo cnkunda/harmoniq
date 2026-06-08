@@ -399,6 +399,11 @@ class LibrosaSummary:
     bar_timestamps_s: list[float]
     key_confidence: float
     tempo_confidence: float
+    # Commit 117: raw curves for section refinement (numpy arrays, optional for
+    # backward compatibility with callers that construct LibrosaSummary manually).
+    onset_novelty: Any = None
+    rms_curve: Any = None
+    times: Any = None
 
 
 def estimate_key_literal(chroma_mean: Sequence[float]) -> tuple[str, str]:
@@ -565,6 +570,11 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
     tempo_confidence = 0.9 if 40.0 <= tempo_bpm <= 200.0 else 0.6
     key_confidence = 0.85
 
+    # Commit 117: compute frame times for raw curves (used by section refinement)
+    frame_times = librosa.frames_to_time(
+        np.arange(len(onset_env)), sr=sr, hop_length=hop_length
+    )
+
     return LibrosaSummary(
         duration_s=duration,
         tempo_bpm=tempo_bpm,
@@ -575,6 +585,9 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
         bar_timestamps_s=bar_timestamps_s,
         key_confidence=key_confidence,
         tempo_confidence=tempo_confidence,
+        onset_novelty=novelty,
+        rms_curve=rms_frames,
+        times=frame_times,
     )
 
 
