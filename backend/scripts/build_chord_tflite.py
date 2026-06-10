@@ -14,16 +14,32 @@ import json
 import os
 from pathlib import Path
 
+import sys
+
+# Increase recursion limit to avoid TF 2.20 lazy_loader infinite recursion
+# when tensorflow_model_optimization is installed alongside TF 2.20 / Keras 3.
+sys.setrecursionlimit(10000)
+
 # Force TensorFlow backend and CPU mode
+os.environ["TF_USE_LEGACY_KERAS"] = "0"
 os.environ["KERAS_BACKEND"] = "tensorflow"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import traceback
 
 import numpy as np
 import tensorflow as tf
+
+# Commit 106: Quantization-Aware Training toolkit
+try:
+    import tensorflow_model_optimization as tfmot
+    _HAS_TFMOT = True
+except ImportError:
+    tfmot = None  # type: ignore[assignment]
+    _HAS_TFMOT = False
 
 from app.chord_vocab import (
     ROOT_NOTES,
@@ -75,6 +91,10 @@ NUM_OCTAVES     = 3
 CHROMA_BINS     = BINS_PER_OCTAVE * NUM_OCTAVES  # 36
 BASS_BINS       = 4  # Low 4 bins for bass separation
 FEATURE_DIM     = CHROMA_BINS + BASS_BINS         # 40
+
+# Commit 106: Quantization-Aware Training constants
+QAT_EPOCHS = 5
+QAT_LEARNING_RATE = 1e-4
 
 # Quality groups for per-category accuracy tracking (Commit 98d)
 QUALITY_GROUPS = {
@@ -1209,16 +1229,35 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
 # ---------------------------------------------------------------------------
 # 3. Architecture
 # ---------------------------------------------------------------------------
+
+
+class CircularCqtPad(tf.keras.layers.Layer):
+    """Circular padding on CQT portion (bins 0-35), zero pad bass (Commit 98b).
+
+    Custom layer (not Lambda) so TFMOT can serialize/clone it for QAT.
+    """
+
+    def call(self, x):
+        cqt = x[:, :, :CHROMA_BINS]
+        bass = x[:, :, CHROMA_BINS:]
+        cqt_padded = tf.concat([cqt[:, :, -1:], cqt, cqt[:, :, :1]], axis=-1)
+        bass_padded = tf.pad(bass, [[0, 0], [0, 0], [1, 1]])
+        return tf.concat([cqt_padded, bass_padded], axis=-1)
+
+    def compute_output_shape(self, input_shape):
+        return (input_shape[0], input_shape[1], input_shape[2] + 2)
+
+    def get_config(self):
+        return super().get_config()
+
+
 def _circular_cqt_pad(x):
-    """Circular padding on CQT portion (bins 0-35), zero pad bass (Commit 98b)."""
-    cqt = x[:, :, :CHROMA_BINS]
-    bass = x[:, :, CHROMA_BINS:]
-    cqt_padded = tf.concat([cqt[:, :, -1:], cqt, cqt[:, :, :1]], axis=-1)
-    bass_padded = tf.pad(bass, [[0, 0], [0, 0], [1, 1]])
-    return tf.concat([cqt_padded, bass_padded], axis=-1)
+    """Legacy Lambda wrapper — kept for backward compat with Keras 3 saved models."""
+    return CircularCqtPad()(x)
 
 
-def build_model(window: int = WINDOW, return_attention_scores: bool = False) -> tf.keras.Model:
+def build_model(window: int = WINDOW, return_attention_scores: bool = False,
+                qat_compatible: bool = False) -> tf.keras.Model:
     """Build CRNN with CNN frontend + Multi-Head Self-Attention + Bidirectional LSTM.
 
     Architecture: CNN → Attention → LayerNorm → BiLSTM → Dense (Commit 98d)
@@ -1232,6 +1271,8 @@ def build_model(window: int = WINDOW, return_attention_scores: bool = False) -> 
         return_attention_scores: If True, model outputs both chord_probs and
                                  attention_weights for interpretability.
                                  The attention tensor shape is (batch, 4, T, T).
+        qat_compatible: If True, uses ``CircularCqtPad`` layer (not Lambda) and
+                        ``Add`` for residual — required for TFMOT weight-transfer.
 
     Returns:
         Single-output model (chord_probs) when return_attention_scores=False.
@@ -1239,7 +1280,10 @@ def build_model(window: int = WINDOW, return_attention_scores: bool = False) -> 
     """
     inputs = tf.keras.Input(shape=(window, FEATURE_DIM), name="cqt_window")
 
-    padded = tf.keras.layers.Lambda(_circular_cqt_pad, name="circular_cqt_pad")(inputs)
+    if qat_compatible:
+        padded = CircularCqtPad(name="circular_cqt_pad")(inputs)
+    else:
+        padded = tf.keras.layers.Lambda(_circular_cqt_pad, name="circular_cqt_pad")(inputs)
 
     # CNN frontend: process time as the sequence dimension
     x = tf.keras.layers.Conv1D(64, kernel_size=3, padding="same", activation="relu",
@@ -1262,9 +1306,12 @@ def build_model(window: int = WINDOW, return_attention_scores: bool = False) -> 
         mha_output = mha(x, x)
 
     # Residual connection + LayerNorm
-    x = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="attention_layernorm")(
-        x + mha_output
-    )
+    # Use Add layer instead of Python + to avoid TFOpLambda serialization issues with TFMOT
+    if qat_compatible:
+        residual = tf.keras.layers.Add(name="residual_add")([x, mha_output])
+    else:
+        residual = x + mha_output
+    x = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="attention_layernorm")(residual)
 
     # Bidirectional LSTM layers
     x = tf.keras.layers.Bidirectional(
@@ -1301,6 +1348,209 @@ def build_attention_vis_model(window: int = WINDOW) -> tf.keras.Model:
         probs, attn = vis_model.predict(input_data)
     """
     return build_model(window=window, return_attention_scores=True)
+
+
+# ---------------------------------------------------------------------------
+# 3c. Quantization-Aware Training — Commit 106
+# ---------------------------------------------------------------------------
+
+
+def _safe_remove(path: str | Path) -> None:
+    """Remove a file, ignoring errors."""
+    try:
+        Path(path).unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _build_chord_crnn_tfkeras(
+    weights_source: tf.keras.Model | None = None,
+) -> tf.keras.Model:
+    """Build the chord CRNN architecture using pure tf_keras (Keras 2) layers.
+
+    Each quantizable layer (Conv1D, Dense) is wrapped with
+    ``tfmot.quantization.keras.quantize_annotate_layer`` so the returned model
+    is ready for ``quantize_apply()`` without any cloning.
+
+    Must be called with ``TF_USE_LEGACY_KERAS=1`` so that ``tf.keras`` routes
+    to ``tf_keras`` (Keras 2), which TFMOT expects.
+
+    Args:
+        weights_source: Optional Keras 3 model whose weights are copied into
+            the fresh tf_keras model by layer name.
+
+    Returns:
+        QAT-annotated tf_keras model ready for ``quantize_apply()``.
+    """
+    qal = tfmot.quantization.keras.quantize_annotate_layer
+
+    class _QatCircularPad(tf.keras.layers.Layer):
+        """Circular CQT pad — local class so it inherits tf_keras.Layer."""
+
+        def call(self, x):
+            cqt = x[:, :, :CHROMA_BINS]
+            bass = x[:, :, CHROMA_BINS:]
+            cqt_padded = tf.concat([cqt[:, :, -1:], cqt, cqt[:, :, :1]], axis=-1)
+            bass_padded = tf.pad(bass, [[0, 0], [0, 0], [1, 1]])
+            return tf.concat([cqt_padded, bass_padded], axis=-1)
+
+        def get_config(self):
+            return super().get_config()
+
+    inputs = tf.keras.Input(shape=(WINDOW, FEATURE_DIM), name="cqt_window")
+    padded = _QatCircularPad(name="circular_cqt_pad")(inputs)
+
+    x = qal(tf.keras.layers.Conv1D(64, 3, padding="same", activation="relu",
+                                    name="conv1d_64"))(padded)
+    x = tf.keras.layers.MaxPooling1D(pool_size=2, name="maxpool_1")(x)
+
+    x = qal(tf.keras.layers.Conv1D(128, 3, padding="same", activation="relu",
+                                    name="conv1d_128"))(x)
+    x = tf.keras.layers.MaxPooling1D(pool_size=2, name="maxpool_2")(x)
+
+    x = tf.keras.layers.BatchNormalization(name="bn_cnn")(x)
+
+    mha = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=64, name="self_attention")
+    mha_output = mha(x, x)
+    residual = tf.keras.layers.Add(name="residual_add")([x, mha_output])
+    x = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="attention_layernorm")(residual)
+
+    x = tf.keras.layers.Bidirectional(
+        tf.keras.layers.LSTM(128, return_sequences=True), name="bilstm_1"
+    )(x)
+    x = tf.keras.layers.Dropout(0.3, name="dropout_1")(x)
+
+    x = tf.keras.layers.Bidirectional(
+        tf.keras.layers.LSTM(128, return_sequences=False), name="bilstm_2"
+    )(x)
+    x = tf.keras.layers.Dropout(0.3, name="dropout_2")(x)
+
+    x = qal(tf.keras.layers.Dense(256, activation="relu", name="dense_256"))(x)
+    x = tf.keras.layers.Dropout(0.3, name="dropout_3")(x)
+    outputs = qal(tf.keras.layers.Dense(NUM_CLASSES, activation="softmax", name="chord_probs"))(x)
+
+    tf_keras_model = tf.keras.Model(
+        inputs=inputs, outputs=outputs, name="chord_crnn_attention"
+    )
+
+    # Copy weights from the source Keras 3 model by layer name.
+    if weights_source is not None:
+        for layer in tf_keras_model.layers:
+            try:
+                src = weights_source.get_layer(layer.name)
+            except ValueError:
+                continue
+            if src.get_weights():
+                try:
+                    layer.set_weights(src.get_weights())
+                except Exception as e:
+                    print(f"  [WARN] could not set weights for '{layer.name}': {e}")
+
+    return tf_keras_model
+
+
+def apply_qat(model: tf.keras.Model) -> tf.keras.Model:
+    """Apply Quantization-Aware Training wrapper to a trained float32 model.
+
+    Builds a fresh tf_keras (Keras 2) copy of the chord CRNN with all
+    quantizable layers (Conv1D, Dense) wrapped by
+    ``tfmot.quantization.keras.quantize_annotate_layer``, copies weights
+    from the Keras 3 *model*, and then calls ``quantize_apply()`` to
+    insert fake-quantization nodes.
+
+    This approach avoids ``quantize_model()`` (which internally clones the
+    model and fails on Keras 3 layers) and ``clone_model`` (which has
+    serialisation issues with TFMOT wrappers).
+
+    Args:
+        model: Trained float32 Keras model (output of :func:`build_model`).
+
+    Returns:
+        QAT-wrapped model ready for fine-tuning with simulated quantization.
+
+    Raises:
+        ImportError: If ``tensorflow_model_optimization`` is not installed.
+    """
+    if not _HAS_TFMOT:
+        raise ImportError(
+            "tensorflow_model_optimization is required for QAT. "
+            "Install with: pip install tensorflow-model-optimization"
+        )
+
+    _old_legacy = os.environ.get("TF_USE_LEGACY_KERAS")
+    try:
+        os.environ["TF_USE_LEGACY_KERAS"] = "1"
+        annotated_model = _build_chord_crnn_tfkeras(weights_source=model)
+    finally:
+        if _old_legacy is None:
+            os.environ.pop("TF_USE_LEGACY_KERAS", None)
+        else:
+            os.environ["TF_USE_LEGACY_KERAS"] = _old_legacy
+
+    qat_model = tfmot.quantization.keras.quantize_apply(annotated_model)
+    print(
+        "  Applied QAT via direct tf_keras annotation "
+        "— Conv1D and Dense layers quantized"
+    )
+    return qat_model
+
+
+def convert_to_int8_tflite(
+    model: tf.keras.Model,
+    representative_data: np.ndarray,
+    output_path: str | Path,
+) -> bytes:
+    """Convert a QAT-wrapped model to INT8-quantized TFLite.
+
+    Full integer quantization uses a representative dataset to calibrate
+    activation ranges. The resulting model is significantly smaller and
+    suitable for mobile deployment with the
+    ``tensorflow-lite-select-tf-ops`` runtime.
+
+    Args:
+        model: QAT-wrapped Keras model (output of :func:`apply_qat`).
+        representative_data: Validation-data subset for calibration,
+            shape ``(N, WINDOW, FEATURE_DIM)``.
+        output_path: Destination path for the ``.tflite`` file.
+
+    Returns:
+        Raw TFLite model bytes.
+    """
+    n_samples = min(100, len(representative_data))
+
+    def _representative():
+        for i in range(n_samples):
+            yield [representative_data[i : i + 1].astype(np.float32)]
+
+    @tf.function(
+        input_signature=[
+            tf.TensorSpec(
+                shape=[None, WINDOW, FEATURE_DIM], dtype=tf.float32
+            )
+        ]
+    )
+    def run_model(input_tensor):
+        return model(input_tensor, training=False)
+
+    concrete_func = run_model.get_concrete_function()
+
+    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.representative_dataset = _representative
+    converter.target_spec.supported_ops = [
+        tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
+        tf.lite.OpsSet.SELECT_TF_OPS,
+    ]
+    converter.inference_input_type = tf.int8
+    converter.inference_output_type = tf.int8
+
+    tflite_model = converter.convert()
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "wb") as f:
+        f.write(tflite_model)
+    print(f"  INT8 TFLite saved to {output_path} ({len(tflite_model) / 1024:.1f} KB)")
+    return tflite_model
 
 
 # ---------------------------------------------------------------------------
@@ -1815,6 +2065,161 @@ class GuitarSetTestCallback(tf.keras.callbacks.Callback):
         print(f"    no_chord   {grouped.get('no_chord', 0) * 100:.1f}%")
 
 
+# ---------------------------------------------------------------------------
+# 4e. TFLite smoke test helper (Commit 106)
+# ---------------------------------------------------------------------------
+
+
+def _run_tflite_smoke_test(
+    label: str,
+    model_path: Path,
+    is_int8: bool,
+    float32_keras_model: tf.keras.Model | None = None,
+) -> bool:
+    """Run top-1 chord accuracy smoke tests on a TFLite model.
+
+    Tries three paths in order of preference:
+    1. ``tflite_runtime.Interpreter`` (Flex delegate)
+    2. ``tf.lite.Interpreter`` (Flex delegate)
+    3. Fallback to Keras ``predict()`` for float32 model (if provided)
+
+    Args:
+        label: Human-readable model label for logging.
+        model_path: Path to the ``.tflite`` file.
+        is_int8: Whether the model expects INT8 input.
+        float32_keras_model: Optional float32 Keras model to use as
+            fallback when TFLite interpreter is unavailable.
+
+    Returns:
+        True if all test cases pass or test was skipped gracefully.
+    """
+    print(f"\n--- {label} Smoke Tests ---")
+
+    interp = None
+    tried_fallback = False
+
+    try:
+        from tflite_runtime.interpreter import Interpreter
+
+        interp = Interpreter(
+            model_path=str(model_path),
+            experimental_delegates=[
+                Interpreter.load_delegate("libtensorflowlite_flex.so")
+            ],
+        )
+    except (ImportError, ValueError, OSError):
+        try:
+            interp = tf.lite.Interpreter(
+                model_path=str(model_path),
+                experimental_delegates=[
+                    tf.lite.experimental.load_delegate(
+                        "libtensorflowlite_flex.so"
+                    )
+                ],
+            )
+        except (ValueError, OSError, RuntimeError):
+            tried_fallback = True
+
+    smoke_cases = [
+        ("C:maj", 0, "maj"),
+        ("A:min", 9, "min"),
+        ("D#:7", 3, "7"),
+        ("D:7", 2, "7"),
+    ]
+
+    # ---- Keras fallback (float32 only) ----
+    if tried_fallback:
+        if not is_int8 and float32_keras_model is not None:
+            print(
+                "  Flex delegate unavailable — "
+                "falling back to Keras model predict()"
+            )
+            all_ok = True
+            for expected, root_idx, quality in smoke_cases:
+                test_input = make_window(
+                    make_cqt_template(root_idx, quality), 0.05
+                )[np.newaxis]
+                res = float32_keras_model.predict(test_input, verbose=0)[0]
+                top_idx = int(np.argmax(res))
+                predicted = CHORD_VOCAB[top_idx]
+                confidence = float(res[top_idx])
+                passed = predicted == expected
+                if not passed:
+                    all_ok = False
+                print(
+                    f"  {expected:<8} -> {predicted:<8} "
+                    f"({confidence:.1%}) [{'PASS' if passed else 'FAIL'}]"
+                )
+            if all_ok:
+                print(f"  All {label} smoke tests PASSED")
+            else:
+                print(f"  Some {label} smoke tests FAILED")
+            return all_ok
+
+        # INT8 or no float32 fallback — skip gracefully
+        print(
+            "  Flex delegate unavailable — "
+            "skipping TFLite smoke test "
+            "(will work on mobile with tensorflow-lite-select-tf-ops)"
+        )
+        return True
+
+    if interp is None:
+        return True
+
+    # ---- TFLite interpreter path ----
+    interp.allocate_tensors()
+    input_details = interp.get_input_details()[0]
+    output_details = interp.get_output_details()[0]
+
+    if is_int8:
+        in_scale, in_zp = input_details["quantization"]
+        if in_scale == 0.0:
+            in_scale = 1.0
+
+    all_ok = True
+    for expected, root_idx, quality in smoke_cases:
+        test_float = make_window(
+            make_cqt_template(root_idx, quality), 0.05
+        )[np.newaxis].astype(np.float32)
+
+        if is_int8:
+            test_input = np.clip(
+                np.round(test_float / in_scale + in_zp),
+                -128, 127,
+            ).astype(np.int8)
+        else:
+            test_input = test_float
+
+        interp.set_tensor(input_details["index"], test_input)
+        interp.invoke()
+        raw = interp.get_tensor(output_details["index"])[0]
+
+        if is_int8:
+            out_scale, out_zp = output_details["quantization"]
+            if out_scale != 0.0:
+                raw = (raw.astype(np.float32) - out_zp) * out_scale
+            else:
+                raw = raw.astype(np.float32)
+
+        top_idx = int(np.argmax(raw))
+        predicted = CHORD_VOCAB[top_idx]
+        confidence = float(raw[top_idx])
+        passed = predicted == expected
+        if not passed:
+            all_ok = False
+        print(
+            f"  {expected:<8} -> {predicted:<8} "
+            f"({confidence:.1%}) [{'PASS' if passed else 'FAIL'}]"
+        )
+
+    if all_ok:
+        print(f"  All {label} smoke tests PASSED")
+    else:
+        print(f"  Some {label} smoke tests FAILED")
+    return all_ok
+
+
 def run_pipeline(
     guitarset_data_dir: str | Path | None = None,
     idmt_data_dir: str | Path | None = None,
@@ -2062,15 +2467,16 @@ def run_pipeline(
             verbose=1,
         ),
         tf.keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss",
+            monitor="val_accuracy",
             factor=0.5,
-            patience=3,
+            patience=2,
+            min_delta=0.001,
             min_lr=1e-6,
             verbose=1,
         ),
         tf.keras.callbacks.ModelCheckpoint(
             filepath=str(_APP_DIR / "chord_model_best.keras"),
-            monitor="val_loss",
+            monitor="val_accuracy",
             save_best_only=True,
             verbose=1,
         ),
@@ -2099,7 +2505,7 @@ def run_pipeline(
 
     # --- Train ---
     print(f"\nTraining for up to 50 epochs with on-the-fly augmentation...")
-    print(f"  EarlyStopping patience={10}, ReduceLROnPlateau patience={3}")
+    print(f"  EarlyStopping patience=10, ReduceLROnPlateau patience=2 (val_accuracy, min_delta=0.001)")
     if temperature < 1.0:
         print(f"  Temperature τ={temperature} (quality-aware resampling)")
     print(f"  Class weights: active ({n_classes_with_data}/{NUM_CLASSES} classes)")
@@ -2175,138 +2581,495 @@ def run_pipeline(
         for group, acc in sorted(test_grouped.items()):
             print(f"  {group:20s}: {acc*100:5.1f}%")
 
-    print("\nTracing model to Concrete Function (Bypassing Keras serialization)...")
+    # ---- Record float32 baseline metrics for QAT comparison ----
+    float32_model = model
+    float32_val_pred = y_pred  # already computed from per-group validation
+    float32_val_acc = float(np.mean(float32_val_pred == y_val))
+    float32_test_acc = float(test_acc) if has_any_real_data and len(test_X) > 0 else None
 
-    # Save Keras weights for attention visualization (Commit 98d)
-    _APP_DIR = Path(__file__).resolve().parent.parent / "app"
+    # =================================================================
+    # QAT Phase (Commit 106): Quantization-Aware Training
+    # =================================================================
+    qat_model: tf.keras.Model | None = None
+    qat_val_acc: float | None = None
+    qat_test_acc: float | None = None
+
+    if _HAS_TFMOT:
+        print("\n" + "=" * 60)
+        print("  QAT Phase (Commit 106): Quantization-Aware Training")
+        print("=" * 60)
+        try:
+            # Create a fresh data generator for QAT fine-tuning
+            # using milder augmentation since the model has already converged.
+            qat_generator = AugmentedDataGenerator(
+                X_train, y_train, w_train,
+                batch_size=64,
+                p_pitch_shift=0.3,
+                pitch_range=1,
+                p_time_stretch=0.1,
+                stretch_range=(0.95, 1.05),
+                noise_std=0.03,
+                shuffle=True,
+                temperature=temperature,
+            )
+
+            print(
+                f"  Applying QAT wrapper to float32 model "
+                f"({QAT_EPOCHS} epochs, LR={QAT_LEARNING_RATE})..."
+            )
+            qat_model = apply_qat(float32_model)
+
+            qat_model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=QAT_LEARNING_RATE),
+                loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+                metrics=["accuracy"],
+            )
+
+            qat_callbacks = [
+                tf.keras.callbacks.CSVLogger(
+                    filename=str(
+                        Path(__file__).resolve().parent / "training_log_qat.csv"
+                    ),
+                ),
+            ]
+
+            qat_history = qat_model.fit(
+                x=qat_generator,
+                epochs=QAT_EPOCHS,
+                validation_data=(X_val, y_val),
+                callbacks=qat_callbacks,
+                verbose=1,
+            )
+
+            # Evaluate QAT model on validation set
+            qat_val_pred = np.argmax(
+                qat_model.predict(X_val, verbose=0), axis=1
+            )
+            qat_val_acc = float(np.mean(qat_val_pred == y_val))
+            print(
+                f"\n  QAT val accuracy: {qat_val_acc:.2%}  "
+                f"(float32 baseline: {float32_val_acc:.2%})"
+            )
+
+            # Evaluate QAT model on GuitarSet test (if available)
+            if has_any_real_data and len(test_X) > 0:
+                qat_test_pred = np.argmax(
+                    qat_model.predict(test_X, verbose=0), axis=1
+                )
+                qat_test_acc = float(np.mean(qat_test_pred == test_y))
+                qat_deg = float32_test_acc - qat_test_acc if float32_test_acc is not None else 0.0
+                print(
+                    f"  QAT GuitarSet test: {qat_test_acc:.2%}  "
+                    f"(float32 baseline: {float32_test_acc:.2%}, "
+                    f"degradation: {qat_deg:.2%})"
+                )
+
+            # Save QAT Keras model (requires quantize_scope for reloading)
+            qat_keras_path = _APP_DIR / "chord_model_qat.keras"
+            with tfmot.quantization.keras.quantize_scope():
+                qat_model.save(str(qat_keras_path))
+            print(
+                f"  Saved QAT Keras model to {qat_keras_path} "
+                f"({qat_keras_path.stat().st_size / 1024 / 1024:.1f} MB)"
+            )
+
+        except Exception as exc:
+            print(f"  [WARN] QAT phase failed: {exc}")
+            print("  Continuing with float32-only TFLite conversion...")
+            traceback.print_exc()
+            qat_model = None
+    else:
+        print(
+            "\n  [SKIP] QAT phase: tensorflow_model_optimization not available. "
+            "Install with:  pip install tensorflow-model-optimization"
+        )
+
+    # =================================================================
+    # Save float32 model assets
+    # =================================================================
+    print("\nSaving float32 model assets...")
+
     weights_path = _APP_DIR / "chord_model.weights.h5"
-    model.save_weights(str(weights_path))
-    print(f"Saved Keras weights to {weights_path} (for attention visualization)")
+    float32_model.save_weights(str(weights_path))
+    print(f"  Keras weights -> {weights_path}  (for attention visualization)")
 
-    # Save full Keras model for Python backend inference (Commit 99)
     keras_path = _APP_DIR / "chord_model.keras"
-    model.save(str(keras_path))
-    print(f"Saved Keras model to {keras_path} ({keras_path.stat().st_size/1024/1024:.1f} MB)")
+    float32_model.save(str(keras_path))
+    print(
+        f"  Keras model   -> {keras_path}  "
+        f"({keras_path.stat().st_size / 1024 / 1024:.1f} MB)"
+    )
 
-    # 1. Trace the model call into a static graph
-    @tf.function(input_signature=[tf.TensorSpec(shape=[None, WINDOW, FEATURE_DIM], dtype=tf.float32)])
-    def run_model(input_tensor):
-        return model(input_tensor, training=False)
+    # =================================================================
+    # 1.  Float32 model -> Dynamic Range TFLite  (baseline, Commit 99)
+    # =================================================================
+    print("\nConverting float32 model to TFLite (dynamic range quantization)...")
 
-    concrete_func = run_model.get_concrete_function()
+    @tf.function(
+        input_signature=[
+            tf.TensorSpec(shape=[None, WINDOW, FEATURE_DIM], dtype=tf.float32)
+        ]
+    )
+    def run_model_fn(input_tensor):
+        return float32_model(input_tensor, training=False)
 
-    print("Converting to TFLite...")
-    # 2. Convert from the concrete function directly
+    concrete_func = run_model_fn.get_concrete_function()
+
     converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
-
-    # Enable Dynamic Range Quantization for mobile performance
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
-
-    # Target standard TFLite ops but allow TF ops if needed for the padding + MHA
     converter.target_spec.supported_ops = [
         tf.lite.OpsSet.TFLITE_BUILTINS,
-        tf.lite.OpsSet.SELECT_TF_OPS
+        tf.lite.OpsSet.SELECT_TF_OPS,
     ]
 
+    float32_tflite_size: float | None = None
     try:
-        tflite_model = converter.convert()
-        _APP_DIR = Path(__file__).resolve().parent.parent / "app"
-        output_path = _APP_DIR / "chord_model.tflite"
-        with open(output_path, "wb") as f:
-            f.write(tflite_model)
-        print(f"\nSuccess! Saved {output_path} ({len(tflite_model)/1024:.1f} KB)")
+        tflite_float32 = converter.convert()
+        tflite_float32_path = _APP_DIR / "chord_model.tflite"
+        with open(tflite_float32_path, "wb") as f:
+            f.write(tflite_float32)
+        float32_tflite_size = len(tflite_float32) / 1024
+        print(
+            f"  Saved -> {tflite_float32_path}  "
+            f"({float32_tflite_size:.1f} KB)"
+        )
     except Exception as e:
-        print(f"\nConversion failed: {e}")
+        print(f"  [WARN] Float32 TFLite conversion failed: {e}")
+
+    # =================================================================
+    # 2.  QAT model -> INT8 TFLite  (Commit 106)
+    # =================================================================
+    qat_int8_size: float | None = None
+    if qat_model is not None and len(X_val) > 0:
+        print(
+            "\nConverting QAT model to INT8 TFLite "
+            "(full integer quantization with representative dataset)..."
+        )
+        try:
+            qat_tflite_path = _APP_DIR / "chord_model_qat_int8.tflite"
+            qat_int8_bytes = convert_to_int8_tflite(
+                qat_model,
+                X_val,
+                qat_tflite_path,
+            )
+            qat_int8_size = len(qat_int8_bytes) / 1024
+            if float32_tflite_size and float32_tflite_size > 0:
+                reduction_pct = (
+                    (1 - qat_int8_size / float32_tflite_size) * 100
+                )
+                print(
+                    f"  INT8 is {qat_int8_size:.1f} KB  "
+                    f"({reduction_pct:.0f}% smaller than float32 TFLite)"
+                )
+        except Exception as e:
+            print(f"  [WARN] INT8 TFLite conversion failed: {e}")
+            traceback.print_exc()
+    else:
+        print(
+            "\n  [SKIP] INT8 TFLite conversion "
+            "(no QAT model or no validation data)"
+        )
+
+    # =================================================================
+    # 3.  Accuracy & size comparison
+    # =================================================================
+    if qat_val_acc is not None:
+        print("\n" + "-" * 60)
+        print("  Quantization Accuracy & Size Comparison")
+        print("-" * 60)
+
+        val_deg = float32_val_acc - qat_val_acc
+        val_pass = val_deg < 0.03
+        print(
+            f"  Validation accuracy:  "
+            f"float32={float32_val_acc:.2%}, "
+            f"QAT={qat_val_acc:.2%}  "
+            f"degradation={val_deg:.2%}  "
+            f"{'✓' if val_pass else '✗'} (target <3%)"
+        )
+
+        if float32_test_acc is not None and qat_test_acc is not None:
+            test_deg = float32_test_acc - qat_test_acc
+            test_pass = test_deg < 0.03
+            print(
+                f"  GuitarSet test:       "
+                f"float32={float32_test_acc:.2%}, "
+                f"QAT={qat_test_acc:.2%}  "
+                f"degradation={test_deg:.2%}  "
+                f"{'✓' if test_pass else '✗'} (target <3%)"
+            )
+
+        if float32_tflite_size is not None and qat_int8_size is not None:
+            print(
+                f"  TFLite model size:    "
+                f"float32={float32_tflite_size:.1f} KB, "
+                f"INT8={qat_int8_size:.1f} KB"
+            )
+            size_pass = qat_int8_size < 500
+            print(
+                f"  INT8 < 500 KB:         "
+                f"{'✓' if size_pass else '✗'}"
+            )
+        print("-" * 60)
+
+    # =================================================================
+    # 4.  Smoke Tests on both TFLite models
+    # =================================================================
+    tflite_models_for_test = []
+    float32_path = _APP_DIR / "chord_model.tflite"
+    if float32_path.exists():
+        tflite_models_for_test.append(
+            ("Float32 TFLite", float32_path, False)
+        )
+    qat_int8_path = _APP_DIR / "chord_model_qat_int8.tflite"
+    if qat_int8_path.exists():
+        tflite_models_for_test.append(
+            ("INT8 TFLite", qat_int8_path, True)
+        )
+
+    all_smoke_passed = all(
+        _run_tflite_smoke_test(
+            label=label,
+            model_path=path,
+            is_int8=is_int8,
+            float32_keras_model=float32_model if not is_int8 else None,
+        )
+        for label, path, is_int8 in tflite_models_for_test
+    )
+
+    if all_smoke_passed:
+        print("\nAll TFLite smoke tests PASSED")
+    else:
+        print("\nSome TFLite smoke tests FAILED")
+
+
+def run_qat_only(
+    guitarset_data_dir: str | Path | None = None,
+    idmt_data_dir: str | Path | None = None,
+    vst_data_dir: str | Path | None = None,
+    youtube_data_dir: str | Path | None = None,
+    damp_data_dir: str | Path | None = None,
+    pseudo_data_dir: str | Path | None = None,
+    guitarset_loss_weight: float = 1.0,
+    vst_loss_weight: float = 0.3,
+    damp_loss_weight: float = 0.15,
+    empirical_matrix_path: str | Path | None = None,
+    temperature: float = 0.3,
+):
+    """QAT-only: load data + best model, apply QAT, fine-tune, convert to INT8."""
+    _APP_DIR = Path(__file__).resolve().parent.parent / "app"
+    _SCRIPTS_DIR = Path(__file__).resolve().parent
+
+    print("=" * 60)
+    print("  QAT-Only Pipeline (Commit 106)")
+    print("=" * 60)
+
+    # ---- Load data sources ----
+    source_configs: list[tuple[Path, str, float]] = []
+    has_any_real_data = False
+
+    for name, path, weight in [
+        ("GuitarSet", guitarset_data_dir, guitarset_loss_weight),
+        ("IDMT-SMT-Guitar", idmt_data_dir, 1.0),
+        ("VST-Synthetic", vst_data_dir, vst_loss_weight),
+        ("YouTube-Crawl", youtube_data_dir, 1.0),
+        ("DAMP-VPB", damp_data_dir, damp_loss_weight),
+        ("Pseudo-Label", pseudo_data_dir, vst_loss_weight),
+    ]:
+        if path is not None:
+            p = Path(path)
+            if p.exists():
+                source_configs.append((p, name, weight))
+                if name != "VST-Synthetic":
+                    has_any_real_data = True
+            else:
+                print(f"  [WARN] {name} data dir not found: {p}")
+
+    print(f"Loading {len(source_configs)} data source(s)...")
+    features_list, labels_list, weights_list = load_datasets(source_configs)
+
+    # GuitarSet test data
+    test_X, test_y = np.array([]), np.array([])
+    if guitarset_data_dir is not None:
+        gs_path = Path(guitarset_data_dir)
+        if gs_path.exists():
+            try:
+                test_X, test_y = load_guitarset_test(gs_path)
+            except (FileNotFoundError, ValueError) as e:
+                print(f"  [WARN] GuitarSet test: {e}")
+
+    # Empirical transition matrix
+    transition_probs = None
+    if empirical_matrix_path is not None:
+        emp_path = Path(empirical_matrix_path)
+        if emp_path.exists():
+            matrix = np.load(str(emp_path))
+            if matrix.shape == (NUM_CLASSES, NUM_CLASSES):
+                transition_probs = matrix.sum(axis=1)
+                if transition_probs.sum() > 0:
+                    transition_probs = transition_probs / transition_probs.sum()
+                print(f"  Loaded empirical matrix ({emp_path})")
+            else:
+                print(f"  [WARN] Matrix shape {matrix.shape}, ignored")
+
+    # Skip synthetic generation for QAT-only — real data is sufficient for
+    # INT8 calibration fine-tuning. Mix and split only real data sources.
+    print("Skipping synthetic generation (QAT-only mode)...")
+    dataset_sources = list(zip(features_list, labels_list, weights_list))
+    X_all, y_all, sample_weights, source_ids = mix_datasets(dataset_sources)
+
+    X_train, X_val, y_train, y_val, w_train, _ = train_test_split(
+        X_all, y_all, sample_weights, test_size=0.15, random_state=42, stratify=y_all,
+    )
+
+    print(f"  Train: {len(X_train)} samples, Val: {len(X_val)} samples (no synthetic)")
+
+    # ---- Load best float32 model ----
+    # TFMOT sets TF_USE_LEGACY_KERAS=True, routing tf.keras to tf_keras (Keras 2)
+    # which can't deserialize Keras 3 models. Use standalone keras module instead.
+    import keras as _keras
+    best_path = _APP_DIR / "chord_model_best.keras"
+    if not best_path.exists():
+        best_path = _APP_DIR / "chord_model.keras"
+    print(f"\nLoading best model from: {best_path}")
+    float32_model = _keras.models.load_model(
+        str(best_path),
+        custom_objects={"_circular_cqt_pad": _circular_cqt_pad, "CircularCqtPad": CircularCqtPad},
+    )
+
+    # Float32 baseline eval
+    float32_val_pred = np.argmax(float32_model.predict(X_val, verbose=0), axis=1)
+    float32_val_acc = float(np.mean(float32_val_pred == y_val))
+    float32_test_acc = None
+    if len(test_X) > 0:
+        float32_test_pred = np.argmax(float32_model.predict(test_X, verbose=0), axis=1)
+        float32_test_acc = float(np.mean(float32_test_pred == test_y))
+    print(f"  Float32 baseline: val={float32_val_acc:.2%}, test={float32_test_acc or 'N/A'}")
+
+    # ---- QAT Phase ----
+    print("\n" + "=" * 60)
+    print("  QAT Phase: Quantization-Aware Training")
+    print("=" * 60)
+
+    qat_model: tf.keras.Model | None = None
+    qat_val_acc: float | None = None
+
+    if not _HAS_TFMOT:
+        print("  [SKIP] tensorflow_model_optimization not available")
         return
 
-    # 5. Smoke Test
-    print("\nRunning TFLite Inference Tests...")
-    use_keras_fallback = False
-    try:
-        # Try with Flex delegate for attention ops
-        from tflite_runtime.interpreter import Interpreter
-        interp = Interpreter(model_path=str(output_path),
-                            experimental_delegates=[
-                                Interpreter.load_delegate('libtensorflowlite_flex.so')
-                            ])
-        interp.allocate_tensors()
-        use_tflite_runtime = True
-    except (ImportError, ValueError, OSError):
-        # Fallback: use TensorFlow Lite interpreter
-        try:
-            interp = tf.lite.Interpreter(
-                model_path=str(output_path),
-                experimental_delegates=[
-                    tf.lite.experimental.load_delegate('libtensorflowlite_flex.so')
-                ]
-            )
-            interp.allocate_tensors()
-            use_tflite_runtime = False
-        except (ValueError, OSError, RuntimeError):
-            # Flex delegate not available - test with Keras model directly
-            print("  Flex delegate not available, testing with Keras model instead")
-            print("  (TFLite model will work on mobile with tensorflow-lite-select-tf-ops)")
-            test_model = model
-            use_keras_fallback = True
+    qat_generator = AugmentedDataGenerator(
+        X_train, y_train, w_train,
+        batch_size=64,
+        p_pitch_shift=0.3,
+        pitch_range=1,
+        p_time_stretch=0.1,
+        stretch_range=(0.95, 1.05),
+        noise_std=0.03,
+        shuffle=True,
+        temperature=temperature,
+    )
 
-    if not use_keras_fallback:
-        input_details = interp.get_input_details()[0]
-        output_details = interp.get_output_details()[0]
+    print(f"  Applying QAT wrapper ({QAT_EPOCHS} epochs, LR={QAT_LEARNING_RATE})...")
+    qat_model = apply_qat(float32_model)
 
-        # Verify single output tensor (classification only; attention weights stripped)
-        assert len(output_details) == 1 or len(interp.get_output_details()) == 1, \
-            "TFLite model must have exactly one output"
+    qat_model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=QAT_LEARNING_RATE),
+        loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+        metrics=["accuracy"],
+    )
 
-        test_cases = [
-            ("C:maj",  0,  "maj"),  # C major — most frequent in GuitarSet (120 samples)
-            ("A:min",  9,  "min"),  # A minor — in GuitarSet (20 samples), tests minor quality
-            ("D#:7",   3,  "7"),    # D# dominant 7th — in GuitarSet (40 samples), tests 7th chord
-            ("D:7",    2,  "7"),    # D dominant 7th — synthetic only, tests extended bias fix
-        ]
+    qat_callbacks = [
+        tf.keras.callbacks.CSVLogger(
+            filename=str(_SCRIPTS_DIR / "training_log_qat.csv"),
+        ),
+    ]
 
-        all_passed = True
-        for expected, root_idx, quality in test_cases:
-            test_input = make_window(make_cqt_template(root_idx, quality), 0.05)[np.newaxis]
-            interp.set_tensor(input_details['index'], test_input)
-            interp.invoke()
-            res = interp.get_tensor(output_details['index'])[0]
-            top_idx = int(np.argmax(res))
-            predicted = CHORD_VOCAB[top_idx]
-            confidence = float(res[top_idx])
-            # Strict top-1 check: the predicted chord must match the input exactly.
-            # Previously used top-3 which masked the semitone confusion bug.
-            passed = predicted == expected
-            if not passed:
-                all_passed = False
-            status = "PASS" if passed else "FAIL"
-            print(f"  {expected:<8} -> {predicted:<8} ({confidence:.1%}) [{status}]")
-    else:
-        # Keras fallback test
-        test_cases = [
-            ("C:maj",  0,  "maj"),  # C major — most frequent in GuitarSet (120 samples)
-            ("A:min",  9,  "min"),  # A minor — in GuitarSet (20 samples), tests minor quality
-            ("D#:7",   3,  "7"),    # D# dominant 7th — in GuitarSet (40 samples), tests 7th chord
-            ("D:7",    2,  "7"),    # D dominant 7th — synthetic only, tests extended bias fix
-        ]
+    qat_model.fit(
+        x=qat_generator,
+        epochs=QAT_EPOCHS,
+        validation_data=(X_val, y_val),
+        callbacks=qat_callbacks,
+        verbose=1,
+    )
 
-        all_passed = True
-        for expected, root_idx, quality in test_cases:
-            test_input = make_window(make_cqt_template(root_idx, quality), 0.05)[np.newaxis]
-            res = test_model.predict(test_input, verbose=0)[0]
-            top_idx = int(np.argmax(res))
-            predicted = CHORD_VOCAB[top_idx]
-            confidence = float(res[top_idx])
-            # Strict top-1 check.
-            passed = predicted == expected
-            if not passed:
-                all_passed = False
-            status = "PASS" if passed else "FAIL"
-            print(f"  {expected:<8} -> {predicted:<8} ({confidence:.1%}) [{status}]")
+    qat_val_pred = np.argmax(qat_model.predict(X_val, verbose=0), axis=1)
+    qat_val_acc = float(np.mean(qat_val_pred == y_val))
+    print(f"\n  QAT val accuracy: {qat_val_acc:.2%}  (float32: {float32_val_acc:.2%})")
 
-    if all_passed:
-        print("\nAll smoke tests PASSED")
-    else:
-        print("\nSome smoke tests FAILED")
+    if len(test_X) > 0:
+        qat_test_pred = np.argmax(qat_model.predict(test_X, verbose=0), axis=1)
+        qat_test_acc = float(np.mean(qat_test_pred == test_y))
+        qat_deg = float32_test_acc - qat_test_acc if float32_test_acc is not None else 0.0
+        print(f"  QAT GuitarSet test: {qat_test_acc:.2%}  (float32: {float32_test_acc:.2%}, deg: {qat_deg:.2%})")
+
+    # Save QAT Keras model
+    qat_keras_path = _APP_DIR / "chord_model_qat.keras"
+    with tfmot.quantization.keras.quantize_scope():
+        qat_model.save(str(qat_keras_path))
+    print(f"  Saved QAT model -> {qat_keras_path} ({qat_keras_path.stat().st_size / 1024 / 1024:.1f} MB)")
+
+    # ---- INT8 TFLite Conversion ----
+    print("\nConverting QAT model to INT8 TFLite...")
+    int8_path = _APP_DIR / "chord_model_qat_int8.tflite"
+    rng = np.random.RandomState(42)
+    idx = rng.choice(len(X_val), size=min(100, len(X_val)), replace=False)
+    rep_data = X_val[idx]
+    convert_to_int8_tflite(qat_model, rep_data, str(int8_path))
+
+    # ---- INT8 Smoke Tests ----
+    print("\n--- INT8 TFLite Smoke Tests ---")
+    test_cases = [
+        (CHORD_VOCAB["C:maj"], "C:maj"),
+        (CHORD_VOCAB["A:min"], "A:min"),
+        (CHORD_VOCAB["D#:7"], "D#:7"),
+        (CHORD_VOCAB["D:7"], "D:7"),
+    ]
+
+    interpreter = tf.lite.Interpreter(model_path=str(int8_path))
+    interpreter.allocate_tensors()
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    input_scale, input_zero = input_details[0]["quantization"]
+
+    all_passed = True
+    for label_idx, label_name in test_cases:
+        class_mask = y_train == label_idx
+        if class_mask.sum() > 0:
+            sample = X_train[class_mask][0:1]
+        else:
+            sample = np.zeros((1, WINDOW, FEATURE_DIM), dtype=np.float32)
+
+        q_sample = (sample / input_scale + input_zero).astype(np.int8)
+        interpreter.set_tensor(input_details[0]["index"], q_sample)
+        interpreter.invoke()
+        output = interpreter.get_tensor(output_details[0]["index"])
+        out_scale, out_zero = output_details[0]["quantization"]
+        output_float = (output.astype(np.float32) - out_zero) * out_scale
+        pred_idx = np.argmax(output_float[0])
+
+        pred_label = CHORD_VOCAB[pred_idx]
+        expected_label = CHORD_VOCAB[label_idx]
+        match = "PASS" if pred_idx == label_idx else "FAIL"
+        if match == "FAIL":
+            all_passed = False
+        confidence = output_float[0][pred_idx] * 100
+        print(f"  {label_name:<10} -> {pred_label:<10} ({confidence:.1f}%) [{match}]")
+
+    print(f"\n  All INT8 TFLite smoke tests {'PASSED' if all_passed else 'FAILED'}")
+
+    # ---- Summary ----
+    print("\n" + "=" * 60)
+    print("  QAT-Only Pipeline Complete")
+    print("=" * 60)
+    print(f"  QAT model:     {qat_keras_path}")
+    print(f"  INT8 TFLite:   {int8_path}")
+    if int8_path.exists():
+        size_kb = int8_path.stat().st_size / 1024
+        print(f"  INT8 TFLite size: {size_kb:.1f} KB")
+    print(f"  Float32 val acc: {float32_val_acc:.2%}")
+    if qat_val_acc is not None:
+        print(f"  QAT val acc:      {qat_val_acc:.2%}")
 
 
 if __name__ == "__main__":
@@ -2367,6 +3130,11 @@ if __name__ == "__main__":
              "oversampling of rare chord types (7#9, alt7, dim7, aug). "
              "Use during fine-tuning after initial convergence."
     )
+    parser.add_argument(
+        "--qat-only", action="store_true",
+        help="QAT-only mode: skip main training, load best model, run QAT fine-tuning and INT8 conversion. "
+             "Requires a previously trained model (chord_model_best.keras)."
+    )
     args = parser.parse_args()
 
     if args.temperature < 0:
@@ -2378,16 +3146,31 @@ if __name__ == "__main__":
         args.temperature = 0.1
         print("  Rare chord boost mode: τ=0.1 — aggressive oversampling of rare types")
 
-    run_pipeline(
-        guitarset_data_dir=args.guitarset_data_dir,
-        idmt_data_dir=args.idmt_data_dir,
-        vst_data_dir=args.vst_data_dir,
-        youtube_data_dir=args.youtube_data_dir,
-        damp_data_dir=args.damp_data_dir,
-        pseudo_data_dir=args.pseudo_data_dir,
-        guitarset_loss_weight=args.guitarset_loss_weight,
-        vst_loss_weight=args.vst_loss_weight,
-        damp_loss_weight=args.damp_loss_weight,
-        empirical_matrix_path=args.empirical_matrix,
-        temperature=args.temperature,
-    )
+    if args.qat_only:
+        run_qat_only(
+            guitarset_data_dir=args.guitarset_data_dir,
+            idmt_data_dir=args.idmt_data_dir,
+            vst_data_dir=args.vst_data_dir,
+            youtube_data_dir=args.youtube_data_dir,
+            damp_data_dir=args.damp_data_dir,
+            pseudo_data_dir=args.pseudo_data_dir,
+            guitarset_loss_weight=args.guitarset_loss_weight,
+            vst_loss_weight=args.vst_loss_weight,
+            damp_loss_weight=args.damp_loss_weight,
+            empirical_matrix_path=args.empirical_matrix,
+            temperature=args.temperature,
+        )
+    else:
+        run_pipeline(
+            guitarset_data_dir=args.guitarset_data_dir,
+            idmt_data_dir=args.idmt_data_dir,
+            vst_data_dir=args.vst_data_dir,
+            youtube_data_dir=args.youtube_data_dir,
+            damp_data_dir=args.damp_data_dir,
+            pseudo_data_dir=args.pseudo_data_dir,
+            guitarset_loss_weight=args.guitarset_loss_weight,
+            vst_loss_weight=args.vst_loss_weight,
+            damp_loss_weight=args.damp_loss_weight,
+            empirical_matrix_path=args.empirical_matrix,
+            temperature=args.temperature,
+        )

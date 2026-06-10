@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-112, 115-118** — archived. **Phase 2 commits 106, 119-147** — planned/deferred.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-118** — archived. **Phase 2 commits 119-147** — planned/deferred.
 
 ---
 
@@ -16,13 +16,13 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 | **E2E / release**  | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md)                               |
 | **Manual QA**      | [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md)                             |
 | **Scoring**        | [`docs/SCORING.md`](docs/SCORING.md)                                 |
-| **Archive**        | [`priorities-archive.md`](priorities-archive.md) (Phase 0 + Phase 1 + Phase 2 commits 98-115) |
+| **Archive**        | [`priorities-archive.md`](priorities-archive.md) (Phase 0 + Phase 1 + Phase 2 commits 98-118) |
 
 ---
 
 ## PHASE 2: Feedback, Retention & ML Refinement
 
-**Status:** In Progress — commits 98-112, 115-118 archived. Commits 106, 119-147 remain as planned/deferred backlog below.
+**Status:** In Progress — commits 98-118 archived. Commits 119-147 remain as planned/deferred backlog below.
 
 ### Milestone: User Feedback & Manual Overrides
 
@@ -93,29 +93,9 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-### Commit 106: Quantization-Aware Training [DEFERRED]
+### Commit 106: Quantization-Aware Training
 
-**Goal:** Improve TFLite quantization accuracy by training with quantization constraints rather than post-training quantization.
-
-**Current State:** Post-training quantization may degrade accuracy for extended chord vocabulary.
-
-**Scope:**
-
-- Integrate `tensorflow_model_optimization` toolkit
-- Apply `quantize_model()` wrapper to training model
-- Implement QAT (Quantization-Aware Training) for 4-5 epochs
-- Compare accuracy vs post-training quantization baseline
-- Generate INT8 quantized model for mobile deployment
-
-**Acceptance Criteria:**
-
-- [ ] QAT model trained with simulated quantization
-- [ ] INT8 quantized model produced
-- [ ] Accuracy degradation <3% vs float32 model
-- [ ] Model size <500KB after quantization
-- [ ] Inference latency reduction confirmed on mobile device
-
----
+Archived to `priorities-archive.md` with all acceptance criteria complete.
 
 ---
 

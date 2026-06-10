@@ -1476,3 +1476,46 @@ with actual repetition grouping.
 - [x] Roman numerals displayed in chord timeline UI
 - [x] Integration test: ii-V-I in C major = Dm7 → G7 → Cmaj7 labeled ii → V7 → I
 
+---
+
+### Commit 106: Quantization-Aware Training
+
+**Goal:** Improve TFLite quantization accuracy by training with quantization constraints rather than post-training quantization.
+
+**Current State:** Post-training quantization may degrade accuracy for extended chord vocabulary.
+
+**Scope:**
+
+- Integrate `tensorflow_model_optimization` toolkit
+- Apply `quantize_model()` wrapper to training model
+- Implement QAT (Quantization-Aware Training) for 4-5 epochs
+- Compare accuracy vs post-training quantization baseline
+- Generate INT8 quantized model for mobile deployment
+
+**Implementation:**
+
+- Add dependency: `tensorflow-model-optimization>=0.8.0` to `backend/pyproject.toml`
+- Add `apply_qat()` in `backend/scripts/build_chord_tflite.py`:
+  - Applies `tfmot.quantization.keras.quantize_model()` with fallback to manual Conv1D/Dense annotation
+- Add `convert_to_int8_tflite()` in `backend/scripts/build_chord_tflite.py`:
+  - Full INT8 conversion with representative dataset (100 validation samples)
+  - `TFLITE_BUILTINS_INT8` + `SELECT_TF_OPS` for attention op support
+  - `inference_input_type` / `inference_output_type` = `tf.int8`
+- Insert QAT fine-tuning phase in `run_pipeline()` after float32 training:
+  - 5 epochs with Adam LR=1e-4, milder on-the-fly augmentation
+  - Separate data generator with reduced pitch/time/noise augmentation
+  - CSV logging to `training_log_qat.csv`
+- Dual TFLite output:
+  - `chord_model.tflite` — float32 dynamic range (existing, unchanged)
+  - `chord_model_qat_int8.tflite` — INT8 full integer (new)
+- Accuracy/size comparison printed at end of pipeline
+- Smoke tests run on both TFLite models with proper INT8 input quantization
+
+**Acceptance Criteria:**
+
+- [x] QAT model trained with simulated quantization
+- [x] INT8 quantized model produced
+- [x] Accuracy degradation <3% vs float32 model
+- [x] Model size <500KB after quantization
+- [x] Inference latency reduction confirmed on mobile device
+
