@@ -11,6 +11,7 @@ from app.section_refinement import (
     _compute_movement_ratio,
     _compute_vocal_gap_curve,
     _detect_boundary_peaks,
+    _detect_instrumental_sections,
     _fingerprint_section,
     _fuse_signals,
     _greedy_group,
@@ -285,7 +286,7 @@ class TestGreedyGroup:
 class TestInferSectionLabels:
     def test_short_first_section_gets_intro(self):
         times = _make_times(60.0)
-        rms = np.ones(len(times))
+        rms = np.ones(len(times)) * 0.2  # Low energy → Intro
         boundary_times = [10.0, 35.0, 50.0]
         chords = _make_mock_verse_chords(0, 60.0)
         sections = _infer_section_labels(boundary_times, 60.0, chords, rms, times)
@@ -428,3 +429,74 @@ class TestRefineSectionBoundaries:
         for s in result:
             assert "label_confidence" in s
             assert "boundary_confidence" in s
+
+    def test_intro_verse_chorus_verse_outro_labels(self):
+        """Commit 119 AC9: Integration test for known Intro-Verse-Chorus-Outro structure.
+
+        Structure: Intro (low, short) → Verse (moderate) → Chorus (high, repeated x2)
+        → Verse (moderate) → Outro (declining).
+        Two identical Chorus sections ensure chord fingerprint grouping detects them.
+        """
+        duration = 85.0
+        hop = 0.1
+        times = np.arange(0.0, duration, hop)
+        rms = np.ones(len(times))
+
+        # Section 0: Intro (0-12s) — low energy
+        rms[:int(12.0 / hop)] = 0.2
+        # Section 1: Verse (12-30s) — moderate energy
+        rms[int(12.0 / hop):int(30.0 / hop)] = 0.45
+        # Section 2: Chorus (30-48s) — high energy
+        rms[int(30.0 / hop):int(48.0 / hop)] = 0.8
+        # Section 3: Chorus (48-66s) — same high energy (repeated)
+        rms[int(48.0 / hop):int(66.0 / hop)] = 0.8
+        # Section 4: Outro (66-85s) — declining energy
+        rms[int(66.0 / hop):] = np.linspace(0.5, 0.15, int(19.0 / hop))
+
+        # Same chord pattern for both Choruses so they fingerprint as identical.
+        # Verse chords stop at 30.0 exactly; chorus chords start at 30.0+,
+        # so there is no interleaving overlap inside any section.
+        chorus1_chords = [(30.0 + i * 1.0, c) for i, c in enumerate(["C", "G", "Am", "F"] * 18) if (30.0 + i * 1.0) < 48.0]
+        chorus2_chords = [(48.0 + i * 1.0, c) for i, c in enumerate(["C", "G", "Am", "F"] * 18) if (48.0 + i * 1.0) < 66.0]
+        chords = (
+            [(0.0, "Am")]
+            + [(12.0 + i * 2.0, c) for i, c in enumerate(["Am", "G", "C", "F"] * 4) if (12.0 + i * 2.0) < 29.0]
+            + chorus1_chords
+            + chorus2_chords
+        )
+
+        boundary_times = [12.0, 30.0, 48.0, 66.0]
+
+        result = _infer_section_labels(
+            boundary_times=boundary_times,
+            song_duration=duration,
+            chord_events=chords,
+            rms_curve=rms,
+            times=times,
+        )
+
+        assert len(result) == 5, f"Expected 5 sections, got {len(result)}"
+
+        labels = [s["label"] for s in result]
+        confs = [s.get("label_confidence", 0.0) for s in result]
+
+        # AC1: Intro — first section, low energy, short
+        assert labels[0] == "Intro", f"Section 0 expected Intro, got {labels[0]}"
+        assert confs[0] >= 0.8
+
+        # AC2: Chorus detected as high-energy repeated (both chorus sections)
+        assert labels[2] == "Chorus", f"Section 2 expected Chorus, got {labels[2]}"
+        assert confs[2] >= 0.7
+        assert labels[3] == "Chorus", f"Section 3 expected Chorus, got {labels[3]}"
+        assert confs[3] >= 0.7
+
+        # AC5: Outro — last section, declining energy
+        assert labels[4] == "Outro", f"Section 4 expected Outro, got {labels[4]}"
+        assert confs[4] >= 0.7
+
+        # Verse
+        assert labels[1] == "Verse", f"Section 1 expected Verse, got {labels[1]}"
+
+        # AC7: label_confidence present on all sections
+        for i, s in enumerate(result):
+            assert "label_confidence" in s, f"Section {i} missing label_confidence"

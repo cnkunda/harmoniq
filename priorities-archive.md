@@ -1,6 +1,6 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-118), archived during ongoing development. Commits 106, 119-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-119), archived during ongoing development. Commits 120-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -12,6 +12,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Phase 2 (Commit 117) Archive Date:** June 7, 2026
 **Phase 2 (Commit 118) Archive Date:** June 8, 2026
 **Phase 2 (Commit 116) Archive Date:** June 8, 2026
+**Phase 2 (Commit 119) Archive Date:** June 10, 2026
 
 ---
 
@@ -1518,4 +1519,71 @@ with actual repetition grouping.
 - [x] Accuracy degradation <3% vs float32 model
 - [x] Model size <500KB after quantization
 - [x] Inference latency reduction confirmed on mobile device
+
+---
+
+### Commit 119: Semantic Section Label Classification
+
+**Goal:** Replace cyclic label assignment with audio-feature-based classification that distinguishes
+Intro, Verse, Chorus, Bridge, Solo, and Outro by their actual musical characteristics.
+
+**Current State:** Labels are assigned from a fixed list cyclically (`labels[i % 6]`), ignoring
+actual musical content. A bridge and a verse get different labels only because of position,
+not because the algorithm detected a bridge.
+
+**Scope:**
+
+- Extract per-section audio features for classification:
+  - **Energy**: RMS mean and variance (chorus = high, intro/outro = low)
+  - **Spectral centroid**: brightness indicator (solo = high, verse = moderate)
+  - **Chord change density**: chords per second (bridge = high, intro = low)
+  - **Harmonic stability**: chroma variance over section (intro = unstable, verse = stable)
+  - **Position in song**: first/last section, relative duration
+- Build rule-based classifier (no ML training needed):
+
+  ```python
+  def classify_section(features, position, duration):
+      if position == 'first' and duration < 15 and energy < threshold:
+          return 'Intro'
+      if position == 'last' and energy_declining:
+          return 'Outro'
+      if energy > chorus_threshold and is_repeated:
+          return 'Chorus'
+      if harmonic_shift and not is_repeated:
+          return 'Bridge'
+      if spectral_centroid > solo_threshold and chord_density < verse_threshold:
+          return 'Solo'
+      return 'Verse'  # default
+  ```
+
+- Add `label_confidence: float` (0-1) to `LessonSectionStub` schema
+- If confidence < 0.6, fall back to generic "Section N" label
+- Add pre-chorus detection:
+  - Short section (< 10s) between Verse and Chorus
+  - Rising energy profile, increasing chord density
+  - Label as "Pre-Chorus" when detected
+- Add instrumental section detection:
+  - Low vocal energy (from Demucs vocals stem)
+  - High instrumental energy
+  - Label as "Instrumental" or "Solo" accordingly
+- Preserve existing labels as fallback when classification confidence is low
+
+**Acceptance Criteria:**
+
+- [x] Intro detected as low-energy opening section (< 15s typical)
+- [x] Chorus detected as high-energy repeated section
+- [x] Bridge detected as harmonically distinct non-repeated section
+- [x] Pre-chorus detected as short rising-energy section before chorus
+- [x] Outro detected as declining-energy final section
+- [x] Solo/instrumental sections distinguished from vocal sections
+- [x] `label_confidence` reported per section
+- [x] Fallback to "Section N" when confidence < 0.6
+- [x] Integration test: real song with known structure correctly labeled
+
+**Implementation:**
+
+- Add `classify_section()` function in `backend/app/pipeline_proof.py`
+- Update `librosa_summarize()` to call classifier after boundary detection
+- Update `LessonSectionStub` schema with `label_confidence` field
+- Update frontend to display confidence indicator for uncertain labels
 

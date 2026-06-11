@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+import numpy as np
+
 logger = logging.getLogger("harmoniq.pipeline_proof")
 
 # --- Constants aligned with README / PRIORITIES --------------------------------
@@ -406,6 +408,189 @@ class LibrosaSummary:
     times: Any = None
     # Commit 118: chroma CQT for repeat detection (12, n_frames)
     chroma: Any = None
+    # Commit 119: spectral centroid curve for section classification
+    spectral_centroid: Any = None
+
+
+# ---- Section Features & Classifier (Commit 119) -----------------------------
+
+
+@dataclass
+class SectionFeatures:
+    """Per-section audio features for semantic label classification."""
+    mean_energy: float = 0.0
+    energy_variance: float = 0.0
+    spectral_centroid_mean: float | None = None
+    chord_density: float = 0.0
+    harmonic_stability: float | None = None
+    energy_trend: float = 0.0
+    relative_duration: float = 0.0
+    position: str = "middle"
+    duration: float = 0.0
+    is_repeated: bool = False
+
+
+_INTRO_MAX_DURATION: float = 15.0
+_INTRO_ENERGY_THRESHOLD: float = 0.35
+_CHORUS_ENERGY_THRESHOLD: float = 0.6
+_SOLO_CENTROID_THRESHOLD: float = 0.7
+_SOLO_MAX_CHORD_DENSITY: float = 1.5
+_BRIDGE_HARMONIC_SHIFT_THRESHOLD: float = 0.15
+_PRECHORUS_MAX_DURATION: float = 10.0
+_PRECHORUS_ENERGY_RISE_THRESHOLD: float = 0.1
+
+
+def classify_section(features: SectionFeatures) -> tuple[str, float]:
+    """Rule-based section label classifier using per-section audio features.
+
+    Returns (label, confidence) where confidence is 0-1.
+    Rules follow PRIORITIES.md Commit 119 pseudocode with pre-chorus additions.
+    """
+    if features.position in ("first", "only") and features.duration < _INTRO_MAX_DURATION and features.mean_energy < _INTRO_ENERGY_THRESHOLD:
+        return ("Intro", 0.85)
+
+    if features.position == "last" and features.energy_trend < 0:
+        return ("Outro", 0.80)
+
+    if features.is_repeated and features.mean_energy > _CHORUS_ENERGY_THRESHOLD:
+        return ("Chorus", 0.75)
+
+    if (
+        not features.is_repeated
+        and features.harmonic_stability is not None
+        and features.harmonic_stability < _BRIDGE_HARMONIC_SHIFT_THRESHOLD
+    ):
+        return ("Bridge", 0.70)
+
+    if (
+        features.spectral_centroid_mean is not None
+        and features.spectral_centroid_mean > _SOLO_CENTROID_THRESHOLD
+        and features.chord_density < _SOLO_MAX_CHORD_DENSITY
+    ):
+        return ("Solo", 0.70)
+
+    return ("Verse", 0.50)
+
+
+def compute_section_features(
+    segments: list[dict[str, Any]],
+    song_duration: float,
+    rms_curve: np.ndarray,
+    times: np.ndarray,
+    spectral_centroid_curve: np.ndarray | None,
+    chroma: np.ndarray | None,
+    chord_events: list[tuple[float, str]],
+) -> list[dict[str, Any]]:
+    """Compute per-section audio features and classify each segment.
+
+    Enriches each segment dict with ``features`` (SectionFeatures) and
+    updates ``label`` / ``label_confidence`` via :func:`classify_section`.
+    """
+    if not segments:
+        return segments
+
+    for i, seg in enumerate(segments):
+        start_t = seg.get("start_s", seg.get("start", 0.0))
+        end_t = seg.get("end_s", seg.get("end", song_duration))
+        duration = end_t - start_t
+
+        if duration <= 0:
+            seg["label"] = "Section"
+            seg["label_confidence"] = 0.0
+            continue
+
+        rms_mask = (times >= start_t) & (times < end_t)
+        section_rms = rms_curve[rms_mask] if rms_mask.any() else np.array([0.0])
+        mean_energy = float(section_rms.mean())
+        energy_variance = float(section_rms.var()) if len(section_rms) > 1 else 0.0
+
+        energy_trend = 0.0
+        if rms_mask.sum() >= 4:
+            energy_trend = float(np.polyfit(times[rms_mask], section_rms, 1)[0])
+
+        sc_mean: float | None = None
+        if spectral_centroid_curve is not None and rms_mask.any():
+            sc_values = spectral_centroid_curve[rms_mask]
+            if len(sc_values) > 0:
+                sc_mean = float(sc_values.mean())
+
+        harmonic_stability: float | None = None
+        if chroma is not None:
+            c_mask = (times >= start_t) & (times < end_t)
+            if c_mask.any():
+                section_chroma = chroma[:, c_mask]
+                if section_chroma.shape[1] >= 2:
+                    per_pitch_var = float(np.var(section_chroma, axis=1).mean())
+                    harmonic_stability = max(0.0, 1.0 - min(1.0, per_pitch_var * 5.0))
+                else:
+                    harmonic_stability = 0.5
+
+        section_chords = [c for t, c in chord_events if start_t <= t < end_t]
+        if len(section_chords) >= 2 and duration > 0:
+            changes = sum(1 for j in range(1, len(section_chords)) if section_chords[j] != section_chords[j - 1])
+            chord_density = changes / duration
+        else:
+            chord_density = 0.0
+
+        if len(segments) == 1:
+            position = "only"
+        elif i == 0:
+            position = "first"
+        elif i == len(segments) - 1:
+            position = "last"
+        else:
+            position = "middle"
+
+        is_repeated = seg.get("is_repeated", False)
+
+        features = SectionFeatures(
+            mean_energy=mean_energy,
+            energy_variance=energy_variance,
+            spectral_centroid_mean=sc_mean,
+            chord_density=chord_density,
+            harmonic_stability=harmonic_stability,
+            energy_trend=energy_trend,
+            relative_duration=duration / song_duration if song_duration > 0 else 0.0,
+            position=position,
+            duration=duration,
+            is_repeated=is_repeated,
+        )
+        seg["features"] = features
+
+    _detect_pre_chorus(segments)
+
+    for seg in segments:
+        features: SectionFeatures = seg.get("features")
+        if features is None:
+            seg["label"] = "Verse"
+            seg["label_confidence"] = 0.5
+            continue
+        label, confidence = classify_section(features)
+        seg["label"] = label
+        seg["label_confidence"] = confidence
+
+    return segments
+
+
+def _detect_pre_chorus(segments: list[dict[str, Any]]) -> None:
+    """Two-pass pre-chorus detection between Verse and Chorus."""
+    for i in range(1, len(segments) - 1):
+        prev = segments[i - 1]
+        curr = segments[i]
+        nxt = segments[i + 1]
+        f: SectionFeatures | None = curr.get("features")
+        if f is None:
+            continue
+        prev_label = prev.get("label", "")
+        next_label = nxt.get("label", "")
+        if (
+            f.duration < _PRECHORUS_MAX_DURATION
+            and f.energy_trend > _PRECHORUS_ENERGY_RISE_THRESHOLD
+            and prev_label == "Verse"
+            and next_label in ("Chorus", "Solo")
+        ):
+            curr["label"] = "Pre-Chorus"
+            curr["label_confidence"] = 0.70
 
 
 def estimate_key_literal(chroma_mean: Sequence[float]) -> tuple[str, str]:
@@ -438,7 +623,6 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
     - consistent with schema wiring for the frontend (bar timestamps + section labels)
     """
     import librosa
-    import numpy as np
 
     y, sr = librosa.load(str(audio_path), sr=TARGET_SR, mono=True)
     duration = float(len(y) / sr)
@@ -484,6 +668,13 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
     # --- Simple onset + energy segmentation into rough sections ---------------
     rms_frames = librosa.feature.rms(y=y, hop_length=hop_length)[0]
 
+    # Commit 119: compute spectral centroid curve for Solo/instrumental detection
+    spectral_centroid_curve: np.ndarray | None = None
+    try:
+        spectral_centroid_curve = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)[0]
+    except Exception:
+        pass
+
     def _norm(a: np.ndarray) -> np.ndarray:
         a = a.astype(float)
         mn = float(a.min(initial=0.0))
@@ -525,7 +716,6 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
                 break
 
     boundaries = [0.0] + boundary_times[:n_boundaries] + [duration]
-    labels = ["Intro", "Verse", "Chorus", "Solo", "Bridge", "Outro"]
     segments: list[dict[str, Any]] = []
     for i in range(len(boundaries) - 1):
         start_s = float(boundaries[i])
@@ -534,14 +724,30 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
             continue
         segments.append(
             {
-                "label": labels[i % len(labels)],
                 "start_s": start_s,
                 "end_s": end_s,
             }
         )
 
     if not segments:
-        segments = [{"label": "full", "start_s": 0.0, "end_s": duration}]
+        segments = [{"start_s": 0.0, "end_s": duration}]
+
+    # Commit 117: compute frame times for raw curves (used by section refinement)
+    frame_times = librosa.frames_to_time(
+        np.arange(len(onset_env)), sr=sr, hop_length=hop_length
+    )
+
+    # Commit 119: classify segments using audio features (replaces cyclic labels)
+    chord_events: list[tuple[float, str]] = []
+    segments = compute_section_features(
+        segments=segments,
+        song_duration=duration,
+        rms_curve=rms_frames,
+        times=frame_times,
+        spectral_centroid_curve=spectral_centroid_curve,
+        chroma=chroma,
+        chord_events=chord_events,
+    )
 
     # --- Bar timestamps (assume 4/4; derive from beat grid) -----------------------
     # beat_grid in schema is "quarter-note" timestamps; bar_timestamps are every 4 beats.
@@ -573,11 +779,6 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
     tempo_confidence = 0.9 if 40.0 <= tempo_bpm <= 200.0 else 0.6
     key_confidence = 0.85
 
-    # Commit 117: compute frame times for raw curves (used by section refinement)
-    frame_times = librosa.frames_to_time(
-        np.arange(len(onset_env)), sr=sr, hop_length=hop_length
-    )
-
     return LibrosaSummary(
         duration_s=duration,
         tempo_bpm=tempo_bpm,
@@ -592,6 +793,7 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
         rms_curve=rms_frames,
         times=frame_times,
         chroma=chroma,
+        spectral_centroid=spectral_centroid_curve,
     )
 
 

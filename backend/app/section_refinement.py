@@ -14,6 +14,14 @@ from typing import Any
 
 import numpy as np
 
+from app.pipeline_proof import (
+    SectionFeatures,
+    _PRECHORUS_MAX_DURATION,
+    _PRECHORUS_ENERGY_RISE_THRESHOLD,
+    classify_section,
+    compute_section_features,
+)
+
 logger = logging.getLogger("harmoniq.section_refinement")
 logger.setLevel(logging.INFO)
 
@@ -30,6 +38,7 @@ CONFIDENCE_THRESHOLD: float = 0.6
 CHORD_SIMILARITY_THRESHOLD: float = 0.6
 MOVEMENT_TOLERANCE_SEC: float = 3.0
 CHORD_NGRAM_SIZE: int = 3
+_INSTRUMENTAL_VOCAL_GAP_THRESHOLD: float = 0.7  # vocal gap curve max below this = instrumental
 
 
 # ---- Signal computation ------------------------------------------------------
@@ -325,91 +334,156 @@ def _infer_section_labels(
     chord_events: list[tuple[float, str]],
     rms_curve: np.ndarray,
     times: np.ndarray,
+    spectral_centroid_curve: np.ndarray | None = None,
+    lyrics_aligned: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Assign labels (Intro/Verse/Chorus/Bridge/Outro) via heuristic rules."""
+    """Assign section labels via two-stage process.
+
+    Stage 1: feature-based classification (spectral centroid, energy, chord density).
+    Stage 2: chord-fingerprint grouping for Chorus/Verse/Bridge refinement.
+    Stage 3: instrumental section detection via vocal gap analysis.
+    """
     all_times = [0.0] + sorted(boundary_times) + [song_duration]
     sections: list[dict[str, Any]] = []
 
     for i in range(len(all_times) - 1):
         start, end = all_times[i], all_times[i + 1]
         sections.append({
-            "start": start,
-            "end": end,
-            "duration": end - start,
-            "fingerprint": _fingerprint_section(chord_events, start, end),
-            "energy": _mean_section_energy(rms_curve, times, start, end),
+            "start_s": start,
+            "end_s": end,
             "label": None,
             "label_confidence": 0.0,
         })
 
-    n = len(sections)
-    if n == 0:
+    if not sections:
         return sections
 
-    # Rule 1: Intro — first section if short and low energy
+    # Stage 1: Feature-based classification via compute_section_features
+    sections = compute_section_features(
+        segments=sections,
+        song_duration=song_duration,
+        rms_curve=rms_curve,
+        times=times,
+        spectral_centroid_curve=spectral_centroid_curve,
+        chroma=None,
+        chord_events=chord_events,
+    )
+
+    # Stage 2: Chord-fingerprint grouping for interior sections.
+    # This refines the feature-based labels where chord patterns are available.
+    n = len(sections)
+
+    # Label Intro/Outro overriding — compute_section_features already handles this,
+    # but reinforce with chord-fingerprint-based energy comparison for interior.
     start_idx = 0
-    if sections[0]["duration"] < 15.0:
-        sections[0]["label"] = "Intro"
-        sections[0]["label_confidence"] = 0.8
+    if n > 0 and sections[0].get("label") == "Intro":
         start_idx = 1
 
-    # Rule 2: Outro — final section with declining energy
     end_idx = n
-    if n > 1 and _is_energy_declining(rms_curve, times, sections[-1]["start"], sections[-1]["end"]):
-        sections[-1]["label"] = "Outro"
-        sections[-1]["label_confidence"] = 0.7
+    if n > 1 and sections[-1].get("label") == "Outro":
         end_idx = n - 1
 
-    # Rule 3: Chord progression fingerprinting for interior sections
     interior = sections[start_idx:end_idx]
-    if len(interior) >= 2:
-        sim_matrix = np.zeros((len(interior), len(interior)))
-        for i, si in enumerate(interior):
-            for j, sj in enumerate(interior):
-                sim_matrix[i][j] = _jaccard(si["fingerprint"], sj["fingerprint"])
+    if len(interior) >= 2 and chord_events:
+        # Build fingerprint + energy for each interior section
+        interior_meta: list[dict[str, Any]] = []
+        for sec in interior:
+            st: float = sec["start_s"]
+            en: float = sec["end_s"]
+            interior_meta.append({
+                "sec": sec,
+                "fingerprint": _fingerprint_section(chord_events, st, en),
+                "energy": _mean_section_energy(rms_curve, times, st, en),
+            })
 
-        groups = _greedy_group(len(interior), sim_matrix)
+        if interior_meta:
+            sim_matrix = np.zeros((len(interior_meta), len(interior_meta)))
+            for i, si in enumerate(interior_meta):
+                for j, sj in enumerate(interior_meta):
+                    sim_matrix[i][j] = _jaccard(si["fingerprint"], sj["fingerprint"])
 
-        # Rule 4: Highest-energy repeated group → Chorus
-        repeated_groups = [g for g in groups if len(g) > 1]
-        chorus_group: list[int] | None = None
-        if repeated_groups:
-            chorus_group = max(
-                repeated_groups,
-                key=lambda g: np.mean([interior[i]["energy"] for i in g]),
-            )
-            for i in chorus_group:
-                interior[i]["label"] = "Chorus"
-                interior[i]["label_confidence"] = 0.75
+            groups = _greedy_group(len(interior_meta), sim_matrix)
 
-        # Rule 5: Other repeated groups → Verse
-        for group in repeated_groups:
-            if group is not chorus_group:
-                for i in group:
-                    interior[i]["label"] = "Verse"
-                    interior[i]["label_confidence"] = 0.7
+            repeated_groups = [g for g in groups if len(g) > 1]
+            chorus_group: list[int] | None = None
+            if repeated_groups:
+                chorus_group = max(
+                    repeated_groups,
+                    key=lambda g: np.mean([interior_meta[i]["energy"] for i in g]),
+                )
+                for i in chorus_group:
+                    interior_meta[i]["sec"]["label"] = "Chorus"
+                    interior_meta[i]["sec"]["label_confidence"] = max(
+                        interior_meta[i]["sec"].get("label_confidence", 0.75), 0.75
+                    )
 
-        # Rule 6: Unique single-occurrence sections → Bridge
-        unique_groups = [g for g in groups if len(g) == 1]
-        for group in unique_groups:
-            for i in group:
-                if interior[i]["label"] is None:
-                    interior[i]["label"] = "Bridge"
-                    interior[i]["label_confidence"] = 0.6
+            for group in repeated_groups:
+                if group is not chorus_group:
+                    for i in group:
+                        interior_meta[i]["sec"]["label"] = "Verse"
+                        interior_meta[i]["sec"]["label_confidence"] = max(
+                            interior_meta[i]["sec"].get("label_confidence", 0.7), 0.7
+                        )
 
-    # Rule 7: Remaining unlabeled — alternate Verse/Chorus
-    unlabeled = [s for s in sections if s["label"] is None]
-    for k, s in enumerate(unlabeled):
-        s["label"] = "Verse" if k % 2 == 0 else "Chorus"
-        s["label_confidence"] = 0.5
+    # Stage 3: Instrumental section detection
+    if lyrics_aligned and sections:
+        _detect_instrumental_sections(sections, lyrics_aligned, times, rms_curve)
 
-    # Safety: ensure every section has a label
+    # Fallback: ensure every section has a label
     for s in sections:
-        if s["label"] is None:
+        if s.get("label") is None or not s["label"]:
             s["label"] = "Verse"
-            s["label_confidence"] = 0.3
+            s["label_confidence"] = 0.5
 
     return sections
+
+
+def _detect_instrumental_sections(
+    sections: list[dict[str, Any]],
+    lyrics_aligned: list[dict[str, Any]],
+    times: np.ndarray,
+    rms_curve: np.ndarray,
+) -> None:
+    """Re-classify sections with low vocal activity as Instrumental or Solo.
+
+    Uses the vocal gap density as a proxy for vocal activity:
+    sections where the vocal gap curve is uniformly high (few vocal events)
+    get tagged as Instrumental. If spectral centroid is also high, tags as Solo.
+    """
+    if not lyrics_aligned or not times.any():
+        return
+
+    vocal_sig = _compute_vocal_gap_curve(lyrics_aligned, times)
+    if vocal_sig.max() < _INSTRUMENTAL_VOCAL_GAP_THRESHOLD:
+        return  # Not enough vocal gap signal to trigger instrumental detection
+
+    for sec in sections:
+        st: float = sec["start_s"]
+        en: float = sec["end_s"]
+        mask = (times >= st) & (times < en)
+        if not mask.any():
+            continue
+        section_vocal = vocal_sig[mask]
+        max_gap = float(section_vocal.max()) if len(section_vocal) > 0 else 0.0
+
+        # High vocal gap = few vocal events = likely instrumental
+        if max_gap > _INSTRUMENTAL_VOCAL_GAP_THRESHOLD:
+            section_rms = rms_curve[mask]
+            mean_energy = float(section_rms.mean()) if len(section_rms) > 0 else 0.0
+            if mean_energy > 0.3:
+                # Check features for Solo vs Instrumental
+                f: SectionFeatures | None = sec.get("features")
+                is_solo = (
+                    f is not None
+                    and f.spectral_centroid_mean is not None
+                    and f.spectral_centroid_mean > 0.7
+                )
+                if is_solo:
+                    sec["label"] = "Solo"
+                    sec["label_confidence"] = 0.70
+                else:
+                    sec["label"] = "Instrumental"
+                    sec["label_confidence"] = 0.65
 
 
 def _estimate_label_confidence(section: dict[str, Any]) -> float:
@@ -429,8 +503,15 @@ def refine_section_boundaries(
     times: np.ndarray,
     song_duration: float,
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
+    spectral_centroid_curve: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     """Refine section boundaries by fusing chord density, vocal gaps, and energy.
+
+    Parameters
+    ----------
+    spectral_centroid_curve : np.ndarray | None
+        Commit 119: spectral centroid curve for Solo/instrumental detection.
+        If None, Solo detection is skipped.
 
     Returns a list of section dicts with keys:
         start, end, label, label_confidence, boundary_confidence
@@ -484,9 +565,15 @@ def refine_section_boundaries(
         kept_confs = [c for _, c in kept]
         conf_map = dict(zip(kept_times, kept_confs))
 
-        # Infer labels
+        # Infer labels (Commit 119: pass spectral centroid + lyrics for feature-based classification)
         sections = _infer_section_labels(
-            kept_times, song_duration, chord_events, rms_curve, times
+            kept_times,
+            song_duration,
+            chord_events,
+            rms_curve,
+            times,
+            spectral_centroid_curve=spectral_centroid_curve,
+            lyrics_aligned=lyrics_aligned,
         )
 
         # Attach boundary confidence to each section

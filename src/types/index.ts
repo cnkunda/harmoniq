@@ -220,6 +220,8 @@ export interface LessonSection {
   repeat_count?: number | null
   /** Commit 118: 1-based position within the repeat group (e.g. 2 = second of three). */
   repeat_index?: number | null
+  /** Commit 119: confidence in the semantic section label (0-1). <0.6 triggers "Section N" fallback. */
+  label_confidence?: number | null
   [key: string]: unknown
 }
 

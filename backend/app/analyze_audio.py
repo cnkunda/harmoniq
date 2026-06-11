@@ -449,6 +449,7 @@ def build_lesson_json_from_librosa(
                 rms_curve=summary.rms_curve,
                 times=summary.times,
                 song_duration=summary.duration_s,
+                spectral_centroid_curve=summary.spectral_centroid,
             )
             logger.info(
                 "section refinement completed for job_id=%s: %d segments",
@@ -540,6 +541,12 @@ def build_lesson_json_from_librosa(
     if not sections:
         sections = [LessonSectionStub(label="Intro", confidence=0.3, start_time_seconds=0.0)]
         section_starts = [0.0]
+
+    # Commit 119: fall back to "Section N" when label confidence < 0.6
+    for i, sec in enumerate(sections):
+        lc = sec.label_confidence
+        if lc is not None and lc < 0.6:
+            sec.label = f"Section {i + 1}"
 
     # Attach transcription data to each section
     for i, section in enumerate(sections):

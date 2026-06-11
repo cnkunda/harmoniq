@@ -45,17 +45,32 @@ FEATURE_DIM = CHROMA_BINS + BASS_BINS
 
 
 def load_model(model_path: str | Path) -> object:
-    """Load the CRNN chord model from a .keras file."""
-    import tensorflow as tf
+    """Load the CRNN chord model from a .keras file.
 
+    The model was saved as a Keras 3 (.keras) file, so we load it
+    with the standalone ``keras`` module (not ``tf.keras`` which routes
+    to Keras 2 / tf_keras and cannot deserialize Keras 3 layer metadata).
+    """
     model_path = Path(model_path)
     if not model_path.exists():
         raise FileNotFoundError(f"Model not found: {model_path}")
 
-    model = tf.keras.models.load_model(
+    # Must set backend before first keras import
+    import os
+    os.environ["KERAS_BACKEND"] = "tensorflow"
+    import keras
+
+    # Lazy import for the Lambda layer's function to avoid circular TF init
+    from scripts.build_chord_tflite import _circular_cqt_pad
+
+    model = keras.models.load_model(
         str(model_path),
-        safe_mode=False,
+        custom_objects={"_circular_cqt_pad": _circular_cqt_pad},
     )
+    # Ensure the model runs in inference mode
+    import tensorflow as tf
+    _ = tf.constant(0)  # trigger TF init
+
     print(f"  [LOADED] {model_path.name}")
     return model
 

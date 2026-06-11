@@ -8,8 +8,10 @@ import pytest
 
 from app.pipeline_proof import (
     NoteEvent,
+    SectionFeatures,
     beat_slot_index_for_time,
     build_gp5_from_note_events,
+    classify_section,
     cli_equivalents_doc,
     demucs_separate_command,
     estimate_key_literal,
@@ -150,3 +152,117 @@ def _mini_wav_mono_pcm16(
             frames.append(struct.pack("<h", int(s * 32767)))
         w.writeframes(b"".join(frames))
     return buf.getvalue()
+
+
+# ---- Commit 119: Semantic Section Label Classification tests -----------------
+
+
+class TestClassifySection:
+    """Tests for classify_section with various SectionFeatures configurations."""
+
+    def test_intro_first_section_low_energy_short(self):
+        features = SectionFeatures(
+            mean_energy=0.2,
+            position="first",
+            duration=10.0,
+        )
+        label, conf = classify_section(features)
+        assert label == "Intro"
+        assert conf >= 0.8
+
+    def test_intro_only_section_low_energy(self):
+        features = SectionFeatures(
+            mean_energy=0.15,
+            position="only",
+            duration=8.0,
+        )
+        label, conf = classify_section(features)
+        assert label == "Intro"
+        assert conf > 0.0
+
+    def test_outro_last_section_declining_energy(self):
+        features = SectionFeatures(
+            mean_energy=0.3,
+            position="last",
+            energy_trend=-0.01,
+        )
+        label, conf = classify_section(features)
+        assert label == "Outro"
+        assert conf >= 0.7
+
+    def test_verse_default_middle_section(self):
+        features = SectionFeatures(
+            mean_energy=0.4,
+            position="middle",
+        )
+        label, conf = classify_section(features)
+        assert label == "Verse"
+        assert conf == 0.5
+
+    def test_chorus_high_energy_repeated(self):
+        features = SectionFeatures(
+            mean_energy=0.7,
+            is_repeated=True,
+            position="middle",
+        )
+        label, conf = classify_section(features)
+        assert label == "Chorus"
+        assert conf >= 0.7
+
+    def test_bridge_harmonic_shift_not_repeated(self):
+        features = SectionFeatures(
+            mean_energy=0.4,
+            harmonic_stability=0.1,
+            is_repeated=False,
+            position="middle",
+        )
+        label, conf = classify_section(features)
+        assert label == "Bridge"
+        assert conf >= 0.6
+
+    def test_solo_high_centroid_low_chord_density(self):
+        features = SectionFeatures(
+            mean_energy=0.5,
+            spectral_centroid_mean=0.85,
+            chord_density=0.5,
+            position="middle",
+        )
+        label, conf = classify_section(features)
+        assert label == "Solo"
+        assert conf >= 0.6
+
+    def test_first_section_but_high_energy_not_intro(self):
+        features = SectionFeatures(
+            mean_energy=0.8,
+            position="first",
+            duration=10.0,
+        )
+        label, conf = classify_section(features)
+        assert label != "Intro"  # Energy too high
+        assert conf > 0.0
+
+    def test_last_section_but_rising_energy_not_outro(self):
+        features = SectionFeatures(
+            mean_energy=0.5,
+            position="last",
+            energy_trend=0.02,  # Rising, not declining
+        )
+        label, conf = classify_section(features)
+        assert label != "Outro"
+
+    def test_chorus_without_repeat_not_chorus(self):
+        features = SectionFeatures(
+            mean_energy=0.7,
+            is_repeated=False,
+            position="middle",
+        )
+        label, conf = classify_section(features)
+        assert label != "Chorus"  # Not repeated, even though high energy
+
+    def test_instrumental_mid_energy_defaults_to_verse(self):
+        features = SectionFeatures(
+            mean_energy=0.4,
+            position="middle",
+        )
+        label, conf = classify_section(features)
+        assert label == "Verse"

@@ -4,6 +4,14 @@ DAMP - Vocal Performance Behaviors subset with pitch files.
 Contains ~2700h of mobile device recordings with CREPE-based f0 annotations.
 We filter for "guitar" and "ukulele" instrument-tagged segments.
 
+**Status: UNAVAILABLE** — Zenodo record 11957226 returned 410 Gone.
+The DAMP vocal datasets have been withdrawn by the rights holder (Smule).
+See https://ccrma.stanford.edu/damp/ for current status.
+
+The training pipeline handles this gracefully — DAMP-VPB is skipped
+with a warning and the remaining 4 datasets (GuitarSet, IDMT-SMT-Guitar,
+VST-Synthetic, YouTube-Crawl) are used instead.
+
 Usage:
     python scripts/download_damp_vpb.py [--data-dir DATA_DIR] [--force]
 
@@ -55,6 +63,28 @@ def download_damp(data_dir: Path, force: bool = False) -> bool:
         count = len(list(audio_dir.rglob("*.wav")))
         print(f"[SKIP] DAMP-VPB already extracted ({count} WAV files)")
         return True
+
+    # Check if Zenodo record is reachable
+    try:
+        resp = requests.head(
+            f"https://zenodo.org/records/{ZENODO_RECORD}", timeout=15
+        )
+        if resp.status_code == 410:
+            print(
+                f"  [UNAVAILABLE] Zenodo record {ZENODO_RECORD} has been withdrawn "
+                "(410 Gone)."
+            )
+            print(
+                "  The DAMP vocal datasets are no longer distributed by Smule. "
+                "See https://ccrma.stanford.edu/damp/"
+            )
+            print(
+                "  The training pipeline will skip DAMP-VPB gracefully. "
+                "No action needed."
+            )
+            return False
+    except requests.RequestException:
+        pass  # Network issue — try the download anyway below
 
     raw_dir.mkdir(parents=True, exist_ok=True)
 
@@ -110,6 +140,7 @@ def main(data_dir: Path, force: bool = False) -> None:
         print("\nDAMP-VPB dataset ready for extraction.")
         print("  Run: python scripts/extract_damp_vpb.py")
     else:
+        print("\nNote: DAMP-VPB is optional — the training pipeline skips it gracefully.")
         sys.exit(1)
 
 

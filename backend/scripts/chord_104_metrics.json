@@ -1,1904 +1,1904 @@
 {
   "per_quality_recall": {
     "11": {
-      "mean_recall": 0.8325,
-      "min_recall": 0.76,
-      "max_recall": 0.9388,
+      "mean_recall": 0.5726,
+      "min_recall": 0.4167,
+      "max_recall": 0.7083,
       "n_chords": 12
     },
     "13": {
-      "mean_recall": 0.7692,
-      "min_recall": 0.6792,
-      "max_recall": 0.9107,
+      "mean_recall": 0.5412,
+      "min_recall": 0.36,
+      "max_recall": 0.72,
       "n_chords": 12
     },
     "6": {
-      "mean_recall": 0.8786,
-      "min_recall": 0.82,
-      "max_recall": 0.9792,
+      "mean_recall": 0.5569,
+      "min_recall": 0.4583,
+      "max_recall": 0.625,
       "n_chords": 12
     },
     "7": {
-      "mean_recall": 0.794,
-      "min_recall": 0.68,
-      "max_recall": 0.8571,
+      "mean_recall": 0.486,
+      "min_recall": 0.4286,
+      "max_recall": 0.5769,
       "n_chords": 12
     },
     "7#5": {
-      "mean_recall": 0.8708,
-      "min_recall": 0.7755,
-      "max_recall": 0.9423,
+      "mean_recall": 0.7031,
+      "min_recall": 0.6,
+      "max_recall": 0.7692,
       "n_chords": 12
     },
     "7#9": {
-      "mean_recall": 0.8727,
-      "min_recall": 0.7647,
-      "max_recall": 0.963,
+      "mean_recall": 0.6394,
+      "min_recall": 0.5217,
+      "max_recall": 0.75,
       "n_chords": 12
     },
     "7b5": {
-      "mean_recall": 0.851,
-      "min_recall": 0.7143,
-      "max_recall": 0.9434,
+      "mean_recall": 0.6212,
+      "min_recall": 0.4783,
+      "max_recall": 0.76,
       "n_chords": 12
     },
     "7b9": {
-      "mean_recall": 0.8145,
-      "min_recall": 0.68,
-      "max_recall": 0.9615,
+      "mean_recall": 0.6001,
+      "min_recall": 0.4545,
+      "max_recall": 0.7391,
       "n_chords": 12
     },
     "7sus4": {
-      "mean_recall": 0.8964,
-      "min_recall": 0.8235,
-      "max_recall": 0.9811,
+      "mean_recall": 0.6705,
+      "min_recall": 0.5714,
+      "max_recall": 0.75,
       "n_chords": 12
     },
     "9": {
-      "mean_recall": 0.8365,
-      "min_recall": 0.6735,
-      "max_recall": 0.902,
+      "mean_recall": 0.5793,
+      "min_recall": 0.44,
+      "max_recall": 0.7083,
       "n_chords": 12
     },
     "alt7": {
-      "mean_recall": 0.8779,
-      "min_recall": 0.7959,
-      "max_recall": 0.9608,
+      "mean_recall": 0.6267,
+      "min_recall": 0.4583,
+      "max_recall": 0.72,
       "n_chords": 12
     },
     "aug": {
-      "mean_recall": 0.8612,
-      "min_recall": 0.75,
-      "max_recall": 0.9787,
-      "n_chords": 12
-    },
-    "dim": {
-      "mean_recall": 0.9151,
-      "min_recall": 0.8621,
-      "max_recall": 0.9811,
-      "n_chords": 12
-    },
-    "dim7": {
-      "mean_recall": 0.7711,
-      "min_recall": 0.5517,
+      "mean_recall": 0.5796,
+      "min_recall": 0.375,
       "max_recall": 0.88,
       "n_chords": 12
     },
+    "dim": {
+      "mean_recall": 0.589,
+      "min_recall": 0.4667,
+      "max_recall": 0.6786,
+      "n_chords": 12
+    },
+    "dim7": {
+      "mean_recall": 0.485,
+      "min_recall": 0.3448,
+      "max_recall": 0.5833,
+      "n_chords": 12
+    },
     "maj": {
-      "mean_recall": 0.794,
-      "min_recall": 0.7083,
-      "max_recall": 0.8906,
+      "mean_recall": 0.4239,
+      "min_recall": 0.2931,
+      "max_recall": 0.5556,
       "n_chords": 12
     },
     "maj7": {
-      "mean_recall": 0.8853,
-      "min_recall": 0.8276,
-      "max_recall": 0.9792,
+      "mean_recall": 0.57,
+      "min_recall": 0.4333,
+      "max_recall": 0.6538,
       "n_chords": 12
     },
     "maj9": {
-      "mean_recall": 0.9002,
-      "min_recall": 0.7234,
-      "max_recall": 1.0,
+      "mean_recall": 0.669,
+      "min_recall": 0.5833,
+      "max_recall": 0.7692,
       "n_chords": 12
     },
     "min": {
-      "mean_recall": 0.8298,
-      "min_recall": 0.7321,
-      "max_recall": 0.8983,
+      "mean_recall": 0.431,
+      "min_recall": 0.3261,
+      "max_recall": 0.5263,
       "n_chords": 12
     },
     "min6": {
-      "mean_recall": 0.8916,
-      "min_recall": 0.82,
-      "max_recall": 0.94,
+      "mean_recall": 0.5799,
+      "min_recall": 0.4828,
+      "max_recall": 0.6818,
       "n_chords": 12
     },
     "min7": {
-      "mean_recall": 0.8511,
-      "min_recall": 0.7551,
-      "max_recall": 0.92,
+      "mean_recall": 0.5451,
+      "min_recall": 0.4074,
+      "max_recall": 0.7083,
       "n_chords": 12
     },
     "min9": {
-      "mean_recall": 0.8925,
-      "min_recall": 0.7,
-      "max_recall": 0.9643,
+      "mean_recall": 0.5837,
+      "min_recall": 0.4545,
+      "max_recall": 0.75,
       "n_chords": 12
     },
     "sus2": {
-      "mean_recall": 0.8743,
-      "min_recall": 0.7021,
-      "max_recall": 0.9444,
+      "mean_recall": 0.6316,
+      "min_recall": 0.5217,
+      "max_recall": 0.7407,
       "n_chords": 12
     },
     "sus4": {
-      "mean_recall": 0.9011,
-      "min_recall": 0.8077,
-      "max_recall": 0.9623,
+      "mean_recall": 0.6557,
+      "min_recall": 0.5769,
+      "max_recall": 0.76,
       "n_chords": 12
     }
   },
   "quality_distribution": {
     "maj": {
-      "count": 4549,
-      "percentage": 5.36
-    },
-    "min": {
-      "count": 3859,
-      "percentage": 4.55
-    },
-    "7": {
-      "count": 3624,
-      "percentage": 4.27
-    },
-    "dim": {
-      "count": 3518,
-      "percentage": 4.14
-    },
-    "7sus4": {
-      "count": 3515,
-      "percentage": 4.14
-    },
-    "9": {
-      "count": 3513,
-      "percentage": 4.14
-    },
-    "7b5": {
-      "count": 3505,
-      "percentage": 4.13
-    },
-    "min9": {
-      "count": 3492,
-      "percentage": 4.11
-    },
-    "maj7": {
-      "count": 3491,
-      "percentage": 4.11
+      "count": 3182,
+      "percentage": 5.91
     },
     "N": {
-      "count": 3486,
-      "percentage": 4.11
+      "count": 3020,
+      "percentage": 5.61
     },
-    "min7": {
-      "count": 3477,
-      "percentage": 4.1
+    "min": {
+      "count": 2569,
+      "percentage": 4.77
     },
-    "dim7": {
-      "count": 3475,
-      "percentage": 4.09
+    "7": {
+      "count": 2324,
+      "percentage": 4.32
     },
-    "7#9": {
-      "count": 3474,
-      "percentage": 4.09
-    },
-    "6": {
-      "count": 3455,
-      "percentage": 4.07
-    },
-    "11": {
-      "count": 3455,
-      "percentage": 4.07
+    "dim": {
+      "count": 2235,
+      "percentage": 4.15
     },
     "min6": {
-      "count": 3455,
-      "percentage": 4.07
+      "count": 2205,
+      "percentage": 4.09
     },
-    "aug": {
-      "count": 3454,
-      "percentage": 4.07
-    },
-    "7#5": {
-      "count": 3454,
-      "percentage": 4.07
-    },
-    "13": {
-      "count": 3453,
-      "percentage": 4.07
-    },
-    "sus2": {
-      "count": 3452,
-      "percentage": 4.07
-    },
-    "sus4": {
-      "count": 3451,
-      "percentage": 4.07
-    },
-    "alt7": {
-      "count": 3447,
+    "min7": {
+      "count": 2186,
       "percentage": 4.06
     },
-    "maj9": {
-      "count": 3425,
-      "percentage": 4.03
+    "7b5": {
+      "count": 2183,
+      "percentage": 4.05
+    },
+    "maj7": {
+      "count": 2175,
+      "percentage": 4.04
+    },
+    "aug": {
+      "count": 2166,
+      "percentage": 4.02
+    },
+    "7#5": {
+      "count": 2143,
+      "percentage": 3.98
+    },
+    "dim7": {
+      "count": 2143,
+      "percentage": 3.98
+    },
+    "13": {
+      "count": 2132,
+      "percentage": 3.96
+    },
+    "9": {
+      "count": 2130,
+      "percentage": 3.96
+    },
+    "sus4": {
+      "count": 2128,
+      "percentage": 3.95
     },
     "7b9": {
-      "count": 3410,
-      "percentage": 4.02
+      "count": 2125,
+      "percentage": 3.95
+    },
+    "6": {
+      "count": 2121,
+      "percentage": 3.94
+    },
+    "min9": {
+      "count": 2119,
+      "percentage": 3.93
+    },
+    "11": {
+      "count": 2105,
+      "percentage": 3.91
+    },
+    "7sus4": {
+      "count": 2096,
+      "percentage": 3.89
+    },
+    "alt7": {
+      "count": 2093,
+      "percentage": 3.89
+    },
+    "sus2": {
+      "count": 2091,
+      "percentage": 3.88
+    },
+    "maj9": {
+      "count": 2091,
+      "percentage": 3.88
+    },
+    "7#9": {
+      "count": 2089,
+      "percentage": 3.88
     }
   },
   "per_class_recall": [
     {
       "chord": "N",
-      "recall": 0.452,
-      "precision": 0.7701,
-      "f1_score": 0.5697
+      "recall": 0.271,
+      "precision": 0.2131,
+      "f1_score": 0.2386
     },
     {
-      "chord": "A#:dim7",
-      "recall": 0.5517,
-      "precision": 0.8649,
-      "f1_score": 0.6737
+      "chord": "F:maj",
+      "recall": 0.2931,
+      "precision": 0.3864,
+      "f1_score": 0.3333
+    },
+    {
+      "chord": "G:maj",
+      "recall": 0.3036,
+      "precision": 0.2297,
+      "f1_score": 0.2615
+    },
+    {
+      "chord": "D:min",
+      "recall": 0.3261,
+      "precision": 0.3333,
+      "f1_score": 0.3297
+    },
+    {
+      "chord": "F#:maj",
+      "recall": 0.3448,
+      "precision": 0.2222,
+      "f1_score": 0.2703
     },
     {
       "chord": "G:dim7",
-      "recall": 0.6667,
-      "precision": 0.8293,
+      "recall": 0.3448,
+      "precision": 0.3846,
+      "f1_score": 0.3636
+    },
+    {
+      "chord": "E:13",
+      "recall": 0.36,
+      "precision": 1.0,
+      "f1_score": 0.5294
+    },
+    {
+      "chord": "C:aug",
+      "recall": 0.375,
+      "precision": 0.7059,
+      "f1_score": 0.4898
+    },
+    {
+      "chord": "C#:min",
+      "recall": 0.3778,
+      "precision": 0.6538,
+      "f1_score": 0.4789
+    },
+    {
+      "chord": "A:min",
+      "recall": 0.4,
+      "precision": 0.6957,
+      "f1_score": 0.5079
+    },
+    {
+      "chord": "G:min",
+      "recall": 0.4043,
+      "precision": 0.7308,
+      "f1_score": 0.5205
+    },
+    {
+      "chord": "G#:min",
+      "recall": 0.4054,
+      "precision": 0.8333,
+      "f1_score": 0.5455
+    },
+    {
+      "chord": "G#:maj",
+      "recall": 0.4074,
+      "precision": 0.3143,
+      "f1_score": 0.3548
+    },
+    {
+      "chord": "D:min7",
+      "recall": 0.4074,
+      "precision": 0.8462,
+      "f1_score": 0.55
+    },
+    {
+      "chord": "C#:dim7",
+      "recall": 0.4091,
+      "precision": 0.75,
+      "f1_score": 0.5294
+    },
+    {
+      "chord": "F#:min7",
+      "recall": 0.4138,
+      "precision": 0.6667,
+      "f1_score": 0.5106
+    },
+    {
+      "chord": "B:min",
+      "recall": 0.4146,
+      "precision": 0.5152,
+      "f1_score": 0.4595
+    },
+    {
+      "chord": "D#:11",
+      "recall": 0.4167,
+      "precision": 0.5882,
+      "f1_score": 0.4878
+    },
+    {
+      "chord": "D:dim7",
+      "recall": 0.4167,
+      "precision": 0.7143,
+      "f1_score": 0.5263
+    },
+    {
+      "chord": "D:maj",
+      "recall": 0.4194,
+      "precision": 0.0793,
+      "f1_score": 0.1333
+    },
+    {
+      "chord": "E:min7",
+      "recall": 0.4194,
+      "precision": 0.8125,
+      "f1_score": 0.5532
+    },
+    {
+      "chord": "G#:7",
+      "recall": 0.4286,
+      "precision": 0.7059,
+      "f1_score": 0.5333
+    },
+    {
+      "chord": "F#:min",
+      "recall": 0.4324,
+      "precision": 0.7273,
+      "f1_score": 0.5424
+    },
+    {
+      "chord": "C#:7",
+      "recall": 0.4333,
+      "precision": 0.6842,
+      "f1_score": 0.5306
+    },
+    {
+      "chord": "F#:maj7",
+      "recall": 0.4333,
+      "precision": 0.5909,
+      "f1_score": 0.5
+    },
+    {
+      "chord": "F:min",
+      "recall": 0.4348,
+      "precision": 0.5556,
+      "f1_score": 0.4878
+    },
+    {
+      "chord": "B:11",
+      "recall": 0.4348,
+      "precision": 0.7143,
+      "f1_score": 0.5405
+    },
+    {
+      "chord": "A#:9",
+      "recall": 0.44,
+      "precision": 0.8462,
+      "f1_score": 0.5789
+    },
+    {
+      "chord": "F#:13",
+      "recall": 0.44,
+      "precision": 0.7857,
+      "f1_score": 0.5641
+    },
+    {
+      "chord": "E:dim7",
+      "recall": 0.44,
+      "precision": 0.6471,
+      "f1_score": 0.5238
+    },
+    {
+      "chord": "C#:maj",
+      "recall": 0.4412,
+      "precision": 0.2419,
+      "f1_score": 0.3125
+    },
+    {
+      "chord": "A#:maj",
+      "recall": 0.4444,
+      "precision": 0.0964,
+      "f1_score": 0.1584
+    },
+    {
+      "chord": "E:maj",
+      "recall": 0.4474,
+      "precision": 0.2394,
+      "f1_score": 0.3119
+    },
+    {
+      "chord": "E:min",
+      "recall": 0.45,
+      "precision": 0.6429,
+      "f1_score": 0.5294
+    },
+    {
+      "chord": "G:7",
+      "recall": 0.4516,
+      "precision": 0.875,
+      "f1_score": 0.5957
+    },
+    {
+      "chord": "A:7",
+      "recall": 0.4516,
+      "precision": 0.7778,
+      "f1_score": 0.5714
+    },
+    {
+      "chord": "G#:min9",
+      "recall": 0.4545,
+      "precision": 0.8333,
+      "f1_score": 0.5882
+    },
+    {
+      "chord": "A:7b9",
+      "recall": 0.4545,
+      "precision": 0.9091,
+      "f1_score": 0.6061
+    },
+    {
+      "chord": "F:alt7",
+      "recall": 0.4583,
+      "precision": 1.0,
+      "f1_score": 0.6286
+    },
+    {
+      "chord": "B:6",
+      "recall": 0.4583,
+      "precision": 0.7857,
+      "f1_score": 0.5789
+    },
+    {
+      "chord": "C:maj",
+      "recall": 0.4605,
+      "precision": 0.1394,
+      "f1_score": 0.2141
+    },
+    {
+      "chord": "G#:13",
+      "recall": 0.4615,
+      "precision": 0.8571,
+      "f1_score": 0.6
+    },
+    {
+      "chord": "A#:dim7",
+      "recall": 0.4615,
+      "precision": 0.7059,
+      "f1_score": 0.5581
+    },
+    {
+      "chord": "D#:maj",
+      "recall": 0.4627,
+      "precision": 0.1834,
+      "f1_score": 0.2627
+    },
+    {
+      "chord": "D#:7",
+      "recall": 0.4634,
+      "precision": 0.7917,
+      "f1_score": 0.5846
+    },
+    {
+      "chord": "C:dim",
+      "recall": 0.4667,
+      "precision": 0.9333,
+      "f1_score": 0.6222
+    },
+    {
+      "chord": "G:11",
+      "recall": 0.4783,
+      "precision": 0.9167,
+      "f1_score": 0.6286
+    },
+    {
+      "chord": "D:13",
+      "recall": 0.4783,
+      "precision": 0.8462,
+      "f1_score": 0.6111
+    },
+    {
+      "chord": "D#:13",
+      "recall": 0.4783,
+      "precision": 0.6111,
+      "f1_score": 0.5366
+    },
+    {
+      "chord": "G#:7b9",
+      "recall": 0.4783,
+      "precision": 0.7857,
+      "f1_score": 0.5946
+    },
+    {
+      "chord": "C:7b5",
+      "recall": 0.4783,
+      "precision": 0.7857,
+      "f1_score": 0.5946
+    },
+    {
+      "chord": "A:dim7",
+      "recall": 0.4815,
+      "precision": 0.619,
+      "f1_score": 0.5417
+    },
+    {
+      "chord": "C#:aug",
+      "recall": 0.4815,
+      "precision": 0.7647,
+      "f1_score": 0.5909
+    },
+    {
+      "chord": "C:min6",
+      "recall": 0.4828,
+      "precision": 1.0,
+      "f1_score": 0.6512
+    },
+    {
+      "chord": "C:7",
+      "recall": 0.4848,
+      "precision": 0.6667,
+      "f1_score": 0.5614
+    },
+    {
+      "chord": "D#:min",
+      "recall": 0.4865,
+      "precision": 0.6429,
+      "f1_score": 0.5538
+    },
+    {
+      "chord": "F:7",
+      "recall": 0.4865,
+      "precision": 0.7826,
+      "f1_score": 0.6
+    },
+    {
+      "chord": "D:7",
+      "recall": 0.5,
+      "precision": 0.9375,
+      "f1_score": 0.6522
+    },
+    {
+      "chord": "F#:7",
+      "recall": 0.5,
+      "precision": 0.7778,
+      "f1_score": 0.6087
+    },
+    {
+      "chord": "A#:7",
+      "recall": 0.5,
+      "precision": 0.6818,
+      "f1_score": 0.5769
+    },
+    {
+      "chord": "G:maj7",
+      "recall": 0.5,
+      "precision": 0.8125,
+      "f1_score": 0.619
+    },
+    {
+      "chord": "F:min7",
+      "recall": 0.5,
+      "precision": 0.875,
+      "f1_score": 0.6364
+    },
+    {
+      "chord": "G#:9",
+      "recall": 0.5,
+      "precision": 0.5909,
+      "f1_score": 0.5417
+    },
+    {
+      "chord": "B:min9",
+      "recall": 0.5,
+      "precision": 0.9231,
+      "f1_score": 0.6486
+    },
+    {
+      "chord": "B:13",
+      "recall": 0.5,
+      "precision": 0.7143,
+      "f1_score": 0.5882
+    },
+    {
+      "chord": "A#:7b5",
+      "recall": 0.5,
+      "precision": 0.9231,
+      "f1_score": 0.6486
+    },
+    {
+      "chord": "D#:aug",
+      "recall": 0.5,
+      "precision": 0.6957,
+      "f1_score": 0.5818
+    },
+    {
+      "chord": "F#:aug",
+      "recall": 0.5,
+      "precision": 0.8,
+      "f1_score": 0.6154
+    },
+    {
+      "chord": "A#:6",
+      "recall": 0.5,
+      "precision": 0.9231,
+      "f1_score": 0.6486
+    },
+    {
+      "chord": "A:maj",
+      "recall": 0.507,
+      "precision": 0.2156,
+      "f1_score": 0.3025
+    },
+    {
+      "chord": "C:min",
+      "recall": 0.5143,
+      "precision": 0.3333,
+      "f1_score": 0.4045
+    },
+    {
+      "chord": "F:dim",
+      "recall": 0.5172,
+      "precision": 1.0,
+      "f1_score": 0.6818
+    },
+    {
+      "chord": "C:6",
+      "recall": 0.5172,
+      "precision": 0.8824,
+      "f1_score": 0.6522
+    },
+    {
+      "chord": "D:6",
+      "recall": 0.5172,
+      "precision": 0.75,
+      "f1_score": 0.6122
+    },
+    {
+      "chord": "C#:6",
+      "recall": 0.5185,
+      "precision": 1.0,
+      "f1_score": 0.6829
+    },
+    {
+      "chord": "D#:min6",
+      "recall": 0.5185,
+      "precision": 0.875,
+      "f1_score": 0.6512
+    },
+    {
+      "chord": "A:min6",
+      "recall": 0.5185,
+      "precision": 0.9333,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "A#:min6",
+      "recall": 0.5185,
+      "precision": 0.9333,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "D:maj7",
+      "recall": 0.52,
+      "precision": 0.7647,
+      "f1_score": 0.619
+    },
+    {
+      "chord": "D#:maj7",
+      "recall": 0.52,
+      "precision": 0.9286,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "C:dim7",
+      "recall": 0.52,
+      "precision": 0.6842,
+      "f1_score": 0.5909
+    },
+    {
+      "chord": "G#:dim7",
+      "recall": 0.52,
+      "precision": 0.8667,
+      "f1_score": 0.65
+    },
+    {
+      "chord": "B:7#9",
+      "recall": 0.5217,
+      "precision": 0.75,
+      "f1_score": 0.6154
+    },
+    {
+      "chord": "F:7b9",
+      "recall": 0.5217,
+      "precision": 0.7059,
+      "f1_score": 0.6
+    },
+    {
+      "chord": "F:sus2",
+      "recall": 0.5217,
+      "precision": 0.9231,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "G#:11",
+      "recall": 0.5238,
+      "precision": 0.5238,
+      "f1_score": 0.5238
+    },
+    {
+      "chord": "A#:min",
+      "recall": 0.5263,
+      "precision": 0.2941,
+      "f1_score": 0.3774
+    },
+    {
+      "chord": "G:min6",
+      "recall": 0.5333,
+      "precision": 0.8889,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "C:maj7",
+      "recall": 0.5357,
+      "precision": 0.3571,
+      "f1_score": 0.4286
+    },
+    {
+      "chord": "B:7b9",
+      "recall": 0.5385,
+      "precision": 0.9333,
+      "f1_score": 0.6829
+    },
+    {
+      "chord": "C#:7b5",
+      "recall": 0.5385,
+      "precision": 0.8235,
+      "f1_score": 0.6512
+    },
+    {
+      "chord": "D:7b5",
+      "recall": 0.5385,
+      "precision": 0.7368,
+      "f1_score": 0.6222
+    },
+    {
+      "chord": "D:sus2",
+      "recall": 0.5385,
+      "precision": 0.7778,
+      "f1_score": 0.6364
+    },
+    {
+      "chord": "C#:9",
+      "recall": 0.5417,
+      "precision": 0.8125,
+      "f1_score": 0.65
+    },
+    {
+      "chord": "A:9",
+      "recall": 0.5417,
+      "precision": 0.7222,
+      "f1_score": 0.619
+    },
+    {
+      "chord": "F#:min9",
+      "recall": 0.5417,
+      "precision": 0.9286,
+      "f1_score": 0.6842
+    },
+    {
+      "chord": "G:min9",
+      "recall": 0.5417,
+      "precision": 0.8667,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "A#:min9",
+      "recall": 0.5417,
+      "precision": 0.8125,
+      "f1_score": 0.65
+    },
+    {
+      "chord": "A:11",
+      "recall": 0.5417,
+      "precision": 0.8667,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "C#:13",
+      "recall": 0.5417,
+      "precision": 0.8667,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "C:alt7",
+      "recall": 0.5417,
+      "precision": 1.0,
+      "f1_score": 0.7027
+    },
+    {
+      "chord": "D#:dim7",
+      "recall": 0.5417,
+      "precision": 0.7222,
+      "f1_score": 0.619
+    },
+    {
+      "chord": "F#:dim7",
+      "recall": 0.5417,
+      "precision": 0.7647,
+      "f1_score": 0.6341
+    },
+    {
+      "chord": "D:aug",
+      "recall": 0.5517,
+      "precision": 0.8889,
+      "f1_score": 0.6809
+    },
+    {
+      "chord": "B:maj",
+      "recall": 0.5556,
+      "precision": 0.1131,
+      "f1_score": 0.188
+    },
+    {
+      "chord": "E:7",
+      "recall": 0.5556,
+      "precision": 0.8333,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "G#:min6",
+      "recall": 0.5556,
+      "precision": 0.9375,
+      "f1_score": 0.6977
+    },
+    {
+      "chord": "D#:min7",
+      "recall": 0.56,
+      "precision": 0.7368,
+      "f1_score": 0.6364
+    },
+    {
+      "chord": "A:min9",
+      "recall": 0.56,
+      "precision": 0.9333,
+      "f1_score": 0.7
+    },
+    {
+      "chord": "E:dim",
+      "recall": 0.56,
+      "precision": 0.7368,
+      "f1_score": 0.6364
+    },
+    {
+      "chord": "B:dim7",
+      "recall": 0.56,
+      "precision": 0.6667,
+      "f1_score": 0.6087
+    },
+    {
+      "chord": "G:aug",
+      "recall": 0.56,
+      "precision": 0.875,
+      "f1_score": 0.6829
+    },
+    {
+      "chord": "A#:min7",
+      "recall": 0.5652,
+      "precision": 0.6842,
+      "f1_score": 0.619
+    },
+    {
+      "chord": "F#:9",
+      "recall": 0.5652,
+      "precision": 0.7647,
+      "f1_score": 0.65
+    },
+    {
+      "chord": "D:min9",
+      "recall": 0.5652,
+      "precision": 0.8125,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "A:aug",
+      "recall": 0.5652,
+      "precision": 0.7647,
+      "f1_score": 0.65
+    },
+    {
+      "chord": "A:6",
+      "recall": 0.5652,
+      "precision": 0.6842,
+      "f1_score": 0.619
+    },
+    {
+      "chord": "B:maj7",
+      "recall": 0.5714,
+      "precision": 0.3478,
+      "f1_score": 0.4324
+    },
+    {
+      "chord": "C:min7",
+      "recall": 0.5714,
+      "precision": 0.6957,
+      "f1_score": 0.6275
+    },
+    {
+      "chord": "G:min7",
+      "recall": 0.5714,
+      "precision": 0.6667,
+      "f1_score": 0.6154
+    },
+    {
+      "chord": "E:9",
+      "recall": 0.5714,
+      "precision": 0.75,
+      "f1_score": 0.6486
+    },
+    {
+      "chord": "F#:11",
+      "recall": 0.5714,
+      "precision": 0.6154,
+      "f1_score": 0.5926
+    },
+    {
+      "chord": "G#:7sus4",
+      "recall": 0.5714,
+      "precision": 0.9231,
+      "f1_score": 0.7059
+    },
+    {
+      "chord": "B:7",
+      "recall": 0.5769,
+      "precision": 0.6,
+      "f1_score": 0.5882
+    },
+    {
+      "chord": "F:9",
+      "recall": 0.5769,
+      "precision": 0.9375,
+      "f1_score": 0.7143
+    },
+    {
+      "chord": "E:sus4",
+      "recall": 0.5769,
+      "precision": 0.8824,
+      "f1_score": 0.6977
+    },
+    {
+      "chord": "G:dim",
+      "recall": 0.5769,
+      "precision": 0.6818,
+      "f1_score": 0.625
+    },
+    {
+      "chord": "E:aug",
+      "recall": 0.5769,
+      "precision": 0.7895,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "C:min9",
+      "recall": 0.5833,
+      "precision": 1.0,
+      "f1_score": 0.7368
+    },
+    {
+      "chord": "D#:min9",
+      "recall": 0.5833,
+      "precision": 1.0,
+      "f1_score": 0.7368
+    },
+    {
+      "chord": "B:maj9",
+      "recall": 0.5833,
+      "precision": 0.6364,
+      "f1_score": 0.6087
+    },
+    {
+      "chord": "C#:11",
+      "recall": 0.5833,
+      "precision": 0.7368,
+      "f1_score": 0.6512
+    },
+    {
+      "chord": "C:7b9",
+      "recall": 0.5833,
+      "precision": 0.8235,
+      "f1_score": 0.6829
+    },
+    {
+      "chord": "G:alt7",
+      "recall": 0.5833,
+      "precision": 0.9333,
+      "f1_score": 0.7179
+    },
+    {
+      "chord": "A#:alt7",
+      "recall": 0.5833,
+      "precision": 1.0,
+      "f1_score": 0.7368
+    },
+    {
+      "chord": "C#:sus2",
+      "recall": 0.5833,
+      "precision": 1.0,
+      "f1_score": 0.7368
+    },
+    {
+      "chord": "D#:sus2",
+      "recall": 0.5833,
+      "precision": 0.875,
+      "f1_score": 0.7
+    },
+    {
+      "chord": "D#:sus4",
+      "recall": 0.5833,
+      "precision": 0.7778,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "F:dim7",
+      "recall": 0.5833,
+      "precision": 0.6364,
+      "f1_score": 0.6087
+    },
+    {
+      "chord": "F:6",
+      "recall": 0.5833,
+      "precision": 1.0,
+      "f1_score": 0.7368
+    },
+    {
+      "chord": "F#:6",
+      "recall": 0.5833,
+      "precision": 0.875,
+      "f1_score": 0.7
+    },
+    {
+      "chord": "F#:dim",
+      "recall": 0.5862,
+      "precision": 0.8947,
+      "f1_score": 0.7083
+    },
+    {
+      "chord": "D#:7#9",
+      "recall": 0.5909,
+      "precision": 0.9286,
+      "f1_score": 0.7222
+    },
+    {
+      "chord": "A:7#9",
+      "recall": 0.5909,
+      "precision": 0.7222,
+      "f1_score": 0.65
+    },
+    {
+      "chord": "F#:sus4",
+      "recall": 0.5909,
+      "precision": 0.9286,
+      "f1_score": 0.7222
+    },
+    {
+      "chord": "D#:6",
+      "recall": 0.5909,
+      "precision": 0.8125,
+      "f1_score": 0.6842
+    },
+    {
+      "chord": "A:min7",
+      "recall": 0.5926,
+      "precision": 0.7273,
+      "f1_score": 0.6531
+    },
+    {
+      "chord": "C:9",
+      "recall": 0.5926,
+      "precision": 0.9412,
+      "f1_score": 0.7273
+    },
+    {
+      "chord": "C:13",
+      "recall": 0.5926,
+      "precision": 0.9412,
+      "f1_score": 0.7273
+    },
+    {
+      "chord": "G#:dim",
+      "recall": 0.5926,
+      "precision": 0.9412,
+      "f1_score": 0.7273
+    },
+    {
+      "chord": "E:maj7",
+      "recall": 0.6,
+      "precision": 0.9474,
+      "f1_score": 0.7347
+    },
+    {
+      "chord": "C:7#5",
+      "recall": 0.6,
+      "precision": 0.8824,
+      "f1_score": 0.7143
+    },
+    {
+      "chord": "G#:7b5",
+      "recall": 0.6,
+      "precision": 0.7143,
+      "f1_score": 0.6522
+    },
+    {
+      "chord": "C:sus2",
+      "recall": 0.6,
+      "precision": 0.9375,
+      "f1_score": 0.7317
+    },
+    {
+      "chord": "A#:dim",
+      "recall": 0.6,
+      "precision": 0.8182,
+      "f1_score": 0.6923
+    },
+    {
+      "chord": "F:maj7",
+      "recall": 0.6071,
+      "precision": 1.0,
+      "f1_score": 0.7556
+    },
+    {
+      "chord": "C#:min7",
+      "recall": 0.6071,
+      "precision": 0.8947,
+      "f1_score": 0.7234
+    },
+    {
+      "chord": "B:dim",
+      "recall": 0.6071,
+      "precision": 0.7727,
+      "f1_score": 0.68
+    },
+    {
+      "chord": "F:min6",
+      "recall": 0.6071,
+      "precision": 0.8947,
+      "f1_score": 0.7234
+    },
+    {
+      "chord": "F#:min6",
+      "recall": 0.6071,
+      "precision": 0.9444,
       "f1_score": 0.7391
     },
     {
       "chord": "B:9",
-      "recall": 0.6735,
-      "precision": 0.8919,
-      "f1_score": 0.7674
+      "recall": 0.6087,
+      "precision": 0.875,
+      "f1_score": 0.7179
     },
     {
-      "chord": "D:13",
-      "recall": 0.6792,
-      "precision": 0.8372,
+      "chord": "C:maj9",
+      "recall": 0.6087,
+      "precision": 0.6364,
+      "f1_score": 0.6222
+    },
+    {
+      "chord": "C#:7#9",
+      "recall": 0.6087,
+      "precision": 0.7778,
+      "f1_score": 0.6829
+    },
+    {
+      "chord": "G#:7#9",
+      "recall": 0.6087,
+      "precision": 0.8235,
+      "f1_score": 0.7
+    },
+    {
+      "chord": "A:alt7",
+      "recall": 0.6087,
+      "precision": 1.0,
+      "f1_score": 0.7568
+    },
+    {
+      "chord": "G#:aug",
+      "recall": 0.6087,
+      "precision": 0.5833,
+      "f1_score": 0.5957
+    },
+    {
+      "chord": "E:6",
+      "recall": 0.6087,
+      "precision": 0.9333,
+      "f1_score": 0.7368
+    },
+    {
+      "chord": "C#:dim",
+      "recall": 0.6129,
+      "precision": 0.7308,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "G#:maj7",
+      "recall": 0.6154,
+      "precision": 0.6957,
+      "f1_score": 0.6531
+    },
+    {
+      "chord": "D:maj9",
+      "recall": 0.6154,
+      "precision": 0.8889,
+      "f1_score": 0.7273
+    },
+    {
+      "chord": "G:13",
+      "recall": 0.6154,
+      "precision": 0.8889,
+      "f1_score": 0.7273
+    },
+    {
+      "chord": "C:7#9",
+      "recall": 0.6154,
+      "precision": 0.9412,
+      "f1_score": 0.7442
+    },
+    {
+      "chord": "G#:6",
+      "recall": 0.6154,
+      "precision": 0.8,
+      "f1_score": 0.6957
+    },
+    {
+      "chord": "E:min6",
+      "recall": 0.6154,
+      "precision": 1.0,
+      "f1_score": 0.7619
+    },
+    {
+      "chord": "G#:maj9",
+      "recall": 0.619,
+      "precision": 0.9286,
+      "f1_score": 0.7429
+    },
+    {
+      "chord": "G#:min7",
+      "recall": 0.625,
+      "precision": 0.8333,
+      "f1_score": 0.7143
+    },
+    {
+      "chord": "D:9",
+      "recall": 0.625,
+      "precision": 0.7895,
+      "f1_score": 0.6977
+    },
+    {
+      "chord": "F:11",
+      "recall": 0.625,
+      "precision": 0.7895,
+      "f1_score": 0.6977
+    },
+    {
+      "chord": "C#:7b9",
+      "recall": 0.625,
+      "precision": 0.9375,
       "f1_score": 0.75
     },
     {
-      "chord": "B:7",
-      "recall": 0.68,
-      "precision": 0.7083,
-      "f1_score": 0.6939
+      "chord": "G:7b9",
+      "recall": 0.625,
+      "precision": 0.9375,
+      "f1_score": 0.75
     },
     {
-      "chord": "G#:13",
+      "chord": "G:7b5",
+      "recall": 0.625,
+      "precision": 0.625,
+      "f1_score": 0.625
+    },
+    {
+      "chord": "E:sus2",
+      "recall": 0.625,
+      "precision": 1.0,
+      "f1_score": 0.7692
+    },
+    {
+      "chord": "A:sus4",
+      "recall": 0.625,
+      "precision": 0.7895,
+      "f1_score": 0.6977
+    },
+    {
+      "chord": "D:7sus4",
+      "recall": 0.625,
+      "precision": 0.8824,
+      "f1_score": 0.7317
+    },
+    {
+      "chord": "B:7sus4",
+      "recall": 0.625,
+      "precision": 1.0,
+      "f1_score": 0.7692
+    },
+    {
+      "chord": "G:6",
+      "recall": 0.625,
+      "precision": 0.8824,
+      "f1_score": 0.7317
+    },
+    {
+      "chord": "D:dim",
+      "recall": 0.6333,
+      "precision": 0.9048,
+      "f1_score": 0.7451
+    },
+    {
+      "chord": "A#:7b9",
+      "recall": 0.6364,
+      "precision": 0.7368,
+      "f1_score": 0.6829
+    },
+    {
+      "chord": "G#:alt7",
+      "recall": 0.6364,
+      "precision": 0.9333,
+      "f1_score": 0.7568
+    },
+    {
+      "chord": "D#:7sus4",
+      "recall": 0.6364,
+      "precision": 0.9333,
+      "f1_score": 0.7568
+    },
+    {
+      "chord": "D#:dim",
+      "recall": 0.6364,
+      "precision": 0.84,
+      "f1_score": 0.7241
+    },
+    {
+      "chord": "F:aug",
+      "recall": 0.6364,
+      "precision": 0.8235,
+      "f1_score": 0.7179
+    },
+    {
+      "chord": "A:maj7",
+      "recall": 0.64,
+      "precision": 0.8,
+      "f1_score": 0.7111
+    },
+    {
+      "chord": "A#:11",
+      "recall": 0.64,
+      "precision": 0.7273,
+      "f1_score": 0.6809
+    },
+    {
+      "chord": "A#:13",
+      "recall": 0.64,
+      "precision": 0.9412,
+      "f1_score": 0.7619
+    },
+    {
+      "chord": "A#:7#9",
+      "recall": 0.64,
+      "precision": 0.8421,
+      "f1_score": 0.7273
+    },
+    {
+      "chord": "F#:7#5",
+      "recall": 0.64,
+      "precision": 0.8889,
+      "f1_score": 0.7442
+    },
+    {
+      "chord": "F#:7b5",
+      "recall": 0.64,
+      "precision": 0.6957,
+      "f1_score": 0.6667
+    },
+    {
+      "chord": "B:7b5",
+      "recall": 0.64,
+      "precision": 0.9412,
+      "f1_score": 0.7619
+    },
+    {
+      "chord": "G#:sus2",
+      "recall": 0.64,
+      "precision": 0.8,
+      "f1_score": 0.7111
+    },
+    {
+      "chord": "C#:maj7",
+      "recall": 0.6429,
+      "precision": 0.1818,
+      "f1_score": 0.2835
+    },
+    {
+      "chord": "C:7sus4",
+      "recall": 0.6429,
+      "precision": 0.9,
+      "f1_score": 0.75
+    },
+    {
+      "chord": "C#:min9",
+      "recall": 0.6522,
+      "precision": 1.0,
+      "f1_score": 0.7895
+    },
+    {
+      "chord": "A#:maj9",
+      "recall": 0.6522,
+      "precision": 0.9375,
+      "f1_score": 0.7692
+    },
+    {
+      "chord": "C:11",
+      "recall": 0.6522,
+      "precision": 0.9375,
+      "f1_score": 0.7692
+    },
+    {
+      "chord": "D:7b9",
+      "recall": 0.6522,
+      "precision": 0.8824,
+      "f1_score": 0.75
+    },
+    {
+      "chord": "B:alt7",
+      "recall": 0.6522,
+      "precision": 0.8824,
+      "f1_score": 0.75
+    },
+    {
+      "chord": "G:sus2",
+      "recall": 0.6522,
+      "precision": 0.8333,
+      "f1_score": 0.7317
+    },
+    {
+      "chord": "C#:sus4",
+      "recall": 0.6522,
+      "precision": 0.8824,
+      "f1_score": 0.75
+    },
+    {
+      "chord": "A#:maj7",
+      "recall": 0.6538,
+      "precision": 0.1545,
+      "f1_score": 0.25
+    },
+    {
+      "chord": "F:7#9",
+      "recall": 0.6538,
+      "precision": 0.8947,
+      "f1_score": 0.7556
+    },
+    {
+      "chord": "D#:7#5",
+      "recall": 0.6538,
+      "precision": 0.85,
+      "f1_score": 0.7391
+    },
+    {
+      "chord": "F:7b5",
+      "recall": 0.6538,
+      "precision": 0.8947,
+      "f1_score": 0.7556
+    },
+    {
+      "chord": "D:min6",
+      "recall": 0.6538,
+      "precision": 1.0,
+      "f1_score": 0.7907
+    },
+    {
+      "chord": "C#:maj9",
+      "recall": 0.6667,
+      "precision": 0.8,
+      "f1_score": 0.7273
+    },
+    {
+      "chord": "F#:maj9",
+      "recall": 0.6667,
+      "precision": 0.6154,
+      "f1_score": 0.64
+    },
+    {
+      "chord": "F:13",
+      "recall": 0.6667,
+      "precision": 0.875,
+      "f1_score": 0.7568
+    },
+    {
+      "chord": "F#:7b9",
+      "recall": 0.6667,
+      "precision": 0.8421,
+      "f1_score": 0.7442
+    },
+    {
+      "chord": "F#:alt7",
+      "recall": 0.6667,
+      "precision": 1.0,
+      "f1_score": 0.8
+    },
+    {
+      "chord": "F#:sus2",
+      "recall": 0.6667,
+      "precision": 0.8889,
+      "f1_score": 0.7619
+    },
+    {
+      "chord": "C:sus4",
+      "recall": 0.6667,
+      "precision": 0.8182,
+      "f1_score": 0.7347
+    },
+    {
+      "chord": "A#:sus4",
+      "recall": 0.6667,
+      "precision": 0.8421,
+      "f1_score": 0.7442
+    },
+    {
+      "chord": "C#:7sus4",
+      "recall": 0.6667,
+      "precision": 0.8889,
+      "f1_score": 0.7619
+    },
+    {
+      "chord": "C#:min6",
+      "recall": 0.6667,
+      "precision": 1.0,
+      "f1_score": 0.8
+    },
+    {
+      "chord": "D:sus4",
+      "recall": 0.6786,
+      "precision": 0.8261,
+      "f1_score": 0.7451
+    },
+    {
+      "chord": "A:dim",
+      "recall": 0.6786,
+      "precision": 0.7917,
+      "f1_score": 0.7308
+    },
+    {
+      "chord": "G:9",
+      "recall": 0.68,
+      "precision": 0.7727,
+      "f1_score": 0.7234
+    },
+    {
+      "chord": "A:maj9",
+      "recall": 0.68,
+      "precision": 0.8947,
+      "f1_score": 0.7727
+    },
+    {
+      "chord": "E:7#9",
       "recall": 0.68,
       "precision": 1.0,
       "f1_score": 0.8095
     },
     {
-      "chord": "A:7b9",
+      "chord": "D#:7b9",
+      "recall": 0.68,
+      "precision": 0.4359,
+      "f1_score": 0.5312
+    },
+    {
+      "chord": "D#:alt7",
       "recall": 0.68,
       "precision": 0.9444,
       "f1_score": 0.7907
     },
     {
-      "chord": "E:13",
-      "recall": 0.6809,
-      "precision": 0.9697,
-      "f1_score": 0.8
-    },
-    {
-      "chord": "B:min9",
-      "recall": 0.7,
-      "precision": 0.9722,
-      "f1_score": 0.814
-    },
-    {
-      "chord": "B:dim7",
-      "recall": 0.7,
-      "precision": 0.9211,
-      "f1_score": 0.7955
-    },
-    {
-      "chord": "C#:sus2",
-      "recall": 0.7021,
-      "precision": 0.9429,
-      "f1_score": 0.8049
-    },
-    {
-      "chord": "A:maj",
-      "recall": 0.7083,
-      "precision": 0.4474,
-      "f1_score": 0.5484
-    },
-    {
-      "chord": "C#:dim7",
-      "recall": 0.7115,
-      "precision": 0.74,
-      "f1_score": 0.7255
-    },
-    {
-      "chord": "A#:7b5",
-      "recall": 0.7143,
-      "precision": 0.8974,
-      "f1_score": 0.7955
-    },
-    {
-      "chord": "C:13",
-      "recall": 0.717,
-      "precision": 0.9268,
-      "f1_score": 0.8085
-    },
-    {
-      "chord": "A#:maj",
-      "recall": 0.7231,
-      "precision": 0.5595,
-      "f1_score": 0.6309
-    },
-    {
-      "chord": "B:maj9",
-      "recall": 0.7234,
+      "chord": "F:sus4",
+      "recall": 0.68,
       "precision": 0.9444,
-      "f1_score": 0.8193
-    },
-    {
-      "chord": "F#:7b9",
-      "recall": 0.7255,
-      "precision": 0.8409,
-      "f1_score": 0.7789
-    },
-    {
-      "chord": "D#:min",
-      "recall": 0.7321,
-      "precision": 0.9111,
-      "f1_score": 0.8119
-    },
-    {
-      "chord": "D#:13",
-      "recall": 0.74,
-      "precision": 0.9737,
-      "f1_score": 0.8409
-    },
-    {
-      "chord": "A:7b5",
-      "recall": 0.74,
-      "precision": 0.925,
-      "f1_score": 0.8222
-    },
-    {
-      "chord": "F#:13",
-      "recall": 0.7451,
-      "precision": 0.9048,
-      "f1_score": 0.8172
-    },
-    {
-      "chord": "D#:maj",
-      "recall": 0.7463,
-      "precision": 0.4854,
-      "f1_score": 0.5882
-    },
-    {
-      "chord": "A:aug",
-      "recall": 0.75,
-      "precision": 0.8864,
-      "f1_score": 0.8125
-    },
-    {
-      "chord": "C#:min7",
-      "recall": 0.7551,
-      "precision": 0.8409,
-      "f1_score": 0.7957
-    },
-    {
-      "chord": "F:7b9",
-      "recall": 0.7551,
-      "precision": 1.0,
-      "f1_score": 0.8605
-    },
-    {
-      "chord": "A#:min7",
-      "recall": 0.7556,
-      "precision": 0.8095,
-      "f1_score": 0.7816
-    },
-    {
-      "chord": "D#:7",
-      "recall": 0.7586,
-      "precision": 0.8627,
-      "f1_score": 0.8073
-    },
-    {
-      "chord": "G#:7",
-      "recall": 0.7593,
-      "precision": 0.9111,
-      "f1_score": 0.8283
-    },
-    {
-      "chord": "G:11",
-      "recall": 0.76,
-      "precision": 0.7755,
-      "f1_score": 0.7677
-    },
-    {
-      "chord": "G#:dim7",
-      "recall": 0.76,
-      "precision": 0.8444,
-      "f1_score": 0.8
-    },
-    {
-      "chord": "D:maj",
-      "recall": 0.7647,
-      "precision": 0.3939,
-      "f1_score": 0.52
-    },
-    {
-      "chord": "D:7",
-      "recall": 0.7647,
-      "precision": 0.78,
-      "f1_score": 0.7723
-    },
-    {
-      "chord": "E:7#9",
-      "recall": 0.7647,
-      "precision": 1.0,
-      "f1_score": 0.8667
-    },
-    {
-      "chord": "C:7b9",
-      "recall": 0.7647,
-      "precision": 1.0,
-      "f1_score": 0.8667
-    },
-    {
-      "chord": "F:maj",
-      "recall": 0.7692,
-      "precision": 0.5747,
-      "f1_score": 0.6579
-    },
-    {
-      "chord": "A#:13",
-      "recall": 0.7708,
-      "precision": 0.9024,
-      "f1_score": 0.8315
-    },
-    {
-      "chord": "B:13",
-      "recall": 0.7708,
-      "precision": 0.925,
-      "f1_score": 0.8409
-    },
-    {
-      "chord": "C#:7#5",
-      "recall": 0.7755,
-      "precision": 0.8837,
-      "f1_score": 0.8261
-    },
-    {
-      "chord": "B:min",
-      "recall": 0.7797,
-      "precision": 0.7541,
-      "f1_score": 0.7667
-    },
-    {
-      "chord": "C:aug",
-      "recall": 0.78,
-      "precision": 0.8125,
-      "f1_score": 0.7959
-    },
-    {
-      "chord": "B:min7",
-      "recall": 0.7818,
-      "precision": 0.7818,
-      "f1_score": 0.7818
-    },
-    {
-      "chord": "B:11",
-      "recall": 0.7826,
-      "precision": 0.7826,
-      "f1_score": 0.7826
-    },
-    {
-      "chord": "G:min",
-      "recall": 0.7833,
-      "precision": 0.8545,
-      "f1_score": 0.8174
-    },
-    {
-      "chord": "D:7b5",
-      "recall": 0.7843,
-      "precision": 0.8889,
-      "f1_score": 0.8333
-    },
-    {
-      "chord": "G:maj",
-      "recall": 0.7846,
-      "precision": 0.573,
-      "f1_score": 0.6623
-    },
-    {
-      "chord": "G:7b9",
-      "recall": 0.7872,
-      "precision": 1.0,
-      "f1_score": 0.881
-    },
-    {
-      "chord": "A#:min9",
-      "recall": 0.7885,
-      "precision": 0.9111,
-      "f1_score": 0.8454
-    },
-    {
-      "chord": "C:7",
-      "recall": 0.7895,
-      "precision": 0.75,
-      "f1_score": 0.7692
-    },
-    {
-      "chord": "A:7",
-      "recall": 0.7959,
-      "precision": 0.7222,
-      "f1_score": 0.7573
-    },
-    {
-      "chord": "A#:7#5",
-      "recall": 0.7959,
-      "precision": 0.9286,
-      "f1_score": 0.8571
-    },
-    {
-      "chord": "A#:alt7",
-      "recall": 0.7959,
-      "precision": 0.975,
-      "f1_score": 0.8764
-    },
-    {
-      "chord": "C:9",
-      "recall": 0.7963,
-      "precision": 0.8958,
-      "f1_score": 0.8431
-    },
-    {
-      "chord": "F:7",
-      "recall": 0.8,
-      "precision": 0.7547,
-      "f1_score": 0.7767
-    },
-    {
-      "chord": "F#:maj",
-      "recall": 0.803,
-      "precision": 0.6023,
-      "f1_score": 0.6883
-    },
-    {
-      "chord": "F:13",
-      "recall": 0.8039,
-      "precision": 0.9318,
-      "f1_score": 0.8632
-    },
-    {
-      "chord": "C#:7b9",
-      "recall": 0.8039,
-      "precision": 0.7193,
-      "f1_score": 0.7593
-    },
-    {
-      "chord": "F#:dim7",
-      "recall": 0.8039,
-      "precision": 0.9318,
-      "f1_score": 0.8632
-    },
-    {
-      "chord": "A#:7#9",
-      "recall": 0.8043,
-      "precision": 0.9487,
-      "f1_score": 0.8706
-    },
-    {
-      "chord": "D:11",
-      "recall": 0.8077,
-      "precision": 0.7925,
-      "f1_score": 0.8
-    },
-    {
-      "chord": "A#:11",
-      "recall": 0.8077,
-      "precision": 0.7925,
-      "f1_score": 0.8
-    },
-    {
-      "chord": "C:sus4",
-      "recall": 0.8077,
-      "precision": 0.8571,
-      "f1_score": 0.8317
-    },
-    {
-      "chord": "F#:7",
-      "recall": 0.8113,
-      "precision": 0.7963,
-      "f1_score": 0.8037
-    },
-    {
-      "chord": "C:maj",
-      "recall": 0.8116,
-      "precision": 0.3544,
-      "f1_score": 0.4934
-    },
-    {
-      "chord": "D#:7b9",
-      "recall": 0.8125,
-      "precision": 0.975,
-      "f1_score": 0.8864
-    },
-    {
-      "chord": "F:dim7",
-      "recall": 0.8125,
-      "precision": 0.9286,
-      "f1_score": 0.8667
-    },
-    {
-      "chord": "C#:maj",
-      "recall": 0.8143,
-      "precision": 0.6196,
-      "f1_score": 0.7037
-    },
-    {
-      "chord": "G#:min",
-      "recall": 0.8148,
-      "precision": 0.8148,
-      "f1_score": 0.8148
-    },
-    {
-      "chord": "A#:min",
-      "recall": 0.8148,
-      "precision": 0.7097,
-      "f1_score": 0.7586
-    },
-    {
-      "chord": "A#:9",
-      "recall": 0.8148,
-      "precision": 0.88,
-      "f1_score": 0.8462
-    },
-    {
-      "chord": "A:11",
-      "recall": 0.8148,
-      "precision": 0.6667,
-      "f1_score": 0.7333
-    },
-    {
-      "chord": "A#:aug",
-      "recall": 0.8163,
-      "precision": 0.6349,
-      "f1_score": 0.7143
-    },
-    {
-      "chord": "A:sus4",
-      "recall": 0.8182,
-      "precision": 0.1935,
-      "f1_score": 0.313
-    },
-    {
-      "chord": "D:min",
-      "recall": 0.8197,
-      "precision": 0.7463,
-      "f1_score": 0.7812
-    },
-    {
-      "chord": "F:min7",
-      "recall": 0.82,
-      "precision": 0.8542,
-      "f1_score": 0.8367
-    },
-    {
-      "chord": "D:alt7",
-      "recall": 0.82,
-      "precision": 1.0,
-      "f1_score": 0.9011
-    },
-    {
-      "chord": "D#:aug",
-      "recall": 0.82,
-      "precision": 0.9762,
-      "f1_score": 0.8913
-    },
-    {
-      "chord": "C#:6",
-      "recall": 0.82,
-      "precision": 0.8723,
-      "f1_score": 0.8454
-    },
-    {
-      "chord": "D:min6",
-      "recall": 0.82,
-      "precision": 0.9318,
-      "f1_score": 0.8723
-    },
-    {
-      "chord": "A:9",
-      "recall": 0.8235,
-      "precision": 0.8571,
-      "f1_score": 0.84
-    },
-    {
-      "chord": "C:11",
-      "recall": 0.8235,
-      "precision": 0.84,
-      "f1_score": 0.8317
-    },
-    {
-      "chord": "D:7#9",
-      "recall": 0.8235,
-      "precision": 1.0,
-      "f1_score": 0.9032
-    },
-    {
-      "chord": "F:7#5",
-      "recall": 0.8235,
-      "precision": 1.0,
-      "f1_score": 0.9032
-    },
-    {
-      "chord": "C:alt7",
-      "recall": 0.8235,
-      "precision": 1.0,
-      "f1_score": 0.9032
-    },
-    {
-      "chord": "A:alt7",
-      "recall": 0.8235,
-      "precision": 1.0,
-      "f1_score": 0.9032
-    },
-    {
-      "chord": "C:7sus4",
-      "recall": 0.8235,
-      "precision": 0.9333,
-      "f1_score": 0.875
-    },
-    {
-      "chord": "C:min6",
-      "recall": 0.8235,
-      "precision": 1.0,
-      "f1_score": 0.9032
-    },
-    {
-      "chord": "A#:7",
-      "recall": 0.8269,
-      "precision": 0.8431,
-      "f1_score": 0.835
-    },
-    {
-      "chord": "A:min9",
-      "recall": 0.8269,
-      "precision": 0.9556,
-      "f1_score": 0.8866
-    },
-    {
-      "chord": "F:11",
-      "recall": 0.8269,
-      "precision": 0.86,
-      "f1_score": 0.8431
-    },
-    {
-      "chord": "B:sus4",
-      "recall": 0.8269,
-      "precision": 0.8776,
-      "f1_score": 0.8515
-    },
-    {
-      "chord": "A:dim7",
-      "recall": 0.8269,
-      "precision": 0.8776,
-      "f1_score": 0.8515
-    },
-    {
-      "chord": "C:6",
-      "recall": 0.8269,
-      "precision": 0.9348,
-      "f1_score": 0.8776
-    },
-    {
-      "chord": "A:maj7",
-      "recall": 0.8276,
-      "precision": 0.9412,
-      "f1_score": 0.8807
-    },
-    {
-      "chord": "A#:maj9",
-      "recall": 0.8302,
-      "precision": 0.9167,
-      "f1_score": 0.8713
-    },
-    {
-      "chord": "G:13",
-      "recall": 0.8302,
-      "precision": 0.8302,
-      "f1_score": 0.8302
-    },
-    {
-      "chord": "B:7b9",
-      "recall": 0.8302,
-      "precision": 0.9565,
-      "f1_score": 0.8889
-    },
-    {
-      "chord": "F#:aug",
-      "recall": 0.8302,
-      "precision": 0.6769,
-      "f1_score": 0.7458
-    },
-    {
-      "chord": "G#:6",
-      "recall": 0.8302,
-      "precision": 0.9167,
-      "f1_score": 0.8713
-    },
-    {
-      "chord": "E:7",
-      "recall": 0.8333,
-      "precision": 0.8511,
-      "f1_score": 0.8421
-    },
-    {
-      "chord": "C#:maj7",
-      "recall": 0.8333,
-      "precision": 0.9756,
-      "f1_score": 0.8989
-    },
-    {
-      "chord": "C:7#9",
-      "recall": 0.8333,
-      "precision": 0.9574,
-      "f1_score": 0.8911
-    },
-    {
-      "chord": "C:7b5",
-      "recall": 0.8333,
-      "precision": 0.8696,
-      "f1_score": 0.8511
-    },
-    {
-      "chord": "A#:6",
-      "recall": 0.8364,
-      "precision": 0.9388,
-      "f1_score": 0.8846
-    },
-    {
-      "chord": "G#:11",
-      "recall": 0.8367,
-      "precision": 0.7885,
-      "f1_score": 0.8119
-    },
-    {
-      "chord": "E:7#5",
-      "recall": 0.8367,
-      "precision": 0.9318,
-      "f1_score": 0.8817
-    },
-    {
-      "chord": "B:maj",
-      "recall": 0.8387,
-      "precision": 0.6753,
-      "f1_score": 0.7482
-    },
-    {
-      "chord": "F#:7sus4",
-      "recall": 0.84,
-      "precision": 0.9767,
-      "f1_score": 0.9032
-    },
-    {
-      "chord": "C:dim7",
-      "recall": 0.84,
-      "precision": 0.9333,
-      "f1_score": 0.8842
-    },
-    {
-      "chord": "D:dim7",
-      "recall": 0.84,
-      "precision": 0.84,
-      "f1_score": 0.84
-    },
-    {
-      "chord": "D:9",
-      "recall": 0.8431,
-      "precision": 0.8269,
-      "f1_score": 0.835
-    },
-    {
-      "chord": "C#:11",
-      "recall": 0.8431,
-      "precision": 0.9149,
-      "f1_score": 0.8776
-    },
-    {
-      "chord": "D#:9",
-      "recall": 0.8444,
-      "precision": 0.9268,
-      "f1_score": 0.8837
-    },
-    {
-      "chord": "A:7#9",
-      "recall": 0.8462,
-      "precision": 0.88,
-      "f1_score": 0.8627
-    },
-    {
-      "chord": "D:7#5",
-      "recall": 0.8462,
-      "precision": 0.898,
-      "f1_score": 0.8713
-    },
-    {
-      "chord": "B:aug",
-      "recall": 0.8462,
-      "precision": 0.8,
-      "f1_score": 0.8224
-    },
-    {
-      "chord": "F:min",
-      "recall": 0.8475,
-      "precision": 0.7042,
-      "f1_score": 0.7692
-    },
-    {
-      "chord": "E:min",
-      "recall": 0.8491,
-      "precision": 0.8824,
-      "f1_score": 0.8654
-    },
-    {
-      "chord": "G:7#9",
-      "recall": 0.8491,
-      "precision": 0.9574,
-      "f1_score": 0.9
-    },
-    {
-      "chord": "G#:7#9",
-      "recall": 0.8491,
-      "precision": 0.9375,
-      "f1_score": 0.8911
-    },
-    {
-      "chord": "C#:7b5",
-      "recall": 0.8491,
-      "precision": 0.9375,
-      "f1_score": 0.8911
-    },
-    {
-      "chord": "G:7",
-      "recall": 0.8519,
-      "precision": 0.7931,
-      "f1_score": 0.8214
-    },
-    {
-      "chord": "F#:maj7",
-      "recall": 0.8519,
-      "precision": 0.8679,
-      "f1_score": 0.8598
-    },
-    {
-      "chord": "F#:11",
-      "recall": 0.8519,
-      "precision": 0.7541,
-      "f1_score": 0.8
-    },
-    {
-      "chord": "G:7#5",
-      "recall": 0.8542,
-      "precision": 0.9762,
-      "f1_score": 0.9111
-    },
-    {
-      "chord": "A:min7",
-      "recall": 0.8545,
-      "precision": 0.94,
-      "f1_score": 0.8952
-    },
-    {
-      "chord": "D:aug",
-      "recall": 0.8545,
-      "precision": 0.8246,
-      "f1_score": 0.8393
-    },
-    {
-      "chord": "C#:7",
-      "recall": 0.8571,
-      "precision": 0.7941,
-      "f1_score": 0.8244
-    },
-    {
-      "chord": "E:maj7",
-      "recall": 0.8571,
-      "precision": 0.84,
-      "f1_score": 0.8485
-    },
-    {
-      "chord": "C#:9",
-      "recall": 0.8571,
-      "precision": 0.9333,
-      "f1_score": 0.8936
-    },
-    {
-      "chord": "C:sus2",
-      "recall": 0.8571,
-      "precision": 0.9767,
-      "f1_score": 0.913
-    },
-    {
-      "chord": "C:min9",
-      "recall": 0.86,
-      "precision": 0.9348,
-      "f1_score": 0.8958
-    },
-    {
-      "chord": "A:7sus4",
-      "recall": 0.86,
-      "precision": 1.0,
-      "f1_score": 0.9247
-    },
-    {
-      "chord": "E:dim7",
-      "recall": 0.86,
-      "precision": 0.8431,
-      "f1_score": 0.8515
-    },
-    {
-      "chord": "B:dim",
-      "recall": 0.8621,
-      "precision": 0.8929,
-      "f1_score": 0.8772
-    },
-    {
-      "chord": "F:maj7",
-      "recall": 0.8627,
-      "precision": 0.9778,
-      "f1_score": 0.9167
-    },
-    {
-      "chord": "D#:7b5",
-      "recall": 0.8627,
-      "precision": 0.8627,
-      "f1_score": 0.8627
-    },
-    {
-      "chord": "B:7b5",
-      "recall": 0.8627,
-      "precision": 0.8462,
-      "f1_score": 0.8544
+      "f1_score": 0.7907
     },
     {
       "chord": "A#:7sus4",
-      "recall": 0.8627,
-      "precision": 0.9778,
-      "f1_score": 0.9167
+      "recall": 0.68,
+      "precision": 0.9444,
+      "f1_score": 0.7907
     },
     {
-      "chord": "G#:maj7",
-      "recall": 0.8654,
-      "precision": 0.9,
-      "f1_score": 0.8824
-    },
-    {
-      "chord": "B:sus2",
-      "recall": 0.8654,
-      "precision": 0.8036,
-      "f1_score": 0.8333
-    },
-    {
-      "chord": "F#:min",
-      "recall": 0.8679,
-      "precision": 0.7302,
-      "f1_score": 0.7931
-    },
-    {
-      "chord": "F:9",
-      "recall": 0.8679,
-      "precision": 0.902,
-      "f1_score": 0.8846
-    },
-    {
-      "chord": "B:6",
-      "recall": 0.8679,
-      "precision": 0.92,
-      "f1_score": 0.8932
-    },
-    {
-      "chord": "F#:9",
-      "recall": 0.8704,
-      "precision": 0.9216,
-      "f1_score": 0.8952
-    },
-    {
-      "chord": "D#:sus2",
-      "recall": 0.8704,
-      "precision": 0.9792,
-      "f1_score": 0.9216
-    },
-    {
-      "chord": "G#:min7",
-      "recall": 0.8723,
-      "precision": 0.9535,
-      "f1_score": 0.9111
-    },
-    {
-      "chord": "C:min",
-      "recall": 0.8727,
-      "precision": 0.8727,
-      "f1_score": 0.8727
-    },
-    {
-      "chord": "E:9",
-      "recall": 0.8727,
-      "precision": 0.96,
-      "f1_score": 0.9143
-    },
-    {
-      "chord": "G:9",
-      "recall": 0.8727,
-      "precision": 0.8571,
-      "f1_score": 0.8649
-    },
-    {
-      "chord": "C:maj9",
-      "recall": 0.8727,
-      "precision": 0.96,
-      "f1_score": 0.9143
-    },
-    {
-      "chord": "E:maj",
-      "recall": 0.8732,
-      "precision": 0.5082,
-      "f1_score": 0.6425
-    },
-    {
-      "chord": "A#:7b9",
-      "recall": 0.875,
-      "precision": 0.9545,
-      "f1_score": 0.913
-    },
-    {
-      "chord": "G#:alt7",
-      "recall": 0.875,
-      "precision": 0.9545,
-      "f1_score": 0.913
-    },
-    {
-      "chord": "F:6",
-      "recall": 0.875,
-      "precision": 0.9608,
-      "f1_score": 0.9159
-    },
-    {
-      "chord": "A:min",
-      "recall": 0.8772,
-      "precision": 0.8475,
-      "f1_score": 0.8621
-    },
-    {
-      "chord": "F#:min7",
-      "recall": 0.8772,
-      "precision": 0.9804,
-      "f1_score": 0.9259
-    },
-    {
-      "chord": "F#:7b5",
-      "recall": 0.8776,
-      "precision": 0.9348,
-      "f1_score": 0.9053
-    },
-    {
-      "chord": "B:7#5",
-      "recall": 0.88,
-      "precision": 0.9778,
-      "f1_score": 0.9263
-    },
-    {
-      "chord": "D#:dim7",
-      "recall": 0.88,
-      "precision": 0.9778,
-      "f1_score": 0.9263
-    },
-    {
-      "chord": "C:maj7",
-      "recall": 0.8824,
-      "precision": 0.9,
-      "f1_score": 0.8911
-    },
-    {
-      "chord": "C:min7",
-      "recall": 0.8824,
-      "precision": 0.9184,
-      "f1_score": 0.9
-    },
-    {
-      "chord": "C#:sus4",
-      "recall": 0.8824,
-      "precision": 0.8824,
-      "f1_score": 0.8824
-    },
-    {
-      "chord": "G:7sus4",
-      "recall": 0.8824,
-      "precision": 0.9783,
-      "f1_score": 0.9278
-    },
-    {
-      "chord": "A#:dim",
-      "recall": 0.8824,
-      "precision": 0.8824,
-      "f1_score": 0.8824
-    },
-    {
-      "chord": "D#:6",
-      "recall": 0.8824,
-      "precision": 0.9,
-      "f1_score": 0.8911
-    },
-    {
-      "chord": "F#:min6",
-      "recall": 0.8824,
-      "precision": 1.0,
-      "f1_score": 0.9375
-    },
-    {
-      "chord": "G:min7",
-      "recall": 0.8846,
-      "precision": 0.902,
-      "f1_score": 0.8932
-    },
-    {
-      "chord": "G#:7b9",
-      "recall": 0.8846,
-      "precision": 0.9583,
-      "f1_score": 0.92
-    },
-    {
-      "chord": "A:sus2",
-      "recall": 0.8846,
-      "precision": 0.9388,
-      "f1_score": 0.9109
-    },
-    {
-      "chord": "C:dim",
-      "recall": 0.8846,
-      "precision": 0.8846,
-      "f1_score": 0.8846
-    },
-    {
-      "chord": "F#:sus2",
-      "recall": 0.8868,
-      "precision": 0.9592,
-      "f1_score": 0.9216
-    },
-    {
-      "chord": "G:sus4",
-      "recall": 0.8868,
-      "precision": 0.746,
-      "f1_score": 0.8103
-    },
-    {
-      "chord": "D#:min6",
-      "recall": 0.8868,
-      "precision": 1.0,
-      "f1_score": 0.94
-    },
-    {
-      "chord": "G#:7b5",
-      "recall": 0.8889,
-      "precision": 0.9231,
-      "f1_score": 0.9057
-    },
-    {
-      "chord": "G:alt7",
-      "recall": 0.8889,
-      "precision": 0.96,
-      "f1_score": 0.9231
-    },
-    {
-      "chord": "F:sus2",
-      "recall": 0.8889,
-      "precision": 0.9057,
-      "f1_score": 0.8972
-    },
-    {
-      "chord": "F:7sus4",
-      "recall": 0.8889,
-      "precision": 0.9796,
-      "f1_score": 0.932
-    },
-    {
-      "chord": "G:6",
-      "recall": 0.8889,
-      "precision": 0.8163,
-      "f1_score": 0.8511
-    },
-    {
-      "chord": "G#:maj",
-      "recall": 0.8906,
-      "precision": 0.4831,
-      "f1_score": 0.6264
-    },
-    {
-      "chord": "A:7#5",
-      "recall": 0.8909,
-      "precision": 0.9423,
-      "f1_score": 0.9159
-    },
-    {
-      "chord": "G:maj9",
-      "recall": 0.8913,
-      "precision": 0.9535,
-      "f1_score": 0.9213
-    },
-    {
-      "chord": "C#:7sus4",
-      "recall": 0.8929,
-      "precision": 0.8929,
-      "f1_score": 0.8929
-    },
-    {
-      "chord": "D:7b9",
-      "recall": 0.8936,
-      "precision": 1.0,
-      "f1_score": 0.9438
-    },
-    {
-      "chord": "D#:11",
-      "recall": 0.8958,
-      "precision": 0.7679,
-      "f1_score": 0.8269
-    },
-    {
-      "chord": "A#:sus2",
-      "recall": 0.8958,
-      "precision": 0.9773,
-      "f1_score": 0.9348
-    },
-    {
-      "chord": "G:dim",
-      "recall": 0.8958,
-      "precision": 0.9556,
-      "f1_score": 0.9247
-    },
-    {
-      "chord": "E:aug",
-      "recall": 0.8958,
-      "precision": 0.8776,
-      "f1_score": 0.8866
-    },
-    {
-      "chord": "A#:min6",
-      "recall": 0.8958,
-      "precision": 1.0,
-      "f1_score": 0.9451
-    },
-    {
-      "chord": "D#:alt7",
-      "recall": 0.898,
-      "precision": 0.9778,
-      "f1_score": 0.9362
-    },
-    {
-      "chord": "G:sus2",
-      "recall": 0.898,
-      "precision": 0.5238,
-      "f1_score": 0.6617
-    },
-    {
-      "chord": "G#:sus2",
-      "recall": 0.898,
-      "precision": 1.0,
-      "f1_score": 0.9462
-    },
-    {
-      "chord": "F:min6",
-      "recall": 0.898,
-      "precision": 0.9167,
-      "f1_score": 0.9072
-    },
-    {
-      "chord": "C#:min",
-      "recall": 0.8983,
-      "precision": 0.7571,
-      "f1_score": 0.8217
-    },
-    {
-      "chord": "A#:maj7",
-      "recall": 0.9,
-      "precision": 0.7377,
-      "f1_score": 0.8108
-    },
-    {
-      "chord": "E:sus2",
-      "recall": 0.9,
-      "precision": 0.9184,
-      "f1_score": 0.9091
-    },
-    {
-      "chord": "E:min6",
-      "recall": 0.9,
-      "precision": 0.7627,
-      "f1_score": 0.8257
-    },
-    {
-      "chord": "D#:min7",
-      "recall": 0.902,
-      "precision": 0.9583,
-      "f1_score": 0.9293
-    },
-    {
-      "chord": "G#:9",
-      "recall": 0.902,
-      "precision": 0.8679,
-      "f1_score": 0.8846
-    },
-    {
-      "chord": "A:13",
-      "recall": 0.902,
-      "precision": 0.9787,
-      "f1_score": 0.9388
-    },
-    {
-      "chord": "B:7#9",
-      "recall": 0.902,
-      "precision": 0.6133,
-      "f1_score": 0.7302
-    },
-    {
-      "chord": "C#:alt7",
-      "recall": 0.902,
-      "precision": 1.0,
-      "f1_score": 0.9485
-    },
-    {
-      "chord": "G#:dim",
-      "recall": 0.902,
-      "precision": 0.902,
-      "f1_score": 0.902
-    },
-    {
-      "chord": "G#:min6",
-      "recall": 0.902,
-      "precision": 1.0,
-      "f1_score": 0.9485
-    },
-    {
-      "chord": "A:6",
-      "recall": 0.9038,
-      "precision": 0.9592,
-      "f1_score": 0.9307
-    },
-    {
-      "chord": "B:alt7",
-      "recall": 0.9057,
-      "precision": 0.9796,
-      "f1_score": 0.9412
-    },
-    {
-      "chord": "G:min6",
-      "recall": 0.9057,
-      "precision": 0.9796,
-      "f1_score": 0.9412
-    },
-    {
-      "chord": "D:min7",
-      "recall": 0.9074,
-      "precision": 0.8909,
-      "f1_score": 0.8991
-    },
-    {
-      "chord": "C#:13",
-      "recall": 0.9107,
-      "precision": 0.8226,
-      "f1_score": 0.8644
-    },
-    {
-      "chord": "F#:sus4",
-      "recall": 0.9107,
-      "precision": 0.7612,
-      "f1_score": 0.8293
-    },
-    {
-      "chord": "F:7b5",
-      "recall": 0.9123,
-      "precision": 0.7222,
-      "f1_score": 0.8062
-    },
-    {
-      "chord": "E:dim",
-      "recall": 0.9123,
-      "precision": 0.8814,
-      "f1_score": 0.8966
-    },
-    {
-      "chord": "E:6",
-      "recall": 0.913,
-      "precision": 0.9333,
-      "f1_score": 0.9231
-    },
-    {
-      "chord": "D:7sus4",
-      "recall": 0.9167,
-      "precision": 0.9167,
-      "f1_score": 0.9167
-    },
-    {
-      "chord": "G:maj7",
-      "recall": 0.9184,
-      "precision": 0.8491,
-      "f1_score": 0.8824
-    },
-    {
-      "chord": "G#:maj9",
-      "recall": 0.9184,
-      "precision": 0.9184,
-      "f1_score": 0.9184
-    },
-    {
-      "chord": "C#:7#9",
-      "recall": 0.9184,
+      "chord": "D:7#9",
+      "recall": 0.6818,
       "precision": 0.9375,
-      "f1_score": 0.9278
-    },
-    {
-      "chord": "A#:sus4",
-      "recall": 0.9184,
-      "precision": 0.5556,
-      "f1_score": 0.6923
-    },
-    {
-      "chord": "G#:aug",
-      "recall": 0.9184,
-      "precision": 0.625,
-      "f1_score": 0.7438
-    },
-    {
-      "chord": "D#:maj7",
-      "recall": 0.92,
-      "precision": 0.8846,
-      "f1_score": 0.902
-    },
-    {
-      "chord": "E:min7",
-      "recall": 0.92,
-      "precision": 0.7077,
-      "f1_score": 0.8
-    },
-    {
-      "chord": "G#:min9",
-      "recall": 0.92,
-      "precision": 0.9583,
-      "f1_score": 0.9388
-    },
-    {
-      "chord": "F#:maj9",
-      "recall": 0.92,
-      "precision": 0.9583,
-      "f1_score": 0.9388
-    },
-    {
-      "chord": "F#:alt7",
-      "recall": 0.92,
-      "precision": 0.9787,
-      "f1_score": 0.9485
-    },
-    {
-      "chord": "D:dim",
-      "recall": 0.92,
-      "precision": 0.8846,
-      "f1_score": 0.902
-    },
-    {
-      "chord": "A:dim",
-      "recall": 0.92,
-      "precision": 0.902,
-      "f1_score": 0.9109
-    },
-    {
-      "chord": "D:6",
-      "recall": 0.92,
-      "precision": 0.8364,
-      "f1_score": 0.8762
-    },
-    {
-      "chord": "F:min9",
-      "recall": 0.9216,
-      "precision": 1.0,
-      "f1_score": 0.9592
-    },
-    {
-      "chord": "D:maj9",
-      "recall": 0.9216,
-      "precision": 0.94,
-      "f1_score": 0.9307
-    },
-    {
-      "chord": "A:maj9",
-      "recall": 0.9216,
-      "precision": 0.8704,
-      "f1_score": 0.8952
-    },
-    {
-      "chord": "F:alt7",
-      "recall": 0.9216,
-      "precision": 1.0,
-      "f1_score": 0.9592
-    },
-    {
-      "chord": "G#:sus4",
-      "recall": 0.9216,
-      "precision": 0.8103,
-      "f1_score": 0.8624
-    },
-    {
-      "chord": "C#:aug",
-      "recall": 0.9216,
-      "precision": 0.8704,
-      "f1_score": 0.8952
-    },
-    {
-      "chord": "B:min6",
-      "recall": 0.9216,
-      "precision": 1.0,
-      "f1_score": 0.9592
-    },
-    {
-      "chord": "F:maj9",
-      "recall": 0.9231,
-      "precision": 0.8571,
-      "f1_score": 0.8889
-    },
-    {
-      "chord": "D#:7sus4",
-      "recall": 0.9231,
-      "precision": 0.96,
-      "f1_score": 0.9412
-    },
-    {
-      "chord": "F:aug",
-      "recall": 0.9231,
-      "precision": 0.7385,
-      "f1_score": 0.8205
-    },
-    {
-      "chord": "C#:min6",
-      "recall": 0.9231,
-      "precision": 0.9057,
-      "f1_score": 0.9143
-    },
-    {
-      "chord": "C#:min9",
-      "recall": 0.9245,
-      "precision": 0.9608,
-      "f1_score": 0.9423
-    },
-    {
-      "chord": "C:7#5",
-      "recall": 0.9245,
-      "precision": 0.9608,
-      "f1_score": 0.9423
-    },
-    {
-      "chord": "D:maj7",
-      "recall": 0.9259,
-      "precision": 0.9804,
-      "f1_score": 0.9524
-    },
-    {
-      "chord": "D#:7#5",
-      "recall": 0.9375,
-      "precision": 0.9783,
-      "f1_score": 0.9574
-    },
-    {
-      "chord": "C#:maj9",
-      "recall": 0.9388,
-      "precision": 0.7541,
-      "f1_score": 0.8364
-    },
-    {
-      "chord": "E:11",
-      "recall": 0.9388,
-      "precision": 0.807,
-      "f1_score": 0.8679
-    },
-    {
-      "chord": "C#:dim",
-      "recall": 0.94,
-      "precision": 0.8868,
-      "f1_score": 0.9126
-    },
-    {
-      "chord": "D#:dim",
-      "recall": 0.94,
-      "precision": 0.9592,
-      "f1_score": 0.9495
-    },
-    {
-      "chord": "A:min6",
-      "recall": 0.94,
-      "precision": 1.0,
-      "f1_score": 0.9691
-    },
-    {
-      "chord": "D#:min9",
-      "recall": 0.9412,
-      "precision": 1.0,
-      "f1_score": 0.9697
-    },
-    {
-      "chord": "E:min9",
-      "recall": 0.9412,
-      "precision": 0.96,
-      "f1_score": 0.9505
-    },
-    {
-      "chord": "D#:maj9",
-      "recall": 0.9412,
-      "precision": 0.9796,
-      "f1_score": 0.96
-    },
-    {
-      "chord": "F:dim",
-      "recall": 0.9412,
-      "precision": 0.9057,
-      "f1_score": 0.9231
-    },
-    {
-      "chord": "F#:7#5",
-      "recall": 0.9423,
-      "precision": 0.98,
-      "f1_score": 0.9608
+      "f1_score": 0.7895
     },
     {
       "chord": "G#:7#5",
-      "recall": 0.9423,
-      "precision": 0.9245,
-      "f1_score": 0.9333
+      "recall": 0.6818,
+      "precision": 0.7143,
+      "f1_score": 0.6977
     },
     {
-      "chord": "G#:7sus4",
-      "recall": 0.9423,
+      "chord": "C#:alt7",
+      "recall": 0.6818,
       "precision": 1.0,
-      "f1_score": 0.9703
+      "f1_score": 0.8108
     },
     {
-      "chord": "E:7b5",
-      "recall": 0.9434,
-      "precision": 0.8065,
-      "f1_score": 0.8696
+      "chord": "A:7sus4",
+      "recall": 0.6818,
+      "precision": 1.0,
+      "f1_score": 0.8108
     },
     {
-      "chord": "G:7b5",
-      "recall": 0.9434,
-      "precision": 0.6849,
-      "f1_score": 0.7937
+      "chord": "B:min6",
+      "recall": 0.6818,
+      "precision": 1.0,
+      "f1_score": 0.8108
     },
     {
-      "chord": "B:7sus4",
-      "recall": 0.9434,
-      "precision": 0.9259,
-      "f1_score": 0.9346
+      "chord": "G#:sus4",
+      "recall": 0.6923,
+      "precision": 0.7826,
+      "f1_score": 0.7347
     },
     {
-      "chord": "D:sus2",
-      "recall": 0.9444,
-      "precision": 0.8947,
-      "f1_score": 0.9189
+      "chord": "E:11",
+      "recall": 0.6957,
+      "precision": 0.6957,
+      "f1_score": 0.6957
     },
     {
-      "chord": "F#:7#9",
-      "recall": 0.9574,
-      "precision": 0.9375,
-      "f1_score": 0.9474
+      "chord": "A:7#5",
+      "recall": 0.6957,
+      "precision": 0.8421,
+      "f1_score": 0.7619
     },
     {
-      "chord": "D#:sus4",
-      "recall": 0.9583,
-      "precision": 0.7667,
-      "f1_score": 0.8519
+      "chord": "G:sus4",
+      "recall": 0.6957,
+      "precision": 0.8,
+      "f1_score": 0.7442
     },
     {
-      "chord": "D:min9",
-      "recall": 0.9592,
-      "precision": 0.9592,
-      "f1_score": 0.9592
+      "chord": "D#:maj9",
+      "recall": 0.7,
+      "precision": 0.7778,
+      "f1_score": 0.7368
     },
     {
-      "chord": "E:sus4",
-      "recall": 0.96,
-      "precision": 0.8889,
-      "f1_score": 0.9231
+      "chord": "B:min7",
+      "recall": 0.7083,
+      "precision": 0.6538,
+      "f1_score": 0.68
     },
     {
-      "chord": "F:sus4",
-      "recall": 0.96,
-      "precision": 0.8727,
-      "f1_score": 0.9143
+      "chord": "D#:9",
+      "recall": 0.7083,
+      "precision": 0.8095,
+      "f1_score": 0.7556
+    },
+    {
+      "chord": "D:11",
+      "recall": 0.7083,
+      "precision": 0.6538,
+      "f1_score": 0.68
+    },
+    {
+      "chord": "D:7#5",
+      "recall": 0.7083,
+      "precision": 1.0,
+      "f1_score": 0.8293
+    },
+    {
+      "chord": "A#:7#5",
+      "recall": 0.7083,
+      "precision": 0.9444,
+      "f1_score": 0.8095
     },
     {
       "chord": "E:alt7",
-      "recall": 0.9608,
+      "recall": 0.7083,
       "precision": 1.0,
-      "f1_score": 0.98
+      "f1_score": 0.8293
     },
     {
-      "chord": "D#:7#9",
-      "recall": 0.9615,
-      "precision": 1.0,
-      "f1_score": 0.9804
+      "chord": "A#:sus2",
+      "recall": 0.7083,
+      "precision": 0.85,
+      "f1_score": 0.7727
     },
     {
-      "chord": "E:7b9",
-      "recall": 0.9615,
-      "precision": 0.9434,
-      "f1_score": 0.9524
+      "chord": "G:7sus4",
+      "recall": 0.7083,
+      "precision": 0.8947,
+      "f1_score": 0.7907
     },
     {
-      "chord": "G:min9",
-      "recall": 0.9623,
-      "precision": 0.9808,
-      "f1_score": 0.9714
+      "chord": "A:13",
+      "recall": 0.72,
+      "precision": 0.9,
+      "f1_score": 0.8
     },
     {
-      "chord": "D:sus4",
-      "recall": 0.9623,
-      "precision": 0.7083,
-      "f1_score": 0.816
+      "chord": "D:alt7",
+      "recall": 0.72,
+      "precision": 0.9,
+      "f1_score": 0.8
     },
     {
-      "chord": "F:7#9",
-      "recall": 0.963,
-      "precision": 0.9811,
-      "f1_score": 0.972
-    },
-    {
-      "chord": "F#:min9",
-      "recall": 0.9643,
-      "precision": 1.0,
-      "f1_score": 0.9818
-    },
-    {
-      "chord": "G:aug",
-      "recall": 0.9787,
-      "precision": 0.7931,
-      "f1_score": 0.8762
-    },
-    {
-      "chord": "B:maj7",
-      "recall": 0.9792,
-      "precision": 0.8246,
-      "f1_score": 0.8952
-    },
-    {
-      "chord": "F#:6",
-      "recall": 0.9792,
-      "precision": 0.8246,
-      "f1_score": 0.8952
+      "chord": "B:sus2",
+      "recall": 0.72,
+      "precision": 0.7826,
+      "f1_score": 0.75
     },
     {
       "chord": "E:7sus4",
-      "recall": 0.9811,
-      "precision": 0.8814,
-      "f1_score": 0.9286
+      "recall": 0.72,
+      "precision": 0.9474,
+      "f1_score": 0.8182
     },
     {
-      "chord": "F#:dim",
-      "recall": 0.9811,
-      "precision": 0.9811,
-      "f1_score": 0.9811
+      "chord": "B:aug",
+      "recall": 0.72,
+      "precision": 0.75,
+      "f1_score": 0.7347
+    },
+    {
+      "chord": "G:maj9",
+      "recall": 0.7273,
+      "precision": 0.9412,
+      "f1_score": 0.8205
+    },
+    {
+      "chord": "F:min9",
+      "recall": 0.7308,
+      "precision": 0.95,
+      "f1_score": 0.8261
+    },
+    {
+      "chord": "F#:7#9",
+      "recall": 0.7308,
+      "precision": 1.0,
+      "f1_score": 0.8444
+    },
+    {
+      "chord": "E:7#5",
+      "recall": 0.7308,
+      "precision": 1.0,
+      "f1_score": 0.8444
+    },
+    {
+      "chord": "A:7b5",
+      "recall": 0.7308,
+      "precision": 0.9048,
+      "f1_score": 0.8085
+    },
+    {
+      "chord": "F:maj9",
+      "recall": 0.7391,
+      "precision": 0.9444,
+      "f1_score": 0.8293
+    },
+    {
+      "chord": "E:7b9",
+      "recall": 0.7391,
+      "precision": 0.9444,
+      "f1_score": 0.8293
+    },
+    {
+      "chord": "C#:7#5",
+      "recall": 0.7391,
+      "precision": 0.9444,
+      "f1_score": 0.8293
+    },
+    {
+      "chord": "F#:7sus4",
+      "recall": 0.7391,
+      "precision": 0.8947,
+      "f1_score": 0.8095
+    },
+    {
+      "chord": "A:sus2",
+      "recall": 0.7407,
+      "precision": 0.7692,
+      "f1_score": 0.7547
+    },
+    {
+      "chord": "E:min9",
+      "recall": 0.75,
+      "precision": 0.9474,
+      "f1_score": 0.8372
+    },
+    {
+      "chord": "G:7#9",
+      "recall": 0.75,
+      "precision": 0.8182,
+      "f1_score": 0.7826
+    },
+    {
+      "chord": "G:7#5",
+      "recall": 0.75,
+      "precision": 0.9474,
+      "f1_score": 0.8372
+    },
+    {
+      "chord": "D#:7b5",
+      "recall": 0.75,
+      "precision": 0.8571,
+      "f1_score": 0.8
+    },
+    {
+      "chord": "F:7sus4",
+      "recall": 0.75,
+      "precision": 0.9474,
+      "f1_score": 0.8372
+    },
+    {
+      "chord": "B:7#5",
+      "recall": 0.76,
+      "precision": 0.9048,
+      "f1_score": 0.8261
+    },
+    {
+      "chord": "E:7b5",
+      "recall": 0.76,
+      "precision": 0.6786,
+      "f1_score": 0.717
+    },
+    {
+      "chord": "B:sus4",
+      "recall": 0.76,
+      "precision": 0.7308,
+      "f1_score": 0.7451
     },
     {
       "chord": "E:maj9",
-      "recall": 1.0,
-      "precision": 0.963,
-      "f1_score": 0.9811
+      "recall": 0.7692,
+      "precision": 0.8333,
+      "f1_score": 0.8
+    },
+    {
+      "chord": "F:7#5",
+      "recall": 0.7692,
+      "precision": 0.9091,
+      "f1_score": 0.8333
+    },
+    {
+      "chord": "A#:aug",
+      "recall": 0.88,
+      "precision": 0.1447,
+      "f1_score": 0.2486
     }
   ]
 }

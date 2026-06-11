@@ -68,9 +68,10 @@ export function parseSectionRecord(section: Record<string, unknown> | undefined)
   isRepeated: boolean | null
   repeatCount: number | null
   repeatIndex: number | null
+  labelConfidence: number | null
 } {
   if (!section) {
-    return { label: 'Section', startTimeSeconds: null, repeatGroupId: null, isRepeated: null, repeatCount: null, repeatIndex: null }
+    return { label: 'Section', startTimeSeconds: null, repeatGroupId: null, isRepeated: null, repeatCount: null, repeatIndex: null, labelConfidence: null }
   }
   const labelRaw = section.label
   const label = typeof labelRaw === 'string' && labelRaw.trim() ? labelRaw.trim() : 'Section'
@@ -82,7 +83,9 @@ export function parseSectionRecord(section: Record<string, unknown> | undefined)
   const isRepeated = typeof section.is_repeated === 'boolean' ? section.is_repeated : null
   const repeatCount = typeof section.repeat_count === 'number' ? section.repeat_count : null
   const repeatIndex = typeof section.repeat_index === 'number' ? section.repeat_index : null
-  return { label, startTimeSeconds, repeatGroupId, isRepeated, repeatCount, repeatIndex }
+  const lc = section.label_confidence
+  const labelConfidence = typeof lc === 'number' && lc >= 0 && lc <= 1 ? lc : null
+  return { label, startTimeSeconds, repeatGroupId, isRepeated, repeatCount, repeatIndex, labelConfidence }
 }
 
 /**

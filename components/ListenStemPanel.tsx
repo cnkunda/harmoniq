@@ -601,6 +601,11 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       ? parseSectionRecord(sections[lessonSectionIndex] as Record<string, unknown>).label
       : null
 
+  const currentSectionConfidence =
+    sections[lessonSectionIndex] != null
+      ? parseSectionRecord(sections[lessonSectionIndex] as Record<string, unknown>).labelConfidence
+      : null
+
   const sectionLine =
     sections.length > 0
       ? `Section ${sectionDisplay} of ${sections.length}${currentSectionLabel ? `: ${currentSectionLabel}` : ''}`
@@ -669,6 +674,9 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                 {songTitle}
               </Text>
               <Text className="mt-1 font-sans text-xs text-muted-brown">{sectionLine}</Text>
+              {currentSectionConfidence != null && currentSectionConfidence < 0.6 ? (
+                <Text className="font-sans text-[10px] text-danger/70">Label confidence: {Math.round(currentSectionConfidence * 100)}% — may not match musical content</Text>
+              ) : null}
 
               {playLessonCard ? (
                 <PlayCaptureLessonCardBanner
@@ -874,13 +882,14 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                   <View className="flex-row flex-wrap gap-1.5 pb-1">
                     {sections.map((raw, i) => {
                       const sec = raw as Record<string, unknown>
-                      const { label, isRepeated, repeatCount, repeatIndex } = parseSectionRecord(sec)
+                      const { label, isRepeated, repeatCount, repeatIndex, labelConfidence } = parseSectionRecord(sec)
                       // Backend pre-computes the suffix, but fallback if raw label lacks it
                       const displayLabel =
                         isRepeated && repeatCount != null && repeatIndex != null && !label.includes('(')
                           ? `${label} (${repeatIndex} of ${repeatCount})`
                           : label
                       const active = i === lessonSectionIndex
+                      const isUncertain = labelConfidence != null && labelConfidence < 0.6
                       return (
                          <AnimatedPressable
                            key={`${i}-${label}`}
@@ -888,11 +897,13 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                            disabled={!ready || loading}
                            className={`shrink-0 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
                              !ready || loading ? 'opacity-40' : ''
-                           }`}
+                           } ${isUncertain ? 'border-danger/30' : ''}`}
                            accessibilityRole="button"
                            accessibilityState={{ selected: active }}
                          >
-                           <Text className={active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>{displayLabel}</Text>
+                           <Text className={active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>
+                             {displayLabel}{isUncertain ? ' ?' : ''}
+                           </Text>
                          </AnimatedPressable>
                       )
                     })}

@@ -37,6 +37,8 @@ interface ChordsAndLyricsProps {
   barsPerLine?: number
   /** Optional section label to display above the chord sheet */
   label?: string
+  /** Commit 119: label confidence (0-1). When <0.6, shown as uncertain. */
+  labelConfidence?: number | null
   /** Layout mode: 'grid' keeps barsPerLine grouping, 'flow' uses flex-wrap */
   layoutMode?: 'grid' | 'flow'
 }
@@ -72,6 +74,7 @@ export function ChordsAndLyrics({
   onChordTap,
   barsPerLine = 4,
   label,
+  labelConfidence,
   layoutMode = 'flow',
 }: ChordsAndLyricsProps) {
   const [isPlaying, setIsPlaying] = useState(false)
@@ -241,10 +244,13 @@ export function ChordsAndLyrics({
 
        {/* Section label (if provided) */}
        {label && (
-         <View className="mb-2">
+         <View className="mb-2 flex-row items-center gap-1.5">
            <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/60">
              [{label}]
            </Text>
+           {labelConfidence != null && labelConfidence < 0.6 && (
+             <Text className="font-mono text-[9px] text-danger/60">(low confidence)</Text>
+           )}
          </View>
        )}
 

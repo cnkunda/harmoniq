@@ -118,6 +118,8 @@ interface LessonSectionWithMusic extends Record<string, unknown> {
   solo_notes?: SoloNotes;
   confidence?: number | null;
   transcription_metadata?: TranscriptionValidationMetadata | null;
+  /** Commit 119: label confidence (0-1) */
+  label_confidence?: number | null;
 }
 
 
@@ -740,6 +742,7 @@ function StudyScreenInner() {
                   }}
                   barsPerLine={4}
                   label={(section?.label ?? '') as string}
+                  labelConfidence={section?.label_confidence ?? null}
                 />
             </View>
 

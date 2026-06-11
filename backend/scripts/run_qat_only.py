@@ -50,6 +50,7 @@ def main():
         (Path("data/vst_synthetic"), "VST-Synthetic", 0.3),
         (Path("data/youtube_crawl"), "YouTube-Crawl", 1.0),
         (Path("data/pseudo_label"), "Pseudo-Label", 0.3),
+        (Path("data/jaah"), "JAAH", 1.0),
     ]
     print(f"Loading {len(source_configs)} data source(s)...")
     from build_chord_tflite import load_datasets

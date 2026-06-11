@@ -93,78 +93,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-### Commit 106: Quantization-Aware Training
 
-Archived to `priorities-archive.md` with all acceptance criteria complete.
-
----
-
-### Commit 119: Semantic Section Label Classification
-
-**Goal:** Replace cyclic label assignment with audio-feature-based classification that distinguishes
-Intro, Verse, Chorus, Bridge, Solo, and Outro by their actual musical characteristics.
-
-**Current State:** Labels are assigned from a fixed list cyclically (`labels[i % 6]`), ignoring
-actual musical content. A bridge and a verse get different labels only because of position,
-not because the algorithm detected a bridge.
-
-**Scope:**
-
-- Extract per-section audio features for classification:
-  - **Energy**: RMS mean and variance (chorus = high, intro/outro = low)
-  - **Spectral centroid**: brightness indicator (solo = high, verse = moderate)
-  - **Chord change density**: chords per second (bridge = high, intro = low)
-  - **Harmonic stability**: chroma variance over section (intro = unstable, verse = stable)
-  - **Position in song**: first/last section, relative duration
-- Build rule-based classifier (no ML training needed):
-
-  ```python
-  def classify_section(features, position, duration):
-      if position == 'first' and duration < 15 and energy < threshold:
-          return 'Intro'
-      if position == 'last' and energy_declining:
-          return 'Outro'
-      if energy > chorus_threshold and is_repeated:
-          return 'Chorus'
-      if harmonic_shift and not is_repeated:
-          return 'Bridge'
-      if spectral_centroid > solo_threshold and chord_density < verse_threshold:
-          return 'Solo'
-      return 'Verse'  # default
-  ```
-
-- Add `label_confidence: float` (0-1) to `LessonSectionStub` schema
-- If confidence < 0.6, fall back to generic "Section N" label
-- Add pre-chorus detection:
-  - Short section (< 10s) between Verse and Chorus
-  - Rising energy profile, increasing chord density
-  - Label as "Pre-Chorus" when detected
-- Add instrumental section detection:
-  - Low vocal energy (from Demucs vocals stem)
-  - High instrumental energy
-  - Label as "Instrumental" or "Solo" accordingly
-- Preserve existing labels as fallback when classification confidence is low
-
-**Acceptance Criteria:**
-
-- [ ] Intro detected as low-energy opening section (< 15s typical)
-- [ ] Chorus detected as high-energy repeated section
-- [ ] Bridge detected as harmonically distinct non-repeated section
-- [ ] Pre-chorus detected as short rising-energy section before chorus
-- [ ] Outro detected as declining-energy final section
-- [ ] Solo/instrumental sections distinguished from vocal sections
-- [ ] `label_confidence` reported per section
-- [ ] Fallback to "Section N" when confidence < 0.6
-- [ ] Integration test: real song with known structure correctly labeled
-
-**Implementation:**
-
-- Add `classify_section()` function in `backend/app/pipeline_proof.py`
-- Update `librosa_summarize()` to call classifier after boundary detection
-- Update `LessonSectionStub` schema with `label_confidence` field
-- Update frontend to display confidence indicator for uncertain labels
-
----
 
 ### Commit 120: Authentic Chord Diagrams via chords-db Integration
 
@@ -1369,7 +1298,212 @@ The current implementation assumes every song is recorded to a static click trac
 
 ---
 
-### Supporting Improvements (absorbed into existing commits)
+### Commit 148: Chord Model Overhaul — Dataset Rebalancing, Training Fixes & Architecture Upgrade
+
+**Goal:** Improve chord model real-world validation accuracy from ~11.9% to 60%+ (and GuitarSet test from ~19.8% to 55%+) through systematic dataset rebalancing, synthetic realism improvement, training procedure fixes, targeted model architecture upgrades, and Keras 3 / tfmot compatibility fixes.
+
+**Current State:** Full 50-epoch training reveals a 71.6% domain gap — real-world validation accuracy is 11.9% while synthetic validation accuracy is 83.6%. The model has learned to be a synthetic CQT template matcher that defaults to "N" (no-chord) whenever real audio deviates from clean templates. Top-10 confusion pairs are all N → major chord, confirming N is used as an uncertainty escape hatch. Triad F1 is 0.368 — the model cannot reliably identify even basic major/minor chords on real audio. Altered, extended, and suspended_other categories score 0.0% on GuitarSet test. QAT phase crashes with `TypeError: 'str' object is not callable` due to Keras 3 / tfmot incompatibility, preventing INT8 model generation.
+
+**Root Cause Analysis:**
+
+| Problem | Evidence | Impact |
+|---------|----------|--------|
+| **Synthetic CQT domain gap** | Real-world val: 11.9%, Synthetic val: 83.6% (71.6% gap) | 20+ augmentations cannot bridge the gap — base CQT templates are too clean |
+| **N as uncertainty escape hatch** | Top-10 confusions are all N → major chord (168+ N→D:maj alone) | Model defaults to N when real audio doesn't match synthetic patterns |
+| **Triad collapse** | Triad F1 = 0.368 (mean recall ~42.6%) | Model hasn't learned fundamental major/minor discrimination on real audio |
+| **Non-triad categories at 0% on real test** | GuitarSet altered/extended/suspended_other = 0.0% across all 50 epochs | Model has learned zero non-triad chords from real recordings |
+| **Synthetic dominance** | 49,860 synthetic vs 12,825 real samples (80/20 split) | Model trains almost entirely on synthetic patterns |
+| **Dead LR schedule** | ReduceLROnPlateau decayed LR to 1e-6 by epoch 28 — effectively zero | Model frozen in local minimum for last 22 epochs |
+| **QAT crash** | `TypeError: 'str' object is not callable` in `tfmot.quantization.keras.quantize_apply` | No INT8 quantized model produced |
+| **EGSet12 evaluation noise** | 45.9% at epoch 9 → collapses to 13-18% for 40 epochs | Only 61 eval windows; single-run variance dominates |
+| **Per-source accuracy not logged per-epoch** | Real/synthetic breakdown only at final summary | Can't monitor real convergence during training |
+| **Mixup defined but never called** | `apply_mixup()` exists at module level but not wired into generator | Missed regularization opportunity |
+| **Per-source weights not embedded** | GuitarSet, Guitar-TECHS, EGSet12 `.npz` files missing `loss_weight` in metadata | Falls back to CLI defaults (correct value but fragile; hides intent) |
+| **Cold-start synthetic generation** | `generate_dataset()` creates 50k templates via additive synthesis with no real-CQT matching | Synthetic templates do not match real CQT distribution at any frequency or energy level |
+
+**Scope:**
+
+#### Phase 1: Dataset Mix & Synthetic Realism (highest impact)
+
+- **1a. Reduce synthetic dominance in `run_pipeline()`:**
+  - Lower on-the-fly synthetic `source_weight` from 1.0 → **0.15** (matching VST's 0.3 as upper bound)
+  - After `mix_datasets()`, downsample synthetic sources to at most 2× the real data volume (cap at ~25k instead of 50k)
+  - This rebalances effective training mix from 80/20 → ~50/50 real/synthetic
+
+- **1b. Fix synthetic CQT realism — the core problem:**
+  - Analyze real CQT distribution from GuitarSet/IDMT: compute per-bin mean, variance, correlation structure across the 40-dim feature space
+  - Apply **distribution matching** to synthetic templates in `generate_dataset()`:
+    - Match per-bin energy distribution (scale synthetic CQT bin magnitudes to match real CQT bin statistics)
+    - Add **structured noise** (not just pink noise) — sample from a multivariate Gaussian matching the real CQT residual (real CQT − synthetic template) distribution
+    - Simulate **CQT variability modes** from PCA of real CQT features: project synthetic templates onto top-10 real CQT principal components, add perturbation along each mode scaled by the real eigenvalue
+  - The key insight: current per-sample augmentations (pitch shift, gain, noise) operate independently per bin, but real CQT has strong bin-to-bin correlations. The PCA approach captures these correlations.
+  - After distribution matching, re-validate: synthetic templates should be visually indistinguishable from real CQT features in t-SNE projection
+
+- **1c. Fix N as uncertainty escape hatch (not just weight):**
+  - The top-10 confusions being N→major chords means the model uses N as "I don't know." Raising N weight will increase N predictions, making this worse.
+  - Instead: **add an auxiliary binary "chord confidence" head** (see Phase 3b) that outputs whether a chord is present at all. Only allow N when this confidence is low.
+  - In the short term (pre-multi-task model): post-process predictions so N is only predicted when the top-1 chord probability < 0.3 AND the entropy across all 277 classes is high. This forces the model to commit to a chord guess rather than defaulting to N.
+  - Collect real no-chord (N) windows from GuitarSet/IDMT inter-chord gaps (rests, reverb tails, muted strings) and add to training. Current N examples are uniform noise — they don't match real silence behavior.
+
+- **1d. Embed loss_weight in .npz metadata:**
+  - Update `extract_guitarset_cqt.py`, `extract_guitar_techs_cqt.py`, `extract_egset12_cqt.py` to store `loss_weight=1.0` in each `.npz` file's metadata
+  - Update EGSet12 extraction to set `split` field properly (`"train"` / `"test"`) — currently all files are `"train"`
+
+- **1e. Per-epoch dual validation logging:**
+  - Split validation set by source: log **real val accuracy**, **synthetic val accuracy**, **domain gap (synthetic - real)**, and **overall** every epoch
+  - Log per-quality-group accuracy on real validation (triad, extended, altered, suspended_other, no_chord)
+  - Three columns added to `training_log.csv`: `val_accuracy_real`, `val_accuracy_synthetic`, `domain_gap`
+
+#### Phase 2: Training Procedure Fixes (medium impact)
+
+- **2a. Cosine annealing LR schedule with warm restarts:**
+  - Replace ReduceLROnPlateau (which killed LR to 1e-6 by epoch 28) with `tf.keras.optimizers.schedules.CosineDecayRestarts`
+  - Initial LR: `3e-3` (higher to escape local minima)
+  - First decay period: 30 epochs, with restarts every 20-30 epochs thereafter
+  - Minimum LR: `1e-5` (prevents total stall — current model died at 1e-6)
+
+- **2b. Enable Mixup regularization:**
+  - Integrate `apply_mixup()` into `AugmentedDataGenerator.__getitem__()` — currently defined at module level but never called
+  - Beta(0.2, 0.2) mixing, applied to 30% of batches
+  - Loss computed against both mixed targets: `loss = λ * loss(y_a, pred) + (1-λ) * loss(y_b, pred)`
+
+- **2c. Label smoothing:**
+  - Implement via `CategoricalCrossentropy(label_smoothing=0.1)` with one-hot encoded labels in generator, OR
+  - Implement manual label smoothing: `y_smooth = y * (1 - ε) + ε / num_classes`
+  - Smoothing factor ε = 0.1
+
+- **2d. Two-phase training curriculum:**
+  - **Phase A (epochs 1-30):** Train on synthetic-heavy mix (current) with higher LR (3e-3) — learn chord structure from clean templates
+  - **Phase B (epochs 31-100):** Fine-tune on real-heavy mix with lower LR (1e-4) and higher augmentation — force adaptation to real audio
+  - Implement via callback that reweights dataset sources at epoch boundary
+  - Phase B cuts synthetic contribution to 20% of batch volume
+
+#### Phase 3: Model Architecture (post-Phase 1+2 evaluation)
+
+*Only pursue if Phase 1+2 ceiling still < 65% real val accuracy.*
+
+- **3a. Increased capacity:**
+  - `Conv1D(64)` → `Conv1D(128)` (first layer), `Conv1D(128)` → `Conv1D(256)` (second layer)
+  - `BiLSTM(128→128)` → `BiLSTM(256→256)` with `return_sequences=True` only on first
+  - `Dense(256)` → `Dense(512)` before output head
+  - Total params: ~1.4M → ~5M (estimated)
+  - Add `Dense(128, activation="relu")` bottleneck before output to prevent overfitting on larger model
+
+- **3b. Multi-task auxiliary heads with N rejection:**
+  - Shared backbone (CNN → Attention → BiLSTM) → 3 output heads:
+    - **Chord classifier** (277-way) — main task, cross-entropy, λ=1.0
+    - **Root classifier** (13-way: 12 roots + N) — auxiliary, cross-entropy, λ=0.3
+    - **Binary chord presence** — auxiliary, binary cross-entropy, λ=0.2
+      - Outputs 0 (no chord / N) or 1 (chord present)
+      - Trained on real N examples from GuitarSet gaps + synthetic N
+      - At inference: if `chord_presence < 0.5`, force prediction to N regardless of chord head
+  - The binary head directly attacks the N escape hatch problem: the model must commit to "chord present" before it can output any chord label
+
+- **3c. AdamW optimizer:**
+  - Replace `optimizer="adam"` with `AdamW(weight_decay=1e-4)` for better generalization
+  - Apply weight decay to all kernel weights, not biases
+
+- **3d. Real-data dropout injection:**
+  - In `AugmentedDataGenerator`, when sampling from real data sources (guitarset, idmt, youtube, etc.), apply a randomly selected subset of augmentations (pitch shift, time stretch, pink noise) — currently real data passes through with minimal on-the-fly augmentation
+  - Probability mask: each augmentation has 50% chance of being applied, ensuring varied real-data views per epoch
+
+#### Phase 4: Real Data Expansion (long-term, ongoing)
+
+- **4a. Expand YouTube crawl:** relax TFLite confidence filter or add more search queries targeting specific genres/chord types
+- **4b. Self-supervised pre-training:** Masked Autoencoder pre-training on unlabeled guitar audio (YouTube stems, public datasets) with reconstruction loss on CQT features, then fine-tune on labeled chord data
+- **4c. GuitarSet cross-validation:** With only 1 held-out player (player 05), results are noisy. Implement 5-fold leave-one-player-out evaluation and report mean ± std across all 5 folds. This is critical for reliable measurement — the current single-run numbers can't distinguish model improvement from random split variance.
+
+#### Phase 5: QAT Pipeline Fix (Keras 3 / tfmot Compatibility)
+
+- **5a. Diagnose the crash:**
+  - The crash occurs in `tfmot.quantization.keras.quantize_apply` → `Model.from_config` → `process_node` → `TypeError: 'str' object is not callable`
+  - Root cause: tfmot wraps the Keras 3 model with quantization annotations, then tries to deserialize it. The `qat_compatible` path (line 1310 in `build_chord_tflite.py`) uses `Add()` layer for residual, but the model still contains other layers (Conv1D, MultiHeadAttention, etc.) that the tfmot Keras 2 deserializer can't reconstruct from config strings
+  - Fix strategy: build the QAT model entirely in legacy Keras 2 mode (`TF_USE_LEGACY_KERAS=1`), transfer weights from the trained Keras 3 float32 model, then run QAT fine-tuning + INT8 conversion
+
+- **5b. Implement legacy Keras 2 QAT path:**
+  - Inside `apply_qat()`: set `os.environ["TF_USE_LEGACY_KERAS"] = "1"` and reload `tf_keras` explicitly
+  - Rebuild the model architecture with `TF_USE_LEGACY_KERAS=1` (the existing `_build_chord_crnn_tfkeras()` at line 1387 already does this for the QAT-compatible path)
+  - Transfer trained weights from Keras 3 model to Keras 2 model by layer name
+  - Apply `tfmot.quantization.keras.quantize_annotate_model()` then `quantize_apply()` — both tested against tf_keras 2.x API
+  - Verify: QAT model trains for 5 epochs without crashing, INT8 TFLite conversion succeeds
+  - Verify: INT8 model accuracy is within 2% of float32 accuracy on validation set
+
+- **5c. Add fallback to dynamic-range quantization:**
+  - If QAT/INT8 still fails despite the fix, fall back to `tf.lite.TFLiteConverter.from_keras_model(float32_model)` with `optimizations=[tf.lite.Optimize.DEFAULT]` (dynamic range quantization to FP16)
+  - Log a clear warning: "INT8 QAT unavailable — using FP16 dynamic quantization instead"
+  - FP16 model is ~2× smaller than float32 (not 4× like INT8) but avoids the crash entirely
+  - This fallback already exists in the code at line 2818 but the float32 model save happens *after* the QAT crash, which is why the current run produced a float32 TFLite model (1067.5 KB) instead of INT8
+
+#### Phase 6: Evaluation Methodology & Diagnostics
+
+- **6a. EGSet12 eval stabilization:**
+  - 61 eval windows is too small — report bootstrapped 95% confidence intervals: sample with replacement 1000× and report mean ± 1.96σ
+  - Log EGSet12 per-epoch accuracy with confidence interval: `"45.9% ± 12.4% (95% CI)"`
+  - Consider merging EGSet12 into training if it can't provide reliable eval signal
+
+- **6b. GuitarSet per-player cross-validation:**
+  - Implement 5-fold split: each fold holds out one player (00-04) for validation, trains on remaining 4
+  - Report mean ± std across all 5 folds: `"GuitarSet val: 23.1% ± 8.4% (fold 0..4)"`
+  - This replaces the current single 04-holdout with a more reliable metric
+  - The true held-out test (player 05) stays untouched until final evaluation
+
+- **6c. CQT distribution visualization:**
+  - Log synthetic vs real CQT feature similarity every epoch:
+    - t-SNE or UMAP projection of 1000 random real + 1000 random synthetic CQT windows
+    - Earth Mover's Distance (EMD) between real and synthetic CQT bin distributions
+    - Track EMD over training — it should decrease as the model learns to bridge the gap
+  - Save projection plot to `scripts/cqt_domain_plot_epoch{N}.png` for manual inspection
+
+**Implementation:**
+
+| File | Changes |
+|------|---------|
+| `backend/scripts/build_chord_tflite.py` | Phase 1a: synthetic source weight, downsampling; Phase 1b: CQT distribution matching in `generate_dataset()`; Phase 1c: N post-processing logic; Phase 1e: per-source val logging; Phase 2a: CosineDecay LR; Phase 2b: Mixup in generator; Phase 2c: label smoothing; Phase 2d: two-phase callback; Phase 3: model architecture, multi-task heads, AdamW, real-data augmentation; Phase 5: QAT legacy Keras 2 path + dynamic-range fallback; Phase 6: per-player CV, EGSet12 CIs, CQT visualization |
+| `backend/scripts/extract_guitarset_cqt.py` | Phase 1d: add `loss_weight=1.0` to `.npz` metadata |
+| `backend/scripts/extract_guitar_techs_cqt.py` | Phase 1d: add `loss_weight=1.0` to `.npz` metadata |
+| `backend/scripts/extract_egset12_cqt.py` | Phase 1d: add `loss_weight=1.0` + `split` field to `.npz` metadata |
+
+**Acceptance Criteria:**
+
+##### Data & Training
+- [ ] Phase 1a: synthetic source weight reduced to 0.15; real/synthetic ratio ~50/50
+- [ ] Phase 1b: synthetic CQT distribution matches real CQT distribution (EMD < 0.1 on validation); t-SNE shows synthetic + real clusters overlapping
+- [ ] Phase 1c: N post-processing reduces N→major confusions by >50%; N precision > 40% on real validation
+- [ ] Phase 1d: all `.npz` files carry embedded `loss_weight`; EGSet12 has `split="test"` files
+- [ ] Phase 1e: real/synthetic/domain_gap val accuracy logged every epoch to CSV
+
+##### Training Procedure
+- [ ] Phase 2a: cosine LR schedule with restarts; LR never decays below 1e-5
+- [ ] Phase 2b: Mixup active in generator; real val accuracy increases 3-5%
+- [ ] Phase 2c: label smoothing active; validation loss decreases
+- [ ] Phase 2d: two-phase training switches at epoch 30; real val accuracy improves in Phase B
+
+##### Model Architecture (if deployed)
+- [ ] Phase 3a: larger model converges to higher real val accuracy than baseline on same data
+- [ ] Phase 3b: binary chord presence head detects N correctly; N recall > 60% with precision > 40%; chord head never predicts N when chord_presence > 0.5
+- [ ] Phase 3c: AdamW reduces train-val gap vs Adam by >5 points
+- [ ] Phase 3d: real-data augmentation improves GuitarSet test accuracy by >3%
+
+##### QAT & TFLite
+- [ ] Phase 5b: QAT model trains for 5 epochs without crash
+- [ ] Phase 5b: INT8 TFLite model produced and passes smoke tests
+- [ ] Phase 5b: INT8 accuracy within 2% of float32 on validation set
+- [ ] Phase 5c: dynamic-range FP16 fallback works when QAT unavailable; warning logged
+
+##### Evaluation
+- [ ] Phase 6a: EGSet12 accuracy reported with 95% bootstrap CI
+- [ ] Phase 6b: GuitarSet 5-fold CV reports mean ± std across players
+- [ ] Phase 6c: CQT domain EMD tracked per epoch; decreases over training
+
+##### Overall Targets
+- [ ] **Real-world validation accuracy ≥ 55%** (from 11.9%)
+- [ ] **Domain gap ≤ 30%** (from 71.6%)
+- [ ] **GuitarSet test accuracy ≥ 50%** (from 19.8%)
+- [ ] **Triad F1 ≥ 0.70** (from 0.368)
+- [ ] **Non-triad (altered/extended) GuitarSet test > 20%** (from 0.0%)
+- [ ] All existing tests pass (`python -m pytest -q`, `npm run lint`, `npm run test`)
+
+---
 
 The following improvements are already partially scoped in existing commits.
 Extend their scope rather than creating new entries:

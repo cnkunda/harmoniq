@@ -343,6 +343,101 @@ Full 6-phase process in `docs/CODER.md` (read before implementing a commit):
 
 ---
 
+---
+
+## Dataset Pipeline (Chord Model Training)
+
+### Data sources
+
+| Dataset | Scripts | Status | Path | CQT windows |
+|---------|---------|--------|------|-------------|
+| **GuitarSet** | `download_guitarset.py` → `parse_guitarset.py` → `extract_guitarset_cqt.py` | ✅ Ready | `data/guitarset` | 360 |
+| **IDMT-SMT-Guitar** | `download_idmt_smt_guitar.py` → `parse_idmt_smt_guitar.py` → `extract_idmt_cqt.py` | ✅ Ready | `data/idmt_smt_guitar` | 129 |
+| **VST Synthetic** | `generate_synthetic_midi.py` → `render_synthetic_guitar.py` | ✅ Ready | `data/vst_synthetic` | 5,640 |
+| **YouTube Crawl** | `crawl_chord_videos.py` → `extract` inline | ✅ Ready | `data/youtube_crawl` | 264 |
+| **Guitar-TECHS** | `download_guitar_techs.py` → `parse_guitar_techs.py` → `extract_guitar_techs_cqt.py` | ✅ Ready | `data/guitar_techs` | 68 |
+| **EGSet12** | `download_egset12.py` → `parse_egset12.py` → `extract_egset12_cqt.py` | ✅ Ready | `data/egset12` | 12 |
+| **JAAH** (annotations only) | `download_jaah.py` | ⚠️ No audio | `data/annotations/jaah` | — |
+| **DAMP-VPB** | (withdrawn) | ❌ Unavailable | — | — |
+| **EGDB-PG** | `download_egdb_pg.py` (135 GB) | ⏸️ Skipped | — | — |
+| **Pseudo-label** | `pseudo_label_pipeline.py` | ✅ Ready | `data/pseudo_label` | 1 file |
+
+### Pipeline commands
+
+```bash
+# From backend/
+
+# --- GuitarSet — already complete ---
+python scripts/download_guitarset.py && python scripts/parse_guitarset.py && python scripts/extract_guitarset_cqt.py
+
+# --- IDMT-SMT-Guitar — already complete ---
+python scripts/download_idmt_smt_guitar.py && python scripts/parse_idmt_smt_guitar.py && python scripts/extract_idmt_cqt.py
+
+# --- VST Synthetic — already complete ---
+python scripts/generate_synthetic_midi.py && python scripts/render_synthetic_guitar.py
+
+# --- YouTube Crawl — already complete ---
+python scripts/crawl_chord_videos.py
+
+# --- Guitar-TECHS (4.1 GB) ---
+python scripts/download_guitar_techs.py
+python scripts/parse_guitar_techs.py
+python scripts/extract_guitar_techs_cqt.py
+
+# --- EGSet12 (110 MB) ---
+python scripts/download_egset12.py
+python scripts/parse_egset12.py
+python scripts/extract_egset12_cqt.py
+
+# --- JAAH (annotations only; requires Smithsonian audio for CQT) ---
+python scripts/download_jaah.py
+python scripts/extract_jaah_cqt.py --audio-dir /path/to/smithsonian/audio   # optional
+
+# --- EGDB-PG (135 GB, optional) ---
+python scripts/download_egdb_pg.py   # Not yet extracted
+```
+
+### Full training command
+
+```bash
+python scripts/build_chord_tflite.py \
+  --guitarset-data-dir data/guitarset \
+  --idmt-data-dir data/idmt_smt_guitar \
+  --vst-data-dir data/vst_synthetic \
+  --youtube-data-dir data/youtube_crawl \
+  --guitar-techs-data-dir data/guitar_techs \
+  --egset12-data-dir data/egset12 \
+  --empirical-matrix data/annotations/transition_matrix_empirical.npy \
+  --temperature 0.3
+```
+
+Two-stage fine-tuning:
+```bash
+# Stage 1: main training
+python scripts/build_chord_tflite.py ...(args above)...
+
+# Stage 2: rare-chord boost
+python scripts/build_chord_tflite.py ...(args above)... --temperature 0.1 --rare-boost
+
+# Stage 3: QAT → INT8 TFLite
+python scripts/build_chord_tflite.py ...(args above)... --qat-only
+```
+
+### Chord matching algorithm (Guitar-TECHS & EGSet12)
+
+Both datasets derive chord labels from MIDI note data rather than explicit chord annotations:
+- **Guitar-TECHS**: Parses per-string `.mid` files via `pretty_midi` → aggregate pitch sets per 0.1s frame → match against `CHORD_INTERVALS` template set (Jaccard score, >0.66 coverage threshold)
+- **EGSet12**: Extracts MIDI note events from JAMS `note_midi` namespace → same pitch-set-to-chord matching
+
+### Data flow per source
+
+1. Audio → `librosa.cqt()` → 40-bin features (36 chroma + 4 bass) at 0.1s hop
+2. Labels → 128-frame overlapping windows (12.8s context, 50% hop) with center-frame label
+3. `.npz` output at `<data_dir>/processed/cqt/<track_id>.npz`
+4. `build_chord_tflite.py::load_dataset_dir()` reads all `.npz` files, filters out `split="test"` rows
+
+---
+
 ## Appendix: Common traps
 
 - **Expo Router default exports**: Screen files under `app/` must use `export default`. Everything else uses named exports.

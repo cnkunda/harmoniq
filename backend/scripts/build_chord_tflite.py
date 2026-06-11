@@ -621,7 +621,7 @@ def apply_temporal_jitter_to_window_features(window: np.ndarray, max_shift_ms: f
         return shifted_window
 
 
-def generate_dataset(samples_per_class: int = 80, config: dict = None,
+def generate_dataset(samples_per_class: int = 120, config: dict = None,
                       transition_probs: np.ndarray | None = None):
     """Generate augmented chord dataset with realistic variability.
 
@@ -1271,8 +1271,8 @@ def build_model(window: int = WINDOW, return_attention_scores: bool = False,
         return_attention_scores: If True, model outputs both chord_probs and
                                  attention_weights for interpretability.
                                  The attention tensor shape is (batch, 4, T, T).
-        qat_compatible: If True, uses ``CircularCqtPad`` layer (not Lambda) and
-                        ``Add`` for residual — required for TFMOT weight-transfer.
+        qat_compatible: If True, uses ``Add`` for residual instead of Python ``+``
+                        — required for TFMOT weight-transfer.
 
     Returns:
         Single-output model (chord_probs) when return_attention_scores=False.
@@ -1280,10 +1280,7 @@ def build_model(window: int = WINDOW, return_attention_scores: bool = False,
     """
     inputs = tf.keras.Input(shape=(window, FEATURE_DIM), name="cqt_window")
 
-    if qat_compatible:
-        padded = CircularCqtPad(name="circular_cqt_pad")(inputs)
-    else:
-        padded = tf.keras.layers.Lambda(_circular_cqt_pad, name="circular_cqt_pad")(inputs)
+    padded = CircularCqtPad(name="circular_cqt_pad")(inputs)
 
     # CNN frontend: process time as the sequence dimension
     x = tf.keras.layers.Conv1D(64, kernel_size=3, padding="same", activation="relu",
@@ -2065,6 +2062,46 @@ class GuitarSetTestCallback(tf.keras.callbacks.Callback):
         print(f"    no_chord   {grouped.get('no_chord', 0) * 100:.1f}%")
 
 
+class EGSet12TestCallback(tf.keras.callbacks.Callback):
+    """Evaluate on EGSet12 held-out set after each epoch.
+
+    EGSet12 provides 12 real solo electric guitar recordings with diverse
+    playing styles — useful as a second real-world eval axis alongside
+    GuitarSet's player_05 test split.
+    """
+
+    def __init__(
+        self,
+        test_X: np.ndarray,
+        test_y: np.ndarray,
+        log_freq: int = 1,
+    ):
+        super().__init__()
+        self.test_X = test_X
+        self.test_y = test_y
+        self.log_freq = log_freq
+        self.history: list[float] = []
+        self.best_test_acc: float = 0.0
+        self.best_epoch: int = -1
+
+    def on_epoch_end(self, epoch: int, logs: dict | None = None):
+        if (epoch + 1) % self.log_freq != 0:
+            return
+        if len(self.test_X) == 0:
+            return
+
+        test_pred = np.argmax(self.model.predict(self.test_X, verbose=0), axis=1)
+        test_acc = float(np.mean(test_pred == self.test_y))
+        self.history.append(test_acc)
+
+        if test_acc > self.best_test_acc:
+            self.best_test_acc = test_acc
+            self.best_epoch = epoch
+
+        print(f"\n  [EGSet12] Epoch {epoch + 1}: accuracy={test_acc:.2%} "
+              f"(best={self.best_test_acc:.2%} @ epoch {self.best_epoch + 1})")
+
+
 # ---------------------------------------------------------------------------
 # 4e. TFLite smoke test helper (Commit 106)
 # ---------------------------------------------------------------------------
@@ -2227,9 +2264,15 @@ def run_pipeline(
     youtube_data_dir: str | Path | None = None,
     damp_data_dir: str | Path | None = None,
     pseudo_data_dir: str | Path | None = None,
+    jaah_data_dir: str | Path | None = None,
+    guitar_techs_data_dir: str | Path | None = None,
+    egset12_data_dir: str | Path | None = None,
     guitarset_loss_weight: float = 1.0,
     vst_loss_weight: float = 0.3,
     damp_loss_weight: float = 0.15,
+    jaah_loss_weight: float = 1.0,
+    guitar_techs_loss_weight: float = 1.0,
+    egset12_loss_weight: float = 1.0,
     empirical_matrix_path: str | Path | None = None,
     temperature: float = 0.3,
 ):
@@ -2242,9 +2285,12 @@ def run_pipeline(
       - GuitarSet (real):       1.0  (highest confidence, real recordings)
       - IDMT-SMT-Guitar:        1.0  (real recordings, good labels)
       - VST synthetic:          0.3  (lower confidence, synthetic audio)
-      - DAMP-VPB:               0.15 (lowest confidence, heuristic labels)
+      - DAMP-VPB:               0.15 (lowest confidence, heuristic labels — UNAVAILABLE)
       - YouTube crawl:          1.0  (real recordings, TFLite-filtered)
       - Pseudo-label:           same as vst_loss_weight (model-generated labels)
+      - JAAH:                   1.0  (real recordings, expert annotations — audio separate)
+      - Guitar-TECHS:           1.0  (real multi-player chords + techniques, MIDI ground truth)
+      - EGSet12:                1.0  (real solo electric guitar, diverse styles)
 
     Args:
         guitarset_data_dir: Path to GuitarSet CQT data directory.
@@ -2253,9 +2299,15 @@ def run_pipeline(
         youtube_data_dir: Path to YouTube crawl CQT data directory.
         damp_data_dir: Path to DAMP-VPB CQT data directory.
         pseudo_data_dir: Path to pseudo-labeled CQT data directory.
+        jaah_data_dir: Path to JAAH CQT data directory (requires user-supplied audio).
+        guitar_techs_data_dir: Path to Guitar-TECHS CQT data directory.
+        egset12_data_dir: Path to EGSet12 CQT data directory.
         guitarset_loss_weight: Per-sample loss weight for GuitarSet (default 1.0).
         vst_loss_weight: Per-sample loss weight for VST synthetic (default 0.3).
         damp_loss_weight: Per-sample loss weight for DAMP-VPB (default 0.15).
+        jaah_loss_weight: Per-sample loss weight for JAAH (default 1.0).
+        guitar_techs_loss_weight: Per-sample loss weight for Guitar-TECHS (default 1.0).
+        egset12_loss_weight: Per-sample loss weight for EGSet12 (default 1.0).
         empirical_matrix_path: Path to empirical transition matrix .npy (or None).
         temperature: Temperature τ for quality re-sampling (default 0.3, matching MT3).
                      τ < 1.0 boosts rare chord quality sampling via MT3 formula.
@@ -2313,6 +2365,30 @@ def run_pipeline(
         else:
             print(f"  [WARN] Pseudo-label data dir not found: {pseudo_path}")
 
+    if jaah_data_dir is not None:
+        jaah_path = Path(jaah_data_dir)
+        if jaah_path.exists():
+            source_configs.append((jaah_path, "JAAH", jaah_loss_weight))
+            has_any_real_data = True
+        else:
+            print(f"  [WARN] JAAH data dir not found: {jaah_path}")
+
+    if guitar_techs_data_dir is not None:
+        gt_path = Path(guitar_techs_data_dir)
+        if gt_path.exists():
+            source_configs.append((gt_path, "Guitar-TECHS", guitar_techs_loss_weight))
+            has_any_real_data = True
+        else:
+            print(f"  [WARN] Guitar-TECHS data dir not found: {gt_path}")
+
+    if egset12_data_dir is not None:
+        eg_path = Path(egset12_data_dir)
+        if eg_path.exists():
+            source_configs.append((eg_path, "EGSet12", egset12_loss_weight))
+            has_any_real_data = True
+        else:
+            print(f"  [WARN] EGSet12 data dir not found: {eg_path}")
+
     print(f"Loading {len(source_configs)} data source(s)...")
     features_list, labels_list, weights_list = load_datasets(source_configs)
 
@@ -2325,6 +2401,27 @@ def run_pipeline(
                 test_X, test_y = load_guitarset_test(gs_path)
             except (FileNotFoundError, ValueError) as e:
                 print(f"  [WARN] Could not load GuitarSet test data: {e}")
+
+    # --- Load EGSet12 eval data (if available) ---
+    egset12_test_X, egset12_test_y = np.array([]), np.array([])
+    if egset12_data_dir is not None:
+        eg_path = Path(egset12_data_dir)
+        if eg_path.exists():
+            try:
+                gs_test_path = Path(egset12_data_dir) / "processed" / "cqt"
+                if gs_test_path.exists():
+                    # Load all EGSet12 .npz files as a held-out eval set
+                    loaded_chunks = []
+                    for npz_path in sorted(gs_test_path.glob("*.npz")):
+                        data = np.load(npz_path)
+                        if "features" in data and "labels" in data:
+                            loaded_chunks.append((data["features"], data["labels"]))
+                    if loaded_chunks:
+                        egset12_test_X = np.concatenate([c[0] for c in loaded_chunks], axis=0)
+                        egset12_test_y = np.concatenate([c[1] for c in loaded_chunks], axis=0)
+                        print(f"  Loaded EGSet12 eval set: {len(egset12_test_X)} windows")
+            except (FileNotFoundError, ValueError) as e:
+                print(f"  [WARN] Could not load EGSet12 eval data: {e}")
 
     # --- Load empirical transition matrix ---
     transition_probs = None
@@ -2426,7 +2523,7 @@ def run_pipeline(
     model = build_model()
     model.compile(
         optimizer="adam",
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(label_smoothing=0.05),
+        loss=tf.keras.losses.SparseCategoricalCrossentropy(),
         metrics=["accuracy"],
     )
 
@@ -2489,6 +2586,11 @@ def run_pipeline(
     if has_any_real_data and len(test_X) > 0:
         test_callback = GuitarSetTestCallback(test_X, test_y)
         callbacks.append(test_callback)
+
+    # EGSet12 eval callback — second held-out eval axis
+    if len(egset12_test_X) > 0:
+        egset12_callback = EGSet12TestCallback(egset12_test_X, egset12_test_y)
+        callbacks.append(egset12_callback)
 
     # --- On-the-fly augmented data generator ---
     train_generator = AugmentedDataGenerator(
@@ -2850,9 +2952,15 @@ def run_qat_only(
     youtube_data_dir: str | Path | None = None,
     damp_data_dir: str | Path | None = None,
     pseudo_data_dir: str | Path | None = None,
+    jaah_data_dir: str | Path | None = None,
+    guitar_techs_data_dir: str | Path | None = None,
+    egset12_data_dir: str | Path | None = None,
     guitarset_loss_weight: float = 1.0,
     vst_loss_weight: float = 0.3,
     damp_loss_weight: float = 0.15,
+    jaah_loss_weight: float = 1.0,
+    guitar_techs_loss_weight: float = 1.0,
+    egset12_loss_weight: float = 1.0,
     empirical_matrix_path: str | Path | None = None,
     temperature: float = 0.3,
 ):
@@ -2875,6 +2983,9 @@ def run_qat_only(
         ("YouTube-Crawl", youtube_data_dir, 1.0),
         ("DAMP-VPB", damp_data_dir, damp_loss_weight),
         ("Pseudo-Label", pseudo_data_dir, vst_loss_weight),
+        ("JAAH", jaah_data_dir, jaah_loss_weight),
+        ("Guitar-TECHS", guitar_techs_data_dir, guitar_techs_loss_weight),
+        ("EGSet12", egset12_data_dir, egset12_loss_weight),
     ]:
         if path is not None:
             p = Path(path)
@@ -2897,6 +3008,23 @@ def run_qat_only(
                 test_X, test_y = load_guitarset_test(gs_path)
             except (FileNotFoundError, ValueError) as e:
                 print(f"  [WARN] GuitarSet test: {e}")
+
+    egset12_test_X, egset12_test_y = np.array([]), np.array([])
+    if egset12_data_dir is not None:
+        try:
+            eg_path = Path(egset12_data_dir) / "processed" / "cqt"
+            if eg_path.exists():
+                loaded_chunks = []
+                for npz_path in sorted(eg_path.glob("*.npz")):
+                    data = np.load(npz_path)
+                    if "features" in data and "labels" in data:
+                        loaded_chunks.append((data["features"], data["labels"]))
+                if loaded_chunks:
+                    egset12_test_X = np.concatenate([c[0] for c in loaded_chunks], axis=0)
+                    egset12_test_y = np.concatenate([c[1] for c in loaded_chunks], axis=0)
+                    print(f"  Loaded EGSet12 eval set: {len(egset12_test_X)} windows")
+        except (FileNotFoundError, ValueError) as e:
+            print(f"  [WARN] EGSet12 eval: {e}")
 
     # Empirical transition matrix
     transition_probs = None
@@ -3103,6 +3231,10 @@ if __name__ == "__main__":
         help="Path to pseudo-labeled CQT data directory (uses vst-loss-weight)"
     )
     parser.add_argument(
+        "--jaah-data-dir", type=str, default=None,
+        help="Path to JAAH CQT data directory (requires user-supplied audio)"
+    )
+    parser.add_argument(
         "--guitarset-loss-weight", type=float, default=1.0,
         help="Per-sample loss weight for GuitarSet (default 1.0)"
     )
@@ -3113,6 +3245,26 @@ if __name__ == "__main__":
     parser.add_argument(
         "--damp-loss-weight", type=float, default=0.15,
         help="Per-sample loss weight for DAMP-VPB (default 0.15, per Commit 105)"
+    )
+    parser.add_argument(
+        "--jaah-loss-weight", type=float, default=1.0,
+        help="Per-sample loss weight for JAAH (default 1.0)"
+    )
+    parser.add_argument(
+        "--guitar-techs-data-dir", type=str, default=None,
+        help="Path to Guitar-TECHS CQT data directory (contains guitar_techs/processed/cqt/)"
+    )
+    parser.add_argument(
+        "--guitar-techs-loss-weight", type=float, default=1.0,
+        help="Per-sample loss weight for Guitar-TECHS (default 1.0)"
+    )
+    parser.add_argument(
+        "--egset12-data-dir", type=str, default=None,
+        help="Path to EGSet12 CQT data directory (contains egset12/processed/cqt/)"
+    )
+    parser.add_argument(
+        "--egset12-loss-weight", type=float, default=1.0,
+        help="Per-sample loss weight for EGSet12 (default 1.0)"
     )
     parser.add_argument(
         "--empirical-matrix", type=str, default=None,
@@ -3154,9 +3306,15 @@ if __name__ == "__main__":
             youtube_data_dir=args.youtube_data_dir,
             damp_data_dir=args.damp_data_dir,
             pseudo_data_dir=args.pseudo_data_dir,
+            jaah_data_dir=args.jaah_data_dir,
+            guitar_techs_data_dir=args.guitar_techs_data_dir,
+            egset12_data_dir=args.egset12_data_dir,
             guitarset_loss_weight=args.guitarset_loss_weight,
             vst_loss_weight=args.vst_loss_weight,
             damp_loss_weight=args.damp_loss_weight,
+            jaah_loss_weight=args.jaah_loss_weight,
+            guitar_techs_loss_weight=args.guitar_techs_loss_weight,
+            egset12_loss_weight=args.egset12_loss_weight,
             empirical_matrix_path=args.empirical_matrix,
             temperature=args.temperature,
         )
@@ -3168,9 +3326,15 @@ if __name__ == "__main__":
             youtube_data_dir=args.youtube_data_dir,
             damp_data_dir=args.damp_data_dir,
             pseudo_data_dir=args.pseudo_data_dir,
+            jaah_data_dir=args.jaah_data_dir,
+            guitar_techs_data_dir=args.guitar_techs_data_dir,
+            egset12_data_dir=args.egset12_data_dir,
             guitarset_loss_weight=args.guitarset_loss_weight,
             vst_loss_weight=args.vst_loss_weight,
             damp_loss_weight=args.damp_loss_weight,
+            jaah_loss_weight=args.jaah_loss_weight,
+            guitar_techs_loss_weight=args.guitar_techs_loss_weight,
+            egset12_loss_weight=args.egset12_loss_weight,
             empirical_matrix_path=args.empirical_matrix,
             temperature=args.temperature,
         )
