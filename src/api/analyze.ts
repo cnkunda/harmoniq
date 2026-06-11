@@ -526,6 +526,8 @@ export async function submitScore(payload: {
   section: unknown
   skill_nodes: string[]
   musical_tolerance_mode?: 'expressive' | 'technique'
+  stem_confidence?: number | null
+  instrument_confusion?: number | null
 }): Promise<ScoreResult> {
   return request<ScoreResult>('/score', {
     method: 'POST',

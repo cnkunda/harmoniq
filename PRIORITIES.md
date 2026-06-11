@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-118** — archived. **Phase 2 commits 119-147** — planned/deferred.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 commits 98-121** — archived. **Phase 2 commits 122-147** — planned/deferred.
 
 ---
 
@@ -16,13 +16,13 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 | **E2E / release**  | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md)                               |
 | **Manual QA**      | [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md)                             |
 | **Scoring**        | [`docs/SCORING.md`](docs/SCORING.md)                                 |
-| **Archive**        | [`priorities-archive.md`](priorities-archive.md) (Phase 0 + Phase 1 + Phase 2 commits 98-118) |
+| **Archive**        | [`priorities-archive.md`](priorities-archive.md) (Phase 0 + Phase 1 + Phase 2 commits 98-121) |
 
 ---
 
 ## PHASE 2: Feedback, Retention & ML Refinement
 
-**Status:** In Progress — commits 98-118 archived. Commits 119-147 remain as planned/deferred backlog below.
+**Status:** In Progress — commits 98-121 archived. Commits 122-147 remain as planned/deferred backlog below.
 
 ### Milestone: User Feedback & Manual Overrides
 
@@ -90,122 +90,6 @@ System for tracking user engagement during play-along sessions: duration, comple
 - [ ] Events persisted to local DB and survive app restart
 - [ ] Analytics adds zero latency to audio playback or capture
 - [ ] Privacy notice displayed; user can opt out
-
----
-
-
-
-### Commit 120: Authentic Chord Diagrams via chords-db Integration
-
-**Goal:** Replace algorithmic fretboard chord shapes with authentic finger-position diagrams from
-`@tombatossals/chords-db`, displaying traditional chord-box diagrams across all session screens
-with multiple position alternatives and capo-aware transposition.
-
-**Current State:** `FretboardDiagram.tsx` computes fret positions algorithmically from hardcoded
-templates (E-shape, A-shape, C-shape, etc.). No traditional chord-box diagrams are rendered.
-Users see colored dots on the fretboard but not the small vertical chord diagrams found in
-chord books. No multiple position alternatives are offered.
-
-**Scope:**
-
-- Install dependencies:
-
-  ```bash
-  npm install @tombatossals/chords-db @tombatossals/react-chords
-  ```
-
-- Create chord name normalization layer (`src/music/chordDbAdapter.ts`):
-  - Map Harmoniq backend format (`C:maj`, `F#:min7`) to chords-db format (`C/major`, `Fsharp/m7`)
-  - Handle flat-to-sharp normalization (Bb → A#, Eb → D#, etc.)
-  - Handle quality renames: `min7 → m7`, `min9 → m9`, `min6 → m6`, `alt7 → alt`, `7#5 → aug7`
-  - Return `{ key, suffix }` for database lookup
-- Create `ChordDiagram` component (`components/ChordDiagram.tsx`):
-  - Wraps `@tombatossals/react-chords` for SVG chord-box rendering
-  - Accepts `chordSymbol` prop (e.g., `"C:maj"`)
-  - Retrieves all positions from chords-db for the chord
-  - Default to open/low position (fret 0-5) for beginner-friendly display
-  - Position cycling UI: `< 2/5 >` to browse alternative voicings
-  - Displays finger numbers, barre indicators, and base fret
-  - Falls back to algorithmic shapes if chord not in database
-- Add chord diagrams to all session screens:
-  - **study.tsx**: Small diagram above fretboard, next to current chord symbol
-  - **slow.tsx**: Diagram above fretboard during slow practice
-  - **play.tsx**: Compact diagram near pitch indicator during play-along
-  - **review.tsx**: Diagram in playback summary for chord reference
-- Layout pattern on each screen:
-
-  ```
-  ┌─────────────────────────────────┐
-  │  [Diagram]  Cmaj7               │
-  │           I - Tonic             │
-  │           < 2/5 >               │
-  └─────────────────────────────────┘
-  ```
-
-- Optional: enhance `chordToFretboardCells()` in `src/music/chordVoicing.ts`
-  to use chords-db positions for fretboard dot rendering (more authentic shapes)
-- Handle edge cases:
-  - Slash chords: chords-db has limited `/E`, `/F`, `/G` support — fall back to algorithmic
-  - Rare qualities (`7#9`, `alt7`): may not exist in database — fall back gracefully
-  - Web vs native: `react-chords` renders SVG — verify on React Native,
-    fall back to custom SVG rendering if needed
-
-**Acceptance Criteria:**
-
-- [ ] `@tombatossals/chords-db` and `@tombatossals/react-chords` installed
-- [ ] `chordDbAdapter.ts` correctly maps all 277 chord types to database format
-- [ ] `ChordDiagram` component renders traditional chord-box diagrams
-- [ ] Position cycling works for chords with multiple voicings
-- [ ] Chord diagrams displayed on study, slow, play, and review screens
-- [ ] Fallback to algorithmic shapes for chords not in database
-- [ ] Flat-to-sharp normalization works (Bb → A#, etc.)
-- [ ] Finger numbers and barre indicators render correctly
-- [ ] No regression: existing fretboard dot rendering unchanged
-- [ ] Web rendering verified; native rendering verified or fallback active
-
-**Implementation:**
-
-- New file: `src/music/chordDbAdapter.ts` — normalization and lookup layer
-- New file: `components/ChordDiagram.tsx` — chord diagram component
-- New file: `components/ChordPositionSelector.tsx` — position carousel UI
-- Modify: `app/session/study.tsx`, `app/session/slow.tsx`, `app/session/play.tsx`, `app/session/review.tsx`
-- Optional: `src/music/chordVoicing.ts` — add chords-db fallback to `chordToFretboardCells()`
-
----
-
-### Commit 121: Instrument Confusion Diagnostic (MT3 Paper Insight)
-
-**Goal:** Add an instrument confusion diagnostic to the analysis pipeline that detects when the chord model's predictions differ significantly between the isolated stem and the full mix, flagging sections where coaching feedback should be hedged.
-
-**Rationale (from MT3 paper, Table 3):** MT3's multi-instrument F1 shows the model rarely confuses instruments when it gets notes right (multi-instrument F1 ≈ onset-offset F1). Our pipeline has no instrument-aware evaluation — we can't distinguish "wrong chord because model confused guitar with piano" from "wrong chord because model misidentified the notes." This matters for coaching: the feedback should differ.
-
-**Current State:** No instrument confusion detection exists. The scoring system has no way to know if a poor transcription is due to instrument interference or genuine model uncertainty.
-
-**Scope:**
-
-- Add instrument confusion metric to `analyze_audio.py`:
-  - After dual-path inference (Commit 112), compute divergence between stem and mix predictions
-  - Divergence = fraction of beats where stem and mix predict different chords
-  - High divergence (>30%) = instrument confusion likely
-- Add `instrument_confusion: float` (0-1) to `LessonJSON` metadata
-- Add `instrument_confusion_per_section: list[dict]` with per-section scores
-- Pass instrument confusion to scoring system:
-  - When confusion is high, reduce scoring confidence
-  - Flag sections in coaching feedback: "The transcription here is uncertain — the piano may be interfering"
-- Add instrument confusion visualization in review panel:
-  - Show per-section confusion bars
-  - Highlight high-confusion sections in the chord timeline
-- Log instrument confusion per job for model improvement tracking
-
-**Acceptance Criteria:**
-
-- [ ] Instrument confusion metric computed per section (0-1 scale)
-- [ ] High-divergence sections flagged in LessonJSON metadata
-- [ ] Scoring confidence reduced when instrument confusion is high
-- [ ] Coaching feedback hedged for high-confusion sections
-- [ ] Instrument confusion displayed in review panel
-- [ ] Per-job confusion logged for model improvement tracking
-- [ ] Integration test: piano-dominant mix shows higher confusion than guitar-forward mix
 
 ---
 

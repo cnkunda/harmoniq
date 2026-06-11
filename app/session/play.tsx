@@ -7,6 +7,8 @@ import { Mic } from 'lucide-react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { CoachFeedbackPrompt } from '@/components/CoachFeedbackPrompt'
 import { CoachNote } from '@/components/CoachNote'
+import { ChordDiagram } from '@/components/ChordDiagram'
+import { ChordPositionSelector } from '@/components/ChordPositionSelector'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorBanner } from '@/components/ErrorBanner'
@@ -36,7 +38,7 @@ import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useAppStore } from '@/src/stores/useAppStore'
-import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
+import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import type { NoteEventMessage } from '@/types/tabMessage'
@@ -69,6 +71,11 @@ function PlayScreenInner() {
   const isDemo = useIsDemoLesson()
   const router = useRouter()
   const musicActions = useMusicActions()
+  const musicState = useMusicState()
+  const [chordPosIndex, setChordPosIndex] = useState(0)
+  useEffect(() => {
+    setChordPosIndex(0)
+  }, [musicState?.currentChord])
   const recordingRef = useRef(false)
   const initialMetronomeOn = useMetronomeDefaultOn()
   const lesson = useLessonStore((s) => s.lesson)
@@ -322,6 +329,23 @@ function PlayScreenInner() {
             tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
             insertBetweenStemAndTab={
               <View className="gap-5">
+                {musicState?.currentChord && musicState.currentChord !== 'N' && (
+                  <View className="flex-row items-center gap-2 px-2 py-1">
+                    <ChordDiagram
+                      name={musicState.currentChord}
+                      size="sm"
+                      positionIndex={chordPosIndex}
+                    />
+                    <Text className="font-mono text-sm text-cream">
+                      {musicState.currentChord}
+                    </Text>
+                    <ChordPositionSelector
+                      chordSymbol={musicState.currentChord}
+                      currentIndex={chordPosIndex}
+                      onPositionChange={setChordPosIndex}
+                    />
+                  </View>
+                )}
                 <View className="w-full min-w-0">
                   <FretboardDiagram
                     keyLabel={keyLabel}

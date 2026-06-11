@@ -7,6 +7,8 @@ import { BookOpen, X } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ChordCorrectionModal } from '@/components/ChordCorrectionModal'
+import { ChordDiagram } from '@/components/ChordDiagram'
+import { ChordPositionSelector } from '@/components/ChordPositionSelector'
 import { ChordsAndLyrics } from '@/components/ChordsAndLyrics'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { EmptyState } from '@/components/EmptyState'
@@ -179,7 +181,13 @@ function StudyScreenInner() {
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const [tick, setTick] = useState<PlaybackTickContext>(DEFAULT_TICK)
   const [stemRoutingOverride, setStemRoutingOverride] = useState<string | null>(null);
-  const [theoryAnnotation, setTheoryAnnotation] = useState<{ chordName: string; chordFunction: string; romanNumeral: string; rationale: string } | null>(null);
+  const [theoryAnnotation, setTheoryAnnotation] = useState<{
+    chordName: string; chordFunction: string; romanNumeral: string; rationale: string
+  } | null>(null);
+  const [chordPosIndex, setChordPosIndex] = useState(0);
+  useEffect(() => {
+    setChordPosIndex(0);
+  }, [theoryAnnotation?.chordName]);
   // Intelligent fretboard display mode (auto-detect or manual override)
   const [fretboardMode, setFretboardMode] = useState<'auto' | 'chords' | 'solo' | 'both'>('auto')
   const [voicingMode, setVoicingMode] = useState<'full' | 'compact'>('full')
@@ -659,6 +667,30 @@ function StudyScreenInner() {
         tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
         insertBetweenStemAndTab={
           <>
+            {/* Chord diagram with position selector */}
+            {theoryAnnotation && theoryAnnotation.chordName && theoryAnnotation.chordName !== 'N' && (
+              <View className="flex-row items-center gap-3 px-2 py-1">
+                <ChordDiagram
+                  name={theoryAnnotation.chordName}
+                  size="md"
+                  positionIndex={chordPosIndex}
+                />
+                <View className="flex-1">
+                  <Text className="font-serif text-md text-cream">
+                    {theoryAnnotation.romanNumeral}
+                  </Text>
+                  <Text className="font-sans text-xs text-muted-brown">
+                    {theoryAnnotation.chordFunction}
+                  </Text>
+                  <ChordPositionSelector
+                    chordSymbol={theoryAnnotation.chordName}
+                    currentIndex={chordPosIndex}
+                    onPositionChange={setChordPosIndex}
+                  />
+                </View>
+              </View>
+            )}
+
             {/* Fretboard Mode Controls */}
 
             <FretboardDiagram

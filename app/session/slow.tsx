@@ -4,6 +4,8 @@ import { Text, View } from 'react-native'
 import { Sliders } from 'lucide-react-native'
 
 import { DemoTourCallout } from '@/components/DemoTourCallout'
+import { ChordDiagram } from '@/components/ChordDiagram'
+import { ChordPositionSelector } from '@/components/ChordPositionSelector'
 import { EmptyState } from '@/components/EmptyState'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { LoopRegionControl } from '@/components/LoopRegionControl'
@@ -21,7 +23,7 @@ import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
-import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
+import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
@@ -82,6 +84,11 @@ function SlowScreenInner() {
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
+  const musicState = useMusicState()
+  const [chordPosIndex, setChordPosIndex] = useState(0)
+  useEffect(() => {
+    setChordPosIndex(0)
+  }, [musicState?.currentChord])
 
   useEffect(() => {
     if (!derived) {
@@ -185,25 +192,44 @@ function SlowScreenInner() {
         onPlaybackTick={handleStemPlaybackTick}
         tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
         insertBetweenStemAndTab={
-          <FretboardDiagram
-            keyLabel={keyLabel}
-            positionLabel={positionLabel}
-            capoText={capoText}
-            selectedNote={selectedNote}
-            pulseKey={fretPulseKey}
-            enableKeyboardInput
-            showTuneControl
-            tuneActive={tunerState.active}
-            tuneCalibrating={tunerState.calibrating}
-            onToggleTune={toggleFretboardTuner}
-            onCalibrateTune={startCalibration}
-            tunerState={tunerState}
-            onSelectNote={(note) => {
-              setSelectedNote(note)
-              setFretPulseKey((k) => k + 1)
-              setNoteModalOpen(true)
-            }}
-          />
+          <View>
+            {musicState?.currentChord && musicState.currentChord !== 'N' && (
+              <View className="flex-row items-center gap-2 px-2 py-1">
+                <ChordDiagram
+                  name={musicState.currentChord}
+                  size="sm"
+                  positionIndex={chordPosIndex}
+                />
+                <Text className="font-mono text-sm text-cream">
+                  {musicState.currentChordRoman ?? musicState.currentChord}
+                </Text>
+                <ChordPositionSelector
+                  chordSymbol={musicState.currentChord}
+                  currentIndex={chordPosIndex}
+                  onPositionChange={setChordPosIndex}
+                />
+              </View>
+            )}
+            <FretboardDiagram
+              keyLabel={keyLabel}
+              positionLabel={positionLabel}
+              capoText={capoText}
+              selectedNote={selectedNote}
+              pulseKey={fretPulseKey}
+              enableKeyboardInput
+              showTuneControl
+              tuneActive={tunerState.active}
+              tuneCalibrating={tunerState.calibrating}
+              onToggleTune={toggleFretboardTuner}
+              onCalibrateTune={startCalibration}
+              tunerState={tunerState}
+              onSelectNote={(note) => {
+                setSelectedNote(note)
+                setFretPulseKey((k) => k + 1)
+                setNoteModalOpen(true)
+              }}
+            />
+          </View>
         }
         onNoteEvent={(evt: NoteEventMessage) => {
           setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })

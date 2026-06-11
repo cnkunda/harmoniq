@@ -381,6 +381,21 @@ class AlphaTabPrerenderHints(BaseModel):
     artifact_rel: str | None = None
 
 
+class SectionConfusionScore(BaseModel):
+    """Commit 121: Per-section instrument confusion metric from dual-path divergence."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    section_index: int
+    label: str = ""
+    start_time: float | None = None
+    end_time: float | None = None
+    instrument_confusion: float = Field(ge=0.0, le=1.0, default=0.0)
+    is_high_confusion: bool = False
+    beat_count: int = 0
+    disagreement_count: int = 0
+
+
 class LessonSectionStub(BaseModel):
     """One teachable slice of the song — expand per README LessonJSON.sections."""
 
@@ -522,6 +537,10 @@ class ScoreRequest(BaseModel):
         default=None,
         description="Continuous stem quality confidence (0-1) from Commit 112 dual-path fusion.",
     )
+    instrument_confusion: float | None = Field(
+        default=None,
+        description="Commit 121: Global instrument confusion (0-1) from dual-path divergence.",
+    )
 
 
 class ScoreWaveformComparison(BaseModel):
@@ -546,6 +565,10 @@ class ReliabilityEnvelope(BaseModel):
     stem_confidence: float | None = Field(
         default=None,
         description="Continuous stem quality confidence (0-1) from Commit 112.",
+    )
+    instrument_confusion: float | None = Field(
+        default=None,
+        description="Commit 121: Global instrument confusion (0-1) from dual-path divergence.",
     )
 
 

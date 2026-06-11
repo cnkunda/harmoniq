@@ -4,6 +4,7 @@
  */
 
 import { allCellsForMidi, OPEN_MIDI_BY_ROW } from "./fretboardCell";
+import { getChordPositionAtIndex, type ChordDbPosition } from './chordDbAdapter';
 
 /** Interval semitones from root for common chord qualities */
 const CHORD_QUALITY_INTERVALS: Record<string, number[]> = {
@@ -449,7 +450,41 @@ function buildFullVoicing(
 }
 
 /**
+ * Convert a chords-db position to FretboardCell[] for use by FretboardDiagram.
+ * Only includes strings that are played (not muted).
+ */
+function chordDbPosToFretCells(
+  position: ChordDbPosition,
+  chordSymbol: string,
+): FretboardCell[] {
+  const parsed = parseChordSymbol(chordSymbol);
+  if (!parsed) return [];
+  const { root } = parsed;
+  const rootPc = noteToPitchClass(root);
+  const rootMidi = rootPc + 4 * 12; // MIDI 48 = C3 reference
+
+  const cells: FretboardCell[] = [];
+
+  for (let i = 0; i < position.frets.length; i++) {
+    const fret = position.frets[i]!;
+    const midi = position.midi[i]!;
+
+    if (fret === -1 || midi == null || midi < 0) continue;
+
+    const string = i + 1;
+    const interval = (midi - rootMidi + 12) % 12;
+
+    cells.push({ string, fret, midi, interval });
+  }
+
+  return cells;
+}
+
+/**
  * Convert a chord symbol to fretboard positions
+ *
+ * Tries chords-db first for authentic positions, falls back to algorithmic
+ * CAGED-based generation when not found in the database.
  *
  * @param chordSymbol - Chord symbol like "C:maj", "F#:min7", "N"
  * @param mode - 'full' for authentic guitar voicings, 'compact' for simplified triads
@@ -464,19 +499,21 @@ export function chordToFretboardCells(
   const parsed = parseChordSymbol(chordSymbol);
   if (!parsed) return [];
 
+  // Try chords-db first for authentic positions
+  const dbPos = getChordPositionAtIndex(chordSymbol, 0);
+  if (dbPos) {
+    return chordDbPosToFretCells(dbPos, chordSymbol);
+  }
+
   const { root, quality } = parsed;
   const rootPc = noteToPitchClass(root);
 
-  // Determine octave - use octave 3 (MIDI 48-59) as base for E-string chords
-  // This puts chords in playable range
   const baseOctave = 3;
-  const rootMidi = rootPc + (baseOctave + 1) * 12; // MIDI 60 = C4 as reference
+  const rootMidi = rootPc + (baseOctave + 1) * 12;
 
-  // Get intervals for this quality
   const intervals =
     CHORD_QUALITY_INTERVALS[quality] ?? CHORD_QUALITY_INTERVALS.maj;
 
-  // Build voicing based on mode
   if (mode === "compact") {
     return buildCompactVoicing(rootMidi, intervals, position);
   } else {

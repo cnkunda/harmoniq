@@ -8,6 +8,7 @@ commits (whisper + tabs) isolated.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Callable
@@ -36,6 +37,7 @@ from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidenc
 from app.beat_grid import estimate_beat_grid
 from app.chord_enrichment import assign_roman_numerals
 from app.chord_inference import infer_chords, infer_chords_dual_path
+from app.instrument_confusion import compute_per_section_confusion
 from app.solo_inference import infer_solo
 from app.section_refinement import refine_section_boundaries
 
@@ -363,6 +365,7 @@ def build_lesson_json_from_librosa(
     # When stem quality is imperfect and guitar stem is available, run inference
     # on both the stem and the full mix, then fuse predictions weighted by stem confidence.
     instrument_confusion: float | None = None
+    dual_fusion_log: list[dict] | None = None
     stem_conf = stem_classification.stem_confidence if stem_classification else 1.0
     use_dual_path = (
         stem_classification is not None
@@ -381,6 +384,7 @@ def build_lesson_json_from_librosa(
             )
             chord_timeline = dual_result.timeline
             instrument_confusion = dual_result.instrument_confusion
+            dual_fusion_log = dual_result.fusion_log
             logger.info(
                 "dual_path job_id=%s stem_conf=%.2f confusion=%.2f disagreements=%d/%d",
                 job_id,
@@ -654,6 +658,33 @@ def build_lesson_json_from_librosa(
     style = infer_style_from_librosa_summary(summary)
     stem_fields = _lesson_json_stem_fields(stem_classification)
 
+    # Commit 121: Per-section instrument confusion from dual-path fusion log
+    per_section_confusion = compute_per_section_confusion(
+        sections=sections,
+        chord_timeline=chord_timeline,
+        fusion_log=dual_fusion_log or [],
+    )
+
+    # Commit 121: Log per-job instrument confusion for model improvement tracking
+    if instrument_confusion is not None:
+        per_section_summary = [
+            {
+                "section_index": s.section_index,
+                "label": s.label,
+                "confusion": round(s.instrument_confusion, 3),
+                "is_high": s.is_high_confusion,
+                "beats": s.beat_count,
+                "disagreements": s.disagreement_count,
+            }
+            for s in per_section_confusion
+        ]
+        logger.info(
+            "instrument_confusion job_id=%s confusion=%.3f per_section=%s",
+            job_id,
+            instrument_confusion,
+            json.dumps(per_section_summary) if per_section_summary else "[]",
+        )
+
     # Commit 82: Set low_snr_warning for pre-emptive transcription quality warning
     # Trigger warning when transcription confidence is very low (< 0.5)
     low_snr_warning = transcription_confidence is not None and transcription_confidence < 0.5
@@ -699,6 +730,7 @@ def build_lesson_json_from_librosa(
         beat_grid_structured=beat_grid,
         stem_routing=routing_hints,
         instrument_confusion=instrument_confusion,
+        instrument_confusion_per_section=per_section_confusion,
         **stem_fields,
     )
 

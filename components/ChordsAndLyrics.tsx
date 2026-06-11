@@ -10,6 +10,7 @@ import { Guitar, Lock, Minus, Plus, Unlock } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ChordDiagram } from './ChordDiagram'
+import { ChordPositionSelector } from './ChordPositionSelector'
 import { SectionNavigator } from './SectionNavigator'
 
 import colors from '@/src/constants/colors'
@@ -83,6 +84,7 @@ export function ChordsAndLyrics({
   const [showShapes, setShowShapes] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
   const [scrollViewHeight, setScrollViewHeight] = useState(0)
+  const [activeChordPosIndex, setActiveChordPosIndex] = useState(0)
 
   const activeBar = currentBar ?? internalBar
   const isControlled = currentBar !== undefined
@@ -151,6 +153,10 @@ export function ChordsAndLyrics({
   const nextChord = displayedChord(
     bars[(activeBar + 1) % bars.length]?.chord || '',
   )
+
+  useEffect(() => {
+    setActiveChordPosIndex(0)
+  }, [activeChord])
 
   // Group bars into lines of barsPerLine
   const lines = useMemo<BarData[][]>(() => {
@@ -415,9 +421,18 @@ export function ChordsAndLyrics({
                   Now Playing
                 </Text>
                 <View className="flex-row items-end gap-3">
-                  <FadeView fadeKey={`active-${activeChord}`}>
-                    <ChordDiagram name={activeChord} size="md" isActive />
-                  </FadeView>
+                  <View>
+                    <FadeView fadeKey={`active-${activeChord}`}>
+                      <ChordDiagram name={activeChord} size="md" isActive positionIndex={activeChordPosIndex} />
+                    </FadeView>
+                    <View className="mt-1">
+                      <ChordPositionSelector
+                        chordSymbol={activeChord}
+                        currentIndex={activeChordPosIndex}
+                        onPositionChange={setActiveChordPosIndex}
+                      />
+                    </View>
+                  </View>
                   <View className="opacity-60">
                     <Text className="font-mono text-[9px] uppercase tracking-wider text-muted-brown mb-1">
                       Next

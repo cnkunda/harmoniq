@@ -225,6 +225,17 @@ export interface LessonSection {
   [key: string]: unknown
 }
 
+export interface InstrumentConfusionPerSection {
+  section_index: number
+  label: string
+  start_time: number | null
+  end_time: number | null
+  instrument_confusion: number
+  is_high_confusion: boolean
+  beat_count: number
+  disagreement_count: number
+}
+
 export interface LessonJSON {
   job_id?: string | null
   song_title?: string | null
@@ -273,6 +284,12 @@ export interface LessonJSON {
   /** Commit 110: Correction metrics. */
   correction_count?: number | null
   correction_coverage?: number | null
+  /** Commit 121: Dual-path instrument confusion metric (0-1). */
+  instrument_confusion?: number | null
+  /** Commit 112: Continuous stem quality confidence (0-1). */
+  stem_confidence?: number | null
+  /** Commit 121: Per-section instrument confusion scores. */
+  instrument_confusion_per_section?: InstrumentConfusionPerSection[]
 }
 
 // ---- Commit 110: Correction types ----
@@ -386,6 +403,8 @@ export interface ScoreResult {
     confidence: 'low' | 'medium' | 'high'
     signal_quality: number
     reliability_flags: string[]
+    stem_confidence?: number | null
+    instrument_confusion?: number | null
   }
 }
 

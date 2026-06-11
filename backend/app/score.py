@@ -352,6 +352,8 @@ def _coach_paragraph_from_score(
         parts.append("Signal was light—move closer to the mic on the next pass.")
     if "low_stem_quality" in reliability_flags:
         parts.append("The isolated guitar stem was degraded (piano bleed or low energy), so chord reference accuracy may be reduced.")
+    if "high_instrument_confusion" in reliability_flags:
+        parts.append("The transcription here is uncertain — other instruments may be interfering with the chord analysis.")
     if confidence == "low":
         parts.append("Confidence is low on this capture, so treat these numbers as directional.")
     return " ".join(parts).strip()
@@ -381,11 +383,20 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
     if stem_conf is not None and stem_conf < 0.5:
         reliability_flags.append("low_stem_quality")
 
+    # Commit 121: incorporate instrument confusion into scoring reliability
+    instrument_conf = payload.instrument_confusion
+    if instrument_conf is not None and instrument_conf > 0.3:
+        reliability_flags.append("high_instrument_confusion")
+
     confidence = _confidence_from_signal(signal_quality, voiced_ratio, harmonic_ratio)
 
     # Downgrade confidence when stem quality is poor — the transcription reference
     # may be unreliable, making scoring numbers less trustworthy.
     if stem_conf is not None and stem_conf < 0.3 and confidence != "low":
+        confidence = "low"
+    # Downgrade confidence when instrument confusion is very high — chord predictions
+    # are unreliable, so scoring numbers should be treated as directional.
+    if instrument_conf is not None and instrument_conf > 0.5 and confidence != "low":
         confidence = "low"
     if reliability_flags:
         logger.info(
@@ -442,5 +453,6 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
             signal_quality=round(signal_quality, 3),
             reliability_flags=reliability_flags,
             stem_confidence=stem_conf,
+            instrument_confusion=instrument_conf,
         ),
     )
