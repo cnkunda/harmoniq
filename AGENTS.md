@@ -48,6 +48,10 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | `python -m pytest -q tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py` | Viterbi decoding tests |
 | `python -m pytest -q tests/test_boundary_tie.py` | Boundary tie tests |
 | `python scripts/clear_analysis_cache.py` | Clear cached song analyses |
+| `python scripts/version_model.py --version X.Y.Z --weights app/chord_model.weights.h5 --log scripts/training_log.csv` | Archive model version to `research/h-gain-vX.Y.Z/` |
+| `python scripts/promote_model.py --list` | Show all model versions and active status |
+| `python scripts/promote_model.py --version X.Y.Z` | Promote version if better than active (gatekeeper) |
+| `python scripts/promote_model.py --version X.Y.Z --force` | Force promote (skip metric check) |
 
 **CI** (`.github/workflows/scoring-tests.yml`): runs frontend `vitest run` + backend pytest on 10 specific test files. Triggered on push to `main`/`master` and on all PRs.
 
@@ -400,6 +404,13 @@ python scripts/download_egdb_pg.py   # Not yet extracted
 ### Full training command
 
 ```bash
+# First, generate CQT distribution statistics for synthetic-to-real domain bridging
+python scripts/cqt_distribution_analyzer.py \
+  --guitarset-data-dir data/guitarset \
+  --idmt-data-dir data/idmt_smt_guitar \
+  --output data/cqt_stats.npz
+
+# Main training with domain gap matching + pseudo-labels
 python scripts/build_chord_tflite.py \
   --guitarset-data-dir data/guitarset \
   --idmt-data-dir data/idmt_smt_guitar \
@@ -407,7 +418,9 @@ python scripts/build_chord_tflite.py \
   --youtube-data-dir data/youtube_crawl \
   --guitar-techs-data-dir data/guitar_techs \
   --egset12-data-dir data/egset12 \
+  --pseudo-data-dir data/pseudo_label \
   --empirical-matrix data/annotations/transition_matrix_empirical.npy \
+  --cqt-stats-path data/cqt_stats.npz \
   --temperature 0.3
 ```
 

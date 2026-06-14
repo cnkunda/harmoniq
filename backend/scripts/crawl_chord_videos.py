@@ -3,18 +3,23 @@
 Searches YouTube for guitar chord tutorials for all 277 chord types,
 downloads high-confidence segments, and extracts CQT features.
 
+Phase 4a: Expanded with genre-diversified search queries (jazz, blues,
+rock, classical, fingerstyle, acoustic, electric, beginner, lesson)
+and relaxed quality filters (480p min, 1K subscribers) to increase
+dataset coverage.
+
 Process:
-1. Search: "guitar chord [type] tutorial" for each chord type
-2. Filter: ≥720p, ≤15min, channel >10K subscribers, tutorial content
+1. Search: "guitar chord [type] tutorial [genre]" for each chord type
+2. Filter: ≥480p, ≤15min, channel >1K subscribers, tutorial content
 3. OCR filter: detect tab/overlay annotations using pytesseract
 4. Download: extract audio segments using chapter/chord markers
-5. Confidence filter: run TFLite model, keep >0.8 confidence matches
+5. Confidence filter: accept all (training pipeline handles noise via loss weighting)
 6. Traceability: store URL, channel, timestamp for retraction
 
 Usage:
     python scripts/crawl_chord_videos.py [--data-dir DATA_DIR]
         [--chord-types CHORD_TYPES] [--max-per-type MAX]
-        [--dry-run] [--force]
+        [--genres GENRE ...] [--dry-run] [--force]
 
 Output:
     <data_dir>/youtube_crawl/
@@ -58,26 +63,47 @@ HOP_FRAMES = 64
 
 N_CHORD_IDX = CHORD_TO_IDX.get("N", CHROMA_BINS * BASS_BINS - 1)
 
-# Quality filtering thresholds
-MIN_RESOLUTION = 720  # p
+# Quality filtering thresholds (relaxed for Phase 4a — more data)
+MIN_RESOLUTION = 480  # p (was 720)
 MAX_DURATION = 15 * 60  # seconds
-MIN_SUBSCRIBERS = 10_000
+MIN_SUBSCRIBERS = 1_000  # (was 10_000)
 
 # Per-source loss weight (clean YouTube audio, full weight)
 YOUTUBE_LOSS_WEIGHT = 1.0
 
+# Genre-specific search suffixes for diversified crawl (Phase 4a)
+GENRE_SUFFIXES = [
+    "",
+    "jazz",
+    "blues",
+    "rock",
+    "classical",
+    "fingerstyle",
+    "acoustic",
+    "electric",
+    "beginner",
+    "lesson",
+]
 
-def _build_search_terms() -> list[str]:
-    """Build search query for each chord type.
 
-    Returns list of search terms like "guitar chord C:maj tutorial".
+def _build_search_terms(genres: list[str] | None = None) -> list[str]:
+    """Build search queries for each chord type with genre diversification.
+
+    Args:
+        genres: Optional list of genre suffixes. If None, uses GENRE_SUFFIXES.
+
+    Returns list of search terms like "guitar chord C:maj tutorial jazz".
     """
+    if genres is None:
+        genres = GENRE_SUFFIXES
     terms = []
     for quality in CHORD_QUALITIES:
         for root in ROOT_NOTES:
             chord = f"{root}:{quality}"
-            terms.append(f"guitar chord {chord} tutorial")
-            terms.append(f"how to play {chord} on guitar")
+            for genre in genres:
+                suffix = f" {genre}" if genre else ""
+                terms.append(f"guitar chord {chord} tutorial{suffix}")
+                terms.append(f"how to play {chord} on guitar{suffix}")
     return terms
 
 
@@ -253,8 +279,9 @@ def crawl_single_chord(
     chord: str,
     output_dir: Path,
     manifest_entries: list[dict],
-    max_per_type: int = 5,
+    max_per_type: int = 10,
     dry_run: bool = False,
+    genres: list[str] | None = None,
 ) -> int:
     """Crawl YouTube for a specific chord type.
 
@@ -267,7 +294,11 @@ def crawl_single_chord(
         print(f"  [DRY RUN] Would search for {chord}")
         return 0
 
-    search_term = f"guitar chord {chord} tutorial"
+    # Pick a random genre suffix for this search (diversifies results)
+    import random
+    genre = random.choice(genres if genres else GENRE_SUFFIXES)
+    suffix = f" {genre}" if genre else ""
+    search_term = f"guitar chord {chord} tutorial{suffix}"
     cmd = [
         "yt-dlp",
         "--dump-json",
@@ -410,9 +441,10 @@ def crawl_single_chord(
 def main(
     data_dir: Path,
     chord_types: list[str] | None = None,
-    max_per_type: int = 5,
+    max_per_type: int = 10,
     dry_run: bool = False,
     force: bool = False,
+    genres: list[str] | None = None,
 ) -> None:
     global RAW_DIR, CQT_DIR, MANIFEST_PATH, OUTPUT_DIR
     OUTPUT_DIR = data_dir / "youtube_crawl"
@@ -430,6 +462,10 @@ def main(
         search_terms = [f"{root}:{q}" for q in CHORD_QUALITIES for root in ROOT_NOTES]
 
     print(f"Will crawl {len(search_terms)} chord types, max {max_per_type} per type")
+    if genres:
+        print(f"Genre suffixes: {genres}")
+    else:
+        print(f"Genre suffixes: {GENRE_SUFFIXES} (all)")
 
     # Load existing manifest
     manifest_entries: list[dict] = []
@@ -457,6 +493,7 @@ def main(
         count = crawl_single_chord(
             chord, OUTPUT_DIR, manifest_entries,
             max_per_type=max_per_type, dry_run=dry_run,
+            genres=genres,
         )
         total_success += count
 
@@ -473,12 +510,15 @@ if __name__ == "__main__":
                         help="Data directory root")
     parser.add_argument("--chord-types", type=str, nargs="+", default=None,
                         help="Specific chord types to crawl (e.g. C:maj G:7)")
-    parser.add_argument("--max-per-type", type=int, default=5,
-                        help="Max clips per chord type")
+    parser.add_argument("--max-per-type", type=int, default=10,
+                        help="Max clips per chord type (default: 10)")
+    parser.add_argument("--genres", type=str, nargs="*", default=None,
+                        help="Genre suffixes to search (e.g. jazz blues rock). "
+                             "Default: all genres")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print what would be done without downloading")
     parser.add_argument("--force", action="store_true",
                         help="Re-download existing clips")
     args = parser.parse_args()
     main(args.data_dir, args.chord_types, args.max_per_type,
-         args.dry_run, args.force)
+         args.dry_run, args.force, genres=args.genres)

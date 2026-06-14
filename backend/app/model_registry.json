@@ -1,0 +1,44 @@
+{
+  "active_version": "1.0.3",
+  "versions": {
+    "1.0.1": {
+      "val_accuracy": 0.6827,
+      "val_loss": 0.9463,
+      "architecture": "single_output",
+      "promoted_at": "2026-05-25T00:00:00Z"
+    },
+    "1.0.2": {
+      "val_accuracy": 0.6845,
+      "val_loss": 0.9716,
+      "architecture": "single_output",
+      "promoted_at": "2026-05-27T00:00:00Z"
+    },
+    "1.0.3": {
+      "val_accuracy": 0.8375275135040283,
+      "val_loss": 0.6404343247413635,
+      "val_accuracy_real": null,
+      "val_accuracy_synthetic": null,
+      "domain_gap": null,
+      "architecture": "CRNN",
+      "promoted_at": "2026-05-29T13:24:55Z"
+    },
+    "1.0.4": {
+      "val_accuracy": 0.5014,
+      "val_loss": 2.1553,
+      "architecture": "single_output",
+      "note": "Regression \u2014 not promoted"
+    },
+    "1.0.5": {
+      "val_accuracy": 0.4854,
+      "val_loss": 3.2029,
+      "val_accuracy_real": 0.3468,
+      "val_accuracy_synthetic": 0.6933,
+      "domain_gap": 0.3465,
+      "architecture": "multi_task",
+      "promoted_at": "2026-06-14T04:54:54Z"
+    }
+  },
+  "promotion_metric": "val_accuracy",
+  "promotion_direction": "higher_is_better",
+  "notes": "v1.0.3 (83.8%) is the best single-output model. v1.0.5 (48.5%) is the current multi-task model \u2014 different architecture, metrics not directly comparable. Manual promotion decision required when switching architectures."
+}

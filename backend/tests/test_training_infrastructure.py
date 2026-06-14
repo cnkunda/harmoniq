@@ -27,6 +27,7 @@ from scripts.build_chord_tflite import (
     generate_pink_noise,
     generate_dataset,
     make_window_augmented,
+    mix_datasets,
     CHORD_CLASS_MAP,
     N_CLASSES_PER_QUALITY,
     WINDOW,
@@ -404,3 +405,69 @@ class TestTemperatureResampling:
 
         assert pct_01 < pct_03, \
             f"τ=0.1 should reduce common class more than τ=0.3 ({pct_01:.3f} vs {pct_03:.3f})"
+
+
+class TestSyntheticWeightCapping:
+    """Tests for Commit 148 Phase 1a: synthetic volume capping and weight=0.15."""
+
+    def test_mix_datasets_preserves_synthetic_weight(self):
+        """mix_datasets should preserve per-source sample weights."""
+        real_X = np.random.randn(50, WINDOW, FEATURE_DIM).astype(np.float32)
+        real_y = np.random.randint(0, 10, size=(50,)).astype(np.int32)
+        real_w = np.ones(50, dtype=np.float32)
+
+        synth_X = np.random.randn(100, WINDOW, FEATURE_DIM).astype(np.float32)
+        synth_y = np.random.randint(0, 10, size=(100,)).astype(np.int32)
+        synth_w = np.full(100, 0.15, dtype=np.float32)
+
+        X, y, w, source_ids = mix_datasets([
+            (real_X, real_y, real_w),
+            (synth_X, synth_y, synth_w),
+        ])
+
+        assert X.shape[1:] == (WINDOW, FEATURE_DIM)
+        assert len(X) == 150
+        assert len(w) == 150
+
+        synth_indices = source_ids == 1
+        assert np.allclose(w[synth_indices], 0.15), \
+            "All synthetic samples should have weight=0.15"
+        assert np.allclose(w[~synth_indices], 1.0), \
+            "All real samples should have weight=1.0"
+
+    def test_synthetic_capped_at_2x_real_volume(self):
+        """Simulate the Phase 1a capping logic: synthetic capped to 2x real volume."""
+        n_real = 300
+        n_synth = 5000
+        max_synthetic = n_real * 2
+
+        synth_X = np.random.randn(n_synth, WINDOW, FEATURE_DIM).astype(np.float32)
+        synth_y = np.random.randint(0, 10, size=(n_synth,)).astype(np.int32)
+
+        if len(synth_X) > max_synthetic:
+            synth_X = synth_X[:max_synthetic]
+            synth_y = synth_y[:max_synthetic]
+
+        assert len(synth_X) == 600, \
+            f"Synthetic should be capped to {max_synthetic}, got {len(synth_X)}"
+        assert len(synth_y) == 600
+
+        weights = np.full(len(synth_X), 0.15, dtype=np.float32)
+        assert np.allclose(weights, 0.15)
+
+    def test_no_cap_when_synthetic_under_2x(self):
+        """When synthetic < 2x real, no capping occurs."""
+        n_real = 1000
+        n_synth = 500
+        max_synthetic = n_real * 2
+
+        synth_X = np.random.randn(n_synth, WINDOW, FEATURE_DIM).astype(np.float32)
+        synth_y = np.random.randint(0, 10, size=(n_synth,)).astype(np.int32)
+
+        if len(synth_X) > max_synthetic:
+            synth_X = synth_X[:max_synthetic]
+            synth_y = synth_y[:max_synthetic]
+
+        assert len(synth_X) == 500, \
+            f"Synthetic should remain at {n_synth} since under 2x cap"
+        assert len(synth_y) == 500

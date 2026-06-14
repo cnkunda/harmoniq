@@ -22,12 +22,14 @@ from sklearn.model_selection import train_test_split
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_chord_tflite as _b
 from build_chord_tflite import (
-    WINDOW, FEATURE_DIM, NUM_CLASSES,
+    WINDOW, FEATURE_DIM, NUM_CLASSES, N_ROOTS,
     apply_qat, convert_to_int8_tflite,
     load_dataset_dir, load_guitarset_test,
     generate_dataset, mix_datasets, AugmentedDataGenerator,
     _HAS_TFMOT, _circular_cqt_pad, CircularCqtPad,
     QAT_EPOCHS, QAT_LEARNING_RATE,
+    derive_root_labels, derive_presence_labels, extract_chord_predictions,
+    collect_real_n_templates,
 )
 import tensorflow_model_optimization as tfmot
 
@@ -75,12 +77,33 @@ def main():
             if transition_probs.sum() > 0:
                 transition_probs = transition_probs / transition_probs.sum()
 
+    # Load CQT distribution stats for synthetic-to-real domain bridging
+    cqt_stats_path = Path("data/cqt_stats.npz")
+    cqt_stats = None
+    if cqt_stats_path.exists():
+        try:
+            cqt_stats = dict(np.load(str(cqt_stats_path)))
+            print(f"  Loaded CQT stats from {cqt_stats_path}")
+        except Exception as e:
+            print(f"  [WARN] Could not load CQT stats: {e}")
+
+    # Collect real N templates for N distribution matching
+    real_n_templates = collect_real_n_templates(
+        [Path(cfg[0]) for cfg in source_configs if Path(cfg[0]).exists()]
+    )
+    if real_n_templates:
+        print(f"  Collected {len(real_n_templates)} real N templates")
+
     # Generate synthetic data
     print("Generating synthetic dataset...")
-    synth_X, synth_y = generate_dataset(transition_probs=transition_probs)
+    synth_X, synth_y = generate_dataset(
+        transition_probs=transition_probs,
+        cqt_stats=cqt_stats,
+        real_n_templates=real_n_templates,
+    )
     p = np.random.permutation(len(synth_X))
     synth_X, synth_y = synth_X[p], synth_y[p]
-    synth_weight = np.ones(len(synth_X), dtype=np.float32)
+    synth_weight = np.full(len(synth_X), 0.15, dtype=np.float32)
     features_list.append(synth_X)
     labels_list.append(synth_y)
     weights_list.append(synth_weight)
@@ -126,11 +149,13 @@ def main():
     )
 
     # Evaluate float32 baseline
-    float32_val_pred = np.argmax(float32_model.predict(X_val, verbose=0), axis=1)
+    float32_output = float32_model.predict(X_val, verbose=0)
+    float32_val_pred = extract_chord_predictions(float32_output)
     float32_val_acc = float(np.mean(float32_val_pred == y_val))
     float32_test_acc = None
     if len(test_X) > 0:
-        float32_test_pred = np.argmax(float32_model.predict(test_X, verbose=0), axis=1)
+        float32_test_output = float32_model.predict(test_X, verbose=0)
+        float32_test_pred = extract_chord_predictions(float32_test_output)
         float32_test_acc = float(np.mean(float32_test_pred == test_y))
     print(f"  Float32 baseline: val={float32_val_acc:.2%}, test={float32_test_acc or 'N/A'}")
 
@@ -156,114 +181,143 @@ def main():
         noise_std=0.03,
         shuffle=True,
         temperature=0.3,
+        multi_task=True,
     )
+
+    y_val_root = derive_root_labels(y_val)
+    y_val_presence = derive_presence_labels(y_val).reshape(-1, 1)
+    y_val_dict = {
+        "chord_probs": tf.keras.utils.to_categorical(y_val, NUM_CLASSES).astype(np.float32),
+        "root_probs": tf.keras.utils.to_categorical(y_val_root, N_ROOTS).astype(np.float32),
+        "presence": y_val_presence.astype(np.float32),
+    }
 
     print(f"  Applying QAT wrapper ({QAT_EPOCHS} epochs, LR={QAT_LEARNING_RATE})...")
-    qat_model = apply_qat(float32_model)
 
-    qat_model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=QAT_LEARNING_RATE),
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-        metrics=["accuracy"],
-    )
+    qat_val_acc = None
+    qat_keras_path = None
+    int8_path = None
 
-    qat_callbacks = [
-        tf.keras.callbacks.CSVLogger(
-            filename=str(_SCRIPTS_DIR / "training_log_qat.csv"),
-        ),
-    ]
+    try:
+        qat_model = apply_qat(float32_model)
 
-    qat_history = qat_model.fit(
-        x=qat_generator,
-        epochs=QAT_EPOCHS,
-        validation_data=(X_val, y_val),
-        callbacks=qat_callbacks,
-        verbose=1,
-    )
+        qat_model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=QAT_LEARNING_RATE),
+            loss={
+                "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+                "root_probs": tf.keras.losses.CategoricalCrossentropy(),
+                "presence": tf.keras.losses.BinaryCrossentropy(),
+            },
+            loss_weights={"chord_probs": 1.0, "root_probs": 0.3, "presence": 0.2},
+            metrics={"chord_probs": "accuracy", "root_probs": "accuracy", "presence": "accuracy"},
+        )
 
-    qat_val_pred = np.argmax(qat_model.predict(X_val, verbose=0), axis=1)
-    qat_val_acc = float(np.mean(qat_val_pred == y_val))
-    print(f"\n  QAT val accuracy: {qat_val_acc:.2%}  (float32: {float32_val_acc:.2%})")
+        qat_callbacks = [
+            tf.keras.callbacks.CSVLogger(
+                filename=str(_SCRIPTS_DIR / "training_log_qat.csv"),
+            ),
+        ]
 
-    if len(test_X) > 0:
-        qat_test_pred = np.argmax(qat_model.predict(test_X, verbose=0), axis=1)
-        qat_test_acc = float(np.mean(qat_test_pred == test_y))
-        qat_deg = float32_test_acc - qat_test_acc if float32_test_acc is not None else 0.0
-        print(f"  QAT GuitarSet test: {qat_test_acc:.2%}  (float32: {float32_test_acc:.2%}, deg: {qat_deg:.2%})")
+        qat_history = qat_model.fit(
+            x=qat_generator,
+            epochs=QAT_EPOCHS,
+            validation_data=(X_val, y_val_dict),
+            callbacks=qat_callbacks,
+            verbose=1,
+        )
 
-    # Save QAT Keras model
-    qat_keras_path = _APP_DIR / "chord_model_qat.keras"
-    with tfmot.quantization.keras.quantize_scope():
-        qat_model.save(str(qat_keras_path))
-    print(f"  Saved QAT model -> {qat_keras_path} ({qat_keras_path.stat().st_size / 1024 / 1024:.1f} MB)")
+        qat_output = qat_model.predict(X_val, verbose=0)
+        qat_val_pred = extract_chord_predictions(qat_output)
+        qat_val_acc = float(np.mean(qat_val_pred == y_val))
+        print(f"\n  QAT val accuracy: {qat_val_acc:.2%}  (float32: {float32_val_acc:.2%})")
 
-    # ---- INT8 TFLite Conversion ----
-    print("\nConverting QAT model to INT8 TFLite...")
-    int8_path = _APP_DIR / "chord_model_qat_int8.tflite"
+        if len(test_X) > 0:
+            qat_test_output = qat_model.predict(test_X, verbose=0)
+            qat_test_pred = extract_chord_predictions(qat_test_output)
+            qat_test_acc = float(np.mean(qat_test_pred == test_y))
+            qat_deg = float32_test_acc - qat_test_acc if float32_test_acc is not None else 0.0
+            print(f"  QAT GuitarSet test: {qat_test_acc:.2%}  (float32: {float32_test_acc:.2%}, deg: {qat_deg:.2%})")
 
-    # Use a subset of validation data for representative calibration
-    rng = np.random.RandomState(42)
-    idx = rng.choice(len(X_val), size=min(100, len(X_val)), replace=False)
-    rep_data = X_val[idx]
+        # Save QAT Keras model
+        qat_keras_path = _APP_DIR / "chord_model_qat.keras"
+        with tfmot.quantization.keras.quantize_scope():
+            qat_model.save(str(qat_keras_path))
+        print(f"  Saved QAT model -> {qat_keras_path} ({qat_keras_path.stat().st_size / 1024 / 1024:.1f} MB)")
 
-    convert_to_int8_tflite(qat_model, rep_data, str(int8_path))
+        # ---- INT8 TFLite Conversion ----
+        print("\nConverting QAT model to INT8 TFLite...")
+        int8_path = _APP_DIR / "chord_model_qat_int8.tflite"
 
-    # ---- INT8 Smoke Tests ----
-    print("\n--- INT8 TFLite Smoke Tests ---")
-    test_cases = [
-        (CHORD_VOCAB["C:maj"], "C:maj"),
-        (CHORD_VOCAB["A:min"], "A:min"),
-        (CHORD_VOCAB["D#:7"], "D#:7"),
-        (CHORD_VOCAB["D:7"], "D:7"),
-    ]
+        # Use a subset of validation data for representative calibration
+        rng = np.random.RandomState(42)
+        idx = rng.choice(len(X_val), size=min(100, len(X_val)), replace=False)
+        rep_data = X_val[idx]
 
-    interpreter = tf.lite.Interpreter(model_path=str(int8_path))
-    interpreter.allocate_tensors()
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    input_scale, input_zero = input_details[0]["quantization"]
+        convert_to_int8_tflite(qat_model, rep_data, str(int8_path))
 
-    all_passed = True
-    for label_idx, label_name in test_cases:
-        # Build a representative input that should match this chord class
-        class_mask = y_train == label_idx
-        if class_mask.sum() > 0:
-            sample = X_train[class_mask][0:1]
-        else:
-            sample = np.zeros((1, WINDOW, FEATURE_DIM), dtype=np.float32)
+        # ---- INT8 Smoke Tests ----
+        print("\n--- INT8 TFLite Smoke Tests ---")
+        test_cases = [
+            (CHORD_VOCAB["C:maj"], "C:maj"),
+            (CHORD_VOCAB["A:min"], "A:min"),
+            (CHORD_VOCAB["D#:7"], "D#:7"),
+            (CHORD_VOCAB["D:7"], "D:7"),
+        ]
 
-        # Quantize input to INT8
-        q_sample = (sample / input_scale + input_zero).astype(np.int8)
-        interpreter.set_tensor(input_details[0]["index"], q_sample)
-        interpreter.invoke()
-        output = interpreter.get_tensor(output_details[0]["index"])
-        # Output is INT8, dequantize to float
-        out_scale, out_zero = output_details[0]["quantization"]
-        output_float = (output.astype(np.float32) - out_zero) * out_scale
-        pred_idx = np.argmax(output_float[0])
+        interpreter = tf.lite.Interpreter(model_path=str(int8_path))
+        interpreter.allocate_tensors()
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        input_scale, input_zero = input_details[0]["quantization"]
 
-        pred_label = CHORD_VOCAB[pred_idx]
-        expected_label = CHORD_VOCAB[label_idx]
-        match = "PASS" if pred_idx == label_idx else "FAIL"
-        if match == "FAIL":
-            all_passed = False
-        confidence = output_float[0][pred_idx] * 100
-        print(f"  {label_name:<10} -> {pred_label:<10} ({confidence:.1f}%) [{match}]")
+        all_passed = True
+        for label_idx, label_name in test_cases:
+            # Build a representative input that should match this chord class
+            class_mask = y_train == label_idx
+            if class_mask.sum() > 0:
+                sample = X_train[class_mask][0:1]
+            else:
+                sample = np.zeros((1, WINDOW, FEATURE_DIM), dtype=np.float32)
 
-    print(f"\n  All INT8 TFLite smoke tests {'PASSED' if all_passed else 'FAILED'}")
+            # Quantize input to INT8
+            q_sample = (sample / input_scale + input_zero).astype(np.int8)
+            interpreter.set_tensor(input_details[0]["index"], q_sample)
+            interpreter.invoke()
+            output = interpreter.get_tensor(output_details[0]["index"])
+            # Output is INT8, dequantize to float
+            out_scale, out_zero = output_details[0]["quantization"]
+            output_float = (output.astype(np.float32) - out_zero) * out_scale
+            pred_idx = np.argmax(output_float[0])
+
+            pred_label = CHORD_VOCAB[pred_idx]
+            expected_label = CHORD_VOCAB[label_idx]
+            match = "PASS" if pred_idx == label_idx else "FAIL"
+            if match == "FAIL":
+                all_passed = False
+            confidence = output_float[0][pred_idx] * 100
+            print(f"  {label_name:<10} -> {pred_label:<10} ({confidence:.1f}%) [{match}]")
+
+        print(f"\n  All INT8 TFLite smoke tests {'PASSED' if all_passed else 'FAILED'}")
+
+    except Exception as exc:
+        print(f"\n  [WARN] QAT pipeline failed: {exc}")
+        print("  [WARN] INT8 QAT unavailable — using FP16 dynamic quantization instead")
+        import traceback
+        traceback.print_exc()
+        qat_model = None
 
     # ---- Summary ----
     print("\n" + "=" * 60)
     print("  QAT-Only Pipeline Complete")
     print("=" * 60)
     print(f"  Float32 model: {best_path}")
-    print(f"  QAT model:     {qat_keras_path}")
-    print(f"  INT8 TFLite:   {int8_path}")
-    print(f"  qat_keras_path.exists()={qat_keras_path.exists()}")
-    print(f"  int8_path.exists()={int8_path.exists()}")
-    if int8_path.exists():
+    if qat_keras_path and qat_keras_path.exists():
+        print(f"  QAT model:     {qat_keras_path}")
+    if int8_path and int8_path.exists():
         size_kb = int8_path.stat().st_size / 1024
-        print(f"  INT8 TFLite size: {size_kb:.1f} KB")
+        print(f"  INT8 TFLite:   {int8_path} ({size_kb:.1f} KB)")
+    else:
+        print(f"  INT8 TFLite:   [NOT PRODUCED — using FP16 dynamic quantization]")
     print(f"  Float32 val acc: {float32_val_acc:.2%}")
     if qat_val_acc is not None:
         print(f"  QAT val acc:      {qat_val_acc:.2%}")

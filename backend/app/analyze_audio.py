@@ -39,6 +39,7 @@ from app.chord_enrichment import assign_roman_numerals
 from app.chord_inference import infer_chords, infer_chords_dual_path
 from app.instrument_confusion import compute_per_section_confusion
 from app.solo_inference import infer_solo
+from app.solo_harmony_analyzer import SoloHarmonizer
 from app.section_refinement import refine_section_boundaries
 
 logger = logging.getLogger("harmoniq.analyze_audio")
@@ -427,6 +428,27 @@ def build_lesson_json_from_librosa(
         logger.exception("solo inference failed for job_id=%s; continuing without solo notes", job_id)
         solo_notes = SoloNotes(notes=[])
 
+    # Commit 123: Solo harmony enrichment — cross-reference solo notes with chord timeline
+    harmonized_solo = None
+    per_bar_analysis = None
+    if (
+        chord_timeline
+        and solo_notes
+        and chord_timeline.events
+        and solo_notes.notes
+        and summary.key_name
+    ):
+        try:
+            harmonizer = SoloHarmonizer(chord_timeline, solo_notes, beat_grid, summary.key_name)
+            harmonized_solo = harmonizer.harmonized_solo
+            per_bar_analysis = harmonizer.per_bar_analysis
+            logger.info(
+                "solo harmony analysis completed for job_id=%s: %d notes, %d bars",
+                job_id, harmonized_solo.note_count, len(per_bar_analysis),
+            )
+        except Exception:
+            logger.exception("solo harmony analysis failed for job_id=%s; skipping", job_id)
+
     # Commit 117: Run Whisper before section construction so refinement has
     # all three signals (chords, vocals, energy).
     lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
@@ -731,6 +753,8 @@ def build_lesson_json_from_librosa(
         stem_routing=routing_hints,
         instrument_confusion=instrument_confusion,
         instrument_confusion_per_section=per_section_confusion,
+        harmonized_solo=harmonized_solo,
+        per_bar_analysis=per_bar_analysis,
         **stem_fields,
     )
 

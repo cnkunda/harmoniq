@@ -24,7 +24,17 @@ from datetime import datetime
 from pathlib import Path
 
 
-LOG_HEADER = "epoch,accuracy,learning_rate,loss,val_accuracy,val_loss"
+LOG_HEADER_LEGACY = "epoch,accuracy,learning_rate,loss,val_accuracy,val_loss"
+
+# Multi-task training log columns (Commit 103+)
+LOG_HEADER_MULTITASK = [
+    "chord_probs_accuracy", "chord_probs_loss", "cqt_emd", "domain_gap",
+    "loss", "presence_loss", "presence_presence_acc", "root_probs_loss",
+    "root_probs_root_accuracy", "val_accuracy_real", "val_accuracy_synthetic",
+    "val_chord_probs_accuracy", "val_chord_probs_loss", "val_loss",
+    "val_presence_loss", "val_presence_presence_acc", "val_root_probs_loss",
+    "val_root_probs_root_accuracy",
+]
 
 DEFAULT_PIPELINE_SCRIPTS = [
     "chord_inference.py",
@@ -32,12 +42,14 @@ DEFAULT_PIPELINE_SCRIPTS = [
     "viterbi_decoder.py",
     "chord_transitions.py",
     "chord_metrics.py",
+    "solo_harmony_analyzer.py",
 ]
 
 COMPANION_ARTIFACTS = [
     "chord_model.keras",
     "chord_model_best.keras",
     "chord_model.tflite",
+    "chord_model_qat.keras",
 ]
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -87,23 +99,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def parse_training_log(log_path: Path) -> dict:
     with log_path.open("r", newline="") as f:
         reader = csv.DictReader(f)
-
-        if reader.fieldnames != [
-            "epoch",
-            "accuracy",
-            "learning_rate",
-            "loss",
-            "val_accuracy",
-            "val_loss",
-        ]:
-            expected = LOG_HEADER
-            got = ",".join(reader.fieldnames or [])
-            raise ValueError(
-                f"CSV header mismatch in {log_path}\n"
-                f"  expected: {expected}\n"
-                f"  got:      {got}"
-            )
-
+        fieldnames = reader.fieldnames or []
         rows = list(reader)
 
     if not rows:
@@ -112,12 +108,36 @@ def parse_training_log(log_path: Path) -> dict:
     first = rows[0]
     last = rows[-1]
 
-    return {
-        "total_epochs": len(rows),
-        "initial_lr": float(first["learning_rate"]),
-        "final_val_acc": float(last["val_accuracy"]),
-        "final_val_loss": float(last["val_loss"]),
-    }
+    # Legacy 6-column format (v1.0.1–v1.0.4)
+    if fieldnames == [
+        "epoch", "accuracy", "learning_rate", "loss", "val_accuracy", "val_loss",
+    ]:
+        return {
+            "total_epochs": len(rows),
+            "initial_lr": float(first["learning_rate"]),
+            "final_val_acc": float(last["val_accuracy"]),
+            "final_val_loss": float(last["val_loss"]),
+            "format": "legacy",
+        }
+
+    # Multi-task 18-column format (v1.0.5+)
+    if "val_accuracy_real" in fieldnames and "chord_probs_accuracy" in fieldnames:
+        return {
+            "total_epochs": len(rows),
+            "initial_lr": None,  # Not in multi-task CSV
+            "final_val_acc": float(last.get("val_chord_probs_accuracy", 0)),
+            "final_val_loss": float(last.get("val_loss", 0)),
+            "final_val_accuracy_real": float(last.get("val_accuracy_real", 0)),
+            "final_val_accuracy_synthetic": float(last.get("val_accuracy_synthetic", 0)),
+            "final_domain_gap": float(last.get("domain_gap", 0)),
+            "final_chord_probs_accuracy": float(last.get("chord_probs_accuracy", 0)),
+            "format": "multitask",
+        }
+
+    raise ValueError(
+        f"Unrecognized CSV header in {log_path}\n"
+        f"  columns: {fieldnames}"
+    )
 
 
 def discover_artifacts(weights_path: Path) -> list[Path]:
@@ -176,6 +196,18 @@ def copy_pipeline_scripts(
 
 
 def generate_metadata(version: str, log_data: dict, dest: Path) -> None:
+    metrics = {
+        "val_accuracy": log_data["final_val_acc"],
+        "val_loss": log_data["final_val_loss"],
+    }
+    if log_data.get("format") == "multitask":
+        metrics.update({
+            "val_accuracy_real": log_data.get("final_val_accuracy_real"),
+            "val_accuracy_synthetic": log_data.get("final_val_accuracy_synthetic"),
+            "domain_gap": log_data.get("final_domain_gap"),
+            "chord_probs_accuracy": log_data.get("final_chord_probs_accuracy"),
+        })
+
     metadata = {
         "model_name": "H-GAIN",
         "version": version,
@@ -186,12 +218,9 @@ def generate_metadata(version: str, log_data: dict, dest: Path) -> None:
         },
         "hyperparameters": {
             "epochs": log_data["total_epochs"],
-            "initial_lr": log_data["initial_lr"],
+            "initial_lr": log_data.get("initial_lr"),
         },
-        "metrics": {
-            "val_accuracy": log_data["final_val_acc"],
-            "val_loss": log_data["final_val_loss"],
-        },
+        "metrics": metrics,
         "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
@@ -215,9 +244,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  ERROR: {e}", file=sys.stderr)
         return 1
     print(f"  [OK]       {args.log.name} — {log_data['total_epochs']} epochs, "
-          f"initial_lr={log_data['initial_lr']}, "
           f"val_acc={log_data['final_val_acc']:.4f}, "
           f"val_loss={log_data['final_val_loss']:.4f}")
+    if log_data.get("format") == "multitask":
+        print(f"             real={log_data.get('final_val_accuracy_real', 0):.4f}, "
+              f"synth={log_data.get('final_val_accuracy_synthetic', 0):.4f}, "
+              f"domain_gap={log_data.get('final_domain_gap', 0):.4f}")
 
     # Discover companion artifacts
     print(f"\n[2/5] Discovering model artifacts ...")

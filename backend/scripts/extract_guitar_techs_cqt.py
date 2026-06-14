@@ -201,6 +201,7 @@ def process_track(audio_path: Path, timeline_path: Path, output_dir: Path,
         track_id=track_id,
         player_id=player,
         split=split,
+        loss_weight=1.0,
     )
 
     labeled = window_labels[window_labels != N_CHORD_IDX]

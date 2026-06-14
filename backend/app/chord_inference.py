@@ -107,31 +107,6 @@ def _get_segment_db(y_segment: np.ndarray) -> float:
     return float(20 * math.log10(rms))
 
 
-def _apply_confidence_threshold(
-    probs: np.ndarray, threshold: float = N_CONFIDENCE_THRESHOLD
-) -> np.ndarray:
-    """Apply confidence threshold: default to N when model is uncertain.
-
-    When the model's top prediction has confidence below the threshold,
-    override the prediction to N (no-chord). This catches the "unsure"
-    cases where the model can't reliably distinguish a chord from silence.
-
-    Args:
-        probs: Shape [T, _NUM_CLASSES], probability distributions.
-        threshold: Minimum confidence to accept a chord prediction.
-
-    Returns:
-        Adjusted probabilities with uncertain frames defaulting to N.
-    """
-    n_idx = _CHORD_TO_IDX.get("N", _NUM_CLASSES - 1)
-    result = probs.copy()
-    max_probs = np.max(result, axis=1)
-    uncertain = max_probs < threshold
-    result[uncertain] = 0.0
-    result[uncertain, n_idx] = 1.0
-    return result
-
-
 def _smooth_chords(events: list[ChordEvent]) -> list[ChordEvent]:
     """Fallback 3-point median filter. Kept for compatibility; Viterbi replaces this."""
     if len(events) < 3:
@@ -393,7 +368,12 @@ def _run_keras_raw(y: np.ndarray, sr: int) -> list[dict]:
 
 
 def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
-    """Run inference using the TFLite model (requires Flex delegate for CRNN)."""
+    """Run inference using the TFLite model.
+
+    The model outputs (batch, 277) — a single classification per window.
+    Uses vote-accumulation to expand per-window predictions to per-frame
+    timeline, matching the Keras inference path.
+    """
     windows, hop = _extract_features(y, sr)
 
     interp = _get_interpreter()
@@ -401,9 +381,8 @@ def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
     outp_detail = interp.get_output_details()[0]
 
     T_overlap = len(windows)
-    T = T_overlap * _HOP_FRAMES - _WINDOW // 2
 
-    window_outputs = np.empty((T_overlap, _WINDOW, _NUM_CLASSES), dtype=np.float32)
+    all_probs = np.empty((T_overlap, _NUM_CLASSES), dtype=np.float32)
 
     for start in range(0, T_overlap, _BATCH_CHUNK):
         end = min(start + _BATCH_CHUNK, T_overlap)
@@ -411,9 +390,22 @@ def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
         interp.set_tensor(inp_detail["index"], chunk)
         interp.invoke()
         output = interp.get_tensor(outp_detail["index"])
-        window_outputs[start:end] = output.reshape(end - start, _WINDOW, _NUM_CLASSES)
+        all_probs[start:end] = output
 
-    merged_probs = _merge_overlapping_predictions(window_outputs, T)
+    # Vote-accumulation: each window's prediction votes for all 128 frames
+    T = T_overlap * _HOP_FRAMES - _WINDOW // 2
+    merged_probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+    counts = np.zeros(T, dtype=np.float32)
+
+    for i in range(T_overlap):
+        frame_start = i * _HOP_FRAMES
+        frame_end = frame_start + _WINDOW
+        for f in range(frame_start, min(frame_end, T)):
+            merged_probs[f] += all_probs[i]
+            counts[f] += 1
+
+    valid = counts > 0
+    merged_probs[valid] /= counts[valid, np.newaxis]
 
     results = []
     for i in range(T):
@@ -735,6 +727,61 @@ def _estimate_key_from_audio(y: np.ndarray, sr: int) -> tuple[int, str, float]:
 # Main inference entry point
 # ---------------------------------------------------------------------------
 
+def _reject_spurious_n(
+    optimal_path: np.ndarray,
+    emission_probs: np.ndarray,
+    n_idx: int,
+    entropy_threshold: float = 0.4,
+    confidence_gap_threshold: float = 0.15,
+) -> np.ndarray:
+    """Reject N predictions where the model is uncertain.
+
+    If the Viterbi path labels a frame as N but the emission distribution
+    has high entropy (flat, uncertain) and the top-2 confidence gap is
+    small, the N is likely a spurious escape-hatch prediction. We replace
+    it with the next-highest non-N class.
+
+    Args:
+        optimal_path: (T,) Viterbi-decoded chord indices.
+        emission_probs: (T, C) per-frame probability distributions.
+        n_idx: Index of the N (no-chord) class.
+        entropy_threshold: Frames with emission entropy above this are
+            considered uncertain (default 0.4, range ~0-2.0 for 277 classes).
+        confidence_gap_threshold: If top-2 confidence gap is below this,
+            the model is split between two predictions.
+
+    Returns:
+        Corrected path with spurious N predictions replaced.
+    """
+    corrected = optimal_path.copy()
+    n_mask = optimal_path == n_idx
+    if not n_mask.any():
+        return corrected
+
+    probs_n_frames = emission_probs[n_mask]
+    # Normalized entropy: H / log(C) — ranges [0, 1]
+    log_c = np.log(float(emission_probs.shape[1]))
+    entropy = -np.sum(probs_n_frames * np.log(probs_n_frames + 1e-10), axis=1) / log_c
+
+    for i, is_n in enumerate(np.where(n_mask)[0]):
+        if entropy[i] < entropy_threshold:
+            continue
+        frame_probs = emission_probs[is_n]
+        top2_indices = np.argpartition(-frame_probs, 2)[:2]
+        top2_conf = frame_probs[top2_indices]
+        sorted_confs = np.sort(top2_conf)[::-1]
+        gap = sorted_confs[0] - sorted_confs[1] if len(sorted_confs) > 1 else 1.0
+        if gap < confidence_gap_threshold:
+            # Replace with top non-N prediction
+            candidates = np.argsort(-frame_probs)
+            for candidate in candidates:
+                if candidate != n_idx:
+                    corrected[is_n] = candidate
+                    break
+
+    return corrected
+
+
 def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
     try:
         import librosa
@@ -888,12 +935,11 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
 
         base_matrix = get_transition_matrix()
 
-        # Bumped from 0.3: chroma-based key detection routinely returns
-        # 0.35-0.4 on real songs, and applying a wrong key constraint is
-        # worse than no constraint at all. With the chroma fallback now
-        # restricted to a 25-class vocabulary, the unconstrained matrix
-        # also produces more stable paths.
-        if key_conf >= 0.6:
+        # Chroma-based key detection routinely returns 0.35-0.4 on real songs.
+        # Lowered threshold from 0.6 to 0.3 so key constraint activates more
+        # often — even a weak key signal is better than none for restricting
+        # the 277-class transition space.
+        if key_conf >= 0.3:
             trans_matrix = apply_key_constraint(base_matrix, key_root, key_mode)
         else:
             trans_matrix = base_matrix
@@ -941,9 +987,13 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
             cnt = int(vit_bc[idx])
             logger.info("  viterbi: %s %.1f%%", CHORD_VOCAB[idx], 100.0 * cnt / T)
 
+        # Commit 148 Phase 1c: entropy-based N escape hatch rejection
+        n_idx = _CHORD_TO_IDX.get("N", _NUM_CLASSES - 1)
+        corrected_path = _reject_spurious_n(optimal_path, emission_probs, n_idx)
+
         events: list[ChordEvent] = []
         for t in range(T):
-            chord_idx = int(optimal_path[t])
+            chord_idx = int(corrected_path[t])
             events.append(ChordEvent(
                 timestamp=float(timestamps[t]),
                 chord=CHORD_VOCAB[chord_idx],

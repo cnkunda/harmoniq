@@ -288,7 +288,7 @@ def apply_key_constraint(
 
     penalty = np.ones((n, n), dtype=np.float32)
     penalty[one] = 0.4
-    penalty[neither] = 0.4
+    penalty[neither] = 0.15
 
     # Extra tritone penalty for non-diatonic pairs
     for i in range(n):

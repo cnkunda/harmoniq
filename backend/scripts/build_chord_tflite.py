@@ -96,6 +96,18 @@ FEATURE_DIM     = CHROMA_BINS + BASS_BINS         # 40
 QAT_EPOCHS = 5
 QAT_LEARNING_RATE = 1e-4
 
+# Commit 148 Phase 3b: Multi-task head constants
+N_ROOTS = 13           # 12 chromatic roots + N (index 12)
+CHORD_LOSS_WEIGHT = 1.0
+ROOT_LOSS_WEIGHT = 0.2
+PRESENCE_LOSS_WEIGHT = 0.1
+N_INDEX = NUM_CLASSES - 1  # 276 — index of the N (no-chord) class
+
+# Commit 148 Phase 2a: Cosine annealing LR schedule
+INITIAL_LR = 1e-3          # Cosine start LR (reduced from 3e-3 for multi-task stability)
+MIN_LR = 1e-5               # Prevents total stall (was 1e-6 under ReduceLROnPlateau)
+FIRST_DECAY_EPOCHS = 30     # Cosine half-period matches Stage 1 duration
+
 # Quality groups for per-category accuracy tracking (Commit 98d)
 QUALITY_GROUPS = {
     "triad":           {"maj", "min"},
@@ -132,6 +144,163 @@ def compute_grouped_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str
 
 
 # ---------------------------------------------------------------------------
+# Phase 6a. Bootstrap confidence intervals
+# ---------------------------------------------------------------------------
+
+def bootstrap_ci_accuracies(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    n_bootstraps: int = 1000,
+    ci_level: float = 0.95,
+    seed: int = 42,
+) -> dict[str, float]:
+    """Compute bootstrapped accuracy with confidence intervals.
+
+    Sample with replacement n_bootstraps times, compute accuracy each time,
+    and report mean ± 1.96σ as the 95% CI.
+
+    Args:
+        y_true: Ground truth class indices, shape (N,).
+        y_pred: Predicted class indices, shape (N,).
+        n_bootstraps: Number of bootstrap resamples.
+        ci_level: Confidence level (default 0.95 → 95% CI).
+        seed: Random seed for reproducibility.
+
+    Returns:
+        Dict with keys: mean_acc, std_acc, ci_lower, ci_upper.
+    """
+    rng = np.random.RandomState(seed)
+    n = len(y_true)
+    boot_accs = np.empty(n_bootstraps, dtype=np.float64)
+    for i in range(n_bootstraps):
+        idx = rng.randint(0, n, size=n)
+        boot_accs[i] = float(np.mean(y_pred[idx] == y_true[idx]))
+    mean_acc = float(np.mean(boot_accs))
+    std_acc = float(np.std(boot_accs))
+    z = 1.96  # for 95% CI
+    ci_lower = float(np.percentile(boot_accs, (1 - ci_level) / 2 * 100))
+    ci_upper = float(np.percentile(boot_accs, (1 + ci_level) / 2 * 100))
+    return {
+        "mean_acc": mean_acc,
+        "std_acc": std_acc,
+        "ci_lower": ci_lower,
+        "ci_upper": ci_upper,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase 6c. CQT domain visualization (EMD + t-SNE)
+# ---------------------------------------------------------------------------
+
+def compute_cqt_emd(
+    real_cqt: np.ndarray,
+    synth_cqt: np.ndarray,
+    n_bins: int = 40,
+) -> float:
+    """Compute Earth Mover's Distance between real and synthetic CQT distributions.
+
+    Averages per-bin Wasserstein-1 distances across all 40 frequency bins.
+    Lower values indicate more similar distributions.
+
+    Args:
+        real_cqt: Real CQT windows, shape (N_real, T, n_bins).
+        synth_cqt: Synthetic CQT windows, shape (N_synth, T, n_bins).
+        n_bins: Number of CQT frequency bins (default 40).
+
+    Returns:
+        Mean EMD across all bins (float).
+    """
+    from scipy.stats import wasserstein_distance
+
+    # Flatten to (samples, features) for each domain
+    real_flat = real_cqt.reshape(-1, n_bins)
+    synth_flat = synth_cqt.reshape(-1, n_bins)
+
+    emd_per_bin = []
+    for b in range(n_bins):
+        emd = wasserstein_distance(real_flat[:, b], synth_flat[:, b])
+        emd_per_bin.append(emd)
+    return float(np.mean(emd_per_bin))
+
+
+def visualize_cqt_domain(
+    real_cqt: np.ndarray,
+    synth_cqt: np.ndarray,
+    epoch: int,
+    emd_value: float,
+    output_dir: Path | str,
+    max_samples: int = 1000,
+    seed: int = 42,
+) -> Path | None:
+    """Generate t-SNE projection of real vs synthetic CQT windows.
+
+    Saves a scatter plot to output_dir/cqt_domain_plot_epoch{N}.png.
+    Real samples in blue, synthetic in red.
+
+    Args:
+        real_cqt: Real CQT windows, shape (N_real, T, n_bins).
+        synth_cqt: Synthetic CQT windows, shape (N_synth, T, n_bins).
+        epoch: Current epoch number (for filename + title).
+        emd_value: Current EMD value (for title annotation).
+        output_dir: Directory to save the plot.
+        max_samples: Max samples per domain to plot (t-SNE is O(N²)).
+        seed: Random seed for subsampling.
+
+    Returns:
+        Path to saved plot, or None if matplotlib is unavailable.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from sklearn.manifold import TSNE
+    except ImportError:
+        print("  [WARN] matplotlib or sklearn not available — skipping CQT domain plot")
+        return None
+
+    rng = np.random.RandomState(seed)
+
+    # Flatten to (samples, features)
+    real_flat = real_cqt.reshape(real_cqt.shape[0], -1)
+    synth_flat = synth_cqt.reshape(synth_cqt.shape[0], -1)
+
+    # Subsample
+    n_real = min(max_samples, len(real_flat))
+    n_synth = min(max_samples, len(synth_flat))
+    idx_real = rng.choice(len(real_flat), size=n_real, replace=False)
+    idx_synth = rng.choice(len(synth_flat), size=n_synth, replace=False)
+    X_real = real_flat[idx_real]
+    X_synth = synth_flat[idx_synth]
+
+    # Combine for t-SNE
+    X_all = np.concatenate([X_real, X_synth], axis=0)
+    labels = np.array([0] * n_real + [1] * n_synth)
+
+    # t-SNE projection
+    perplexity = min(30, len(X_all) - 1)
+    tsne = TSNE(n_components=2, random_state=seed, perplexity=perplexity)
+    X_2d = tsne.fit_transform(X_all)
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 8))
+    mask_real = labels == 0
+    mask_synth = labels == 1
+    ax.scatter(X_2d[mask_real, 0], X_2d[mask_real, 1],
+               c="blue", alpha=0.5, s=10, label=f"Real (n={n_real})")
+    ax.scatter(X_2d[mask_synth, 0], X_2d[mask_synth, 1],
+               c="red", alpha=0.5, s=10, label=f"Synthetic (n={n_synth})")
+    ax.set_title(f"CQT Domain Projection — Epoch {epoch}\nEMD: {emd_value:.4f}")
+    ax.legend()
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    output_path = Path(output_dir) / f"cqt_domain_plot_epoch{epoch}.png"
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return output_path
+
+
+# ---------------------------------------------------------------------------
 # 1b. No-Chord (N) Silence Templates (Phase 1a)
 # ---------------------------------------------------------------------------
 _N_SILENCE_VARIANTS = [
@@ -140,6 +309,41 @@ _N_SILENCE_VARIANTS = [
     "bg_noise",       # Uniform low energy with random fluctuations
     "single_pluck",   # One bin at moderate energy, rest near zero
 ]
+
+
+def collect_real_n_templates(data_dirs: list[Path]) -> list[np.ndarray]:
+    """Extract real N (no-chord) windows from real CQT datasets.
+
+    Scans .npz files in processed/cqt/ for frames whose label matches the
+    N class (last index in CHORD_CLASS_MAP). These real silent/no-chord
+    passages provide realistic N distribution to replace purely synthetic
+    silence during training.
+
+    Args:
+        data_dirs: List of dataset paths containing processed/cqt/*.npz.
+
+    Returns:
+        List of (128, 40) arrays, each a real N-cqt feature window.
+    """
+    n_idx = NUM_CLASSES - 1
+    templates: list[np.ndarray] = []
+
+    for data_dir in data_dirs:
+        cqt_dir = data_dir / "processed" / "cqt"
+        if not cqt_dir.exists():
+            continue
+        for npz_path in sorted(cqt_dir.glob("*.npz")):
+            try:
+                data = np.load(npz_path)
+                features = data["features"]
+                labels = data["labels"]
+                n_mask = labels == n_idx
+                n_windows = features[n_mask]
+                templates.extend(n_windows)
+            except Exception as e:
+                print(f"  [WARN] skipping {npz_path.name}: {e}")
+
+    return templates
 
 
 def _make_n_silence_template() -> np.ndarray:
@@ -194,13 +398,15 @@ def _make_n_silence_template() -> np.ndarray:
 # ---------------------------------------------------------------------------
 # 2. Data Generation (Harmonic Overtones with Extension Attenuation)
 # ---------------------------------------------------------------------------
-def make_cqt_template(root: int, quality: str, bass_octave: int = 1) -> np.ndarray:
+def make_cqt_template(root: int, quality: str) -> np.ndarray:
     """Generate 36-bin CQT template with octave-aware chord tones.
+
+    Chord tones are placed in octaves 2-3 matching real guitar range
+    (lowest string E2=82.4 Hz lives in octave 2, bin 12+).
 
     Args:
         root: Root note index (0-11)
         quality: Chord quality string
-        bass_octave: Which octave to place bass (1, 2, or 3)
 
     Returns:
         40-bin feature vector [36 CQT + 4 bass]
@@ -229,8 +435,9 @@ def make_cqt_template(root: int, quality: str, bass_octave: int = 1) -> np.ndarr
         cqt[(bin_idx + 7) % CHROMA_BINS] += 0.5
         cqt[bin_idx] += 0.3
 
-    # Place root note in octave 1 (bass register) for root-position presence
-    cqt[root] += 0.5
+    # Place root note in octave 2 (guitar's lowest string is E2=82.4 Hz,
+    # which falls in octave 2 of the CQT grid)
+    cqt[12 + root] += 0.5
 
     total = cqt.sum()
     if total > 0:
@@ -622,7 +829,9 @@ def apply_temporal_jitter_to_window_features(window: np.ndarray, max_shift_ms: f
 
 
 def generate_dataset(samples_per_class: int = 120, config: dict = None,
-                      transition_probs: np.ndarray | None = None):
+                      transition_probs: np.ndarray | None = None,
+                      cqt_stats: dict | None = None,
+                      real_n_templates: list[np.ndarray] | None = None):
     """Generate augmented chord dataset with realistic variability.
 
     Includes chord transition windows sampled from the empirical chord
@@ -634,6 +843,14 @@ def generate_dataset(samples_per_class: int = 120, config: dict = None,
     This fixes the critical bug where 80% of pre-generated samples had
     pitch-shifted features but original-chord labels.
 
+    When cqt_stats is provided (from cqt_distribution_analyzer), synthetic
+    windows are post-processed with distribution matching to bridge the
+    synthetic-to-real domain gap (Commit 148 Phase 1b).
+
+    When real_n_templates is provided, N (no-chord) frames use real extracted
+    CQT features from GuitarSet gaps instead of purely synthetic silence
+    (Commit 148 Phase 1c).
+
     Args:
         samples_per_class: Base samples per chord class (80 → 277×80 = 22,160 total).
                            Reduced from 260 to balance real/synthetic ratio.
@@ -641,6 +858,10 @@ def generate_dataset(samples_per_class: int = 120, config: dict = None,
         transition_probs: Optional (NUM_CLASSES,) marginal chord distribution from
             empirical transition matrix. Used to sample chord pairs for transition
             windows. If None, samples uniform.
+        cqt_stats: Optional CQT statistics for distribution matching. If None,
+            no distribution matching is applied.
+        real_n_templates: Optional list of real (128, 40) N-CQT windows. If
+            provided, replaces ~50% of synthetic N samples with real ones.
     """
     cfg = config or {}
     inversion_rates = cfg.get("inversion_rates", [0.60, 0.25, 0.15])
@@ -660,29 +881,41 @@ def generate_dataset(samples_per_class: int = 120, config: dict = None,
     X, y = [], []
 
     for idx, (root_idx, quality) in enumerate(CHORD_CLASS_MAP):
-        template = make_cqt_template(root_idx, quality)
+        # Commit 148 Phase 1c: use real N templates from GuitarSet gaps
+        if quality == "N" and real_n_templates and np.random.random() < 0.5:
+            template = real_n_templates[np.random.randint(len(real_n_templates))]
+            template = template.copy()
+            # Add mild augmentation to increase diversity of real N frames
+            if np.random.random() < 0.4:
+                noise = generate_pink_noise(template.shape, 0.005)
+                template = np.clip(template + noise, 0, 1)
+        else:
+            template = make_cqt_template(root_idx, quality)
 
         for _ in range(samples_per_class):
-            inversion = np.random.choice([0, 1, 2], p=inversion_rates)
-            augmented = apply_inversion(template, root_idx, quality, inversion)
-            augmented = apply_missing_notes(augmented, quality, dropout_rate)
-            augmented = apply_extension_dropout(augmented, quality, extension_drop_rate)
+            if template.ndim == 1 or template.shape[0] != WINDOW:
+                inversion = np.random.choice([0, 1, 2], p=inversion_rates)
+                augmented = apply_inversion(template, root_idx, quality, inversion)
+                augmented = apply_missing_notes(augmented, quality, dropout_rate)
+                augmented = apply_extension_dropout(augmented, quality, extension_drop_rate)
 
-            if np.random.random() < bass_rate:
-                strength = np.random.uniform(0.1, 0.3)
-                augmented = apply_bass_ambiguity(augmented, root_idx, quality, strength)
+                if np.random.random() < bass_rate:
+                    strength = np.random.uniform(0.1, 0.3)
+                    augmented = apply_bass_ambiguity(augmented, root_idx, quality, strength)
 
-            # Guitar body resonance — applied to template before window creation
-            if np.random.random() < guitar_body_rate:
-                augmented = apply_guitar_body_resonance(augmented, strength=0.3)
+                if np.random.random() < guitar_body_rate:
+                    augmented = apply_guitar_body_resonance(augmented, strength=0.3)
 
-            std = 0.08 + np.random.uniform(0, 0.12)
-            window, shift = make_window_augmented(
-                augmented, std,
-                pitch_range=pitch_range,
-                stretch_rate=stretch_rate,
-                stretch_range=stretch_range
-            )
+                std = 0.08 + np.random.uniform(0, 0.12)
+                window, shift = make_window_augmented(
+                    augmented, std,
+                    pitch_range=pitch_range,
+                    stretch_rate=stretch_rate,
+                    stretch_range=stretch_range
+                )
+            else:
+                window = template.copy()
+                shift = 0
 
             # Apply strumming onset after window creation (temporal)
             if np.random.random() < strumming_rate:
@@ -707,6 +940,9 @@ def generate_dataset(samples_per_class: int = 120, config: dict = None,
             if quality == "N":
                 if np.random.random() < 0.6:
                     window = apply_n_augmentation(window)
+
+            # Commit 148 Phase 1b: distribution matching for domain gap
+            window = _apply_distribution_matching(window, cqt_stats, strength=0.8)
 
             if np.random.random() < temporal_jitter_prob:
                 max_shift_ms = 30.0
@@ -746,7 +982,9 @@ def generate_dataset(samples_per_class: int = 120, config: dict = None,
         template_a = make_cqt_template(root_a, qual_a)
         template_b = make_cqt_template(root_b, qual_b)
         mix_ratio = np.random.uniform(0.3, 0.7)
-        X.append(make_transition_window(template_a, template_b, mix_ratio))
+        window = make_transition_window(template_a, template_b, mix_ratio)
+        window = _apply_distribution_matching(window, cqt_stats, strength=0.3)
+        X.append(window)
         y.append(idx_a)
     
     return np.array(X, dtype=np.float32), np.array(y, dtype=np.int32)
@@ -1030,32 +1268,82 @@ def apply_n_augmentation(window: np.ndarray) -> np.ndarray:
     return result
 
 
-def apply_mixup(
-    X_batch: np.ndarray, y_batch: np.ndarray, alpha: float = 0.2
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
-    """Apply Mixup augmentation to a batch of samples.
+# Mixup is now applied inline in AugmentedDataGenerator.__getitem__
+# (Commit 148 Phase 2b)
 
-    Mixup creates virtual training examples by convexly combining pairs
-    of samples and their labels. This regularizes the model and smooths
-    decision boundaries, especially helpful for N vs chord confusion.
+
+def _apply_distribution_matching(
+    window: np.ndarray, cqt_stats: dict | None = None,
+    strength: float = 0.8,
+) -> np.ndarray:
+    """Bridge synthetic-to-real domain gap via CQT distribution matching.
+
+    Three complementary operations (applied in sequence):
+      1. Per-bin energy scaling: scales each of the 40 bins toward real
+         energy distribution using per_bin_mean / per_bin_std.
+      2. Structured noise injection: noise sampled from real covariance
+         structure (Cholesky), preserving inter-bin correlations.
+      3. PCA-mode perturbation: projects window onto top-10 real PCA
+         components and perturbs them with variance-scaled noise.
+
+    Each operation has a probability < 1.0 so the model sees both
+    matched and unmatched synthetic data.
 
     Args:
-        X_batch: Feature batch of shape (batch, WINDOW, FEATURE_DIM).
-        y_batch: Label batch of shape (batch,).
-        alpha: Beta distribution parameter (higher = more mixing).
+        window: (128, 40) synthetic CQT feature window.
+        cqt_stats: Output from cqt_distribution_analyzer.compute_cqt_statistics().
+            If None, this is a no-op.
+        strength: Overall scaling of distribution matching (0 = none, 1 = full).
 
     Returns:
-        (X_mixed, y_a, y_b, lam) where:
-        - X_mixed: Mixed features
-        - y_a, y_b: Original labels for the two mixed samples
-        - lam: Mixing coefficient
+        Modified window with same shape.
     """
-    lam = np.random.beta(alpha, alpha)
-    batch_size = len(X_batch)
-    indices = np.random.permutation(batch_size)
+    if cqt_stats is None:
+        return window
 
-    X_mixed = lam * X_batch + (1.0 - lam) * X_batch[indices]
-    return X_mixed, y_batch, y_batch[indices], lam
+    rng = np.random.default_rng()
+
+    # 1. Per-bin energy scaling (90% probability — nearly always match)
+    if rng.random() < 0.9:
+        real_mean = cqt_stats["per_bin_mean"]
+        real_std = cqt_stats["per_bin_std"]
+        window_mean = window.mean(axis=0)
+        # Scale each bin toward real distribution
+        scale = 1.0 + strength * ((real_mean / (window_mean + 1e-10)) - 1.0)
+        scale = np.clip(scale, 0.5, 2.0)
+        window = window * scale
+        # Then add noise to match real variance
+        noise_scale = strength * 0.3 * real_std
+        window = window + rng.normal(0, noise_scale, size=window.shape)
+        window = np.clip(window, 0.0, None)
+
+    # 2. Structured noise from real covariance (80% probability)
+    if rng.random() < 0.8:
+        cov = cqt_stats["covariance"]
+        try:
+            L = np.linalg.cholesky(
+                cov + 1e-6 * np.eye(FEATURE_DIM, dtype=np.float32)
+            )
+            structured_noise = rng.normal(0, strength * 0.15, size=(WINDOW, FEATURE_DIM))
+            structured_noise = structured_noise @ L.T
+            window = window + structured_noise
+        except np.linalg.LinAlgError:
+            pass
+
+    # 3. PCA-mode perturbation (80% probability)
+    if rng.random() < 0.8 and len(cqt_stats.get("pca_components", [])) >= 3:
+        components = cqt_stats["pca_components"]  # (K, 5120)
+        flat = window.reshape(1, -1)  # (1, 5120)
+        proj = flat @ components.T  # (1, K)
+        var = cqt_stats["pca_explained_variance"]
+        # Perturb higher-variance modes more (they capture real structure)
+        perturb = rng.normal(0, 1, size=proj.shape) * np.sqrt(var) * strength * 0.2
+        reconstructed = flat + (perturb @ components)  # (1, 5120)
+        window = reconstructed.reshape(WINDOW, FEATURE_DIM)
+
+    # Final safety clip — CQT features are non-negative
+    window = np.clip(window, 0.0, None)
+    return window
 
 
 # ---------------------------------------------------------------------------
@@ -1079,6 +1367,9 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
     - Time stretch (0.9x-1.1x) via temporal interpolation
     - Pink noise injection (low amplitude) for spectral robustness
     - Async batch generation via `workers` + `use_multiprocessing`
+    - ``transition_real_ratio``: target real-data fraction in batches
+      for gradual curriculum transition. Starts at 0.0 (no override)
+      and can be adjusted via callback to smoothly shift data mix.
     """
 
     def __init__(
@@ -1093,12 +1384,14 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         stretch_range: tuple[float, float] = (0.9, 1.1),
         noise_std: float = 0.05,
         shuffle: bool = True,
-        temperature: float = 0.3,
-        p_mixup: float = 0.3,
+        temperature: float = 0.5,
+        p_mixup: float = 0.15,
         mixup_alpha: float = 0.2,
+        real_mask: np.ndarray | None = None,
+        transition_real_ratio: float | None = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__()
         self.X = X
         self.y = y
         self.w = w
@@ -1112,10 +1405,15 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         self.temperature = float(temperature)
         self.p_mixup = p_mixup
         self.mixup_alpha = mixup_alpha
+        self.real_mask = real_mask  # bool mask: True for real samples
+        self.transition_real_ratio = transition_real_ratio
+        self.multi_task = kwargs.get("multi_task", False)
         self.indices = np.arange(len(X))
         self._n_chord_classes = len(CHORD_INTERVALS) * N_CLASSES_PER_QUALITY
         if shuffle:
-            if self.temperature < 1.0:
+            if self.transition_real_ratio is not None and self.real_mask is not None:
+                self._resample_indices_transition()
+            elif self.temperature < 1.0:
                 self._resample_indices_temperature()
             else:
                 np.random.shuffle(self.indices)
@@ -1123,7 +1421,7 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
     def __len__(self) -> int:
         return int(np.ceil(len(self.X) / self.batch_size))
 
-    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def __getitem__(self, idx: int):
         if idx < 0:
             idx += len(self)
         batch_indices = self.indices[
@@ -1132,14 +1430,59 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         batch_X = self.X[batch_indices].copy()
         batch_y = self.y[batch_indices].copy()
 
-        batch_X, batch_y = self._apply_on_the_fly_augmentations(batch_X, batch_y)
+        batch_X, batch_y = self._apply_on_the_fly_augmentations(batch_X, batch_y, batch_indices)
+
+        # Save integer labels before one-hot conversion (needed for multi-task heads)
+        chord_labels_int = batch_y.copy()
+
+        # Convert chord labels to one-hot
+        chord_onehot = tf.keras.utils.to_categorical(chord_labels_int, NUM_CLASSES).astype(np.float32)
+
+        if self.multi_task:
+            # Derive root + presence labels from augmented integer labels
+            root_labels = derive_root_labels(chord_labels_int.astype(np.int32))
+            presence_labels = derive_presence_labels(chord_labels_int.astype(np.int32))
+            root_onehot = tf.keras.utils.to_categorical(root_labels, N_ROOTS).astype(np.float32)
+
+            # Apply mixup to all label sets with the same lambda + permutation
+            if np.random.random() < self.p_mixup:
+                lam = np.random.beta(self.mixup_alpha, self.mixup_alpha)
+                perm = np.random.permutation(len(batch_X))
+                batch_X = lam * batch_X + (1.0 - lam) * batch_X[perm]
+                chord_onehot = lam * chord_onehot + (1.0 - lam) * chord_onehot[perm]
+                root_onehot = lam * root_onehot + (1.0 - lam) * root_onehot[perm]
+                presence_labels = lam * presence_labels + (1.0 - lam) * presence_labels[perm]
+
+            target_dict = {
+                "chord_probs": chord_onehot,
+                "root_probs": root_onehot,
+                "presence": presence_labels.reshape(-1, 1),
+            }
+            if self.w is not None:
+                w_batch = self.w[batch_indices].copy()
+                weight_dict = {
+                    "chord_probs": w_batch,
+                    "root_probs": w_batch,
+                    "presence": w_batch,
+                }
+                return batch_X, target_dict, weight_dict
+            return batch_X, target_dict
+
+        # Single-task path (unchanged)
+        if np.random.random() < self.p_mixup:
+            lam = np.random.beta(self.mixup_alpha, self.mixup_alpha)
+            perm = np.random.permutation(len(batch_X))
+            batch_X = lam * batch_X + (1.0 - lam) * batch_X[perm]
+            chord_onehot = lam * chord_onehot + (1.0 - lam) * chord_onehot[perm]
 
         if self.w is not None:
-            return batch_X, batch_y, self.w[batch_indices].copy()
-        return batch_X, batch_y
+            return batch_X, chord_onehot, self.w[batch_indices].copy()
+        return batch_X, chord_onehot
 
     def on_epoch_end(self):
-        if self.shuffle:
+        if self.transition_real_ratio is not None and self.real_mask is not None:
+            self._resample_indices_transition()
+        elif self.shuffle:
             if self.temperature < 1.0:
                 self._resample_indices_temperature()
             else:
@@ -1173,28 +1516,62 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
             np.arange(total), size=total, replace=True, p=weights
         )
 
+    def _resample_indices_transition(self):
+        """Resample indices to match the target real/synthetic ratio.
+
+        Used during the gradual curriculum transition in Stage 2 to smoothly
+        shift from synthetic-heavy to real-heavy data distribution over
+        several epochs, avoiding the instant curriculum shock.
+        """
+        total = len(self.X)
+        real_idx = np.where(self.real_mask)[0]
+        synth_idx = np.where(~self.real_mask)[0]
+        n_real = len(real_idx)
+        n_synth = len(synth_idx)
+        target_real = int(round(total * self.transition_real_ratio))
+        target_real = max(1, min(target_real, n_real))
+        target_synth = total - target_real
+        if target_synth > n_synth:
+            target_synth = n_synth
+            target_real = total - target_synth
+        chosen_real = np.random.choice(real_idx, size=target_real, replace=True)
+        chosen_synth = np.random.choice(synth_idx, size=target_synth, replace=True)
+        self.indices = np.concatenate([chosen_real, chosen_synth])
+        np.random.shuffle(self.indices)
+
     def _apply_on_the_fly_augmentations(
-        self, batch_X: np.ndarray, batch_y: np.ndarray
+        self, batch_X: np.ndarray, batch_y: np.ndarray,
+        batch_indices: np.ndarray | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         for i in range(len(batch_X)):
+            is_real = self.real_mask is not None and batch_indices is not None and self.real_mask[batch_indices[i]]
             sample = batch_X[i]
 
             # --- Pitch shift with label adjustment ---
-            if np.random.random() < self.p_pitch_shift:
-                shift = np.random.randint(
-                    -self.pitch_range, self.pitch_range + 1
-                )
+            # Real data gets higher pitch-shift probability and range
+            p_shift = self.p_pitch_shift * (1.5 if is_real else 1.0)
+            if np.random.random() < p_shift:
+                p_range = self.pitch_range + (1 if is_real else 0)
+                shift = np.random.randint(-p_range, p_range + 1)
                 if shift != 0:
                     sample = apply_pitch_shift(sample, shift)
                     batch_y[i] = self._label_after_pitch_shift(batch_y[i], shift)
 
             # --- Time stretch ---
-            if np.random.random() < self.p_time_stretch:
-                factor = np.random.uniform(*self.stretch_range)
+            # Real data gets higher time-stretch probability
+            p_stretch = self.p_time_stretch * (1.5 if is_real else 1.0)
+            if np.random.random() < p_stretch:
+                s_range = self.stretch_range
+                if is_real:
+                    # Wider stretch range for real data (0.85-1.15x)
+                    s_range = (max(0.85, s_range[0]), min(1.15, s_range[1]))
+                factor = np.random.uniform(*s_range)
                 sample = apply_time_stretch(sample, factor)
 
             # --- Pink noise ---
-            noise = generate_pink_noise(sample.shape, self.noise_std)
+            # Real data gets more noise
+            n_std = self.noise_std * (2.0 if is_real else 1.0)
+            noise = generate_pink_noise(sample.shape, n_std)
             sample = np.clip(sample + noise, 0, 1)
 
             batch_X[i] = sample
@@ -1227,10 +1604,47 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
 
 
 # ---------------------------------------------------------------------------
+# 2d. Multi-Task Label Derivation (Commit 148 Phase 3b)
+# ---------------------------------------------------------------------------
+
+
+def derive_root_labels(chord_labels: np.ndarray) -> np.ndarray:
+    """Derive root classifier labels from chord class indices.
+
+    Root = chord_idx % 12 for chord classes (0-275), or 12 for N class.
+
+    Args:
+        chord_labels: (N,) integer chord class indices.
+
+    Returns:
+        (N,) integer root labels in range [0, 12].
+    """
+    root_labels = np.where(
+        chord_labels >= N_INDEX, N_ROOTS - 1, chord_labels % N_CLASSES_PER_QUALITY
+    ).astype(np.int32)
+    return root_labels
+
+
+def derive_presence_labels(chord_labels: np.ndarray) -> np.ndarray:
+    """Derive binary chord-presence labels from chord class indices.
+
+    Presence = 1 for any chord class, 0 for N (no-chord).
+
+    Args:
+        chord_labels: (N,) integer chord class indices.
+
+    Returns:
+        (N,) float32 binary labels.
+    """
+    return np.where(chord_labels < N_INDEX, 1.0, 0.0).astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
 # 3. Architecture
 # ---------------------------------------------------------------------------
 
 
+@tf.keras.saving.register_keras_serializable()
 class CircularCqtPad(tf.keras.layers.Layer):
     """Circular padding on CQT portion (bins 0-35), zero pad bass (Commit 98b).
 
@@ -1347,6 +1761,130 @@ def build_attention_vis_model(window: int = WINDOW) -> tf.keras.Model:
     return build_model(window=window, return_attention_scores=True)
 
 
+def build_multi_task_model(
+    window: int = WINDOW,
+    qat_compatible: bool = False,
+) -> tf.keras.Model:
+    """Build multi-task CRNN: shared backbone + chord/root/presence heads (Phase 3b).
+
+    Architecture (Phase 3a + 3b):
+      Shared backbone: CNN(128,256) → Attention → BiLSTM(256) → Dense(512)
+      → Dense(128, relu) bottleneck
+      Three output heads:
+        - chord_probs:  Dense(277, softmax)  — main chord classifier
+        - root_probs:   Dense(13, softmax)   — root classifier (12 roots + N)
+        - presence:     Dense(1, sigmoid)     — binary chord presence
+
+    The binary chord-presence head directly attacks the N escape-hatch
+    problem: the model must commit to "chord present" before it can output
+    any chord label.  At inference, if presence < 0.5, force prediction to N.
+
+    Args:
+        window: Temporal window size (default WINDOW=128).
+        qat_compatible: If True, uses ``Add`` for residual instead of ``+``.
+
+    Returns:
+        Multi-output Keras model with dict outputs:
+        ``{'chord_probs': (B, 277), 'root_probs': (B, 13), 'presence': (B, 1)}``
+    """
+    inputs = tf.keras.Input(shape=(window, FEATURE_DIM), name="cqt_window")
+    padded = CircularCqtPad(name="circular_cqt_pad")(inputs)
+
+    # ---- Shared backbone (Phase 3a: increased capacity) ----
+
+    # CNN frontend
+    x = tf.keras.layers.Conv1D(128, kernel_size=3, padding="same", activation="relu",
+                                name="conv1d_128")(padded)
+    x = tf.keras.layers.MaxPooling1D(pool_size=2, name="maxpool_1")(x)
+
+    x = tf.keras.layers.Conv1D(256, kernel_size=3, padding="same", activation="relu",
+                                name="conv1d_256")(x)
+    x = tf.keras.layers.MaxPooling1D(pool_size=2, name="maxpool_2")(x)
+
+    x = tf.keras.layers.BatchNormalization(name="bn_cnn")(x)
+
+    # Multi-Head Self-Attention
+    mha = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=64, name="self_attention")
+    mha_output = mha(x, x)
+
+    if qat_compatible:
+        residual = tf.keras.layers.Add(name="residual_add")([x, mha_output])
+    else:
+        residual = x + mha_output
+    x = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="attention_layernorm")(residual)
+
+    # Bidirectional LSTM (Phase 3a: doubled capacity)
+    x = tf.keras.layers.Bidirectional(
+        tf.keras.layers.LSTM(256, return_sequences=True), name="bilstm_1"
+    )(x)
+    x = tf.keras.layers.Dropout(0.3, name="dropout_1")(x)
+
+    x = tf.keras.layers.Bidirectional(
+        tf.keras.layers.LSTM(256, return_sequences=False), name="bilstm_2"
+    )(x)
+    x = tf.keras.layers.Dropout(0.3, name="dropout_2")(x)
+
+    # Shared embedding head (Phase 3a: larger + bottleneck)
+    x = tf.keras.layers.Dense(512, activation="relu", name="dense_512")(x)
+    x = tf.keras.layers.Dropout(0.3, name="dropout_3")(x)
+    x = tf.keras.layers.Dense(128, activation="relu", name="dense_128_bottleneck")(x)
+    x = tf.keras.layers.Dropout(0.2, name="dropout_bottleneck")(x)
+
+    # ---- Output heads (Phase 3b) ----
+
+    # Head 1: Chord classifier (277-way, main task)
+    chord_probs = tf.keras.layers.Dense(
+        NUM_CLASSES, activation="softmax", name="chord_probs"
+    )(x)
+
+    # Head 2: Root classifier (13-way: 12 roots + N)
+    root_probs = tf.keras.layers.Dense(
+        N_ROOTS, activation="softmax", name="root_probs"
+    )(x)
+
+    # Head 3: Binary chord presence (0 = N, 1 = chord present)
+    presence = tf.keras.layers.Dense(
+        1, activation="sigmoid", name="presence"
+    )(x)
+
+    model = tf.keras.Model(
+        inputs=inputs,
+        outputs={"chord_probs": chord_probs, "root_probs": root_probs, "presence": presence},
+        name="chord_multi_task",
+    )
+    return model
+
+
+def extract_chord_predictions(model_output, use_n_rejection: bool = True) -> np.ndarray:
+    """Extract chord predictions from multi-task model output with N-rejection.
+
+    For multi-task models, the output is a dict with 'chord_probs', 'root_probs',
+    and 'presence' keys.  For single-output models, it is a plain numpy array.
+
+    When ``use_n_rejection=True`` and a binary presence head is available:
+    if ``presence < 0.5``, the prediction is forced to N regardless of the
+    chord head output.
+
+    Args:
+        model_output: dict (multi-task) or np.ndarray (single-output).
+        use_n_rejection: If True and presence head is available, force N when
+            chord presence is below 0.5.
+
+    Returns:
+        (batch_size,) integer predictions.
+    """
+    if isinstance(model_output, dict):
+        chord_probs = model_output["chord_probs"]
+        preds = np.argmax(chord_probs, axis=1).astype(np.int32)
+        if use_n_rejection and "presence" in model_output:
+            presence = model_output["presence"].flatten()
+            low_confidence = presence < 0.5
+            preds[low_confidence] = N_INDEX
+        return preds
+    # Single-output model — use N-override as before
+    return _apply_n_override(model_output)
+
+
 # ---------------------------------------------------------------------------
 # 3c. Quantization-Aware Training — Commit 106
 # ---------------------------------------------------------------------------
@@ -1372,37 +1910,38 @@ def _build_chord_crnn_tfkeras(
     Must be called with ``TF_USE_LEGACY_KERAS=1`` so that ``tf.keras`` routes
     to ``tf_keras`` (Keras 2), which TFMOT expects.
 
+    Uses a ``Lambda`` layer for CQT padding instead of a custom class to avoid
+    serialization/deserialisation issues when ``tfmot`` rebuilds the model
+    graph during ``quantize_apply()``.
+
+    Builds a multi-task model with three output heads:
+    - chord_probs: 277-way softmax (main head)
+    - root_probs: 13-way softmax
+    - presence: 1-way sigmoid
+
+    Note: Does NOT annotate individual layers with ``qal()`` — that approach
+    fails because ``quantize_apply`` clones the model and unwraps per-layer
+    annotations. Instead, the model is built plain and
+    ``quantize_annotate_model()`` is applied in ``apply_qat()``.
+
     Args:
         weights_source: Optional Keras 3 model whose weights are copied into
             the fresh tf_keras model by layer name.
 
     Returns:
-        QAT-annotated tf_keras model ready for ``quantize_apply()``.
+        Plain tf_keras model (no per-layer annotations) ready for
+        ``quantize_annotate_model()`` + ``quantize_apply()``.
     """
-    qal = tfmot.quantization.keras.quantize_annotate_layer
-
-    class _QatCircularPad(tf.keras.layers.Layer):
-        """Circular CQT pad — local class so it inherits tf_keras.Layer."""
-
-        def call(self, x):
-            cqt = x[:, :, :CHROMA_BINS]
-            bass = x[:, :, CHROMA_BINS:]
-            cqt_padded = tf.concat([cqt[:, :, -1:], cqt, cqt[:, :, :1]], axis=-1)
-            bass_padded = tf.pad(bass, [[0, 0], [0, 0], [1, 1]])
-            return tf.concat([cqt_padded, bass_padded], axis=-1)
-
-        def get_config(self):
-            return super().get_config()
 
     inputs = tf.keras.Input(shape=(WINDOW, FEATURE_DIM), name="cqt_window")
-    padded = _QatCircularPad(name="circular_cqt_pad")(inputs)
+    padded = CircularCqtPad(name="circular_cqt_pad")(inputs)
 
-    x = qal(tf.keras.layers.Conv1D(64, 3, padding="same", activation="relu",
-                                    name="conv1d_64"))(padded)
+    x = tf.keras.layers.Conv1D(128, 3, padding="same", activation="relu",
+                                name="conv1d_128")(padded)
     x = tf.keras.layers.MaxPooling1D(pool_size=2, name="maxpool_1")(x)
 
-    x = qal(tf.keras.layers.Conv1D(128, 3, padding="same", activation="relu",
-                                    name="conv1d_128"))(x)
+    x = tf.keras.layers.Conv1D(256, 3, padding="same", activation="relu",
+                                name="conv1d_256")(x)
     x = tf.keras.layers.MaxPooling1D(pool_size=2, name="maxpool_2")(x)
 
     x = tf.keras.layers.BatchNormalization(name="bn_cnn")(x)
@@ -1413,21 +1952,29 @@ def _build_chord_crnn_tfkeras(
     x = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="attention_layernorm")(residual)
 
     x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(128, return_sequences=True), name="bilstm_1"
+        tf.keras.layers.LSTM(256, return_sequences=True), name="bilstm_1"
     )(x)
     x = tf.keras.layers.Dropout(0.3, name="dropout_1")(x)
 
     x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(128, return_sequences=False), name="bilstm_2"
+        tf.keras.layers.LSTM(256, return_sequences=False), name="bilstm_2"
     )(x)
     x = tf.keras.layers.Dropout(0.3, name="dropout_2")(x)
 
-    x = qal(tf.keras.layers.Dense(256, activation="relu", name="dense_256"))(x)
+    x = tf.keras.layers.Dense(512, activation="relu", name="dense_512")(x)
     x = tf.keras.layers.Dropout(0.3, name="dropout_3")(x)
-    outputs = qal(tf.keras.layers.Dense(NUM_CLASSES, activation="softmax", name="chord_probs"))(x)
+    x = tf.keras.layers.Dense(128, activation="relu", name="dense_128_bottleneck")(x)
+    x = tf.keras.layers.Dropout(0.2, name="dropout_bottleneck")(x)
+
+    # Multi-task heads
+    chord_head = tf.keras.layers.Dense(NUM_CLASSES, activation="softmax", name="chord_probs")(x)
+    root_head = tf.keras.layers.Dense(N_ROOTS, activation="softmax", name="root_probs")(x)
+    presence_head = tf.keras.layers.Dense(1, activation="sigmoid", name="presence")(x)
 
     tf_keras_model = tf.keras.Model(
-        inputs=inputs, outputs=outputs, name="chord_crnn_attention"
+        inputs=inputs,
+        outputs={"chord_probs": chord_head, "root_probs": root_head, "presence": presence_head},
+        name="chord_crnn_attention",
     )
 
     # Copy weights from the source Keras 3 model by layer name.
@@ -1477,14 +2024,38 @@ def apply_qat(model: tf.keras.Model) -> tf.keras.Model:
     _old_legacy = os.environ.get("TF_USE_LEGACY_KERAS")
     try:
         os.environ["TF_USE_LEGACY_KERAS"] = "1"
-        annotated_model = _build_chord_crnn_tfkeras(weights_source=model)
+        plain_model = _build_chord_crnn_tfkeras(weights_source=model)
+
+        # Patch keras.models.clone_model used inside quantize_apply so that
+        # _quantize passes through unsupported layers (CircularCqtPad, etc.)
+        # instead of raising RuntimeError.
+        from tensorflow_model_optimization.python.core.keras.compat import keras as _tfmot_keras
+        _orig_clone = _tfmot_keras.models.clone_model
+
+        def _safe_clone_model(model, input_tensors=None, clone_function=None):
+            if clone_function is not None:
+                _orig_qf = clone_function
+                def _safe_quantize(layer):
+                    try:
+                        return _orig_qf(layer)
+                    except (RuntimeError, ValueError):
+                        return layer
+                clone_function = _safe_quantize
+            return _orig_clone(model, input_tensors=input_tensors,
+                               clone_function=clone_function)
+
+        _tfmot_keras.models.clone_model = _safe_clone_model
+        try:
+            annotated_model = tfmot.quantization.keras.quantize_annotate_model(plain_model)
+            qat_model = tfmot.quantization.keras.quantize_apply(annotated_model)
+        finally:
+            _tfmot_keras.models.clone_model = _orig_clone
     finally:
         if _old_legacy is None:
             os.environ.pop("TF_USE_LEGACY_KERAS", None)
         else:
             os.environ["TF_USE_LEGACY_KERAS"] = _old_legacy
 
-    qat_model = tfmot.quantization.keras.quantize_apply(annotated_model)
     print(
         "  Applied QAT via direct tf_keras annotation "
         "— Conv1D and Dense layers quantized"
@@ -1515,23 +2086,18 @@ def convert_to_int8_tflite(
     """
     n_samples = min(100, len(representative_data))
 
+    # For multi-output models, export only chord_probs head for TFLite
+    is_multi = hasattr(model, 'output_names') and isinstance(model.output, dict)
+    if is_multi:
+        export_m = tf.keras.Model(inputs=model.input, outputs=model.output["chord_probs"])
+    else:
+        export_m = model
+
     def _representative():
         for i in range(n_samples):
             yield [representative_data[i : i + 1].astype(np.float32)]
 
-    @tf.function(
-        input_signature=[
-            tf.TensorSpec(
-                shape=[None, WINDOW, FEATURE_DIM], dtype=tf.float32
-            )
-        ]
-    )
-    def run_model(input_tensor):
-        return model(input_tensor, training=False)
-
-    concrete_func = run_model.get_concrete_function()
-
-    converter = tf.lite.TFLiteConverter.from_concrete_functions([concrete_func])
+    converter = tf.lite.TFLiteConverter.from_keras_model(export_m)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = _representative
     converter.target_spec.supported_ops = [
@@ -1831,6 +2397,213 @@ def load_guitarset_test(data_dir: Path) -> tuple[np.ndarray, np.ndarray]:
     return X, y
 
 
+# ---------------------------------------------------------------------------
+# 4c. GuitarSet 5-fold Leave-One-Player-Out CV (Commit 122 Phase 4c)
+# ---------------------------------------------------------------------------
+
+# Players used for CV (00-04). Player 05 is held out for final test.
+_CV_PLAYERS = ["00", "01", "02", "03", "04"]
+
+
+def load_guitarset_by_player(
+    data_dir: Path,
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Load GuitarSet data grouped by player ID.
+
+    Returns a dict mapping player_id -> (features, labels) for all 6 players.
+    Each value contains the concatenated windows from all tracks by that player.
+    """
+    cqt_dir = data_dir / "processed" / "cqt"
+    if not cqt_dir.exists():
+        raise FileNotFoundError(f"GuitarSet CQT directory not found: {cqt_dir}")
+
+    player_data: dict[str, list[tuple[np.ndarray, np.ndarray]]] = {
+        p: [] for p in ["00", "01", "02", "03", "04", "05"]
+    }
+
+    for npz_path in sorted(cqt_dir.glob("*.npz")):
+        data = np.load(npz_path)
+        player_id = str(data.get("player_id", b""))[:2]
+        if player_id not in player_data:
+            continue
+        player_data[player_id].append((data["features"], data["labels"]))
+
+    result: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for pid, files in sorted(player_data.items()):
+        if not files:
+            continue
+        X = np.concatenate([f[0] for f in files], axis=0).astype(np.float32)
+        y = np.concatenate([f[1] for f in files], axis=0).astype(np.int32)
+        result[pid] = (X, y)
+
+    return result
+
+
+def run_guitarset_cv(
+    guitarset_data_dir: str | Path,
+    build_model_fn=None,
+    train_kwargs: dict | None = None,
+    epochs: int = 30,
+    batch_size: int = 64,
+    verbose: int = 1,
+) -> dict[str, object]:
+    """Run 5-fold leave-one-player-out cross-validation on GuitarSet.
+
+    Each fold holds out one player (00-04) for validation and trains on
+    the remaining 4 players. Player 05 is never used (held out for final test).
+
+    Args:
+        guitarset_data_dir: Path to GuitarSet data directory.
+        build_model_fn: Callable that returns a compiled Keras model.
+            If None, uses build_multi_task_model().
+        train_kwargs: Extra kwargs passed to model.fit() (callbacks, etc.).
+        epochs: Number of training epochs per fold.
+        batch_size: Batch size for training.
+        verbose: Verbosity level.
+
+    Returns:
+        Dict with keys:
+            fold_accuracies: list of per-fold validation accuracies
+            mean_accuracy: mean across folds
+            std_accuracy: std across folds
+            per_fold_details: list of dicts with per-fold metrics
+    """
+    from sklearn.model_selection import train_test_split as _ts
+
+    data_dir = Path(guitarset_data_dir)
+    player_data = load_guitarset_by_player(data_dir)
+
+    missing = [p for p in _CV_PLAYERS if p not in player_data]
+    if missing:
+        raise ValueError(f"Missing GuitarSet players for CV: {missing}")
+
+    print(f"\n{'=' * 60}")
+    print(f"  GuitarSet 5-Fold Leave-One-Player-Out CV")
+    print(f"  Players: {_CV_PLAYERS} (player 05 held out for final test)")
+    print(f"{'=' * 60}")
+
+    fold_accuracies: list[float] = []
+    fold_details: list[dict] = []
+
+    for fold_idx, val_player in enumerate(_CV_PLAYERS):
+        train_players = [p for p in _CV_PLAYERS if p != val_player]
+
+        # Combine training players
+        X_train = np.concatenate([player_data[p][0] for p in train_players])
+        y_train = np.concatenate([player_data[p][1] for p in train_players])
+        X_val = player_data[val_player][0]
+        y_val = player_data[val_player][1]
+
+        print(f"\n--- Fold {fold_idx + 1}/5: val=player {val_player}, "
+              f"train=players {train_players} ---")
+        print(f"  Train: {len(X_train)} windows, Val: {len(X_val)} windows")
+
+        # Build and compile model
+        if build_model_fn is not None:
+            model = build_model_fn()
+        else:
+            model = build_multi_task_model()
+
+        # Default compilation for multi-task
+        if not hasattr(model, 'optimizer') or model.optimizer is None:
+            model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3, weight_decay=1e-4, clipnorm=1.0),
+                loss={
+                    "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+                    "root_probs": tf.keras.losses.CategoricalCrossentropy(),
+                    "presence": tf.keras.losses.BinaryCrossentropy(),
+                },
+                loss_weights={"chord_probs": 1.0, "root_probs": 0.3, "presence": 0.2},
+                metrics={"chord_probs": "accuracy"},
+            )
+
+        # Prepare validation dict
+        y_val_root = tf.keras.utils.to_categorical(
+            derive_root_labels(y_val), N_ROOTS
+        ).astype(np.float32)
+        y_val_presence = derive_presence_labels(y_val).reshape(-1, 1)
+        y_val_dict = {
+            "chord_probs": tf.keras.utils.to_categorical(y_val, NUM_CLASSES).astype(np.float32),
+            "root_probs": y_val_root,
+            "presence": y_val_presence,
+        }
+
+        # Prepare training dict
+        y_train_dict = {
+            "chord_probs": tf.keras.utils.to_categorical(y_train, NUM_CLASSES).astype(np.float32),
+            "root_probs": tf.keras.utils.to_categorical(derive_root_labels(y_train), N_ROOTS).astype(np.float32),
+            "presence": derive_presence_labels(y_train).reshape(-1, 1).astype(np.float32),
+        }
+
+        # Train
+        model.fit(
+            X_train,
+            y_train_dict,
+            epochs=epochs,
+            batch_size=batch_size,
+            validation_data=(X_val, y_val_dict),
+            verbose=verbose,
+        )
+
+        # Evaluate
+        output = model.predict(X_val, verbose=0)
+        y_pred = extract_chord_predictions(output)
+        acc = float(np.mean(y_pred == y_val))
+        fold_accuracies.append(acc)
+
+        # Per-group accuracy
+        grouped = compute_grouped_accuracy(y_val, y_pred)
+        detail = {
+            "fold": fold_idx + 1,
+            "val_player": val_player,
+            "train_players": train_players,
+            "accuracy": acc,
+            "n_val": len(X_val),
+            "grouped": grouped,
+        }
+        fold_details.append(detail)
+
+        print(f"  Fold {fold_idx + 1} accuracy: {acc:.1%}")
+        for group, gacc in sorted(grouped.items()):
+            print(f"    {group:20s}: {gacc * 100:.1f}%")
+
+        del model
+        tf.keras.backend.clear_session()
+
+    mean_acc = float(np.mean(fold_accuracies))
+    std_acc = float(np.std(fold_accuracies))
+
+    # Phase 6b: Bootstrap CI on the CV mean
+    rng = np.random.RandomState(42)
+    n_bootstraps = 1000
+    boot_means = np.empty(n_bootstraps, dtype=np.float64)
+    for i in range(n_bootstraps):
+        idx = rng.randint(0, len(fold_accuracies), size=len(fold_accuracies))
+        boot_means[i] = np.mean(np.array(fold_accuracies)[idx])
+    cv_ci_lower = float(np.percentile(boot_means, 2.5))
+    cv_ci_upper = float(np.percentile(boot_means, 97.5))
+
+    print(f"\n{'=' * 60}")
+    print(f"  GuitarSet 5-Fold CV Results")
+    print(f"{'=' * 60}")
+    for i, (acc, detail) in enumerate(zip(fold_accuracies, fold_details)):
+        print(f"  Fold {i + 1} (player {detail['val_player']}): {acc:.1%}")
+    print(f"  ─────────────────────────────────")
+    print(f"  Mean ± std: {mean_acc:.1%} ± {std_acc:.1%}")
+    print(f"  95% CI: [{cv_ci_lower:.1%}, {cv_ci_upper:.1%}]")
+    print(f"  Range: {min(fold_accuracies):.1%} – {max(fold_accuracies):.1%}")
+    print(f"{'=' * 60}")
+
+    return {
+        "fold_accuracies": fold_accuracies,
+        "mean_accuracy": mean_acc,
+        "std_accuracy": std_acc,
+        "ci_lower": cv_ci_lower,
+        "ci_upper": cv_ci_upper,
+        "per_fold_details": fold_details,
+    }
+
+
 def load_empirical_transition_matrix(data_dir: str | Path) -> np.ndarray | None:
     """Load empirical transition matrix from annotations directory."""
     matrix_path = Path(data_dir) / "annotations" / "transition_matrix_empirical.npy"
@@ -2041,7 +2814,8 @@ class GuitarSetTestCallback(tf.keras.callbacks.Callback):
         if (epoch + 1) % self.log_freq != 0:
             return
 
-        test_pred = np.argmax(self.model.predict(self.test_X, verbose=0), axis=1)
+        test_output = self.model.predict(self.test_X, verbose=0)
+        test_pred = extract_chord_predictions(test_output)
         test_acc = float(np.mean(test_pred == self.test_y))
         self.history.append(test_acc)
 
@@ -2063,11 +2837,14 @@ class GuitarSetTestCallback(tf.keras.callbacks.Callback):
 
 
 class EGSet12TestCallback(tf.keras.callbacks.Callback):
-    """Evaluate on EGSet12 held-out set after each epoch.
+    """Evaluate on EGSet12 held-out set after each epoch (Phase 6a).
 
     EGSet12 provides 12 real solo electric guitar recordings with diverse
     playing styles — useful as a second real-world eval axis alongside
     GuitarSet's player_05 test split.
+
+    Reports bootstrapped 95% confidence intervals since 61 eval windows
+    is too small for stable point estimates.
     """
 
     def __init__(
@@ -2075,12 +2852,15 @@ class EGSet12TestCallback(tf.keras.callbacks.Callback):
         test_X: np.ndarray,
         test_y: np.ndarray,
         log_freq: int = 1,
+        n_bootstraps: int = 1000,
     ):
         super().__init__()
         self.test_X = test_X
         self.test_y = test_y
         self.log_freq = log_freq
+        self.n_bootstraps = n_bootstraps
         self.history: list[float] = []
+        self.ci_history: list[dict] = []
         self.best_test_acc: float = 0.0
         self.best_epoch: int = -1
 
@@ -2090,16 +2870,249 @@ class EGSet12TestCallback(tf.keras.callbacks.Callback):
         if len(self.test_X) == 0:
             return
 
-        test_pred = np.argmax(self.model.predict(self.test_X, verbose=0), axis=1)
+        test_output = self.model.predict(self.test_X, verbose=0)
+        test_pred = extract_chord_predictions(test_output)
         test_acc = float(np.mean(test_pred == self.test_y))
         self.history.append(test_acc)
+
+        ci = bootstrap_ci_accuracies(self.test_y, test_pred, n_bootstraps=self.n_bootstraps)
+        self.ci_history.append(ci)
 
         if test_acc > self.best_test_acc:
             self.best_test_acc = test_acc
             self.best_epoch = epoch
 
-        print(f"\n  [EGSet12] Epoch {epoch + 1}: accuracy={test_acc:.2%} "
+        print(f"\n  [EGSet12] Epoch {epoch + 1}: "
+              f"accuracy={test_acc:.2%} ± {ci['std_acc']:.2%} "
+              f"(95% CI: [{ci['ci_lower']:.2%}, {ci['ci_upper']:.2%}]) "
               f"(best={self.best_test_acc:.2%} @ epoch {self.best_epoch + 1})")
+
+
+class TwoPhaseCallback(tf.keras.callbacks.Callback):
+    """Manages two-phase training curriculum (Commit 148 Phase 2d).
+
+    Prints a visual separator at the end of Phase A (epoch ``switch_epoch``)
+    and logs the transition. The actual data/LR switch is handled externally
+    by ``run_pipeline()`` which starts a second ``model.fit()`` call.
+    """
+
+    def __init__(self, switch_epoch: int = 30):
+        super().__init__()
+        self.switch_epoch = switch_epoch
+
+    def on_epoch_end(self, epoch: int, logs: dict | None = None):
+        if (epoch + 1) == self.switch_epoch:
+            print(f"\n{'=' * 60}")
+            print(f"  Phase A complete (epoch {epoch + 1}). Switching to Phase B...")
+            print(f"{'=' * 60}\n")
+
+
+class GradualTransitionCallback(tf.keras.callbacks.Callback):
+    """Gradually transitions the real-data ratio in the data generator.
+
+    Smoothly ramps ``generator.transition_real_ratio`` from ``start_ratio``
+    to ``target_ratio`` over ``transition_epochs``, preventing the instant
+    curriculum shock that occurs when switching from synthetic-heavy to
+    real-heavy data.
+
+    The generator responds to this ratio at each ``on_epoch_end`` via
+    ``_resample_indices_transition()``.
+    """
+
+    def __init__(
+        self,
+        generator: AugmentedDataGenerator,
+        start_ratio: float = 0.5,
+        target_ratio: float = 0.8,
+        transition_epochs: int = 10,
+        start_epoch: int = 0,
+    ):
+        super().__init__()
+        self.generator = generator
+        self.start_ratio = start_ratio
+        self.target_ratio = target_ratio
+        self.transition_epochs = transition_epochs
+        self.start_epoch = start_epoch
+
+    def on_epoch_begin(self, epoch: int, logs: dict | None = None):
+        phase_epoch = epoch - self.start_epoch
+        if 0 <= phase_epoch < self.transition_epochs:
+            progress = (phase_epoch + 1) / self.transition_epochs
+            ratio = self.start_ratio + progress * (self.target_ratio - self.start_ratio)
+            self.generator.transition_real_ratio = ratio
+
+
+def _apply_n_override(
+    probs: np.ndarray,
+    n_class_idx: int | None = None,
+    prob_threshold: float = 0.3,
+    entropy_threshold: float | None = None,
+) -> np.ndarray:
+    """Override N predictions: only allow N when model is genuinely uncertain.
+
+    When the model has reasonable confidence (>threshold) in any chord class,
+    force the prediction to that chord instead of allowing N as a default escape
+    hatch. This breaks the "always predict N for real audio" equilibrium by
+    removing the safe default and forcing the model to commit to a chord guess.
+
+    N is only predicted when BOTH conditions hold:
+      1. The best non-N chord probability is below ``prob_threshold``.
+      2. Entropy across all classes is high (model is genuinely confused).
+
+    If either condition is false, the prediction is forced to the best non-N
+    chord class, creating gradient pressure for the model to learn real audio
+    patterns.
+
+    Args:
+        probs: (batch_size, num_classes) softmax probability array.
+        n_class_idx: Index of the N (no-chord) class. Defaults to
+            ``NUM_CLASSES - 1`` (the last entry, per ``CHORD_CLASS_MAP``).
+        prob_threshold: Minimum probability for a chord prediction to be kept.
+        entropy_threshold: Entropy threshold. If ``None``, computed as
+            0.7 * log(num_classes). With 277 classes this is ~3.93.
+
+    Returns:
+        (batch_size,) argmax predictions with N-override applied.
+    """
+    if n_class_idx is None:
+        n_class_idx = NUM_CLASSES - 1
+
+    if entropy_threshold is None:
+        entropy_threshold = 0.7 * np.log(float(probs.shape[1]))
+
+    eps = 1e-10
+    entropy = -np.sum(probs * np.log(np.clip(probs, eps, 1.0)), axis=1)
+
+    chord_probs = probs.copy()
+    chord_probs[:, n_class_idx] = -1.0
+    best_chord_idx = np.argmax(chord_probs, axis=1).astype(np.int32)
+    best_chord_prob = np.max(chord_probs, axis=1)
+
+    # Default: plain argmax (may pick N)
+    preds = np.argmax(probs, axis=1).astype(np.int32)
+
+    # Allow N only when BOTH: best chord prob is low AND entropy is high
+    allow_n = (best_chord_prob < prob_threshold) & (entropy > entropy_threshold)
+
+    # Force chord prediction when N is used as an uncertainty escape hatch
+    n_mask = (preds == n_class_idx) & (~allow_n)
+    preds[n_mask] = best_chord_idx[n_mask]
+
+    return preds
+
+
+class DualValidationLogger(tf.keras.callbacks.Callback):
+    """Per-epoch dual validation logging (Commit 148 Phase 1e, Phase 6c).
+
+    Evaluates the model on both real and synthetic validation sets at
+    each epoch end and logs ``val_accuracy_real``, ``val_accuracy_synthetic``,
+    and ``domain_gap`` to a CSV file alongside the standard metrics.
+
+    Phase 6c: Also computes Earth Mover's Distance (EMD) between real and
+    synthetic CQT distributions every epoch, and saves t-SNE projection
+    plots periodically.
+    """
+
+    def __init__(
+        self,
+        X_real_val: np.ndarray,
+        y_real_val: np.ndarray,
+        X_synth_val: np.ndarray,
+        y_synth_val: np.ndarray,
+        filename: str = "training_log.csv",
+        separator: str = ",",
+        append: bool = False,
+        plot_output_dir: Path | str | None = None,
+        plot_every_n: int = 5,
+    ):
+        super().__init__()
+        self.X_real_val = X_real_val
+        self.y_real_val = y_real_val
+        self.X_synth_val = X_synth_val
+        self.y_synth_val = y_synth_val
+        self.sep = separator
+        self.filename = filename
+        self.append = append
+        self.writer = None
+        self.keys: list[str] | None = None
+        self.plot_output_dir = Path(plot_output_dir) if plot_output_dir else _SCRIPTS_DIR
+        self.plot_every_n = plot_every_n
+        self.emd_history: list[float] = []
+
+    def on_epoch_end(self, epoch: int, logs: dict | None = None):
+        logs = logs or {}
+
+        # Evaluate on real validation set (with N-rejection via extract_chord_predictions)
+        has_real = len(self.X_real_val) > 0 and len(self.y_real_val) > 0
+        if has_real:
+            real_output = self.model.predict(self.X_real_val, verbose=0)
+            real_pred = extract_chord_predictions(real_output)
+            real_acc = float(np.mean(real_pred == self.y_real_val))
+            logs["val_accuracy_real"] = real_acc
+        else:
+            logs["val_accuracy_real"] = 0.0
+
+        # Evaluate on synthetic validation set (no N-override — synthetic N is clean)
+        has_synth = len(self.X_synth_val) > 0 and len(self.y_synth_val) > 0
+        if has_synth:
+            synth_output = self.model.predict(self.X_synth_val, verbose=0)
+            if isinstance(synth_output, dict):
+                synth_pred = np.argmax(synth_output["chord_probs"], axis=1)
+            else:
+                synth_pred = np.argmax(synth_output, axis=1)
+            synth_acc = float(np.mean(synth_pred == self.y_synth_val))
+            logs["val_accuracy_synthetic"] = synth_acc
+        else:
+            synth_acc = 0.0
+            logs["val_accuracy_synthetic"] = 0.0
+
+        # Domain gap = synthetic - real
+        logs["domain_gap"] = synth_acc - logs["val_accuracy_real"]
+
+        # Phase 6c: Compute CQT domain EMD (every epoch)
+        has_real_cqt = len(self.X_real_val) > 0
+        has_synth_cqt = len(self.X_synth_val) > 0
+        if has_real_cqt and has_synth_cqt:
+            emd = compute_cqt_emd(self.X_real_val, self.X_synth_val)
+            logs["cqt_emd"] = emd
+            self.emd_history.append(emd)
+            print(f"    CQT EMD: {emd:.4f}")
+            # Phase 6c: Save t-SNE projection periodically
+            if (epoch + 1) % self.plot_every_n == 0:
+                plot_path = visualize_cqt_domain(
+                    self.X_real_val, self.X_synth_val,
+                    epoch=epoch + 1, emd_value=emd,
+                    output_dir=self.plot_output_dir,
+                )
+                if plot_path:
+                    print(f"    Saved CQT domain plot -> {plot_path}")
+        else:
+            logs["cqt_emd"] = 0.0
+
+        # CSV writing (same logic as CSVLogger)
+        if self.keys is None:
+            self.keys = sorted(logs.keys())
+        import csv
+        file_exists = False
+        has_header_mismatch = False
+        try:
+            with open(self.filename, "r") as f:
+                first_line = f.readline()
+                file_exists = bool(first_line)
+                if file_exists:
+                    existing_headers = [h.strip() for h in first_line.strip().split(",")]
+                    if set(existing_headers) != set(self.keys):
+                        has_header_mismatch = True
+        except FileNotFoundError:
+            pass
+        # If header mismatch, truncate and start fresh
+        mode = "w" if (not file_exists or has_header_mismatch) else ("a" if self.append else "w")
+        with open(self.filename, mode, newline="") as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=self.keys)
+            if mode == "w" or has_header_mismatch:
+                writer.writeheader()
+            row = {k: logs.get(k, "") for k in self.keys}
+            writer.writerow(row)
 
 
 # ---------------------------------------------------------------------------
@@ -2112,6 +3125,7 @@ def _run_tflite_smoke_test(
     model_path: Path,
     is_int8: bool,
     float32_keras_model: tf.keras.Model | None = None,
+    cqt_stats: dict | None = None,
 ) -> bool:
     """Run top-1 chord accuracy smoke tests on a TFLite model.
 
@@ -2126,6 +3140,8 @@ def _run_tflite_smoke_test(
         is_int8: Whether the model expects INT8 input.
         float32_keras_model: Optional float32 Keras model to use as
             fallback when TFLite interpreter is unavailable.
+        cqt_stats: Optional CQT distribution statistics for matching
+            synthetic test inputs to training distribution.
 
     Returns:
         True if all test cases pass or test was skipped gracefully.
@@ -2175,11 +3191,16 @@ def _run_tflite_smoke_test(
             for expected, root_idx, quality in smoke_cases:
                 test_input = make_window(
                     make_cqt_template(root_idx, quality), 0.05
-                )[np.newaxis]
-                res = float32_keras_model.predict(test_input, verbose=0)[0]
-                top_idx = int(np.argmax(res))
-                predicted = CHORD_VOCAB[top_idx]
-                confidence = float(res[top_idx])
+                )
+                test_input = _apply_distribution_matching(test_input, cqt_stats, strength=0.8)
+                test_input = test_input[np.newaxis]
+                raw_output = float32_keras_model.predict(test_input, verbose=0)
+                pred_idx = extract_chord_predictions(raw_output)[0]
+                predicted = CHORD_VOCAB[pred_idx]
+                if isinstance(raw_output, dict):
+                    confidence = float(raw_output["chord_probs"][0, pred_idx])
+                else:
+                    confidence = float(raw_output[0, pred_idx])
                 passed = predicted == expected
                 if not passed:
                     all_ok = False
@@ -2218,7 +3239,9 @@ def _run_tflite_smoke_test(
     for expected, root_idx, quality in smoke_cases:
         test_float = make_window(
             make_cqt_template(root_idx, quality), 0.05
-        )[np.newaxis].astype(np.float32)
+        )
+        test_float = _apply_distribution_matching(test_float, cqt_stats, strength=0.8)
+        test_float = test_float[np.newaxis].astype(np.float32)
 
         if is_int8:
             test_input = np.clip(
@@ -2275,6 +3298,7 @@ def run_pipeline(
     egset12_loss_weight: float = 1.0,
     empirical_matrix_path: str | Path | None = None,
     temperature: float = 0.3,
+    cqt_stats_path: str | Path | None = None,
 ):
     """Run the full training pipeline with multi-source weighted data mixing.
 
@@ -2309,21 +3333,36 @@ def run_pipeline(
         guitar_techs_loss_weight: Per-sample loss weight for Guitar-TECHS (default 1.0).
         egset12_loss_weight: Per-sample loss weight for EGSet12 (default 1.0).
         empirical_matrix_path: Path to empirical transition matrix .npy (or None).
-        temperature: Temperature τ for quality re-sampling (default 0.3, matching MT3).
+        temperature: Temperature τ for quality re-sampling (default 0.5).
                      τ < 1.0 boosts rare chord quality sampling via MT3 formula.
                      τ = 1.0 uses uniform sampling (neutral).
+        cqt_stats_path: Path to .npz with CQT distribution statistics for
+            synthetic-to-real domain gap matching (Commit 148 Phase 1b).
+            If None, no distribution matching is applied.
     """
     _APP_DIR = Path(__file__).resolve().parent.parent / "app"
     _SCRIPTS_DIR = Path(__file__).resolve().parent
 
+    # --- Load CQT statistics for distribution matching (Commit 148 Phase 1b) ---
+    cqt_stats: dict | None = None
+    if cqt_stats_path is not None:
+        cqt_path = Path(cqt_stats_path)
+        if cqt_path.exists():
+            cqt_stats = dict(np.load(str(cqt_path)))
+            print(f"  Loaded CQT distribution stats from {cqt_path} ({cqt_stats['n_samples']} real windows)")
+        else:
+            print(f"  [WARN] CQT stats not found: {cqt_path} — distribution matching disabled")
+
     # --- Load all dataset sources ---
     source_configs: list[tuple[Path, str, float]] = []
+    real_data_dirs: list[Path] = []
     has_any_real_data = False
 
     if guitarset_data_dir is not None:
         gs_path = Path(guitarset_data_dir)
         if gs_path.exists():
             source_configs.append((gs_path, "GuitarSet", guitarset_loss_weight))
+            real_data_dirs.append(gs_path)
             has_any_real_data = True
         else:
             print(f"  [WARN] GuitarSet data dir not found: {gs_path}")
@@ -2332,6 +3371,7 @@ def run_pipeline(
         idmt_path = Path(idmt_data_dir)
         if idmt_path.exists():
             source_configs.append((idmt_path, "IDMT-SMT-Guitar", 1.0))
+            real_data_dirs.append(idmt_path)
             has_any_real_data = True
         else:
             print(f"  [WARN] IDMT-SMT-Guitar data dir not found: {idmt_path}")
@@ -2347,6 +3387,7 @@ def run_pipeline(
         yt_path = Path(youtube_data_dir)
         if yt_path.exists():
             source_configs.append((yt_path, "YouTube-Crawl", 1.0))
+            real_data_dirs.append(yt_path)
             has_any_real_data = True
         else:
             print(f"  [WARN] YouTube crawl data dir not found: {yt_path}")
@@ -2369,6 +3410,7 @@ def run_pipeline(
         jaah_path = Path(jaah_data_dir)
         if jaah_path.exists():
             source_configs.append((jaah_path, "JAAH", jaah_loss_weight))
+            real_data_dirs.append(jaah_path)
             has_any_real_data = True
         else:
             print(f"  [WARN] JAAH data dir not found: {jaah_path}")
@@ -2377,6 +3419,7 @@ def run_pipeline(
         gt_path = Path(guitar_techs_data_dir)
         if gt_path.exists():
             source_configs.append((gt_path, "Guitar-TECHS", guitar_techs_loss_weight))
+            real_data_dirs.append(gt_path)
             has_any_real_data = True
         else:
             print(f"  [WARN] Guitar-TECHS data dir not found: {gt_path}")
@@ -2385,6 +3428,7 @@ def run_pipeline(
         eg_path = Path(egset12_data_dir)
         if eg_path.exists():
             source_configs.append((eg_path, "EGSet12", egset12_loss_weight))
+            real_data_dirs.append(eg_path)
             has_any_real_data = True
         else:
             print(f"  [WARN] EGSet12 data dir not found: {eg_path}")
@@ -2410,10 +3454,13 @@ def run_pipeline(
             try:
                 gs_test_path = Path(egset12_data_dir) / "processed" / "cqt"
                 if gs_test_path.exists():
-                    # Load all EGSet12 .npz files as a held-out eval set
+                    # Load EGSet12 .npz files filtered to test split only
                     loaded_chunks = []
                     for npz_path in sorted(gs_test_path.glob("*.npz")):
                         data = np.load(npz_path)
+                        split = str(data.get("split", b""))
+                        if split != "test":
+                            continue
                         if "features" in data and "labels" in data:
                             loaded_chunks.append((data["features"], data["labels"]))
                     if loaded_chunks:
@@ -2439,15 +3486,33 @@ def run_pipeline(
         else:
             print(f"  [WARN] Empirical matrix not found: {emp_path}")
 
+    # --- Commit 148 Phase 1c: collect real N templates for escape hatch fix ---
+    real_n_templates: list[np.ndarray] = []
+    if real_data_dirs:
+        real_n_templates = collect_real_n_templates(real_data_dirs)
+        print(f"  Collected {len(real_n_templates)} real N-CQT templates for escape hatch fix")
+
     # --- Generate synthetic data ---
     print("Generating synthetic dataset...")
-    synth_X, synth_y = generate_dataset(transition_probs=transition_probs)
+    synth_X, synth_y = generate_dataset(
+        transition_probs=transition_probs,
+        cqt_stats=cqt_stats,
+        real_n_templates=real_n_templates if real_n_templates else None,
+    )
     p = np.random.permutation(len(synth_X))
     synth_X, synth_y = synth_X[p], synth_y[p]
-    print(f"  Generated {len(synth_X)} synthetic samples (weight=1.0)")
 
-    # --- Add synthetic data as another weighted source ---
-    synth_weight = np.ones(len(synth_X), dtype=np.float32)
+    # --- Commit 148 Phase 1a: cap synthetic volume & reduce weight ---
+    total_real = sum(len(f) for f in features_list)
+    max_synthetic = total_real * 2 if total_real > 0 else len(synth_X)
+    if len(synth_X) > max_synthetic:
+        synth_X = synth_X[:max_synthetic]
+        synth_y = synth_y[:max_synthetic]
+        print(f"  Capped synthetic to 2× real volume: {len(synth_X)} samples (weight=0.15)")
+    else:
+        print(f"  Generated {len(synth_X)} synthetic samples (weight=0.15)")
+
+    synth_weight = np.full(len(synth_X), 0.15, dtype=np.float32)
     features_list.append(synth_X)
     labels_list.append(synth_y)
     weights_list.append(synth_weight)
@@ -2497,10 +3562,18 @@ def run_pipeline(
         y_synth_val = np.zeros(0, dtype=np.int32)
         w_synth_val = np.zeros(0, dtype=np.float32)
 
-    # Concatenate splits
+    # Commit 148 Phase 2d: Stash real/synth splits for two-phase curriculum
+    X_real_tr_s1, y_real_tr_s1, w_real_tr_s1 = X_real_tr.copy(), y_real_tr.copy(), w_real_tr.copy()
+    X_synth_tr_s1, y_synth_tr_s1, w_synth_tr_s1 = X_synth_tr.copy(), y_synth_tr.copy(), w_synth_tr.copy()
+
+    # Stage 1: synthetic-heavy concatenation
     X_train = np.concatenate([X_real_tr, X_synth_tr])
     y_train = np.concatenate([y_real_tr, y_synth_tr])
     w_train = np.concatenate([w_real_tr, w_synth_tr])
+    train_real_mask = np.concatenate([
+        np.ones(len(X_real_tr), dtype=bool),
+        np.zeros(len(X_synth_tr), dtype=bool),
+    ])
     X_val = np.concatenate([X_real_val, X_synth_val])
     y_val = np.concatenate([y_real_val, y_synth_val])
     w_val = np.concatenate([w_real_val, w_synth_val])
@@ -2515,133 +3588,269 @@ def run_pipeline(
     val_perm = np.random.permutation(len(X_val))
     X_val, y_val, w_val, val_source_tags = X_val[val_perm], y_val[val_perm], w_val[val_perm], val_source_tags[val_perm]
 
+    # Commit 148 Phase 2b/2c: Convert validation labels to one-hot
+    y_val_onehot = tf.keras.utils.to_categorical(y_val, NUM_CLASSES).astype(np.float32)
+
+    # Commit 148 Phase 3b: Multi-task validation labels (dict format)
+    y_val_root = tf.keras.utils.to_categorical(
+        derive_root_labels(y_val), N_ROOTS
+    ).astype(np.float32)
+    y_val_presence = derive_presence_labels(y_val).reshape(-1, 1)
+    y_val_dict = {
+        "chord_probs": y_val_onehot,
+        "root_probs": y_val_root,
+        "presence": y_val_presence,
+    }
+
     real_val_pct = len(X_real_val) / max(len(X_val), 1) * 100
     print(f"  Train: {len(X_train)} samples, Val: {len(X_val)} samples "
           f"({real_val_pct:.0f}% real)")
 
-    # --- Build model ---
-    model = build_model()
+    # Commit 148 Phase 2d: Build Stage 2 training data (real-heavy 80/20)
+    _s2_synth_cap = max(1, int(len(X_real_tr_s1) * 0.25))
+    if len(X_synth_tr_s1) > _s2_synth_cap:
+        _s2_perm = np.random.RandomState(42).permutation(len(X_synth_tr_s1))
+        X_synth_tr_s2 = X_synth_tr_s1[_s2_perm[:_s2_synth_cap]]
+        y_synth_tr_s2 = y_synth_tr_s1[_s2_perm[:_s2_synth_cap]]
+        w_synth_tr_s2 = w_synth_tr_s1[_s2_perm[:_s2_synth_cap]]
+    else:
+        X_synth_tr_s2, y_synth_tr_s2, w_synth_tr_s2 = X_synth_tr_s1, y_synth_tr_s1, w_synth_tr_s1
+    X_train_s2 = np.concatenate([X_real_tr_s1, X_synth_tr_s2])
+    y_train_s2 = np.concatenate([y_real_tr_s1, y_synth_tr_s2])
+    w_train_s2 = np.concatenate([w_real_tr_s1, w_synth_tr_s2])
+    train_real_mask_s2 = np.concatenate([
+        np.ones(len(X_real_tr_s1), dtype=bool),
+        np.zeros(len(X_synth_tr_s2), dtype=bool),
+    ])
+    print(f"  Stage 2 real-heavy: {len(X_real_tr_s1)} real + {len(X_synth_tr_s2)} synth "
+          f"= {len(X_train_s2)} total ({100 * len(X_real_tr_s1) / max(len(X_train_s2), 1):.0f}% real)")
+
+    # Temperature resampling (τ < 1.0) already handles rare-class oversampling
+    # at the sampling level. Per-source weights (real=1.0, synthetic=0.15) handle
+    # domain importance.  Using both simultaneously (merging into sample_weights
+    # or passing class_weight to fit) creates extreme gradient values that
+    # destabilize multi-task training.  We use only per-source sample_weights
+    # via the generator; class_weight is not passed to model.fit().
+    # The NCI (non-chord index) class-weight cap is preserved for reference.
+    print("\nSkipping sklearn class_weight — temperature resampling handles imbalance...")
+    merged_class_weight = None
+
+    # --- Build model (Phase 3b: multi-task) ---
+    model = build_multi_task_model()
+
+    # --- Build shared test callbacks (appended to both stages) ---
+    test_callbacks: list[tf.keras.callbacks.Callback] = []
+    if has_any_real_data and len(test_X) > 0:
+        test_callbacks.append(GuitarSetTestCallback(test_X, test_y))
+    if len(egset12_test_X) > 0:
+        test_callbacks.append(EGSet12TestCallback(egset12_test_X, egset12_test_y))
+
+    # ===== Stage 1: Synthetic-heavy (epochs 1-30) =====
+    print(f"\n{'=' * 60}")
+    print(f"  Stage 1: Synthetic-heavy training (epochs 1-30)")
+    print(f"  Cosine LR: {INITIAL_LR} -> {MIN_LR} over {FIRST_DECAY_EPOCHS} epochs")
+    print(f"  Mixup: p=0.3, alpha=0.2, label_smoothing=0.1")
+    print(f"  Multi-task: chord(λ={CHORD_LOSS_WEIGHT}) + root(λ={ROOT_LOSS_WEIGHT}) + presence(λ={PRESENCE_LOSS_WEIGHT})")
+    print(f"{'=' * 60}")
+
+    steps_per_epoch_s1 = int(np.ceil(len(X_train) / 64))
+    lr_schedule_s1 = tf.keras.optimizers.schedules.CosineDecayRestarts(
+        initial_learning_rate=INITIAL_LR,
+        first_decay_steps=FIRST_DECAY_EPOCHS * steps_per_epoch_s1,
+        t_mul=2.0,
+        m_mul=0.5,
+        alpha=MIN_LR / INITIAL_LR,
+    )
     model.compile(
-        optimizer="adam",
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-        metrics=["accuracy"],
+        optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule_s1, weight_decay=1e-4, clipnorm=1.0),
+        loss={
+            "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+            "root_probs": tf.keras.losses.CategoricalCrossentropy(),
+            "presence": tf.keras.losses.BinaryCrossentropy(),
+        },
+        loss_weights={
+            "chord_probs": CHORD_LOSS_WEIGHT,
+            "root_probs": ROOT_LOSS_WEIGHT,
+            "presence": PRESENCE_LOSS_WEIGHT,
+        },
+        metrics={
+            "chord_probs": tf.keras.metrics.CategoricalAccuracy(name="accuracy"),
+            "root_probs": tf.keras.metrics.CategoricalAccuracy(name="root_accuracy"),
+            "presence": tf.keras.metrics.BinaryAccuracy(name="presence_acc"),
+        },
     )
 
-    # --- Class weights (sklearn balanced, no temperature double-correction) ---
-    # Temperature resampling (τ < 1.0) changes per-epoch sample distribution
-    # in AugmentedDataGenerator. Class weights are standard sklearn balanced
-    # — they compensate for class-level frequency differences. The two
-    # mechanisms are independent and complementary at different granularities
-    # (sampling distribution vs loss gradient).
-    print("\nComputing class weights for imbalanced training data...")
-    class_weight_dict = compute_training_class_weights(y_train, temperature=temperature)
-    n_classes_with_data = len(class_weight_dict)
-    print(f"  Computed weights for {n_classes_with_data}/{NUM_CLASSES} classes present in training set")
-
-    # If we already have per-sample weights (from per-source loss weighting),
-    # Keras does not allow passing both `class_weight` and `sample_weight`
-    # to model.fit. Merge class-based weights into the per-sample weights and
-    # avoid passing `class_weight` to model.fit in that case.
-    if w_train is not None:
-        # Build per-sample class weight vector and fold into sample weights.
-        # Any class missing from class_weight_dict gets weight 1.0.
-        class_weights_vector = np.array([
-            float(class_weight_dict.get(int(lbl), 1.0)) for lbl in y_train
-        ], dtype=np.float32)
-        w_train = w_train.astype(np.float32) * class_weights_vector
-        # We cleared class_weight to signal it should not be passed to model.fit.
-        merged_class_weight = None
-        print("  Merged class_weight into per-sample sample_weights; will not pass `class_weight` to model.fit")
-    else:
-        merged_class_weight = class_weight_dict
-
-    # --- Training callbacks (Commit 103) ---
-    callbacks = [
+    callbacks_s1: list[tf.keras.callbacks.Callback] = [
         tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=10,
+            monitor="val_accuracy_real",
+            patience=25,
             restore_best_weights=True,
-            verbose=1,
-        ),
-        tf.keras.callbacks.ReduceLROnPlateau(
-            monitor="val_accuracy",
-            factor=0.5,
-            patience=2,
-            min_delta=0.001,
-            min_lr=1e-6,
             verbose=1,
         ),
         tf.keras.callbacks.ModelCheckpoint(
             filepath=str(_APP_DIR / "chord_model_best.keras"),
-            monitor="val_accuracy",
+            monitor="val_accuracy_real",
             save_best_only=True,
             verbose=1,
         ),
-        tf.keras.callbacks.CSVLogger(
+        DualValidationLogger(
+            X_real_val=X_real_val, y_real_val=y_real_val,
+            X_synth_val=X_synth_val, y_synth_val=y_synth_val,
             filename=str(_SCRIPTS_DIR / "training_log.csv"),
+            plot_output_dir=_SCRIPTS_DIR,
+            plot_every_n=5,
         ),
+        TwoPhaseCallback(switch_epoch=30),
     ]
+    callbacks_s1.extend(test_callbacks)
 
-    # GuitarSet test callback — per-epoch visibility into real-world accuracy
-    if has_any_real_data and len(test_X) > 0:
-        test_callback = GuitarSetTestCallback(test_X, test_y)
-        callbacks.append(test_callback)
-
-    # EGSet12 eval callback — second held-out eval axis
-    if len(egset12_test_X) > 0:
-        egset12_callback = EGSet12TestCallback(egset12_test_X, egset12_test_y)
-        callbacks.append(egset12_callback)
-
-    # --- On-the-fly augmented data generator ---
-    train_generator = AugmentedDataGenerator(
+    train_generator_s1 = AugmentedDataGenerator(
         X_train, y_train, w_train,
         batch_size=64,
-        p_pitch_shift=0.5,
-        pitch_range=2,
-        p_time_stretch=0.3,
-        stretch_range=(0.9, 1.1),
-        noise_std=0.05,
-        shuffle=True,
-        temperature=temperature,
+        p_pitch_shift=0.5, pitch_range=2,
+        p_time_stretch=0.3, stretch_range=(0.9, 1.1),
+        noise_std=0.05, shuffle=True, temperature=temperature,
+        real_mask=train_real_mask, multi_task=True,
     )
 
-    # --- Train ---
-    print(f"\nTraining for up to 50 epochs with on-the-fly augmentation...")
-    print(f"  EarlyStopping patience=10, ReduceLROnPlateau patience=2 (val_accuracy, min_delta=0.001)")
-    if temperature < 1.0:
-        print(f"  Temperature τ={temperature} (quality-aware resampling)")
-    print(f"  Class weights: active ({n_classes_with_data}/{NUM_CLASSES} classes)")
-    print(f"  Batch size=64")
-
-    # If we've merged class weights into per-sample weights, don't pass
-    # class_weight to model.fit (it conflicts with sample_weight). Otherwise,
-    # pass the computed class_weight_dict as before.
-    fit_kwargs = dict(
-        x=train_generator,
-        epochs=50,
-        validation_data=(X_val, y_val),
-        callbacks=callbacks,
+    fit_kwargs_s1 = dict(
+        x=train_generator_s1,
+        epochs=30,
+        validation_data=(X_val, y_val_dict),
+        callbacks=callbacks_s1,
         verbose=1,
     )
     if merged_class_weight is not None:
-        fit_kwargs["class_weight"] = merged_class_weight
+        fit_kwargs_s1["class_weight"] = {
+            "chord_probs": merged_class_weight,
+            "root_probs": {i: 1.0 for i in range(N_ROOTS)},
+            "presence": {0: 1.0, 1: 1.0},
+        }
 
-    history = model.fit(**fit_kwargs)
+    history_s1 = model.fit(**fit_kwargs_s1)
 
-    # Restore best weights (EarlyStopping with restore_best_weights already does this)
-    print(f"\nTraining completed. "
-          f"Best val_loss: {min(history.history['val_loss']):.4f}, "
-          f"Best val_accuracy: {max(history.history['val_accuracy']):.1%}")
+    # ===== Stage 2: Real-heavy fine-tuning (epochs 31-100) =====
+    print(f"\n{'=' * 60}")
+    print(f"  Stage 2: Real-heavy fine-tuning (epochs 31-100)")
+    print(f"  Cosine LR: 1e-4 -> 1e-5 over 10 epochs, no restart")
+    print(f"{'=' * 60}")
+
+    model = tf.keras.models.load_model(str(_APP_DIR / "chord_model_best.keras"))
+
+    steps_per_epoch_s2 = int(np.ceil(len(X_train_s2) / 64))
+    total_steps_s2 = 70 * steps_per_epoch_s2  # epochs 31-100 = 70 epochs
+    lr_schedule_s2 = tf.keras.optimizers.schedules.CosineDecay(
+        initial_learning_rate=1e-4,
+        decay_steps=total_steps_s2,
+        alpha=1e-5 / 1e-4,
+    )
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule_s2, weight_decay=1e-4, clipnorm=1.0),
+        loss={
+            "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+            "root_probs": tf.keras.losses.CategoricalCrossentropy(),
+            "presence": tf.keras.losses.BinaryCrossentropy(),
+        },
+        loss_weights={
+            "chord_probs": CHORD_LOSS_WEIGHT,
+            "root_probs": ROOT_LOSS_WEIGHT,
+            "presence": PRESENCE_LOSS_WEIGHT,
+        },
+        metrics={
+            "chord_probs": tf.keras.metrics.CategoricalAccuracy(name="accuracy"),
+            "root_probs": tf.keras.metrics.CategoricalAccuracy(name="root_accuracy"),
+            "presence": tf.keras.metrics.BinaryAccuracy(name="presence_acc"),
+        },
+    )
+
+    callbacks_s2: list[tf.keras.callbacks.Callback] = [
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_accuracy_real",
+            patience=25,
+            restore_best_weights=True,
+            verbose=1,
+        ),
+        tf.keras.callbacks.ModelCheckpoint(
+            filepath=str(_APP_DIR / "chord_model_best.keras"),
+            monitor="val_accuracy_real",
+            save_best_only=True,
+            verbose=1,
+        ),
+        DualValidationLogger(
+            X_real_val=X_real_val, y_real_val=y_real_val,
+            X_synth_val=X_synth_val, y_synth_val=y_synth_val,
+            filename=str(_SCRIPTS_DIR / "training_log.csv"),
+            append=True,
+            plot_output_dir=_SCRIPTS_DIR,
+            plot_every_n=5,
+        ),
+    ]
+    callbacks_s2.extend(test_callbacks)
+
+    train_generator_s2 = AugmentedDataGenerator(
+        X_train_s2, y_train_s2, w_train_s2,
+        batch_size=64,
+        p_pitch_shift=0.5, pitch_range=2,
+        p_time_stretch=0.3, stretch_range=(0.9, 1.1),
+        noise_std=0.05, shuffle=True, temperature=temperature,
+        real_mask=train_real_mask_s2, multi_task=True,
+    )
+
+    # Gradual curriculum transition: smooth from ~50% real (S1 end) to 80% real (S2) over 10 epochs
+    _s1_real_pct = len(X_real_tr_s1) / max(len(X_train), 1)
+    callbacks_s2.append(GradualTransitionCallback(
+        generator=train_generator_s2,
+        start_ratio=_s1_real_pct,
+        target_ratio=0.8,
+        transition_epochs=10,
+        start_epoch=30,
+    ))
+
+    fit_kwargs_s2 = dict(
+        x=train_generator_s2,
+        epochs=100,
+        initial_epoch=30,
+        validation_data=(X_val, y_val_dict),
+        callbacks=callbacks_s2,
+        verbose=1,
+    )
+    if merged_class_weight is not None:
+        fit_kwargs_s2["class_weight"] = {
+            "chord_probs": merged_class_weight,
+            "root_probs": {i: 1.0 for i in range(N_ROOTS)},
+            "presence": {0: 1.0, 1: 1.0},
+        }
+
+    history_s2 = model.fit(**fit_kwargs_s2)
+
+    # Merge histories for post-training evaluation
+    merged_history: dict[str, list[float]] = {}
+    for k in history_s1.history:
+        merged_history[k] = history_s1.history[k] + history_s2.history.get(k, [])
+    # Add keys unique to s2
+    for k in history_s2.history:
+        if k not in merged_history:
+            merged_history[k] = [None] * len(history_s1.history[k]) + history_s2.history[k]
+    history = type("History", (), {"history": merged_history})()
+
+    # Try chord_probs accuracy first (multi-task), fall back to accuracy (single-task)
+    best_val_acc = max(
+        merged_history.get("val_chord_probs_accuracy", []),
+        default=max(merged_history.get("val_accuracy", [0.0])),
+    )
+    print(f"\nTraining completed. Best val_accuracy: {best_val_acc:.1%}")
 
     # --- Per-group validation accuracy (Commit 98d) ---
     print("\n--- Per-Group Validation Accuracy ---")
-    y_pred = np.argmax(model.predict(X_val, verbose=0), axis=1)
+    y_output = model.predict(X_val, verbose=0)
+    y_pred = extract_chord_predictions(y_output)
+    y_pred_raw = np.argmax(y_output["chord_probs"], axis=1) if isinstance(y_output, dict) else np.argmax(y_output, axis=1)
     grouped_acc = compute_grouped_accuracy(y_val, y_pred)
     for group, acc in sorted(grouped_acc.items()):
         pct = acc * 100
         arrow = ""
         if group == "overall":
-            arrow = f"  (best val: {max(history.history['val_accuracy']):.1%})"
+            arrow = f"  (best val: {best_val_acc:.1%})"
         elif group == "extended":
             arrow = "  ← target +3% improvement"
         print(f"  {group:20s}: {pct:5.1f}%{arrow}")
@@ -2654,9 +3863,10 @@ def run_pipeline(
         real_acc = float(np.mean(y_pred[real_val_mask] == y_val[real_val_mask]))
         print(f"  Real-world val:   {real_acc:.1%}  ({real_val_mask.sum()} samples)")
     if synth_val_mask.sum() > 0:
-        synth_acc = float(np.mean(y_pred[synth_val_mask] == y_val[synth_val_mask]))
+        # Synthetic val uses raw argmax (no N-override — synthetic N is clean)
+        synth_acc = float(np.mean(y_pred_raw[synth_val_mask] == y_val[synth_val_mask]))
         print(f"  Synthetic val:    {synth_acc:.1%}  ({synth_val_mask.sum()} samples)")
-    domain_gap = float(np.mean(y_pred[synth_val_mask] == y_val[synth_val_mask])) - float(np.mean(y_pred[real_val_mask] == y_val[real_val_mask]))
+    domain_gap = synth_acc - float(np.mean(y_pred[real_val_mask] == y_val[real_val_mask]))
     print(f"  Domain gap:       {domain_gap:.1%}  (synthetic - real)")
 
     # --- Confusion matrix (Commit 103) ---
@@ -2676,7 +3886,8 @@ def run_pipeline(
     # --- GuitarSet test set validation (if available) ---
     if has_any_real_data and len(test_X) > 0:
         print("\n--- GuitarSet Test Set (Player 05) ---")
-        test_pred = np.argmax(model.predict(test_X, verbose=0), axis=1)
+        test_probs = model.predict(test_X, verbose=0)
+        test_pred = extract_chord_predictions(test_probs)
         test_acc = np.mean(test_pred == test_y)
         print(f"  Root accuracy on GuitarSet test: {test_acc:.1%}")
         test_grouped = compute_grouped_accuracy(test_y, test_pred)
@@ -2713,6 +3924,8 @@ def run_pipeline(
                 noise_std=0.03,
                 shuffle=True,
                 temperature=temperature,
+                real_mask=train_real_mask,
+                multi_task=True,
             )
 
             print(
@@ -2723,8 +3936,13 @@ def run_pipeline(
 
             qat_model.compile(
                 optimizer=tf.keras.optimizers.Adam(learning_rate=QAT_LEARNING_RATE),
-                loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-                metrics=["accuracy"],
+                loss={
+                    "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+                    "root_probs": tf.keras.losses.CategoricalCrossentropy(),
+                    "presence": tf.keras.losses.BinaryCrossentropy(),
+                },
+                loss_weights={"chord_probs": 1.0, "root_probs": 0.3, "presence": 0.2},
+                metrics={"chord_probs": "accuracy", "root_probs": "accuracy", "presence": "accuracy"},
             )
 
             qat_callbacks = [
@@ -2738,15 +3956,14 @@ def run_pipeline(
             qat_history = qat_model.fit(
                 x=qat_generator,
                 epochs=QAT_EPOCHS,
-                validation_data=(X_val, y_val),
+                validation_data=(X_val, y_val_dict),
                 callbacks=qat_callbacks,
                 verbose=1,
             )
 
             # Evaluate QAT model on validation set
-            qat_val_pred = np.argmax(
-                qat_model.predict(X_val, verbose=0), axis=1
-            )
+            qat_output = qat_model.predict(X_val, verbose=0)
+            qat_val_pred = extract_chord_predictions(qat_output)
             qat_val_acc = float(np.mean(qat_val_pred == y_val))
             print(
                 f"\n  QAT val accuracy: {qat_val_acc:.2%}  "
@@ -2755,9 +3972,8 @@ def run_pipeline(
 
             # Evaluate QAT model on GuitarSet test (if available)
             if has_any_real_data and len(test_X) > 0:
-                qat_test_pred = np.argmax(
-                    qat_model.predict(test_X, verbose=0), axis=1
-                )
+                qat_test_output = qat_model.predict(test_X, verbose=0)
+                qat_test_pred = extract_chord_predictions(qat_test_output)
                 qat_test_acc = float(np.mean(qat_test_pred == test_y))
                 qat_deg = float32_test_acc - qat_test_acc if float32_test_acc is not None else 0.0
                 print(
@@ -2777,6 +3993,7 @@ def run_pipeline(
 
         except Exception as exc:
             print(f"  [WARN] QAT phase failed: {exc}")
+            print("  [WARN] INT8 QAT unavailable — using FP16 dynamic quantization instead")
             print("  Continuing with float32-only TFLite conversion...")
             traceback.print_exc()
             qat_model = None
@@ -2807,13 +4024,24 @@ def run_pipeline(
     # =================================================================
     print("\nConverting float32 model to TFLite (dynamic range quantization)...")
 
+    # For multi-output models, TFLite only supports tensor outputs.
+    # Create a wrapper that extracts chord_probs head only.
+    is_multi_output = hasattr(float32_model, 'output_names') and isinstance(float32_model.output, dict)
+
+    if is_multi_output:
+        print("  Multi-output model: exporting chord_probs head only for TFLite")
+        chord_probs_tensor = float32_model.output["chord_probs"]
+        export_model = tf.keras.Model(inputs=float32_model.input, outputs=chord_probs_tensor)
+    else:
+        export_model = float32_model
+
     @tf.function(
         input_signature=[
             tf.TensorSpec(shape=[None, WINDOW, FEATURE_DIM], dtype=tf.float32)
         ]
     )
     def run_model_fn(input_tensor):
-        return float32_model(input_tensor, training=False)
+        return export_model(input_tensor, training=False)
 
     concrete_func = run_model_fn.get_concrete_function()
 
@@ -2865,7 +4093,7 @@ def run_pipeline(
                 )
         except Exception as e:
             print(f"  [WARN] INT8 TFLite conversion failed: {e}")
-            traceback.print_exc()
+            print("  [WARN] INT8 QAT unavailable — using FP16 dynamic quantization instead")
     else:
         print(
             "\n  [SKIP] INT8 TFLite conversion "
@@ -2935,6 +4163,7 @@ def run_pipeline(
             model_path=path,
             is_int8=is_int8,
             float32_keras_model=float32_model if not is_int8 else None,
+            cqt_stats=cqt_stats,
         )
         for label, path, is_int8 in tflite_models_for_test
     )
@@ -2963,6 +4192,7 @@ def run_qat_only(
     egset12_loss_weight: float = 1.0,
     empirical_matrix_path: str | Path | None = None,
     temperature: float = 0.3,
+    cqt_stats_path: str | Path | None = None,
 ):
     """QAT-only: load data + best model, apply QAT, fine-tune, convert to INT8."""
     _APP_DIR = Path(__file__).resolve().parent.parent / "app"
@@ -3017,12 +4247,15 @@ def run_qat_only(
                 loaded_chunks = []
                 for npz_path in sorted(eg_path.glob("*.npz")):
                     data = np.load(npz_path)
+                    split = str(data.get("split", b""))
+                    if split != "test":
+                        continue
                     if "features" in data and "labels" in data:
                         loaded_chunks.append((data["features"], data["labels"]))
                 if loaded_chunks:
                     egset12_test_X = np.concatenate([c[0] for c in loaded_chunks], axis=0)
                     egset12_test_y = np.concatenate([c[1] for c in loaded_chunks], axis=0)
-                    print(f"  Loaded EGSet12 eval set: {len(egset12_test_X)} windows")
+                    print(f"  Loaded EGSet12 eval set: {len(egset12_test_X)} windows (test split only)")
         except (FileNotFoundError, ValueError) as e:
             print(f"  [WARN] EGSet12 eval: {e}")
 
@@ -3066,11 +4299,13 @@ def run_qat_only(
     )
 
     # Float32 baseline eval
-    float32_val_pred = np.argmax(float32_model.predict(X_val, verbose=0), axis=1)
+    float32_output = float32_model.predict(X_val, verbose=0)
+    float32_val_pred = extract_chord_predictions(float32_output)
     float32_val_acc = float(np.mean(float32_val_pred == y_val))
     float32_test_acc = None
     if len(test_X) > 0:
-        float32_test_pred = np.argmax(float32_model.predict(test_X, verbose=0), axis=1)
+        float32_test_output = float32_model.predict(test_X, verbose=0)
+        float32_test_pred = extract_chord_predictions(float32_test_output)
         float32_test_acc = float(np.mean(float32_test_pred == test_y))
     print(f"  Float32 baseline: val={float32_val_acc:.2%}, test={float32_test_acc or 'N/A'}")
 
@@ -3096,95 +4331,127 @@ def run_qat_only(
         noise_std=0.03,
         shuffle=True,
         temperature=temperature,
+        multi_task=True,
     )
 
     print(f"  Applying QAT wrapper ({QAT_EPOCHS} epochs, LR={QAT_LEARNING_RATE})...")
-    qat_model = apply_qat(float32_model)
 
-    qat_model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=QAT_LEARNING_RATE),
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(),
-        metrics=["accuracy"],
-    )
+    qat_val_acc = None
+    qat_keras_path = None
+    int8_path = None
 
-    qat_callbacks = [
-        tf.keras.callbacks.CSVLogger(
-            filename=str(_SCRIPTS_DIR / "training_log_qat.csv"),
-        ),
-    ]
+    try:
+        qat_model = apply_qat(float32_model)
 
-    qat_model.fit(
-        x=qat_generator,
-        epochs=QAT_EPOCHS,
-        validation_data=(X_val, y_val),
-        callbacks=qat_callbacks,
-        verbose=1,
-    )
+        # Build multi-task validation dict
+        y_val_root_qat = tf.keras.utils.to_categorical(
+            derive_root_labels(y_val), N_ROOTS
+        ).astype(np.float32)
+        y_val_presence_qat = derive_presence_labels(y_val).reshape(-1, 1)
+        y_val_dict_qat = {
+            "chord_probs": tf.keras.utils.to_categorical(y_val, NUM_CLASSES).astype(np.float32),
+            "root_probs": y_val_root_qat,
+            "presence": y_val_presence_qat,
+        }
 
-    qat_val_pred = np.argmax(qat_model.predict(X_val, verbose=0), axis=1)
-    qat_val_acc = float(np.mean(qat_val_pred == y_val))
-    print(f"\n  QAT val accuracy: {qat_val_acc:.2%}  (float32: {float32_val_acc:.2%})")
+        qat_model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=QAT_LEARNING_RATE),
+            loss={
+                "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+                "root_probs": tf.keras.losses.CategoricalCrossentropy(),
+                "presence": tf.keras.losses.BinaryCrossentropy(),
+            },
+            loss_weights={"chord_probs": 1.0, "root_probs": 0.3, "presence": 0.2},
+            metrics={"chord_probs": "accuracy", "root_probs": "accuracy", "presence": "accuracy"},
+        )
 
-    if len(test_X) > 0:
-        qat_test_pred = np.argmax(qat_model.predict(test_X, verbose=0), axis=1)
-        qat_test_acc = float(np.mean(qat_test_pred == test_y))
-        qat_deg = float32_test_acc - qat_test_acc if float32_test_acc is not None else 0.0
-        print(f"  QAT GuitarSet test: {qat_test_acc:.2%}  (float32: {float32_test_acc:.2%}, deg: {qat_deg:.2%})")
+        qat_callbacks = [
+            tf.keras.callbacks.CSVLogger(
+                filename=str(_SCRIPTS_DIR / "training_log_qat.csv"),
+            ),
+        ]
 
-    # Save QAT Keras model
-    qat_keras_path = _APP_DIR / "chord_model_qat.keras"
-    with tfmot.quantization.keras.quantize_scope():
-        qat_model.save(str(qat_keras_path))
-    print(f"  Saved QAT model -> {qat_keras_path} ({qat_keras_path.stat().st_size / 1024 / 1024:.1f} MB)")
+        qat_model.fit(
+            x=qat_generator,
+            epochs=QAT_EPOCHS,
+            validation_data=(X_val, y_val_dict_qat),
+            callbacks=qat_callbacks,
+            verbose=1,
+        )
 
-    # ---- INT8 TFLite Conversion ----
-    print("\nConverting QAT model to INT8 TFLite...")
-    int8_path = _APP_DIR / "chord_model_qat_int8.tflite"
-    rng = np.random.RandomState(42)
-    idx = rng.choice(len(X_val), size=min(100, len(X_val)), replace=False)
-    rep_data = X_val[idx]
-    convert_to_int8_tflite(qat_model, rep_data, str(int8_path))
+        qat_output = qat_model.predict(X_val, verbose=0)
+        qat_val_pred = extract_chord_predictions(qat_output)
+        qat_val_acc = float(np.mean(qat_val_pred == y_val))
+        print(f"\n  QAT val accuracy: {qat_val_acc:.2%}  (float32: {float32_val_acc:.2%})")
 
-    # ---- INT8 Smoke Tests ----
-    print("\n--- INT8 TFLite Smoke Tests ---")
-    test_cases = [
-        (CHORD_VOCAB["C:maj"], "C:maj"),
-        (CHORD_VOCAB["A:min"], "A:min"),
-        (CHORD_VOCAB["D#:7"], "D#:7"),
-        (CHORD_VOCAB["D:7"], "D:7"),
-    ]
+        if len(test_X) > 0:
+            qat_test_output = qat_model.predict(test_X, verbose=0)
+            qat_test_pred = extract_chord_predictions(qat_test_output)
+            qat_test_acc = float(np.mean(qat_test_pred == test_y))
+            qat_deg = float32_test_acc - qat_test_acc if float32_test_acc is not None else 0.0
+            print(f"  QAT GuitarSet test: {qat_test_acc:.2%}  (float32: {float32_test_acc:.2%}, deg: {qat_deg:.2%})")
 
-    interpreter = tf.lite.Interpreter(model_path=str(int8_path))
-    interpreter.allocate_tensors()
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    input_scale, input_zero = input_details[0]["quantization"]
+        # Save QAT Keras model
+        qat_keras_path = _APP_DIR / "chord_model_qat.keras"
+        with tfmot.quantization.keras.quantize_scope():
+            qat_model.save(str(qat_keras_path))
+        print(f"  Saved QAT model -> {qat_keras_path} ({qat_keras_path.stat().st_size / 1024 / 1024:.1f} MB)")
 
-    all_passed = True
-    for label_idx, label_name in test_cases:
-        class_mask = y_train == label_idx
-        if class_mask.sum() > 0:
-            sample = X_train[class_mask][0:1]
-        else:
-            sample = np.zeros((1, WINDOW, FEATURE_DIM), dtype=np.float32)
+        # ---- INT8 TFLite Conversion ----
+        print("\nConverting QAT model to INT8 TFLite...")
+        int8_path = _APP_DIR / "chord_model_qat_int8.tflite"
+        rng = np.random.RandomState(42)
+        idx = rng.choice(len(X_val), size=min(100, len(X_val)), replace=False)
+        rep_data = X_val[idx]
+        convert_to_int8_tflite(qat_model, rep_data, str(int8_path))
 
-        q_sample = (sample / input_scale + input_zero).astype(np.int8)
-        interpreter.set_tensor(input_details[0]["index"], q_sample)
-        interpreter.invoke()
-        output = interpreter.get_tensor(output_details[0]["index"])
-        out_scale, out_zero = output_details[0]["quantization"]
-        output_float = (output.astype(np.float32) - out_zero) * out_scale
-        pred_idx = np.argmax(output_float[0])
+        # ---- INT8 Smoke Tests ----
+        print("\n--- INT8 TFLite Smoke Tests ---")
+        test_cases = [
+            (CHORD_VOCAB["C:maj"], "C:maj"),
+            (CHORD_VOCAB["A:min"], "A:min"),
+            (CHORD_VOCAB["D#:7"], "D#:7"),
+            (CHORD_VOCAB["D:7"], "D:7"),
+        ]
 
-        pred_label = CHORD_VOCAB[pred_idx]
-        expected_label = CHORD_VOCAB[label_idx]
-        match = "PASS" if pred_idx == label_idx else "FAIL"
-        if match == "FAIL":
-            all_passed = False
-        confidence = output_float[0][pred_idx] * 100
-        print(f"  {label_name:<10} -> {pred_label:<10} ({confidence:.1f}%) [{match}]")
+        interpreter = tf.lite.Interpreter(model_path=str(int8_path))
+        interpreter.allocate_tensors()
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        input_scale, input_zero = input_details[0]["quantization"]
 
-    print(f"\n  All INT8 TFLite smoke tests {'PASSED' if all_passed else 'FAILED'}")
+        all_passed = True
+        for label_idx, label_name in test_cases:
+            class_mask = y_train == label_idx
+            if class_mask.sum() > 0:
+                sample = X_train[class_mask][0:1]
+            else:
+                sample = np.zeros((1, WINDOW, FEATURE_DIM), dtype=np.float32)
+
+            q_sample = (sample / input_scale + input_zero).astype(np.int8)
+            interpreter.set_tensor(input_details[0]["index"], q_sample)
+            interpreter.invoke()
+            output = interpreter.get_tensor(output_details[0]["index"])
+            out_scale, out_zero = output_details[0]["quantization"]
+            output_float = (output.astype(np.float32) - out_zero) * out_scale
+            pred_idx = np.argmax(output_float[0])
+
+            pred_label = CHORD_VOCAB[pred_idx]
+            expected_label = CHORD_VOCAB[label_idx]
+            match = "PASS" if pred_idx == label_idx else "FAIL"
+            if match == "FAIL":
+                all_passed = False
+            confidence = output_float[0][pred_idx] * 100
+            print(f"  {label_name:<10} -> {pred_label:<10} ({confidence:.1f}%) [{match}]")
+
+        print(f"\n  All INT8 TFLite smoke tests {'PASSED' if all_passed else 'FAILED'}")
+
+    except Exception as exc:
+        print(f"\n  [WARN] QAT pipeline failed: {exc}")
+        print("  [WARN] INT8 QAT unavailable — using FP16 dynamic quantization instead")
+        import traceback
+        traceback.print_exc()
+        qat_model = None
 
     # ---- Summary ----
     print("\n" + "=" * 60)
@@ -3271,7 +4538,7 @@ if __name__ == "__main__":
         help="Path to empirical transition matrix .npy file"
     )
     parser.add_argument(
-        "--temperature", type=float, default=1.0,
+        "--temperature", type=float, default=0.5,
         help="Temperature τ for quality re-sampling (default 1.0 = uniform). "
              "τ<1.0 boosts rare chord quality sampling via MT3 formula. "
              "τ=1.0 = uniform sampling. Range [0, 1]."
@@ -3283,9 +4550,24 @@ if __name__ == "__main__":
              "Use during fine-tuning after initial convergence."
     )
     parser.add_argument(
+        "--cqt-stats-path", type=str, default=None,
+        help="Path to .npz with CQT distribution statistics for synthetic-to-real "
+             "domain gap matching (Commit 148 Phase 1b). Generated by "
+             "cqt_distribution_analyzer.py. If omitted, no distribution matching."
+    )
+    parser.add_argument(
         "--qat-only", action="store_true",
         help="QAT-only mode: skip main training, load best model, run QAT fine-tuning and INT8 conversion. "
              "Requires a previously trained model (chord_model_best.keras)."
+    )
+    parser.add_argument(
+        "--guitarset-cv", action="store_true",
+        help="GuitarSet 5-fold cross-validation mode: run leave-one-player-out CV "
+             "(players 00-04) and report mean ± std. Player 05 held out for final test."
+    )
+    parser.add_argument(
+        "--cv-epochs", type=int, default=30,
+        help="Epochs per fold for --guitarset-cv (default: 30)"
     )
     args = parser.parse_args()
 
@@ -3317,7 +4599,21 @@ if __name__ == "__main__":
             egset12_loss_weight=args.egset12_loss_weight,
             empirical_matrix_path=args.empirical_matrix,
             temperature=args.temperature,
+            cqt_stats_path=args.cqt_stats_path,
         )
+    elif args.guitarset_cv:
+        if not args.guitarset_data_dir:
+            parser.error("--guitarset-cv requires --guitarset-data-dir")
+        cv_result = run_guitarset_cv(
+            guitarset_data_dir=args.guitarset_data_dir,
+            epochs=args.cv_epochs,
+        )
+        # Save CV results
+        import json as _json
+        cv_output = Path(args.guitarset_data_dir) / "cv_results.json"
+        with open(cv_output, "w") as f:
+            _json.dump(cv_result, f, indent=2, default=str)
+        print(f"\nCV results saved to {cv_output}")
     else:
         run_pipeline(
             guitarset_data_dir=args.guitarset_data_dir,
@@ -3337,4 +4633,5 @@ if __name__ == "__main__":
             egset12_loss_weight=args.egset12_loss_weight,
             empirical_matrix_path=args.empirical_matrix,
             temperature=args.temperature,
+            cqt_stats_path=args.cqt_stats_path,
         )

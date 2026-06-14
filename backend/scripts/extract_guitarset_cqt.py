@@ -210,6 +210,7 @@ def process_song(audio_path: Path, timeline_path: Path, output_dir: Path,
         track_id=track_id,
         player_id=player_id,
         split=split,
+        loss_weight=1.0,
     )
 
     chord_labels = window_labels[window_labels != N_CHORD_IDX]

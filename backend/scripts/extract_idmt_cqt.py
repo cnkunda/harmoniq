@@ -176,6 +176,7 @@ def process_clip(
         style=style,
         source="idmt",
         loss_weight=IDMT_LOSS_WEIGHT,
+        split="train",
     )
 
     labeled = int((window_labels != N_CHORD_IDX).sum())

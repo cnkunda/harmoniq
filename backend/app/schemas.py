@@ -461,6 +461,9 @@ class LessonJSON(BaseModel):
     # Commit 112: Continuous stem quality confidence (0-1) and instrument confusion metric
     stem_confidence: float | None = None
     instrument_confusion: float | None = None
+    # Commit 123: Solo harmony enrichment
+    harmonized_solo: HarmonizedSoloNotes | None = None
+    per_bar_analysis: list[BarScope] | None = None
 
 
 class JobStatus(BaseModel):
@@ -738,6 +741,98 @@ class SoloNote(BaseModel):
 
 class SoloNotes(BaseModel):
     notes: list[SoloNote]
+
+
+# Commit 123 Schemas — Solo Harmony Enrichment
+
+class ChordToneAnalysis(BaseModel):
+    """Per-note harmonic analysis: what role does this pitch play in the current chord?"""
+
+    scale_degree: int | None = Field(
+        default=None,
+        description="Diatonic scale degree (1-7) for chord tones/tensions; None for chromatic passing tones",
+    )
+    scale_degree_name: str = Field(
+        ...,
+        description='Human-readable label: "R", "b3", "3", "4", "b5", "5", "b7", "7", "#4", etc.',
+    )
+    chord_tone_type: Literal["chord_tone", "tension", "chromatic", "pedal"] = Field(
+        ...,
+        description="Harmonic role of this note in the current chord",
+    )
+    semitone_distance: int = Field(
+        ...,
+        ge=0,
+        le=11,
+        description="Absolute distance from chord root in semitones (0-11)",
+    )
+
+
+class HarmonizedSoloNote(BaseModel):
+    """Solo note enriched with harmonic context from the active chord."""
+
+    start_time: float = Field(..., description="Quantized start time in seconds")
+    duration: float = Field(..., description="Quantized duration in seconds", ge=0)
+    pitch: int = Field(..., description="MIDI pitch number")
+    velocity: int = Field(..., ge=0, le=127)
+    chord: str | None = Field(
+        default=None,
+        description="Active chord symbol at note onset (e.g., 'C:maj7'); None if no chord",
+    )
+    chord_analysis: ChordToneAnalysis | None = Field(
+        default=None,
+        description="Harmonic analysis of this note; None when chord is unavailable or 'N'",
+    )
+
+
+class HarmonizedSoloNotes(BaseModel):
+    """Enriched solo note list with per-note chord context and aggregate percentages."""
+
+    notes: list[HarmonizedSoloNote] = Field(default_factory=list)
+    note_count: int = Field(default=0, description="Total solo notes (including those over 'N' chords)")
+    chord_tone_pct: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of harmonically analyzed notes that are chord tones",
+    )
+    tension_note_pct: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of harmonically analyzed notes that are tensions",
+    )
+    chromatic_pct: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of harmonically analyzed notes that are chromatic",
+    )
+
+
+class BarScope(BaseModel):
+    """Per-bar analysis: dominant chord, suggested scales, CAGED position, and note indices."""
+
+    bar_index: int = Field(..., description="Zero-based bar index")
+    start_time: float = Field(..., description="Bar start time in seconds")
+    end_time: float = Field(..., description="Bar end time in seconds")
+    chord: str | None = Field(
+        default=None,
+        description="Dominant chord in this bar; None if no chord events fall in this bar",
+    )
+    suggested_scales: list[str] = Field(
+        default_factory=list,
+        description="Suggested scale names for improvisation over this bar",
+    )
+    primary_position: str | None = Field(
+        default=None,
+        description='Inferred CAGED position (e.g., "position 2 (CAGED: E-form)")',
+    )
+    notes: list[int] = Field(
+        default_factory=list,
+        description="Indices into HarmonizedSoloNotes.notes for notes in this bar",
+    )
+
 
 # Commit 82 Schemas
 

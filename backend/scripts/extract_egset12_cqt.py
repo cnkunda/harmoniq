@@ -167,13 +167,16 @@ def process_song(audio_path: Path, timeline_path: Path, output_dir: Path,
     windows, window_labels, window_times = _build_windows(features, frame_labels)
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    # Commit 148 Phase 1d: reserve tracks 03, 07, 11 for test split
+    split = "test" if track_id in ("03", "07", "11") else "train"
     np.savez_compressed(
         out_path,
         features=windows,
         labels=window_labels,
         frame_times=window_times,
         track_id=track_id,
-        split="train",
+        split=split,
+        loss_weight=1.0,
     )
 
     labeled = window_labels[window_labels != N_CHORD_IDX]
