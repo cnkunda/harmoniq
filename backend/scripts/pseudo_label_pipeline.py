@@ -35,13 +35,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-SR = 22050
 WINDOW = 128
 HOP_FRAMES = 64
-HOP_SEC = 0.1
-CHROMA_BINS = 36
-BASS_BINS = 4
-FEATURE_DIM = CHROMA_BINS + BASS_BINS
+from app.cqt_constants import CHROMA_BINS, BASS_BINS, FEATURE_DIM, BINS_PER_OCTAVE, TARGET_SR, HOP_SEC
 
 
 def load_model(model_path: str | Path) -> object:
@@ -83,17 +79,14 @@ def extract_cqt_features(audio_path: Path) -> np.ndarray:
     """
     import librosa
 
-    y, sr = librosa.load(str(audio_path), sr=SR, mono=True)
-    hop = int(SR * HOP_SEC)
+    y, sr = librosa.load(str(audio_path), sr=TARGET_SR, mono=True)
+    hop = int(TARGET_SR * HOP_SEC)
 
-    cqt = librosa.cqt(y=y, sr=sr, hop_length=hop, n_bins=CHROMA_BINS, bins_per_octave=12)
+    cqt = librosa.cqt(y=y, sr=sr, hop_length=hop, n_bins=CHROMA_BINS, bins_per_octave=BINS_PER_OCTAVE)
     cqt = np.abs(cqt).T.astype(np.float32)
 
     norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
-    cqt = cqt / norms
-
-    bass = cqt[:, :BASS_BINS]
-    features = np.concatenate([cqt, bass], axis=1)
+    features = cqt / norms
 
     # Build sliding windows with 50% overlap
     pad = np.zeros((WINDOW // 2, FEATURE_DIM), dtype=np.float32)

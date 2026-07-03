@@ -32,7 +32,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.chord_vocab import CHORD_TO_IDX
-from scripts.user_audio_pipeline import _parse_lab_label, N_CHORD_IDX, HOP_SEC
+from app.cqt_constants import (HOP_SEC, BINS_PER_OCTAVE, NUM_OCTAVES,
+                                CHROMA_BINS, BASS_BINS, FEATURE_DIM)
+from scripts.user_audio_pipeline import _parse_lab_label, N_CHORD_IDX
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 ANNOTATION_DIR = DATA_DIR / "annotations" / "jaah"
@@ -40,40 +42,37 @@ OUTPUT_DIR = DATA_DIR / "jaah" / "processed" / "cqt"
 
 
 def extract_cqt_from_audio(audio_path: Path) -> np.ndarray:
-    """Extract 36-bin CQT + 4-bin bass features from audio file.
+    """Compute 144-bin CQT features matching chord_inference.py.
 
     Args:
         audio_path: Path to WAV/MP3 file.
 
     Returns:
-        features: (T, FEATURE_DIM) array where T is number of frames
+        features: (T, CHROMA_BINS) array where T is number of frames
                   at 0.1s hop resolution.
     """
     import librosa
 
     y, sr = librosa.load(str(audio_path), sr=44100, mono=True)
 
-    # Compute CQT (36 bins = 3 octaves × 12 bins/octave)
+    hop = int(44100 * HOP_SEC)
     cqt = np.abs(
         librosa.cqt(
             y,
             sr=sr,
-            hop_length=int(44100 * HOP_SEC),
-            n_bins=36,
-            bins_per_octave=12,
-            fmin=65.41,  # C2 ~ 65.4 Hz
+            hop_length=hop,
+            n_bins=CHROMA_BINS,
+            bins_per_octave=BINS_PER_OCTAVE,
+            fmin=librosa.note_to_hz('C1'),  # ~32.7 Hz
         )
     )
-    cqt = cqt.T.astype(np.float32)  # (T, 36)
+    cqt = cqt.T.astype(np.float32)
 
     # Normalize each frame
     row_sums = cqt.sum(axis=1, keepdims=True)
     cqt = np.divide(cqt, row_sums, where=row_sums > 0, out=np.zeros_like(cqt))
 
-    # Bass features (first 4 bins of CQT)
-    bass = cqt[:, :4].copy()
-
-    return np.concatenate([cqt, bass], axis=1).astype(np.float32)
+    return cqt.astype(np.float32)
 
 
 def frame_labels_from_lab(

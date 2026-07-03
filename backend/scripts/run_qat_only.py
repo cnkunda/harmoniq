@@ -56,7 +56,7 @@ def main():
     ]
     print(f"Loading {len(source_configs)} data source(s)...")
     from build_chord_tflite import load_datasets
-    features_list, labels_list, weights_list = load_datasets(source_configs)
+    features_list, labels_list, weights_list, _ = load_datasets(source_configs)
 
     # GuitarSet test data
     test_X, test_y = np.array([]), np.array([])
@@ -110,8 +110,11 @@ def main():
 
     # Mix all sources
     print("Mixing all dataset sources...")
-    dataset_sources = list(zip(features_list, labels_list, weights_list))
-    X_all, y_all, sample_weights, source_ids = mix_datasets(dataset_sources)
+    # No recording IDs needed for QAT-only; use dummy IDs per source
+    qat_rec_ids = [np.array([f"{i}_{j}" for j in range(len(f))], dtype=object)
+                   for i, f in enumerate(features_list)]
+    dataset_sources = list(zip(features_list, labels_list, weights_list, qat_rec_ids))
+    X_all, y_all, sample_weights, source_ids, _ = mix_datasets(dataset_sources)
 
     n_real_sources = len(features_list) - 1
     real_mask = source_ids < n_real_sources

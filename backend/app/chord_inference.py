@@ -30,61 +30,50 @@ from app.chord_vocab import CHORD_INTERVALS as _CHORD_INTERVALS
 logger = logging.getLogger("harmoniq.inference.chord")
 
 _ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-_CHORD_QUALITIES = [
-    "maj", "min",
-    "7", "maj7", "min7",
-    "9", "min9", "maj9", "11", "13",
-    "7#9", "7b9", "7#5", "7b5", "alt7",
-    "sus2", "sus4", "7sus4",
-    "dim", "dim7", "aug", "6", "min6",
-]
 
-CHORD_VOCAB = [f"{root}:{qual}" for qual in _CHORD_QUALITIES for root in _ROOTS] + ["N"]
-_CHORD_TO_IDX = {chord: i for i, chord in enumerate(CHORD_VOCAB)}
-_NUM_CLASSES = len(CHORD_VOCAB)  # 277
+# MIREX 25-class vocabulary (Commit A: vocab reduction 277→25)
+from app.chord_vocab import (
+    MIREX_VOCAB, NUM_CLASSES_MIREX, MIREX_TO_IDX, MIREX_QUALITY_MAP,
+    ROOT_NOTES as _ROOT_NOTES,
+)
+
+CHORD_VOCAB = MIREX_VOCAB
+_CHORD_TO_IDX = MIREX_TO_IDX
+_NUM_CLASSES = NUM_CLASSES_MIREX  # 25
 
 # Restricted vocabulary for the chroma fallback path (Commit: chroma quality fix).
-# 12-bin chroma vectors cannot discriminate altered-dominant qualities
-# (alt7, 7#9, 7b9, 7#5, 7b5), extensions (9, 11, 13), or aug/dim7 from
-# each other — the template matcher picks them essentially at random, which
-# produced 25%+ alt7 emissions on real songs. The chroma path now only emits
-# the qualities that chroma can actually distinguish.
+# 12-bin chroma vectors cannot discriminate altered-dominant qualities.
+# The chroma path emits 5 qualities (maj, min, 7, maj7, min7) which map to
+# MIREX's maj/min via MIREX_QUALITY_MAP (7→maj, maj7→maj, min7→min).
 _CHROMA_QUALITIES = ["maj", "min", "7", "maj7", "min7"]
 CHROMA_VOCAB = [f"{root}:{qual}" for qual in _CHROMA_QUALITIES for root in _ROOTS] + ["N"]
 _CHROMA_TO_IDX = {chord: i for i, chord in enumerate(CHROMA_VOCAB)}
-# Map each restricted chord back to its 277-class index for projection into
-# the Viterbi emission space.
-_CHROMA_TO_FULL_IDX = np.array(
-    [_CHORD_TO_IDX[label] for label in CHROMA_VOCAB], dtype=np.int64
-)
+# Map each chroma candidate to its 25-class MIREX index
+_CHROMA_TO_FULL_IDX = np.array([
+    MIREX_TO_IDX.get(label, NUM_CLASSES_MIREX - 1) for label in CHROMA_VOCAB
+], dtype=np.int64)
 _NUM_CHROMA = len(CHROMA_VOCAB)  # 61
 
 _TFLITE_PATH = Path(__file__).parent / "chord_model.tflite"
 _KERAS_PATH = Path(__file__).parent / "chord_model.keras"
-_WINDOW = 128
-_HOP_FRAMES = 64  # 50% overlap (Commit 100)
-_HOP_SEC = 0.1
-_BINS_PER_OCTAVE = 12
-_NUM_OCTAVES = 3
-_CHROMA_BINS = _BINS_PER_OCTAVE * _NUM_OCTAVES  # 36
-_BASS_BINS = 4
-_FEATURE_DIM = _CHROMA_BINS + _BASS_BINS         # 40
+from app.cqt_constants import (WINDOW as _WINDOW, HOP_FRAMES as _HOP_FRAMES,
+                                HOP_SEC as _HOP_SEC, BINS_PER_OCTAVE as _BINS_PER_OCTAVE,
+                                NUM_OCTAVES as _NUM_OCTAVES, CHROMA_BINS as _CHROMA_BINS,
+                                BASS_BINS as _BASS_BINS, FEATURE_DIM as _FEATURE_DIM)
 _BATCH_CHUNK = 512
 
 
 def _circular_cqt_pad(x):
-    """Circular padding on CQT portion (bins 0-35), zero pad bass.
+    """Circular padding on 144-bin CQT.
 
     Replicates the Lambda layer from the training script (build_chord_tflite.py).
     Required for Keras model deserialization — the function must be available
     in the inference module so Keras can resolve the Lambda layer reference.
+    With BASS_BINS=0, the entire FEATURE_DIM is the CQT, so we circular-pad
+    the full input.
     """
     import tensorflow as tf
-    cqt = x[:, :, :_CHROMA_BINS]
-    bass = x[:, :, _CHROMA_BINS:]
-    cqt_padded = tf.concat([cqt[:, :, -1:], cqt, cqt[:, :, :1]], axis=-1)
-    bass_padded = tf.pad(bass, [[0, 0], [0, 0], [1, 1]])
-    return tf.concat([cqt_padded, bass_padded], axis=-1)
+    return tf.concat([x[:, :, -1:], x, x[:, :, :1]], axis=-1)
 
 # Precomputed triangular window for overlap-and-blend (Commit 100)
 _TRIANGULAR_WINDOW = np.minimum(
@@ -201,15 +190,13 @@ def _extract_features(y: np.ndarray, sr: int) -> tuple[np.ndarray, int]:
     import librosa
 
     hop = int(sr * _HOP_SEC)
-    cqt = librosa.cqt(y=y, sr=sr, hop_length=hop, n_bins=36, bins_per_octave=12)
+    cqt = librosa.cqt(y=y, sr=sr, hop_length=hop, n_bins=_CHROMA_BINS,
+                       bins_per_octave=_BINS_PER_OCTAVE)
     cqt = np.abs(cqt)
     cqt = cqt.T.astype(np.float32)
 
     norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
-    cqt = cqt / norms
-
-    bass = cqt[:, :4]
-    features = np.concatenate([cqt, bass], axis=1)
+    features = cqt / norms
     windows = _build_windows(features)
     return windows, hop
 
@@ -588,7 +575,7 @@ def _pool_beat_window(
     """Pool frame predictions within a beat window into a full distribution.
 
     Returns:
-        Dict with timestamp, probs [277], top candidates, confidence gap,
+        Dict with timestamp, probs [25], top candidates, confidence gap,
         first/second half distributions, and metadata.
     """
     probs_sum = np.zeros(_NUM_CLASSES, dtype=np.float64)
@@ -746,7 +733,7 @@ def _reject_spurious_n(
         emission_probs: (T, C) per-frame probability distributions.
         n_idx: Index of the N (no-chord) class.
         entropy_threshold: Frames with emission entropy above this are
-            considered uncertain (default 0.4, range ~0-2.0 for 277 classes).
+            considered uncertain (default 0.4, range ~0-4.0 for 25 classes).
         confidence_gap_threshold: If top-2 confidence gap is below this,
             the model is split between two predictions.
 

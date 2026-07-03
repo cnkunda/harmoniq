@@ -26,19 +26,14 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.chord_vocab import CHORD_INTERVALS, CHORD_TO_IDX
+from app.chord_vocab import CHORD_INTERVALS, CHORD_TO_IDX, NUM_CLASSES
 
 # Inference pipeline constants (must match chord_inference.py)
 TARGET_SR = 44100
 HOP_SEC = 0.1
-BINS_PER_OCTAVE = 12
-NUM_OCTAVES = 3
-CHROMA_BINS = BINS_PER_OCTAVE * NUM_OCTAVES  # 36
-BASS_BINS = 4
-FEATURE_DIM = CHROMA_BINS + BASS_BINS  # 40
-WINDOW = 128
-HOP_FRAMES = 64
-N_CHORD_IDX = CHORD_TO_IDX.get("N", CHROMA_BINS * BASS_BINS - 1)
+from app.cqt_constants import (BINS_PER_OCTAVE, NUM_OCTAVES,
+                                CHROMA_BINS, BASS_BINS, FEATURE_DIM, WINDOW, HOP_FRAMES)
+N_CHORD_IDX = CHORD_TO_IDX.get("N", NUM_CLASSES - 1)
 
 # Quality normalization (from build_empirical_transition_matrix)
 QUALITY_NORM = {
@@ -235,9 +230,7 @@ def process_pair(audio_path: Path, lab_path: Path, output_dir: Path) -> dict | N
                       bins_per_octave=BINS_PER_OCTAVE)
     cqt = np.abs(cqt).T.astype(np.float32)
     norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
-    cqt = cqt / norms
-    bass = cqt[:, :BASS_BINS]
-    features = np.concatenate([cqt, bass], axis=1)
+    features = cqt / norms
 
     num_frames = len(features)
 

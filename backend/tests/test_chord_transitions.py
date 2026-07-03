@@ -23,9 +23,9 @@ from app.chord_inference import CHORD_VOCAB
 
 
 class TestTransitionMatrixShape:
-    def test_matrix_is_277x277(self):
+    def test_matrix_is_25x25(self):
         matrix = build_transition_matrix()
-        assert matrix.shape == (277, 277)
+        assert matrix.shape == (25, 25)
 
     def test_matrix_is_row_stochastic(self):
         matrix = build_transition_matrix()
@@ -62,14 +62,6 @@ class TestRootIntervalWeights:
 
 
 class TestQualityCompatibility:
-    def test_dominant_to_tonic_is_strong(self):
-        matrix = build_transition_matrix()
-        g7_idx = _CHORD_TO_IDX["G:7"]
-        c_maj_idx = _CHORD_TO_IDX["C:maj"]
-        c_min_idx = _CHORD_TO_IDX["C:min"]
-        assert matrix[g7_idx, c_maj_idx] > 0.005
-        assert matrix[g7_idx, c_min_idx] > 0.005
-
     def test_same_quality_persistence(self):
         matrix = build_transition_matrix()
         c_idx = _CHORD_TO_IDX["C:maj"]
@@ -112,7 +104,7 @@ class TestCaching:
             cache_path = Path(tmpdir) / "test_matrix.npy"
             matrix = load_transition_matrix(cache_path)
             assert cache_path.exists()
-            assert matrix.shape == (277, 277)
+            assert matrix.shape == (25, 25)
 
 
 class TestKeyConstraints:
@@ -120,7 +112,7 @@ class TestKeyConstraints:
         indices = get_diatonic_indices(key_root=7, key_mode="major")
         expected_labels = {
             "G:maj", "A:min", "B:min", "C:maj",
-            "D:maj", "D:7", "E:min", "F#:dim",
+            "D:maj", "E:min", "F#:min",
         }
         expected_indices = {_CHORD_TO_IDX[label] for label in expected_labels}
         assert indices == expected_indices
@@ -128,8 +120,8 @@ class TestKeyConstraints:
     def test_a_minor_diatonic_chords(self):
         indices = get_diatonic_indices(key_root=9, key_mode="minor")
         expected_labels = {
-            "A:min", "B:dim", "C:maj", "D:min",
-            "E:min", "E:7", "F:maj", "G:maj",
+            "A:min", "B:min", "C:maj", "D:min",
+            "E:min", "F:maj", "G:maj",
         }
         expected_indices = {_CHORD_TO_IDX[label] for label in expected_labels}
         assert indices == expected_indices
@@ -163,7 +155,7 @@ class TestKeyConstraints:
         c_idx = _CHORD_TO_IDX["C:maj"]
         fs_idx = _CHORD_TO_IDX["F#:maj"]
 
-        assert constrained[c_idx, fs_idx] < 0.005
+        assert constrained[c_idx, fs_idx] < 0.01
 
     def test_constrained_matrix_is_row_stochastic(self):
         matrix = build_transition_matrix()

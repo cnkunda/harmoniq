@@ -14,7 +14,7 @@ import numpy as np
 logger = logging.getLogger("harmoniq.inference.viterbi")
 
 _LOG_FLOOR = 1e-30
-_DOMINANT_QUALITIES = {"7", "7#9", "7b9", "7#5", "7b5", "alt7", "7sus4"}
+_DOMINANT_QUALITIES: set[str] = set()  # empty in 25-class MIREX vocab
 
 
 def _parse_quality(chord_label: str) -> str:
@@ -39,7 +39,7 @@ class ViterbiChordDecoder:
     def __init__(
         self,
         transition_log_probs: np.ndarray,
-        vocab_size: int = 277,
+        vocab_size: int = 25,
         chord_vocab: list[str] | None = None,
     ):
         """Initialize decoder with transition probabilities.

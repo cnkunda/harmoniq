@@ -1,7 +1,7 @@
 """Extract CQT features from EGSet12 audio aligned with chord labels.
 
 Reads WAVs and per-track JSON timelines (from parse_egset12.py), aligns
-36-bin CQT + 4-bin bass features with chord labels at 0.1s frame resolution.
+144-bin CQT features with chord labels at 0.1s frame resolution.
 
 All 12 tracks are used as training data (no test hold-back since the dataset
 is small and intended for diverse style coverage).
@@ -29,7 +29,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.chord_vocab import CHORD_TO_IDX
+from app.chord_vocab import CHORD_TO_IDX, NUM_CLASSES
 
 RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "egset12" / "raw"
 PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "egset12" / "processed"
@@ -37,15 +37,9 @@ PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "egset12" / "p
 # Feature extraction constants (must match build_chord_tflite.py)
 TARGET_SR = 44100
 HOP_SEC = 0.1
-BINS_PER_OCTAVE = 12
-NUM_OCTAVES = 3
-CHROMA_BINS = BINS_PER_OCTAVE * NUM_OCTAVES  # 36
-BASS_BINS = 4
-FEATURE_DIM = CHROMA_BINS + BASS_BINS  # 40
-WINDOW = 128
-HOP_FRAMES = 64
-
-N_CHORD_IDX = CHORD_TO_IDX.get("N", 276)
+from app.cqt_constants import (BINS_PER_OCTAVE, NUM_OCTAVES,
+                                CHROMA_BINS, BASS_BINS, FEATURE_DIM, WINDOW, HOP_FRAMES)
+N_CHORD_IDX = CHORD_TO_IDX.get("N", NUM_CLASSES - 1)
 
 
 def _resample_if_needed(y: np.ndarray, sr: int) -> tuple[np.ndarray, int]:
@@ -57,7 +51,7 @@ def _resample_if_needed(y: np.ndarray, sr: int) -> tuple[np.ndarray, int]:
 
 
 def _extract_cqt(y: np.ndarray, sr: int) -> np.ndarray:
-    """Compute 36-bin CQT + 4-bin bass features."""
+    """Compute 144-bin CQT features."""
     import librosa
 
     hop = int(sr * HOP_SEC)
@@ -67,10 +61,7 @@ def _extract_cqt(y: np.ndarray, sr: int) -> np.ndarray:
     cqt = cqt.T.astype(np.float32)
 
     norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
-    cqt = cqt / norms
-
-    bass = cqt[:, :BASS_BINS]
-    features = np.concatenate([cqt, bass], axis=1)
+    features = cqt / norms
     return features
 
 

@@ -4,15 +4,16 @@ build_chord_tflite.py
 Final Version: Uses Concrete Function tracing to bypass Keras 3 / Python 3.12 
 serialization bugs.
 
-Vocabulary: 23 qualities x 12 roots + 1 No-Chord (277 total) — Advanced Extensions (Commit 98)
+Vocabulary: 25-class MIREX (12 maj + 12 min + N) — mapped from 277-class at dataset load (Commit 98)
 Architecture: CRNN with Bidirectional LSTM + Multi-Head Self-Attention (Commit 98d)
 Augmentation: Inversions, missing notes, pitch shift, time stretch, bass ambiguity, pink noise, transitions (Commit 98a)
-Features: 36-bin CQT with octave preservation + 4-bin bass channel (Commit 98b)
+Features: 144-bin CQT with octave preservation (Commit 98b)
 """
 
 import json
 import os
 from pathlib import Path
+from typing import Any, Callable
 
 import sys
 
@@ -33,6 +34,11 @@ import traceback
 import numpy as np
 import tensorflow as tf
 
+# Limit TF memory growth to avoid OOM
+gpus = tf.config.experimental.list_physical_devices('GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
+
 # Commit 106: Quantization-Aware Training toolkit
 try:
     import tensorflow_model_optimization as tfmot
@@ -48,6 +54,11 @@ from app.chord_vocab import (
     CHORD_VOCAB,
     CHORD_TO_IDX,
     NUM_CLASSES,
+    MIREX_VOCAB,
+    MIREX_TO_IDX,
+    NUM_CLASSES_MIREX,
+    mirex_label,
+    MIREX_QUALITY_MAP,
 )
 
 from sklearn.metrics import confusion_matrix, classification_report
@@ -68,6 +79,13 @@ CHORD_CLASS_MAP.append((-1, "N"))
 N_CLASSES_PER_QUALITY = 12  # Each quality has 12 root positions
 N_CHORD_CLASSES = len(CHORD_INTERVALS) * N_CLASSES_PER_QUALITY  # 23 * 12 = 276
 
+# MIREX 25-class class map for per-group accuracy computation
+MIREX_CLASS_MAP: list[tuple[int, str]] = (
+    [(root, "maj") for root in range(12)]
+    + [(root, "min") for root in range(12)]
+    + [(-1, "N")]
+)
+
 
 def _find_class_index(root: int, quality: str) -> int:
     """Find class index for a given (root, quality) pair.
@@ -83,14 +101,11 @@ def _find_class_index(root: int, quality: str) -> int:
     return quality_position * N_CLASSES_PER_QUALITY + root
 
 
-WINDOW          = 128              # Temporal context: ~12.8s at 0.1s hop (Commit 98c)
+from app.cqt_constants import (WINDOW, BINS_PER_OCTAVE, NUM_OCTAVES,
+                                CHROMA_BINS, FEATURE_DIM)
+
 WINDOW_MIN      = 64               # Configurable range
 WINDOW_MAX      = 256
-BINS_PER_OCTAVE = 12
-NUM_OCTAVES     = 3
-CHROMA_BINS     = BINS_PER_OCTAVE * NUM_OCTAVES  # 36
-BASS_BINS       = 4  # Low 4 bins for bass separation
-FEATURE_DIM     = CHROMA_BINS + BASS_BINS         # 40
 
 # Commit 106: Quantization-Aware Training constants
 QAT_EPOCHS = 5
@@ -101,19 +116,16 @@ N_ROOTS = 13           # 12 chromatic roots + N (index 12)
 CHORD_LOSS_WEIGHT = 1.0
 ROOT_LOSS_WEIGHT = 0.2
 PRESENCE_LOSS_WEIGHT = 0.1
-N_INDEX = NUM_CLASSES - 1  # 276 — index of the N (no-chord) class
+N_INDEX = NUM_CLASSES_MIREX - 1  # 24 — index of the N (no-chord) class in 25-class vocab
 
 # Commit 148 Phase 2a: Cosine annealing LR schedule
 INITIAL_LR = 1e-3          # Cosine start LR (reduced from 3e-3 for multi-task stability)
 MIN_LR = 1e-5               # Prevents total stall (was 1e-6 under ReduceLROnPlateau)
-FIRST_DECAY_EPOCHS = 30     # Cosine half-period matches Stage 1 duration
+FIRST_DECAY_EPOCHS = 20     # Cosine half-period matches Stage 1 duration
 
-# Quality groups for per-category accuracy tracking (Commit 98d)
+# Quality groups for per-category accuracy tracking (Commit A: vocab reduction)
 QUALITY_GROUPS = {
     "triad":           {"maj", "min"},
-    "extended":        {"7", "maj7", "min7", "9", "min9", "maj9", "11", "13"},
-    "altered":         {"7#9", "7b9", "7#5", "7b5", "alt7"},
-    "suspended_other": {"sus2", "sus4", "7sus4", "dim", "dim7", "aug", "6", "min6"},
     "no_chord":        {"N"},
 }
 
@@ -121,18 +133,18 @@ QUALITY_GROUPS = {
 def compute_grouped_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     """Compute per-quality-group accuracy.
 
-    Groups: triad, extended, altered, suspended_other, no_chord, overall.
+    Groups: triad, no_chord, overall.
 
     Args:
-        y_true: Ground truth class indices, shape (N,)
-        y_pred: Predicted class indices, shape (N,)
+        y_true: Ground truth class indices (25-class MIREX), shape (N,)
+        y_pred: Predicted class indices (25-class MIREX), shape (N,)
 
     Returns:
         Dict mapping group name to accuracy (float in [0, 1]).
     """
     results: dict[str, float] = {}
     for group_name, qualities in QUALITY_GROUPS.items():
-        mask = np.array([CHORD_CLASS_MAP[idx][1] in qualities for idx in y_true])
+        mask = np.array([MIREX_CLASS_MAP[idx][1] in qualities for idx in y_true])
         if mask.sum() == 0:
             results[group_name] = 0.0
             continue
@@ -195,17 +207,17 @@ def bootstrap_ci_accuracies(
 def compute_cqt_emd(
     real_cqt: np.ndarray,
     synth_cqt: np.ndarray,
-    n_bins: int = 40,
+    n_bins: int = 144,
 ) -> float:
     """Compute Earth Mover's Distance between real and synthetic CQT distributions.
 
-    Averages per-bin Wasserstein-1 distances across all 40 frequency bins.
+    Averages per-bin Wasserstein-1 distances across all 144 frequency bins.
     Lower values indicate more similar distributions.
 
     Args:
         real_cqt: Real CQT windows, shape (N_real, T, n_bins).
         synth_cqt: Synthetic CQT windows, shape (N_synth, T, n_bins).
-        n_bins: Number of CQT frequency bins (default 40).
+        n_bins: Number of CQT frequency bins (default 144).
 
     Returns:
         Mean EMD across all bins (float).
@@ -315,17 +327,17 @@ def collect_real_n_templates(data_dirs: list[Path]) -> list[np.ndarray]:
     """Extract real N (no-chord) windows from real CQT datasets.
 
     Scans .npz files in processed/cqt/ for frames whose label matches the
-    N class (last index in CHORD_CLASS_MAP). These real silent/no-chord
-    passages provide realistic N distribution to replace purely synthetic
-    silence during training.
+    N class. Checks for both the old 277-class N index (276) and the new
+    25-class N index (24) to handle stale .npz files from previous extraction.
 
     Args:
         data_dirs: List of dataset paths containing processed/cqt/*.npz.
 
     Returns:
-        List of (128, 40) arrays, each a real N-cqt feature window.
+        List of (128, 144) arrays, each a real N-cqt feature window.
     """
-    n_idx = NUM_CLASSES - 1
+    n_idx_new = NUM_CLASSES_MIREX - 1  # 24 (new N index)
+    n_idx_old = NUM_CLASSES - 1        # 276 (old N index in stale .npz files)
     templates: list[np.ndarray] = []
 
     for data_dir in data_dirs:
@@ -337,7 +349,7 @@ def collect_real_n_templates(data_dirs: list[Path]) -> list[np.ndarray]:
                 data = np.load(npz_path)
                 features = data["features"]
                 labels = data["labels"]
-                n_mask = labels == n_idx
+                n_mask = (labels == n_idx_new) | (labels == n_idx_old)
                 n_windows = features[n_mask]
                 templates.extend(n_windows)
             except Exception as e:
@@ -353,7 +365,7 @@ def _make_n_silence_template() -> np.ndarray:
     so the model learns to distinguish silence from low-energy chords.
 
     Returns:
-        40-bin feature vector [36 CQT + 4 bass].
+        144-bin feature vector.
     """
     variant = np.random.choice(_N_SILENCE_VARIANTS)
     cqt = np.zeros(CHROMA_BINS, dtype=np.float32)
@@ -391,27 +403,26 @@ def _make_n_silence_template() -> np.ndarray:
     if total > 0:
         cqt = cqt / total
 
-    bass = cqt[:BASS_BINS].copy()
-    return np.concatenate([cqt, bass]).astype(np.float32)
+    return cqt.astype(np.float32)
 
 
 # ---------------------------------------------------------------------------
 # 2. Data Generation (Harmonic Overtones with Extension Attenuation)
 # ---------------------------------------------------------------------------
 def make_cqt_template(root: int, quality: str) -> np.ndarray:
-    """Generate 36-bin CQT template with octave-aware chord tones.
+    """Generate 144-bin CQT template with overtone modeling.
 
-    Chord tones are placed in octaves 2-3 matching real guitar range
-    (lowest string E2=82.4 Hz lives in octave 2, bin 12+).
+    Chord tones placed at 24-bins-per-octave resolution covering
+    octaves 2-4 (guitar range E2-E5 + harmonics).
 
     Args:
         root: Root note index (0-11)
         quality: Chord quality string
 
     Returns:
-        40-bin feature vector [36 CQT + 4 bass]
+        144-bin feature vector (no separate bass channel).
     """
-    cqt = np.zeros(CHROMA_BINS, dtype=np.float32)
+    cqt = np.zeros(CHROMA_BINS, dtype=np.float32)  # 144
 
     if quality == "N":
         return _make_n_silence_template()
@@ -424,27 +435,42 @@ def make_cqt_template(root: int, quality: str) -> np.ndarray:
         else:
             octave = 2
 
-        note_in_octave = (root + interval) % BINS_PER_OCTAVE
-        bin_idx = (octave - 1) * BINS_PER_OCTAVE + note_in_octave
+        note_in_octave = (root + interval) % 12
+        bin_idx = octave * BINS_PER_OCTAVE + note_in_octave  # 24*octave + note
 
         weight = 1.0 if interval <= 12 else 0.4
         if i == 0:
             weight *= 1.20
 
+        # Fundamental
         cqt[bin_idx] += weight
-        cqt[(bin_idx + 7) % CHROMA_BINS] += 0.5
-        cqt[bin_idx] += 0.3
 
-    # Place root note in octave 2 (guitar's lowest string is E2=82.4 Hz,
-    # which falls in octave 2 of the CQT grid)
-    cqt[12 + root] += 0.5
+        # 2nd harmonic (octave above)
+        harmonic2_bin = bin_idx + BINS_PER_OCTAVE
+        if harmonic2_bin < CHROMA_BINS:
+            cqt[harmonic2_bin] += weight * 0.5
 
-    total = cqt.sum()
-    if total > 0:
-        cqt = cqt / total
+        # 3rd harmonic (octave + fifth)
+        harmonic3_bin = bin_idx + BINS_PER_OCTAVE + 7
+        if harmonic3_bin < CHROMA_BINS:
+            cqt[harmonic3_bin] += weight * 0.3
 
-    bass = cqt[:BASS_BINS].copy()
-    return np.concatenate([cqt, bass]).astype(np.float32)
+        # Spectral leakage: spread energy to adjacent bins
+        for offset in [-1, 1]:
+            neighbor = bin_idx + offset
+            if 0 <= neighbor < CHROMA_BINS:
+                cqt[neighbor] += weight * 0.15
+
+    # Root note reinforcement in octave 2
+    root_bin = 2 * BINS_PER_OCTAVE + root
+    cqt[root_bin] += 0.5
+
+    # Min-max normalization (matches real extraction normalization)
+    cmin, cmax = cqt.min(), cqt.max()
+    if cmax > cmin:
+        cqt = (cqt - cmin) / (cmax - cmin + 1e-8)
+
+    return cqt.astype(np.float32)  # No bass concatenation
 
 
 def make_chroma_template(root: int, quality: str) -> np.ndarray:
@@ -467,10 +493,10 @@ def apply_inversion(template: np.ndarray, root: int, quality: str, inversion: in
     """Apply chord inversion by placing the inversion note in octave 1.
 
     Args:
-        template: 40-bin CQT template [36 CQT + 4 bass]
+        template: 144-bin CQT template.
         root: Root note index (0-11)
         quality: Chord quality string
-        inversion: 0=root position, 1=1st inversion (3rd in bass), 2=2nd inversion (5th in bass)
+        inversion: 0=root position, 1=1st inversion, 2=2nd inversion
     """
     if inversion == 0 or quality == "N":
         return template
@@ -492,16 +518,14 @@ def apply_inversion(template: np.ndarray, root: int, quality: str, inversion: in
     if total > 0:
         cqt = cqt / total
 
-    bass = cqt[:BASS_BINS].copy()
-
-    return np.concatenate([cqt, bass]).astype(np.float32)
+    return cqt.astype(np.float32)
 
 
 def apply_missing_notes(template: np.ndarray, quality: str, dropout_rate: float = 0.15) -> np.ndarray:
     """Randomly drop chord tones to model sparse arrangements.
     
     Preserves at least 2 notes to maintain chord identity.
-    Works with 40-bin CQT template.
+    Works with 144-bin CQT template.
     """
     if quality == "N":
         return template
@@ -527,21 +551,17 @@ def apply_missing_notes(template: np.ndarray, quality: str, dropout_rate: float 
             octave = 3
         else:
             octave = 2
-        
+
         note_in_octave = interval % BINS_PER_OCTAVE
         bin_idx = (octave - 1) * BINS_PER_OCTAVE + note_in_octave
-        
+
         cqt[bin_idx] *= 0.1
         cqt[(bin_idx + 7) % CHROMA_BINS] *= 0.1
-    
-    result[CHROMA_BINS:] = cqt[:BASS_BINS].copy()
-    
+
     total = cqt.sum()
     if total > 0:
-        cqt = cqt / total
-        result[:CHROMA_BINS] = cqt
-        result[CHROMA_BINS:] = cqt[:BASS_BINS].copy()
-    
+        result[:CHROMA_BINS] = cqt / total
+
     return result
 
 
@@ -553,14 +573,8 @@ def apply_pitch_shift(window: np.ndarray, shift_semitones: int = 0) -> np.ndarra
     """
     if shift_semitones == 0:
         return window
-    
-    cqt = window[:, :CHROMA_BINS]
-    bass = window[:, CHROMA_BINS:]
-    
-    cqt_shifted = np.roll(cqt, shift_semitones, axis=-1)
-    bass_shifted = np.roll(bass, shift_semitones, axis=-1)
-    
-    return np.concatenate([cqt_shifted, bass_shifted], axis=-1)
+
+    return np.roll(window, shift_semitones, axis=-1).astype(np.float32)
 
 
 def apply_time_stretch(window: np.ndarray, stretch_factor: float = 1.0) -> np.ndarray:
@@ -583,37 +597,41 @@ def apply_time_stretch(window: np.ndarray, stretch_factor: float = 1.0) -> np.nd
 
 
 def apply_bass_ambiguity(template: np.ndarray, root: int, quality: str, ambiguity_strength: float = 0.0) -> np.ndarray:
-    """Inject bass energy at non-root positions in octave 1.
-    
-    Works with 40-bin CQT template.
+    """Add energy to low-frequency bins (0-23) of the 144-bin CQT.
+
+    Replaces the old bass-channel ambiguity approach. With BASS_BINS=0,
+    the 144-bin CQT covers E2-E5; low bins 0-23 correspond to the lowest
+    octave. Injecting energy at non-chord notes in this range simulates
+    the ambiguous bass of real recordings.
+
+    Same signature as the old function for backward compatibility.
     """
     if ambiguity_strength <= 0 or quality == "N":
         return template
-    
+
     result = template.copy()
-    cqt = result[:CHROMA_BINS]
-    
+
     chord_notes = set()
     for interval in CHORD_INTERVALS[quality]:
-        note = (root + interval) % BINS_PER_OCTAVE
+        note = (root + interval) % 12
         chord_notes.add(note)
-    
-    possible_bass = [n for n in range(BINS_PER_OCTAVE) if n not in chord_notes]
+
+    possible_bass = [n for n in range(12) if n not in chord_notes]
     if not possible_bass:
         return template
-    
+
     bass_note = np.random.choice(possible_bass)
-    cqt[bass_note] += ambiguity_strength
-    cqt[(bass_note + 7) % BINS_PER_OCTAVE] += ambiguity_strength * 0.3
-    
-    result[CHROMA_BINS:] = cqt[:BASS_BINS].copy()
-    
-    total = cqt.sum()
+    # Place ambiguous bass energy in low-frequency region (bins 0-23)
+    bin_0 = bass_note * 2  # spread across 2 bins for realism
+    bin_1 = (bass_note * 2 + 1) % 24
+    result[bin_0] += ambiguity_strength
+    result[bin_1] += ambiguity_strength * 0.5
+
+    # Renormalize
+    total = result.sum()
     if total > 0:
-        cqt = cqt / total
-        result[:CHROMA_BINS] = cqt
-        result[CHROMA_BINS:] = cqt[:BASS_BINS].copy()
-    
+        result = result / total
+
     return result
 
 
@@ -642,7 +660,7 @@ def generate_pink_noise(shape: tuple, noise_std: float = 0.12) -> np.ndarray:
 
 
 def make_transition_window(template_a: np.ndarray, template_b: np.ndarray, mix_ratio: float = 0.5) -> np.ndarray:
-    """Create a window mixing two 40-bin CQT templates."""
+    """Create a window mixing two 144-bin CQT templates."""
     window = np.zeros((WINDOW, FEATURE_DIM), dtype=np.float32)
     for i in range(WINDOW):
         t = i / (WINDOW - 1)
@@ -654,7 +672,7 @@ def make_transition_window(template_a: np.ndarray, template_b: np.ndarray, mix_r
 
 
 def make_window(center_chroma: np.ndarray, noise_std: float = 0.12) -> np.ndarray:
-    """Create window with 40-bin CQT features."""
+    """Create window with 144-bin CQT features."""
     frames = [np.clip(center_chroma + np.random.randn(FEATURE_DIM).astype(np.float32) * noise_std, 0, 1) 
               for _ in range(WINDOW)]
     return np.stack(frames, axis=0)
@@ -668,7 +686,7 @@ def make_window_augmented(center_chroma: np.ndarray, noise_std: float = 0.12,
     Returns (window, shift_semitones) so callers can adjust labels
     to match the applied pitch shift.
 
-    Works with 40-bin CQT features.
+    Works with 144-bin CQT features.
     """
     frames = []
     for _ in range(WINDOW):
@@ -698,7 +716,7 @@ def apply_extension_dropout(template: np.ndarray, quality: str,
     learns not to always default to the extended form.
 
     Args:
-        template: 40-bin CQT template.
+        template: 144-bin CQT template.
         quality: Chord quality string.
         extension_drop_rate: Probability of zeroing out an extension note.
 
@@ -734,8 +752,6 @@ def apply_extension_dropout(template: np.ndarray, quality: str,
     total = cqt.sum()
     if total > 0:
         cqt = cqt / total
-        result[:CHROMA_BINS] = cqt
-        result[CHROMA_BINS:] = cqt[:BASS_BINS].copy()
 
     return result
 
@@ -860,7 +876,7 @@ def generate_dataset(samples_per_class: int = 120, config: dict = None,
             windows. If None, samples uniform.
         cqt_stats: Optional CQT statistics for distribution matching. If None,
             no distribution matching is applied.
-        real_n_templates: Optional list of real (128, 40) N-CQT windows. If
+        real_n_templates: Optional list of real (128, 144) N-CQT windows. If
             provided, replaces ~50% of synthetic N samples with real ones.
     """
     cfg = config or {}
@@ -879,8 +895,12 @@ def generate_dataset(samples_per_class: int = 120, config: dict = None,
 
     n_chord_classes = len(CHORD_INTERVALS) * N_CLASSES_PER_QUALITY
     X, y = [], []
+    _total_classes = len(CHORD_CLASS_MAP)
+    _progress_interval = max(1, _total_classes // 20)
 
     for idx, (root_idx, quality) in enumerate(CHORD_CLASS_MAP):
+        if idx % _progress_interval == 0:
+            print(f"  [synth] Generating class {idx}/{_total_classes} ({quality}:{ROOT_NOTES[root_idx] if root_idx >= 0 else 'N'})...")
         # Commit 148 Phase 1c: use real N templates from GuitarSet gaps
         if quality == "N" and real_n_templates and np.random.random() < 0.5:
             template = real_n_templates[np.random.randint(len(real_n_templates))]
@@ -969,12 +989,28 @@ def generate_dataset(samples_per_class: int = 120, config: dict = None,
     
     # Transition windows: temporally mix two chords to teach boundary patterns
     n_classes = len(CHORD_CLASS_MAP)
-    n_transitions = int(n_classes * 200 * transition_rate)
-    chord_dist = transition_probs if transition_probs is not None and transition_probs.sum() > 0 else None
-    for _ in range(n_transitions):
-        if chord_dist is not None:
-            idx_a = np.random.choice(n_classes, p=chord_dist / chord_dist.sum())
-            idx_b = np.random.choice(n_classes, p=chord_dist / chord_dist.sum())
+    n_transitions = int(n_classes * max(5, samples_per_class // 3) * transition_rate)
+    # Expand 25-class MIREX marginal distribution to 277-class for CPCC sampling
+    if transition_probs is not None and transition_probs.sum() > 0:
+        expanded = np.zeros(n_classes, dtype=np.float64)
+        for i in range(276):
+            quality = CHORD_QUALITIES[i // 12]
+            root = i % 12
+            target_q = MIREX_QUALITY_MAP.get(quality, "maj")
+            m_idx = MIREX_TO_IDX.get(f"{ROOT_NOTES[root]}:{target_q}", 24)
+            expanded[i] = transition_probs[m_idx]
+        expanded[276] = transition_probs[-1]  # N
+        expanded /= expanded.sum()
+    else:
+        expanded = None
+    print(f"  [synth] Generating {n_transitions} transition windows...")
+    _trans_interval = max(1, n_transitions // 10)
+    for t_idx in range(n_transitions):
+        if t_idx % _trans_interval == 0:
+            print(f"  [synth] Transition {t_idx}/{n_transitions}...")
+        if expanded is not None:
+            idx_a = np.random.choice(n_classes, p=expanded)
+            idx_b = np.random.choice(n_classes, p=expanded)
         else:
             idx_a, idx_b = np.random.choice(n_classes, 2, replace=False)
         root_a, qual_a = CHORD_CLASS_MAP[idx_a]
@@ -1004,7 +1040,7 @@ def apply_guitar_body_resonance(
     response to make synthetic CQT templates more realistic.
 
     Args:
-        template: 40-bin CQT template [36 CQT + 4 bass].
+        template: 144-bin CQT template.
         strength: How strongly to apply the EQ curve (0 = flat).
 
     Returns:
@@ -1025,7 +1061,7 @@ def apply_guitar_body_resonance(
     if total > 0:
         cqt = cqt / total
 
-    return np.concatenate([cqt, cqt[:BASS_BINS]]).astype(np.float32)
+    return cqt.astype(np.float32)
 
 
 def apply_strumming_onset(
@@ -1087,8 +1123,6 @@ def apply_cqt_leakage(
 
     result = window.copy()
     result[:, :CHROMA_BINS] = (1.0 - leakage_strength) * cqt + leakage_strength * cqt_leaky
-    # Re-extract bass from modified CQT
-    result[:, CHROMA_BINS:] = result[:, :BASS_BINS]
 
     return result
 
@@ -1138,8 +1172,6 @@ def apply_cqt_reverb(
             (1.0 - strength * 0.5) * cqt_row + strength * 0.5 * spread
         )
 
-    # Re-extract bass
-    result[:, CHROMA_BINS:] = result[:, :BASS_BINS]
     return result
 
 
@@ -1176,7 +1208,6 @@ def apply_fine_detune(
         cqt[t] = (1.0 - alpha) * cqt[t] + alpha * shifted
 
     result[:, :CHROMA_BINS] = cqt
-    result[:, CHROMA_BINS:] = result[:, :BASS_BINS]
     return result
 
 
@@ -1209,7 +1240,6 @@ def apply_spectral_tilt(
 
     result = window.copy()
     result[:, :CHROMA_BINS] *= ramp[np.newaxis, :]
-    result[:, CHROMA_BINS:] = result[:, :BASS_BINS]
     return result
 
 
@@ -1279,7 +1309,7 @@ def _apply_distribution_matching(
     """Bridge synthetic-to-real domain gap via CQT distribution matching.
 
     Three complementary operations (applied in sequence):
-      1. Per-bin energy scaling: scales each of the 40 bins toward real
+      1. Per-bin energy scaling: scales each of the 144 bins toward real
          energy distribution using per_bin_mean / per_bin_std.
       2. Structured noise injection: noise sampled from real covariance
          structure (Cholesky), preserving inter-bin correlations.
@@ -1290,7 +1320,7 @@ def _apply_distribution_matching(
     matched and unmatched synthetic data.
 
     Args:
-        window: (128, 40) synthetic CQT feature window.
+        window: (128, 144) synthetic CQT feature window.
         cqt_stats: Output from cqt_distribution_analyzer.compute_cqt_statistics().
             If None, this is a no-op.
         strength: Overall scaling of distribution matching (0 = none, 1 = full).
@@ -1387,6 +1417,10 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         temperature: float = 0.5,
         p_mixup: float = 0.15,
         mixup_alpha: float = 0.2,
+        p_specaug_freq: float = 0.3,
+        specaug_freq_mask: int = 8,
+        p_specaug_time: float = 0.3,
+        specaug_time_mask: int = 16,
         real_mask: np.ndarray | None = None,
         transition_real_ratio: float | None = None,
         **kwargs,
@@ -1405,11 +1439,14 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         self.temperature = float(temperature)
         self.p_mixup = p_mixup
         self.mixup_alpha = mixup_alpha
+        self.p_specaug_freq = p_specaug_freq
+        self.specaug_freq_mask = specaug_freq_mask
+        self.p_specaug_time = p_specaug_time
+        self.specaug_time_mask = specaug_time_mask
         self.real_mask = real_mask  # bool mask: True for real samples
         self.transition_real_ratio = transition_real_ratio
         self.multi_task = kwargs.get("multi_task", False)
         self.indices = np.arange(len(X))
-        self._n_chord_classes = len(CHORD_INTERVALS) * N_CLASSES_PER_QUALITY
         if shuffle:
             if self.transition_real_ratio is not None and self.real_mask is not None:
                 self._resample_indices_transition()
@@ -1436,7 +1473,7 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         chord_labels_int = batch_y.copy()
 
         # Convert chord labels to one-hot
-        chord_onehot = tf.keras.utils.to_categorical(chord_labels_int, NUM_CLASSES).astype(np.float32)
+        chord_onehot = tf.keras.utils.to_categorical(chord_labels_int, NUM_CLASSES_MIREX).astype(np.float32)
 
         if self.multi_task:
             # Derive root + presence labels from augmented integer labels
@@ -1568,6 +1605,24 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
                 factor = np.random.uniform(*s_range)
                 sample = apply_time_stretch(sample, factor)
 
+            # --- SpecAugment: Frequency masking ---
+            # Masks random contiguous frequency bins to improve cross-recording
+            # generalization (different mics/EQ affect different frequency ranges)
+            if np.random.random() < self.p_specaug_freq:
+                n_bins = sample.shape[-1]
+                mask_size = min(self.specaug_freq_mask, n_bins // 4)
+                f_start = np.random.randint(0, max(1, n_bins - mask_size))
+                sample[:, f_start:f_start + mask_size] = 0.0
+
+            # --- SpecAugment: Time masking ---
+            # Masks random contiguous time steps to improve robustness to
+            # transient noise and temporal occlusions
+            if np.random.random() < self.p_specaug_time:
+                n_frames = sample.shape[0]
+                mask_size = min(self.specaug_time_mask, n_frames // 4)
+                t_start = np.random.randint(0, max(1, n_frames - mask_size))
+                sample[t_start:t_start + mask_size, :] = 0.0
+
             # --- Pink noise ---
             # Real data gets more noise
             n_std = self.noise_std * (2.0 if is_real else 1.0)
@@ -1591,7 +1646,7 @@ class AugmentedDataGenerator(tf.keras.utils.Sequence):
         So label_idx // 12  -> quality position
            label_idx % 12   -> root
         """
-        if label_idx >= self._n_chord_classes:
+        if label_idx >= N_INDEX:
             return label_idx  # N class — no shift
         quality_pos = label_idx // N_CLASSES_PER_QUALITY
         root = label_idx % N_CLASSES_PER_QUALITY
@@ -1646,17 +1701,14 @@ def derive_presence_labels(chord_labels: np.ndarray) -> np.ndarray:
 
 @tf.keras.saving.register_keras_serializable()
 class CircularCqtPad(tf.keras.layers.Layer):
-    """Circular padding on CQT portion (bins 0-35), zero pad bass (Commit 98b).
+    """Circular padding on 144-bin CQT (no bass channel).
 
     Custom layer (not Lambda) so TFMOT can serialize/clone it for QAT.
     """
 
     def call(self, x):
-        cqt = x[:, :, :CHROMA_BINS]
-        bass = x[:, :, CHROMA_BINS:]
-        cqt_padded = tf.concat([cqt[:, :, -1:], cqt, cqt[:, :, :1]], axis=-1)
-        bass_padded = tf.pad(bass, [[0, 0], [0, 0], [1, 1]])
-        return tf.concat([cqt_padded, bass_padded], axis=-1)
+        # x shape: (batch, time, 144)
+        return tf.concat([x[:, :, -1:], x, x[:, :, :1]], axis=-1)
 
     def compute_output_shape(self, input_shape):
         return (input_shape[0], input_shape[1], input_shape[2] + 2)
@@ -1728,17 +1780,17 @@ def build_model(window: int = WINDOW, return_attention_scores: bool = False,
     x = tf.keras.layers.Bidirectional(
         tf.keras.layers.LSTM(128, return_sequences=True), name="bilstm_1"
     )(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_1")(x)
+    x = tf.keras.layers.Dropout(0.45, name="dropout_1")(x)
 
     x = tf.keras.layers.Bidirectional(
         tf.keras.layers.LSTM(128, return_sequences=False), name="bilstm_2"
     )(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_2")(x)
+    x = tf.keras.layers.Dropout(0.45, name="dropout_2")(x)
 
     # Classifier head
     x = tf.keras.layers.Dense(256, activation="relu", name="dense_256")(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_3")(x)
-    outputs = tf.keras.layers.Dense(NUM_CLASSES, activation="softmax", name="chord_probs")(x)
+    x = tf.keras.layers.Dropout(0.45, name="dropout_3")(x)
+    outputs = tf.keras.layers.Dense(NUM_CLASSES_MIREX, activation="softmax", name="chord_probs")(x)
 
     if return_attention_scores:
         return tf.keras.Model(inputs=inputs, outputs=[outputs, attn_scores],
@@ -1765,19 +1817,10 @@ def build_multi_task_model(
     window: int = WINDOW,
     qat_compatible: bool = False,
 ) -> tf.keras.Model:
-    """Build multi-task CRNN: shared backbone + chord/root/presence heads (Phase 3b).
+    """Build multi-task CRNN: shared backbone + chord/root/presence heads.
 
-    Architecture (Phase 3a + 3b):
-      Shared backbone: CNN(128,256) → Attention → BiLSTM(256) → Dense(512)
-      → Dense(128, relu) bottleneck
-      Three output heads:
-        - chord_probs:  Dense(277, softmax)  — main chord classifier
-        - root_probs:   Dense(13, softmax)   — root classifier (12 roots + N)
-        - presence:     Dense(1, sigmoid)     — binary chord presence
-
-    The binary chord-presence head directly attacks the N escape-hatch
-    problem: the model must commit to "chord present" before it can output
-    any chord label.  At inference, if presence < 0.5, force prediction to N.
+    Reduced architecture for data-scarce setting (~3,800 real windows).
+    Removed MultiHeadAttention, single BiLSTM layer, compact dense layers.
 
     Args:
         window: Temporal window size (default WINDOW=128).
@@ -1785,56 +1828,45 @@ def build_multi_task_model(
 
     Returns:
         Multi-output Keras model with dict outputs:
-        ``{'chord_probs': (B, 277), 'root_probs': (B, 13), 'presence': (B, 1)}``
+        ``{'chord_probs': (B, 25), 'root_probs': (B, 13), 'presence': (B, 1)}``
     """
     inputs = tf.keras.Input(shape=(window, FEATURE_DIM), name="cqt_window")
     padded = CircularCqtPad(name="circular_cqt_pad")(inputs)
 
-    # ---- Shared backbone (Phase 3a: increased capacity) ----
+    # ---- Compact shared backbone with L2 regularization ----
 
-    # CNN frontend
-    x = tf.keras.layers.Conv1D(128, kernel_size=3, padding="same", activation="relu",
-                                name="conv1d_128")(padded)
+    _l2 = tf.keras.regularizers.l2(1e-4)
+
+    # CNN frontend (reduced width)
+    x = tf.keras.layers.Conv1D(32, kernel_size=3, padding="same", activation="relu",
+                                kernel_regularizer=_l2,
+                                name="conv1d_32")(padded)
     x = tf.keras.layers.MaxPooling1D(pool_size=2, name="maxpool_1")(x)
 
-    x = tf.keras.layers.Conv1D(256, kernel_size=3, padding="same", activation="relu",
-                                name="conv1d_256")(x)
+    x = tf.keras.layers.Conv1D(64, kernel_size=3, padding="same", activation="relu",
+                                kernel_regularizer=_l2,
+                                name="conv1d_64")(x)
     x = tf.keras.layers.MaxPooling1D(pool_size=2, name="maxpool_2")(x)
 
     x = tf.keras.layers.BatchNormalization(name="bn_cnn")(x)
 
-    # Multi-Head Self-Attention
-    mha = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=64, name="self_attention")
-    mha_output = mha(x, x)
-
-    if qat_compatible:
-        residual = tf.keras.layers.Add(name="residual_add")([x, mha_output])
-    else:
-        residual = x + mha_output
-    x = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="attention_layernorm")(residual)
-
-    # Bidirectional LSTM (Phase 3a: doubled capacity)
+    # Single Bidirectional LSTM with L2
     x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(256, return_sequences=True), name="bilstm_1"
+        tf.keras.layers.LSTM(64, return_sequences=False,
+                             kernel_regularizer=_l2), name="bilstm"
     )(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_1")(x)
+    x = tf.keras.layers.Dropout(0.5, name="dropout_1")(x)
 
-    x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(256, return_sequences=False), name="bilstm_2"
-    )(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_2")(x)
-
-    # Shared embedding head (Phase 3a: larger + bottleneck)
-    x = tf.keras.layers.Dense(512, activation="relu", name="dense_512")(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_3")(x)
-    x = tf.keras.layers.Dense(128, activation="relu", name="dense_128_bottleneck")(x)
-    x = tf.keras.layers.Dropout(0.2, name="dropout_bottleneck")(x)
+    # Compact embedding with L2
+    x = tf.keras.layers.Dense(64, activation="relu", kernel_regularizer=_l2,
+                              name="dense_64")(x)
+    x = tf.keras.layers.Dropout(0.5, name="dropout_2")(x)
 
     # ---- Output heads (Phase 3b) ----
 
-    # Head 1: Chord classifier (277-way, main task)
+    # Head 1: Chord classifier (25-way MIREX)
     chord_probs = tf.keras.layers.Dense(
-        NUM_CLASSES, activation="softmax", name="chord_probs"
+        NUM_CLASSES_MIREX, activation="softmax", name="chord_probs"
     )(x)
 
     # Head 2: Root classifier (13-way: 12 roots + N)
@@ -1936,38 +1968,32 @@ def _build_chord_crnn_tfkeras(
     inputs = tf.keras.Input(shape=(WINDOW, FEATURE_DIM), name="cqt_window")
     padded = CircularCqtPad(name="circular_cqt_pad")(inputs)
 
-    x = tf.keras.layers.Conv1D(128, 3, padding="same", activation="relu",
-                                name="conv1d_128")(padded)
+    _l2 = tf.keras.regularizers.l2(1e-4)
+
+    x = tf.keras.layers.Conv1D(32, 3, padding="same", activation="relu",
+                                kernel_regularizer=_l2,
+                                name="conv1d_32")(padded)
     x = tf.keras.layers.MaxPooling1D(pool_size=2, name="maxpool_1")(x)
 
-    x = tf.keras.layers.Conv1D(256, 3, padding="same", activation="relu",
-                                name="conv1d_256")(x)
+    x = tf.keras.layers.Conv1D(64, 3, padding="same", activation="relu",
+                                kernel_regularizer=_l2,
+                                name="conv1d_64")(x)
     x = tf.keras.layers.MaxPooling1D(pool_size=2, name="maxpool_2")(x)
 
     x = tf.keras.layers.BatchNormalization(name="bn_cnn")(x)
 
-    mha = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=64, name="self_attention")
-    mha_output = mha(x, x)
-    residual = tf.keras.layers.Add(name="residual_add")([x, mha_output])
-    x = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="attention_layernorm")(residual)
-
     x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(256, return_sequences=True), name="bilstm_1"
+        tf.keras.layers.LSTM(64, return_sequences=False,
+                             kernel_regularizer=_l2), name="bilstm"
     )(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_1")(x)
+    x = tf.keras.layers.Dropout(0.5, name="dropout_1")(x)
 
-    x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(256, return_sequences=False), name="bilstm_2"
-    )(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_2")(x)
-
-    x = tf.keras.layers.Dense(512, activation="relu", name="dense_512")(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_3")(x)
-    x = tf.keras.layers.Dense(128, activation="relu", name="dense_128_bottleneck")(x)
-    x = tf.keras.layers.Dropout(0.2, name="dropout_bottleneck")(x)
+    x = tf.keras.layers.Dense(64, activation="relu", kernel_regularizer=_l2,
+                              name="dense_64")(x)
+    x = tf.keras.layers.Dropout(0.5, name="dropout_2")(x)
 
     # Multi-task heads
-    chord_head = tf.keras.layers.Dense(NUM_CLASSES, activation="softmax", name="chord_probs")(x)
+    chord_head = tf.keras.layers.Dense(NUM_CLASSES_MIREX, activation="softmax", name="chord_probs")(x)
     root_head = tf.keras.layers.Dense(N_ROOTS, activation="softmax", name="root_probs")(x)
     presence_head = tf.keras.layers.Dense(1, activation="sigmoid", name="presence")(x)
 
@@ -2067,13 +2093,13 @@ def convert_to_int8_tflite(
     model: tf.keras.Model,
     representative_data: np.ndarray,
     output_path: str | Path,
-) -> bytes:
+) -> bytes | None:
     """Convert a QAT-wrapped model to INT8-quantized TFLite.
 
-    Full integer quantization uses a representative dataset to calibrate
-    activation ranges. The resulting model is significantly smaller and
-    suitable for mobile deployment with the
-    ``tensorflow-lite-select-tf-ops`` runtime.
+    Tries multiple strategies in order: INT8 with calibration, INT8 without
+    calibration, FP16, and finally Float32. The BiLSTM layer uses TensorList
+    ops that require SELECT_TF_OPS, which the calibrator cannot handle, so
+    fallback strategies are essential.
 
     Args:
         model: QAT-wrapped Keras model (output of :func:`apply_qat`).
@@ -2082,10 +2108,8 @@ def convert_to_int8_tflite(
         output_path: Destination path for the ``.tflite`` file.
 
     Returns:
-        Raw TFLite model bytes.
+        Raw TFLite model bytes, or None if all strategies failed.
     """
-    n_samples = min(100, len(representative_data))
-
     # For multi-output models, export only chord_probs head for TFLite
     is_multi = hasattr(model, 'output_names') and isinstance(model.output, dict)
     if is_multi:
@@ -2093,27 +2117,87 @@ def convert_to_int8_tflite(
     else:
         export_m = model
 
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    strategies = []
+
+    # Strategy 1: INT8 with calibration (requires Flex delegate at calibration time)
+    n_samples = min(100, len(representative_data))
+
     def _representative():
         for i in range(n_samples):
             yield [representative_data[i : i + 1].astype(np.float32)]
 
-    converter = tf.lite.TFLiteConverter.from_keras_model(export_m)
-    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.representative_dataset = _representative
-    converter.target_spec.supported_ops = [
-        tf.lite.OpsSet.TFLITE_BUILTINS_INT8,
-        tf.lite.OpsSet.SELECT_TF_OPS,
-    ]
-    converter.inference_input_type = tf.int8
-    converter.inference_output_type = tf.int8
+    strategies.append(("INT8 (calibrated)", lambda: _build_converter(
+        export_m,
+        optimizations=[tf.lite.Optimize.DEFAULT],
+        representative_dataset=_representative,
+        supported_ops=[tf.lite.OpsSet.TFLITE_BUILTINS_INT8, tf.lite.OpsSet.SELECT_TF_OPS],
+        inference_input_type=tf.int8,
+        inference_output_type=tf.int8,
+    )))
 
-    tflite_model = converter.convert()
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "wb") as f:
-        f.write(tflite_model)
-    print(f"  INT8 TFLite saved to {output_path} ({len(tflite_model) / 1024:.1f} KB)")
-    return tflite_model
+    # Strategy 2: INT8 without calibration (static ranges, may be less accurate)
+    strategies.append(("INT8 (no calibration)", lambda: _build_converter(
+        export_m,
+        optimizations=[tf.lite.Optimize.DEFAULT],
+        supported_ops=[tf.lite.OpsSet.TFLITE_BUILTINS_INT8, tf.lite.OpsSet.SELECT_TF_OPS],
+        inference_input_type=tf.int8,
+        inference_output_type=tf.int8,
+    )))
+
+    # Strategy 3: FP16 dynamic range (no calibration needed)
+    strategies.append(("FP16", lambda: _build_converter(
+        export_m,
+        optimizations=[tf.lite.Optimize.DEFAULT],
+        supported_ops=[tf.lite.OpsSet.TFLITE_BUILTINS, tf.lite.OpsSet.SELECT_TF_OPS],
+    )))
+
+    # Strategy 4: Float32 (no optimization, just SELECT_TF_OPS compatibility)
+    strategies.append(("Float32", lambda: _build_converter(
+        export_m,
+        supported_ops=[tf.lite.OpsSet.SELECT_TF_OPS],
+    )))
+
+    for name, build_fn in strategies:
+        try:
+            print(f"  Trying {name} conversion...")
+            converter = build_fn()
+            tflite_model = converter.convert()
+            with open(output_path, "wb") as f:
+                f.write(tflite_model)
+            print(f"  {name} TFLite saved to {output_path} ({len(tflite_model) / 1024:.1f} KB)")
+            return tflite_model
+        except Exception as exc:
+            print(f"  [SKIP] {name} conversion failed: {exc}")
+            continue
+
+    print("  [FAIL] All TFLite conversion strategies failed")
+    return None
+
+
+def _build_converter(
+    model: tf.keras.Model,
+    optimizations: list | None = None,
+    representative_dataset: Callable | None = None,
+    supported_ops: list | None = None,
+    inference_input_type: Any = None,
+    inference_output_type: Any = None,
+) -> tf.lite.TFLiteConverter:
+    """Build a TFLiteConverter with the given options."""
+    converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    if optimizations is not None:
+        converter.optimizations = optimizations
+    if representative_dataset is not None:
+        converter.representative_dataset = representative_dataset
+    if supported_ops is not None:
+        converter.target_spec.supported_ops = supported_ops
+    if inference_input_type is not None:
+        converter.inference_input_type = inference_input_type
+    if inference_output_type is not None:
+        converter.inference_output_type = inference_output_type
+    return converter
 
 
 # ---------------------------------------------------------------------------
@@ -2140,7 +2224,7 @@ def compute_confusion_matrix_report(
     Returns:
         Full confusion matrix, shape (NUM_CLASSES, NUM_CLASSES).
     """
-    cm = confusion_matrix(y_true, y_pred, labels=range(NUM_CLASSES))
+    cm = confusion_matrix(y_true, y_pred, labels=range(NUM_CLASSES_MIREX))
 
     cm_no_diag = cm.copy()
     np.fill_diagonal(cm_no_diag, 0)
@@ -2159,8 +2243,8 @@ def compute_confusion_matrix_report(
         idx = top_indices[rank]
         i, j = confused_pairs[idx]
         count = int(confused_counts[idx])
-        true_chord = CHORD_VOCAB[i]
-        pred_chord = CHORD_VOCAB[j]
+        true_chord = MIREX_VOCAB[i]
+        pred_chord = MIREX_VOCAB[j]
         print(f"  {rank + 1:2d}. {true_chord:<12} → {pred_chord:<12}  ({count} errors)")
 
     return cm
@@ -2188,8 +2272,8 @@ def compute_per_class_metrics(
     report = classification_report(
         y_true,
         y_pred,
-        labels=range(NUM_CLASSES),
-        target_names=CHORD_VOCAB,
+        labels=range(NUM_CLASSES_MIREX),
+        target_names=MIREX_VOCAB,
         output_dict=True,
         zero_division=0,
     )
@@ -2281,7 +2365,7 @@ def compute_training_class_weights(
     # Cap N (no-chord) class weight to prevent over-penalization.
     # N has only 1 class vs 276 chord classes, so sklearn balanced gives it
     # an extremely high weight. Capping at 3.0 keeps it reasonable.
-    n_idx = NUM_CLASSES - 1  # N is the last class index
+    n_idx = NUM_CLASSES_MIREX - 1  # N is the last class (index 24)
     if n_idx in weight_dict:
         weight_dict[n_idx] = min(weight_dict[n_idx], 3.0)
 
@@ -2292,15 +2376,36 @@ def compute_training_class_weights(
 # 4a. Multi-source dataset loading (Commit 105)
 # ---------------------------------------------------------------------------
 
-def load_dataset_dir(data_path: Path) -> tuple[np.ndarray, np.ndarray, float | None]:
+def _build_recording_id(data: np.lib.npyio.NpzFile, source_name: str, npz_path: Path) -> str:
+    """Build a recording-level identifier from available metadata.
+
+    Uses player_id (session-level) if available, otherwise track_id.
+    The identifier is prefixed with the source name to ensure uniqueness
+    across datasets (e.g., 'guitarset_player_00' vs 'guitar_techs_player_P1').
+    """
+    player_id = str(data.get("player_id", b"")).strip()
+    if player_id:
+        return f"{source_name}_player_{player_id}"
+    track_id = str(data.get("track_id", b"")).strip()
+    if track_id:
+        return f"{source_name}_{track_id}"
+    # Fallback: use filename stem as a unique recording ID
+    return f"{source_name}_{npz_path.stem}"
+
+
+def load_dataset_dir(data_path: Path) -> tuple[np.ndarray, np.ndarray, float | None, np.ndarray]:
     """Load CQT features, labels, and loss weight from a dataset .npz directory.
 
     Reads all .npz files from <data_path>/processed/cqt/.
-    Filters out GuitarSet test split (player_05) by checking the 'split' field.
+    Filters out files with split='test' (e.g., GuitarSet player_05).
 
     Returns:
-        (features, labels, loss_weight) where loss_weight is read from
-        the .npz metadata or None if not present.
+        (features, labels, loss_weight, recording_ids) where:
+        - features: (N, 128, 144) float32 CQT windows
+        - labels: (N,) int32 277-class chord labels
+        - loss_weight: per-source loss weight from .npz metadata or None
+        - recording_ids: (N,) object array of recording-level identifiers
+          for leave-recording-out validation. Derived from player_id or track_id.
     """
     cqt_dir = data_path / "processed" / "cqt"
     if not cqt_dir.exists():
@@ -2312,7 +2417,9 @@ def load_dataset_dir(data_path: Path) -> tuple[np.ndarray, np.ndarray, float | N
 
     all_features: list[np.ndarray] = []
     all_labels: list[np.ndarray] = []
+    all_recording_ids: list[np.ndarray] = []
     loss_weight: float | None = None
+    source_name = data_path.name
 
     for npz_path in npz_files:
         data = np.load(npz_path)
@@ -2324,22 +2431,28 @@ def load_dataset_dir(data_path: Path) -> tuple[np.ndarray, np.ndarray, float | N
         # should have the same loss_weight)
         if "loss_weight" in data and loss_weight is None:
             loss_weight = float(data["loss_weight"])
+        # Build recording-level ID for this file (player or track level)
+        rec_id = _build_recording_id(data, source_name, npz_path)
+        n_windows = len(data["features"])
         all_features.append(data["features"])
         all_labels.append(data["labels"])
+        all_recording_ids.append(np.full(n_windows, rec_id, dtype=object))
 
     if not all_features:
         raise ValueError(f"No training files found in {cqt_dir}")
 
     X = np.concatenate(all_features, axis=0).astype(np.float32)
     y = np.concatenate(all_labels, axis=0).astype(np.int32)
+    recording_ids = np.concatenate(all_recording_ids, axis=0)
 
-    print(f"  Loaded {len(X)} windows from {len(npz_files)} files ({data_path.name}, "
-          f"loss_weight={loss_weight})")
-    return X, y, loss_weight
+    n_recordings = len(set(recording_ids))
+    print(f"  Loaded {len(X)} windows from {n_recordings} recordings, "
+          f"{len(npz_files)} files ({source_name}, loss_weight={loss_weight})")
+    return X, y, loss_weight, recording_ids
 
 
 def load_datasets(sources: list[tuple[Path, str, float]]) -> tuple[
-    list[np.ndarray], list[np.ndarray], list[np.ndarray],
+    list[np.ndarray], list[np.ndarray], list[np.ndarray], list[np.ndarray],
 ]:
     """Load multiple datasets with per-source loss weights.
 
@@ -2349,26 +2462,29 @@ def load_datasets(sources: list[tuple[Path, str, float]]) -> tuple[
                  default_loss_weight is used if not present in .npz metadata.
 
     Returns:
-        (features_list, labels_list, weights_list) where each element is
-        a list of arrays, one per source.
+        (features_list, labels_list, weights_list, recording_ids_list)
+        where each element is a list of arrays, one per source.
+        recording_ids_list contains recording-level identifiers for
+        leave-recording-out validation.
     """
     features_list: list[np.ndarray] = []
     labels_list: list[np.ndarray] = []
     weights_list: list[np.ndarray] = []
+    recording_ids_list: list[np.ndarray] = []
 
     for data_dir, source_name, default_weight in sources:
         try:
-            X, y, lw = load_dataset_dir(data_dir)
+            X, y, lw, rec_ids = load_dataset_dir(data_dir)
             lw = lw if lw is not None else default_weight
             features_list.append(X)
             labels_list.append(y)
-            # Create per-sample weights for this source
             weights_list.append(np.full(len(X), lw, dtype=np.float32))
+            recording_ids_list.append(rec_ids)
         except Exception as e:
             print(f"  [SKIP] {source_name}: {e}")
             continue
 
-    return features_list, labels_list, weights_list
+    return features_list, labels_list, weights_list, recording_ids_list
 
 
 def load_guitarset_test(data_dir: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -2509,11 +2625,11 @@ def run_guitarset_cv(
             model.compile(
                 optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3, weight_decay=1e-4, clipnorm=1.0),
                 loss={
-                    "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+                    "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.0),
                     "root_probs": tf.keras.losses.CategoricalCrossentropy(),
                     "presence": tf.keras.losses.BinaryCrossentropy(),
                 },
-                loss_weights={"chord_probs": 1.0, "root_probs": 0.3, "presence": 0.2},
+                loss_weights={"chord_probs": 1.0, "root_probs": 0.1, "presence": 0.05},
                 metrics={"chord_probs": "accuracy"},
             )
 
@@ -2523,14 +2639,14 @@ def run_guitarset_cv(
         ).astype(np.float32)
         y_val_presence = derive_presence_labels(y_val).reshape(-1, 1)
         y_val_dict = {
-            "chord_probs": tf.keras.utils.to_categorical(y_val, NUM_CLASSES).astype(np.float32),
+            "chord_probs": tf.keras.utils.to_categorical(y_val, NUM_CLASSES_MIREX).astype(np.float32),
             "root_probs": y_val_root,
             "presence": y_val_presence,
         }
 
         # Prepare training dict
         y_train_dict = {
-            "chord_probs": tf.keras.utils.to_categorical(y_train, NUM_CLASSES).astype(np.float32),
+            "chord_probs": tf.keras.utils.to_categorical(y_train, NUM_CLASSES_MIREX).astype(np.float32),
             "root_probs": tf.keras.utils.to_categorical(derive_root_labels(y_train), N_ROOTS).astype(np.float32),
             "presence": derive_presence_labels(y_train).reshape(-1, 1).astype(np.float32),
         }
@@ -2620,20 +2736,22 @@ def load_empirical_transition_matrix(data_dir: str | Path) -> np.ndarray | None:
 # ---------------------------------------------------------------------------
 
 def mix_datasets(
-    dataset_sources: list[tuple[np.ndarray, np.ndarray, np.ndarray]],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    dataset_sources: list[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Mix multiple datasets by concatenation with per-source sample weights.
 
-    Each source provides (X, y, sample_weights). The arrays are concatenated
-    and the sample_weights are preserved for loss weighting during training.
+    Each source provides (X, y, sample_weights, recording_ids). The arrays
+    are concatenated and shuffled consistently.
 
     Args:
-        dataset_sources: List of (features, labels, sample_weights) tuples,
-                         one per data source.
+        dataset_sources: List of (features, labels, sample_weights, recording_ids)
+                         tuples, one per data source.
 
     Returns:
-        (X, y, sample_weights, source_ids) concatenated and shuffled arrays.
-        source_ids tracks which source each sample came from (for stratified splitting).
+        (X, y, sample_weights, source_ids, recording_ids) concatenated and
+        shuffled arrays. source_ids tracks which source each sample came from.
+        recording_ids tracks recording-level groups for honest cross-recording
+        train/val splitting.
     """
     if len(dataset_sources) == 0:
         raise ValueError("At least one dataset source is required")
@@ -2642,28 +2760,33 @@ def mix_datasets(
     y_parts: list[np.ndarray] = []
     w_parts: list[np.ndarray] = []
     source_parts: list[np.ndarray] = []
+    rec_id_parts: list[np.ndarray] = []
 
-    for i, (X_src, y_src, w_src) in enumerate(dataset_sources):
+    for i, (X_src, y_src, w_src, rec_ids_src) in enumerate(dataset_sources):
         X_parts.append(X_src)
         y_parts.append(y_src)
         w_parts.append(w_src)
         source_parts.append(np.full(len(X_src), i, dtype=np.int32))
+        rec_id_parts.append(rec_ids_src)
 
     X = np.concatenate(X_parts, axis=0).astype(np.float32)
     y = np.concatenate(y_parts, axis=0).astype(np.int32)
     w = np.concatenate(w_parts, axis=0).astype(np.float32)
     source_ids = np.concatenate(source_parts, axis=0).astype(np.int32)
+    recording_ids = np.concatenate(rec_id_parts, axis=0)
 
     # Shuffle consistently
     p = np.random.permutation(len(X))
-    X, y, w, source_ids = X[p], y[p], w[p], source_ids[p]
+    X, y, w, source_ids, recording_ids = X[p], y[p], w[p], source_ids[p], recording_ids[p]
 
     total = len(X)
-    print(f"  Mixed {len(dataset_sources)} sources: {total} total samples")
-    for i, (X_src, _, _) in enumerate(dataset_sources):
+    n_recordings = len(set(recording_ids))
+    print(f"  Mixed {len(dataset_sources)} sources: {total} total samples "
+          f"from {n_recordings} recordings")
+    for i, (X_src, _, _, _) in enumerate(dataset_sources):
         print(f"    Source {i}: {len(X_src)} samples")
 
-    return X, y, w, source_ids
+    return X, y, w, source_ids, recording_ids
 
 
 # ---------------------------------------------------------------------------
@@ -2969,13 +3092,13 @@ def _apply_n_override(
             ``NUM_CLASSES - 1`` (the last entry, per ``CHORD_CLASS_MAP``).
         prob_threshold: Minimum probability for a chord prediction to be kept.
         entropy_threshold: Entropy threshold. If ``None``, computed as
-            0.7 * log(num_classes). With 277 classes this is ~3.93.
+            0.7 * log(num_classes). With 25 classes this is ~2.25.
 
     Returns:
         (batch_size,) argmax predictions with N-override applied.
     """
     if n_class_idx is None:
-        n_class_idx = NUM_CLASSES - 1
+        n_class_idx = NUM_CLASSES_MIREX - 1
 
     if entropy_threshold is None:
         entropy_threshold = 0.7 * np.log(float(probs.shape[1]))
@@ -3386,9 +3509,8 @@ def run_pipeline(
     if youtube_data_dir is not None:
         yt_path = Path(youtube_data_dir)
         if yt_path.exists():
-            source_configs.append((yt_path, "YouTube-Crawl", 1.0))
-            real_data_dirs.append(yt_path)
-            has_any_real_data = True
+            # YouTube crawl is 100% no-chord (N) — skip for training
+            print(f"  [SKIP] YouTube-Crawl at {yt_path} — 100% N windows, skipping")
         else:
             print(f"  [WARN] YouTube crawl data dir not found: {yt_path}")
 
@@ -3433,8 +3555,27 @@ def run_pipeline(
         else:
             print(f"  [WARN] EGSet12 data dir not found: {eg_path}")
 
+    # Load user-contributed data (if available)
+    _data_dir = Path(__file__).resolve().parent.parent / "data"
+    user_contributed_dir = _data_dir / "user_contributed"
+    if user_contributed_dir.exists() and (user_contributed_dir / "processed" / "cqt").exists():
+        source_configs.append((user_contributed_dir, "User-Contributed", 1.0))
+        real_data_dirs.append(user_contributed_dir)
+        has_any_real_data = True
+
     print(f"Loading {len(source_configs)} data source(s)...")
     features_list, labels_list, weights_list = load_datasets(source_configs)
+
+    # Track which loaded sources are synthetic (data_dir not in real_data_dirs)
+    _loaded_synth_flags: list[bool] = [
+        config[0] not in real_data_dirs for config in source_configs
+    ]
+    # Find the VST source index (used later to include VST in Stage 1)
+    _vst_loaded_idx: int | None = None
+    for i, (_, name, _) in enumerate(source_configs):
+        if "VST" in name.upper():
+            _vst_loaded_idx = i
+            break
 
     # --- Load GuitarSet test data (if available) ---
     test_X, test_y = np.array([]), np.array([])
@@ -3443,6 +3584,7 @@ def run_pipeline(
         if gs_path.exists():
             try:
                 test_X, test_y = load_guitarset_test(gs_path)
+                test_y = np.array([mirex_label(int(y)) for y in test_y], dtype=np.int32)
             except (FileNotFoundError, ValueError) as e:
                 print(f"  [WARN] Could not load GuitarSet test data: {e}")
 
@@ -3454,7 +3596,6 @@ def run_pipeline(
             try:
                 gs_test_path = Path(egset12_data_dir) / "processed" / "cqt"
                 if gs_test_path.exists():
-                    # Load EGSet12 .npz files filtered to test split only
                     loaded_chunks = []
                     for npz_path in sorted(gs_test_path.glob("*.npz")):
                         data = np.load(npz_path)
@@ -3466,6 +3607,7 @@ def run_pipeline(
                     if loaded_chunks:
                         egset12_test_X = np.concatenate([c[0] for c in loaded_chunks], axis=0)
                         egset12_test_y = np.concatenate([c[1] for c in loaded_chunks], axis=0)
+                        egset12_test_y = np.array([mirex_label(int(y)) for y in egset12_test_y], dtype=np.int32)
                         print(f"  Loaded EGSet12 eval set: {len(egset12_test_X)} windows")
             except (FileNotFoundError, ValueError) as e:
                 print(f"  [WARN] Could not load EGSet12 eval data: {e}")
@@ -3476,13 +3618,13 @@ def run_pipeline(
         emp_path = Path(empirical_matrix_path)
         if emp_path.exists():
             matrix = np.load(str(emp_path))
-            if matrix.shape == (NUM_CLASSES, NUM_CLASSES):
+            if matrix.shape == (NUM_CLASSES_MIREX, NUM_CLASSES_MIREX):
                 transition_probs = matrix.sum(axis=1)
                 if transition_probs.sum() > 0:
                     transition_probs = transition_probs / transition_probs.sum()
                 print(f"  Loaded empirical transition matrix ({emp_path})")
             else:
-                print(f"  [WARN] Matrix shape {matrix.shape} != ({NUM_CLASSES},{NUM_CLASSES}), ignored")
+                print(f"  [WARN] Matrix shape {matrix.shape} != ({NUM_CLASSES_MIREX},{NUM_CLASSES_MIREX}), ignored")
         else:
             print(f"  [WARN] Empirical matrix not found: {emp_path}")
 
@@ -3493,8 +3635,16 @@ def run_pipeline(
         print(f"  Collected {len(real_n_templates)} real N-CQT templates for escape hatch fix")
 
     # --- Generate synthetic data ---
-    print("Generating synthetic dataset...")
+    # Estimate required samples BEFORE generation to avoid massive waste
+    total_real = sum(len(f) for f in features_list)
+    max_synthetic = total_real * 1 if total_real > 0 else 5000
+    n_classes_277 = len(CHORD_INTERVALS) * N_CLASSES_PER_QUALITY + 1
+    # Reserve ~20% for transition windows, rest for per-class generation
+    target_per_class = max(10, int((max_synthetic * 0.8) / n_classes_277))
+    target_transitions = min(max_synthetic * 2, n_classes_277 * 50)
+    print(f"Generating synthetic dataset ({target_per_class} per class, {int(target_transitions)} transitions)...")
     synth_X, synth_y = generate_dataset(
+        samples_per_class=target_per_class,
         transition_probs=transition_probs,
         cqt_stats=cqt_stats,
         real_n_templates=real_n_templates if real_n_templates else None,
@@ -3503,93 +3653,116 @@ def run_pipeline(
     synth_X, synth_y = synth_X[p], synth_y[p]
 
     # --- Commit 148 Phase 1a: cap synthetic volume & reduce weight ---
-    total_real = sum(len(f) for f in features_list)
-    max_synthetic = total_real * 2 if total_real > 0 else len(synth_X)
     if len(synth_X) > max_synthetic:
         synth_X = synth_X[:max_synthetic]
         synth_y = synth_y[:max_synthetic]
-        print(f"  Capped synthetic to 2× real volume: {len(synth_X)} samples (weight=0.15)")
+        print(f"  Capped synthetic to {len(synth_X)} samples (weight=0.15)")
     else:
         print(f"  Generated {len(synth_X)} synthetic samples (weight=0.15)")
 
+    # Generate synthetic recording IDs (one unique ID per sample — synthetic
+    # windows are independent, no recording-level grouping needed)
+    synth_rec_ids = np.array(
+        [f"synthetic_{i}" for i in range(len(synth_X))], dtype=object
+    )
     synth_weight = np.full(len(synth_X), 0.15, dtype=np.float32)
     features_list.append(synth_X)
     labels_list.append(synth_y)
     weights_list.append(synth_weight)
+    recording_ids_list.append(synth_rec_ids)
+
+    # Build synthetic-source flag for each entry in features_list.
+    # VST / DAMP / Pseudo-Label are loaded but not in real_data_dirs → synthetic.
+    # The generate_dataset output (last entry) is always synthetic.
+    _synth_source_flags = _loaded_synth_flags + [True]
 
     # --- Mix all sources ---
     print("Mixing all dataset sources with per-source loss weighting...")
-    dataset_sources = list(zip(features_list, labels_list, weights_list))
-    X_all, y_all, sample_weights, source_ids = mix_datasets(dataset_sources)
+    dataset_sources = list(zip(features_list, labels_list, weights_list, recording_ids_list))
+    X_all, y_all, sample_weights, source_ids, recording_ids = mix_datasets(dataset_sources)
+
+    # Commit A: Map all labels from 277-class to 25-class MIREX vocabulary
+    # Real .npz files still have 277-class labels, synthetic labels from
+    # generate_dataset are generated as 277-class. Both must be mapped.
+    y_all = np.array([mirex_label(int(y)) for y in y_all], dtype=np.int32)
 
     # --- Source-aware train / validation split (Phase 2a) ---
-    # Force validation set to have higher real-world audio percentage.
-    # Real sources: indices 0..N_real-1, Synthetic: index N_real (last).
-    n_real_sources = len(features_list) - 1  # synthetic is last source
-    real_mask = source_ids < n_real_sources
-    synth_mask = ~real_mask
+    # Separate by synthetic vs real using the source index flags.
+    _synth_src_indices = {i for i, is_synth in enumerate(_synth_source_flags) if is_synth}
+    synth_mask = np.array([sid in _synth_src_indices for sid in source_ids])
+    real_mask = ~synth_mask
 
-    X_real, y_real, w_real = X_all[real_mask], y_all[real_mask], sample_weights[real_mask]
-    X_synth, y_synth, w_synth = X_all[synth_mask], y_all[synth_mask], sample_weights[synth_mask]
-
-    print(f"  Real samples: {len(X_real)}, Synthetic samples: {len(X_synth)}")
-
-    # Real: 70/30 split (higher val fraction ensures real data representation)
-    try:
-        X_real_tr, X_real_val, y_real_tr, y_real_val, w_real_tr, w_real_val = train_test_split(
-            X_real, y_real, w_real, test_size=0.30, random_state=42,
-            stratify=y_real,
-        )
-    except ValueError:
-        X_real_tr, X_real_val, y_real_tr, y_real_val, w_real_tr, w_real_val = train_test_split(
-            X_real, y_real, w_real, test_size=0.30, random_state=42,
-        )
-
-    # Synthetic: 90/10 split (less val needed since they're easier)
-    if len(X_synth) > 10:
-        try:
-            X_synth_tr, X_synth_val, y_synth_tr, y_synth_val, w_synth_tr, w_synth_val = train_test_split(
-                X_synth, y_synth, w_synth, test_size=0.10, random_state=42,
-                stratify=y_synth,
-            )
-        except ValueError:
-            X_synth_tr, X_synth_val, y_synth_tr, y_synth_val, w_synth_tr, w_synth_val = train_test_split(
-                X_synth, y_synth, w_synth, test_size=0.10, random_state=42,
-            )
+    # Further separate synthetic into VST, generated, and other (DAMP, Pseudo)
+    _generated_idx = len(features_list) - 1
+    _generated_mask = source_ids == _generated_idx
+    if _vst_loaded_idx is not None:
+        _vst_mask = source_ids == _vst_loaded_idx
     else:
-        X_synth_tr, y_synth_tr, w_synth_tr = X_synth, y_synth, w_synth
-        X_synth_val = np.zeros((0, WINDOW, FEATURE_DIM), dtype=np.float32)
-        y_synth_val = np.zeros(0, dtype=np.int32)
-        w_synth_val = np.zeros(0, dtype=np.float32)
+        _vst_mask = np.zeros(len(source_ids), dtype=bool)
+    _other_synth_mask = synth_mask & ~_vst_mask & ~_generated_mask
 
-    # Commit 148 Phase 2d: Stash real/synth splits for two-phase curriculum
+    X_real, y_real, w_real, rec_ids_real = (
+        X_all[real_mask], y_all[real_mask], sample_weights[real_mask], recording_ids[real_mask]
+    )
+    X_vst, y_vst, w_vst, rec_ids_vst = (
+        X_all[_vst_mask], y_all[_vst_mask], sample_weights[_vst_mask], recording_ids[_vst_mask]
+    )
+    X_generated, y_generated, w_generated, rec_ids_generated = (
+        X_all[_generated_mask], y_all[_generated_mask], sample_weights[_generated_mask], recording_ids[_generated_mask]
+    )
+
+    _other_synth_count = _other_synth_mask.sum()
+    if _other_synth_count > 0:
+        print(f"  Other synthetic samples (ignored): {_other_synth_count}")
+
+    print(f"  Real samples: {len(X_real)}, VST synthetic: {len(X_vst)}, Generated synthetic: {len(X_generated)}")
+
+    # Real: 70/30 RECORDING-LEVEL split (honest cross-recording validation)
+    # All windows from the same recording stay in the same split.
+    from sklearn.model_selection import GroupShuffleSplit
+    gss = GroupShuffleSplit(n_splits=1, test_size=0.30, random_state=42)
+    # Use unique recording groups to split at recording level
+    train_idx, val_idx = next(gss.split(X_real, y_real, groups=rec_ids_real))
+    X_real_tr, X_real_val = X_real[train_idx], X_real[val_idx]
+    y_real_tr, y_real_val = y_real[train_idx], y_real[val_idx]
+    w_real_tr, w_real_val = w_real[train_idx], w_real[val_idx]
+    # Log the recording-level split
+    train_recs = set(rec_ids_real[train_idx])
+    val_recs = set(rec_ids_real[val_idx])
+    print(f"  Recording-level 70/30 split: {len(train_recs)} train recordings, "
+          f"{len(val_recs)} val recordings")
+
+    # VST: use entirely for training with domain-bridge weight 0.3
+    if len(X_vst) > 0:
+        w_vst = np.full(len(X_vst), 0.3, dtype=np.float32)
+
+    # Commit 148 Phase 2d: Stash real train for two-phase curriculum
     X_real_tr_s1, y_real_tr_s1, w_real_tr_s1 = X_real_tr.copy(), y_real_tr.copy(), w_real_tr.copy()
-    X_synth_tr_s1, y_synth_tr_s1, w_synth_tr_s1 = X_synth_tr.copy(), y_synth_tr.copy(), w_synth_tr.copy()
 
-    # Stage 1: synthetic-heavy concatenation
-    X_train = np.concatenate([X_real_tr, X_synth_tr])
-    y_train = np.concatenate([y_real_tr, y_synth_tr])
-    w_train = np.concatenate([w_real_tr, w_synth_tr])
-    train_real_mask = np.concatenate([
-        np.ones(len(X_real_tr), dtype=bool),
-        np.zeros(len(X_synth_tr), dtype=bool),
-    ])
-    X_val = np.concatenate([X_real_val, X_synth_val])
-    y_val = np.concatenate([y_real_val, y_synth_val])
-    w_val = np.concatenate([w_real_val, w_synth_val])
-
-    # Track validation source breakdown for reporting
-    val_source_tags = np.concatenate([
-        np.ones(len(X_real_val), dtype=np.int32),  # 1 = real
-        np.zeros(len(X_synth_val), dtype=np.int32),  # 0 = synthetic
-    ])
+    # Stage 1: real + VST training (no generated synthetic)
+    X_train = X_real_tr.copy()
+    y_train = y_real_tr.copy()
+    w_train = w_real_tr.copy()
+    train_real_mask = np.ones(len(X_real_tr), dtype=bool)
+    if len(X_vst) > 0:
+        X_train = np.concatenate([X_train, X_vst])
+        y_train = np.concatenate([y_train, y_vst])
+        w_train = np.concatenate([w_train, w_vst])
+        train_real_mask = np.concatenate([
+            np.ones(len(X_real_tr), dtype=bool),
+            np.zeros(len(X_vst), dtype=bool),
+        ])
+    X_val = X_real_val.copy()
+    y_val = y_real_val.copy()
+    w_val = w_real_val.copy()
+    val_source_tags = np.ones(len(X_val), dtype=np.int32)  # 1 = real (all val is real)
 
     # Shuffle validation set
     val_perm = np.random.permutation(len(X_val))
     X_val, y_val, w_val, val_source_tags = X_val[val_perm], y_val[val_perm], w_val[val_perm], val_source_tags[val_perm]
 
     # Commit 148 Phase 2b/2c: Convert validation labels to one-hot
-    y_val_onehot = tf.keras.utils.to_categorical(y_val, NUM_CLASSES).astype(np.float32)
+    y_val_onehot = tf.keras.utils.to_categorical(y_val, NUM_CLASSES_MIREX).astype(np.float32)
 
     # Commit 148 Phase 3b: Multi-task validation labels (dict format)
     y_val_root = tf.keras.utils.to_categorical(
@@ -3602,54 +3775,129 @@ def run_pipeline(
         "presence": y_val_presence,
     }
 
-    real_val_pct = len(X_real_val) / max(len(X_val), 1) * 100
-    print(f"  Train: {len(X_train)} samples, Val: {len(X_val)} samples "
-          f"({real_val_pct:.0f}% real)")
+    print(f"  Stage 1 real+VST: {len(X_real_tr)} real + {len(X_vst)} VST "
+          f"= {len(X_train)} total ({100 * len(X_real_tr) / max(len(X_train), 1):.0f}% real)")
+    print(f"  Validation (real only): {len(X_val)} samples")
 
-    # Commit 148 Phase 2d: Build Stage 2 training data (real-heavy 80/20)
-    _s2_synth_cap = max(1, int(len(X_real_tr_s1) * 0.25))
-    if len(X_synth_tr_s1) > _s2_synth_cap:
-        _s2_perm = np.random.RandomState(42).permutation(len(X_synth_tr_s1))
-        X_synth_tr_s2 = X_synth_tr_s1[_s2_perm[:_s2_synth_cap]]
-        y_synth_tr_s2 = y_synth_tr_s1[_s2_perm[:_s2_synth_cap]]
-        w_synth_tr_s2 = w_synth_tr_s1[_s2_perm[:_s2_synth_cap]]
+    # Commit 148 Phase 2d: Build Stage 2 training data (real + generated supplement)
+    _s2_synth_cap = max(1, int(len(X_real_tr_s1) * 0.30))
+    if len(X_generated) > _s2_synth_cap:
+        _s2_perm = np.random.RandomState(42).permutation(len(X_generated))
+        X_generated_s2 = X_generated[_s2_perm[:_s2_synth_cap]]
+        y_generated_s2 = y_generated[_s2_perm[:_s2_synth_cap]]
+        w_generated_s2 = w_generated[_s2_perm[:_s2_synth_cap]]
     else:
-        X_synth_tr_s2, y_synth_tr_s2, w_synth_tr_s2 = X_synth_tr_s1, y_synth_tr_s1, w_synth_tr_s1
-    X_train_s2 = np.concatenate([X_real_tr_s1, X_synth_tr_s2])
-    y_train_s2 = np.concatenate([y_real_tr_s1, y_synth_tr_s2])
-    w_train_s2 = np.concatenate([w_real_tr_s1, w_synth_tr_s2])
+        X_generated_s2, y_generated_s2, w_generated_s2 = X_generated, y_generated, w_generated
+    X_train_s2 = np.concatenate([X_real_tr_s1, X_generated_s2])
+    y_train_s2 = np.concatenate([y_real_tr_s1, y_generated_s2])
+    w_train_s2 = np.concatenate([w_real_tr_s1, w_generated_s2])
     train_real_mask_s2 = np.concatenate([
         np.ones(len(X_real_tr_s1), dtype=bool),
-        np.zeros(len(X_synth_tr_s2), dtype=bool),
+        np.zeros(len(X_generated_s2), dtype=bool),
     ])
-    print(f"  Stage 2 real-heavy: {len(X_real_tr_s1)} real + {len(X_synth_tr_s2)} synth "
+    print(f"  Stage 2 real-supplement: {len(X_real_tr_s1)} real + {len(X_generated_s2)} generated "
           f"= {len(X_train_s2)} total ({100 * len(X_real_tr_s1) / max(len(X_train_s2), 1):.0f}% real)")
 
-    # Temperature resampling (τ < 1.0) already handles rare-class oversampling
-    # at the sampling level. Per-source weights (real=1.0, synthetic=0.15) handle
-    # domain importance.  Using both simultaneously (merging into sample_weights
-    # or passing class_weight to fit) creates extreme gradient values that
-    # destabilize multi-task training.  We use only per-source sample_weights
-    # via the generator; class_weight is not passed to model.fit().
-    # The NCI (non-chord index) class-weight cap is preserved for reference.
-    print("\nSkipping sklearn class_weight — temperature resampling handles imbalance...")
-    merged_class_weight = None
+    # Compute inverse-frequency class weights and fold into sample weights.
+    print("\nComputing & applying balanced class weights...")
+    _class_counts = np.bincount(y_real_tr.astype(int), minlength=NUM_CLASSES_MIREX)
+    _class_counts = np.maximum(_class_counts, 1)
+    _median_count = np.median(_class_counts[_class_counts > 0])
+    _class_weight_arr = _median_count / _class_counts.astype(np.float32)
+    _class_weight_arr = np.clip(_class_weight_arr, 0.5, 5.0)
+    print(f"  Class weight range: [{_class_weight_arr.min():.2f}, {_class_weight_arr.max():.2f}]")
+    for ci in np.argsort(_class_counts)[:5]:
+        print(f"    {MIREX_VOCAB[ci]:25s}: count={_class_counts[ci]:4d}, weight={_class_weight_arr[ci]:.2f}")
+    for ci in np.argsort(-_class_counts)[:3]:
+        print(f"    {MIREX_VOCAB[ci]:25s}: count={_class_counts[ci]:4d}, weight={_class_weight_arr[ci]:.2f}")
+    # Fold into existing sample weights (Stage 1 + Stage 2)
+    w_real_tr *= _class_weight_arr[y_real_tr.astype(int)]
+    # Note: w_real_tr_s1 was already copied before this — need to re-build
+    # Stage 2 data with weighted sample weights.
+    w_real_tr_s1 = w_real_tr.copy()
+    # Rebuild Stage 2 training data with updated weights
+    w_train_s2 = np.concatenate([w_real_tr_s1, w_generated_s2])
 
-    # --- Build model (Phase 3b: multi-task) ---
+    # --- Build model ---
     model = build_multi_task_model()
 
-    # --- Build shared test callbacks (appended to both stages) ---
+    # --- Build shared test callbacks (appended to all stages) ---
     test_callbacks: list[tf.keras.callbacks.Callback] = []
     if has_any_real_data and len(test_X) > 0:
         test_callbacks.append(GuitarSetTestCallback(test_X, test_y))
     if len(egset12_test_X) > 0:
         test_callbacks.append(EGSet12TestCallback(egset12_test_X, egset12_test_y))
 
-    # ===== Stage 1: Synthetic-heavy (epochs 1-30) =====
+    # ===== Stage 0: Synthetic pre-training (epochs 1-30) =====
+    # Pre-train on abundant synthetic data (VST + generated) to learn CQT→chord
+    # mapping from clean templates, then adapt to real audio in later stages.
+    PRETRAIN_EPOCHS = 30
+    _has_any_synth = len(X_vst) + len(X_generated) > 0
+    if _has_any_synth:
+        _synth_X_all = np.concatenate([X_vst, X_generated]) if len(X_vst) > 0 else X_generated
+        _synth_y_all = np.concatenate([y_vst, y_generated]) if len(X_vst) > 0 else y_generated
+        _synth_w_all = np.concatenate([
+            np.full(len(X_vst), 1.0, dtype=np.float32),
+            np.full(len(X_generated), 1.0, dtype=np.float32),
+        ]) if len(X_vst) > 0 else np.full(len(X_generated), 1.0, dtype=np.float32)
+        _synth_perm = np.random.permutation(len(_synth_X_all))
+        _synth_X_all, _synth_y_all, _synth_w_all = (
+            _synth_X_all[_synth_perm], _synth_y_all[_synth_perm], _synth_w_all[_synth_perm]
+        )
+        print(f"\n{'=' * 60}")
+        print(f"  Stage 0: Synthetic pre-training ({PRETRAIN_EPOCHS} epochs)")
+        print(f"  Data: {len(_synth_X_all)} synthetic windows (VST + generated)")
+        print(f"  Cosine LR: 3e-3 -> 1e-5 over {PRETRAIN_EPOCHS} epochs")
+        print(f"{'=' * 60}")
+        _steps_pretrain = int(np.ceil(len(_synth_X_all) / 64))
+        _lr_pretrain = tf.keras.optimizers.schedules.CosineDecay(
+            initial_learning_rate=3e-3,
+            decay_steps=PRETRAIN_EPOCHS * _steps_pretrain,
+            alpha=1e-5 / 3e-3,
+        )
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=_lr_pretrain, weight_decay=1e-4, clipnorm=1.0),
+            loss={
+                "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.0),
+                "root_probs": tf.keras.losses.CategoricalCrossentropy(),
+                "presence": tf.keras.losses.BinaryCrossentropy(),
+            },
+            loss_weights={
+                "chord_probs": CHORD_LOSS_WEIGHT,
+                "root_probs": ROOT_LOSS_WEIGHT * 0.5,
+                "presence": PRESENCE_LOSS_WEIGHT * 0.5,
+            },
+            metrics={
+                "chord_probs": tf.keras.metrics.CategoricalAccuracy(name="accuracy"),
+                "root_probs": tf.keras.metrics.CategoricalAccuracy(name="root_accuracy"),
+                "presence": tf.keras.metrics.BinaryAccuracy(name="presence_acc"),
+            },
+        )
+        _synth_generator = AugmentedDataGenerator(
+            _synth_X_all, _synth_y_all, _synth_w_all,
+            batch_size=64,
+            p_pitch_shift=0.3, pitch_range=1,
+            p_time_stretch=0.1, stretch_range=(0.95, 1.05),
+            noise_std=0.03, shuffle=True, temperature=1.0,
+            real_mask=np.ones(len(_synth_X_all), dtype=bool),
+            multi_task=True,
+        )
+        model.fit(
+            x=_synth_generator,
+            epochs=PRETRAIN_EPOCHS,
+            callbacks=test_callbacks,
+            verbose=1,
+        )
+    else:
+        print("  [SKIP] No synthetic data — skipping Stage 0 pre-training")
+
+    # ===== Stage 1: Real+VST training =====
+    _s1_start = 0 if not _has_any_synth else PRETRAIN_EPOCHS
+    _s1_end = PRETRAIN_EPOCHS + 20
     print(f"\n{'=' * 60}")
-    print(f"  Stage 1: Synthetic-heavy training (epochs 1-30)")
+    print(f"  Stage 1: Real+VST training (epochs {_s1_start+1}-{_s1_end})")
     print(f"  Cosine LR: {INITIAL_LR} -> {MIN_LR} over {FIRST_DECAY_EPOCHS} epochs")
-    print(f"  Mixup: p=0.3, alpha=0.2, label_smoothing=0.1")
+    print(f"  Mixup: p=0.3, alpha=0.2, label_smoothing=0.0")
     print(f"  Multi-task: chord(λ={CHORD_LOSS_WEIGHT}) + root(λ={ROOT_LOSS_WEIGHT}) + presence(λ={PRESENCE_LOSS_WEIGHT})")
     print(f"{'=' * 60}")
 
@@ -3664,14 +3912,14 @@ def run_pipeline(
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule_s1, weight_decay=1e-4, clipnorm=1.0),
         loss={
-            "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+            "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.0),
             "root_probs": tf.keras.losses.CategoricalCrossentropy(),
             "presence": tf.keras.losses.BinaryCrossentropy(),
         },
         loss_weights={
             "chord_probs": CHORD_LOSS_WEIGHT,
-            "root_probs": ROOT_LOSS_WEIGHT,
-            "presence": PRESENCE_LOSS_WEIGHT,
+            "root_probs": ROOT_LOSS_WEIGHT * 0.5,
+            "presence": PRESENCE_LOSS_WEIGHT * 0.5,
         },
         metrics={
             "chord_probs": tf.keras.metrics.CategoricalAccuracy(name="accuracy"),
@@ -3680,10 +3928,21 @@ def run_pipeline(
         },
     )
 
+    # No synthetic validation data — val is purely real (Phase 2 fix)
+    X_synth_val = np.zeros((0, WINDOW, FEATURE_DIM), dtype=np.float32)
+    y_synth_val = np.zeros(0, dtype=np.int32)
+
     callbacks_s1: list[tf.keras.callbacks.Callback] = [
+        DualValidationLogger(
+            X_real_val=X_real_val, y_real_val=y_real_val,
+            X_synth_val=X_synth_val, y_synth_val=y_synth_val,
+            filename=str(_SCRIPTS_DIR / "training_log.csv"),
+            plot_output_dir=_SCRIPTS_DIR,
+            plot_every_n=5,
+        ),
         tf.keras.callbacks.EarlyStopping(
             monitor="val_accuracy_real",
-            patience=25,
+            patience=10,
             restore_best_weights=True,
             verbose=1,
         ),
@@ -3693,14 +3952,7 @@ def run_pipeline(
             save_best_only=True,
             verbose=1,
         ),
-        DualValidationLogger(
-            X_real_val=X_real_val, y_real_val=y_real_val,
-            X_synth_val=X_synth_val, y_synth_val=y_synth_val,
-            filename=str(_SCRIPTS_DIR / "training_log.csv"),
-            plot_output_dir=_SCRIPTS_DIR,
-            plot_every_n=5,
-        ),
-        TwoPhaseCallback(switch_epoch=30),
+        TwoPhaseCallback(switch_epoch=_s1_end),
     ]
     callbacks_s1.extend(test_callbacks)
 
@@ -3715,30 +3967,29 @@ def run_pipeline(
 
     fit_kwargs_s1 = dict(
         x=train_generator_s1,
-        epochs=30,
+        epochs=_s1_end,
+        initial_epoch=_s1_start,
         validation_data=(X_val, y_val_dict),
         callbacks=callbacks_s1,
         verbose=1,
     )
-    if merged_class_weight is not None:
-        fit_kwargs_s1["class_weight"] = {
-            "chord_probs": merged_class_weight,
-            "root_probs": {i: 1.0 for i in range(N_ROOTS)},
-            "presence": {0: 1.0, 1: 1.0},
-        }
+    # Class weights are already folded into sample weights; no separate class_weight dict needed.
 
     history_s1 = model.fit(**fit_kwargs_s1)
 
-    # ===== Stage 2: Real-heavy fine-tuning (epochs 31-100) =====
+    # ===== Stage 2: Real-heavy fine-tuning =====
+    _s2_start = _s1_end
+    _s2_end = _s1_end + 40
     print(f"\n{'=' * 60}")
-    print(f"  Stage 2: Real-heavy fine-tuning (epochs 31-100)")
+    print(f"  Stage 2: Real-heavy fine-tuning (epochs {_s2_start+1}-{_s2_end})")
     print(f"  Cosine LR: 1e-4 -> 1e-5 over 10 epochs, no restart")
     print(f"{'=' * 60}")
 
-    model = tf.keras.models.load_model(str(_APP_DIR / "chord_model_best.keras"))
+    # model is reused from Stage 1 (no need to reload — avoids stale checkpoint / Keras 3 compat issues)
+    print(f"  Reusing model from Stage 1 (epoch {_s1_end}). Architecture: {model.input_shape} -> 25-class multi-task")
 
     steps_per_epoch_s2 = int(np.ceil(len(X_train_s2) / 64))
-    total_steps_s2 = 70 * steps_per_epoch_s2  # epochs 31-100 = 70 epochs
+    total_steps_s2 = (_s2_end - _s2_start) * steps_per_epoch_s2  # 40 epochs
     lr_schedule_s2 = tf.keras.optimizers.schedules.CosineDecay(
         initial_learning_rate=1e-4,
         decay_steps=total_steps_s2,
@@ -3747,14 +3998,14 @@ def run_pipeline(
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule_s2, weight_decay=1e-4, clipnorm=1.0),
         loss={
-            "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+            "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.0),
             "root_probs": tf.keras.losses.CategoricalCrossentropy(),
             "presence": tf.keras.losses.BinaryCrossentropy(),
         },
         loss_weights={
             "chord_probs": CHORD_LOSS_WEIGHT,
-            "root_probs": ROOT_LOSS_WEIGHT,
-            "presence": PRESENCE_LOSS_WEIGHT,
+            "root_probs": ROOT_LOSS_WEIGHT * 0.5,
+            "presence": PRESENCE_LOSS_WEIGHT * 0.5,
         },
         metrics={
             "chord_probs": tf.keras.metrics.CategoricalAccuracy(name="accuracy"),
@@ -3764,18 +4015,6 @@ def run_pipeline(
     )
 
     callbacks_s2: list[tf.keras.callbacks.Callback] = [
-        tf.keras.callbacks.EarlyStopping(
-            monitor="val_accuracy_real",
-            patience=25,
-            restore_best_weights=True,
-            verbose=1,
-        ),
-        tf.keras.callbacks.ModelCheckpoint(
-            filepath=str(_APP_DIR / "chord_model_best.keras"),
-            monitor="val_accuracy_real",
-            save_best_only=True,
-            verbose=1,
-        ),
         DualValidationLogger(
             X_real_val=X_real_val, y_real_val=y_real_val,
             X_synth_val=X_synth_val, y_synth_val=y_synth_val,
@@ -3783,6 +4022,18 @@ def run_pipeline(
             append=True,
             plot_output_dir=_SCRIPTS_DIR,
             plot_every_n=5,
+        ),
+        tf.keras.callbacks.EarlyStopping(
+            monitor="val_accuracy_real",
+            patience=10,
+            restore_best_weights=True,
+            verbose=1,
+        ),
+        tf.keras.callbacks.ModelCheckpoint(
+            filepath=str(_APP_DIR / "chord_model_stage2_best.keras"),
+            monitor="val_accuracy_real",
+            save_best_only=True,
+            verbose=1,
         ),
     ]
     callbacks_s2.extend(test_callbacks)
@@ -3796,30 +4047,25 @@ def run_pipeline(
         real_mask=train_real_mask_s2, multi_task=True,
     )
 
-    # Gradual curriculum transition: smooth from ~50% real (S1 end) to 80% real (S2) over 10 epochs
+    # Gradual curriculum transition: smooth from 100% real (S1 end) to 92% real (S2) over 10 epochs
     _s1_real_pct = len(X_real_tr_s1) / max(len(X_train), 1)
     callbacks_s2.append(GradualTransitionCallback(
         generator=train_generator_s2,
         start_ratio=_s1_real_pct,
-        target_ratio=0.8,
+        target_ratio=0.92,
         transition_epochs=10,
-        start_epoch=30,
+        start_epoch=_s1_end,
     ))
 
     fit_kwargs_s2 = dict(
         x=train_generator_s2,
-        epochs=100,
-        initial_epoch=30,
+        epochs=_s2_end,
+        initial_epoch=_s2_start,
         validation_data=(X_val, y_val_dict),
         callbacks=callbacks_s2,
         verbose=1,
     )
-    if merged_class_weight is not None:
-        fit_kwargs_s2["class_weight"] = {
-            "chord_probs": merged_class_weight,
-            "root_probs": {i: 1.0 for i in range(N_ROOTS)},
-            "presence": {0: 1.0, 1: 1.0},
-        }
+    # Class weights are already folded into sample weights; no separate class_weight dict needed.
 
     history_s2 = model.fit(**fit_kwargs_s2)
 
@@ -3859,6 +4105,7 @@ def run_pipeline(
     print("\n--- Per-Source Validation Accuracy ---")
     real_val_mask = val_source_tags == 1
     synth_val_mask = val_source_tags == 0
+    synth_acc = 0.0
     if real_val_mask.sum() > 0:
         real_acc = float(np.mean(y_pred[real_val_mask] == y_val[real_val_mask]))
         print(f"  Real-world val:   {real_acc:.1%}  ({real_val_mask.sum()} samples)")
@@ -3866,7 +4113,8 @@ def run_pipeline(
         # Synthetic val uses raw argmax (no N-override — synthetic N is clean)
         synth_acc = float(np.mean(y_pred_raw[synth_val_mask] == y_val[synth_val_mask]))
         print(f"  Synthetic val:    {synth_acc:.1%}  ({synth_val_mask.sum()} samples)")
-    domain_gap = synth_acc - float(np.mean(y_pred[real_val_mask] == y_val[real_val_mask]))
+    real_acc_val = float(np.mean(y_pred[real_val_mask] == y_val[real_val_mask])) if real_val_mask.sum() > 0 else 0.0
+    domain_gap = synth_acc - real_acc_val
     print(f"  Domain gap:       {domain_gap:.1%}  (synthetic - real)")
 
     # --- Confusion matrix (Commit 103) ---
@@ -3937,11 +4185,11 @@ def run_pipeline(
             qat_model.compile(
                 optimizer=tf.keras.optimizers.Adam(learning_rate=QAT_LEARNING_RATE),
                 loss={
-                    "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+                    "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.0),
                     "root_probs": tf.keras.losses.CategoricalCrossentropy(),
                     "presence": tf.keras.losses.BinaryCrossentropy(),
                 },
-                loss_weights={"chord_probs": 1.0, "root_probs": 0.3, "presence": 0.2},
+                loss_weights={"chord_probs": 1.0, "root_probs": 0.1, "presence": 0.05},
                 metrics={"chord_probs": "accuracy", "root_probs": "accuracy", "presence": "accuracy"},
             )
 
@@ -4227,7 +4475,7 @@ def run_qat_only(
                 print(f"  [WARN] {name} data dir not found: {p}")
 
     print(f"Loading {len(source_configs)} data source(s)...")
-    features_list, labels_list, weights_list = load_datasets(source_configs)
+    features_list, labels_list, weights_list, _ = load_datasets(source_configs)
 
     # GuitarSet test data
     test_X, test_y = np.array([]), np.array([])
@@ -4236,6 +4484,7 @@ def run_qat_only(
         if gs_path.exists():
             try:
                 test_X, test_y = load_guitarset_test(gs_path)
+                test_y = np.array([mirex_label(int(y)) for y in test_y], dtype=np.int32)
             except (FileNotFoundError, ValueError) as e:
                 print(f"  [WARN] GuitarSet test: {e}")
 
@@ -4255,6 +4504,7 @@ def run_qat_only(
                 if loaded_chunks:
                     egset12_test_X = np.concatenate([c[0] for c in loaded_chunks], axis=0)
                     egset12_test_y = np.concatenate([c[1] for c in loaded_chunks], axis=0)
+                    egset12_test_y = np.array([mirex_label(int(y)) for y in egset12_test_y], dtype=np.int32)
                     print(f"  Loaded EGSet12 eval set: {len(egset12_test_X)} windows (test split only)")
         except (FileNotFoundError, ValueError) as e:
             print(f"  [WARN] EGSet12 eval: {e}")
@@ -4265,7 +4515,7 @@ def run_qat_only(
         emp_path = Path(empirical_matrix_path)
         if emp_path.exists():
             matrix = np.load(str(emp_path))
-            if matrix.shape == (NUM_CLASSES, NUM_CLASSES):
+            if matrix.shape == (NUM_CLASSES_MIREX, NUM_CLASSES_MIREX):
                 transition_probs = matrix.sum(axis=1)
                 if transition_probs.sum() > 0:
                     transition_probs = transition_probs / transition_probs.sum()
@@ -4276,8 +4526,13 @@ def run_qat_only(
     # Skip synthetic generation for QAT-only — real data is sufficient for
     # INT8 calibration fine-tuning. Mix and split only real data sources.
     print("Skipping synthetic generation (QAT-only mode)...")
-    dataset_sources = list(zip(features_list, labels_list, weights_list))
-    X_all, y_all, sample_weights, source_ids = mix_datasets(dataset_sources)
+    qat_rec_ids = [np.array([f"{i}_{j}" for j in range(len(f))], dtype=object)
+                   for i, f in enumerate(features_list)]
+    dataset_sources = list(zip(features_list, labels_list, weights_list, qat_rec_ids))
+    X_all, y_all, sample_weights, source_ids, _ = mix_datasets(dataset_sources)
+
+    # Map 277-class labels to 25-class MIREX (same as full pipeline)
+    y_all = np.array([mirex_label(int(y)) for y in y_all], dtype=np.int32)
 
     X_train, X_val, y_train, y_val, w_train, _ = train_test_split(
         X_all, y_all, sample_weights, test_size=0.15, random_state=42, stratify=y_all,
@@ -4286,14 +4541,16 @@ def run_qat_only(
     print(f"  Train: {len(X_train)} samples, Val: {len(X_val)} samples (no synthetic)")
 
     # ---- Load best float32 model ----
-    # TFMOT sets TF_USE_LEGACY_KERAS=True, routing tf.keras to tf_keras (Keras 2)
-    # which can't deserialize Keras 3 models. Use standalone keras module instead.
-    import keras as _keras
+    # Model was saved with TF Keras (Keras 2). Since TFMOT sets
+    # TF_USE_LEGACY_KERAS=True, tf.keras routes to tf_keras (Keras 2),
+    # which is what we need to load the saved model.
     best_path = _APP_DIR / "chord_model_best.keras"
+    if not best_path.exists():
+        best_path = _APP_DIR / "chord_model_stage2_best.keras"
     if not best_path.exists():
         best_path = _APP_DIR / "chord_model.keras"
     print(f"\nLoading best model from: {best_path}")
-    float32_model = _keras.models.load_model(
+    float32_model = tf.keras.models.load_model(
         str(best_path),
         custom_objects={"_circular_cqt_pad": _circular_cqt_pad, "CircularCqtPad": CircularCqtPad},
     )
@@ -4336,9 +4593,9 @@ def run_qat_only(
 
     print(f"  Applying QAT wrapper ({QAT_EPOCHS} epochs, LR={QAT_LEARNING_RATE})...")
 
-    qat_val_acc = None
-    qat_keras_path = None
-    int8_path = None
+    qat_val_acc: float | None = None
+    qat_keras_path: Path | None = None
+    int8_path: Path | None = None
 
     try:
         qat_model = apply_qat(float32_model)
@@ -4349,7 +4606,7 @@ def run_qat_only(
         ).astype(np.float32)
         y_val_presence_qat = derive_presence_labels(y_val).reshape(-1, 1)
         y_val_dict_qat = {
-            "chord_probs": tf.keras.utils.to_categorical(y_val, NUM_CLASSES).astype(np.float32),
+            "chord_probs": tf.keras.utils.to_categorical(y_val, NUM_CLASSES_MIREX).astype(np.float32),
             "root_probs": y_val_root_qat,
             "presence": y_val_presence_qat,
         }
@@ -4357,11 +4614,11 @@ def run_qat_only(
         qat_model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=QAT_LEARNING_RATE),
             loss={
-                "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+                "chord_probs": tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.0),
                 "root_probs": tf.keras.losses.CategoricalCrossentropy(),
                 "presence": tf.keras.losses.BinaryCrossentropy(),
             },
-            loss_weights={"chord_probs": 1.0, "root_probs": 0.3, "presence": 0.2},
+            loss_weights={"chord_probs": 1.0, "root_probs": 0.1, "presence": 0.05},
             metrics={"chord_probs": "accuracy", "root_probs": "accuracy", "presence": "accuracy"},
         )
 
@@ -4397,58 +4654,81 @@ def run_qat_only(
             qat_model.save(str(qat_keras_path))
         print(f"  Saved QAT model -> {qat_keras_path} ({qat_keras_path.stat().st_size / 1024 / 1024:.1f} MB)")
 
-        # ---- INT8 TFLite Conversion ----
-        print("\nConverting QAT model to INT8 TFLite...")
+        # ---- TFLite Conversion ----
+        print("\nConverting QAT model to TFLite...")
         int8_path = _APP_DIR / "chord_model_qat_int8.tflite"
         rng = np.random.RandomState(42)
         idx = rng.choice(len(X_val), size=min(100, len(X_val)), replace=False)
         rep_data = X_val[idx]
-        convert_to_int8_tflite(qat_model, rep_data, str(int8_path))
+        tflite_bytes = convert_to_int8_tflite(qat_model, rep_data, str(int8_path))
 
-        # ---- INT8 Smoke Tests ----
-        print("\n--- INT8 TFLite Smoke Tests ---")
-        test_cases = [
-            (CHORD_VOCAB["C:maj"], "C:maj"),
-            (CHORD_VOCAB["A:min"], "A:min"),
-            (CHORD_VOCAB["D#:7"], "D#:7"),
-            (CHORD_VOCAB["D:7"], "D:7"),
-        ]
+        if tflite_bytes is not None:
+            # ---- TFLite Smoke Tests ----
+            print("\n--- TFLite Smoke Tests ---")
+            test_cases = [
+                (MIREX_TO_IDX["C:maj"], "C:maj"),
+                (MIREX_TO_IDX["A:min"], "A:min"),
+                (MIREX_TO_IDX["D#:maj"], "D#:maj"),
+                (MIREX_TO_IDX["D:maj"], "D:maj"),
+            ]
 
-        interpreter = tf.lite.Interpreter(model_path=str(int8_path))
-        interpreter.allocate_tensors()
-        input_details = interpreter.get_input_details()
-        output_details = interpreter.get_output_details()
-        input_scale, input_zero = input_details[0]["quantization"]
+            try:
+                # Load Flex delegate for SELECT_TF_OPS (needed for BiLSTM TensorList ops)
+                flex_delegate = tf.lite.experimental.load_delegate("libtensorflowlite_flex.so")
+                interpreter = tf.lite.Interpreter(
+                    model_path=str(int8_path),
+                    experimental_delegates=[flex_delegate],
+                )
+            except (ValueError, OSError, RuntimeError):
+                # Flex delegate not available — run without it
+                interpreter = tf.lite.Interpreter(model_path=str(int8_path))
 
-        all_passed = True
-        for label_idx, label_name in test_cases:
-            class_mask = y_train == label_idx
-            if class_mask.sum() > 0:
-                sample = X_train[class_mask][0:1]
-            else:
-                sample = np.zeros((1, WINDOW, FEATURE_DIM), dtype=np.float32)
+            try:
+                interpreter.allocate_tensors()
+                input_details = interpreter.get_input_details()
+                output_details = interpreter.get_output_details()
+                input_scale, input_zero = input_details[0]["quantization"]
 
-            q_sample = (sample / input_scale + input_zero).astype(np.int8)
-            interpreter.set_tensor(input_details[0]["index"], q_sample)
-            interpreter.invoke()
-            output = interpreter.get_tensor(output_details[0]["index"])
-            out_scale, out_zero = output_details[0]["quantization"]
-            output_float = (output.astype(np.float32) - out_zero) * out_scale
-            pred_idx = np.argmax(output_float[0])
+                all_passed = True
+                for label_idx, label_name in test_cases:
+                    class_mask = y_train == label_idx
+                    if class_mask.sum() > 0:
+                        sample = X_train[class_mask][0:1]
+                    else:
+                        sample = np.zeros((1, WINDOW, FEATURE_DIM), dtype=np.float32)
 
-            pred_label = CHORD_VOCAB[pred_idx]
-            expected_label = CHORD_VOCAB[label_idx]
-            match = "PASS" if pred_idx == label_idx else "FAIL"
-            if match == "FAIL":
-                all_passed = False
-            confidence = output_float[0][pred_idx] * 100
-            print(f"  {label_name:<10} -> {pred_label:<10} ({confidence:.1f}%) [{match}]")
+                    # Handle both quantized (INT8) and float input
+                    if input_details[0]["dtype"] == np.int8:
+                        q_sample = (sample / input_scale + input_zero).astype(np.int8)
+                    else:
+                        q_sample = sample.astype(np.float32)
+                    interpreter.set_tensor(input_details[0]["index"], q_sample)
+                    interpreter.invoke()
+                    output = interpreter.get_tensor(output_details[0]["index"])
+                    out_scale, out_zero = output_details[0]["quantization"]
+                    if out_scale != 0:
+                        output_float = (output.astype(np.float32) - out_zero) * out_scale
+                    else:
+                        output_float = output.astype(np.float32)
+                    pred_idx = np.argmax(output_float[0])
 
-        print(f"\n  All INT8 TFLite smoke tests {'PASSED' if all_passed else 'FAILED'}")
+                    pred_label = MIREX_VOCAB[pred_idx]
+                    expected_label = MIREX_VOCAB[label_idx]
+                    match = "PASS" if pred_idx == label_idx else "FAIL"
+                    if match == "FAIL":
+                        all_passed = False
+                    confidence = output_float[0][pred_idx] * 100
+                    print(f"  {label_name:<10} -> {pred_label:<10} ({confidence:.1f}%) [{match}]")
+
+                print(f"\n  All TFLite smoke tests {'PASSED' if all_passed else 'FAILED'}")
+            except RuntimeError as e:
+                print(f"  [SKIP] TFLite smoke tests (SELECT_TF_OPS not available in Python runtime): {e}")
+                print("  [SKIP] Test on-device with the tensorflow-lite-select-tf-ops dependency.")
+        else:
+            print("  [SKIP] TFLite smoke tests (conversion failed)")
 
     except Exception as exc:
         print(f"\n  [WARN] QAT pipeline failed: {exc}")
-        print("  [WARN] INT8 QAT unavailable — using FP16 dynamic quantization instead")
         import traceback
         traceback.print_exc()
         qat_model = None
@@ -4457,11 +4737,16 @@ def run_qat_only(
     print("\n" + "=" * 60)
     print("  QAT-Only Pipeline Complete")
     print("=" * 60)
-    print(f"  QAT model:     {qat_keras_path}")
-    print(f"  INT8 TFLite:   {int8_path}")
-    if int8_path.exists():
+    if qat_keras_path is not None:
+        print(f"  QAT model:     {qat_keras_path}")
+    else:
+        print(f"  QAT model:     (not saved)")
+    if int8_path is not None and int8_path.exists():
+        print(f"  INT8 TFLite:   {int8_path}")
         size_kb = int8_path.stat().st_size / 1024
         print(f"  INT8 TFLite size: {size_kb:.1f} KB")
+    else:
+        print(f"  INT8 TFLite:   (not available)")
     print(f"  Float32 val acc: {float32_val_acc:.2%}")
     if qat_val_acc is not None:
         print(f"  QAT val acc:      {qat_val_acc:.2%}")

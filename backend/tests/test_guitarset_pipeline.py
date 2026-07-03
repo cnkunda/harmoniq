@@ -26,6 +26,7 @@ from scripts.extract_guitarset_cqt import (
     process_song,
     PLAYER_SPLIT,
     HOP_SEC,
+    HOP_FRAMES,
     WINDOW,
     FEATURE_DIM,
     N_CHORD_IDX,
@@ -222,7 +223,7 @@ class TestBuildWindows:
         labels = np.random.randint(0, 10, size=T).astype(np.int32)
         windows, window_labels = _build_windows(features, labels)
 
-        expected_overlap = (T + 64 - 1) // 64
+        expected_overlap = (T + HOP_FRAMES - 1) // HOP_FRAMES
         assert windows.shape == (expected_overlap, WINDOW, FEATURE_DIM)
         assert window_labels.shape == (expected_overlap,)
 
@@ -248,13 +249,10 @@ class TestExtractCqt:
         sr = 44100
         y = np.random.randn(sr * 1) * 0.01
         features = _extract_cqt(y, sr)
-        # CQT portion (first 36 bins) should sum to ~1 per frame
-        cqt_part = features[:, :36]
-        row_sums = cqt_part.sum(axis=1)
-        assert np.allclose(row_sums, 1.0, atol=0.15), f"cqt sums: {row_sums}"
-        # Bass channel (last 4 bins) should have reasonable values
-        bass_part = features[:, 36:]
-        assert bass_part.min() >= 0
+        # Entire feature vector (all 144 bins) should sum to ~1 per frame
+        row_sums = features.sum(axis=1)
+        assert np.allclose(row_sums, 1.0, atol=0.15), f"row sums: {row_sums}"
+        assert features.min() >= 0
 
 
 class TestPlayerSplit:

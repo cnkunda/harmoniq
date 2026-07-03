@@ -20,11 +20,7 @@ import numpy as np
 
 logger = logging.getLogger("harmoniq.cqt_analysis")
 
-CHROMA_BINS = 36
-BASS_BINS = 4
-FEATURE_DIM = CHROMA_BINS + BASS_BINS
-WINDOW = 128
-
+from app.cqt_constants import CHROMA_BINS, BASS_BINS, FEATURE_DIM, WINDOW
 
 def collect_real_cqt_features(data_dirs: list[Path]) -> np.ndarray:
     """Load real CQT features from processed dataset directories.
@@ -35,10 +31,11 @@ def collect_real_cqt_features(data_dirs: list[Path]) -> np.ndarray:
     Returns:
         (N, 128, 40) array of real CQT windows, excluding no-chord samples.
     """
-    from app.chord_vocab import NUM_CLASSES
+    from app.chord_vocab import NUM_CLASSES, NUM_CLASSES_MIREX
 
     all_features: list[np.ndarray] = []
-    n_idx = NUM_CLASSES - 1
+    n_idx_new = NUM_CLASSES_MIREX - 1  # 24 (new N index)
+    n_idx_old = NUM_CLASSES - 1        # 276 (old N index in stale .npz files)
 
     for data_dir in data_dirs:
         cqt_dir = data_dir / "processed" / "cqt"
@@ -51,7 +48,7 @@ def collect_real_cqt_features(data_dirs: list[Path]) -> np.ndarray:
                 data = np.load(npz_path)
                 features = data["features"]
                 labels = data["labels"]
-                chord_mask = labels != n_idx
+                chord_mask = (labels != n_idx_new) & (labels != n_idx_old)
                 filtered = features[chord_mask]
                 if len(filtered) > 0:
                     all_features.append(filtered)

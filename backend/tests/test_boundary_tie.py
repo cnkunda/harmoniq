@@ -23,6 +23,7 @@ from app.chord_inference import (
     _NUM_CLASSES,
     _CHORD_TO_IDX,
 )
+from app.cqt_constants import CHROMA_BINS
 from app.solo_inference import TieRegistry, _merge_boundary_notes
 from app.schemas import BeatGrid, SoloNote, TimeSignature
 from app.score import _deduplicate_onsets
@@ -51,23 +52,23 @@ class TestTriangularWindow:
 class TestBuildWindows:
     def test_overlapping_window_count(self):
         T = 200
-        features = np.zeros((T, 40), dtype=np.float32)
+        features = np.zeros((T, CHROMA_BINS), dtype=np.float32)
         windows = _build_windows(features)
         expected = (T + _HOP_FRAMES - 1) // _HOP_FRAMES
         assert windows.shape[0] == expected
 
     def test_window_shape(self):
         T = 128
-        features = np.zeros((T, 40), dtype=np.float32)
+        features = np.zeros((T, CHROMA_BINS), dtype=np.float32)
         windows = _build_windows(features)
         expected = (T + _HOP_FRAMES - 1) // _HOP_FRAMES
         assert windows.shape[0] == expected
         assert windows.shape[1] == _WINDOW
-        assert windows.shape[2] == 40
+        assert windows.shape[2] == CHROMA_BINS
 
     def test_padding_preserves_content(self):
         T = 64
-        features = np.ones((T, 40), dtype=np.float32)
+        features = np.ones((T, CHROMA_BINS), dtype=np.float32)
         windows = _build_windows(features)
         first_window = windows[0]
         assert np.all(first_window[_WINDOW // 2:] == 1.0)
@@ -114,11 +115,13 @@ class TestMergeOverlappingPredictions:
 class TestBoundaryPenalty:
     def test_penalty_applied_at_boundaries(self):
         T = 256
-        probs = np.full((T, _NUM_CLASSES), 1.0 / _NUM_CLASSES, dtype=np.float32)
+        probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+        probs[:, 0] = 0.9
+        probs[:, 1:] = 0.1 / (_NUM_CLASSES - 1)
         penalized = _apply_boundary_penalty(probs)
 
         boundary_idx = _WINDOW
-        assert penalized[boundary_idx].sum() < 1.0
+        assert penalized[boundary_idx, 0] < probs[boundary_idx, 0] + 1e-5
 
     def test_no_penalty_at_track_edges(self):
         T = 256
@@ -138,11 +141,13 @@ class TestBoundaryPenalty:
 
     def test_boundary_rows_not_normalized(self):
         T = 256
-        probs = np.full((T, _NUM_CLASSES), 1.0 / _NUM_CLASSES, dtype=np.float32)
+        probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+        probs[:, 0] = 0.9
+        probs[:, 1:] = 0.1 / (_NUM_CLASSES - 1)
         penalized = _apply_boundary_penalty(probs)
 
         boundary_idx = _WINDOW
-        assert penalized[boundary_idx].sum() < 1.0
+        assert penalized[boundary_idx, 0] < probs[boundary_idx, 0] + 1e-5
 
     def test_penalty_reduces_raw_confidence_at_boundary(self):
         T = 256

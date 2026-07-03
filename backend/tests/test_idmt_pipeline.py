@@ -218,7 +218,8 @@ class TestExtractCqt:
         features = extract_cqt(y, sr)
         bass_part = features[:, CHROMA_BINS:]
         assert bass_part.shape[1] == BASS_BINS
-        assert bass_part.min() >= 0
+        if BASS_BINS > 0:
+            assert bass_part.min() >= 0
 
 
 class TestProcessClip:

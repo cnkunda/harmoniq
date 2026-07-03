@@ -1,7 +1,7 @@
 """Extract CQT features from IDMT-SMT-Guitar audio aligned with chord labels.
 
 Reads IDMT WAV files and per-clip JSON timelines (from parse_idmt_smt_guitar.py),
-extracts 36-bin CQT + 4-bin bass features matching the GuitarSet format,
+extracts 144-bin CQT features matching the GuitarSet format,
 with added instrument and style metadata for per-source loss weighting.
 
 Usage:
@@ -29,27 +29,20 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.chord_vocab import CHORD_TO_IDX
+from app.chord_vocab import CHORD_TO_IDX, NUM_CLASSES
 
 # Constants matching chord_inference.py exactly
-TARGET_SR = 44100
-HOP_SEC = 0.1
-BINS_PER_OCTAVE = 12
-NUM_OCTAVES = 3
-CHROMA_BINS = BINS_PER_OCTAVE * NUM_OCTAVES  # 36
-BASS_BINS = 4
-FEATURE_DIM = CHROMA_BINS + BASS_BINS  # 40
-WINDOW = 128
-HOP_FRAMES = 64  # 50% overlap
+from app.cqt_constants import (TARGET_SR, HOP_SEC, BINS_PER_OCTAVE, NUM_OCTAVES,
+                                CHROMA_BINS, BASS_BINS, FEATURE_DIM, WINDOW, HOP_FRAMES)
 
-N_CHORD_IDX = CHORD_TO_IDX.get("N", CHROMA_BINS * BASS_BINS - 1)
+N_CHORD_IDX = CHORD_TO_IDX.get("N", NUM_CLASSES - 1)
 
 # Per-source loss weight for IDMT data (clean real audio, full weight)
 IDMT_LOSS_WEIGHT = 1.0
 
 
 def extract_cqt(y: np.ndarray, sr: int) -> np.ndarray:
-    """Compute 36-bin CQT + 4-bin bass features.
+    """Compute 144-bin CQT features.
 
     Matches chord_inference.py _extract_features exactly.
     """
@@ -60,9 +53,7 @@ def extract_cqt(y: np.ndarray, sr: int) -> np.ndarray:
                       bins_per_octave=BINS_PER_OCTAVE)
     cqt = np.abs(cqt).T.astype(np.float32)
     norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
-    cqt = cqt / norms
-    bass = cqt[:, :BASS_BINS]
-    features = np.concatenate([cqt, bass], axis=1)
+    features = cqt / norms
     return features
 
 

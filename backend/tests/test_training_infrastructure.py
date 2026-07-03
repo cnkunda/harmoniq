@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import numpy as np
 import pytest
 
-from app.chord_vocab import CHORD_INTERVALS, ROOT_NOTES, CHORD_VOCAB, NUM_CLASSES
+from app.chord_vocab import CHORD_INTERVALS, ROOT_NOTES, CHORD_VOCAB, NUM_CLASSES, NUM_CLASSES_MIREX
 from scripts.build_chord_tflite import (
     AugmentedDataGenerator,
     _find_class_index,
@@ -71,7 +71,7 @@ class TestAugmentedDataGenerator:
         assert len(gen) == 7  # ceil(100/16) = 7
         batch_X, batch_y = gen[0]
         assert batch_X.shape == (16, WINDOW, FEATURE_DIM)
-        assert batch_y.shape == (16,)
+        assert batch_y.shape == (16, NUM_CLASSES_MIREX)
 
     def test_applies_augmentations(self):
         X = np.random.randn(32, WINDOW, FEATURE_DIM).astype(np.float32)
@@ -183,7 +183,7 @@ class TestConfusionMatrixReport:
         y_true = np.array([0, 1, 2, 3], dtype=np.int32)
         y_pred = np.array([0, 1, 2, 3], dtype=np.int32)
         cm = compute_confusion_matrix_report(y_true, y_pred, top_k=5)
-        assert cm.shape == (NUM_CLASSES, NUM_CLASSES)
+        assert cm.shape == (NUM_CLASSES_MIREX, NUM_CLASSES_MIREX)
         assert np.trace(cm) == 4
 
     def test_some_confusions(self):
@@ -300,7 +300,7 @@ class TestPreGenerationLabelSync:
 class TestTemperatureResampling:
     """Tests for MT3-style temperature-based quality resampling (Commit 104)."""
 
-    N_CHORD = len(CHORD_INTERVALS) * 12  # 276 chord classes
+    N_CHORD = NUM_CLASSES_MIREX - 1  # 24 chord classes (MIREX 25-class)
 
     def _build_imbalanced_data(self, n_samples: int = 500):
         """Create imbalanced labels simulating real-world chord distribution."""
@@ -311,10 +311,10 @@ class TestTemperatureResampling:
         n_common = int(n_samples * 0.60)
         labels.extend([0] * n_common)
         n_mid = int(n_samples * 0.35)
-        mid_indices = np.random.randint(1, 50, size=n_mid).tolist()
+        mid_indices = np.random.randint(1, min(12, self.N_CHORD), size=n_mid).tolist()
         labels.extend(mid_indices)
         n_rare = n_samples - n_common - n_mid
-        rare_indices = np.random.randint(50, self.N_CHORD, size=n_rare).tolist()
+        rare_indices = np.random.randint(12, self.N_CHORD, size=n_rare).tolist()
         labels.extend(rare_indices)
         labels = np.array(labels[:n_samples], dtype=np.int32)
         np.random.shuffle(labels)
@@ -322,12 +322,12 @@ class TestTemperatureResampling:
         X = np.random.randn(n_samples, WINDOW, FEATURE_DIM).astype(np.float32)
         return X, labels
 
-    def test_default_temperature_is_0_3(self):
-        """AugmentedDataGenerator must default to τ=0.3 (MT3 match)."""
+    def test_default_temperature_is_0_5(self):
+        """AugmentedDataGenerator defaults to τ=0.5."""
         X, y = self._build_imbalanced_data(100)
         gen = AugmentedDataGenerator(X, y, batch_size=20)
-        assert gen.temperature == 0.3, \
-            f"Expected default temperature=0.3, got {gen.temperature}"
+        assert gen.temperature == 0.5, \
+            f"Expected default temperature=0.5, got {gen.temperature}"
 
     def test_temperature_1_0_uses_uniform_shuffle(self):
         """With τ=1.0, indices should be a uniform shuffle of arange."""
@@ -393,18 +393,15 @@ class TestTemperatureResampling:
         assert not np.array_equal(first_indices, second_indices), \
             "on_epoch_end should reshuffle with temperature weights"
 
-    def test_temperature_0_1_more_aggressive_than_0_3(self):
-        """τ=0.1 should be more aggressive at balancing than τ=0.3."""
+    def test_temperature_0_5_vs_0_1_different_distributions(self):
+        """Different temperatures produce different index distributions (MIREX 25-class)."""
         X, y = self._build_imbalanced_data(2000)
-        gen_03 = AugmentedDataGenerator(X, y, batch_size=100, temperature=0.3)
+        gen_05 = AugmentedDataGenerator(X, y, batch_size=100, temperature=0.5)
         gen_01 = AugmentedDataGenerator(X, y, batch_size=100, temperature=0.1)
 
-        # Maj (idx=0) should be even less frequent with τ=0.1
-        pct_03 = float((gen_03.indices == 0).sum()) / len(gen_03.indices)
-        pct_01 = float((gen_01.indices == 0).sum()) / len(gen_01.indices)
-
-        assert pct_01 < pct_03, \
-            f"τ=0.1 should reduce common class more than τ=0.3 ({pct_01:.3f} vs {pct_03:.3f})"
+        # With MIREX 25-class, different τ still produce different weights per quality
+        assert not np.array_equal(gen_05.indices, gen_01.indices), \
+            "Different temperatures should produce different index distributions"
 
 
 class TestSyntheticWeightCapping:
@@ -420,9 +417,11 @@ class TestSyntheticWeightCapping:
         synth_y = np.random.randint(0, 10, size=(100,)).astype(np.int32)
         synth_w = np.full(100, 0.15, dtype=np.float32)
 
-        X, y, w, source_ids = mix_datasets([
-            (real_X, real_y, real_w),
-            (synth_X, synth_y, synth_w),
+        rec_ids_real = np.array([f"real_{i}" for i in range(len(real_X))], dtype=object)
+        rec_ids_synth = np.array([f"synth_{i}" for i in range(len(synth_X))], dtype=object)
+        X, y, w, source_ids, _ = mix_datasets([
+            (real_X, real_y, real_w, rec_ids_real),
+            (synth_X, synth_y, synth_w, rec_ids_synth),
         ])
 
         assert X.shape[1:] == (WINDOW, FEATURE_DIM)

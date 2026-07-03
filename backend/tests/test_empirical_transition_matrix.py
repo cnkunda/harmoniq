@@ -12,7 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.chord_vocab import CHORD_TO_IDX, ROOT_NOTES, CHORD_QUALITIES, NUM_CLASSES
+from app.chord_vocab import CHORD_TO_IDX, ROOT_NOTES, CHORD_QUALITIES, NUM_CLASSES, MIREX_TO_IDX, NUM_CLASSES_MIREX
 from scripts.build_empirical_transition_matrix import (
     _parse_lab_label,
     _parse_lab_file,
@@ -215,12 +215,12 @@ class TestBuildTransitionCounts:
         lf = tmp_path / "simple.lab"
         lf.write_text(content)
         counts, starts, quality_freq = build_transition_counts([lf])
-        assert counts.shape == (NUM_CLASSES, NUM_CLASSES)
-        # C:maj → G:7 transition
-        c_maj_idx = CHORD_TO_IDX["C:maj"]
-        g_7_idx = CHORD_TO_IDX["G:7"]
-        assert counts[c_maj_idx, g_7_idx] >= 1
-        assert counts[g_7_idx, c_maj_idx] >= 1
+        assert counts.shape == (NUM_CLASSES_MIREX, NUM_CLASSES_MIREX)
+        # C:maj → G:maj (G:7 mapped to G:maj via MIREX)
+        c_maj_idx = MIREX_TO_IDX["C:maj"]
+        g_maj_idx = MIREX_TO_IDX["G:maj"]
+        assert counts[c_maj_idx, g_maj_idx] >= 1
+        assert counts[g_maj_idx, c_maj_idx] >= 1
         # Quality distribution
         assert quality_freq["maj"] >= 2  # C:maj appears twice
         assert quality_freq["7"] >= 1
@@ -243,19 +243,19 @@ class TestBuildTransitionCounts:
 
 class TestBuildEmpiricalMatrix:
     def test_shape_and_stochastic(self):
-        counts = np.random.randint(0, 10, size=(NUM_CLASSES, NUM_CLASSES)).astype(np.int64)
+        counts = np.random.randint(0, 10, size=(NUM_CLASSES_MIREX, NUM_CLASSES_MIREX)).astype(np.int64)
         matrix = build_empirical_matrix(counts, smoothing=1.0)
-        assert matrix.shape == (NUM_CLASSES, NUM_CLASSES)
+        assert matrix.shape == (NUM_CLASSES_MIREX, NUM_CLASSES_MIREX)
         row_sums = matrix.sum(axis=1)
         assert np.allclose(row_sums, 1.0, atol=1e-5)
 
     def test_smoothing_handles_zero_rows(self):
-        counts = np.zeros((NUM_CLASSES, NUM_CLASSES), dtype=np.int64)
+        counts = np.zeros((NUM_CLASSES_MIREX, NUM_CLASSES_MIREX), dtype=np.int64)
         matrix = build_empirical_matrix(counts, smoothing=1.0)
         assert np.allclose(matrix.sum(axis=1), 1.0, atol=1e-5)
 
     def test_laplace_smoothing_effect(self):
-        counts = np.eye(NUM_CLASSES, dtype=np.int64) * 10
+        counts = np.eye(NUM_CLASSES_MIREX, dtype=np.int64) * 10
         matrix = build_empirical_matrix(counts, smoothing=1.0)
         # Diagonal should be high but not 1.0 (smoothing distributes mass)
         assert np.allclose(matrix.diagonal().mean(), 0.0, atol=0.5)  # mostly off-diagonal

@@ -42,7 +42,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.chord_vocab import (
-    CHORD_QUALITIES, ROOT_NOTES, CHORD_TO_IDX,
+    CHORD_QUALITIES, ROOT_NOTES, CHORD_TO_IDX, NUM_CLASSES,
 )
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -53,15 +53,9 @@ MANIFEST_PATH = OUTPUT_DIR / "manifest.json"
 
 # CQT extraction constants
 HOP_SEC = 0.1
-BINS_PER_OCTAVE = 12
-NUM_OCTAVES = 3
-CHROMA_BINS = BINS_PER_OCTAVE * NUM_OCTAVES  # 36
-BASS_BINS = 4
-FEATURE_DIM = CHROMA_BINS + BASS_BINS  # 40
-WINDOW = 128
-HOP_FRAMES = 64
-
-N_CHORD_IDX = CHORD_TO_IDX.get("N", CHROMA_BINS * BASS_BINS - 1)
+from app.cqt_constants import (BINS_PER_OCTAVE, NUM_OCTAVES,
+                                CHROMA_BINS, BASS_BINS, FEATURE_DIM, WINDOW, HOP_FRAMES)
+N_CHORD_IDX = CHORD_TO_IDX.get("N", NUM_CLASSES - 1)
 
 # Quality filtering thresholds (relaxed for Phase 4a — more data)
 MIN_RESOLUTION = 480  # p (was 720)
@@ -108,12 +102,7 @@ def _build_search_terms(genres: list[str] | None = None) -> list[str]:
 
 
 def _extract_cqt(y: np.ndarray, sr: int) -> np.ndarray:
-    """Compute 36-bin CQT + 4-bin bass features matching chord_inference.py.
-
-    Returns an array of shape (T, FEATURE_DIM) where the first CHROMA_BINS
-    columns are L1-normalized chroma energies and the trailing BASS_BINS
-    columns duplicate the lowest chroma bins.
-    """
+    """Compute 144-bin CQT features matching chord_inference.py."""
     import librosa
 
     hop = int(sr * HOP_SEC)
@@ -121,9 +110,7 @@ def _extract_cqt(y: np.ndarray, sr: int) -> np.ndarray:
                       bins_per_octave=BINS_PER_OCTAVE)
     cqt = np.abs(cqt).T.astype(np.float32)
     norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
-    cqt = cqt / norms
-    bass = cqt[:, :BASS_BINS]
-    return np.concatenate([cqt, bass], axis=1)
+    return cqt / norms
 
 
 def _build_windows(

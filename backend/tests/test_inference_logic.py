@@ -96,7 +96,7 @@ def test_chord_inference_silence_threshold(monkeypatch, tmp_path, mock_beat_grid
         def get_output_details(self): return [{"index": 1}]
         def set_tensor(self, *a): pass
         def invoke(self): pass
-        def get_tensor(self, i): return np.zeros((1, 277), dtype=np.float32)
+        def get_tensor(self, i): return np.zeros((1, 25), dtype=np.float32)
         def allocate_tensors(self): pass
 
     monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
@@ -114,7 +114,7 @@ def test_chord_inference_silence_threshold(monkeypatch, tmp_path, mock_beat_grid
         return audio, 44100
 
     def _make_frame(time_sec, chord, confidence):
-        probs = np.full(277, 1e-6, dtype=np.float32)
+        probs = np.full(25, 1e-6, dtype=np.float32)
         probs[0] = confidence
         probs /= probs.sum()
         return {"time": time_sec, "chord": chord, "confidence": confidence, "probs": probs}
@@ -148,7 +148,7 @@ def test_chord_majority_vote_pooling(monkeypatch, tmp_path, mock_beat_grid):
         def get_output_details(self): return [{"index": 1}]
         def set_tensor(self, *a): pass
         def invoke(self): pass
-        def get_tensor(self, i): return np.zeros((1, 277), dtype=np.float32)
+        def get_tensor(self, i): return np.zeros((1, 25), dtype=np.float32)
         def allocate_tensors(self): pass
 
     monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
@@ -161,7 +161,7 @@ def test_chord_majority_vote_pooling(monkeypatch, tmp_path, mock_beat_grid):
     monkeypatch.setattr("librosa.load", lambda *a, **k: (np.full(44100, 0.5), 44100))
 
     def _make_frame(time_sec, chord, confidence):
-        probs = np.full(277, 1e-6, dtype=np.float32)
+        probs = np.full(25, 1e-6, dtype=np.float32)
         idx = 0 if chord == "C:maj" else 1
         probs[idx] = confidence
         probs /= probs.sum()

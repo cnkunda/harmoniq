@@ -43,6 +43,8 @@ from app.schemas import (
     ChordCorrectionResponse,
     ChordEnrichmentStatus,
     CoachHydrationStatus,
+    ContributeRequest,
+    ContributeResponse,
     CorrectionExportResponse,
     CorrectionHistoryItem,
     CorrectionHistoryResponse,
@@ -822,3 +824,37 @@ async def export_corrections(job_id: str) -> CorrectionExportResponse:
         chord_corrections=chord_corrections,
         note_corrections=note_corrections,
     )
+
+
+@router.post(
+    "/analyze/{job_id}/contribute",
+    response_model=ContributeResponse,
+    summary="POST /analyze/{job_id}/contribute — contribute corrected audio to training",
+)
+async def contribute_to_training(job_id: str, req: ContributeRequest) -> ContributeResponse:
+    """Contribute the corrected chord transcription to training data.
+
+    Exports the current (corrected) chord timeline as a .lab file,
+    pairs it with the original audio, extracts CQT features, and stores
+    the result in data/user_contributed/ for inclusion in the next
+    training run.
+    """
+    from app.contribute import ContributionError, contribute_audio
+
+    job = _get_lesson(job_id)
+    lesson = job.result
+
+    if not lesson.chord_timeline or not lesson.chord_timeline.events:
+        raise HTTPException(status_code=400, detail="No chord timeline available to contribute.")
+
+    try:
+        result = contribute_audio(
+            job_id=job_id,
+            timeline=lesson.chord_timeline,
+            contributor_id=req.contributor_id,
+            license=req.license,
+        )
+    except ContributionError as e:
+        raise HTTPException(status_code=400, detail={"error": e.args[0], "message": e.args[1]})
+
+    return ContributeResponse(**result)

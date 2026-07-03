@@ -17,6 +17,8 @@ import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
+from app.chord_vocab import NUM_CLASSES_MIREX
+
 from scripts.cqt_distribution_analyzer import (
     collect_real_cqt_features,
     compute_cqt_statistics,
@@ -38,7 +40,7 @@ class TestCollectRealCqtFeatures:
         features = np.random.randn(n_total, WINDOW, FEATURE_DIM).astype(np.float32)
         labels = np.zeros(n_total, dtype=np.int32)
         labels[:n_windows] = np.random.randint(0, 200, size=n_windows)
-        labels[n_windows:] = 276
+        labels[n_windows:] = NUM_CLASSES_MIREX - 1
         np.savez_compressed(str(path), features=features, labels=labels)
 
     def test_collects_features_and_filters_n(self):

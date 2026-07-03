@@ -11,11 +11,12 @@ from pathlib import Path
 
 import numpy as np
 
-from app.chord_inference import CHORD_VOCAB, _ROOTS, _CHORD_QUALITIES
+from app.chord_inference import CHORD_VOCAB, _ROOTS
+from app.chord_vocab import NUM_CLASSES_MIREX
 
 logger = logging.getLogger("harmoniq.inference.transitions")
 
-_NUM_CLASSES = len(CHORD_VOCAB)  # 277
+_NUM_CLASSES = NUM_CLASSES_MIREX  # 25
 _CACHE_DIR = Path(__file__).parent.parent / "data"
 _CACHE_FILE = _CACHE_DIR / "transition_matrix.npy"
 
@@ -43,29 +44,28 @@ _ROOT_INTERVAL_WEIGHTS = {
     11: 0.3,  # major 7th (chromatic)
 }
 
-# Dominant chord qualities (tend to resolve)
-_DOMINANT_QUALITIES = {"7", "7#9", "7b9", "7#5", "7b5", "alt7", "7sus4"}
+# Dominant chord qualities (tend to resolve) — mapped to MIREX maj
+_DOMINANT_QUALITIES: set[str] = set()  # empty in 25-class vocab; dominance from root intervals only
 
 # Diatonic degree patterns for major and minor keys
 # Each entry: (degree_offset, quality) where degree_offset is semitones from key root
+# With MIREX 25-class: only "maj" and "min" are available.
 _MAJOR_DIATONIC = [
     (0, "maj"),   # I
     (2, "min"),   # ii
     (4, "min"),   # iii
     (5, "maj"),   # IV
     (7, "maj"),   # V
-    (7, "7"),     # V7
     (9, "min"),   # vi
-    (11, "dim"),  # vii°
+    (11, "min"),  # vii° → min (diminished maps to min in MIREX)
 ]
 
 _MINOR_DIATONIC = [
     (0, "min"),   # i
-    (2, "dim"),   # ii°
+    (2, "min"),   # ii° → min
     (3, "maj"),   # III
     (5, "min"),   # iv
     (7, "min"),   # v
-    (7, "7"),     # v7
     (8, "maj"),   # VI
     (10, "maj"),  # VII
 ]
@@ -89,33 +89,15 @@ def _root_distance(i: int, j: int) -> int:
 
 
 def _quality_weight(qual_i: str, qual_j: str) -> float:
-    """Quality compatibility weight."""
+    """Quality compatibility weight for 25-class MIREX vocab.
+
+    Only maj/min/N are valid. Same-quality persistence is preferred.
+    """
     if qual_i == "N" or qual_j == "N":
         return 1.0
 
-    # Same quality persistence
     if qual_i == qual_j:
         return 1.5
-
-    # Dominant → tonic resolution
-    if qual_i in _DOMINANT_QUALITIES and qual_j in ("maj", "min"):
-        return 2.0
-
-    # ii → V progression support
-    if qual_i in ("min", "min7", "min9") and qual_i != qual_j and qual_j in _DOMINANT_QUALITIES:
-        return 1.5
-
-    # V → I support (dominant to major/minor)
-    if qual_i in _DOMINANT_QUALITIES and qual_j in ("maj", "min", "maj7", "min7"):
-        return 1.8
-
-    # Diminished resolution (dim/dim7 → chord a semitone above root)
-    if qual_i in ("dim", "dim7"):
-        return 1.3
-
-    # Augmented tends to resolve up by semitone
-    if qual_i == "aug":
-        return 1.2
 
     return 1.0
 
@@ -141,14 +123,13 @@ def _no_chord_weight(i: int, j: int) -> float:
 
 
 def build_transition_matrix(source: str = "synthetic") -> np.ndarray:
-    """Build a 277x277 row-stochastic transition probability matrix.
+    """Build a 25x25 row-stochastic transition probability matrix.
 
     Args:
         source: "synthetic" (music-theory rules) or "real" (dataset-based).
-            "real" is a stub until Commit 101 dataset integration.
 
     Returns:
-        np.ndarray of shape [277, 277], row-normalized.
+        np.ndarray of shape [25, 25], row-normalized.
     """
     if source == "real":
         logger.warning(
@@ -263,7 +244,7 @@ def apply_key_constraint(
       - Tritone + non-diatonic: ×0.05
 
     Args:
-        matrix: Base transition matrix [277, 277]
+        matrix: Base transition matrix [25, 25]
         key_root: 0-11
         key_mode: "major" or "minor"
 

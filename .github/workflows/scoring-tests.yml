@@ -1,67 +1,39 @@
-name: Scoring tests
+name: Scoring Tests
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   pull_request:
-    branches:
-      - "**"
-  workflow_dispatch:
+    branches: [main, master]
 
 jobs:
-  backend-scoring:
-    name: Backend pytest (jam + score)
+  frontend:
+    name: Frontend Unit Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     defaults:
       run:
-        working-directory: backend
-
+        working-directory: ./
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/pyproject.toml
-
-      - name: Install backend + dev deps
-        run: pip install -e ".[dev]"
-
-      - name: Run scoring tests
-        run: python -m pytest -q tests/test_jam_score.py tests/test_score.py
-
-      - name: Run chord model tests (commits 98-98d)
-        run: python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py
-
-      - name: Run Viterbi tests (commit 99)
-        run: python -m pytest -q tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py
-
-      - name: Run boundary tie tests (commit 100)
-        run: python -m pytest -q tests/test_boundary_tie.py
-
-  frontend-scoring:
-    name: Vitest (placement + SM-2 + progress signals)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run all frontend unit tests
-        run: npx vitest run
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py tests/test_boundary_tie.py tests/test_chord_vocab.py tests/test_guitarset_pipeline.py tests/test_e2e_data_pipeline.py

@@ -74,7 +74,7 @@ class _MockInterp:
     def invoke(self):
         pass
     def get_tensor(self, i):
-        return np.zeros((1, 277), dtype=np.float32)
+        return np.zeros((1, 25), dtype=np.float32)
     def allocate_tensors(self):
         pass
 
@@ -93,8 +93,8 @@ class TestIIVIPProgression:
 
         frames = []
         chord_sequence = [
-            ("D:min7", 4),
-            ("G:7", 4),
+            ("D:min", 4),
+            ("G:maj", 4),
             ("C:maj", 4),
         ]
         t = 0.0
@@ -108,12 +108,12 @@ class TestIIVIPProgression:
         timeline = infer_chords(tmp_path / "dummy.wav", mock_beat_grid_120)
         chords = [e.chord for e in timeline.events if e.chord != "N"]
 
-        assert "D:min7" in chords
-        assert "G:7" in chords
+        assert "D:min" in chords
+        assert "G:maj" in chords
         assert "C:maj" in chords
 
-        ii_idx = next(i for i, c in enumerate(chords) if c == "D:min7")
-        v_idx = next(i for i, c in enumerate(chords) if c == "G:7")
+        ii_idx = next(i for i, c in enumerate(chords) if c == "D:min")
+        v_idx = next(i for i, c in enumerate(chords) if c == "G:maj")
         i_idx = next(i for i, c in enumerate(chords) if c == "C:maj")
         assert ii_idx < v_idx < i_idx
 
@@ -294,11 +294,11 @@ class TestViterbiPerformance:
         trans_log = probs_to_log_probs(trans_matrix)
 
         T = 60
-        vocab_size = 277
+        vocab_size = 25
         emission_probs = np.ones((T, vocab_size), dtype=np.float32) / vocab_size
         emission_probs[:, 0] = 0.5
-        emission_probs[:, 100] = 0.3
-        emission_probs[:, 200] = 0.2
+        emission_probs[:, 12] = 0.3
+        emission_probs[:, 24] = 0.2
         emission_log = probs_to_log_probs(emission_probs)
         duration_beats = np.ones(T, dtype=np.float32)
 
@@ -335,7 +335,7 @@ class TestCIFlickerGate:
         chord_sequence = [
             ("C:maj", 4),
             ("F:maj", 4),
-            ("G:7", 4),
+            ("G:maj", 4),
             ("C:maj", 8),
         ]
         for chord, num_beats in chord_sequence:
@@ -364,7 +364,7 @@ class TestCIBeatAlignmentGate:
         t = 0.0
         chord_sequence = [
             ("C:maj", 8),
-            ("G:7", 8),
+            ("G:maj", 8),
             ("C:maj", 8),
         ]
         for chord, num_beats in chord_sequence:

@@ -9,13 +9,13 @@ from app.viterbi_decoder import ViterbiChordDecoder, probs_to_log_probs
 from app.chord_inference import CHORD_VOCAB
 
 
-def _make_uniform_emissions(T: int, vocab_size: int = 277) -> np.ndarray:
+def _make_uniform_emissions(T: int, vocab_size: int = 25) -> np.ndarray:
     probs = np.ones((T, vocab_size), dtype=np.float32) / vocab_size
     return probs
 
 
 def _make_peaked_emissions(
-    T: int, peak_indices: list[int], vocab_size: int = 277, peak_val: float = 0.8
+    T: int, peak_indices: list[int], vocab_size: int = 25, peak_val: float = 0.8
 ) -> np.ndarray:
     """Create emission probs where each time step has a clear peak."""
     probs = np.ones((T, vocab_size), dtype=np.float32) * (1 - peak_val) / (vocab_size - 1)
@@ -199,10 +199,10 @@ class TestNumericalStability:
 
 class TestViterbiWithChordVocab:
     def test_chord_vocab_enables_duration_logic(self):
-        vocab_size = 277
+        vocab_size = 25
         trans_log = np.log(np.ones((vocab_size, vocab_size)) / vocab_size)
 
-        emissions = _make_peaked_emissions(3, [0, 100, 200], vocab_size, peak_val=0.7)
+        emissions = _make_peaked_emissions(3, [0, 12, 24], vocab_size, peak_val=0.7)
         emission_log = probs_to_log_probs(emissions)
 
         decoder = ViterbiChordDecoder(

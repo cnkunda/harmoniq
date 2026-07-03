@@ -1,7 +1,7 @@
 """Extract CQT features from GuitarSet audio aligned with chord labels.
 
 Reads mono-pickup-mix WAVs and per-song JSON timelines (from parse_guitarset.py),
-aligns 36-bin CQT + 4-bin bass features with chord labels at 0.1s frame resolution.
+aligns 144-bin CQT features with chord labels at 0.1s frame resolution.
 
 Usage:
     python scripts/extract_guitarset_cqt.py [--data-dir DATA_DIR] [--force]
@@ -30,23 +30,16 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.chord_vocab import CHORD_TO_IDX, ROOT_NOTES
+from app.chord_vocab import CHORD_TO_IDX, ROOT_NOTES, NUM_CLASSES
 
 RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "guitarset" / "raw"
 PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "guitarset" / "processed"
 
 # Inference pipeline constants (must match chord_inference.py)
-TARGET_SR = 44100
-HOP_SEC = 0.1
-BINS_PER_OCTAVE = 12
-NUM_OCTAVES = 3
-CHROMA_BINS = BINS_PER_OCTAVE * NUM_OCTAVES  # 36
-BASS_BINS = 4
-FEATURE_DIM = CHROMA_BINS + BASS_BINS  # 40
-WINDOW = 128
-HOP_FRAMES = 64  # 50% overlap
+from app.cqt_constants import (TARGET_SR, HOP_SEC, BINS_PER_OCTAVE, NUM_OCTAVES,
+                                CHROMA_BINS, BASS_BINS, FEATURE_DIM, WINDOW, HOP_FRAMES)
 
-N_CHORD_IDX = CHORD_TO_IDX.get("N", CHROMA_BINS * BASS_BINS - 1)
+N_CHORD_IDX = CHORD_TO_IDX.get("N", NUM_CLASSES - 1)
 
 # Player split (no artist overlap)
 PLAYER_SPLIT = {
@@ -57,7 +50,7 @@ PLAYER_SPLIT = {
 
 
 def _extract_cqt(y: np.ndarray, sr: int) -> np.ndarray:
-    """Compute 36-bin CQT + 4-bin bass features matching chord_inference.py exactly."""
+    """Compute 144-bin CQT features matching chord_inference.py exactly."""
     import librosa
 
     hop = int(sr * HOP_SEC)
@@ -67,10 +60,7 @@ def _extract_cqt(y: np.ndarray, sr: int) -> np.ndarray:
     cqt = cqt.T.astype(np.float32)
 
     norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
-    cqt = cqt / norms
-
-    bass = cqt[:, :BASS_BINS]
-    features = np.concatenate([cqt, bass], axis=1)
+    features = cqt / norms
     return features
 
 

@@ -1017,3 +1017,26 @@ class CorrectionExportResponse(BaseModel):
     key: str | None = None
     chord_corrections: list[dict[str, Any]] = Field(default_factory=list)
     note_corrections: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ContributeRequest(BaseModel):
+    """POST /analyze/{job_id}/contribute — contribute corrected audio to training."""
+
+    contributor_id: str = Field(
+        ...,
+        description="Anonymous contributor identifier (client-generated UUID)",
+        min_length=1,
+        max_length=128,
+    )
+    license: str = Field(
+        default="cc-by-4.0",
+        description="License for the contributed recording",
+    )
+
+
+class ContributeResponse(BaseModel):
+    """POST /analyze/{job_id}/contribute — contribution accepted."""
+
+    status: str = Field(default="accepted")
+    windows: int = Field(..., description="Number of CQT windows extracted")
+    track_id: str = Field(..., description="Stored track identifier")

@@ -1,6 +1,6 @@
 """Build empirical chord transition matrix from Isophonics/Billboard annotations.
 
-Parses .lab files from data/annotations/, maps chords to 277-class vocabulary,
+Parses .lab files from data/annotations/, maps chords to 25-class MIREX vocabulary,
 and counts chord-to-chord transitions as interval-relative statistics
 (key-invariant). Also computes chord quality frequency distribution.
 
@@ -8,7 +8,7 @@ Usage:
     python scripts/build_empirical_transition_matrix.py [--data-dir DATA_DIR] [--force]
 
 Output:
-    data/annotations/transition_matrix_empirical.npy  — 277×277 row-stochastic
+    data/annotations/transition_matrix_empirical.npy  — 25×25 row-stochastic
     data/annotations/chord_distribution.json           — per-quality frequency stats
 """
 
@@ -21,7 +21,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.chord_vocab import CHORD_INTERVALS, ROOT_NOTES, CHORD_QUALITIES, CHORD_TO_IDX, NUM_CLASSES
+from app.chord_vocab import CHORD_INTERVALS, ROOT_NOTES, CHORD_QUALITIES, CHORD_TO_IDX, NUM_CLASSES, NUM_CLASSES_MIREX, mirex_label
 
 N_CHORD_IDX = CHORD_TO_IDX.get("N", NUM_CLASSES - 1)
 
@@ -245,12 +245,12 @@ def build_transition_counts(
 
     Returns:
         (transition_counts, start_distribution, quality_frequency)
-          - transition_counts: (NUM_CLASSES, NUM_CLASSES) raw counts
-          - start_distribution: (NUM_CLASSES,) counts of first chord in each song
+          - transition_counts: (NUM_CLASSES_MIREX, NUM_CLASSES_MIREX) raw counts
+          - start_distribution: (NUM_CLASSES_MIREX,) counts of first chord in each song
           - quality_frequency: Counter of (quality) counts
     """
-    transition_counts = np.zeros((NUM_CLASSES, NUM_CLASSES), dtype=np.int64)
-    start_distribution = np.zeros(NUM_CLASSES, dtype=np.int64)
+    transition_counts = np.zeros((NUM_CLASSES_MIREX, NUM_CLASSES_MIREX), dtype=np.int64)
+    start_distribution = np.zeros(NUM_CLASSES_MIREX, dtype=np.int64)
     quality_frequency: Counter = Counter()
     total_entries = 0
     skipped_annotations = 0
@@ -265,10 +265,10 @@ def build_transition_counts(
         for _, _, chord in entries:
             total_entries += 1
             if chord is None:
-                chord_sequence.append(N_CHORD_IDX)
+                chord_sequence.append(NUM_CLASSES_MIREX - 1)
             else:
-                idx = CHORD_TO_IDX.get(chord, N_CHORD_IDX)
-                chord_sequence.append(idx)
+                idx_277 = CHORD_TO_IDX.get(chord, N_CHORD_IDX)
+                chord_sequence.append(mirex_label(idx_277))
                 quality = chord.split(":", 1)[1] if ":" in chord else chord
                 quality_frequency[quality] += 1
 
@@ -303,11 +303,11 @@ def build_empirical_matrix(
     """Convert raw transition counts to a row-stochastic matrix with additive smoothing.
 
     Args:
-        transition_counts: (NUM_CLASSES, NUM_CLASSES) raw counts.
+        transition_counts: (NUM_CLASSES_MIREX, NUM_CLASSES_MIREX) raw counts.
         smoothing: Additive smoothing factor (Laplace). 1.0 = standard Laplace.
 
     Returns:
-        (NUM_CLASSES, NUM_CLASSES) row-stochastic float32 matrix.
+        (NUM_CLASSES_MIREX, NUM_CLASSES_MIREX) row-stochastic float32 matrix.
     """
     smoothed = transition_counts.astype(np.float64) + smoothing
     row_sums = smoothed.sum(axis=1, keepdims=True)
