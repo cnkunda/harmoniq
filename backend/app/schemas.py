@@ -464,6 +464,11 @@ class LessonJSON(BaseModel):
     # Commit 123: Solo harmony enrichment
     harmonized_solo: HarmonizedSoloNotes | None = None
     per_bar_analysis: list[BarScope] | None = None
+    # Phase 2 Milestone A: MT3 transcription source indicator
+    transcription_source: str | None = Field(
+        default=None,
+        description="Which pipeline tier produced this transcription: 'mt3', 'crnn', 'chroma', or None",
+    )
 
 
 class JobStatus(BaseModel):
@@ -493,7 +498,7 @@ class JobStatus(BaseModel):
     # Commit 109: Progressive analysis stage for frontend partial rendering
     analysis_stage: str | None = Field(
         default=None,
-        description="Machine-readable analysis stage: initializing, stems_separating, chords_inferring, solo_inferring, building_musicxml, complete.",
+        description="Machine-readable analysis stage: initializing, stems_separating, mt3_inferring, chords_inferring, solo_inferring, building_musicxml, complete.",
     )
 
 

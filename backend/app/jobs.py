@@ -550,7 +550,7 @@ def _process_analyze_job(
             logger.info("stub lesson generated in %.2fs job_id=%s", stub_elapsed, job_id)
             result = stub
         else:
-            _set_job_analysis_stage(job_id, "chords_inferring", 0.62, "Inferring chords…")
+            _set_job_analysis_stage(job_id, "chords_inferring", 0.62, "Transcribing (MT3)…")
             guitar_stem_path = backend_root / guitar_rel_path
             vocals_stem_path = backend_root / vocals_rel_path if vocals_rel_path else None
             piano_rel = stems.get("piano")

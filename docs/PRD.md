@@ -140,7 +140,7 @@ The product should feel **warm, analog, handcrafted** — workshop / jazz-club l
 Aligned with README “V1 Scope Summary”:
 
 - Onboarding placement; Home with spaced-repetition-driven suggestions; full **five-step** session loop; web + native clients.
-- Analyze pipeline: YouTube + upload; **htdemucs_6s** guitar stem; librosa structure; Whisper lyrics; basic-pitch → GP5; skeleton/alternate tabs when confidence allows; Claude coach strings when API present.
+- Analyze pipeline: YouTube + upload; **htdemucs_6s** guitar stem; librosa structure; Whisper lyrics; **MT3** as primary transcription engine (produces both chord timeline and solo notes simultaneously) → CRNN TFLite fallback → Chroma fallback; skeleton/alternate tabs when confidence allows; Claude coach strings when API present.
 - AlphaTab integration with shared message contract; SmartScroll via timestamps; smart metronome; section chips; mixer; pitch on device for play path.
 - Review phrasing visualization; MIDI export; lick library + drill/transpose concepts as specified in README.
 - Jam mode with bundled beds + inference + summaries.
@@ -155,7 +155,7 @@ Accounts/sync, social, chord dictionary as core curriculum, multi-instrument, pa
 
 | Area | Limitation |
 |------|------------|
-| Pipeline | Full Demucs + Whisper + basic-pitch is heavy; first runs may download weights; Windows/WSL may need extra setup. |
+| Pipeline | Full Demucs + MT3 is heavy; GPU recommended for MT3 (<60s/song); CPU works (~5 min/song) with automatic CRNN fallback. First runs download MT3 weights and Demucs checkpoints. Windows/WSL may need extra setup. |
 | Stub vs real | Some revisions may return stub lessons for fast UI paths; tabs may be placeholders. |
 | Expo Go | May lack full native audio/pitch — dev builds for parity. |
 | Web mic | Requires **HTTPS** or **`http://localhost`**. |
@@ -172,7 +172,7 @@ Detail stays in README and backend README; at PRD level the system comprises:
 |-------|----------------|
 | **Client** | Expo Router app; Zustand; local DB; AlphaTab harness; expo-av / Web Audio; `react-native-audio-api` + shared pitch hook on native; Jam and session UX. |
 | **Backend (FastAPI)** | `/analyze` jobs; `/score`; `/jam-score`; `/export`; `/practice/plan`; optional coach endpoints; pipeline workers. |
-| **Analysis pipeline** | yt-dlp or upload normalize → Demucs **6-stem** → analysis → Whisper → basic-pitch → GP5 → coach enrichment → **LessonJSON** with **confidence** fields. |
+| **Analysis pipeline** | yt-dlp or upload normalize → Demucs **6-stem** → MT3 transcription (primary) → Chord decoder + Solo decoder → CRNN TFLite fallback → Chroma fallback → GP5/MusicXML → coach enrichment → **LessonJSON** with **confidence** fields and `transcription_source` tier indicator. |
 
 **Real-time rule:** Pitch estimation during play stays **on-device** — no network in the hot path.
 

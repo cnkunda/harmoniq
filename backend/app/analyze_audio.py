@@ -38,6 +38,7 @@ from app.beat_grid import estimate_beat_grid
 from app.chord_enrichment import assign_roman_numerals
 from app.chord_inference import infer_chords, infer_chords_dual_path
 from app.instrument_confusion import compute_per_section_confusion
+from app.mt3 import transcribe_with_fallback, get_transcription_source_label
 from app.solo_inference import infer_solo
 from app.solo_harmony_analyzer import SoloHarmonizer
 from app.section_refinement import refine_section_boundaries
@@ -284,24 +285,25 @@ def build_lesson_json_from_librosa(
     # Run transcription inference for chord timeline and solo notes
     chord_timeline: ChordTimeline | None = None
     solo_notes: SoloNotes | None = None
+    transcription_source: str | None = None
 
-    # === Commit 111: Hint-aware chord + solo routing ===
-    # Default fallback: full mix for chords, guitar stem for solo (preserves pre-Commit-111 behavior).
+    # === Phase 2, Milestone A: MT3-Primary transcription ===
+    # Uses the fallback chain: MT3 → CRNN TFLite → Chroma matching.
+    # When MT3 is unavailable or confidence is low, falls back gracefully.
+    # ===
+    if on_stage:
+        on_stage("mt3_inferring", 0.60, "Transcribing with MT3…")
+
+    # Resolve the best available audio source for transcription
     chord_mix_path = mix_wav_path if (mix_wav_path and mix_wav_path.is_file()) else guitar_stem_path
     solo_source_path = guitar_stem_path
 
     if routing_hints is not None and stem_abs_paths is not None:
-        # Chord: try to mix chord_mix_stems (typically ["bass", "other"])
         valid_chord_stems = resolve_chord_stems(
             stem_abs_paths, routing_hints.chord_mix_stems
         )
         if len(valid_chord_stems) >= 2:
             try:
-                # Derive job_dir from the input song WAV path so the chord mix
-                # lands alongside the rest of the job artifacts. Using
-                # ``wav_path.parent`` keeps tests that use a tmp data dir
-                # working without forcing the analysis function to know the
-                # absolute path.
                 job_dir = Path(wav_path).parent
                 chord_mix_path = mix_stems(
                     valid_chord_stems,
@@ -325,12 +327,7 @@ def build_lesson_json_from_librosa(
             if not routing_hints.fallback_reason:
                 routing_hints.fallback_reason = "insufficient_stems"
             routing_hints.resolved_chord_path = str(chord_mix_path)
-            logger.info(
-                "stem_routing job_id=%s chord_fallback reason=%s path=%s",
-                job_id, routing_hints.fallback_reason, chord_mix_path,
-            )
 
-        # Solo: cascade through selected → guitar → vocals
         try:
             resolved_solo, chosen_stem = resolve_solo_stem(
                 stem_abs_paths, routing_hints.selected_melodic_stem
@@ -357,49 +354,86 @@ def build_lesson_json_from_librosa(
                 routing_hints.fallback_reason = "solo_resolution_failed"
             routing_hints.resolved_solo_path = str(guitar_stem_path)
             solo_source_path = guitar_stem_path
-    # === End Commit 111 routing block ===
+    # === End routing block ===
 
-    if on_stage:
-        on_stage("chords_inferring", 0.65, "Inferring chords…")
-
-    # Commit 112: Dual-path confidence-weighted stem fusion
-    # When stem quality is imperfect and guitar stem is available, run inference
-    # on both the stem and the full mix, then fuse predictions weighted by stem confidence.
     instrument_confusion: float | None = None
     dual_fusion_log: list[dict] | None = None
-    stem_conf = stem_classification.stem_confidence if stem_classification else 1.0
-    use_dual_path = (
-        stem_classification is not None
-        and stem_conf < 1.0
-        and guitar_stem_path.is_file()
-        and chord_mix_path != guitar_stem_path
-    )
 
+    # Try MT3 fallback chain first (chords + solo notes together)
     try:
-        if use_dual_path:
-            dual_result = infer_chords_dual_path(
-                stem_path=guitar_stem_path,
-                mix_path=chord_mix_path,
-                beat_grid=beat_grid,
-                stem_confidence=stem_conf,
-            )
-            chord_timeline = dual_result.timeline
-            instrument_confusion = dual_result.instrument_confusion
-            dual_fusion_log = dual_result.fusion_log
-            logger.info(
-                "dual_path job_id=%s stem_conf=%.2f confusion=%.2f disagreements=%d/%d",
-                job_id,
-                dual_result.stem_confidence,
-                dual_result.instrument_confusion,
-                len(dual_result.fusion_log),
-                len(chord_timeline.events),
-            )
-        else:
-            chord_timeline = infer_chords(chord_mix_path, beat_grid)
-        logger.info("chord inference completed for job_id=%s with %d events (source=%s dual_path=%s)", job_id, len(chord_timeline.events), chord_mix_path, use_dual_path)
+        mt3_result = transcribe_with_fallback(
+            solo_source_path,
+            beat_grid,
+            use_mt3=True,
+        )
+        chord_timeline = mt3_result.chord_timeline
+        solo_notes = mt3_result.solo_notes
+        transcription_source = mt3_result.source
+
+        logger.info(
+            "MT3 fallback chain for job_id=%s source=%s confidence=%.2f "
+            "chord_events=%d solo_notes=%d%s",
+            job_id, mt3_result.source, mt3_result.mean_confidence,
+            len(chord_timeline.events), len(solo_notes.notes),
+            f" fallback={mt3_result.fallback_reason}" if mt3_result.fallback_reason else "",
+        )
     except Exception:
-        logger.exception("chord inference failed for job_id=%s; continuing without chord timeline", job_id)
-        chord_timeline = ChordTimeline(events=[])
+        logger.exception(
+            "MT3 transcription failed for job_id=%s; falling back to CRNN",
+            job_id,
+        )
+        transcription_source = "crnn"
+
+    # If MT3 chain returned none or no results, run legacy CRNN inference
+    if chord_timeline is None or len(chord_timeline.events) == 0:
+        logger.info("MT3 produced no chords for job_id=%s; running CRNN fallback", job_id)
+        if on_stage:
+            on_stage("chords_inferring", 0.65, "Inferring chords (fallback)…")
+
+        stem_conf = stem_classification.stem_confidence if stem_classification else 1.0
+        use_dual_path = (
+            stem_classification is not None
+            and stem_conf < 1.0
+            and guitar_stem_path.is_file()
+            and chord_mix_path != guitar_stem_path
+        )
+
+        try:
+            if use_dual_path:
+                dual_result = infer_chords_dual_path(
+                    stem_path=guitar_stem_path,
+                    mix_path=chord_mix_path,
+                    beat_grid=beat_grid,
+                    stem_confidence=stem_conf,
+                )
+                chord_timeline = dual_result.timeline
+                instrument_confusion = dual_result.instrument_confusion
+                dual_fusion_log = dual_result.fusion_log
+            else:
+                chord_timeline = infer_chords(chord_mix_path, beat_grid)
+            transcription_source = "crnn"
+            logger.info(
+                "CRNN chord inference for job_id=%s: %d events (dual_path=%s)",
+                job_id, len(chord_timeline.events), use_dual_path,
+            )
+        except Exception:
+            logger.exception("CRNN chord inference failed for job_id=%s", job_id)
+            chord_timeline = ChordTimeline(events=[])
+            transcription_source = "none"
+
+    # If MT3 didn't produce solo notes, run Basic Pitch fallback
+    if solo_notes is None or len(solo_notes.notes) == 0:
+        if on_stage:
+            on_stage("solo_inferring", 0.78, "Inferring solo notation (fallback)…")
+        try:
+            solo_notes = infer_solo(solo_source_path, beat_grid)
+            logger.info(
+                "Basic Pitch solo inference for job_id=%s: %d notes",
+                job_id, len(solo_notes.notes),
+            )
+        except Exception:
+            logger.exception("solo inference failed for job_id=%s", job_id)
+            solo_notes = SoloNotes(notes=[])
 
     # Commit 116: Assign deterministic Roman numeral labels to all chord events
     if chord_timeline.events and summary.key_name:
@@ -418,15 +452,6 @@ def build_lesson_json_from_librosa(
                     user_warning=stem_classification.user_warning,
                     stem_confidence=stem_classification.stem_confidence,
                 )
-
-    if on_stage:
-        on_stage("solo_inferring", 0.78, "Inferring solo notation…")
-    try:
-        solo_notes = infer_solo(solo_source_path, beat_grid)
-        logger.info("solo inference completed for job_id=%s with %d notes (stem=%s)", job_id, len(solo_notes.notes), solo_source_path)
-    except Exception:
-        logger.exception("solo inference failed for job_id=%s; continuing without solo notes", job_id)
-        solo_notes = SoloNotes(notes=[])
 
     # Commit 123: Solo harmony enrichment — cross-reference solo notes with chord timeline
     harmonized_solo = None
@@ -755,6 +780,7 @@ def build_lesson_json_from_librosa(
         instrument_confusion_per_section=per_section_confusion,
         harmonized_solo=harmonized_solo,
         per_bar_analysis=per_bar_analysis,
+        transcription_source=transcription_source,
         **stem_fields,
     )
 

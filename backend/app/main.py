@@ -28,6 +28,7 @@ from app.routers.export import router as export_router
 from app.routers.discovery import router as discovery_router
 from app.routers.taste import router as taste_router
 from app.routers.curriculum import router as curriculum_router
+from app.routers.mt3 import router as mt3_router
 from app.schemas import (
     JamBackingRequest,
     JamBackingResponse,
@@ -90,6 +91,21 @@ async def lifespan(application: FastAPI):
         load_jobs_from_disk()
     except Exception:
         logger.exception("Failed to load jobs from disk on startup")
+
+    # Commit A1.1: warm-start MT3 model server on boot (non-blocking if unavailable)
+    try:
+        from app.mt3.model_server import Mt3ModelServer
+        mt3_loaded = Mt3ModelServer().warm_start()
+        if mt3_loaded:
+            logger.info("MT3 model warm-started successfully")
+        else:
+            load_err = Mt3ModelServer().load_error()
+            logger.info(
+                "MT3 model not loaded at startup%s — will use CRNN fallback",
+                f" ({load_err})" if load_err else "",
+            )
+    except Exception:
+        logger.exception("Failed to warm-start MT3 model — will use CRNN fallback")
     yield
 
 
@@ -168,6 +184,7 @@ app.include_router(export_router)
 app.include_router(discovery_router)
 app.include_router(taste_router)
 app.include_router(curriculum_router)
+app.include_router(mt3_router)
 
 
 # ---------------------------------------------------------------------------

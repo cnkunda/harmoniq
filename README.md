@@ -88,12 +88,15 @@ Runs locally during development. Deploy to Railway, Fly.io, or Render free tier 
 2. `demucs --model htdemucs_6s --out ./stems song.wav` → 6 dedicated WAV stems: guitar, bass, drums, vocals, piano, other. The `htdemucs_6s` checkpoint is critical — it separates guitar as its own stem rather than burying it in "other." Do not use the default 4-stem model.
 3. `librosa.load(guitar_stem)` → key string (e.g., "G major"), tempo float (BPM), beat grid (array of timestamps in seconds), structure segments array (intro / verse / chorus / solo / bridge / outro, detected via onset strength + RMS energy segmentation).
 4. `whisper.transcribe(vocals_stem, word_timestamps=True)` (base model, runs locally) → lyrics with word-level timestamps. Map each word timestamp to the nearest beat in the beat grid.
-5. `basic_pitch.predict(guitar_stem)` on solo/lead sections only → MIDI note events with timestamps. Convert MIDI → Guitar Pro format (`.gp5`) via `py-guitarpro`.
-6. Skeleton tab generation: from the full MIDI note events, filter out ornaments — grace notes, bends shorter than 50ms, and hammer-ons/pull-offs faster than a 16th note at the song's BPM. Remaining events → second `.gp5` file.
-7. Alternate position generation *(only if confidence is high)*: given key and detected primary position, compute alternate fingering map (e.g., position 2 → position 4) → third `.gp5` file.
-8. `bar_timestamps` array: use beat grid and time signature to compute one timestamp per bar (e.g., 4/4 at 72 BPM → one bar every 3.33 seconds). This drives SmartScroll.
-9. Claude API call: generate `coach_note` and `coach_explanation` strings for each solo/lead section.
-10. Return `LessonJSON`.
+5. **MT3 inference** on guitar stem → raw token-level event stream: onset, pitch, velocity, instrument, offset per event. Simultaneously yields both chord timeline and solo notes from a single inference pass.
+6. **MT3 → Chord decoder**: aggregate sounding pitches per time slice → pitch class set → match against `CHORD_INTERVALS` template set (Jaccard score, >0.66 coverage threshold) → 25-class MIREX or 277-class chord labels with per-chord confidence.
+7. **MT3 → Solo decoder**: filter monophonic melodic line, apply beat-grid quantization, tie detection → `SoloNotes` with per-note confidence and technique tags (bends, vibrato, grace notes).
+8. **Fallback chain**: if MT3 server unavailable or confidence < 0.7, fall back to CRNN TFLite model (`chord_inference.py`) for chords and Basic Pitch (`solo_inference.py`) for solo lines. Tertiary fallback: pure librosa chroma template matching (25-class MIREX only).
+9. Skeleton tab generation: from solo notes, filter ornaments — grace notes, bends shorter than 50ms, and hammer-ons/pull-offs faster than a 16th note at the song's BPM. Remaining events → `.gp5` file.
+10. Alternate position generation *(only if confidence is high)*: given key and detected primary position, compute alternate fingering map (e.g., position 2 → position 4) → second `.gp5` file.
+11. `bar_timestamps` array: use beat grid and time signature to compute one timestamp per bar (e.g., 4/4 at 72 BPM → one bar every 3.33 seconds). This drives SmartScroll.
+12. Claude API call: generate `coach_note` and `coach_explanation` strings for each solo/lead section.
+13. Return `LessonJSON` with `transcription_source: "mt3"` (or `"crnn"`, `"chroma"`) indicating which pipeline tier produced the result.
 
 **Pipeline reliability:** Every derived output includes confidence: `key_confidence`, `tempo_confidence`, `transcription_confidence`, `section_confidence` (per section where applicable). If transcription confidence is low: mark tab as approximate, disable alternate positions, default to skeleton tab. Users can ignore or override incorrect analysis.
 
@@ -373,11 +376,15 @@ Mic listens passively while the user noodles freely — over a backing track, a 
 
 ## Lead sheet roadmap (Chord-style)
 
-Target experience: **beat-aligned chord symbols**, a **clean monophonic solo line**, and **fretboard sync** to the current chord and note — matching the modular pattern (stems → beat grid → chord model + Basic Pitch → score) described in the product PRD.
+Target experience: **beat-aligned chord symbols**, a **clean monophonic solo line**, and **fretboard sync** to the current chord and note — matching the modular pattern (stems → beat grid → MT3 transcription → chord timeline + solo notes → MusicXML) described in the product PRD.
 
 * **Canonical score format:** MusicXML (partwise) with `<harmony>` for chords and `<note>` for the solo line; `<frame>` for chord diagrams; `<dynamics>`, `<articulations>`, `<beam>`, `<slur>`, and `<technical>` (string/fret) for full notation. **alphaTab** loads the file via its **MusicXML importer** for notation + diagrams. (Commit 108: MusicXML is now the primary render format; GP5 is retained as export-only fallback.)
+* **Primary transcription engine:** **MT3** (Google's Multi-Task Multitrack Transformer) produces both chord timeline and solo notes simultaneously from a single inference pass on the guitar stem. Replaces the previous two-phase approach (TFLite chords + Basic Pitch solo).
+* **Fallback chain:** MT3 → CRNN TFLite (cached from prior training) → Chroma template matching. Each tier is confidence-gated; the orchestrator logs which tier produced the result per job.
+* **On-device real-time inference:** The CRNN TFLite model powers Live Mic Mode (<120ms latency) for chord detection during practice. Long-term, an MT3-distilled student model will replace it.
+* **Custom model future:** The CRNN training pipeline is preserved as a distillation target. MT3 pseudo-labels (confidence-filtered >0.9) will train a smaller student model that can run on-device with near-MT3 accuracy.
 * **Machine-readable analysis:** `BeatGrid`, `ChordTimeline`, and `SoloNotes` JSON alongside the score for edits and recomputation.
-* **Engineering roadmap:** [PRIORITIES.md](PRIORITIES.md) commits **78–81** (Demucs `htdemucs_6s` + beat grid → TFLite chords + Basic Pitch solo → MusicXML → alphaTab + fretboard), then **82** for confidence and manual stem overrides.
+* **Engineering roadmap:** [PRIORITIES.md](PRIORITIES.md) Phase 2 Milestone A (Demucs → MT3 → chord+solo decoders → MusicXML → alphaTab + fretboard).
 
 ---
 
@@ -394,11 +401,14 @@ or multipart form with audio file (WAV/MP3/M4A, max 50MB).
 2. `demucs --model htdemucs_6s --out ./stems song.wav` → guitar / bass / drums / vocals / piano / other
 3. Librosa analysis on guitar stem → key, tempo, beat grid, structure segments, bar_timestamps
 4. Whisper on vocals stem → word-timestamped lyrics → mapped to beat grid
-5. basic-pitch on guitar stem (solo/lead sections only) → MIDI → `.gp5` via py-guitarpro
-6. Skeleton `.gp5` (ornaments filtered out)
-7. Alternate position `.gp5` *(generate only if confidence is high; otherwise omit)*
-8. Claude API call for coach_note + coach_explanation per section
-9. Return LessonJSON
+5. **MT3 inference** on guitar stem → token-level event stream (onsets, pitches, velocities, instruments, offsets)
+6. **MT3 → Chord decoder**: aggregate sounding pitches per time slice → match against chord templates → chord timeline with per-chord confidence
+7. **MT3 → Solo decoder**: filter melodic line → beat-grid quantization → tie detection → SoloNotes with per-note confidence
+8. Fallback chain: if MT3 unavailable or confidence < 0.7, use CRNN TFLite (`chord_inference.py`) + Basic Pitch (`solo_inference.py`); final fallback: librosa chroma matching
+9. Skeleton `.gp5` (ornaments filtered out from solo notes)
+10. Alternate position `.gp5` *(generate only if confidence is high; otherwise omit)*
+11. Claude API call for coach_note + coach_explanation per section
+12. Return LessonJSON with `transcription_source` field indicating which pipeline tier produced the result
 
 Cache results by **audio hash** and **pipeline version**. YouTube remains convenience input — always support direct audio upload and handle extraction failures gracefully.
 

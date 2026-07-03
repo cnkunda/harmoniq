@@ -1,6 +1,6 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-121), archived during ongoing development. Commits 122-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -15,6 +15,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Phase 2 (Commit 119) Archive Date:** June 10, 2026
 **Phase 2 (Commit 120) Archive Date:** June 11, 2026
 **Phase 2 (Commit 121) Archive Date:** June 11, 2026
+**Phase 2 (Commits 122-148) Archive Date:** July 3, 2026 — Superseded by MT3-primary strategy. Custom model work archived as reference for Phase 3 distillation.
 
 ---
 
@@ -1700,4 +1701,41 @@ chord books. No multiple position alternatives are offered.
 - [x] Instrument confusion displayed in review panel
 - [x] Per-job confusion logged for model improvement tracking
 - [x] Integration test: piano-dominant mix shows higher confusion than guitar-forward mix
+
+---
+
+## Phase 2 (Archived) — Custom Chord Model Development (Superseded by MT3)
+
+**Archive Date:** July 3, 2026
+**Reason for archiving:** The custom CRNN chord model hit a persistent 35.6-point domain gap (34.7% real vs 70.3% synthetic accuracy, v1.0.5 training log). All commits 122-148 are superseded by the MT3-primary strategy. The training infrastructure (scripts, dataset pipeline) is preserved for Phase 3 distillation training, but the commits below are no longer on the critical path.
+
+| Ref | Summary | Status Change |
+|-----|---------|---------------|
+| **Commit 122** | Chord Model Overhaul — Dataset Rebalancing, Training Fixes & Architecture Upgrade | **Archived** — MT3 delivers >80% accuracy without custom training |
+| **Commit 123** | Solo Harmony Enrichment (inferred) | — |
+| **Commit 124** | Scale/Mode Library & Interval Constants | Migrated to Phase 2 Milestone B |
+| **Commit 125** | Scale Explorer Screen | Migrated to Phase 2 Milestone B |
+| **Commit 126** | Fretboard Theory Overlay in Study Step | Migrated to Phase 2 Milestone B (merged with B1/B2) |
+| **Commit 127** | Expanded Jam Scale Detection | Migrated to Phase 2 Milestone B |
+| **Commit 128** | Chord Progression Labels | Migrated to Phase 2 Milestone B |
+| **Commit 129** | Slonimsky-Expanded Warmup Pool | Migrated to Phase 2 Milestone B |
+| **Commit 130** | Slonimsky Pattern Generator | Migrated to Phase 2 Milestone B |
+| **Commit 131** | Inversion & Slash Chord Logic | Migrated to Phase 2 Milestone B |
+| **Commit 132** | Voicing & Position Inference | Migrated to Phase 2 Milestone B |
+| **Commit 133** | Live Mic Mode | Migrated to Phase 2 Milestone A (A3 — On-Device CRNN TFLite) |
+| **Commit 134** | Dynamic Session Engine | Migrated to Phase 2 Milestone C |
+| **Commit 135** | Orient-as-Hint | Migrated to Phase 2 Milestone C |
+| **Commit 136** | Mastery & Integrity | Migrated to Phase 2 Milestone C |
+| **Commit 137** | Chord Pulse Dashboard | Migrated to Phase 2 Milestone C |
+| **Commit 138** | Multi-Instrument Diagram Support | Migrated to Phase 2 Milestone C |
+| **Commit 139** | 6-Stem High-Fidelity Demucs | **Complete** — already shipped |
+| **Commit 140** | Real-Time Stem Mixer & Export | Migrated to Phase 2 Milestone D |
+| **Commit 141** | Dynamic Tempo Support | Migrated to Phase 2 Milestone D |
+| **Commit 142** | Redis Job Queue + Celery Workers | Migrated to Phase 2 Milestone D |
+| **Commit 143** | Dedicated ML Model Server | **Superseded** — now serves MT3 instead of CRNN |
+| **Commit 144** | GPU Job Queue for Demucs | Migrated to Phase 2 Milestone D |
+| **Commit 145** | Error Resilience | Migrated to Phase 2 Milestone D |
+| **Commit 146** | Monitoring & Observability | Migrated to Phase 2 Milestone D |
+| **Commit 147** | Audio Fingerprinting & Quality Scoring | Migrated to Phase 2 Milestone D |
+| **Commit 148** | MT3 as Auxiliary Training Tool | **Replaced** — MT3 is now primary, not auxiliary |
 

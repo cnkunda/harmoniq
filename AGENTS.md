@@ -167,12 +167,15 @@ Shared contract: `HarmoniqDbClient` interface in `src/db/harmoniqDbClient.ts`. P
 - Web mic: `getUserMedia` + `AudioWorklet` (requires HTTPS or localhost).
 - Ghost recordings: on-disk files (native) vs inline base64 strings (web).
 
-### Backend pipeline (stub state)
+### Backend pipeline (MT3-primary)
 
-- `POST /analyze` + `GET /analyze/{job_id}` return in-memory stub `LessonJSON`.
-- Full ML pipeline (Demucs, librosa, Whisper, basic-pitch, pyguitarpro, Claude) is scaffolded but gated.
-- `basic-pitch` requires TensorFlow — does not install on Windows/Linux Python 3.11+.
+- `POST /analyze` + `GET /analyze/{job_id}` run the full pipeline: Demucs → MT3 → chord decoder + solo decoder → MusicXML → LessonJSON.
+- **Primary transcription engine**: MT3 (Google Multi-Task Multitrack Transformer). Produces both chord timeline and solo notes simultaneously from a single inference pass on the guitar stem.
+- **Fallback chain**: MT3 → CRNN TFLite (`chord_inference.py`) → Chroma template matching. Each tier confidence-gated; `transcription_source` field indicates which tier produced the result.
+- **On-device path**: CRNN TFLite model powers Live Mic Mode (<120ms latency). Long-term target: MT3-distilled student model.
+- **Custom model training** (`build_chord_tflite.py`): preserved for Phase 3 distillation. MT3 pseudo-labels will train a smaller student model.
 - `torch==2.5.1` / `torchaudio==2.5.1` pinned — do not upgrade without testing Demucs.
+- MT3 requires JAX; CPU fallback auto-activates CRNN path.
 
 ### Expo Router routing
 
@@ -456,6 +459,6 @@ Both datasets derive chord labels from MIDI note data rather than explicit chord
 - **Expo Router default exports**: Screen files under `app/` must use `export default`. Everything else uses named exports.
 - **Env var prefixes**: Frontend uses `EXPO_PUBLIC_HARMONIQ_SKIP_*`, backend uses `HARMONIQ_SKIP_*`. Mixing them up = silent no-op.
 - **Ghost recording paths**: Native stores recordings on disk; web stores inline base64. Test assertions must account for both.
-- **basic-pitch / TensorFlow**: Does not install on Windows or Linux with Python 3.11+. macOS only. Do not gate CI on it.
+- **MT3 / JAX**: MT3 requires JAX for GPU inference. The CRNN TFLite fallback activates automatically when JAX/TPU is unavailable. basic-pitch / TensorFlow is no longer a primary pipeline dependency (was the solo inference engine before MT3).
 - **CSS grid**: Not available in React Native. Use `flex-row flex-wrap` instead.
 - **WSL networking**: Use LAN IP (`192.168.x.x`) in both `EXPO_PUBLIC_API_URL` and `HARMONIQ_CORS_ORIGINS` so physical devices can reach the backend.
