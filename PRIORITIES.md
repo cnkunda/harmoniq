@@ -73,7 +73,7 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
   - Handle polyrhythmic sections: if simultaneous guitar and piano detected, prefer guitar pitches for chord inference
   - Handle non-chord regions (rests, percussion-only): emit "N" (no-chord) when pitch density falls below threshold
 
-- **Commit A1.3** — MT3 Event Stream → Solo Notes Decoder:
+- **DONE - Commit A1.3** — MT3 Event Stream → Solo Notes Decoder:
   - Filter MT3 events for monophonic or primary melodic line (highest confidence pitch track)
   - Convert event stream to `SoloNotes` format compatible with existing `solo_notes` field in `LessonJSON`
   - Apply quantization to nearest beat grid position (existing `beat_grid.py`)

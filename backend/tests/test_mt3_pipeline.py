@@ -36,6 +36,11 @@ from app.mt3.solo_decoder import (
     _filter_short_noise,
     _quantize_to_grid,
     _resolve_simultaneous_notes,
+    _detect_bends,
+    _detect_vibrato,
+    _detect_grace_notes,
+    _coherence_factor,
+    _merge_boundary_notes,
     decode_events_to_solo_notes,
 )
 from app.schemas import BeatGrid, ChordEvent, ChordTimeline, SoloNote, SoloNotes
@@ -443,6 +448,154 @@ class TestSoloDecoder:
         stream = Mt3EventStream(events=events, audio_duration_s=3.0, mean_confidence=0.9, num_instruments=1)
         result = decode_events_to_solo_notes(stream, sample_beat_grid)
         assert len(result.notes) == 5
+
+    def test_decode_events_populates_confidence(self, sample_beat_grid):
+        """Output SoloNotes should have confidence values from event confidence."""
+        events = [
+            Mt3Event(time=0.0, pitch=60, velocity=100, program=24, is_onset=True, confidence=0.85),
+            Mt3Event(time=0.5, pitch=60, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.80),
+        ]
+        stream = Mt3EventStream(events=events, audio_duration_s=1.0, mean_confidence=0.85, num_instruments=1)
+        result = decode_events_to_solo_notes(stream, sample_beat_grid)
+        assert len(result.notes) == 1
+        assert 0.0 < result.notes[0].confidence <= 1.0
+
+    def test_decode_events_applies_technique_tags(self, sample_beat_grid):
+        """Bend/vibrato/grace patterns should produce technique tags on output notes."""
+        events = [
+            Mt3Event(time=0.0, pitch=60, velocity=90, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.06, pitch=60, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=0.07, pitch=62, velocity=95, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.5, pitch=62, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+        ]
+        stream = Mt3EventStream(events=events, audio_duration_s=1.0, mean_confidence=0.9, num_instruments=1)
+        result = decode_events_to_solo_notes(stream, sample_beat_grid)
+        all_techniques = [t for note in result.notes for t in note.technique]
+        assert len(all_techniques) > 0
+
+
+# ---------------------------------------------------------------------------
+# Solo Decoder — Technique Detection Tests
+# ---------------------------------------------------------------------------
+
+class TestSoloDecoderTechniqueDetection:
+    def test_detect_bends_slide_pattern(self):
+        """Adjacent segments with pitch slide within 2 semitones and gap < 50ms should be tagged 'bend'."""
+        segments = [
+            NoteSegment(start_time=0.0, end_time=0.3, pitch=60, mean_velocity=100, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.32, end_time=0.6, pitch=62, mean_velocity=95, max_confidence=0.9, program=24),
+        ]
+        result = _detect_bends(segments)
+        assert "bend" in result[0].technique
+        assert "bend" in result[1].technique
+
+    def test_detect_bends_no_match_wide_gap(self):
+        """Segments with gap > 100ms should not be tagged as bends."""
+        segments = [
+            NoteSegment(start_time=0.0, end_time=0.3, pitch=60, mean_velocity=100, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.5, end_time=0.8, pitch=62, mean_velocity=95, max_confidence=0.9, program=24),
+        ]
+        result = _detect_bends(segments)
+        assert "bend" not in result[0].technique
+        assert "bend" not in result[1].technique
+
+    def test_detect_bends_no_match_wide_pitch(self):
+        """Segments with pitch difference > 2 semitones should not be tagged."""
+        segments = [
+            NoteSegment(start_time=0.0, end_time=0.3, pitch=60, mean_velocity=100, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.32, end_time=0.6, pitch=65, mean_velocity=95, max_confidence=0.9, program=24),
+        ]
+        result = _detect_bends(segments)
+        assert "bend" not in result[0].technique
+        assert "bend" not in result[1].technique
+
+    def test_detect_bends_no_match_different_program(self):
+        """Segments from different programs should not be tagged as bends."""
+        segments = [
+            NoteSegment(start_time=0.0, end_time=0.3, pitch=60, mean_velocity=100, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.32, end_time=0.6, pitch=61, mean_velocity=95, max_confidence=0.9, program=25),
+        ]
+        result = _detect_bends(segments)
+        assert "bend" not in result[0].technique
+        assert "bend" not in result[1].technique
+
+    def test_detect_vibrato_rapid_oscillation(self):
+        """3+ same-pitch segments with duration < 100ms and total < 500ms should be tagged 'vibrato'."""
+        segments = [
+            NoteSegment(start_time=0.0, end_time=0.05, pitch=60, mean_velocity=100, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.05, end_time=0.10, pitch=60, mean_velocity=95, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.10, end_time=0.15, pitch=60, mean_velocity=100, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.15, end_time=0.20, pitch=60, mean_velocity=95, max_confidence=0.9, program=24),
+        ]
+        result = _detect_vibrato(segments)
+        for seg in result:
+            assert "vibrato" in seg.technique
+
+    def test_detect_vibrato_no_match_long_durations(self):
+        """Segments with duration >= 100ms should not form vibrato pattern."""
+        segments = [
+            NoteSegment(start_time=0.0, end_time=0.15, pitch=60, mean_velocity=100, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.15, end_time=0.30, pitch=60, mean_velocity=95, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.30, end_time=0.45, pitch=60, mean_velocity=100, max_confidence=0.9, program=24),
+        ]
+        result = _detect_vibrato(segments)
+        for seg in result:
+            assert "vibrato" not in seg.technique
+
+    def test_grace_note_detection(self):
+        """Short note (< 0.08s) followed by longer note within 50ms should be tagged 'grace_note'."""
+        segments = [
+            NoteSegment(start_time=0.0, end_time=0.05, pitch=60, mean_velocity=80, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.06, end_time=0.5, pitch=64, mean_velocity=100, max_confidence=0.9, program=24),
+        ]
+        result = _detect_grace_notes(segments)
+        assert "grace_note" in result[0].technique
+        assert "grace_note" not in result[1].technique
+
+    def test_grace_note_not_removed(self):
+        """Grace notes should remain in the output (not filtered out)."""
+        segments = [
+            NoteSegment(start_time=0.0, end_time=0.05, pitch=60, mean_velocity=80, max_confidence=0.9, program=24),
+            NoteSegment(start_time=0.06, end_time=0.5, pitch=64, mean_velocity=100, max_confidence=0.9, program=24),
+        ]
+        result = _detect_grace_notes(segments)
+        assert len(result) == 2
+
+    def test_tie_detection_merges_notes(self):
+        """Notes across boundary with matching pitch/timing should merge with is_tied=True."""
+        notes = [
+            SoloNote(start_time=0.0, duration=12.9, pitch=60, velocity=100),
+            SoloNote(start_time=12.85, duration=1.0, pitch=60, velocity=95),
+        ]
+        result = _merge_boundary_notes(notes, bpm=120.0, window_sec=12.8)
+        tied_notes = [n for n in result if n.is_tied]
+        assert len(tied_notes) >= 1
+
+    def test_confidence_calculation(self, sample_beat_grid):
+        """Event confidence should be reflected in output SoloNote.confidence."""
+        events = [
+            Mt3Event(time=0.0, pitch=60, velocity=100, program=0, is_onset=True, confidence=0.75),
+            Mt3Event(time=0.5, pitch=60, velocity=0, program=0, is_onset=False, is_offset=True, confidence=0.70),
+        ]
+        stream = Mt3EventStream(events=events, audio_duration_s=1.0, mean_confidence=0.75, num_instruments=1)
+        result = decode_events_to_solo_notes(stream, sample_beat_grid)
+        assert len(result.notes) == 1
+        assert result.notes[0].confidence == pytest.approx(0.75, abs=0.01)
+
+    def test_coherence_factor_monophonic(self):
+        """Isolated segment should have coherence factor 1.0."""
+        seg = NoteSegment(start_time=0.0, end_time=0.5, pitch=60, mean_velocity=100, max_confidence=0.9, program=24)
+        assert _coherence_factor(seg, [seg]) == 1.0
+
+    def test_coherence_factor_polyphonic(self):
+        """Overlapping segments should have coherence factor 0.9."""
+        seg1 = NoteSegment(start_time=0.0, end_time=0.5, pitch=60, mean_velocity=100, max_confidence=0.9, program=24)
+        seg2 = NoteSegment(start_time=0.3, end_time=0.8, pitch=64, mean_velocity=90, max_confidence=0.9, program=24)
+        assert _coherence_factor(seg1, [seg1, seg2]) == 0.9
+
+    def test_merge_boundary_notes_empty(self):
+        """Empty note list should return empty."""
+        assert _merge_boundary_notes([], 120.0) == []
 
 
 # ---------------------------------------------------------------------------

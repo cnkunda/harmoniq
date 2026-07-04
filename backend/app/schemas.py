@@ -743,6 +743,9 @@ class SoloNote(BaseModel):
     duration: float = Field(..., description="Quantized duration in seconds", ge=0)
     pitch: int = Field(..., description="MIDI pitch number (e.g., 60 for Middle C)")
     velocity: int = Field(..., ge=0, le=127)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Combined model + coherence confidence")
+    technique: list[str] = Field(default_factory=list, description="Technique tags: 'bend', 'vibrato', 'grace_note'")
+    is_tied: bool = Field(default=False, description="True if this note is tied from a previous segment")
 
 class SoloNotes(BaseModel):
     notes: list[SoloNote]
