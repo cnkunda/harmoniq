@@ -36,6 +36,12 @@ _MIN_PITCHES_FOR_CHORD = 3
 # GM program numbers to consider for chord inference (guitar + piano family)
 _CHORD_INSTRUMENTS = set(range(24, 32)) | set(range(0, 8))
 
+# Guitar family programs (24-31): acoustic/electric guitar variants
+_GUITAR_PROGRAMS = set(range(24, 32))
+
+# Percussion program (GM Channel 10)
+_PERCUSSION_PROGRAM = 128
+
 
 def decode_events_to_chord_timeline(
     event_stream: Mt3EventStream,
@@ -66,10 +72,10 @@ def decode_events_to_chord_timeline(
 
     audio_end = event_stream.audio_duration_s or max(e.time for e in events) + 1.0
 
-    active_notes = _build_active_note_grid(events, audio_end)
-    chord_events = _infer_chords_from_active_notes(
-        active_notes, audio_end, prefer_guitar_programs,
+    active_notes = _build_active_note_grid(
+        events, audio_end, prefer_guitar=prefer_guitar_programs,
     )
+    chord_events = _infer_chords_from_active_notes(active_notes, audio_end)
 
     timeline = ChordTimeline(
         events=chord_events,
@@ -87,11 +93,16 @@ def decode_events_to_chord_timeline(
 def _build_active_note_grid(
     events: list[Mt3Event],
     audio_end: float,
+    *,
+    prefer_guitar: bool = True,
 ) -> dict[float, dict[int, list[Mt3Event]]]:
     """Build a time-sliced grid of active (sounding) notes.
 
     For each 0.1s hop, determine which pitches are actively sounding
-    by tracking onsets and offsets across the event stream.
+    by tracking onsets and offsets across the event stream. Percussion
+    (program 128) is always excluded. When prefer_guitar is True and a
+    pitch class has events from both guitar-family and non-guitar-family
+    programs, only guitar-family events are kept.
 
     Returns:
         Dict mapping time_slice → {pitch_class: [active_events]}
@@ -100,6 +111,8 @@ def _build_active_note_grid(
     offsets: dict[int, list[float]] = defaultdict(list)
 
     for event in events:
+        if event.program == _PERCUSSION_PROGRAM:
+            continue
         if event.is_onset and not event.is_offset:
             onsets.append(event)
         elif event.is_offset:
@@ -112,7 +125,7 @@ def _build_active_note_grid(
 
     for t in time_slices:
         t = float(round(t, 2))
-        active: dict[int, list[Mt3Event]] = {}
+        raw_active: dict[int, list[Mt3Event]] = {}
 
         for onset_event in onsets:
             if onset_event.time > t:
@@ -124,9 +137,17 @@ def _build_active_note_grid(
                 continue
 
             pc = onset_event.pitch % 12
-            if pc not in active:
-                active[pc] = []
-            active[pc].append(onset_event)
+            if pc not in raw_active:
+                raw_active[pc] = []
+            raw_active[pc].append(onset_event)
+
+        if prefer_guitar:
+            active: dict[int, list[Mt3Event]] = {}
+            for pc, note_events in raw_active.items():
+                guitar_events = [e for e in note_events if e.program in _GUITAR_PROGRAMS]
+                active[pc] = guitar_events if guitar_events else note_events
+        else:
+            active = raw_active
 
         grid[t] = active
 
@@ -136,7 +157,6 @@ def _build_active_note_grid(
 def _infer_chords_from_active_notes(
     active_notes: dict[float, dict[int, list[Mt3Event]]],
     audio_end: float,
-    prefer_guitar: bool,
 ) -> list[ChordEvent]:
     """Convert active-note grid to chord events via template matching.
 
@@ -159,9 +179,7 @@ def _infer_chords_from_active_notes(
             chord_label = "N"
             confidence = _n_confidence(len(active_pcs), active_notes[t])
         else:
-            chord_label, confidence = _match_chord_template(
-                active_pcs, active_notes[t], prefer_guitar,
-            )
+            chord_label, confidence = _match_chord_template(active_pcs)
 
         if chord_label == prev_chord:
             prev_confidence = max(prev_confidence, confidence)
@@ -197,19 +215,23 @@ def _infer_chords_from_active_notes(
 
 def _match_chord_template(
     active_pcs: set[int],
-    active_details: dict[int, list[Mt3Event]],
-    prefer_guitar: bool,
 ) -> tuple[str, float]:
     """Match a pitch class set against CHORD_INTERVALS.
 
-    Tries each root (C-B) × quality combination, computes Jaccard score,
-    returns the best match above _JACCARD_THRESHOLD.
+    Tries each root (C-B) x quality combination, computes Jaccard score
+    for selection and pitch set coverage fraction for confidence. Returns
+    the best match above _JACCARD_THRESHOLD.
+
+    Confidence is derived from coverage fraction: the proportion of the
+    matched template's pitch classes that are present in the active set.
+    This gives an intuitive measure of "how complete is this chord."
 
     Returns:
         Tuple of (chord_label, confidence).
     """
     best_label = "N"
     best_score = 0.0
+    best_coverage = 0.0
 
     for root_idx, root in enumerate(ROOT_NOTES):
         for quality, intervals in CHORD_INTERVALS.items():
@@ -222,14 +244,16 @@ def _match_chord_template(
                 continue
 
             jaccard = intersection / union
+            coverage = intersection / len(template_pcs) if template_pcs else 0.0
 
             if jaccard > best_score:
                 best_score = jaccard
                 best_label = f"{root}:{quality}"
+                best_coverage = coverage
 
     if best_score >= _JACCARD_THRESHOLD:
         mirex_label = _to_mirex(best_label)
-        return mirex_label, best_score
+        return mirex_label, best_coverage
 
     return "N", 1.0 - best_score
 

@@ -19,6 +19,8 @@ from app.mt3.chord_decoder import (
     _match_chord_template,
     _to_mirex,
     decode_events_to_chord_timeline,
+    _GUITAR_PROGRAMS,
+    _PERCUSSION_PROGRAM,
 )
 from app.mt3.fallback import (
     TranscriptionResult,
@@ -146,29 +148,29 @@ class TestMt3Schemas:
 
 class TestChordDecoder:
     def test_match_chord_template_cmaj(self, cmaj_events):
-        """C major triad should match C:maj with Jaccard ≥ 0.66."""
+        """C major triad should match C:maj with Jaccard >= 0.66."""
         active_pcs = {e.pitch % 12 for e in cmaj_events}
-        chord_label, confidence = _match_chord_template(active_pcs, {}, prefer_guitar=True)
+        chord_label, confidence = _match_chord_template(active_pcs)
         assert chord_label == "C:maj"
         assert confidence >= 0.66
 
     def test_match_chord_template_cmaj7(self, cmaj7_events):
-        """C major 7 should match C:maj7 via 277-class → C:maj via MIREX."""
+        """C major 7 should match C:maj7 via 277-class -> C:maj via MIREX."""
         active_pcs = {e.pitch % 12 for e in cmaj7_events}
-        chord_label, confidence = _match_chord_template(active_pcs, {}, prefer_guitar=True)
+        chord_label, confidence = _match_chord_template(active_pcs)
         assert "C:" in chord_label
         assert confidence >= 0.66
 
     def test_match_chord_template_too_few_notes(self):
         """A single pitch should not match any chord."""
         active_pcs = {0}  # just C
-        chord_label, confidence = _match_chord_template(active_pcs, {}, prefer_guitar=True)
+        chord_label, confidence = _match_chord_template(active_pcs)
         assert chord_label == "N"
         assert confidence > 0
 
     def test_match_chord_template_empty(self):
         """No pitches should produce N."""
-        chord_label, confidence = _match_chord_template(set(), {}, prefer_guitar=True)
+        chord_label, confidence = _match_chord_template(set())
         assert chord_label == "N"
 
     def test_to_mirex_map(self):
@@ -228,8 +230,146 @@ class TestChordDecoder:
 
 
 # ---------------------------------------------------------------------------
-# Solo Decoder Tests
+# Chord Decoder — Instrument Filtering & Guitar Preference Tests
 # ---------------------------------------------------------------------------
+
+class TestChordDecoderInstrumentFiltering:
+    def test_percussion_excluded_from_active_grid(self):
+        """Program 128 (percussion) events must not appear in the active note grid."""
+        events = [
+            Mt3Event(time=0.0, pitch=60, velocity=100, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.0, pitch=64, velocity=90, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.0, pitch=67, velocity=95, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.0, pitch=36, velocity=80, program=128, is_onset=True, confidence=0.99),
+            Mt3Event(time=1.0, pitch=60, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=64, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=67, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=36, velocity=0, program=128, is_onset=False, is_offset=True, confidence=0.9),
+        ]
+        grid = _build_active_note_grid(events, audio_end=1.5)
+        pcs_at_zero = set(grid[0.0].keys())
+        # Percussion pitch 36 % 12 = 0 (C), but it should be excluded
+        # Only guitar events for C(0), E(4), G(7) should remain
+        all_programs = {
+            e.program for note_events in grid[0.0].values() for e in note_events
+        }
+        assert 128 not in all_programs
+        assert 0 in pcs_at_zero  # C from guitar
+        assert 4 in pcs_at_zero  # E from guitar
+        assert 7 in pcs_at_zero  # G from guitar
+
+    def test_guitar_preference_dominates_piano(self):
+        """When guitar and piano play different notes at the same pitch class,
+        guitar events should be kept and piano events dropped."""
+        events = [
+            # Guitar plays C4 (pitch 60, pc=0)
+            Mt3Event(time=0.0, pitch=60, velocity=100, program=24, is_onset=True, confidence=0.9),
+            # Piano plays C5 (pitch 72, pc=0) — same pitch class, different octave
+            Mt3Event(time=0.0, pitch=72, velocity=90, program=0, is_onset=True, confidence=0.9),
+            # Guitar plays E4 (pitch 64, pc=4)
+            Mt3Event(time=0.0, pitch=64, velocity=90, program=24, is_onset=True, confidence=0.9),
+            # Guitar plays G4 (pitch 67, pc=7)
+            Mt3Event(time=0.0, pitch=67, velocity=95, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=60, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=72, velocity=0, program=0, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=64, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=67, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+        ]
+        grid = _build_active_note_grid(events, audio_end=1.5, prefer_guitar=True)
+        # At time 0, pc=0 should have only the guitar event (pitch 60), not piano (pitch 72)
+        events_at_pc0 = grid[0.0].get(0, [])
+        programs_at_pc0 = {e.program for e in events_at_pc0}
+        assert 24 in programs_at_pc0  # guitar retained
+        assert 0 not in programs_at_pc0  # piano dropped
+
+    def test_guitar_preference_false_uses_all_instruments(self):
+        """When prefer_guitar=False, all instrument events are kept."""
+        events = [
+            Mt3Event(time=0.0, pitch=60, velocity=100, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.0, pitch=72, velocity=90, program=0, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.0, pitch=64, velocity=90, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.0, pitch=67, velocity=95, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=60, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=72, velocity=0, program=0, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=64, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=67, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+        ]
+        grid = _build_active_note_grid(events, audio_end=1.5, prefer_guitar=False)
+        events_at_pc0 = grid[0.0].get(0, [])
+        programs_at_pc0 = {e.program for e in events_at_pc0}
+        assert 24 in programs_at_pc0
+        assert 0 in programs_at_pc0
+
+    def test_confidence_is_coverage_fraction(self):
+        """For C:maj template {0,4,7} with active set {0,4,7,9},
+        confidence should be 1.0 (coverage = 3/3 = 1.0), not 0.75 (Jaccard)."""
+        active_pcs = {0, 4, 7, 9}  # C E G A — C:maj tones all present + extra A
+        chord_label, confidence = _match_chord_template(active_pcs)
+        assert chord_label == "C:maj"
+        # Coverage = |{0,4,7} ∩ {0,4,7,9}| / |{0,4,7}| = 3/3 = 1.0
+        assert confidence == 1.0
+
+    def test_confidence_reflects_incomplete_chord(self):
+        """For C:maj template {0,4,7} with active set {0,7} (missing E),
+        Jaccard = 2/3 ≈ 0.667 which is right at the threshold — should match."""
+        active_pcs = {0, 7}  # C G — missing E
+        chord_label, confidence = _match_chord_template(active_pcs)
+        assert chord_label == "C:maj"
+        assert confidence == pytest.approx(2 / 3, abs=0.01)
+
+    def test_n_confidence_for_empty_grid(self):
+        """Empty pitch set should produce N with confidence 1.0."""
+        chord_label, confidence = _match_chord_template(set())
+        assert chord_label == "N"
+        assert confidence == 1.0
+
+    def test_guitar_only_events_used_for_chord(self):
+        """Chord inference with guitar-only events should work correctly."""
+        events = [
+            Mt3Event(time=0.0, pitch=60, velocity=100, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.0, pitch=64, velocity=90, program=25, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.0, pitch=67, velocity=95, program=26, is_onset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=60, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=64, velocity=0, program=25, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=67, velocity=0, program=26, is_onset=False, is_offset=True, confidence=0.9),
+        ]
+        stream = Mt3EventStream(events=events, audio_duration_s=1.5, mean_confidence=0.9, num_instruments=1)
+        beat_grid = BeatGrid(
+            bpm=120.0, pulse_bpm=120.0, beats=[0.0, 0.5, 1.0],
+            downbeats=[0.0], time_signature={"numerator": 4, "denominator": 4},
+            tick_value=0.25,
+        )
+        timeline = decode_events_to_chord_timeline(stream, beat_grid, prefer_guitar_programs=True)
+        assert len(timeline.events) >= 1
+        assert timeline.events[0].chord == "C:maj"
+
+    def test_mixed_instruments_guitar_dominates(self):
+        """When guitar and piano share pitch classes, guitar events should
+        dominate chord inference by being the sole contributors at those PCs."""
+        events = [
+            # Guitar: C4 E4 G4 (C:maj)
+            Mt3Event(time=0.0, pitch=60, velocity=100, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.0, pitch=64, velocity=90, program=24, is_onset=True, confidence=0.9),
+            Mt3Event(time=0.0, pitch=67, velocity=95, program=24, is_onset=True, confidence=0.9),
+            # Piano: C5 E5 (same pitch classes as guitar, different octaves)
+            Mt3Event(time=0.0, pitch=72, velocity=85, program=0, is_onset=True, confidence=0.85),
+            Mt3Event(time=0.0, pitch=76, velocity=80, program=0, is_onset=True, confidence=0.85),
+            Mt3Event(time=1.0, pitch=60, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=64, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=67, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
+            Mt3Event(time=1.0, pitch=72, velocity=0, program=0, is_onset=False, is_offset=True, confidence=0.85),
+            Mt3Event(time=1.0, pitch=76, velocity=0, program=0, is_onset=False, is_offset=True, confidence=0.85),
+        ]
+        stream = Mt3EventStream(events=events, audio_duration_s=1.5, mean_confidence=0.88, num_instruments=2)
+        beat_grid = BeatGrid(
+            bpm=120.0, pulse_bpm=120.0, beats=[0.0, 0.5, 1.0],
+            downbeats=[0.0], time_signature={"numerator": 4, "denominator": 4},
+            tick_value=0.25,
+        )
+        timeline = decode_events_to_chord_timeline(stream, beat_grid, prefer_guitar_programs=True)
+        assert len(timeline.events) >= 1
+        # Guitar preference drops piano at shared PCs → active_pcs = {0,4,7} → C:maj
+        assert timeline.events[0].chord == "C:maj"
 
 class TestSoloDecoder:
     def test_filter_melodic_events_excludes_percussion(self, multi_instrument_events):

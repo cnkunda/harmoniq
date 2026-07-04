@@ -65,7 +65,7 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
   - Batch mode for multi-song processing
   - Graceful degradation: if MT3 server is unavailable, fall back to existing CRNN + Basic Pitch pipeline
 
-- **Commit A1.2** — MT3 Event Stream → Chord Decoder:
+- **DONE - Commit A1.2** — MT3 Event Stream → Chord Decoder:
   - Convert MT3 multi-track event stream into chord timeline via music21 deterministic analysis
   - For each time slice (0.1s hops): aggregate all sounding pitches → pitch class set → match against `CHORD_INTERVALS` template set (same methodology as Guitar-TECHS/EGSet12 parsing — Jaccard score, >0.66 coverage threshold)
   - Output 277-class vocabulary but map to 25-class MIREX for consistency with existing frontend chord display
