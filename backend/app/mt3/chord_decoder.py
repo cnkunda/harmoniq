@@ -14,6 +14,7 @@ Approach (matches Guitar-TECHS / EGSet12 methodology):
 
 from __future__ import annotations
 
+import bisect
 from collections import defaultdict
 
 import numpy as np
@@ -76,6 +77,10 @@ def decode_events_to_chord_timeline(
         events, audio_end, prefer_guitar=prefer_guitar_programs,
     )
     chord_events = _infer_chords_from_active_notes(active_notes, audio_end)
+
+    beat_times = beat_grid.beats if beat_grid.beats else [0.0]
+    for event in chord_events:
+        event.timestamp = _quantize_to_nearest_beat(event.timestamp, beat_times)
 
     timeline = ChordTimeline(
         events=chord_events,
@@ -281,6 +286,30 @@ def _to_mirex(chord_label: str) -> str:
         return mirex_label
 
     return chord_label
+
+
+def _quantize_to_nearest_beat(time_s: float, beat_times: list[float]) -> float:
+    """Snap a timestamp to the nearest beat position.
+
+    Args:
+        time_s: The timestamp to quantize (in seconds).
+        beat_times: Sorted list of beat positions (in seconds).
+
+    Returns:
+        The nearest beat position. If beat_times is empty, returns time_s unchanged.
+        If time_s is before the first beat, returns the first beat.
+        If time_s is after the last beat, returns the last beat.
+    """
+    if not beat_times:
+        return time_s
+    if time_s <= beat_times[0]:
+        return beat_times[0]
+    if time_s >= beat_times[-1]:
+        return beat_times[-1]
+    idx = bisect.bisect_left(beat_times, time_s)
+    before = beat_times[idx - 1]
+    after = beat_times[idx]
+    return before if (time_s - before) < (after - time_s) else after
 
 
 def _n_confidence(

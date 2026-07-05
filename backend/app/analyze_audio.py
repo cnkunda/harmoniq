@@ -362,7 +362,7 @@ def build_lesson_json_from_librosa(
     # Try MT3 fallback chain first (chords + solo notes together)
     try:
         mt3_result = transcribe_with_fallback(
-            solo_source_path,
+            chord_mix_path,
             beat_grid,
             use_mt3=True,
         )

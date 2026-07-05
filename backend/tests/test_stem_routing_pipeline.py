@@ -15,6 +15,7 @@ import pytest
 import soundfile as sf
 
 from app.analyze_audio import build_lesson_json_from_librosa
+from app.mt3 import TranscriptionResult
 from app.schemas import ChordTimeline, SoloNotes, StemRoutingHints
 
 
@@ -66,6 +67,13 @@ def test_chord_inference_uses_bass_other_mix_when_hints_present(tmp_path, stem_w
     monkeypatch.setattr("app.analyze_audio.infer_solo", fake_infer_solo)
     monkeypatch.setattr("app.analyze_audio.librosa_summarize", lambda p: _fake_summary())
     monkeypatch.setattr("app.analyze_audio.estimate_beat_grid", lambda p: _fake_beat_grid())
+    monkeypatch.setattr("app.analyze_audio.transcribe_with_fallback", lambda *a, **k: TranscriptionResult(
+        chord_timeline=ChordTimeline(events=[]),
+        solo_notes=SoloNotes(notes=[]),
+        source="none",
+        mean_confidence=0.0,
+        fallback_reason="mocked",
+    ))
     monkeypatch.setattr("app.analyze_audio.generate_tab_artifacts_for_guitar_stem", lambda *a, **k: {})
 
     hints = StemRoutingHints(
@@ -199,6 +207,13 @@ def test_hardcoded_paths_preserved_when_no_hints(tmp_path, stem_wavs, monkeypatc
     monkeypatch.setattr("app.analyze_audio.infer_solo", fake_infer_solo)
     monkeypatch.setattr("app.analyze_audio.librosa_summarize", lambda p: _fake_summary())
     monkeypatch.setattr("app.analyze_audio.estimate_beat_grid", lambda p: _fake_beat_grid())
+    monkeypatch.setattr("app.analyze_audio.transcribe_with_fallback", lambda *a, **k: TranscriptionResult(
+        chord_timeline=ChordTimeline(events=[]),
+        solo_notes=SoloNotes(notes=[]),
+        source="none",
+        mean_confidence=0.0,
+        fallback_reason="mocked",
+    ))
     monkeypatch.setattr("app.analyze_audio.generate_tab_artifacts_for_guitar_stem", lambda *a, **k: {})
 
     # No routing_hints, no stem_abs_paths — fallback to old behavior.
@@ -233,6 +248,13 @@ def test_hardcoded_paths_use_mix_wav_path_when_provided(tmp_path, stem_wavs, mon
     monkeypatch.setattr("app.analyze_audio.infer_solo", lambda *a, **k: SoloNotes(notes=[]))
     monkeypatch.setattr("app.analyze_audio.librosa_summarize", lambda p: _fake_summary())
     monkeypatch.setattr("app.analyze_audio.estimate_beat_grid", lambda p: _fake_beat_grid())
+    monkeypatch.setattr("app.analyze_audio.transcribe_with_fallback", lambda *a, **k: TranscriptionResult(
+        chord_timeline=ChordTimeline(events=[]),
+        solo_notes=SoloNotes(notes=[]),
+        source="none",
+        mean_confidence=0.0,
+        fallback_reason="mocked",
+    ))
     monkeypatch.setattr("app.analyze_audio.generate_tab_artifacts_for_guitar_stem", lambda *a, **k: {})
 
     build_lesson_json_from_librosa(

@@ -499,10 +499,14 @@ export function chordToFretboardCells(
   const parsed = parseChordSymbol(chordSymbol);
   if (!parsed) return [];
 
-  // Try chords-db first for authentic positions
-  const dbPos = getChordPositionAtIndex(chordSymbol, 0);
-  if (dbPos) {
-    return chordDbPosToFretCells(dbPos, chordSymbol);
+  // Try chords-db first for authentic positions (only in compact mode;
+  // full mode uses algorithmic CAGED templates for consistent guitar shapes)
+  if (mode === "compact") {
+    const dbPos = getChordPositionAtIndex(chordSymbol, 0);
+    if (dbPos) {
+      const dbCells = chordDbPosToFretCells(dbPos, chordSymbol);
+      if (dbCells.length >= 3) return dbCells;
+    }
   }
 
   const { root, quality } = parsed;

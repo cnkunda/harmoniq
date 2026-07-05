@@ -13,7 +13,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -21,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
 from app.coach import generate_jam_coach_summary, generate_onboarding_placement_summary, generate_quick_feedback, generate_orient_annotation, generate_theory_annotation
-from app.jam_backing import LyriaProviderError, build_instrumental_prompt, call_gemini_lyria_instrumental, gemini_lyria_config, load_bundled_track_wav, select_bundled_track
+from app.jam_backing import Mrt2BackingGenerator, build_mrt2_prompt, load_bundled_track_wav, select_bundled_track
 from app.lyria_clip import generate_orient_clip
 from app.routers.analyze import router as analyze_router
 from app.routers.export import router as export_router
@@ -423,27 +422,24 @@ async def quick_feedback(payload: QuickFeedbackRequest) -> QuickFeedbackResponse
     "/jam/backing",
     response_model=JamBackingResponse,
     tags=["Jam"],
-    summary="POST /jam/backing — instrumental practice bed (Gemini Lyria + local fallback)",
+    summary="POST /jam/backing — instrumental practice bed (MRT2 + bundled fallback)",
 )
 async def jam_backing(payload: JamBackingRequest) -> JamBackingResponse:
-    api_key, base_url, default_model = gemini_lyria_config()
-    model = (payload.model or default_model).strip() or default_model
-    prompt = build_instrumental_prompt(
-        musical_key=payload.musical_key.strip(), bpm=payload.bpm,
-        weak_areas=[str(x).strip() for x in payload.weak_areas if str(x).strip()],
-        style_hint=payload.style_hint,
+    prompt = build_mrt2_prompt(
+        style_hint=payload.style_hint or "",
+        musical_key=payload.musical_key.strip(),
+        bpm=payload.bpm,
     )
     raw: bytes | None = None
     duration_ms: int | None = None
     prompt_used = prompt
-    if api_key:
-        try:
-            raw, duration_ms = await call_gemini_lyria_instrumental(prompt=prompt, api_key=api_key, base_url=base_url, model=model)
-        except (LyriaProviderError, httpx.HTTPError) as exc:
-            logger.warning("jam_backing provider error: %s", exc)
-    else:
-        logger.info("jam_backing no GEMINI_API_KEY; using bundled fallback")
+    generator = Mrt2BackingGenerator()
+    result = await asyncio.to_thread(generator.generate, prompt=prompt)
+    if result is not None:
+        raw, duration_ms = result
+        logger.info("jam_backing generated with MRT2")
     if raw is None:
+        logger.info("jam_backing MRT2 unavailable; using bundled fallback")
         fallback = select_bundled_track(musical_key=payload.musical_key.strip(), bpm=payload.bpm, style_hint=payload.style_hint)
         raw, duration_ms = load_bundled_track_wav(fallback)
         prompt_used = f"{prompt} [fallback_track={fallback.filename}]"

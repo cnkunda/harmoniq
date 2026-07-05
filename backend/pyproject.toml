@@ -43,8 +43,13 @@ basicpitch = [
     "basic-pitch>=0.4.0",
 ]
 mt3 = [
-    "mt3>=0.2.0",
+    "mt3 @ git+https://github.com/magenta/mt3.git",
     "note-seq>=0.1.0",
+    # JAX 0.4.20+ required for Python 3.12 compatibility (PyObject_Vectorcall).
+    # Install separately: pip install jax>=0.4.20 jaxlib>=0.4.20
+]
+mrt2 = [
+    "magenta-rt>=2.0",
 ]
 dev = [
     "httpx>=0.27.0",

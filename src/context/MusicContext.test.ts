@@ -14,6 +14,7 @@ describe('musicReducer', () => {
   it('starts with sensible defaults', () => {
     expect(INITIAL_MUSIC_STATE).toEqual({
       currentChord: null,
+      currentChordRoman: null,
       activeNotes: [],
       currentBar: 0,
       positionMs: 0,

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE score-partwise  PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="4.0">
+  <work>
+    <work-title>Uploaded track</work-title>
+  </work>
+  <movement-title>Uploaded track</movement-title>
+  <identification>
+    <creator type="composer">Unknown artist</creator>
+    <encoding>
+      <encoding-date>2026-07-04</encoding-date>
+      <software>music21 v.10.3.0</software>
+      <supports element="beam" type="yes" />
+      <supports element="stem" type="yes" />
+      <supports element="accidental" type="yes" />
+    </encoding>
+  </identification>
+  <defaults>
+    <scaling>
+      <millimeters>7</millimeters>
+      <tenths>40</tenths>
+    </scaling>
+    <page-layout>
+      <page-height>1100</page-height>
+      <page-width>850</page-width>
+      <page-margins type="both">
+        <left-margin>50</left-margin>
+        <right-margin>50</right-margin>
+        <top-margin>50</top-margin>
+        <bottom-margin>50</bottom-margin>
+      </page-margins>
+    </page-layout>
+
+      <system-layout>
+      <system-margins>
+        <left-margin>0</left-margin>
+        <right-margin>0</right-margin>
+      </system-margins>
+      <system-distance>120</system-distance>
+      <top-system-distance>70</top-system-distance>
+    </system-layout>
+    <staff-layout>
+      <staff-distance>65</staff-distance>
+    </staff-layout>
+</defaults>
+  <part-list>
+    <score-part id="Pb41d9d3cf64cf6f52c88752368da6c37">
+      <part-name>Lead Sheet</part-name>
+    </score-part>
+  </part-list>
+  <!--=========================== Part 1 ===========================-->
+  <part id="Pb41d9d3cf64cf6f52c88752368da6c37">
+    <!--========================= Measure 1 ==========================-->
+    <measure implicit="no" number="1">
+      <attributes>
+        <divisions>10080</divisions>
+        <time>
+          <beats>4</beats>
+          <beat-type>4</beat-type>
+        </time>
+        <clef>
+          <sign>G</sign>
+          <line>2</line>
+        </clef>
+      </attributes>
+      <barline location="right">
+        <bar-style>light-heavy</bar-style>
+      </barline>
+    </measure>
+  </part>
+</score-partwise>

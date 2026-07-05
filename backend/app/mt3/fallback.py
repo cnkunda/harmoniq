@@ -7,7 +7,8 @@ Implements the tiered inference pipeline:
 
 Each tier evaluates confidence. If MT3 confidence is below threshold or
 MT3 server is unavailable, falls back to the next tier. The orchestrator
-tracks which tier produced the result for observability.
+tracks which tier produced the result for observability and records
+chain metadata (attempted tiers, reasons) for downstream consumption.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from pathlib import Path
 import numpy as np
 
 from app.beat_grid import estimate_beat_grid
-from app.chord_inference import infer_chords
+from app.chord_inference import get_last_inference_tier, infer_chords
 from app.mt3.chord_decoder import decode_events_to_chord_timeline
 from app.mt3.model_server import Mt3ModelServer, mt3_infer
 from app.mt3.schemas import Mt3EventStream, TranscriptionSource
@@ -49,6 +50,8 @@ class TranscriptionResult:
     mean_confidence: float = 0.0
     mt3_events: Mt3EventStream | None = None
     fallback_reason: str | None = None
+    # Commit A2.1: structured metadata tracing the full fallback chain
+    transcription_metadata: dict | None = None
 
 
 def get_transcription_source_label(source: TranscriptionSource) -> str:
@@ -79,38 +82,70 @@ def transcribe_with_fallback(
             MT3 output to be accepted.
 
     Returns:
-        TranscriptionResult with the best available chord and solo data.
+        TranscriptionResult with the best available chord and solo data,
+        plus transcription_metadata tracing the fallback chain.
     """
     audio_path = Path(audio_path)
 
+    chain_metadata: dict = {
+        "attempted_tiers": [],
+        "tier_reasons": {},
+        "mean_confidence": 0.0,
+    }
+
     if not audio_path.is_file():
         logger.error("transcribe_with_fallback: audio file not found: %s", audio_path)
-        return TranscriptionResult(source="none", fallback_reason="audio_file_not_found")
+        chain_metadata["tier_reasons"]["none"] = "audio_file_not_found"
+        return TranscriptionResult(
+            source="none",
+            fallback_reason="audio_file_not_found",
+            transcription_metadata=chain_metadata,
+        )
 
     # Tier 1: MT3 — produces both chords and solo notes
     if use_mt3:
+        chain_metadata["attempted_tiers"].append("mt3")
         result = _try_mt3(audio_path, beat_grid, mt3_confidence_threshold)
-        if result is not None and result.source == "mt3" and len(result.chord_timeline.events) > 0:
+        if result is not None and result.source == "mt3" and len(result.chord_timeline.events) >= _MIN_CHORD_EVENTS:
+            chain_metadata["tier_reasons"]["mt3"] = "success"
+            chain_metadata["mean_confidence"] = result.mean_confidence
+            result.transcription_metadata = chain_metadata
             logger.info(
-                "MT3 transcription selected: %d chord events, %d solo notes",
-                len(result.chord_timeline.events), len(result.solo_notes.notes),
+                "Fallback chain result: source=%s confidence=%.3f chain=%s reasons=%s",
+                result.source, result.mean_confidence,
+                chain_metadata["attempted_tiers"], chain_metadata["tier_reasons"],
             )
             return result
+        chain_metadata["tier_reasons"]["mt3"] = result.fallback_reason if result else "mt3_server_unavailable"
     else:
-        logger.info("MT3 tier skipped (use_mt3=False)")
+        chain_metadata["tier_reasons"]["mt3"] = "skipped (use_mt3=False)"
 
-    # Tier 2: CRNN TFLite (with internal fallback to chroma) — chords only
-    # Solo notes are not produced at this tier (returns empty list)
+    # Tier 2: CRNN TFLite (with internal fallback to chroma)
+    chain_metadata["attempted_tiers"].append("crnn")
     result = _try_crnn(audio_path, beat_grid)
     if result is not None and len(result.chord_timeline.events) > 0:
+        chain_metadata["tier_reasons"][result.source] = "success"
+        chain_metadata["mean_confidence"] = result.mean_confidence
+        result.transcription_metadata = chain_metadata
         logger.info(
-            "CRNN/chroma transcription selected: %d chord events (no solo notes)",
-            len(result.chord_timeline.events),
+            "Fallback chain result: source=%s confidence=%.3f chain=%s reasons=%s",
+            result.source, result.mean_confidence,
+            chain_metadata["attempted_tiers"], chain_metadata["tier_reasons"],
         )
         return result
+    chain_metadata["tier_reasons"]["crnn"] = result.fallback_reason if result else "crnn_inference_failed"
 
-    logger.error("All transcription tiers failed for %s", audio_path)
-    return TranscriptionResult(source="none", fallback_reason="all_tiers_failed")
+    # All tiers failed
+    chain_metadata["tier_reasons"]["none"] = "all_tiers_failed"
+    logger.error(
+        "All transcription tiers failed for %s chain=%s reasons=%s",
+        audio_path, chain_metadata["attempted_tiers"], chain_metadata["tier_reasons"],
+    )
+    return TranscriptionResult(
+        source="none",
+        fallback_reason="all_tiers_failed",
+        transcription_metadata=chain_metadata,
+    )
 
 
 def _try_mt3(
@@ -184,10 +219,11 @@ def _try_mt3(
 
 
 def _try_crnn(audio_path: Path, beat_grid: BeatGrid) -> TranscriptionResult | None:
-    """Attempt CRNN TFLite chord inference.
+    """Attempt CRNN TFLite chord inference with chroma fallback detection.
 
-    CRNN internally falls back to chroma template matching if the model
-    file is unavailable, so this single call covers both Tier 2 and 3.
+    Calls ``infer_chords`` (which internally tries Keras → TFLite → Chroma),
+    then uses ``get_last_inference_tier()`` from chord_inference to determine
+    whether the actual inference was CRNN or chroma template matching.
 
     Returns None if inference fails entirely.
     """
@@ -203,10 +239,13 @@ def _try_crnn(audio_path: Path, beat_grid: BeatGrid) -> TranscriptionResult | No
             if chord_timeline.events else 0.0
         )
 
-        source: TranscriptionSource = "crnn"
+        # Detect which tier actually ran inside infer_chords
+        actual_tier = get_last_inference_tier()
+        source: TranscriptionSource = actual_tier  # type: ignore[assignment]
+
         logger.info(
-            "CRNN/chroma transcription: %d chord events (mean_conf=%.2f)",
-            len(chord_timeline.events), mean_conf,
+            "CRNN/chroma transcription: source=%s events=%d mean_conf=%.2f",
+            source, len(chord_timeline.events), mean_conf,
         )
         return TranscriptionResult(
             chord_timeline=chord_timeline,

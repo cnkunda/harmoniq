@@ -332,7 +332,7 @@ Mic listens passively while the user noodles freely — over a backing track, a 
 
 **Web:** Requires HTTPS and mic permission.
 
-**Backing tracks** (bundled as MP3 loops in `/assets/backing-tracks/`, looped via `expo-av`): in-repo **multi-part** beds (bass, chords/arpeggio, light drums — not single-tone demos). Regenerate from source with `python scripts/generate_backing_tracks.py` (requires numpy + ffmpeg). See `assets/backing-tracks/SOURCES.md`. Optional richer **AI** instrumental via `POST /jam/backing` when `GEMINI_API_KEY` is set on the API (Gemini Lyria); route auto-falls back to bundled loops if AI generation is unavailable.
+**Backing tracks** (bundled as MP3 loops in `/assets/backing-tracks/`, looped via `expo-av`): in-repo **multi-part** beds (bass, chords/arpeggio, light drums — not single-tone demos). Regenerate from source with `python scripts/generate_backing_tracks.py` (requires numpy + ffmpeg). See `assets/backing-tracks/SOURCES.md`. Optional richer **AI** instrumental via `POST /jam/backing` using **MRT2 (Magenta RealTime 2)** — an open-weights generative audio model — when installed (`pip install "harmoniq-backend[mrt2]"`); route auto-falls back to bundled loops if MRT2 is unavailable.
 - A minor, slow blues shuffle — 70 BPM
 - A minor, open drone — ambient, no tempo
 - G major, fingerpicking groove — 80 BPM (Tommy Emmanuel / acoustic)

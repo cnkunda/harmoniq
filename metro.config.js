@@ -12,6 +12,12 @@ if (!config.resolver.assetExts.includes('sf2')) {
 if (!config.resolver.assetExts.includes('sf3')) {
   config.resolver.assetExts.push('sf3')
 }
+if (!config.resolver.assetExts.includes('tflite')) {
+  config.resolver.assetExts.push('tflite')
+}
+if (!config.resolver.assetExts.includes('onnx')) {
+  config.resolver.assetExts.push('onnx')
+}
 
 // Python venv dirs (especially WSL-created `.venv-wsl` on NTFS) confuse Metro's file watcher
 // (EACCES on `lib64` symlinks). They are never part of the JS bundle.

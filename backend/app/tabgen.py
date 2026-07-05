@@ -284,8 +284,10 @@ def apply_tab_artifacts_to_sections(
         section_dict = sec.model_dump(exclude_none=True)
         
         # Update with tab artifacts
-        section_dict["tab_full_gp5_base64"] = tab_artifacts["tab_full_gp5_base64"]
-        section_dict["tab_skeleton_gp5_base64"] = tab_artifacts["tab_skeleton_gp5_base64"]
+        if "tab_full_gp5_base64" in tab_artifacts:
+            section_dict["tab_full_gp5_base64"] = tab_artifacts["tab_full_gp5_base64"]
+        if "tab_skeleton_gp5_base64" in tab_artifacts:
+            section_dict["tab_skeleton_gp5_base64"] = tab_artifacts["tab_skeleton_gp5_base64"]
         if "tab_alt_position_gp5_base64" in tab_artifacts:
             section_dict["tab_alt_position_gp5_base64"] = tab_artifacts["tab_alt_position_gp5_base64"]
         

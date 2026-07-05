@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { TabViewport } from '@/components/TabViewport'
+import { ActiveListenerCard } from '@/src/chord/ActiveListenerCard'
 import { getDiscoveryRecommendations } from '@/src/api/discovery'
 import colors from '@/src/constants/colors'
 import {
@@ -256,6 +257,11 @@ export default function DiscoverScreen() {
         <Text className="mt-2 font-sans text-sm text-muted-brown">
           Song recommendations and your library — play along with Spotify while tabs follow in real time.
         </Text>
+
+        {/* Active Listener */}
+        <View className="mt-6">
+          <ActiveListenerCard />
+        </View>
 
         {recsError && <ErrorBanner message={recsError} variant="error" className="mt-4" />}
 

@@ -7,16 +7,17 @@ Architecture:
   Mt3EventStream and is_available() returns False. This allows the
   fallback chain to degrade gracefully.
 
-  The actual MT3 inference pipeline:
-    1. Load audio at 16kHz mono (resampling from 44.1kHz guitar stem)
-    2. Compute log-mel spectrogram (256 bins, 128 hop, 512 window)
-    3. Run T5-small encoder-decoder to produce token logits
-    4. Greedy-decode logits to token sequence
-    5. Parse token sequence into Mt3Event objects
+  The inference pipeline follows the official MT3 colab:
+    1. Load audio at 16kHz mono
+    2. Split into frames and compute log-mel spectrograms (mt3.spectrograms)
+    3. Run T5-small encoder-decoder via T5X predict_batch_with_aux
+    4. Decode token sequence to NoteSequence via metrics_utils
+    5. Convert NoteSequence to Mt3EventStream for downstream decoders
 """
 
 from __future__ import annotations
 
+import functools
 import logging
 import time
 from pathlib import Path
@@ -29,11 +30,7 @@ logger = logging.getLogger("harmoniq.mt3.model_server")
 
 _MODEL_CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "models" / "mt3"
 _MT3_SAMPLE_RATE = 16000
-_MT3_FFT_SIZE = 512
-_MT3_HOP_SIZE = 128
-_MT3_NUM_MEL_BINS = 256
-
-_PERCUSSION_PROGRAM = 128  # GM percussion map
+_PERCUSSION_PROGRAM = 128
 
 
 class Mt3ModelServer:
@@ -46,7 +43,6 @@ class Mt3ModelServer:
     _instance: Mt3ModelServer | None = None
     _model = None
     _vocab = None
-    _note_processor = None
     _loaded = False
     _load_error: str | None = None
 
@@ -56,16 +52,14 @@ class Mt3ModelServer:
         return cls._instance
 
     def is_available(self) -> bool:
-        """Check if the MT3 model is loaded and ready for inference."""
         if not self._loaded:
             self._try_load()
         return self._loaded
 
     def _try_load(self) -> bool:
-        """Attempt to load MT3 dependencies and checkpoint.
+        """Attempt to load MT3 dependencies, GIN configs, and checkpoint.
 
         Returns True on success, False with logged warning on failure.
-        The model weights download to _MODEL_CACHE_DIR on first load.
         """
         if self._loaded:
             return True
@@ -73,34 +67,102 @@ class Mt3ModelServer:
             return False
 
         try:
-            import note_seq  # noqa: F401
-            from mt3 import note_sequences, run_length_encoder
-            from mt3.models import get_model
-            from mt3.config import CONFIG_MAP
-            from mt3.vocabularies import build_vocabularies
+            import gin
+            import jax
+            import seqio
+            import tensorflow as tf
+            import t5x
 
-            _MODEL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            from mt3 import (
+                metrics_utils,
+                models,
+                network,
+                note_sequences,
+                preprocessors,
+                spectrograms,
+                vocabularies,
+            )
 
-            model_name = "mt3"
-            if model_name not in CONFIG_MAP:
-                logger.warning("MT3 config '%s' not found; available: %s", model_name, list(CONFIG_MAP.keys()))
-                self._load_error = f"Config '{model_name}' not found"
+            checkpoint_dir = _MODEL_CACHE_DIR / "mt3_t5_small"
+            if not (checkpoint_dir / "checkpoint").is_file():
+                logger.warning(
+                    "MT3 checkpoint not found at %s; MT3 unavailable", checkpoint_dir
+                )
+                self._load_error = f"Checkpoint not found at {checkpoint_dir}"
                 return False
 
-            config = CONFIG_MAP[model_name]
-            self._vocab = build_vocabularies(config)
-            self._note_processor = note_sequences.NoteProcessor()
+            gin_files = [str(checkpoint_dir / "model.gin"), str(checkpoint_dir / "mt3.gin")]
 
-            model = get_model(config, self._vocab)
-            checkpoint_path = str(_MODEL_CACHE_DIR / "mt3_t5_small")
-            model.load_weights(checkpoint_path)
+            self._num_velocity_bins = 1
+            self._encoding_spec = note_sequences.NoteEncodingWithTiesSpec
+            self._inputs_length = 256
+            self._outputs_length = 1024
+            self._batch_size = 8
+            self._sequence_length = {
+                "inputs": self._inputs_length,
+                "targets": self._outputs_length,
+            }
 
-            self._model = model
-            self._loaded = True
-            logger.info(
-                "MT3 model loaded from %s (vocab_size=%d)",
-                checkpoint_path, len(self._vocab),
+            self._partitioner = t5x.partitioning.PjitPartitioner(num_partitions=1)
+
+            self._spectrogram_config = spectrograms.SpectrogramConfig()
+            self._codec = vocabularies.build_codec(
+                vocab_config=vocabularies.VocabularyConfig(
+                    num_velocity_bins=self._num_velocity_bins
+                )
             )
+            self._vocabulary = vocabularies.vocabulary_from_codec(self._codec)
+            self._output_features = {
+                "inputs": seqio.ContinuousFeature(dtype=tf.float32, rank=2),
+                "targets": seqio.Feature(vocabulary=self._vocabulary),
+            }
+
+            # Parse GIN configs — must happen before model construction
+            gin_bindings = [
+                "from __gin__ import dynamic_registration",
+                "from mt3 import vocabularies",
+                "VOCAB_CONFIG=@vocabularies.VocabularyConfig()",
+                f"vocabularies.VocabularyConfig.num_velocity_bins={self._num_velocity_bins}",
+            ]
+            with gin.unlock_config():
+                gin.parse_config_files_and_bindings(
+                    gin_files, gin_bindings, finalize_config=False
+                )
+
+            # Build T5X model from GIN-registered classes
+            model_config = gin.get_configurable(network.T5Config)()
+            module = network.Transformer(config=model_config)
+            self._model = models.ContinuousInputsEncoderDecoderModel(
+                module=module,
+                input_vocabulary=self._output_features["inputs"].vocabulary,
+                output_vocabulary=self._output_features["targets"].vocabulary,
+                optimizer_def=t5x.adafactor.Adafactor(decay_rate=0.8, step_offset=0),
+                input_depth=spectrograms.input_depth(self._spectrogram_config),
+            )
+
+            # Restore checkpoint via T5X TrainStateInitializer
+            train_state_initializer = t5x.utils.TrainStateInitializer(
+                optimizer_def=self._model.optimizer_def,
+                init_fn=self._model.get_initial_variables,
+                input_shapes={
+                    "encoder_input_tokens": (self._batch_size, self._inputs_length),
+                    "decoder_input_tokens": (self._batch_size, self._outputs_length),
+                },
+                partitioner=self._partitioner,
+            )
+
+            restore_cfg = t5x.utils.RestoreCheckpointConfig(
+                path=str(checkpoint_dir), mode="specific", dtype="float32"
+            )
+
+            train_state_axes = train_state_initializer.train_state_axes
+            self._predict_fn = self._get_predict_fn(train_state_axes)
+            self._train_state = train_state_initializer.from_checkpoint_or_scratch(
+                [restore_cfg], init_rng=jax.random.PRNGKey(0)
+            )
+
+            self._loaded = True
+            logger.info("MT3 model loaded from %s", checkpoint_dir)
             return True
 
         except ImportError as exc:
@@ -123,6 +185,37 @@ class Mt3ModelServer:
             self._load_error = str(exc)
             return False
 
+    def _get_predict_fn(self, train_state_axes):
+        """Generate a partitioned prediction function for decoding.
+
+        Follows the official MT3 colab pattern:
+        wraps model.predict_batch_with_aux into a partitioned function.
+        """
+
+        def partial_predict_fn(params, batch, decode_rng):
+            return self._model.predict_batch_with_aux(
+                params, batch, decoder_params={"decode_rng": None}
+            )
+
+        return self._partitioner.partition(
+            partial_predict_fn,
+            in_axis_resources=(
+                train_state_axes.params,
+                t5x.partitioning.PartitionSpec("data"),
+                None,
+            ),
+            out_axis_resources=t5x.partitioning.PartitionSpec("data"),
+        )
+
+    def _predict_tokens(self, batch, seed=0):
+        """Run greedy decoding on a batch, return decoded tokens."""
+        import jax
+
+        prediction, _ = self._predict_fn(
+            self._train_state.params, batch, jax.random.PRNGKey(seed)
+        )
+        return self._vocabulary.decode_tf(prediction).numpy()
+
     def infer(self, audio_path: str | Path) -> Mt3EventStream:
         """Run MT3 inference on an audio file.
 
@@ -140,63 +233,43 @@ class Mt3ModelServer:
             return Mt3EventStream(audio_duration_s=0.0)
 
         if not self.is_available():
-            return Mt3EventStream(
-                audio_duration_s=0.0,
-                inference_time_ms=0.0,
-            )
+            return Mt3EventStream(audio_duration_s=0.0, inference_time_ms=0.0)
 
         start_time = time.time()
 
         try:
             import librosa
-            from mt3 import note_sequences
-            from mt3.run_length_encoder import RunLengthEncoder
 
             audio, sr = librosa.load(str(audio_path), sr=_MT3_SAMPLE_RATE, mono=True)
             audio_duration = len(audio) / _MT3_SAMPLE_RATE
 
-            spectrogram = _compute_log_mel_spectrogram(audio)
+            est_ns = self._run_inference(audio)
 
-            spectrogram_batch = np.expand_dims(spectrogram, axis=0)
-
-            tokens = self._model.generate(
-                spectrogram_batch,
-                vocab=self._vocab,
-                max_length=2048,
-            )
-
-            if tokens is None or len(tokens) == 0:
-                logger.warning("MT3 generated no tokens for %s", audio_path)
+            if not est_ns or not est_ns.notes:
+                logger.warning("MT3 generated no notes for %s", audio_path)
                 return Mt3EventStream(
                     audio_duration_s=audio_duration,
                     inference_time_ms=(time.time() - start_time) * 1000,
                 )
 
-            token_sequence = tokens[0].numpy()
-            event_predictions = self._vocab.decode_event_predictions(token_sequence)
-
-            note_sequence = note_sequences.NoteProcessor().process(
-                event_predictions,
-                self._vocab,
-                onset_only=True,
-            )
-
-            events = _convert_note_sequence_to_events(
-                note_sequence, audio_duration
-            )
+            events = self._note_sequence_to_events(est_ns, audio_duration)
 
             mean_conf = (
-                float(np.mean([e.confidence for e in events]))
-                if events else 0.0
+                float(np.mean([e.confidence for e in events])) if events else 0.0
             )
-            instrument_count = len(set(e.program for e in events if not self._is_percussion(e.program)))
+            instrument_count = len(
+                set(e.program for e in events if not self._is_percussion(e.program))
+            )
 
             inference_ms = (time.time() - start_time) * 1000
             logger.info(
-                "MT3 inference complete: %s → %d events across %d instruments "
+                "MT3 inference complete: %s -> %d events across %d instruments "
                 "(%.1fms, mean_conf=%.2f)",
-                audio_path.name, len(events), instrument_count,
-                inference_ms, mean_conf,
+                audio_path.name,
+                len(events),
+                instrument_count,
+                inference_ms,
+                mean_conf,
             )
 
             return Mt3EventStream(
@@ -212,19 +285,118 @@ class Mt3ModelServer:
             inference_ms = (time.time() - start_time) * 1000
             logger.exception(
                 "MT3 inference failed for %s after %.1fms: %s",
-                audio_path, inference_ms, exc,
+                audio_path,
+                inference_ms,
+                exc,
             )
-            return Mt3EventStream(
-                audio_duration_s=0.0,
-                inference_time_ms=inference_ms,
-            )
+            return Mt3EventStream(audio_duration_s=0.0, inference_time_ms=inference_ms)
+
+    def _run_inference(self, audio: np.ndarray):
+        """Run the full MT3 inference pipeline on audio samples.
+
+        Follows the official colab's InferenceModel.__call__ method:
+          1. Create TF Dataset of spectrogram frames
+          2. Apply preprocessing chain (split_to_inputs_length, add_dummy, compute_spectrograms)
+          3. Convert features and batch
+          4. Greedy-decode via T5X predict_batch_with_aux
+          5. Convert event predictions to NoteSequence
+        """
+        import tensorflow as tf
+        from mt3 import metrics_utils, preprocessors, spectrograms
+
+        ds = self._audio_to_dataset(audio)
+        ds = self._preprocess(ds)
+
+        model_ds = self._model.FEATURE_CONVERTER_CLS(pack=False)(
+            ds, task_feature_lengths=self._sequence_length
+        )
+        model_ds = model_ds.batch(self._batch_size)
+
+        inferences = (
+            tokens
+            for batch in model_ds.as_numpy_iterator()
+            for tokens in self._predict_tokens(batch)
+        )
+
+        predictions = []
+        for example, tokens in zip(ds.as_numpy_iterator(), inferences):
+            predictions.append(self._postprocess(tokens, example))
+
+        result = metrics_utils.event_predictions_to_ns(
+            predictions,
+            codec=self._codec,
+            encoding_spec=self._encoding_spec,
+        )
+        return result["est_ns"]
+
+    def _audio_to_dataset(self, audio: np.ndarray):
+        """Create a TF Dataset of spectrogram frames from input audio."""
+        import tensorflow as tf
+        from mt3 import spectrograms
+
+        frame_size = self._spectrogram_config.hop_width
+        padding = [0, frame_size - len(audio) % frame_size]
+        audio = np.pad(audio, padding, mode="constant")
+        frames = spectrograms.split_audio(audio, self._spectrogram_config)
+        num_frames = len(audio) // frame_size
+        times = np.arange(num_frames) / self._spectrogram_config.frames_per_second
+        return tf.data.Dataset.from_tensors({
+            "inputs": frames,
+            "input_times": times,
+        })
+
+    def _preprocess(self, ds):
+        """Apply MT3 preprocessing chain to the dataset."""
+        import functools as ft
+        import t5 as _t5
+        from mt3 import preprocessors
+
+        pp_chain = [
+            ft.partial(
+                _t5.data.preprocessors.split_tokens_to_inputs_length,
+                sequence_length=self._sequence_length,
+                output_features=self._output_features,
+                feature_key="inputs",
+                additional_feature_keys=["input_times"],
+            ),
+            preprocessors.add_dummy_targets,
+            ft.partial(
+                preprocessors.compute_spectrograms,
+                spectrogram_config=self._spectrogram_config,
+            ),
+        ]
+        for pp in pp_chain:
+            ds = pp(ds)
+        return ds
+
+    def _postprocess(self, tokens, example):
+        """Post-process decoded tokens into a prediction dict."""
+        from mt3 import vocabularies
+
+        tokens = self._trim_eos(tokens)
+        start_time = example["input_times"][0]
+        start_time -= start_time % (1 / self._codec.steps_per_second)
+        return {
+            "est_tokens": tokens,
+            "start_time": start_time,
+            "raw_inputs": [],
+        }
+
+    @staticmethod
+    def _trim_eos(tokens):
+        """Trim end-of-sequence token from decoded token array."""
+        from mt3 import vocabularies
+
+        tokens = np.array(tokens, np.int32)
+        if vocabularies.DECODED_EOS_ID in tokens:
+            tokens = tokens[: np.argmax(tokens == vocabularies.DECODED_EOS_ID)]
+        return tokens
 
     def warm_start(self) -> bool:
         """Eagerly load the model on server boot.
 
         Returns True if the model loaded successfully, False if dependencies
-        are missing or loading failed. Safe to call multiple times — subsequent
-        calls are no-ops if already loaded or if loading already failed.
+        are missing or loading failed. Safe to call multiple times.
         """
         return self.is_available()
 
@@ -237,78 +409,53 @@ class Mt3ModelServer:
         """Check if a GM program number corresponds to percussion."""
         return program == _PERCUSSION_PROGRAM
 
+    def _note_sequence_to_events(
+        self, ns, audio_duration: float
+    ) -> list[Mt3Event]:
+        """Convert a NoteSequence proto to structured Mt3Event objects.
 
+        Args:
+            ns: The output NoteSequence from MT3 inference.
+            audio_duration: Duration of the input audio for clamping.
 
-def _compute_log_mel_spectrogram(audio: np.ndarray) -> np.ndarray:
-    """Compute log-mel spectrogram for MT3 input.
+        Returns:
+            List of Mt3Event objects, one onset + one offset per note.
+        """
+        events: list[Mt3Event] = []
 
-    Uses the same parameters as the MT3 preprocessing pipeline:
-    - 256 mel bins
-    - 512 FFT size
-    - 128 hop size
-    - 16kHz sample rate
+        for note in ns.notes:
+            program = getattr(note, "program", 24)
+            confidence = getattr(note, "confidence", 0.9)
 
-    Returns:
-        Array of shape (time_steps, 256) with log-mel magnitudes.
-    """
-    import librosa
+            events.append(
+                Mt3Event(
+                    time=float(note.start_time),
+                    pitch=int(note.pitch),
+                    velocity=int(min(note.velocity, 127))
+                    if hasattr(note, "velocity")
+                    else 80,
+                    program=int(program),
+                    is_onset=True,
+                    confidence=float(confidence),
+                )
+            )
 
-    mel_spec = librosa.feature.melspectrogram(
-        y=audio,
-        sr=_MT3_SAMPLE_RATE,
-        n_fft=_MT3_FFT_SIZE,
-        hop_length=_MT3_HOP_SIZE,
-        n_mels=_MT3_NUM_MEL_BINS,
-        fmin=30.0,
-        fmax=_MT3_SAMPLE_RATE / 2,
-    )
-    log_mel = librosa.power_to_db(mel_spec, ref=1.0, top_db=80.0)
-    return log_mel.T  # (time, bins)
+            end_time = min(float(note.end_time), audio_duration)
+            if end_time > float(note.start_time):
+                events.append(
+                    Mt3Event(
+                        time=end_time,
+                        pitch=int(note.pitch),
+                        velocity=0,
+                        program=int(program),
+                        is_onset=False,
+                        is_offset=True,
+                        confidence=float(confidence),
+                    )
+                )
 
-
-def _convert_note_sequence_to_events(
-    note_sequence,  # note_seq.NoteSequence
-    audio_duration: float,
-) -> list[Mt3Event]:
-    """Convert a NoteSequence proto to structured Mt3Event objects.
-
-    Args:
-        note_sequence: The output from MT3's note processor.
-        audio_duration: Duration of the input audio for clamping.
-
-    Returns:
-        List of Mt3Event objects, one per note in the sequence.
-    """
-    events: list[Mt3Event] = []
-
-    for note in note_sequence.notes:
-        program = getattr(note, "program", 24)
-        confidence = getattr(note, "confidence", 0.9)
-
-        events.append(Mt3Event(
-            time=float(note.start_time),
-            pitch=int(note.pitch),
-            velocity=int(min(note.velocity, 127)) if hasattr(note, "velocity") else 80,
-            program=int(program),
-            is_onset=True,
-            is_offset=False,
-            confidence=float(confidence),
-        ))
-
-        end_time = min(float(note.end_time), audio_duration)
-        if end_time > float(note.start_time):
-            events.append(Mt3Event(
-                time=end_time,
-                pitch=int(note.pitch),
-                velocity=0,
-                program=int(program),
-                is_onset=False,
-                is_offset=True,
-                confidence=float(confidence),
-            ))
-
-    events.sort(key=lambda e: (e.time, e.pitch, 0 if e.is_onset else 1))
-    return events
+        events.sort(key=lambda e: (e.time, e.pitch, 0 if e.is_onset else 1))
+        return events
 
 
 def mt3_infer(audio_path: str | Path) -> Mt3EventStream:

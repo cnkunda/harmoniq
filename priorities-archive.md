@@ -16,6 +16,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Phase 2 (Commit 120) Archive Date:** June 11, 2026
 **Phase 2 (Commit 121) Archive Date:** June 11, 2026
 **Phase 2 (Commits 122-148) Archive Date:** July 3, 2026 — Superseded by MT3-primary strategy. Custom model work archived as reference for Phase 3 distillation.
+**Milestone A (MT3-Primary AMT Pipeline) Archive Date:** July 5, 2026 — Complete. All 10 acceptance criteria verified.
 
 ---
 
@@ -1738,4 +1739,85 @@ chord books. No multiple position alternatives are offered.
 | **Commit 146** | Monitoring & Observability | Migrated to Phase 2 Milestone D |
 | **Commit 147** | Audio Fingerprinting & Quality Scoring | Migrated to Phase 2 Milestone D |
 | **Commit 148** | MT3 as Auxiliary Training Tool | **Replaced** — MT3 is now primary, not auxiliary |
+
+---
+
+## Milestone A: MT3-Primary AMT Pipeline
+
+**Archive Date:** July 5, 2026
+
+**Goal:** Replace the CRNN + Basic Pitch analysis pipeline with MT3 as the primary backend transcription engine, producing simultaneous chord and solo note outputs with higher accuracy.
+
+**Scope:**
+
+#### A1 — MT3 Inference Backend
+- **DONE - Commit A1.1** — MT3 Model Server:
+  - Download and serve MT3 checkpoint (T5-small, ~236M params checkpoint) via a dedicated FastAPI service or subprocess
+  - Accept audio tensor input (44.1kHz mono guitar stem, resampled to 16kHz for MT3)
+  - Run inference via JAX inference path (preserve GPU support) or TF Serving
+  - Output raw token-level event stream: onset, pitch, velocity, instrument, offset per event
+  - Multi-track event stream covers all detected notes, not just guitar — filter by instrument class (piano/guitar = keep, drums/vocals = discard)
+  - Warm-start model loading on server boot; cache model weights in `data/models/mt3/`
+  - API spec: `POST /mt3/infer` → accepts WAV path, returns `Mt3EventStream` (list of `{time, pitch, velocity, program, is_onsetevent, is_offsetevent}`)
+  - Batch mode for multi-song processing
+  - Graceful degradation: if MT3 server is unavailable, fall back to existing CRNN + Basic Pitch pipeline
+
+- **DONE - Commit A1.2** — MT3 Event Stream → Chord Decoder:
+  - Convert MT3 multi-track event stream into chord timeline via music21 deterministic analysis
+  - For each time slice (0.1s hops): aggregate all sounding pitches → pitch class set → match against `CHORD_INTERVALS` template set (same methodology as Guitar-TECHS/EGSet12 parsing — Jaccard score, >0.66 coverage threshold)
+  - Output 277-class vocabulary but map to 25-class MIREX for consistency with existing frontend chord display
+  - Per-chord confidence derived from pitch set coverage fraction
+  - Handle polyrhythmic sections: if simultaneous guitar and piano detected, prefer guitar pitches for chord inference
+  - Handle non-chord regions (rests, percussion-only): emit "N" (no-chord) when pitch density falls below threshold
+
+- **DONE - Commit A1.3** — MT3 Event Stream → Solo Notes Decoder:
+  - Filter MT3 events for monophonic or primary melodic line (highest confidence pitch track)
+  - Convert event stream to `SoloNotes` format compatible with existing `solo_notes` field in `LessonJSON`
+  - Apply quantization to nearest beat grid position (existing `beat_grid.py`)
+  - Apply tie detection across boundaries (reuse `TieRegistry` from `solo_inference.py`)
+  - Extract technique tags: detect bends (pitch slides), vibrato (rapid pitch modulation), grace notes (sub-50ms onsets)
+  - Confidence per note: `mt3_event.confidence * pitch_set_coherence`
+
+- **DONE - Commit A1.4** — Dual-Output LessonJSON Assembly:
+  - Merge chord timeline + solo notes into single `LessonJSON` response
+  - Ensure sync: chord events and solo notes share the same beat grid, bar timestamps, and time base
+  - Add `transcription_source: "mt3"` field to LessonJSON so frontend knows which pipeline produced the data
+  - Pass through existing downstream steps: MusicXML generation, section refinement, coach copy hydration
+  - Integration test: known song → MT3 → chord timeline matches ground-truth progression within 85% accuracy
+
+#### A2 — Confidence-Adaptive Fallback Chain
+
+- **DONE - Commit A2.1** — Fallback Orchestrator:
+  - Implement fallback chain: `MT3 → CRNN TFLite → Chroma matching`
+  - At each stage, evaluate `confidence` (MT3: mean event confidence; CRNN: softmax max-prob; Chroma: template correlation score)
+  - Use MT3 output if `mean_confidence > 0.7`; fall back to CRNN if MT3 confidence low or MT3 server unavailable; fall back to Chroma if no model available
+  - Track fallback decisions in `transcription_metadata` for observability
+  - Log per-song: which tier produced the result, and why higher tiers were skipped
+
+- **DONE - Commit A2.2** — On-Device CRNN TFLite Preservation:
+  - Keep existing `chord_model.tflite` in `backend/app/` for on-device inference path (Live Mic Mode)
+  - Keep `chord_inference.py` as-is — it becomes the fallback inference engine
+  - CRNN training pipeline (`build_chord_tflite.py`) retained for long-term distillation training
+  - The CRNN now serves two roles: (1) on-device real-time inference, (2) future student model for MT3 distillation
+
+#### A3 — Live Mic Mode (On-Device MT3-Distilled or CRNN)
+- **DONE - Commit A3.1** — React Native TFLite Bridge:
+  - Implement low-latency (<120ms) real-time chord detection from mic input using the CRNN TFLite model
+  - Web path: TensorFlow.js or ONNX runtime runtime
+  - Mobile path: TFLite C++ API via JSI bridge (or TF Lite React Native binding)
+  - UI: "Active Listener" screen with live chord display, confidence meter, and history stream
+  - Long-term: replace CRNN with MT3-distilled student model (Phase 3)
+
+**Acceptance Criteria for Milestone A:**
+
+- [x] MT3 inference server processes a 4-minute song in <60 seconds (GPU) or <5 minutes (CPU) — `test_mt3_performance.py`
+- [x] MT3 chord accuracy on GuitarSet test set ≥ 80% (25-class MIREX) — `test_guitarset_mt3_accuracy.py`
+- [x] MT3 solo note transcription accuracy on GuitarSet monophonic sections ≥ 85% (onset F1) — `test_guitarset_solo_accuracy.py`
+- [x] Chord timeline and solo notes are temporally aligned to the same beat grid — chord_decoder.py + solo_decoder.py share `beat_grid`
+- [x] Fallback chain produces valid output even when MT3 server is down — `test_mt3_pipeline.py` + fallback.py
+- [x] On-device CRNN TFLite inference <120ms per chord frame on a Pixel 7 / iPhone 13 — `tests/benchmarks/chordModelLatency.ts`
+- [x] All existing `npm run lint`, `npm run test`, `pytest` tests pass — CI `scoring-tests.yml`
+- [x] Integration test: known song → full pipeline → LessonJSON with both chord and solo data — `test_e2e_integration.py`
+- [x] `transcription_source` field populated correctly per job — verified in test_e2e_integration.py (mt3/crnn/none)
+- [x] Fallback tier logged per job for observability — fallback.py structured logging with chain + reasons
 

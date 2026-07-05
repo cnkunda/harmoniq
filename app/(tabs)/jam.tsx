@@ -113,7 +113,7 @@ export default function JamScreen() {
   const lastScaleTintRef = useRef<{ rootMidi: number; intervals: readonly number[] } | null>(null)
   const classicTrackDef = BACKING_TRACKS.find((t) => t.id === classicTrackId) ?? BACKING_TRACKS[0]
   jamBpmRef.current = classicTrackDef.bpm ?? null
-  const activeJamTrackSource = backingMode === 'ai' ? 'AI instrumental · Gemini' : 'Offline loop (bundled)'
+  const activeJamTrackSource = backingMode === 'ai' ? 'AI instrumental · MRT2' : 'Offline loop (bundled)'
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
 
   const currentPlan = usePlanStore((s) => s.currentPlan)
@@ -386,7 +386,7 @@ export default function JamScreen() {
       if (e instanceof ApiError) {
         if (e.status === 503) {
           toast.error(
-            'AI backing needs GEMINI_API_KEY on the practice server. Choose a classic loop or configure the backend.',
+            'AI backing needs MRT2 model files on the practice server. Choose a classic loop or install magenta-rt.',
           )
         } else {
           toast.error(e.message || 'Could not generate backing track')
@@ -789,7 +789,7 @@ export default function JamScreen() {
                   >
                     <View className="flex-1 pr-2">
                       <Text className={`font-sans text-sm ${backingMode === 'ai' ? 'text-amber-light' : 'text-cream'}`}>
-                        AI instrumental (server · Gemini)
+                        AI instrumental (server · MRT2)
                       </Text>
                       <Text className="mt-0.5 font-sans text-xs text-muted-brown">
                         Generates a fresh bed from the key/tempo of the loop you select below

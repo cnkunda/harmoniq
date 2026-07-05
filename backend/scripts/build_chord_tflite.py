@@ -8,6 +8,11 @@ Vocabulary: 25-class MIREX (12 maj + 12 min + N) — mapped from 277-class at da
 Architecture: CRNN with Bidirectional LSTM + Multi-Head Self-Attention (Commit 98d)
 Augmentation: Inversions, missing notes, pitch shift, time stretch, bass ambiguity, pink noise, transitions (Commit 98a)
 Features: 144-bin CQT with octave preservation (Commit 98b)
+
+Roles (Commit A2.2):
+  1. CRNN training pipeline for the on-device TFLite model (Live Mic Mode)
+  2. Preserved for long-term MT3 distillation — trains student models that
+     learn from MT3 pseudo-labels, producing smaller/faster on-device models
 """
 
 import json
@@ -2177,6 +2182,48 @@ def convert_to_int8_tflite(
     return None
 
 
+def convert_to_onnx(
+    model: tf.keras.Model,
+    output_path: str | Path,
+) -> str | None:
+    """Convert a Keras model to ONNX format for web inference.
+
+    Uses tf2onnx to produce an ONNX model that can be loaded by
+    onnxruntime-web in the browser.
+
+    Args:
+        model: Trained Keras model (single-output chord_probs head).
+        output_path: Destination path for the ``.onnx`` file.
+
+    Returns:
+        The output path string on success, or None on failure.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        import tf2onnx
+        import tf2onnx.convert
+    except ImportError:
+        print("  [SKIP] ONNX conversion — tf2onnx not installed. "
+              "Install with: pip install tf2onnx")
+        return None
+
+    try:
+        spec = (tf.TensorSpec(model.input_shape, tf.float32, name="input"),)
+        model_proto, _ = tf2onnx.convert.from_keras(
+            model,
+            input_signature=spec,
+            output_path=str(output_path),
+        )
+        size_kb = output_path.stat().st_size / 1024
+        print(f"  Saved ONNX -> {output_path}  ({size_kb:.1f} KB)")
+        return str(output_path)
+    except Exception as exc:
+        print(f"  [WARN] ONNX conversion failed: {exc}")
+        return None
+
+
 def _build_converter(
     model: tf.keras.Model,
     optimizations: list | None = None,
@@ -3422,6 +3469,7 @@ def run_pipeline(
     empirical_matrix_path: str | Path | None = None,
     temperature: float = 0.3,
     cqt_stats_path: str | Path | None = None,
+    export_onnx: bool = False,
 ):
     """Run the full training pipeline with multi-source weighted data mixing.
 
@@ -4349,6 +4397,14 @@ def run_pipeline(
         )
 
     # =================================================================
+    # 2b. ONNX export for web inference (Commit A3.1)
+    # =================================================================
+    if export_onnx:
+        print("\nExporting ONNX model for web inference...")
+        onnx_path = _APP_DIR / "chord_model.onnx"
+        convert_to_onnx(export_model, onnx_path)
+
+    # =================================================================
     # 3.  Accuracy & size comparison
     # =================================================================
     if qat_val_acc is not None:
@@ -4854,6 +4910,11 @@ if __name__ == "__main__":
         "--cv-epochs", type=int, default=30,
         help="Epochs per fold for --guitarset-cv (default: 30)"
     )
+    parser.add_argument(
+        "--onnx", action="store_true",
+        help="Export ONNX model (chord_model.onnx) for web inference after training. "
+             "Requires tf2onnx: pip install tf2onnx"
+    )
     args = parser.parse_args()
 
     if args.temperature < 0:
@@ -4885,6 +4946,7 @@ if __name__ == "__main__":
             empirical_matrix_path=args.empirical_matrix,
             temperature=args.temperature,
             cqt_stats_path=args.cqt_stats_path,
+            export_onnx=args.onnx,
         )
     elif args.guitarset_cv:
         if not args.guitarset_data_dir:
@@ -4919,4 +4981,5 @@ if __name__ == "__main__":
             empirical_matrix_path=args.empirical_matrix,
             temperature=args.temperature,
             cqt_stats_path=args.cqt_stats_path,
+            export_onnx=args.onnx,
         )

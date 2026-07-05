@@ -11,6 +11,11 @@ Inference chain (auto-selects best available):
 
 Replaces the old _smooth_chords median filter with statistically optimal
 Viterbi sequence decoding using a music-theory transition matrix.
+
+Dual role (Commit A2.2):
+  1. On-device real-time inference (Live Mic Mode) via TFLite model
+  2. Fallback inference engine when MT3 is unavailable or confidence is low
+  3. Future student model for MT3 knowledge distillation
 """
 
 from __future__ import annotations
@@ -22,6 +27,8 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+import os as _os
+_os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Model saved with tf_keras; before any tf import
 
 from app.schemas import BeatGrid, ChordEvent, ChordTimeline
 from app.pipeline_proof import TARGET_SR
@@ -62,6 +69,19 @@ from app.cqt_constants import (WINDOW as _WINDOW, HOP_FRAMES as _HOP_FRAMES,
                                 BASS_BINS as _BASS_BINS, FEATURE_DIM as _FEATURE_DIM)
 _BATCH_CHUNK = 512
 
+# Track which inference tier the last _run_inference call used.
+# Set by _run_inference; read by fallback.py::_try_crnn via get_last_inference_tier().
+_last_inference_tier: str = "none"
+
+
+def get_last_inference_tier() -> str:
+    """Return which inference tier the last _run_inference call used.
+
+    Returns:
+        One of ``"crnn"`` (Keras or TFLite model) or ``"chroma"`` (template matching).
+    """
+    return _last_inference_tier
+
 
 def _circular_cqt_pad(x):
     """Circular padding on 144-bin CQT.
@@ -74,6 +94,11 @@ def _circular_cqt_pad(x):
     """
     import tensorflow as tf
     return tf.concat([x[:, :, -1:], x, x[:, :, :1]], axis=-1)
+
+
+class CircularCqtPad:
+    """Placeholder — actual tf.keras.layers.Layer subclass defined in _get_keras_model()."""
+    pass
 
 # Precomputed triangular window for overlap-and-blend (Commit 100)
 _TRIANGULAR_WINDOW = np.minimum(
@@ -122,7 +147,7 @@ def _smooth_chords(events: list[ChordEvent]) -> list[ChordEvent]:
 def _get_keras_model():
     """Load the full Keras CRNN model for Python backend inference.
 
-    Uses custom_objects to resolve the _circular_cqt_pad Lambda layer
+    Uses custom_objects to resolve the CircularCqtPad custom layer
     that was saved during model training (build_chord_tflite.py).
 
     Returns the model or raises if .keras file is missing/unloadable.
@@ -135,9 +160,22 @@ def _get_keras_model():
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Force CPU-only (GPU crashes on WSL2)
     import tensorflow as tf
 
+    # Define the CircularCqtPad layer here where tf is available
+    class _CircularPadImpl(tf.keras.layers.Layer):
+        def call(self, x):
+            return tf.concat([x[:, :, -1:], x, x[:, :, :1]], axis=-1)
+        def compute_output_shape(self, input_shape):
+            return (input_shape[0], input_shape[1], input_shape[2] + 2)
+        def get_config(self):
+            return super().get_config()
+
     model = tf.keras.models.load_model(
         str(_KERAS_PATH),
-        custom_objects={"_circular_cqt_pad": _circular_cqt_pad},
+        custom_objects={
+            "_circular_cqt_pad": _circular_cqt_pad,
+            "CircularCqtPad": _CircularPadImpl,
+            "Custom>CircularCqtPad": _CircularPadImpl,  # registered_name key
+        },
         safe_mode=False,
     )
     logger.info("Chord model loaded via Keras (%s)", _KERAS_PATH.name)
@@ -313,6 +351,10 @@ def _run_keras_raw(y: np.ndarray, sr: int) -> list[dict]:
         end = min(start + _BATCH_CHUNK, T_overlap)
         chunk = windows[start:end]
         pred = model.predict(chunk, verbose=0)
+        if isinstance(pred, dict):
+            pred = pred["chord_probs"]
+        elif isinstance(pred, list):
+            pred = pred[0]  # Ordering-sensitive fallback
         all_probs[start:end] = pred
 
     # Diagnostic: check per-window prediction diversity
@@ -465,8 +507,11 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
 
     Chain: Keras → TFLite → Chroma template matching.
     """
+    global _last_inference_tier
+
     try:
         raw_frames = _run_keras_raw(y, sr)
+        _last_inference_tier = "crnn"
         logger.info("Chord inference: %d frames (Keras CRNN)", len(raw_frames))
         return raw_frames
     except Exception as exc:
@@ -474,11 +519,13 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
 
     try:
         raw_frames = _run_tflite_raw(y, sr)
+        _last_inference_tier = "crnn"
         logger.info("Chord inference: %d frames (TFLite CRNN)", len(raw_frames))
         return raw_frames
     except Exception as exc:
         logger.warning("TFLite inference unavailable: %s", exc)
 
+    _last_inference_tier = "chroma"
     raw_frames = _run_chroma_raw(y, sr)
     logger.warning("Falling back to chroma template matching (%d frames)", len(raw_frames))
     return raw_frames

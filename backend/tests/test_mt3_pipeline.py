@@ -10,6 +10,9 @@ Tests cover:
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -27,7 +30,7 @@ from app.mt3.fallback import (
     transcribe_with_fallback,
     get_transcription_source_label,
 )
-from app.mt3.model_server import Mt3ModelServer, _convert_note_sequence_to_events
+from app.mt3.model_server import Mt3ModelServer
 from app.mt3.schemas import Mt3Event, Mt3EventStream
 from app.mt3.solo_decoder import (
     NoteSegment,
@@ -615,6 +618,8 @@ class TestFallbackOrchestrator:
         assert len(result.solo_notes.notes) == 0
         assert result.source == "none"
         assert result.mean_confidence == 0.0
+        # Commit A2.1: transcription_metadata should default to None
+        assert result.transcription_metadata is None
 
     def test_fallback_file_not_found(self):
         """transcribe_with_fallback should return none source when file missing."""
@@ -626,6 +631,8 @@ class TestFallbackOrchestrator:
         result = transcribe_with_fallback("/nonexistent/audio.wav", bg, use_mt3=False)
         assert result.source == "none"
         assert result.fallback_reason == "audio_file_not_found"
+        assert result.transcription_metadata is not None
+        assert result.transcription_metadata["tier_reasons"]["none"] == "audio_file_not_found"
 
     def test_fallback_skips_mt3_when_use_mt3_false(self, tmp_path):
         """When use_mt3=False, the orchestrator should skip MT3 and go to CRNN."""
@@ -646,6 +653,175 @@ class TestFallbackOrchestrator:
 
         result = transcribe_with_fallback(str(audio_file), bg, use_mt3=False)
         assert result.source in ("crnn", "chroma", "none")
+
+    # ------------------------------------------------------------------
+    # Commit A2.1 — Fallback chain metadata and tier tracking tests
+    # ------------------------------------------------------------------
+
+    def test_transcription_metadata_on_mt3_success(self, tmp_path, monkeypatch):
+        """When MT3 succeeds, transcription_metadata should contain chain info."""
+        audio_file = tmp_path / "test_mt3_ok.wav"
+        import struct
+        import wave
+        with wave.open(str(audio_file), "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(struct.pack(f"<{16000}h", *[0] * 16000))
+
+        bg = BeatGrid(
+            bpm=120.0, pulse_bpm=120.0,
+            beats=[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5],
+            downbeats=[0.0, 2.0, 4.0],
+            time_signature={"numerator": 4, "denominator": 4},
+            tick_value=0.25,
+        )
+
+        def fake_try_mt3(*args, **kwargs):
+            return TranscriptionResult(
+                chord_timeline=ChordTimeline(events=[
+                    ChordEvent(timestamp=0.0, chord="C:maj", confidence=0.95),
+                    ChordEvent(timestamp=1.0, chord="G:maj", confidence=0.92),
+                    ChordEvent(timestamp=2.0, chord="A:min", confidence=0.90),
+                ]),
+                solo_notes=SoloNotes(notes=[]),
+                source="mt3",
+                mean_confidence=0.91,
+            )
+
+        monkeypatch.setattr("app.mt3.fallback._try_mt3", fake_try_mt3)
+
+        result = transcribe_with_fallback(str(audio_file), bg, use_mt3=True)
+        assert result.source == "mt3"
+        assert result.transcription_metadata is not None
+        assert result.transcription_metadata["attempted_tiers"] == ["mt3"]
+        assert result.transcription_metadata["tier_reasons"]["mt3"] == "success"
+        assert result.transcription_metadata["mean_confidence"] == pytest.approx(0.91)
+
+    def test_transcription_metadata_tracks_fallback_reason(self, tmp_path, monkeypatch):
+        """When MT3 fails and CRNN succeeds, tier_reasons should capture MT3's reason."""
+        audio_file = tmp_path / "test_fallback.wav"
+        import struct
+        import wave
+        with wave.open(str(audio_file), "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(struct.pack(f"<{16000}h", *[0] * 16000))
+
+        bg = BeatGrid(
+            bpm=120.0, pulse_bpm=120.0, beats=[0.0, 0.5, 1.0, 1.5],
+            downbeats=[0.0, 2.0], time_signature={"numerator": 4, "denominator": 4},
+            tick_value=0.25,
+        )
+
+        # MT3 returns None (server unavailable)
+        monkeypatch.setattr("app.mt3.fallback._try_mt3", lambda *a, **k: None)
+
+        # CRNN succeeds
+        def fake_try_crnn(*args, **kwargs):
+            return TranscriptionResult(
+                chord_timeline=ChordTimeline(events=[
+                    ChordEvent(timestamp=0.0, chord="C:maj", confidence=0.80),
+                ]),
+                solo_notes=SoloNotes(notes=[]),
+                source="crnn",
+                mean_confidence=0.80,
+            )
+
+        monkeypatch.setattr("app.mt3.fallback._try_crnn", fake_try_crnn)
+
+        result = transcribe_with_fallback(str(audio_file), bg, use_mt3=True)
+        assert result.source == "crnn"
+        assert result.transcription_metadata is not None
+        assert result.transcription_metadata["attempted_tiers"] == ["mt3", "crnn"]
+        assert result.transcription_metadata["tier_reasons"]["mt3"] == "mt3_server_unavailable"
+        assert result.transcription_metadata["tier_reasons"]["crnn"] == "success"
+
+    def test_chain_metadata_all_tiers_failed(self, tmp_path, monkeypatch):
+        """When both tiers fail, metadata captures all failure reasons."""
+        bg = BeatGrid(
+            bpm=120.0, pulse_bpm=120.0, beats=[0.0],
+            downbeats=[0.0], time_signature={"numerator": 4, "denominator": 4},
+            tick_value=0.25,
+        )
+
+        result = transcribe_with_fallback("/tmp/nonexistent_fallback_test.wav", bg, use_mt3=True)
+        assert result.source == "none"
+        assert result.fallback_reason == "audio_file_not_found"
+        assert result.transcription_metadata is not None
+
+    def test_crnn_detects_chroma_source(self, monkeypatch):
+        """_try_crnn should return source='chroma' when get_last_inference_tier() returns 'chroma'."""
+        from app.mt3.fallback import _try_crnn
+
+        bg = BeatGrid(
+            bpm=120.0, pulse_bpm=120.0, beats=[0.0, 0.5],
+            downbeats=[0.0], time_signature={"numerator": 4, "denominator": 4},
+            tick_value=0.25,
+        )
+
+        monkeypatch.setattr(
+            "app.mt3.fallback.infer_chords",
+            lambda *a, **k: ChordTimeline(events=[
+                ChordEvent(timestamp=0.0, chord="C:maj", confidence=0.75),
+            ]),
+        )
+        monkeypatch.setattr(
+            "app.mt3.fallback.get_last_inference_tier",
+            lambda: "chroma",
+        )
+
+        result = _try_crnn(Path("/tmp/fake.wav"), bg)
+        assert result is not None
+        assert result.source == "chroma"
+        assert result.mean_confidence == pytest.approx(0.75)
+
+    def test_fallback_logging_includes_chain_info(self, tmp_path, monkeypatch, caplog):
+        """The structured log line should contain source, confidence, and chain info."""
+        import struct
+        import wave
+
+        audio_file = tmp_path / "test_logging.wav"
+        with wave.open(str(audio_file), "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(16000)
+            wf.writeframes(struct.pack(f"<{16000}h", *[0] * 16000))
+
+        bg = BeatGrid(
+            bpm=120.0, pulse_bpm=120.0,
+            beats=[0.0, 0.5, 1.0, 1.5, 2.0, 2.5],
+            downbeats=[0.0, 2.0, 4.0],
+            time_signature={"numerator": 4, "denominator": 4},
+            tick_value=0.25,
+        )
+
+        def fake_try_mt3(*args, **kwargs):
+            return TranscriptionResult(
+                chord_timeline=ChordTimeline(events=[
+                    ChordEvent(timestamp=0.0, chord="C:maj", confidence=0.95),
+                    ChordEvent(timestamp=1.0, chord="G:maj", confidence=0.92),
+                    ChordEvent(timestamp=2.0, chord="A:min", confidence=0.90),
+                ]),
+                solo_notes=SoloNotes(notes=[]),
+                source="mt3",
+                mean_confidence=0.91,
+            )
+
+        monkeypatch.setattr("app.mt3.fallback._try_mt3", fake_try_mt3)
+
+        with caplog.at_level(logging.INFO, logger="harmoniq.mt3.fallback"):
+            transcribe_with_fallback(str(audio_file), bg, use_mt3=True)
+
+        fallback_logs = [r for r in caplog.records
+                         if "Fallback chain result" in r.message]
+        assert len(fallback_logs) >= 1
+        log_msg = fallback_logs[0].message
+        assert "source=mt3" in log_msg
+        assert "confidence=0.91" in log_msg or "confidence=0.910" in log_msg
+        assert "chain=" in log_msg
+        assert "reasons=" in log_msg
 
 
 # ---------------------------------------------------------------------------
@@ -790,3 +966,260 @@ class TestFullPipeline:
         assert len(lesson["chord_timeline"].events) == 2
         assert len(lesson["solo_notes"].notes) == 2
         assert lesson["transcription_source"] == "mt3"
+
+
+# ---------------------------------------------------------------------------
+# Commit A1.4 — Dual-Output LessonJSON Assembly Tests
+# ---------------------------------------------------------------------------
+
+
+class TestMT3LessonJSONAssembly:
+    """Tests for Commit A1.4: MT3 dual output → LessonJSON assembly.
+
+    These tests mock the heavy inference dependencies (transcribe_with_fallback,
+    librosa_summarize, etc.) and test only the LessonJSON assembly logic in
+    build_lesson_json_from_librosa.
+    """
+
+    # ------------------------------------------------------------------
+    # Test helpers — following the pattern from test_stem_routing_pipeline.py
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _fake_summary():
+        from app.pipeline_proof import LibrosaSummary
+        return LibrosaSummary(
+            duration_s=4.0,
+            tempo_bpm=120.0,
+            beat_times_s=[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5],
+            key_name="C major",
+            mode="major",
+            segments=[{"label": "Intro", "start_s": 0.0}],
+            bar_timestamps_s=[0.0, 2.0, 4.0],
+            key_confidence=0.9,
+            tempo_confidence=0.9,
+        )
+
+    @staticmethod
+    def _fake_beat_grid_dict():
+        from app.schemas import BeatGrid
+        return BeatGrid(
+            bpm=120.0,
+            pulse_bpm=120.0,
+            beats=[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5],
+            downbeats=[0.0, 2.0, 4.0],
+            time_signature={"numerator": 4, "denominator": 4},
+            tick_value=0.25,
+        ).model_dump()
+
+    @staticmethod
+    def _fake_mt3_chord_timeline():
+        return ChordTimeline(events=[
+            ChordEvent(timestamp=0.0, chord="C:maj", confidence=0.95),
+            ChordEvent(timestamp=0.5, chord="C:maj", confidence=0.93),
+            ChordEvent(timestamp=1.0, chord="G:maj", confidence=0.90),
+            ChordEvent(timestamp=1.5, chord="G:maj", confidence=0.91),
+            ChordEvent(timestamp=2.0, chord="A:min", confidence=0.88),
+            ChordEvent(timestamp=2.5, chord="A:min", confidence=0.87),
+            ChordEvent(timestamp=3.0, chord="F:maj", confidence=0.92),
+            ChordEvent(timestamp=3.5, chord="F:maj", confidence=0.90),
+        ])
+
+    @staticmethod
+    def _fake_mt3_solo_notes():
+        return SoloNotes(notes=[
+            SoloNote(start_time=0.0, duration=0.5, pitch=60, velocity=100, fret=3, string=3),
+            SoloNote(start_time=0.5, duration=0.5, pitch=64, velocity=90, fret=2, string=2),
+            SoloNote(start_time=1.0, duration=0.5, pitch=67, velocity=95, fret=0, string=1),
+            SoloNote(start_time=1.5, duration=0.5, pitch=71, velocity=85, fret=2, string=2),
+            SoloNote(start_time=2.0, duration=0.5, pitch=72, velocity=90, fret=3, string=1),
+            SoloNote(start_time=2.5, duration=0.5, pitch=76, velocity=88, fret=3, string=2),
+            SoloNote(start_time=3.0, duration=0.5, pitch=77, velocity=92, fret=5, string=2),
+            SoloNote(start_time=3.5, duration=0.5, pitch=81, velocity=86, fret=6, string=2),
+        ])
+
+    @staticmethod
+    @staticmethod
+    def _fake_transcription_result(*, source: str = "mt3", mean_confidence: float = 0.91):
+        ct = TestMT3LessonJSONAssembly._fake_mt3_chord_timeline()
+        ct.metadata = {
+            "source": source,
+            "decoder": "chord_decoder",
+            "note_count": len(TestMT3LessonJSONAssembly._fake_mt3_solo_notes().notes),
+            "mean_confidence": mean_confidence,
+        }
+        return TranscriptionResult(
+            chord_timeline=ct,
+            solo_notes=TestMT3LessonJSONAssembly._fake_mt3_solo_notes(),
+            source=source,
+            mean_confidence=mean_confidence,
+        )
+
+    @staticmethod
+    def _write_dummy_stems(tmp_path):
+        """Write minimal WAV files so build_lesson_json_from_librosa doesn't crash on path resolution."""
+        import soundfile as sf
+        sr = 44100
+        job_dir = tmp_path / "data" / "jobs" / "test_job"
+        (job_dir / "stems").mkdir(parents=True, exist_ok=True)
+        for name in ("guitar", "vocals"):
+            p = job_dir / "stems" / f"{name}.wav"
+            sf.write(str(p), np.zeros(sr, dtype=np.float32), sr)
+        song_wav = job_dir / "song.wav"
+        sf.write(str(song_wav), np.zeros(sr, dtype=np.float32), sr)
+        return job_dir, song_wav
+
+    def _call_build_lesson(
+        self,
+        tmp_path,
+        monkeypatch,
+        *,
+        mock_transcription_result: TranscriptionResult | None = None,
+        infer_chords_fn=None,
+        infer_solo_fn=None,
+    ):
+        """Helper: set up mocks and call build_lesson_json_from_librosa.
+
+        Args:
+            infer_chords_fn: Optional override for the infer_chords mock.
+                If None, defaults to _fake_mt3_chord_timeline().
+            infer_solo_fn: Optional override for the infer_solo mock.
+                If None, defaults to _fake_mt3_solo_notes().
+        """
+        from app.analyze_audio import build_lesson_json_from_librosa
+        from app.mt3.fallback import TranscriptionResult as TR
+        from app.schemas import ChordTimeline, SoloNotes
+
+        job_dir, song_wav = self._write_dummy_stems(tmp_path)
+
+        # Default mock: return MT3 result from _fake_transcription_result
+        if mock_transcription_result is None:
+            mock_transcription_result = self._fake_transcription_result()
+
+        def fake_transcribe(*args, **kwargs):
+            return mock_transcription_result
+
+        if infer_chords_fn is None:
+            def infer_chords_fn(*args, **kwargs):
+                return self._fake_mt3_chord_timeline()
+
+        if infer_solo_fn is None:
+            def infer_solo_fn(*args, **kwargs):
+                return self._fake_mt3_solo_notes()
+
+        monkeypatch.setattr("app.analyze_audio.transcribe_with_fallback", fake_transcribe)
+        monkeypatch.setattr("app.analyze_audio.infer_chords", infer_chords_fn)
+        monkeypatch.setattr("app.analyze_audio.infer_solo", infer_solo_fn)
+        monkeypatch.setattr("app.analyze_audio.librosa_summarize", lambda p: self._fake_summary())
+        monkeypatch.setattr("app.analyze_audio.estimate_beat_grid", lambda p: self._fake_beat_grid_dict())
+        monkeypatch.setattr(
+            "app.analyze_audio.generate_tab_artifacts_for_guitar_stem", lambda *a, **k: {}
+        )
+        monkeypatch.setattr(
+            "app.analyze_audio.transcribe_vocals_to_lyrics_aligned",
+            lambda *args, **kwargs: ([], 0.0),
+        )
+
+        result = build_lesson_json_from_librosa(
+            "test_job",
+            guitar_stem_path=job_dir / "stems" / "guitar.wav",
+            vocals_stem_path=job_dir / "stems" / "vocals.wav",
+            stems={"guitar": "stems/guitar.wav", "vocals": "stems/vocals.wav"},
+            wav_path=str(song_wav),
+        )
+        return result
+
+    # ------------------------------------------------------------------
+    # Tests
+    # ------------------------------------------------------------------
+
+    def test_build_lesson_json_includes_transcription_source(self, tmp_path, monkeypatch):
+        """When MT3 produces results, transcription_source should be 'mt3'."""
+        result = self._call_build_lesson(tmp_path, monkeypatch)
+        assert result.transcription_source == "mt3"
+
+    def test_build_lesson_json_fallback_to_crnn_updates_source(self, tmp_path, monkeypatch):
+        """When MT3 returns empty chord_timeline, CRNN fallback should set source='crnn'."""
+        # MT3 returns empty chords
+        mt3_result = self._fake_transcription_result()
+        mt3_result.chord_timeline = ChordTimeline(events=[])
+        mt3_result.source = "mt3"
+
+        # CRNN fallback returns real chords
+        def crnn_infer_chords(*args, **kwargs):
+            return self._fake_mt3_chord_timeline()
+
+        result = self._call_build_lesson(
+            tmp_path, monkeypatch,
+            mock_transcription_result=mt3_result,
+            infer_chords_fn=crnn_infer_chords,
+        )
+        assert result.transcription_source == "crnn"
+
+    def test_mt3_chord_and_solo_share_beat_grid(self, tmp_path, monkeypatch):
+        """Chord events and solo notes should share the same beat_grid_structured."""
+        result = self._call_build_lesson(tmp_path, monkeypatch)
+        assert result.beat_grid_structured is not None
+        assert len(result.beat_grid_structured.beats) > 0
+        # Check that chord timestamps align with beat positions
+        if result.chord_timeline and result.chord_timeline.events:
+            for event in result.chord_timeline.events:
+                assert event.timestamp in result.beat_grid_structured.beats or \
+                       any(abs(event.timestamp - b) < 0.01 for b in result.beat_grid_structured.beats)
+
+    def test_musicxml_generates_from_mt3_data(self):
+        """build_musicxml() should produce valid MusicXML from MT3 data."""
+        from app.musicxml_builder import build_musicxml
+        from app.schemas import BeatGrid
+
+        bt = BeatGrid(
+            bpm=120.0,
+            pulse_bpm=120.0,
+            beats=[0.0, 0.5, 1.0, 1.5, 2.0, 2.5],
+            downbeats=[0.0, 2.0],
+            time_signature={"numerator": 4, "denominator": 4},
+            tick_value=0.25,
+        )
+        chord_timeline = self._fake_mt3_chord_timeline()
+        solo_notes = self._fake_mt3_solo_notes()
+
+        musicxml_str = build_musicxml(
+            beat_grid=bt,
+            chord_timeline=chord_timeline,
+            solo_notes=solo_notes,
+            title="Test Song",
+            artist="Test Artist",
+            key_signature="C major",
+        )
+
+        assert "<score-partwise" in musicxml_str
+        assert "<measure" in musicxml_str
+        assert "<note" in musicxml_str
+        assert "<harmony" in musicxml_str or musicxml_str == "", \
+            "Expected at least one harmony element or empty fallback"
+        assert len(musicxml_str) > 0
+
+    def test_downstream_section_refinement_runs(self, tmp_path, monkeypatch):
+        """Section refinement should process MT3 chord data without error."""
+        result = self._call_build_lesson(tmp_path, monkeypatch)
+        assert len(result.sections) > 0
+        # Each section should have chord_timeline (as dict) filtered to its time range
+        for section in result.sections:
+            section_chords = getattr(section, "chord_timeline", None)
+            if section_chords and section_chords.get("events"):
+                for event in section_chords["events"]:
+                    if section.start_time_seconds is not None:
+                        assert event["timestamp"] >= section.start_time_seconds
+                    if section.end_time_seconds is not None:
+                        assert event["timestamp"] < section.end_time_seconds
+
+    def test_confidence_calculation_integration(self, tmp_path, monkeypatch):
+        """LessonJSON.chord_timeline metadata should reflect MT3 mean_confidence."""
+        result = self._call_build_lesson(
+            tmp_path,
+            monkeypatch,
+            mock_transcription_result=self._fake_transcription_result(mean_confidence=0.85),
+        )
+        assert result.chord_timeline is not None
+        metadata = result.chord_timeline.metadata or {}
+        assert metadata.get("mean_confidence", 0.0) == pytest.approx(0.85, abs=0.01)

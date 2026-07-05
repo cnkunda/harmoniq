@@ -30,6 +30,10 @@ expo start --web              # browser
 python -m venv .venv-wsl && source .venv-wsl/bin/activate
 pip install -e ".[dev]"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# MRT2 backing tracks (optional — without this, bundled MP3 loops are used)
+pip install -e ".[mrt2]"
+mrt models init && mrt models download mrt2_small
 ```
 
 | Command | What it does |
@@ -176,6 +180,14 @@ Shared contract: `HarmoniqDbClient` interface in `src/db/harmoniqDbClient.ts`. P
 - **Custom model training** (`build_chord_tflite.py`): preserved for Phase 3 distillation. MT3 pseudo-labels will train a smaller student model.
 - `torch==2.5.1` / `torchaudio==2.5.1` pinned — do not upgrade without testing Demucs.
 - MT3 requires JAX; CPU fallback auto-activates CRNN path.
+
+### MRT2 backing track generation
+
+- `POST /jam/backing` generates practice backing tracks via **MRT2 (Magenta RealTime 2)** — open-weights generative audio model (2.4B / 230M params).
+- `backend/app/jam_backing.py`: `Mrt2BackingGenerator` singleton, lazy-loaded on first request. Falls back to bundled MP3 loops when MRT2 is unavailable.
+- Setup: `pip install "harmoniq-backend[mrt2]"` then `mrt models init && mrt models download mrt2_small`.
+- Text prompt built from `style_hint + musical_key + bpm` → MusicCoCa embedding → MRT2 generates 48kHz stereo WAV.
+- Offline (non-realtime) inference — generation takes ~2-5 min on CPU, returned as base64 WAV.
 
 ### Expo Router routing
 
