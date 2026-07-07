@@ -186,19 +186,17 @@ def _detect_model_type(model_path: Path) -> str:
 def _try_inference(audio_path: Path, model_path: Path | None, beat_grid: BeatGrid) -> list | None:
     """Attempt inference with a specific model path. Returns raw notes or None on failure."""
     try:
-        from basic_pitch.inference import predict
+        from app.pipeline_proof import basic_pitch_predict_events
 
-        _, _, raw_note_events = predict(
-            str(audio_path),
-            model_or_model_path=str(model_path) if model_path else None,
-            onset_threshold=0.6,
-            frame_threshold=0.4,
-            minimum_note_length=0.0,
+        midi_tempo = beat_grid.bpm if beat_grid.bpm > 0 else None
+        note_events = basic_pitch_predict_events(
+            audio_path,
+            midi_tempo=midi_tempo,
         )
-        return raw_note_events
-    except AttributeError as exc:
-        logger.warning("Model format error with %s: %s", model_path, exc)
-        return None
+        raw_events: list[tuple[float, float, float, float, float]] = []
+        for ne in note_events:
+            raw_events.append((ne.start_s, ne.end_s, float(ne.pitch_midi), float(ne.amplitude), 0.0))
+        return raw_events
     except ImportError as exc:
         logger.warning("basic-pitch dependency missing: %s", exc)
         return None

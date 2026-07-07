@@ -31,7 +31,7 @@ logger.setLevel(logging.INFO)
 # LLM configuration
 # ---------------------------------------------------------------------------
 
-MODEL_ID = os.getenv("HARMONIQ_CHORD_ENRICHMENT_MODEL", "claude-haiku-4-20250414")
+MODEL_ID = os.getenv("HARMONIQ_CHORD_ENRICHMENT_MODEL", "claude-haiku-4-5-20251001")
 ENRICHMENT_TIMEOUT_SECONDS = max(
     0.5, float(os.getenv("HARMONIQ_CHORD_ENRICHMENT_TIMEOUT_MS", "12000")) / 1000.0
 )

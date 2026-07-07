@@ -47,6 +47,7 @@ export function useChordDetector() {
   const runningRef = useRef(false)
   const modelRef = useRef<ModelRunner | null>(null)
   const cqtRef = useRef<{ compute(audio: Float32Array): Float32Array } | null>(null)
+  const modelTypeRef = useRef<'tflite' | 'onnx' | null>(null)
 
   /** Load the TFLite or ONNX model. */
   const loadModel = useCallback(async (): Promise<'tflite' | 'onnx'> => {
@@ -62,6 +63,7 @@ export function useChordDetector() {
           return new Float32Array(output[0]!)
         },
       }
+      modelTypeRef.current = 'tflite'
       setModelType('tflite')
       console.log('[ChordDetector] TFLite model loaded (native)')
       return 'tflite'
@@ -87,6 +89,7 @@ export function useChordDetector() {
           return new Float32Array((output as unknown as { data: Float32Array }).data)
         },
       }
+      modelTypeRef.current = 'onnx'
       setModelType('onnx')
       console.log('[ChordDetector] ONNX model loaded')
       return 'onnx'
@@ -181,6 +184,15 @@ export function useChordDetector() {
       : model.runSync(modelInput)
 
     const latencyMs = performance.now() - startMs
+
+    // AC 6: warn when on-device inference exceeds 120ms threshold
+    if (latencyMs > 120) {
+      console.warn(
+        `[ChordDetector] Slow inference: ${latencyMs.toFixed(1)}ms ` +
+        `(threshold: 120ms, model: ${modelTypeRef.current ?? 'unknown'})`,
+      )
+    }
+
     const detection = parseOutput(probs, latencyMs)
     setCurrentChord(detection)
   }, [buildModelInput, parseOutput, setCurrentChord])

@@ -161,7 +161,7 @@ def _try_mt3(
 
     server = Mt3ModelServer()
     if not server.is_available():
-        logger.warning("MT3 server unavailable; skipping Tier 1")
+        logger.warning("MT3 model unavailable; skipping Tier 1")
         return None
 
     event_stream = mt3_infer(str(audio_path))

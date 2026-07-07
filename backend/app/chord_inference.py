@@ -506,6 +506,8 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
     """Run chord inference using the best available model.
 
     Chain: Keras → TFLite → Chroma template matching.
+    Falls through to chroma when the neural model produces mostly N (no-chord)
+    predictions, which indicates the model has low confidence for this audio.
     """
     global _last_inference_tier
 
@@ -513,7 +515,10 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
         raw_frames = _run_keras_raw(y, sr)
         _last_inference_tier = "crnn"
         logger.info("Chord inference: %d frames (Keras CRNN)", len(raw_frames))
-        return raw_frames
+        if _neural_model_too_noisy(raw_frames):
+            logger.warning("CRNN model predicts >80%% N chords; falling back to chroma")
+        else:
+            return raw_frames
     except Exception as exc:
         logger.warning("Keras inference unavailable: %s", exc)
 
@@ -521,7 +526,9 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
         raw_frames = _run_tflite_raw(y, sr)
         _last_inference_tier = "crnn"
         logger.info("Chord inference: %d frames (TFLite CRNN)", len(raw_frames))
-        return raw_frames
+        if not _neural_model_too_noisy(raw_frames):
+            return raw_frames
+        logger.warning("TFLite model predicts >80%% N chords; falling back to chroma")
     except Exception as exc:
         logger.warning("TFLite inference unavailable: %s", exc)
 
@@ -529,6 +536,22 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
     raw_frames = _run_chroma_raw(y, sr)
     logger.warning("Falling back to chroma template matching (%d frames)", len(raw_frames))
     return raw_frames
+
+
+def _neural_model_too_noisy(raw_frames: list[dict], n_threshold: float = 0.80) -> bool:
+    """Check if the neural model's predictions are dominated by N (no-chord).
+
+    When >80% of frames are N, the model likely can't find meaningful chords
+    in this audio, and chroma template matching should be preferred.
+    """
+    if not raw_frames:
+        return True
+    n_count = sum(1 for f in raw_frames if f.get("chord") == "N")
+    ratio = n_count / len(raw_frames)
+    if ratio >= n_threshold:
+        logger.info("Model predictions: %.1f%% N chords (%d/%d frames) — quality gate triggered", 100.0 * ratio, n_count, len(raw_frames))
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------

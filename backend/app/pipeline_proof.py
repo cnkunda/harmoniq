@@ -807,6 +807,9 @@ class NoteEvent:
     amplitude: float = 0.0
 
 
+_BASIC_PITCH_CACHE: dict[str, list[NoteEvent]] = {}
+
+
 def basic_pitch_predict_events(
     audio_path: Path,
     *,
@@ -815,9 +818,18 @@ def basic_pitch_predict_events(
     """
     Run Spotify Basic Pitch on an audio file; return typed note events.
 
+    Results are cached by audio path so repeated calls (e.g. solo inference
+    + tab generation) reuse the same model output.
+
     Requires ``pip install -e ".[basicpitch]"`` (see ``pyproject.toml``). On some
     platforms Python/TensorFlow wheels are not available — the notebook documents this.
     """
+    cache_key = f"{audio_path}::{midi_tempo}"
+    cached = _BASIC_PITCH_CACHE.get(cache_key)
+    if cached is not None:
+        logger.info("Reusing cached Basic Pitch result for %s", audio_path)
+        return cached
+
     try:
         from basic_pitch.inference import predict as basic_pitch_predict
     except ImportError as e:
@@ -847,6 +859,7 @@ def basic_pitch_predict_events(
         pitch = int(round(float(row[2])))
         amp = float(row[3])
         out.append(NoteEvent(start_s=start_s, end_s=end_s, pitch_midi=pitch, amplitude=amp))
+    _BASIC_PITCH_CACHE[cache_key] = out
     return out
 
 
