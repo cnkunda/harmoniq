@@ -39,7 +39,7 @@ mrt models init && mrt models download mrt2_small
 | Command | What it does |
 |---------|-------------|
 | `npm run lint` | `tsc --noEmit` — zero errors required before every commit |
-| `npm run test` | `vitest run` — all 34 unit test files |
+| `npm run test` | `vitest run` — unit test files |
 | `npm run test:ui` | Playwright structural tests (non-visual) |
 | `npm run test:visual` | Playwright visual regression |
 | `npm run test:visual:update` | Update Playwright visual snapshots |
@@ -175,7 +175,8 @@ Shared contract: `HarmoniqDbClient` interface in `src/db/harmoniqDbClient.ts`. P
 
 - `POST /analyze` + `GET /analyze/{job_id}` run the full pipeline: Demucs → MT3 → chord decoder + solo decoder → MusicXML → LessonJSON.
 - **Primary transcription engine**: MT3 (Google Multi-Task Multitrack Transformer). Produces both chord timeline and solo notes simultaneously from a single inference pass on the guitar stem.
-- **Fallback chain**: MT3 → CRNN TFLite (`chord_inference.py`) → Chroma template matching. Each tier confidence-gated; `transcription_source` field indicates which tier produced the result.
+- **Fallback chain**: MT3 → CRNN TFLite (`chord_inference.py`) → Chroma template matching. Each tier confidence-gated; `transcription_source` field indicates which tier produced the result. A quality gate (`_neural_model_too_noisy()`) at line 541 bypasses the CRNN result when >80% of frames predict N (no-chord), falling through to chroma.
+- **Basic Pitch caching**: `basic_pitch_predict_events()` in `pipeline_proof.py` caches results by audio path to avoid duplicate 60s+ inference between solo note extraction and tab generation.
 - **On-device path**: CRNN TFLite model powers Live Mic Mode (<120ms latency). Long-term target: MT3-distilled student model.
 - **Custom model training** (`build_chord_tflite.py`): preserved for Phase 3 distillation. MT3 pseudo-labels will train a smaller student model.
 - `torch==2.5.1` / `torchaudio==2.5.1` pinned — do not upgrade without testing Demucs.
@@ -269,7 +270,7 @@ describe('getChordFunction', () => {
 ```
 
 - Tests co-located next to their source module.
-- All 34 test files run in CI (`vitest run`).
+- All test files run in CI (`vitest run`).
 
 ### Playwright patterns
 

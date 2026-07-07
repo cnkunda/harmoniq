@@ -191,6 +191,7 @@ def _try_inference(audio_path: Path, model_path: Path | None, beat_grid: BeatGri
         midi_tempo = beat_grid.bpm if beat_grid.bpm > 0 else None
         note_events = basic_pitch_predict_events(
             audio_path,
+            model_path=model_path,
             midi_tempo=midi_tempo,
         )
         raw_events: list[tuple[float, float, float, float, float]] = []

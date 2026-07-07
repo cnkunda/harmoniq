@@ -516,7 +516,7 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
         _last_inference_tier = "crnn"
         logger.info("Chord inference: %d frames (Keras CRNN)", len(raw_frames))
         if _neural_model_too_noisy(raw_frames):
-            logger.warning("CRNN model predicts >80%% N chords; falling back to chroma")
+            logger.warning("CRNN model predicts >80%% N chords; falling through to TFLite")
         else:
             return raw_frames
     except Exception as exc:

@@ -813,6 +813,7 @@ _BASIC_PITCH_CACHE: dict[str, list[NoteEvent]] = {}
 def basic_pitch_predict_events(
     audio_path: Path,
     *,
+    model_path: Path | None = None,
     midi_tempo: float | None = None,
 ) -> list[NoteEvent]:
     """
@@ -824,7 +825,7 @@ def basic_pitch_predict_events(
     Requires ``pip install -e ".[basicpitch]"`` (see ``pyproject.toml``). On some
     platforms Python/TensorFlow wheels are not available — the notebook documents this.
     """
-    cache_key = f"{audio_path}::{midi_tempo}"
+    cache_key = f"{audio_path}::{midi_tempo}::{model_path}"
     cached = _BASIC_PITCH_CACHE.get(cache_key)
     if cached is not None:
         logger.info("Reusing cached Basic Pitch result for %s", audio_path)
@@ -842,6 +843,8 @@ def basic_pitch_predict_events(
     kwargs: dict[str, Any] = {}
     if midi_tempo is not None:
         kwargs["midi_tempo"] = float(midi_tempo)
+    if model_path is not None:
+        kwargs["model_or_model_path"] = str(model_path)
     try:
         _, _, raw_events = basic_pitch_predict(str(audio_path), **kwargs)
     except Exception as default_err:

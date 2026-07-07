@@ -42,8 +42,13 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
                                                         └→ Solo Notes (event decoder)
                                                               ↓
                                               CRNN TFLite (on-device fallback)
+                                               │  quality gate: >80% N → chroma
                                               Chroma matching (tertiary fallback)
 ```
+
+**CRNN quality gate:** When the neural model predicts >80% N (no-chord) across frames, `_neural_model_too_noisy()` in `chord_inference.py` bypasses the CRNN result and falls through to chroma template matching. This handles the known 34.7% real accuracy limitation where the model defaults to N on unfamiliar audio.
+
+**Basic Pitch caching:** `basic_pitch_predict_events()` in `pipeline_proof.py` caches results by audio path and model variant. Prevents duplicate 60s+ Basic Pitch inference between solo note extraction and tab generation — the solo inference path (`solo_inference.py`) and tab generation path both call the same cached function.
 
 ---
 
