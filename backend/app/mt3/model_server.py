@@ -104,6 +104,7 @@ class Mt3ModelServer:
             }
 
             self._partitioner = t5x.partitioning.PjitPartitioner(num_partitions=1)
+            self._partition_spec = t5x.partitioning.PartitionSpec
 
             self._spectrogram_config = spectrograms.SpectrogramConfig()
             self._codec = vocabularies.build_codec(
@@ -201,10 +202,10 @@ class Mt3ModelServer:
             partial_predict_fn,
             in_axis_resources=(
                 train_state_axes.params,
-                t5x.partitioning.PartitionSpec("data"),
+                self._partition_spec("data"),
                 None,
             ),
-            out_axis_resources=t5x.partitioning.PartitionSpec("data"),
+            out_axis_resources=self._partition_spec("data"),
         )
 
     def _predict_tokens(self, batch, seed=0):

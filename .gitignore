@@ -38,6 +38,9 @@ yarn-error.*
 .env
 .env*.local
 
+# pip install logs (accidental commits)
+=*
+
 # Python bytecode / caches
 __pycache__/
 *.py[cod]
