@@ -16,7 +16,15 @@ from app.schemas import BeatGrid
 
 @pytest.fixture(autouse=True)
 def _mock_basic_pitch_import():
-    """Prevent basic-pitch from hanging on model download during import."""
+    """Prevent basic-pitch from hanging on model download during import.
+
+    Also clears the Basic Pitch result cache to ensure no stale data
+    leaks between tests (same dummy.wav + midi_tempo + model_path
+    across multiple solo tests would otherwise collide).
+    """
+    from app.pipeline_proof import _BASIC_PITCH_CACHE
+    _BASIC_PITCH_CACHE.clear()
+
     if "basic_pitch" not in sys.modules:
         mock_model_path = MagicMock(spec=Path)
         mock_model_path.is_dir.return_value = True
