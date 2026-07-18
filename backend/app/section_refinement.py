@@ -578,7 +578,7 @@ def refine_section_boundaries(
 
         # Attach boundary confidence to each section
         for s in sections:
-            s["boundary_confidence"] = conf_map.get(s["start"], 1.0)
+            s["boundary_confidence"] = conf_map.get(s.get("start_s", s.get("start", 0.0)), 1.0)
             # Final label_confidence blends label inference confidence with
             # boundary placement confidence
             s["label_confidence"] = _estimate_label_confidence(s) * s["boundary_confidence"]

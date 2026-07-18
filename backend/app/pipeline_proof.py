@@ -853,6 +853,7 @@ def basic_pitch_predict_events(
         tflite_path = Path(basic_pitch_pkg.__file__).resolve().parent / "saved_models" / "icassp_2022" / "nmp.tflite"
         if not tflite_path.exists():
             raise
+        kwargs.pop("model_or_model_path", None)
         _, _, raw_events = basic_pitch_predict(str(audio_path), model_or_model_path=tflite_path, **kwargs)
     out: list[NoteEvent] = []
     for row in raw_events:

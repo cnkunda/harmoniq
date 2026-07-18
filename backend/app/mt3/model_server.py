@@ -17,6 +17,11 @@ Architecture:
 
 from __future__ import annotations
 
+import os as _os
+# Force CPU for TF (CuDNN 9.3 vs system 9.1 mismatch) and JAX (no CUDA jaxlib)
+_os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
+_os.environ.setdefault("JAX_PLATFORMS", "cpu")
+
 import functools
 import logging
 import time

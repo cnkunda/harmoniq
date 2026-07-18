@@ -28,7 +28,7 @@ from pathlib import Path
 
 import numpy as np
 import os as _os
-_os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Model saved with tf_keras; before any tf import
+_os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Model config references tf_keras (legacy Keras 2.x)
 
 from app.schemas import BeatGrid, ChordEvent, ChordTimeline
 from app.pipeline_proof import TARGET_SR
@@ -248,17 +248,42 @@ def _get_keras_model():
         def get_config(self):
             return super().get_config()
 
-    model = tf.keras.models.load_model(
-        str(_KERAS_PATH),
-        custom_objects={
-            "_circular_cqt_pad": _circular_cqt_pad,
-            "CircularCqtPad": _CircularPadImpl,
-            "Custom>CircularCqtPad": _CircularPadImpl,  # registered_name key
-        },
-        safe_mode=False,
-    )
-    logger.info("Chord model loaded via Keras (%s)", _KERAS_PATH.name)
-    return model
+    try:
+        model = tf.keras.models.load_model(
+            str(_KERAS_PATH),
+            custom_objects={
+                "_circular_cqt_pad": _circular_cqt_pad,
+                "CircularCqtPad": _CircularPadImpl,
+                "Custom>CircularCqtPad": _CircularPadImpl,
+            },
+            safe_mode=False,
+        )
+        logger.info("Chord model loaded via Keras (%s)", _KERAS_PATH.name)
+        return model
+    except Exception as keras_err:
+        logger.warning("Keras loading failed with TF_USE_LEGACY_KERAS=1: %s", keras_err)
+        logger.info("Retrying with TF_USE_LEGACY_KERAS=0 (native Keras 3.x)")
+        _os.environ["TF_USE_LEGACY_KERAS"] = "0"
+        try:
+            import importlib
+            importlib.reload(tf.keras)
+            model = tf.keras.models.load_model(
+                str(_KERAS_PATH),
+                custom_objects={
+                    "_circular_cqt_pad": _circular_cqt_pad,
+                    "CircularCqtPad": _CircularPadImpl,
+                    "Custom>CircularCqtPad": _CircularPadImpl,
+                },
+                safe_mode=False,
+            )
+            logger.info("Chord model loaded via Keras 3.x (%s)", _KERAS_PATH.name)
+            return model
+        except Exception as keras3_err:
+            logger.warning("Keras 3.x loading also failed: %s", keras3_err)
+            raise RuntimeError(
+                f"Failed to load Keras model at {_KERAS_PATH}: "
+                f"legacy={keras_err}, native={keras3_err}"
+            ) from keras_err
 
 
 @lru_cache(maxsize=1)
@@ -287,7 +312,28 @@ def _get_interpreter():
     except Exception as exc:
         raise RuntimeError(f"Failed to load chord model at {path}: {exc}") from exc
 
-    interp.allocate_tensors()
+    try:
+        interp.allocate_tensors()
+    except Exception:
+        import glob as _glob
+        _flex_libs = _glob.glob(
+            str(Path(tf.__file__).resolve().parent / "lite" / "**" / "*flex*"),
+            recursive=True,
+        )
+        if not _flex_libs:
+            raise RuntimeError(
+                "Chord TFLite model requires SELECT_TF_OPS (Flex delegate) but "
+                "libtensorflowlite_flex.so not found in TF installation. "
+                "Install the full tensorflow package (not tensorflow-cpu) or "
+                "rebuild model without BiLSTM ops."
+            ) from None
+        logger.info("allocate_tensors failed — retrying with Flex delegate (SELECT_TF_OPS)")
+        from tensorflow.lite.python import interpreter as _tflite_interp
+        flex_delegate = _tflite_interp.load_delegate(str(_flex_libs[0]))
+        interp = tf.lite.Interpreter(
+            model_path=path, experimental_delegates=[flex_delegate]
+        )
+        interp.allocate_tensors()
     input_details = interp.get_input_details()
     output_details = interp.get_output_details()
     logger.debug(
@@ -1249,7 +1295,7 @@ def _infer_voicing_from_audio(events: list[ChordEvent], y: np.ndarray, sr: int) 
                 midi = open_midi + fret
                 if midi < 0 or midi > 88:
                     continue
-                bin_idx = int(round(librosa.hz_to_bins(librosa.midi_to_hz(midi), fmin=fmin, bins_per_octave=12)))
+                bin_idx = int(round(12 * np.log2(librosa.midi_to_hz(midi) / fmin)))
                 if 0 <= bin_idx < n_bins:
                     energy = cqt_mean[bin_idx]
                     if energy > best_energy:

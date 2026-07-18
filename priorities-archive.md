@@ -17,6 +17,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Phase 2 (Commit 121) Archive Date:** June 11, 2026
 **Phase 2 (Commits 122-148) Archive Date:** July 3, 2026 — Superseded by MT3-primary strategy. Custom model work archived as reference for Phase 3 distillation.
 **Milestone A (MT3-Primary AMT Pipeline) Archive Date:** July 5, 2026 — Complete. All 10 acceptance criteria verified.
+**Milestone B (Fretboard Dual-Mode Optimization) Archive Date:** July 17, 2026 — Complete. All 9 commits verified.
 
 ---
 
@@ -1820,4 +1821,152 @@ chord books. No multiple position alternatives are offered.
 - [x] Integration test: known song → full pipeline → LessonJSON with both chord and solo data — `test_e2e_integration.py`
 - [x] `transcription_source` field populated correctly per job — verified in test_e2e_integration.py (mt3/crnn/none)
 - [x] Fallback tier logged per job for observability — fallback.py structured logging with chain + reasons
+
+---
+
+## Milestone B: Fretboard Dual-Mode Optimization
+
+**Archive Date:** July 17, 2026
+**Status:** Complete. All 9 commits verified.
+
+**Goal:** Optimize the fretboard and session UI for simultaneous chord and solo line display — the core UX differentiator powered by MT3's dual output.
+
+**Current state:** `FretboardDiagram` already supports a `mode` toggle (`auto | chords | solo | both`) with amber chord circles and red solo note circles. `ChordsAndLyrics` shows bar-by-bar chord symbols. `MusicContext` wires `currentChord` and `activeNotes` to playback position. The foundation is solid — this milestone polishes it for the MT3 dual-output richness.
+
+#### Commit B1: Fretboard Dual-View Polish
+- **Scope:**
+  - Refine the four-mode toggle (`chords`, `solo`, `both`, `auto`):
+    - `auto` = intelligent default: show solo notes with faint chord shape background
+    - `chords` = existing chord circles only
+    - `solo` = existing solo note red circles + pitch labels only
+    - `both` = chord circles (amber, 30% opacity) + solo notes (red, 100% opacity) overlaid
+  - Chord-solo visual separation:
+    - Chord shape rendered as filled circles (amber `#D4A574`, `opacity=0.4`)
+    - Active solo note rendered as glowing circles (terracotta `#C17B5F` core, amber `#E8B86D` glow ring, `opacity=1.0`)
+    - When a solo note matches a chord tone, show a dual-color ring (amber outer, terracotta inner)
+    - When a solo note is outside the current chord (tension/chromatic), show a purple indicator ring
+  - Real-time note detail on tap: extend `SessionNoteDetailModal` to show:
+    - Note name + octave
+    - Chord tone status: chord tone (green), tension (amber), chromatic/outside (red)
+    - Scale degree in current key
+    - Finger suggestion (reuse existing `fingerSuggestion.ts`)
+    - "Confidence: 87%" from MT3 event confidence
+  - Fretboard responsiveness: larger touch targets on mobile for note selection
+  - Keyboard shortcut overlay on web (reuse existing keyboard input)
+
+- **Acceptance Criteria:**
+  - [x] Four-mode toggle cycles correctly with instant visual feedback
+  - [x] `both` mode clearly distinguishes chord shapes from active solo notes
+  - [x] Dual-color rings show when solo note matches chord tone
+  - [x] Purple ring shows when solo note is outside chord (tension/chromatic)
+  - [x] Tapped note displays chord tone status correctly
+  - [x] MT3 confidence shown in note detail
+  - [x] No regression on existing `chords` and `solo` modes
+  - [x] Touch targets ≥ 44px on mobile
+
+#### Commit B2: Harmonic Context Overlay
+- **Scope:**
+  - Derive scale pitch classes from song key (using new `src/music/scales.ts`)
+  - Three visual tiers on `FretboardDiagram`:
+    - **Scale tones** — faint green circles (15% opacity) for notes in the key
+    - **Chord tones** — existing amber circles for current chord notes
+    - **Outside tones** — no highlight (gray or invisible)
+  - Toggle in Study toolbar: "Key context" / "Chord only" / "Off"
+  - Add `scalePitchClasses` to `MusicContext` alongside existing `chordEvents`/`soloNotesArr`
+  - Compute from lesson key on section load
+
+- **Acceptance Criteria:**
+  - [x] Scale tones visible as green circles when "Key context" mode active
+  - [x] Chord tones render on top of scale tones
+  - [x] Outside notes have no highlight
+  - [x] Toggle cycles through three modes
+  - [x] Tapped note displays scale degree and chord tone status
+
+#### Commit B3: Expanded Jam Scale Detection
+- **Scope:**
+  - Replace 6-template pentatonic-only matcher with full 30+ scale library from `src/music/scales.ts`
+  - Improved scoring: weighted = 0.5 × overlap + 0.3 × root alignment + 0.2 × pentatonic skeleton match
+  - Surface detected mode in Jam UI with top 3 candidates and confidence bars
+  - Add `inferred_mode` field to `BestScaleMatch` and `jam_snapshots`
+
+- **Acceptance Criteria:**
+  - [x] Jam detects all 7 diatonic modes, not just pentatonic
+  - [x] Weighted scoring used for mode detection
+  - [x] Top 3 candidates shown with confidence bars
+  - [x] Confidence < 0.5 shows "Mixed mode" with note bias breakdown
+
+#### Commit B4: Scale/Mode Library (Foundational)
+- **Scope:**
+  - Create `src/music/scales.ts` with 30+ scales as pitch class sets (diatonic, harmonic/melodic minor, pentatonic, symmetrical)
+  - Create `src/music/intervals.ts` with `Interval` enum and helper functions
+  - Export as `SCALE_DB: Record<string, ScaleEntry>`
+  - Unit tests for all scales
+
+- **Acceptance Criteria:**
+  - [x] All 30+ scales exported as pitch class sets
+  - [x] Interval enum and helpers exported
+  - [x] Unit tests verify correctness
+
+#### Commit B5: Scale Explorer Screen
+- **Scope:**
+  - `app/scale-explorer/index.tsx` — interactive scale browser
+  - Scale picker with root + mode selection, grouped by family
+  - Fretboard highlighting with scale degrees, note names, interval overlays
+  - CAGED position zones, tap-to-audition, "Play scale" with tempo
+  - Favorites persisted to SQLite
+
+- **Acceptance Criteria:**
+  - [x] Scale picker shows all 30+ scales
+  - [x] Fretboard highlights with root distinguished
+  - [x] Overlay toggles work correctly
+  - [x] Note audition and scale playback functional
+
+#### Commit B6: Chord Progression Labels
+- **Scope:**
+  - Sliding-window progression matcher in `src/music/progressionAnalysis.ts`
+  - Define common patterns (ii-V-I, I-IV-V, etc.)
+  - Bracketed labels below chord symbols in timeline
+  - Educational tooltip on tap
+
+- **Acceptance Criteria:**
+  - [x] Sliding window matches common progressions
+  - [x] ii-V-I in C major correctly labeled
+  - [x] Bracketed annotations display below chord symbols
+  - [x] Tapping label shows educational tooltip
+
+#### Commit B7: Warmup Pool Expansion + Slonimsky Generator
+- **Scope:**
+  - Add 15+ Slonimsky exercises to `warmup_pool.json` (3 families + compound)
+  - Algorithmic pattern generator in `src/music/slonimskyGenerator.ts`
+  - Daily lick rotation for home screen
+  - Difficulty-aware selection
+
+- **Acceptance Criteria:**
+  - [x] 15+ Slonimsky exercises added with valid fretboard data
+  - [x] Pattern generator produces valid `SlonimskyPattern` objects
+  - [x] Daily lick appears on home screen and persists to `licks` table
+  - [x] Difficulty scales by player skill level
+
+#### Commit B8: Chord Inversion & Slash Notation
+- **Scope:**
+  - Add `bass` field to `ChordEvent` schema
+  - Extract bass note from low CQT bins on full mix (or Branch A's aggregate pitch representation — never from the guitar-stem-only event stream, since the guitar often does not play the bass note)
+  - Emit `<bass>` in MusicXML when bass ≠ root
+  - Inversion identification (1st/2nd)
+
+- **Acceptance Criteria:**
+  - [x] `ChordEvent.bass` stores detected bass note
+  - [x] `<bass>` element emitted in MusicXML when needed
+  - [x] Inversions identified from bass note analysis
+
+#### Commit B9: Voicing & Position Inference
+- **Scope:**
+  - Spectral/event analysis for voicing detection
+  - CAGED shape recognition from MT3 pitch distribution
+  - Position inference from note clustering
+
+- **Acceptance Criteria:**
+  - [x] E-shape vs A-shape voicings distinguished
+  - [x] CAGED positions inferred from pitch data
+  - [x] Fretboard diagrams reflect detected voicing
 
