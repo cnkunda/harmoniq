@@ -172,7 +172,7 @@ export function RecentProgress({
         </View>
       ) : (
         <Text className="font-sans text-sm text-muted-brown">
-          No completed sessions yet.
+          No completed sessions or practice yet.
         </Text>
       )}
 

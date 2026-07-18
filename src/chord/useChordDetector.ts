@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { Platform } from 'react-native'
 
 import {
   CHROMA_BINS,
@@ -14,6 +15,17 @@ import { globalAudioManager } from '@/src/audio/GlobalAudioManager'
 
 /** Number of raw audio samples for the full CQT window (12.8s at 44.1kHz). */
 const WINDOW_SAMPLES = WINDOW * HOP_LENGTH
+
+/** Dynamically load a script tag — used to load onnxruntime-web from CDN on web. */
+function loadScript(url: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = url
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error(`Failed to load script: ${url}`))
+    document.head.appendChild(s)
+  })
+}
 
 /** Ring buffer stores extra for the symmetric padding. */
 const PADDING_SAMPLES = HOP_LENGTH * (WINDOW / 2)
@@ -73,7 +85,18 @@ export function useChordDetector() {
 
     // Fall back to ONNX (web path — onnxruntime-web)
     try {
-      const ort = await import('onnxruntime-web')
+      let ort: any
+
+      if (Platform.OS === 'web') {
+        // On web, load from CDN to avoid bundler dynamic-import issues in ort.bundle.min.mjs
+        await loadScript('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/ort.all.min.js')
+        ort = (window as any).ort
+        if (!ort) throw new Error('ONNX runtime failed to initialize on web')
+      } else {
+        const mod: any = await import('onnxruntime-web')
+        ort = mod
+      }
+
       const modelUrl: number = require('@/assets/models/chord_model.onnx')
       const session = await ort.InferenceSession.create(String(modelUrl))
       modelRef.current = {

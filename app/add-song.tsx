@@ -1,4 +1,4 @@
-import { Check, X } from 'lucide-react-native'
+import { Check, Music, Upload, X } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Platform, ScrollView, Text, TextInput, View } from 'react-native'
 import Animated, {
@@ -339,7 +339,7 @@ export default function AddSongScreen() {
               accessibilityLabel="Close add song"
               hitSlop={8}
             >
-              <X color={colors.muted.brown} size={22} strokeWidth={2} />
+              <X color={colors.cream} size={22} strokeWidth={2} />
             </AnimatedPressable>
             <Text
               className="px-12 text-center font-serif text-2xl text-cream"
@@ -347,7 +347,7 @@ export default function AddSongScreen() {
             >
               Add Song
             </Text>
-            <Text className="mt-4 max-w-lg self-center text-center font-sans text-sm leading-6 text-muted-brown">
+            <Text className="mt-4 max-w-lg self-center text-center font-sans text-sm leading-6 text-cream/80">
               {subtitle}
             </Text>
 
@@ -374,10 +374,10 @@ export default function AddSongScreen() {
                         accessibilityRole="tab"
                         accessibilityState={{ selected, disabled: pillsDisabled }}
                         accessibilityLabel={isSearch ? `${opt.label}, preview catalog` : opt.label}
-                        className={`min-h-[44px] justify-center rounded-full px-5 ${selected ? 'bg-wood-700' : 'border border-wood-600/70 bg-wood-900/30'} ${pillsDisabled ? 'opacity-50' : ''}`}
+                        className={`min-h-[44px] justify-center rounded-full px-5 ${selected ? 'bg-amber-accent/12 border border-amber-accent/25' : 'border border-wood-600/70 bg-wood-900/30'} ${pillsDisabled ? 'opacity-50' : ''}`}
                       >
                         <Text
-                          className={`text-center font-sans-medium text-sm ${selected ? 'text-amber-light' : 'text-muted-brown'}`}
+                          className={`text-center font-sans-medium text-sm ${selected ? 'text-amber-accent' : 'text-muted-brown'}`}
                         >
                           {opt.label}
                         </Text>
@@ -390,10 +390,10 @@ export default function AddSongScreen() {
               <View className="mt-6 border-t border-wood-600/35 pt-7">
                 {importTab === 'upload' && Platform.OS === 'web' ? (
                   <View className="gap-4">
-                    <Text className="text-center font-sans-medium text-xs uppercase tracking-wide text-amber-light">
+                    <Text className="text-center font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
                       Audio file
                     </Text>
-                    <Text className="text-center font-sans text-xs leading-5 text-muted-brown">
+                    <Text className="text-center font-sans text-xs leading-5 text-cream/80">
                       Drag and drop or click to choose MP3, WAV, or M4A. Tap Analyze file when you&apos;re ready.
                     </Text>
                     <AudioDropzone
@@ -405,7 +405,7 @@ export default function AddSongScreen() {
                     />
                     {pendingUploadFilename ? (
                       <Text className="text-center font-sans text-sm leading-5 text-cream" numberOfLines={2}>
-                        <Text className="text-muted-brown">Selected </Text>
+                        <Text className="text-cream/60">Selected </Text>
                         <Text className="font-sans-medium text-cream">{pendingUploadFilename}</Text>
                       </Text>
                     ) : null}
@@ -418,22 +418,27 @@ export default function AddSongScreen() {
                         })
                       }}
                       disabled={!canAnalyzePendingFile}
-                      className={`min-h-[48px] justify-center rounded-xl px-4 py-3 ${canAnalyzePendingFile ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
+                      className={`min-h-[52px] justify-center rounded-xl px-5 py-3 ${canAnalyzePendingFile ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
                       accessibilityRole="button"
                       accessibilityLabel="Analyze selected audio file"
                     >
-                      <Text
-                        className={`text-center font-sans-medium text-base ${canAnalyzePendingFile ? 'text-wood-900' : ''}`}
-                      >
-                        Analyze file
-                      </Text>
+                      <View className="flex-row items-center justify-center gap-2">
+                        {canAnalyzePendingFile ? (
+                          <Upload size={18} color={colors.wood[900]} />
+                        ) : null}
+                        <Text
+                          className={`text-center font-sans-medium text-base ${canAnalyzePendingFile ? 'text-wood-900' : ''}`}
+                        >
+                          Analyze file
+                        </Text>
+                      </View>
                     </AnimatedPressable>
                   </View>
                 ) : null}
 
                 {importTab === 'youtube' ? (
                   <View className="gap-4">
-                    <Text className="text-center font-sans-medium text-xs uppercase tracking-wide text-amber-light">
+                    <Text className="text-center font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
                       YouTube URL
                     </Text>
                     <TextInput
@@ -453,25 +458,30 @@ export default function AddSongScreen() {
                     <AnimatedPressable haptic="light"
                       onPress={() => void runAnalyze({ youtube_url: url.trim() })}
                       disabled={!canStartFromUrl}
-                      className={`min-h-[48px] justify-center rounded-xl px-4 py-3 ${canStartFromUrl ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
+                      className={`min-h-[52px] justify-center rounded-xl px-5 py-3 ${canStartFromUrl ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
                       accessibilityRole="button"
                       accessibilityLabel="Analyze YouTube URL"
                     >
-                      <Text
-                        className={`text-center font-sans-medium text-base ${canStartFromUrl ? 'text-wood-900' : ''}`}
-                      >
-                        Analyze URL
-                      </Text>
+                      <View className="flex-row items-center justify-center gap-2">
+                        {canStartFromUrl ? (
+                          <Music size={18} color={colors.wood[900]} />
+                        ) : null}
+                        <Text
+                          className={`text-center font-sans-medium text-base ${canStartFromUrl ? 'text-wood-900' : ''}`}
+                        >
+                          Analyze URL
+                        </Text>
+                      </View>
                     </AnimatedPressable>
                   </View>
                 ) : null}
 
                 {importTab === 'search' ? (
                   <View className="gap-3">
-                    <Text className="text-center font-sans-medium text-xs uppercase tracking-wide text-amber-light">
+                    <Text className="text-center font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
                       Tab catalog
                     </Text>
-                    <Text className="text-center font-sans text-xs leading-5 text-muted-brown">
+                    <Text className="text-center font-sans text-xs leading-5 text-cream/80">
                       Server-side stub only — no files are downloaded. A licensed catalog API can replace this later.
                     </Text>
                     <View className="mt-1 flex-row gap-3">
@@ -584,7 +594,7 @@ export default function AddSongScreen() {
 
         {uiState === 'done' && lesson ? (
           <View className="mt-6 rounded-2xl border border-wood-600 bg-wood-800 p-6">
-            <Text className="text-center font-sans-medium text-sm text-amber-light">Lesson result</Text>
+            <Text className="text-center font-sans-medium text-sm text-amber-accent">Lesson result</Text>
             {lastAnalyzeWasUploadRef.current ? (
               <View className="mt-4 gap-4">
                 <Text className="text-center font-sans text-xs leading-5 text-muted-brown">
@@ -625,10 +635,13 @@ export default function AddSongScreen() {
             </Text>
             <AnimatedPressable haptic="light"
               onPress={continueToSession}
-              className="mt-6 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
+              className="mt-6 min-h-[52px] justify-center rounded-xl bg-amber-accent px-5 py-3"
               accessibilityRole="button"
             >
-              <Text className="text-center font-sans-medium text-base text-wood-900">Continue to session</Text>
+              <View className="flex-row items-center justify-center gap-2">
+                <Check size={18} color={colors.wood[900]} />
+                <Text className="text-center font-sans-medium text-base text-wood-900">Continue to session</Text>
+              </View>
             </AnimatedPressable>
             <AnimatedPressable haptic="light"
               onPress={() => router.replace('/')}

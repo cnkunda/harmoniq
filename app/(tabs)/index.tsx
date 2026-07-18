@@ -4,6 +4,7 @@ import { useRouter, type Href } from 'expo-router'
 import {
   ChevronRight,
   Clock,
+  Headphones,
   Library as LibraryIcon,
   Link2,
   ListMusic,
@@ -41,6 +42,7 @@ import {
 } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_MOOD, PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { HomeSuggestion, LessonListRow, PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
+import { startDemoSession } from '@/src/demo/startDemoSession'
 import {
   dismissDailyLick,
   getDailyLick,
@@ -48,7 +50,6 @@ import {
   persistDailyLick,
   type DailyLick,
 } from '@/src/home/dailyLick'
-import { startDemoSession } from '@/src/demo/startDemoSession'
 import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
 import { startPracticePlanFromHome } from '@/src/session/practicePlanNavigation'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
@@ -723,10 +724,10 @@ export default function HomeScreen() {
 
           <View className="flex-col gap-8">
             <View>
-              <Text className="mb-3 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Recently added</Text>
+              <Text className="mb-3 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Recently uploaded</Text>
               <View className="gap-2">
                 {recentItems.length === 0 ? (
-                  <Text className="font-sans text-sm text-muted-brown">No songs added yet.</Text>
+                  <Text className="font-sans text-sm text-muted-brown">No songs or recordings added yet.</Text>
                  ) : (
                    recentItems.map((item) => (
                      <AnimatedPressable
@@ -749,54 +750,52 @@ export default function HomeScreen() {
 
             <View>
               <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Quick actions</Text>
-               <View className="flex-row gap-3">
-                 <AnimatedPressable
-                   onPress={goAnalyze}
-                   className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
-                   accessibilityRole="button"
-                   accessibilityLabel="Add a song"
-                 >
-                   <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
-                     <Plus color={colors.amber.light} size={22} strokeWidth={2} />
-                   </View>
-                   <Text className="text-center font-sans-medium text-sm text-cream">Add Song</Text>
+               <View className="flex-row flex-wrap gap-3">
+                  <AnimatedPressable
+                    onPress={goAnalyze}
+                    className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Add a song"
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                      <Plus color={colors.amber.light} size={22} strokeWidth={2} />
+                    </View>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Add Song</Text>
                   </AnimatedPressable>
-                 <AnimatedPressable
-                   onPress={goLibrary}
-                   className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
-                   accessibilityRole="button"
-                   accessibilityLabel="Open library"
-                 >
-                   <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
-                     <LibraryIcon color={colors.amber.light} size={22} strokeWidth={2} />
-                   </View>
-                   <Text className="text-center font-sans-medium text-sm text-cream">Open Library</Text>
-                 </AnimatedPressable>
-              </View>
-              {/* <Pressable
-                onPress={goListening}
-                className="mt-3 min-h-[80px] items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/35 py-4 active:bg-wood-700/50"
-                accessibilityRole="button"
-                accessibilityLabel="Open listening mode"
-              >
-                <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
-                  <Headphones color={colors.amber.light} size={20} strokeWidth={2} />
+                  <AnimatedPressable
+                    onPress={goLibrary}
+                    className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Open library"
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                      <LibraryIcon color={colors.amber.light} size={22} strokeWidth={2} />
+                    </View>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Open Library</Text>
+                  </AnimatedPressable>
+                  <AnimatedPressable
+                    onPress={goListening}
+                    className="min-h-[128px] min-w-[148px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Open mic"
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                      <Headphones color={colors.amber.light} size={22} strokeWidth={2} />
+                    </View>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Open Mic</Text>
+                  </AnimatedPressable>
+                  <AnimatedPressable
+                    onPress={() => router.push('/scale-explorer' as any)}
+                    className="min-h-[128px] min-w-[148px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Scale Explorer"
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                      <Music color={colors.amber.light} size={22} strokeWidth={2} />
+                    </View>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Scales</Text>
+                  </AnimatedPressable>
                 </View>
-                <Text className="text-center font-sans-medium text-sm text-cream">Listening Mode</Text>
-              </Pressable> */}
-               <View className="mt-3 flex-row gap-3">
-                 <AnimatedPressable
-                   onPress={() => router.push('/scale-explorer' as any)}
-                   className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
-                   accessibilityRole="button"
-                   accessibilityLabel="Scale Explorer"
-                 >
-                   <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
-                     <Music color={colors.amber.light} size={22} strokeWidth={2} />
-                   </View>
-                   <Text className="text-center font-sans-medium text-sm text-cream">Scales</Text>
-                 </AnimatedPressable>
-               </View>
             </View>
           </View>
         </View>

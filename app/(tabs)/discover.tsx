@@ -2,7 +2,8 @@ import { useFocusEffect } from '@react-navigation/native'
 import * as Linking from 'expo-linking'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Platform, ScrollView, Switch, Text, View } from 'react-native'
+import { ActivityIndicator, Platform, ScrollView, Switch, Text, View } from 'react-native'
+import { Headphones, Library, Music } from 'lucide-react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
@@ -254,7 +255,7 @@ export default function DiscoverScreen() {
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
       <ScrollView className="flex-1 px-6 py-6" contentContainerStyle={{ paddingBottom: 36 }}>
         <Text className="font-serif text-3xl text-cream">Discover</Text>
-        <Text className="mt-2 font-sans text-sm text-muted-brown">
+        <Text className="mt-2 font-sans text-sm text-cream/80">
           Song recommendations and your library — play along with Spotify while tabs follow in real time.
         </Text>
 
@@ -266,13 +267,24 @@ export default function DiscoverScreen() {
         {recsError && <ErrorBanner message={recsError} variant="error" className="mt-4" />}
 
         {/* Recommendations Section */}
-        <View className="mt-6 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Recommended songs</Text>
-          {recsLoading ? <Text className="mt-3 font-sans text-sm text-muted-brown">Loading recommendations…</Text> : null}
+        <View className="mt-6 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4 shadow-soft-wood">
+          <View className="flex-row items-center gap-2">
+            <Music size={14} color={colors.amber.accent} />
+            <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Recommended songs</Text>
+          </View>
+          {recsLoading ? (
+            <View className="mt-3 flex-row items-center gap-2">
+              <ActivityIndicator color={colors.amber.accent} size="small" />
+              <Text className="font-sans text-sm text-cream/70">Loading recommendations…</Text>
+            </View>
+          ) : null}
           {!recsLoading && suggestions.length === 0 ? (
-            <Text className="mt-3 font-sans text-sm text-muted-brown">
-              Complete more lessons to get personalized recommendations
-            </Text>
+            <View className="mt-4 items-center gap-2">
+              <Music size={24} color={colors.amber.accent + '60'} />
+              <Text className="font-sans text-sm text-cream/70">
+                Complete more lessons to get personalized recommendations
+              </Text>
+            </View>
           ) : (
             <View className="mt-3 gap-2">
               {suggestions.map((suggestion) => (
@@ -283,7 +295,7 @@ export default function DiscoverScreen() {
                   className="rounded-lg border border-wood-600/45 bg-wood-900/40 px-3 py-2.5"
                 >
                   <Text className="font-sans-medium text-sm text-cream">{suggestion.song_title || 'Unknown Song'}</Text>
-                  <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                  <Text className="mt-0.5 font-sans text-xs text-cream/60">
                     {suggestion.artist || 'Unknown Artist'}
                   </Text>
                   {suggestion.reasonLabel && (
@@ -317,16 +329,27 @@ export default function DiscoverScreen() {
           />
         ) : null}
 
-        <View className="mt-6 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Your Library</Text>
-          <Text className="mt-1 font-sans text-xs text-muted-brown">
+        <View className="mt-6 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4 shadow-soft-wood">
+          <View className="flex-row items-center gap-2">
+            <Library size={14} color={colors.amber.accent} />
+            <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Your Library</Text>
+          </View>
+          <Text className="mt-1 font-sans text-xs text-cream/70">
             Select a song to view tabs and enable Spotify follow-along
           </Text>
-          {libraryLoading ? <Text className="mt-3 font-sans text-sm text-muted-brown">Loading songs…</Text> : null}
+          {libraryLoading ? (
+            <View className="mt-3 flex-row items-center gap-2">
+              <ActivityIndicator color={colors.amber.accent} size="small" />
+              <Text className="font-sans text-sm text-cream/70">Loading songs…</Text>
+            </View>
+          ) : null}
           {!libraryLoading && libraryLessons.length === 0 ? (
-            <Text className="mt-3 font-sans text-sm text-muted-brown">
-              No analyzed songs yet. Add one first from Home or Library.
-            </Text>
+            <View className="mt-4 items-center gap-2">
+              <Library size={24} color={colors.amber.accent + '60'} />
+              <Text className="font-sans text-sm text-cream/70">
+                No analyzed songs yet. Add one first from Home or Library.
+              </Text>
+            </View>
           ) : (
             <View className="mt-3 gap-2">
               {libraryLessons.slice(0, 10).map((row) => {
@@ -340,10 +363,10 @@ export default function DiscoverScreen() {
                       selected ? 'border-amber-accent bg-amber-accent/15' : 'border-wood-600/45 bg-wood-900/40'
                     }`}
                   >
-                    <Text className={`font-sans-medium text-sm ${selected ? 'text-amber-light' : 'text-cream'}`}>
+                    <Text className={`font-sans-medium text-sm ${selected ? 'text-amber-accent' : 'text-cream'}`}>
                       {row.song_title?.trim() || 'Untitled song'}
                     </Text>
-                    <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                    <Text className="mt-0.5 font-sans text-xs text-cream/60">
                       {row.artist?.trim() || 'Unknown artist'}
                     </Text>
                   </AnimatedPressable>
@@ -354,11 +377,14 @@ export default function DiscoverScreen() {
         </View>
 
         {/* Spotify Controls */}
-        <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
+        <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4 shadow-soft-wood">
           <View className="flex-row items-center justify-between gap-3">
             <View className="flex-1 pr-2">
-              <Text className="font-sans-medium text-sm text-cream">Follow along</Text>
-              <Text className="mt-1 font-sans text-xs text-muted-brown">
+              <View className="flex-row items-center gap-2">
+                <Headphones size={16} color={colors.amber.accent} />
+                <Text className="font-sans-medium text-sm text-cream">Follow along</Text>
+              </View>
+              <Text className="mt-1 font-sans text-xs text-cream/70">
                 Sync tab cursor to Spotify playback position.
               </Text>
             </View>
@@ -373,17 +399,20 @@ export default function DiscoverScreen() {
           <AnimatedPressable
             onPress={() => void listenOnSpotify()}
             haptic="medium"
-            className="mt-4 rounded-lg bg-amber-accent/90 px-4 py-3"
+            className="mt-4 rounded-lg bg-amber-accent/90 px-5 py-3.5"
           >
-            <Text className="text-center font-sans-medium text-sm text-wood-900">Listen on Spotify</Text>
+            <View className="flex-row items-center justify-center gap-2">
+              <Headphones size={16} color={colors.wood[900]} />
+              <Text className="text-center font-sans-medium text-sm text-wood-900">Listen on Spotify</Text>
+            </View>
           </AnimatedPressable>
-          <Text className="mt-2 font-sans text-[11px] text-muted-brown">
+          <Text className="mt-2 font-sans text-[11px] text-cream/60">
             This opens Spotify search for the selected song. Harmoniq never starts/stops Spotify playback.
           </Text>
           {playbackState ? (
             <Text className="mt-3 font-sans text-xs text-cream">
               Now tracking:{' '}
-              <Text className="font-sans-medium text-amber-light">
+              <Text className="font-sans-medium text-amber-accent">
                 {playbackState.track_name?.trim() || 'Unknown track'}
               </Text>{' '}
               {playbackState.artists?.length ? `· ${playbackState.artists.join(', ')}` : ''} ·{' '}
