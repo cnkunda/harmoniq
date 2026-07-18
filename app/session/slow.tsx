@@ -82,7 +82,7 @@ function SlowScreenInner() {
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
-  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
+  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote, null, null), [keyLabel, selectedNote])
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
   const musicState = useMusicState()
   const [chordPosIndex, setChordPosIndex] = useState(0)

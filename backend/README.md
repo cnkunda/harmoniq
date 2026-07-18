@@ -44,22 +44,36 @@ jupyter lab research/pipeline_proof.ipynb
 
 Set **`LOCAL_AUDIO`** or **`YOUTUBE_URL`** in the first code cell. Outputs go under `data/research_notebook/` (gitignored via `data/`).
 
-## Transcription architecture
+## Transcription architecture — two-branch
 
-The primary transcription engine is **MT3** (Google's Multi-Task Multitrack Transformer, checkpoints from `magenta/mt3`). It produces both chord timeline and solo notes from a single inference pass on the guitar stem:
+The primary transcription engine uses a two-branch architecture to decouple chord extraction from solo note extraction, avoiding the single-pass guitar-stem bottleneck:
+
+**Branch A — Chords (instrument-agnostic):**
+- Input: full mix or harmonic-bed submix (bass + piano + other + guitar, drums removed) — never the guitar stem alone.
+- Model: MT3 at "Flat" granularity (or a dedicated chroma extractor) collapses all pitched content into an aggregate pitch/chroma representation.
+- Decoder: chroma/pitch-class aggregation → template matching against `CHORD_INTERVALS`. Confidence reflects chroma clarity + template match quality, independent of guitar-stem quality.
+
+**Branch B — Solo (leakage-hardened, guitar-specific):**
+- Input: guitar stem (Demucs `htdemucs_6s`) as a soft prior + full mix as a secondary parallel feature.
+- Model: MT3-style token decoder conditioned on a fixed guitar-program embedding — structural leakage prevention via program-scoped vocabulary.
+- Leakage mitigation (MR-MT3, arXiv:2403.10024): memory retention across segment boundaries, prior token sampling during training, token shuffling augmentation.
+- Post-hoc safety net: hard-filter any token outside the guitar program range.
 
 ```
-Guitar stem → MT3 inference → token event stream
-                                 ├── Chord decoder (pitch set → chord template match)
-                                 └── Solo decoder (melodic filter → beat quantization)
+Demucs 6-stem ─┬→ full mix / harmonic bed ─→ Branch A ─→ Chord Timeline
+                │                             (aggregate pitch/chroma → template match)
+                │
+                └→ guitar stem + full mix ──→ Branch B ─→ Solo Notes
+                                                (program-conditioned MT3
+                                                 + MR-MT3 memory retention
+                                                 + program token filter)
 ```
 
-**Fallback chain** (confidence-gated):
-1. MT3 (GPU recommended) — primary, best accuracy
-2. CRNN TFLite (`chord_inference.py`) — CPU, on-device compatible
-3. Chroma template matching (librosa) — always available, restricted to 25-class MIREX
+**Fallback chain** (per-branch, confidence-gated):
+- Branch A: MT3 (GPU) → CRNN TFLite on full mix (`chord_inference.py`, CPU) → Chroma template matching (librosa, 25-class MIREX)
+- Branch B: MT3 (GPU) → Basic Pitch on guitar stem (`solo_inference.py`, CPU/on-device)
 
-The orchestrator logs which tier produced the result per job in `transcription_metadata`.
+The orchestrator logs which tier produced each branch's result in `transcription_metadata` (`chord_tier` + `solo_tier`).
 
 ### MT3 setup
 

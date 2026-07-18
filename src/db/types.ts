@@ -166,6 +166,8 @@ export type JamSnapshotRow = {
   /** Optional future map for physical fretboard positions. */
   position_weight_map: Record<string, number>
   inferred_scale_label: string | null
+  /** Commit B3: SCALE_DB key for the matched mode (e.g., 'ionian', 'aeolian', 'major_pentatonic'). */
+  inferred_mode?: string | null
   inference_confidence: 'low' | 'medium' | 'high' | null
   track_id: string | null
   track_label: string | null
@@ -201,6 +203,7 @@ export type JamSnapshotInsertInput = {
   pitch_class_weight_map: Record<string, number>
   position_weight_map?: Record<string, number> | null
   inferred_scale_label?: string | null
+  inferred_mode?: string | null
   inference_confidence?: 'low' | 'medium' | 'high' | null
   track_id?: string | null
   track_label?: string | null

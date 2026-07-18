@@ -12,6 +12,7 @@ import { ConfidenceMeter } from '@/src/chord/ConfidenceMeter'
 import { ChordHistoryStream } from '@/src/chord/ChordHistoryStream'
 import { useChordDetector } from '@/src/chord/useChordDetector'
 import { isNoChord } from '@/src/chord/chordVocab'
+import { formatChordDisplay } from '@/src/music/chordVoicing'
 import colors from '@/src/constants/colors'
 
 /**
@@ -46,7 +47,7 @@ export function ActiveListenerCard() {
     opacity: chordFlash.value,
   }))
 
-  const chordLabel = currentChord ? (isNoChord(currentChord.chord) ? '—' : formatChord(currentChord.chord)) : '—'
+  const chordLabel = currentChord ? (isNoChord(currentChord.chord) ? '—' : formatChordDisplay(currentChord.chord)) : '—'
 
   return (
     <View className="rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
@@ -131,11 +132,4 @@ export function ActiveListenerCard() {
   )
 }
 
-/** Format a chord label for display: "C:maj" → "C", "A:min" → "Am". */
-function formatChord(chord: string): string {
-  const [root, quality] = chord.split(':')
-  if (!root) return chord
-  if (quality === 'maj') return root
-  if (quality === 'min') return `${root}m`
-  return chord
-}
+

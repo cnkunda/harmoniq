@@ -51,20 +51,41 @@ def _style_matches(style_label: str, style_tags: list[str]) -> bool:
     return any(tag and tag.lower() in sl for tag in style_tags)
 
 
+def _resolve_difficulty(player_profile: PlayerProfile | None) -> int:
+    """Map experience_level to difficulty tier (1-3). Defaults to 2."""
+    if player_profile is None:
+        return 2
+    lc = player_profile.learning_context
+    if lc is None:
+        return 2
+    level = (lc.experience_level or "intermediate").strip().lower()
+    return {"beginner": 1, "intermediate": 2, "advanced": 3}.get(level, 2)
+
+
 def generate_warmup(
     player_profile: PlayerProfile | None,
     taste_profile: TasteProfile | None,
     *,
     session_bpm: int | None = None,
     seed: int = 0,
+    difficulty: int | None = None,
 ) -> WarmupPlan:
     """
     Build three exercises: chromatic/spider opener, weak-area technique, style feel.
     Exercise BPM defaults to 70% of taste comfort low (or session_bpm when provided).
+    Difficulty filters the pool: only items with ``difficulty <= requested`` are
+    considered. Derived from player_profile.learning_context.experience_level when
+    not explicitly provided.
     """
     pool = _load_pool()
     profile = player_profile or PlayerProfile()
     taste = taste_profile or TasteProfile()
+    if difficulty is None:
+        difficulty = _resolve_difficulty(player_profile)
+    difficulty = max(1, min(3, difficulty))
+
+    pool = [x for x in pool if x.get("difficulty", 2) <= difficulty]
+
     comfort = taste.bpm_comfort_range
     low = int(comfort[0]) if comfort and len(comfort) > 0 else 80
     base_input = int(session_bpm) if session_bpm is not None else low
@@ -127,6 +148,7 @@ def generate_warmup(
                 technique_tag=_norm_weak(str(row.get("technique_tag") or "timing")),
                 bpm=exercise_bpm,
                 fretboard_guide=_fretboard_guide_from_row(row),
+                difficulty=int(row.get("difficulty") or 2),
             )
         )
 

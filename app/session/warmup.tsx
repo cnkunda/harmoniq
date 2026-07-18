@@ -108,7 +108,7 @@ function WarmupScreenInner() {
   const keyLabel = (lesson?.key ?? 'E minor').toString()
   const positionLabel = 'Tap the tab or fretboard to explore'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
-  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
+  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote, null, null), [keyLabel, selectedNote])
 
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
 

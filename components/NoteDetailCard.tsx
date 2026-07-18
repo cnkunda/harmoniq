@@ -4,20 +4,46 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
 
 import { AnimatedPressable } from './AnimatedPressable'
+import type { ChordToneStatus } from '@/src/music/noteSelectionDetail'
+import colors from '@/src/constants/colors'
 
 export type NoteDetailCardProps = {
   noteName: string
   scaleDegree: string
   fingerLine: string
-  /** Optional same-pitch fingerings on other strings (Study / AlphaTab). */
   alternateFingerLines?: string[]
   coachText: string
   onDismiss?: () => void
+  chordToneStatus?: ChordToneStatus | null
+  confidence?: number | null
 }
 
-/**
- * Draggable pedagogy panel for Study (AlphaTab note selection).
- */
+const STATUS_META: Record<ChordToneStatus, { label: string; color: string; dot: string }> = {
+  chord_tone: { label: 'Chord tone', color: colors.success, dot: colors.success },
+  tension: { label: 'Tension', color: colors.amber.accent, dot: colors.amber.light },
+  chromatic: { label: 'Chromatic / Outside', color: colors.danger, dot: colors.danger },
+}
+
+function ChordToneBadge({ status }: { status: ChordToneStatus }) {
+  const meta = STATUS_META[status]
+  return (
+    <View className="flex-row items-center gap-1.5 rounded-full border px-2.5 py-1" style={{ borderColor: meta.color + '60' }}>
+      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: meta.dot }} />
+      <Text className="font-sans-medium text-[10px]" style={{ color: meta.color }}>{meta.label}</Text>
+    </View>
+  )
+}
+
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  const pct = Math.round(confidence * 100)
+  const color = pct >= 85 ? colors.success : pct >= 60 ? colors.amber.accent : colors.danger
+  return (
+    <View className="flex-row items-center gap-1 rounded-full border px-2 py-1" style={{ borderColor: color + '50' }}>
+      <Text className="font-mono text-[10px]" style={{ color }}>Confidence: {pct}%</Text>
+    </View>
+  )
+}
+
 export function NoteDetailCard({
   noteName,
   scaleDegree,
@@ -25,6 +51,8 @@ export function NoteDetailCard({
   alternateFingerLines,
   coachText,
   onDismiss,
+  chordToneStatus,
+  confidence,
 }: NoteDetailCardProps) {
   const translateX = useSharedValue(0)
   const translateY = useSharedValue(0)
@@ -91,6 +119,13 @@ export function NoteDetailCard({
             <Text className="font-sans-medium text-xs text-amber-light">{scaleDegree}</Text>
           </View>
         </View>
+
+        {chordToneStatus || (confidence != null && confidence >= 0) ? (
+          <View className="mb-4 flex-row flex-wrap items-center gap-2">
+            {chordToneStatus ? <ChordToneBadge status={chordToneStatus} /> : null}
+            {confidence != null && confidence >= 0 ? <ConfidenceBadge confidence={confidence} /> : null}
+          </View>
+        ) : null}
 
         <View className="rounded-2xl border border-wood-600 bg-wood-900 p-4">
           <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-amber-light">Suggested fingering</Text>

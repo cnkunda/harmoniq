@@ -152,12 +152,12 @@ export interface FretboardCell {
 }
 
 /**
- * Parse a chord symbol into root note and quality
- * Handles formats like "C:maj", "F#:min7", "Bb:7", "N" (no chord)
+ * Parse a chord symbol into root note, quality, and optional bass note.
+ * Handles formats like "C:maj", "F#:min7", "Bb:7", "C:maj/E", "C/E", "N".
  */
 export function parseChordSymbol(
   chordSymbol: string,
-): { root: string; quality: string } | null {
+): { root: string; quality: string; bass?: string } | null {
   if (!chordSymbol || chordSymbol === "N") return null;
 
   // Extract root (1-2 chars: letter + optional # or b)
@@ -169,14 +169,30 @@ export function parseChordSymbol(
   const afterRoot = chordSymbol.slice(rootMatch[0].length);
 
   // Extract quality (everything after optional colon, or the remainder if no colon)
+  // and optional bass note suffix (after /)
   let quality = "maj"; // default
+  let bass: string | undefined
 
   if (afterRoot.startsWith(":")) {
-    // Format: C:maj, C:min7, etc.
-    quality = afterRoot.slice(1).trim();
+    // Format: C:maj, C:min7, C:maj/E, etc.
+    let rest = afterRoot.slice(1).trim()
+    // Check for slash notation: C:maj/E
+    const slashIdx = rest.indexOf('/')
+    if (slashIdx !== -1) {
+      bass = rest.slice(slashIdx + 1).trim()
+      rest = rest.slice(0, slashIdx).trim()
+    }
+    quality = rest.length > 0 ? rest : 'maj'
   } else if (afterRoot.length > 0) {
-    // Format: Cmaj, Cm, C7, etc. (no colon)
-    quality = afterRoot.trim();
+    // Format: Cmaj, Cm, C7, C/E, etc. (no colon)
+    let rest = afterRoot.trim()
+    // Check for slash notation: C/E
+    const slashIdx = rest.indexOf('/')
+    if (slashIdx !== -1) {
+      bass = rest.slice(slashIdx + 1).trim()
+      rest = rest.slice(0, slashIdx).trim()
+    }
+    quality = rest.length > 0 ? rest : 'maj'
   }
 
   // Normalize quality names - be careful with order of checks
@@ -208,7 +224,7 @@ export function parseChordSymbol(
     quality = "maj";
   else if (q === "7") quality = "7";
 
-  return { root, quality };
+  return { root, quality, bass };
 }
 
 /**
@@ -559,13 +575,17 @@ export function getChordQualityDisplay(quality: string): string {
 
 /**
  * Format chord symbol for display (compact notation)
- * "C:maj" → "C", "F#:min7" → "F#m7", "Bb:maj7" → "Bbmaj7"
+ * "C:maj" → "C", "F#:min7" → "F#m7", "C:maj/E" → "C/E", "Bb:maj7" → "Bbmaj7"
+ *
+ * Accepts an optional `bass` override parameter. When provided, it takes
+ * precedence over any bass note parsed from the chord symbol string.
  */
-export function formatChordDisplay(chordSymbol: string): string {
+export function formatChordDisplay(chordSymbol: string, bass?: string): string {
   const parsed = parseChordSymbol(chordSymbol);
   if (!parsed) return chordSymbol === "N" ? "—" : chordSymbol;
 
-  const { root, quality } = parsed;
+  const { root, quality, bass: parsedBass } = parsed;
   const qualityDisplay = getChordQualityDisplay(quality);
-  return `${root}${qualityDisplay}`;
+  const actualBass = bass ?? parsedBass;
+  return `${root}${qualityDisplay}${actualBass ? '/' + actualBass : ''}`;
 }

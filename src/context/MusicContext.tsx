@@ -41,6 +41,8 @@ export type ChordEvent = {
   confidence?: number
   /** Commit 116: Roman numeral functional label (e.g., 'I', 'ii7', 'V7') */
   roman_numeral?: string
+  /** Commit B8: Detected bass note root (e.g., 'E', 'G#'). Undefined when root position. */
+  bass?: string
 }
 
 /** A solo note event (start time/duration in seconds, MIDI pitch). */
@@ -69,6 +71,8 @@ export type MusicState = {
   isPlaying: boolean
   /** True after AlphaTab finishes loading its soundfont. */
   playerReady: boolean
+  /** Commit B2: Scale pitch classes derived from the lesson key (e.g., [0,2,4,5,7,9,11] for C major). */
+  scalePitchClasses: number[]
 }
 
 export const INITIAL_MUSIC_STATE: MusicState = {
@@ -79,6 +83,7 @@ export const INITIAL_MUSIC_STATE: MusicState = {
   positionMs: 0,
   isPlaying: false,
   playerReady: false,
+  scalePitchClasses: [],
 }
 
 export type MusicAction =
@@ -93,6 +98,7 @@ export type MusicAction =
       activeNotes: ActiveNote[]
       currentBar: number
     }
+  | { type: 'SET_SCALE_PITCH_CLASSES'; classes: number[] }
 
 export function musicReducer(state: MusicState, action: MusicAction): MusicState {
   switch (action.type) {
@@ -114,6 +120,8 @@ export function musicReducer(state: MusicState, action: MusicAction): MusicState
         activeNotes: action.activeNotes,
         currentBar: action.currentBar,
       }
+    case 'SET_SCALE_PITCH_CLASSES':
+      return { ...state, scalePitchClasses: action.classes }
     default:
       return state
   }
@@ -133,6 +141,8 @@ type MusicActions = {
   setPlayerReady: (ready: boolean) => void
   /** Set current bar (typically from AlphaTab beat events). */
   setBeat: (bar: number) => void
+  /** Commit B2: Set the scale pitch classes for harmonic context overlay. */
+  setScalePitchClasses: (classes: number[]) => void
 }
 
 type MusicContextValue = {
@@ -163,6 +173,13 @@ function findCurrentChord(events: ChordEvent[] | null | undefined, timeSec: numb
     const e = events[i]!
     if (e.timestamp <= timeSec) {
       if (!e.chord || e.chord === 'N') return null
+      // Embed bass in the chord string when present and different from root
+      if (e.bass) {
+        const root = e.chord.split(':')[0]!
+        if (e.bass !== root) {
+          return `${e.chord}/${e.bass}`
+        }
+      }
       return e.chord
     }
   }
@@ -263,9 +280,13 @@ export function MusicProvider({
     dispatch({ type: 'SET_BEAT', bar })
   }, [])
 
+  const setScalePitchClasses = useCallback((classes: number[]) => {
+    dispatch({ type: 'SET_SCALE_PITCH_CLASSES', classes })
+  }, [])
+
   const actions = useMemo<MusicActions>(
-    () => ({ setPosition, setPlaying, setPlayerReady, setBeat }),
-    [setPosition, setPlaying, setPlayerReady, setBeat],
+    () => ({ setPosition, setPlaying, setPlayerReady, setBeat, setScalePitchClasses }),
+    [setPosition, setPlaying, setPlayerReady, setBeat, setScalePitchClasses],
   )
 
   const value = useMemo<MusicContextValue>(() => ({ state, dispatch, actions }), [state, actions])

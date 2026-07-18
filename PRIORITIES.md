@@ -33,28 +33,29 @@ Google's MT3 (Music Transcription Transformer, ICLR 2022) solves this: a T5-smal
 **Why keep the custom model:**
 - On-device real-time inference (Live Mic Mode, <120ms latency) — MT3 is too large to run on-device
 - Fallback when the MT3 server is unavailable
-- Long-term distillation target: use MT3-generated pseudo-labels to train a smaller student model
+- Long-term distillation target: use MT3-generated pseudo-labels to train two smaller student models — a framewise chord student (non-autoregressive, piano-roll) and a guitar-vocabulary token solo student (autoregressive, program-filtered)
 
-**Architecture:**
+**Architecture — two-branch (chord/solo split):**
 
 ```
-Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeline (event decoder)
-                                                        └→ Solo Notes (event decoder)
-                                                              ↓
-                                              CRNN TFLite (on-device fallback)
-                                               │  quality gate: >80% N → chroma
-                                              Chroma matching (tertiary fallback)
+Audio → Demucs 6-stem ─┬→ full mix / harmonic bed ─→ Branch A: MT3 (Flat granularity) ─→ Chord Timeline
+                        │                               or chroma extractor
+                        │
+                        └→ guitar stem (as soft prior) ─→ Branch B: MT3 conditioned on                           ─→ Solo Notes
+                            + full mix (parallel feature)   guitar-program embedding
+                                                             + MR-MT3 memory retention
+                                                             + prior token sampling
+                                                             + token shuffling
+                                                             + post-hoc program filter
+                                                                  ↓
+                                                  CRNN TFLite (on-device fallback for chords, full mix)
+                                                   │  quality gate: >80% N → chroma
+                                                  Chroma matching (tertiary fallback for chords)
 ```
 
 **CRNN quality gate:** When the neural model predicts >80% N (no-chord) across frames, `_neural_model_too_noisy()` in `chord_inference.py` bypasses the CRNN result and falls through to chroma template matching. This handles the known 34.7% real accuracy limitation where the model defaults to N on unfamiliar audio.
 
 **Basic Pitch caching:** `basic_pitch_predict_events()` in `pipeline_proof.py` caches results by audio path and model variant. Prevents duplicate 60s+ Basic Pitch inference between solo note extraction and tab generation — the solo inference path (`solo_inference.py`) and tab generation path both call the same cached function.
-
----
-
-### Milestone A: MT3-Primary AMT Pipeline
-
-**Status:** Complete — archived to [`priorities-archive.md`](priorities-archive.md). MT3 replaces CRNN + Basic Pitch as the primary backend transcription engine, producing simultaneous chord and solo note outputs with >80% chord accuracy and >85% solo onset F1 on GuitarSet. All acceptance criteria verified.
 
 ---
 
@@ -86,14 +87,14 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
   - Keyboard shortcut overlay on web (reuse existing keyboard input)
 
 - **Acceptance Criteria:**
-  - [ ] Four-mode toggle cycles correctly with instant visual feedback
-  - [ ] `both` mode clearly distinguishes chord shapes from active solo notes
-  - [ ] Dual-color rings show when solo note matches chord tone
-  - [ ] Purple ring shows when solo note is outside chord (tension/chromatic)
-  - [ ] Tapped note displays chord tone status correctly
-  - [ ] MT3 confidence shown in note detail
-  - [ ] No regression on existing `chords` and `solo` modes
-  - [ ] Touch targets ≥ 44px on mobile
+  - [x] Four-mode toggle cycles correctly with instant visual feedback
+  - [x] `both` mode clearly distinguishes chord shapes from active solo notes
+  - [x] Dual-color rings show when solo note matches chord tone
+  - [x] Purple ring shows when solo note is outside chord (tension/chromatic)
+  - [x] Tapped note displays chord tone status correctly
+  - [x] MT3 confidence shown in note detail
+  - [x] No regression on existing `chords` and `solo` modes
+  - [x] Touch targets ≥ 44px on mobile
 
 #### Commit B2: Harmonic Context Overlay
 - **Scope:**
@@ -107,11 +108,11 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
   - Compute from lesson key on section load
 
 - **Acceptance Criteria:**
-  - [ ] Scale tones visible as green circles when "Key context" mode active
-  - [ ] Chord tones render on top of scale tones
-  - [ ] Outside notes have no highlight
-  - [ ] Toggle cycles through three modes
-  - [ ] Tapped note displays scale degree and chord tone status
+  - [x] Scale tones visible as green circles when "Key context" mode active
+  - [x] Chord tones render on top of scale tones
+  - [x] Outside notes have no highlight
+  - [x] Toggle cycles through three modes
+  - [x] Tapped note displays scale degree and chord tone status
 
 #### Commit B3: Expanded Jam Scale Detection
 - **Scope:**
@@ -121,10 +122,10 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
   - Add `inferred_mode` field to `BestScaleMatch` and `jam_snapshots`
 
 - **Acceptance Criteria:**
-  - [ ] Jam detects all 7 diatonic modes, not just pentatonic
-  - [ ] Weighted scoring used for mode detection
-  - [ ] Top 3 candidates shown with confidence bars
-  - [ ] Confidence < 0.5 shows "Mixed mode" with note bias breakdown
+  - [x] Jam detects all 7 diatonic modes, not just pentatonic
+  - [x] Weighted scoring used for mode detection
+  - [x] Top 3 candidates shown with confidence bars
+  - [x] Confidence < 0.5 shows "Mixed mode" with note bias breakdown
 
 #### Commit B4: Scale/Mode Library (Foundational)
 - **Scope:**
@@ -134,9 +135,9 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
   - Unit tests for all scales
 
 - **Acceptance Criteria:**
-  - [ ] All 30+ scales exported as pitch class sets
-  - [ ] Interval enum and helpers exported
-  - [ ] Unit tests verify correctness
+  - [x] All 30+ scales exported as pitch class sets
+  - [x] Interval enum and helpers exported
+  - [x] Unit tests verify correctness
 
 #### Commit B5: Scale Explorer Screen
 - **Scope:**
@@ -147,10 +148,10 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
   - Favorites persisted to SQLite
 
 - **Acceptance Criteria:**
-  - [ ] Scale picker shows all 30+ scales
-  - [ ] Fretboard highlights with root distinguished
-  - [ ] Overlay toggles work correctly
-  - [ ] Note audition and scale playback functional
+  - [x] Scale picker shows all 30+ scales
+  - [x] Fretboard highlights with root distinguished
+  - [x] Overlay toggles work correctly
+  - [x] Note audition and scale playback functional
 
 #### Commit B6: Chord Progression Labels
 - **Scope:**
@@ -160,10 +161,10 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
   - Educational tooltip on tap
 
 - **Acceptance Criteria:**
-  - [ ] Sliding window matches common progressions
-  - [ ] ii-V-I in C major correctly labeled
-  - [ ] Bracketed annotations display below chord symbols
-  - [ ] Tapping label shows educational tooltip
+  - [x] Sliding window matches common progressions
+  - [x] ii-V-I in C major correctly labeled
+  - [x] Bracketed annotations display below chord symbols
+  - [x] Tapping label shows educational tooltip
 
 #### Commit B7: Warmup Pool Expansion + Slonimsky Generator
 - **Scope:**
@@ -173,22 +174,22 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
   - Difficulty-aware selection
 
 - **Acceptance Criteria:**
-  - [ ] 15+ Slonimsky exercises added with valid fretboard data
-  - [ ] Pattern generator produces valid `SlonimskyPattern` objects
-  - [ ] Daily lick appears on home screen and persists to `licks` table
-  - [ ] Difficulty scales by player skill level
+  - [x] 15+ Slonimsky exercises added with valid fretboard data
+  - [x] Pattern generator produces valid `SlonimskyPattern` objects
+  - [x] Daily lick appears on home screen and persists to `licks` table
+  - [x] Difficulty scales by player skill level
 
 #### Commit B8: Chord Inversion & Slash Notation
 - **Scope:**
   - Add `bass` field to `ChordEvent` schema
-  - Extract bass note from low CQT bins (or MT3 event stream lowest note)
+  - Extract bass note from low CQT bins on full mix (or Branch A's aggregate pitch representation — never from the guitar-stem-only event stream, since the guitar often does not play the bass note)
   - Emit `<bass>` in MusicXML when bass ≠ root
   - Inversion identification (1st/2nd)
 
 - **Acceptance Criteria:**
-  - [ ] `ChordEvent.bass` stores detected bass note
-  - [ ] `<bass>` element emitted in MusicXML when needed
-  - [ ] Inversions identified from bass note analysis
+  - [x] `ChordEvent.bass` stores detected bass note
+  - [x] `<bass>` element emitted in MusicXML when needed
+  - [x] Inversions identified from bass note analysis
 
 #### Commit B9: Voicing & Position Inference
 - **Scope:**
@@ -197,9 +198,9 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
   - Position inference from note clustering
 
 - **Acceptance Criteria:**
-  - [ ] E-shape vs A-shape voicings distinguished
-  - [ ] CAGED positions inferred from pitch data
-  - [ ] Fretboard diagrams reflect detected voicing
+  - [x] E-shape vs A-shape voicings distinguished
+  - [x] CAGED positions inferred from pitch data
+  - [x] Fretboard diagrams reflect detected voicing
 
 ---
 
@@ -208,7 +209,7 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
 **Commit C1: User Feedback & Manual Overrides**
 - UI for users to mark incorrect notes/chords
 - Backend persistence of corrections
-- Corrections feed into MT3 distillation dataset for future custom model training
+- Corrections route to two distillation sets: chord corrections → Branch A chord student's training set; note/solo corrections → Branch B solo student's training set
 
 **Commit C2: Jam Mode Summary Agent**
 - Claude-powered post-jam analysis and vocabulary mapping
@@ -299,26 +300,37 @@ Audio → Demucs 6-stem → guitar stem → MT3 inference ─┬→ Chord Timeli
 
 **Status:** Planned
 
-### Milestone: MT3 Distillation (Custom Model 2.0)
+### Milestone 3A: Chord Student Distillation
 
-Once MT3 is powering production, use its pseudo-labels + the existing CRNN training infrastructure to train a much smaller student model that approaches MT3 accuracy.
+Once Branch A (full-mix chord pipeline) is powering production, distill its Flat-granularity pitch output into a framewise, non-autoregressive piano-roll student model.
+
+**Target student:** framewise piano-roll model, non-autoregressive, real-time-capable on-device. This replaces the existing CRNN for Live Mic Mode chord detection.
 
 **Approach:**
-- MT3 runs on all labeled + unlabeled song audio → generates pseudo-labels with confidence scores
+- Branch A (MT3 or chroma) runs on all labeled + unlabeled song audio → generates pseudo-labels with confidence scores
 - Filter pseudo-labels at confidence > 0.9 → creates a training set 10-100× larger than current labeled data
-- Train student CRNN (TFLite-friendly, <600KB) on MT3 pseudo-labels + existing real labels
-- Knowledge distillation loss: KL divergence between MT3 teacher logits and student logits (in addition to standard cross-entropy on labels)
-- Target: student model achieves >70% GuitarSet accuracy while running on-device
+- Train framewise student (TFLite-friendly, <600KB) with knowledge distillation loss (KL divergence between teacher logits and student logits in addition to cross-entropy)
+- Fine-tune on real guitar audio (GuitarSet, isolated catalog stems) — not only Slakh2100, which is MIDI-rendered and generalizes poorly to real electric/acoustic guitar timbre
+- Target: student achieves >70% GuitarSet chord accuracy while running on-device
 
-**If student model reaches production quality:**
-- Swap MT3 for student model in the backend pipeline (reduced cost, faster inference)
-- Keep MT3 as teacher for continued distillation (label refreshes on new data)
-- On-device inference gets a major upgrade from 34.7% → 70%+ accuracy
+**If student reaches production quality:** swap Branch A teacher for student in the backend pipeline (reduced cost, faster inference). Keep teacher for continued pseudo-label refreshes.
+**If student plateaus:** Branch A teacher (MT3/chroma) remains primary; student stays as on-device fallback.
 
-**If student model plateaus below production bar:**
-- MT3 remains the primary backend engine
-- Student model stays as on-device fallback
-- Invest in dataset expansion (more real labeled recordings, better coverage of non-triad chords)
+### Milestone 3B: Solo Student Distillation
+
+Once Branch B (guitar-conditioned, leakage-hardened solo pipeline) is powering production, distill it into a guitar-only-vocabulary token student model.
+
+**Target student:** autoregressive token model with vocabulary limited to guitar program numbers only — structurally incapable of leaking non-guitar notes. Keeps the token-based output (bends, ties, duration matter for tab generation) but is smaller than MT3 because of the restricted vocabulary.
+
+**Approach:**
+- Branch B (MT3 with program conditioning + memory retention) runs on all labeled + unlabeled guitar audio → generates pseudo-labels with confidence scores + leakage_risk
+- Filter pseudo-labels at confidence > 0.9 AND leakage_risk < 0.3
+- Train guitar-vocabulary token student with knowledge distillation loss
+- Fine-tune on real isolated guitar audio (GuitarSet, catalog stems) to handle real electric/acoustic timbre, bends, palm-muting — Slakh2100 is insufficient for real-guitar generalization
+- Target: solo note accuracy ≥ MT3 teacher on guitar-only passages, with zero instrument-leakage events on held-out mix tests
+
+**If student reaches production quality:** swap Branch B teacher for student. On-device solo transcription gets a major upgrade.
+**If student plateaus:** Branch B teacher remains primary; student stays as on-device fallback for solo.
 
 ### Milestone: Lead Sheet Agent
 Agentic workflow to convert MIDI + Whisper lyrics into structured MusicXML.
@@ -352,7 +364,7 @@ Long-term skill trajectory analysis, plateau detection, non-linear practice reco
 | Multi-task model architecture (6-output) | **Deferred** to Phase 3 distillation (backed by MT3 data) |
 | 277-class chord model training | **Preserved** for long-term distillation pipeline |
 | 5-fold GuitarSet CV, CQT visualization | **Archived** — no longer critical path |
-| Basic Pitch for solo transcription | **Replaced** by MT3's simultaneous chord+solo output |
+| Basic Pitch for solo transcription | **Replaced** by two-branch architecture: full-mix chord branch + guitar-conditioned solo branch with MR-MT3 leakage mitigation |
 | Fretboard as secondary concern | **Elevated** — dual-mode display is the core UX differentiator |
 
 ---
@@ -365,5 +377,7 @@ All commits within each milestone must meet their individual ACs. The Phase 2 re
 - [ ] Fretboard dual-mode toggle works across Listen, Study, Slow, Play, Review steps
 - [ ] Fallback chain never produces empty/null result (always degrades gracefully)
 - [ ] 10-song smoke test: 5 studio recordings + 5 live performances → all produce valid chord timelines
+- [ ] **Chord-without-guitar regression test**: mix a chord progression with the guitar stem muted or heavily attenuated in the source audio — chord detection must remain stable/correct from the full-mix branch (Branch A)
+- [ ] **Leakage stress test**: mix a guitar melody with a doubling piano or vocal line in the same register/time window — solo transcription must not include notes attributable to the non-guitar part (Branch B)
 - [ ] `npm run lint`, `npm run test`, `pytest` pass
 - [ ] Manual QA sign-off on session loop for MT3-powered songs vs CRNN-powered songs

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
     chordToFretboardCells,
-    formatChordDisplay
+    formatChordDisplay,
+    parseChordSymbol,
 } from "./chordVoicing";
 
 describe("chordToFretboardCells", () => {
@@ -242,5 +243,91 @@ describe("formatChordDisplay", () => {
   it("handles shorthand notation", () => {
     expect(formatChordDisplay("Cm")).toBe("Cm");
     expect(formatChordDisplay("C7")).toBe("C7");
+  });
+});
+
+describe("parseChordSymbol (slash notation)", () => {
+  it("parses slash chord C:maj/E", () => {
+    const result = parseChordSymbol("C:maj/E");
+    expect(result).toEqual({ root: "C", quality: "maj", bass: "E" });
+  });
+
+  it("parses slash chord G:7/F", () => {
+    const result = parseChordSymbol("G:7/F");
+    expect(result).toEqual({ root: "G", quality: "7", bass: "F" });
+  });
+
+  it("parses plain chord without bass", () => {
+    const result = parseChordSymbol("A:min");
+    expect(result).toEqual({ root: "A", quality: "min" });
+  });
+
+  it('returns null for "N"', () => {
+    expect(parseChordSymbol("N")).toBeNull();
+  });
+
+  it("handles sharp roots with slash", () => {
+    const result = parseChordSymbol("F#:min7/C#");
+    expect(result).toEqual({ root: "F#", quality: "min7", bass: "C#" });
+  });
+
+  it("handles shorthand with slash", () => {
+    const result = parseChordSymbol("Cm/G");
+    expect(result).toEqual({ root: "C", quality: "min", bass: "G" });
+  });
+});
+
+describe("formatChordDisplay (slash notation)", () => {
+  it("formats slash chord C:maj/E as C/E", () => {
+    expect(formatChordDisplay("C:maj/E")).toBe("C/E");
+  });
+
+  it("formats slash chord G:7/F as G7/F", () => {
+    expect(formatChordDisplay("G:7/F")).toBe("G7/F");
+  });
+
+  it("formats minor slash chord A:min7/G as Am7/G", () => {
+    expect(formatChordDisplay("A:min7/G")).toBe("Am7/G");
+  });
+
+  it("formats plain chord without bass as before", () => {
+    expect(formatChordDisplay("C:maj")).toBe("C");
+  });
+
+  it("accepts explicit bass parameter override", () => {
+    expect(formatChordDisplay("C:maj", "G")).toBe("C/G");
+  });
+});
+
+describe("chordToFretboardCells with voicing", () => {
+  it("renders full E-shape C major in low position with valid intervals", () => {
+    // E-shape at fret 8 (C major barre) in full mode
+    const cells = chordToFretboardCells("C:maj", "full", "low");
+    expect(cells.length).toBeGreaterThanOrEqual(5);
+    expect(cells.some((c) => c.interval === 0)).toBe(true); // Root present
+    expect(cells.some((c) => c.interval === 4)).toBe(true); // Major 3rd
+    expect(cells.some((c) => c.interval === 7)).toBe(true); // Perfect 5th
+  });
+
+  it("renders full A-shape D major in low position", () => {
+    const cells = chordToFretboardCells("D:maj", "full", "low");
+    // Should produce an A-shape voicing (root on string 5)
+    expect(cells.length).toBeGreaterThanOrEqual(4);
+    // Should have strings in the A-shape configuration
+    expect(cells.every((c) => c.fret >= 0)).toBe(true);
+  });
+
+  it("renders full G-shape G major in open position", () => {
+    const cells = chordToFretboardCells("G:maj", "full", "open");
+    expect(cells.length).toBeGreaterThanOrEqual(5);
+    expect(cells.some((c) => c.fret === 0)).toBe(true); // Some open strings
+  });
+
+  it("should not produce muted strings for basic major chords", () => {
+    const cells = chordToFretboardCells("C:maj", "full", "low");
+    for (const cell of cells) {
+      expect(cell.fret).toBeGreaterThanOrEqual(0);
+      expect(cell.midi).toBeGreaterThan(0);
+    }
   });
 });

@@ -18,39 +18,24 @@ import os
 import threading
 import time
 
-from app.schemas import (
-    BeatGrid,
-    BeatGridRecomputeResponse,
-    ChordEnrichmentStatus,
-    CoachFocusArea,
-    CoachHydrationSection,
-    CoachHydrationStatus,
-    JobStatus,
-    LessonJSON,
-    LessonSectionStub,
-    PlayerProfile,
-    StemRoutingHints,
-)
-
 from app.analyze_audio import build_lesson_json_from_librosa
 from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
-from app.cache import invalidate_cache_for_wav, load_cached_lesson_for_wav, reuse_cached_artifacts_into_job, save_cached_lesson_for_wav
-from app.coach import hydrate_coach_copy_into_sections
-from app.chord_enrichment import enrich_chord_timeline
-from app.demucs_engine import DemucsEngineError, build_stem_routing_hints
 from app.audio_processing import AudioPreparationError, prepare_audio_input
-from app.ingest import (
-    AUDIO_TOO_SHORT_USER_MESSAGE,
-    AudioTooShortError,
-    IngestError,
-    SourceMetadata,
-    YouTubeUrlInvalidError,
-    get_data_dir,
-    get_job_dir,
-    resolve_lesson_titles,
-    wav_file_duration_seconds,
-)
-
+from app.cache import (invalidate_cache_for_wav, load_cached_lesson_for_wav,
+                       reuse_cached_artifacts_into_job,
+                       save_cached_lesson_for_wav)
+from app.chord_enrichment import enrich_chord_timeline
+from app.coach import hydrate_coach_copy_into_sections
+from app.demucs_engine import DemucsEngineError, build_stem_routing_hints
+from app.ingest import (AUDIO_TOO_SHORT_USER_MESSAGE, AudioTooShortError,
+                        IngestError, SourceMetadata, YouTubeUrlInvalidError,
+                        get_data_dir, get_job_dir, resolve_lesson_titles,
+                        wav_file_duration_seconds)
+from app.schemas import (BeatGrid, BeatGridRecomputeResponse,
+                         ChordEnrichmentStatus, CoachFocusArea,
+                         CoachHydrationSection, CoachHydrationStatus,
+                         JobStatus, LessonJSON, LessonSectionStub,
+                         PlayerProfile, StemRoutingHints)
 from app.separate import SeparationError, separate_song_to_stems
 from app.stem_quality import classify_stems_for_lesson
 
@@ -331,12 +316,12 @@ YOUTUBE_URL_INVALID_USER_MESSAGE = (
 # Keep short so the acceptance criteria ("within a few seconds") is satisfied.
 PROCESSING_SLEEP_SECONDS = 0.1
 
-# Maximum audio duration for analysis (5 minutes) to prevent excessive processing time
-MAX_ANALYZE_DURATION_SECONDS = 300
+# Maximum audio duration for analysis (10 minutes) to prevent excessive processing time
+MAX_ANALYZE_DURATION_SECONDS = 600
 
 # User-facing error message for audio too long
 AUDIO_TOO_LONG_USER_MESSAGE = (
-    "Audio is too long for analysis. Please use a clip under 5 minutes."
+    "Audio is too long for analysis. Please use a clip under 10 minutes."
 )
 
 # Must be user-safe and actionable on separation failures.
@@ -758,8 +743,8 @@ def _process_beat_grid_recompute(
     """Worker: re-derive beat grid and all dependent artifacts for an existing job."""
     from app.analyze_audio import build_lesson_json_from_librosa
     from app.beat_grid import BeatGridComputationError, estimate_beat_grid
-    from app.ingest import get_data_dir, get_job_dir
     from app.chord_inference import infer_chords
+    from app.ingest import get_data_dir, get_job_dir
     from app.musicxml_builder import build_musicxml
     from app.schemas import ChordTimeline, SoloNotes
     from app.solo_inference import infer_solo

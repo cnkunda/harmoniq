@@ -127,6 +127,9 @@ export const PREF_TAB_VARIANT = 'tab_variant'
 export const PREF_SHOW_LYRICS = 'show_lyrics'
 /** Commit 72: speech rate 0.7–1.2 (stored as string float, default 1). */
 export const PREF_VOICE_COACH_RATE = 'voice_coach_rate'
+
+/** B7: daily lick dismissal — base key, suffix with YYYY-MM-DD. */
+export const PREF_DAILY_LICK_DISMISSED = 'daily_lick_dismissed_'
 /** Commit 72: `default` | `female` | `male` — OS voice selection hint. */
 export const PREF_VOICE_COACH_GENDER = 'voice_coach_gender'
 
@@ -250,6 +253,12 @@ export const MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION = 'ALTER TABLE skill_nodes
 
 /** Rollback for v14: remove schema_version column. */
 export const ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION = 'ALTER TABLE skill_nodes DROP COLUMN IF EXISTS schema_version'
+
+/** v15: inferred_mode column on jam_snapshots for Milestone B Commit B3. */
+export const MIGRATION_V15_JAM_SNAPSHOT_INFERRED_MODE = 'ALTER TABLE jam_snapshots ADD COLUMN inferred_mode TEXT'
+
+/** Rollback for v15: remove inferred_mode column. */
+export const ROLLBACK_V15_JAM_SNAPSHOT_INFERRED_MODE = 'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS inferred_mode'
 
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },

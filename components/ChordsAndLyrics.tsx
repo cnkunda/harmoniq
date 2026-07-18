@@ -15,6 +15,7 @@ import { SectionNavigator } from './SectionNavigator'
 
 import colors from '@/src/constants/colors'
 import { spring, timing } from '@/src/constants/animations'
+import type { ProgressionLabel } from '@/src/music/progressionAnalysis'
 
 export interface BarData {
   chord: string
@@ -22,6 +23,8 @@ export interface BarData {
   text?: string
   /** Commit 116: Roman numeral functional label (e.g., 'I', 'ii7', 'V7') */
   roman?: string
+  /** Commit B9: CAGED voicing shape label (e.g., 'E', 'A', 'C', 'D', 'G'). */
+  voicing?: string
 }
 
 interface ChordsAndLyricsProps {
@@ -42,6 +45,10 @@ interface ChordsAndLyricsProps {
   labelConfidence?: number | null
   /** Layout mode: 'grid' keeps barsPerLine grouping, 'flow' uses flex-wrap */
   layoutMode?: 'grid' | 'flow'
+  /** Commit B6: Chord progression labels detected from roman numeral sequence */
+  progressionLabels?: ProgressionLabel[]
+  /** Commit B6: Fired when a bracketed progression label is tapped */
+  onProgressionTap?: (label: ProgressionLabel) => void
 }
 
 const CHROMATIC = [
@@ -77,6 +84,8 @@ export function ChordsAndLyrics({
   label,
   labelConfidence,
   layoutMode = 'flow',
+  progressionLabels,
+  onProgressionTap,
 }: ChordsAndLyricsProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [internalBar, setInternalBar] = useState(0)
@@ -169,6 +178,19 @@ export function ChordsAndLyrics({
 
   // Track layouts for each line (for auto-scroll)
   const lineLayouts = useRef<Record<number, { y: number; height: number }>>({})
+
+  // Commit B6: Build map of startBar -> ProgressionLabel, picking longest when multiple overlap
+  const labelForStartBar = useMemo(() => {
+    const map = new Map<number, ProgressionLabel>()
+    if (!progressionLabels) return map
+    for (const label of progressionLabels) {
+      const existing = map.get(label.startBar)
+      if (!existing || (label.endBar - label.startBar) > (existing.endBar - existing.startBar)) {
+        map.set(label.startBar, label)
+      }
+    }
+    return map
+  }, [progressionLabels])
 
   return (
     <View className="mt-3 rounded-xl border border-wood-600/40 bg-cream-dark/45 p-4">
@@ -319,6 +341,11 @@ export function ChordsAndLyrics({
                               {bar.roman}
                             </Text>
                           ) : null}
+                          {bar.voicing ? (
+                            <Text className="font-mono text-[7px] leading-tight tracking-tight text-left text-amber-accent/50">
+                              {bar.voicing}
+                            </Text>
+                          ) : null}
                           {chord2 && (
                             <Text className="font-mono text-xs leading-tight tracking-tight text-left text-amber-accent/50">
                               {chord2}
@@ -336,6 +363,17 @@ export function ChordsAndLyrics({
                         </Text>
 
                         <ActiveBarMarker isActive={isActive} />
+
+                        {labelForStartBar.get(globalBarIdx) && (
+                          <AnimatedPressable
+                            haptic="none"
+                            onPress={() => onProgressionTap?.(labelForStartBar.get(globalBarIdx)!)}
+                          >
+                            <Text className="font-mono text-[9px] text-muted-brown/60 tracking-wider mt-0.5">
+                              [{labelForStartBar.get(globalBarIdx)!.name}]
+                            </Text>
+                          </AnimatedPressable>
+                        )}
                       </AnimatedPressable>
                     )
                   })}
@@ -383,6 +421,13 @@ export function ChordsAndLyrics({
                                 </Text>
                               </View>
                             ) : null}
+                            {bar.voicing ? (
+                              <View className="mb-0.5">
+                                <Text className="font-mono text-[7px] leading-tight tracking-tight text-center text-amber-accent/50">
+                                  {bar.voicing}
+                                </Text>
+                              </View>
+                            ) : null}
                             {chord2 && (
                               <View className="mb-0.5">
                                 <Text className="font-mono text-[10px] leading-tight tracking-tight text-center text-amber-accent/50">
@@ -405,6 +450,17 @@ export function ChordsAndLyrics({
                             )}
 
                             <ActiveBarMarker isActive={isActive} />
+
+                            {labelForStartBar.get(globalBarIdx) && (
+                              <AnimatedPressable
+                                haptic="none"
+                                onPress={() => onProgressionTap?.(labelForStartBar.get(globalBarIdx)!)}
+                              >
+                                <Text className="font-mono text-[9px] text-muted-brown/60 tracking-wider text-center mt-0.5">
+                                  [{labelForStartBar.get(globalBarIdx)!.name}]
+                                </Text>
+                              </AnimatedPressable>
+                            )}
                           </AnimatedPressable>
                         )
                       })}

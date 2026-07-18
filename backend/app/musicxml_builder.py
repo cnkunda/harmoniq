@@ -302,6 +302,16 @@ def _velocity_to_dynamics(velocity: int) -> str:
     return "ff"
 
 
+# Commit B9: CAGED shape definitions for voicing-aware chord diagrams.
+_CAGED_VOICING_SHAPES: dict[str, dict] = {
+    "E": {"strings": [1, 2, 3, 4, 5, 6], "pattern": [0, 0, 1, 2, 2, 0], "shiftable": True},
+    "A": {"strings": [1, 2, 3, 4, 5], "pattern": [0, 2, 2, 2, 0], "shiftable": True},
+    "C": {"strings": [1, 2, 3, 4, 5], "pattern": [0, 1, 0, 2, 3], "shiftable": False},
+    "D": {"strings": [1, 2, 3, 4], "pattern": [2, 3, 2, 0], "shiftable": False},
+    "G": {"strings": [1, 2, 3, 4, 5, 6], "pattern": [3, 3, 0, 0, 2, 3], "shiftable": False},
+}
+
+
 def _compute_chord_midi_pitches(chord_symbol: str, root_midi: int | None = None) -> list[int]:
     """Compute MIDI pitches for a chord symbol, preferring guitar-range voicings.
 
@@ -330,22 +340,39 @@ def _compute_chord_midi_pitches(chord_symbol: str, root_midi: int | None = None)
     return sorted(root_midi + iv for iv in intervals if root_midi + iv <= 88)
 
 
-def _compute_chord_voicing(chord_symbol: str) -> list[tuple[int, int]]:
+def _compute_chord_voicing(
+    chord_symbol: str,
+    voicing_shape: str | None = None,
+    voicing_position: int | None = None,
+) -> list[tuple[int, int]]:
     """Compute guitar voicing (string, fret) pairs for a chord diagram.
+
+    When voicing_shape and voicing_position are provided, uses the CAGED shape
+    pattern directly to compute (string, fret) pairs. Otherwise falls back to
+    MIDI-pitch-to-guitar-position mapping.
 
     Returns list of (string, fret) for each fretted/open string in the voicing.
     Empty list if voicing cannot be determined.
     """
+    if voicing_shape is not None and voicing_shape in _CAGED_VOICING_SHAPES and voicing_position is not None:
+        shape_def = _CAGED_VOICING_SHAPES[voicing_shape]
+        position = voicing_position
+        voicing: list[tuple[int, int]] = []
+        for i, s in enumerate(shape_def["strings"]):
+            fret = shape_def["pattern"][i] + position
+            if fret >= 0:
+                voicing.append((s, fret))
+        return voicing
+
     pitches = _compute_chord_midi_pitches(chord_symbol)
     if not pitches:
         return []
 
-    # For each pitch, find the best guitar position (lowest fret)
-    voicing: list[tuple[int, int]] = []
+    # Fallback: for each pitch, find the best guitar position (lowest fret)
+    voicing = []
     used_strings: set[int] = set()
     for pitch in pitches:
         positions = midi_to_all_guitar_positions(pitch)
-        # Prefer open strings (fret 0), then lowest fret, on unused strings
         for pos in sorted(positions, key=lambda p: (p.fret, p.string)):
             if pos.string not in used_strings:
                 voicing.append((pos.string, pos.fret))
@@ -804,23 +831,37 @@ def _inject_chord_diagrams(musicxml: str, chord_timeline: ChordTimeline, beat_gr
     for event in chord_timeline.events:
         if event.chord == "N" or event.chord in chord_diagrams:
             continue
-        voicing = _compute_chord_voicing(event.chord)
+        voicing_shape: str | None = getattr(event, 'voicing_shape', None)
+        voicing_position: int | None = getattr(event, 'voicing_position', None)
+        voicing = _compute_chord_voicing(
+            event.chord,
+            voicing_shape=voicing_shape,
+            voicing_position=voicing_position,
+        )
         if not voicing:
             continue
 
         # Build <frame> XML
-        frame_parts = [
-            "          <frame>",
-            "            <frame-strings>6</frame-strings>",
-            "            <frame-frets>5</frame-frets>",
-        ]
+        first_fret = max(1, voicing_position) if voicing_position and voicing_position > 0 else None
+        if first_fret is not None:
+            frame_parts = [
+                f'          <frame first-fret="{first_fret}">',
+                "            <frame-strings>6</frame-strings>",
+                "            <frame-frets>5</frame-frets>",
+            ]
+        else:
+            frame_parts = [
+                "          <frame>",
+                "            <frame-strings>6</frame-strings>",
+                "            <frame-frets>5</frame-frets>",
+            ]
+
         # Build fret array: fret number per string (6=low E, 1=high E)
-        # -1 means muted (not in voicing)
         frets_by_string = {s: -1 for s in range(1, 7)}
         for string_num, fret_num in voicing:
             frets_by_string[string_num] = fret_num
 
-        for s in range(6, 0, -1):  # low E to high E
+        for s in range(6, 0, -1):
             fret = frets_by_string[s]
             if fret >= 0:
                 frame_parts.append(f"            <frame-note><string>{s}</string><fret>{fret}</fret></frame-note>")
@@ -1141,7 +1182,7 @@ def build_musicxml(
             if chord_event.chord == "N":
                 continue
 
-            m21_chord_str = _harmoniq_chord_to_music21(chord_event.chord)
+            m21_chord_str = _harmoniq_chord_to_music21(chord_event.chord, chord_event.bass)
             try:
                 m21_chord_symbol = m21.harmony.ChordSymbol(m21_chord_str)
             except Exception:
@@ -1250,11 +1291,16 @@ _HARMONIQ_TO_MUSIC21_QUALITY_MAP: dict[str, str] = {
 }
 
 
-def _harmoniq_chord_to_music21(chord_symbol: str) -> str:
+def _harmoniq_chord_to_music21(chord_symbol: str, bass: str | None = None) -> str:
     """Convert Harmoniq chord format (e.g. 'C:maj', 'F#:min7') to music21 format ('C', 'F#m7').
 
     music21's ChordSymbol expects standard chord abbreviations like 'C', 'Cm', 'C7', 'Cmaj7'.
     Harmoniq uses a 'root:quality' format that music21 cannot parse directly.
+
+    When ``bass`` differs from the chord root, appends ``/bass`` to produce a
+    slash chord (e.g., ``C:maj`` with bass ``E`` → ``C/E``). music21's
+    ChordSymbol parser natively recognises the slash format and emits the
+    corresponding ``<bass>`` MusicXML element.
 
     Qualities not in the map fall back to ``quality`` itself, which usually
     causes music21 to fail and emit a "Could not parse chord symbol"
@@ -1266,10 +1312,17 @@ def _harmoniq_chord_to_music21(chord_symbol: str) -> str:
     parts = chord_symbol.split(":", 1)
     root = parts[0]
     if len(parts) < 2:
+        if bass and bass != root:
+            return f"{root}/{bass}"
         return root
     quality = parts[1].strip()
     if not quality:
+        if bass and bass != root:
+            return f"{root}/{bass}"
         return root
     suffix = _HARMONIQ_TO_MUSIC21_QUALITY_MAP.get(quality.lower(), quality)
-    return root + suffix
+    result = root + suffix
+    if bass and bass != root:
+        result = f"{result}/{bass}"
+    return result
 

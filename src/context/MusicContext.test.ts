@@ -20,6 +20,7 @@ describe('musicReducer', () => {
       positionMs: 0,
       isPlaying: false,
       playerReady: false,
+      scalePitchClasses: [],
     })
   })
 

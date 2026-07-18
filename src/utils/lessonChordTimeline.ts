@@ -1,11 +1,13 @@
 import type { LessonJSON } from '@/src/types'
 
-/** Commit 116: Chord event with optional Roman numeral */
+/** Commit 116: Chord event with optional Roman numeral. Commit B9: voicing fields. */
 type ChordEventWithRoman = {
   timestamp: number
   chord: string
   confidence?: number
   roman_numeral?: string
+  voicing_shape?: string
+  voicing_position?: number
 }
 
 /**
@@ -53,6 +55,8 @@ export function getLessonWideChordEvents(lesson: LessonJSON | null | undefined)
         chord: e.chord,
         confidence: e.confidence,
         roman_numeral: e.roman_numeral,
+        voicing_shape: e.voicing_shape,
+        voicing_position: e.voicing_position,
       })
     }
   }

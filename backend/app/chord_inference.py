@@ -32,6 +32,7 @@ _os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Model saved with tf_keras; before an
 
 from app.schemas import BeatGrid, ChordEvent, ChordTimeline
 from app.pipeline_proof import TARGET_SR
+from app.caged_shapes import CAGED_SHAPES as _CAGED_VOICING_SHAPES
 from app.chord_vocab import CHORD_INTERVALS as _CHORD_INTERVALS
 
 logger = logging.getLogger("harmoniq.inference.chord")
@@ -81,6 +82,84 @@ def get_last_inference_tier() -> str:
         One of ``"crnn"`` (Keras or TFLite model) or ``"chroma"`` (template matching).
     """
     return _last_inference_tier
+
+
+def _detect_bass_note(audio_segment: np.ndarray, sr: int) -> str | None:
+    """Detect the bass note from an audio segment using spectral peak in the low range.
+
+    Computes an STFT, finds the strongest spectral peak in the 65-200 Hz
+    bass range, and converts the peak frequency to a note name. Returns None
+    when the segment is too short or no confident peak is found.
+
+    Args:
+        audio_segment: Audio segment as a 1D numpy array.
+        sr: Sample rate in Hz.
+
+    Returns:
+        Note name (e.g., 'C', 'F#') or None if detection fails.
+    """
+    if len(audio_segment) < 256:
+        return None
+    try:
+        import librosa
+        D = np.abs(librosa.stft(audio_segment))
+        freqs = librosa.fft_frequencies(sr=sr)
+        bass_mask = (freqs >= 65.0) & (freqs <= 200.0)
+        if not np.any(bass_mask):
+            return None
+        bass_spectrum = D[bass_mask]
+        bass_mean = np.mean(bass_spectrum, axis=1)
+        peak_idx = int(np.argmax(bass_mean))
+        peak_freq = float(freqs[bass_mask][peak_idx])
+        if peak_freq <= 0:
+            return None
+        midi = 12.0 * np.log2(peak_freq / 440.0) + 69.0
+        midi_int = int(round(midi))
+        if midi_int < 0 or midi_int > 127:
+            return None
+        return _ROOTS[midi_int % 12]
+    except Exception:
+        return None
+
+
+def _identify_inversion(
+    chord_root: str,
+    quality: str | None,
+    bass_note: str | None,
+) -> int | None:
+    """Identify chord inversion from bass note relative to chord intervals.
+
+    Args:
+        chord_root: Root note name (e.g., 'C', 'F#').
+        quality: Chord quality string (e.g., 'maj', 'min7').
+        bass_note: Detected bass note name (e.g., 'E', 'G').
+
+    Returns:
+        None for root position, 1 for first inversion (bass = 3rd),
+        2 for second inversion (bass = 5th), 3 for third inversion (bass = 7th).
+    """
+    if bass_note is None or quality is None:
+        return None
+    intervals = _CHORD_INTERVALS.get(quality)
+    if intervals is None:
+        return None
+    try:
+        root_pc = _ROOTS.index(chord_root)
+        bass_pc = _ROOTS.index(bass_note)
+    except ValueError:
+        return None
+    semitone_distance = (bass_pc - root_pc) % 12
+
+    for position, interval in enumerate(intervals):
+        if interval % 12 == semitone_distance:
+            if position == 1:
+                return 1
+            elif position == 2:
+                return 2
+            elif position == 3:
+                return 3
+            return None
+    return None
 
 
 def _circular_cqt_pad(x):
@@ -839,7 +918,7 @@ def _reject_spurious_n(
     return corrected
 
 
-def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
+def infer_chords(audio_path: Path, beat_grid: BeatGrid, *, detect_bass: bool = False, detect_voicing: bool = False) -> ChordTimeline:
     try:
         import librosa
     except ImportError as exc:
@@ -1062,6 +1141,14 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
         events = _fallback_to_pooling(beat_data_list)
         events = _smooth_chords(events)
 
+    # Commit B8: post-hoc bass note and inversion detection from audio
+    if detect_bass and events and 'y' in locals() and 'sr' in locals():
+        _attach_bass_and_inversion(events, y, sr)
+
+    # Commit B9: post-hoc voicing detection from audio (best-effort, lower accuracy than MT3)
+    if detect_voicing and events and 'y' in locals() and 'sr' in locals():
+        _infer_voicing_from_audio(events, y, sr)
+
     chord_count = len([e for e in events if e.chord != "N"])
     logger.info("Chord inference complete: %d/%d non-N chords", chord_count, len(events))
 
@@ -1073,6 +1160,143 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
         metadata = None
 
     return ChordTimeline(events=events, metadata=metadata)
+
+
+def _attach_bass_and_inversion(events: list[ChordEvent], y: np.ndarray, sr: int) -> None:
+    """Post-hoc attach bass notes and inversion to chord events from audio.
+
+    For each event, extracts a window of audio centered on the event timestamp
+    and uses spectral peak detection in the bass range (65-200 Hz) to determine
+    the bass note. Inversion is then derived from chord intervals.
+
+    Args:
+        events: Chord events to annotate in-place.
+        y: Full audio waveform.
+        sr: Sample rate.
+    """
+    window_s = 0.5
+    half_window_samples = int(window_s / 2 * sr)
+    for event in events:
+        if event.chord == "N":
+            event.bass = None
+            event.inversion = None
+            continue
+        center = int(event.timestamp * sr)
+        start = max(0, center - half_window_samples)
+        end = min(len(y), center + half_window_samples)
+        segment = y[start:end]
+        bass_note = _detect_bass_note(segment, sr)
+        if bass_note is not None:
+            root = event.chord.split(":")[0] if ":" in event.chord else None
+            if root is not None and bass_note == root:
+                event.bass = None
+            else:
+                event.bass = bass_note
+                quality = event.chord.split(":")[1] if ":" in event.chord else None
+                if root is not None and quality is not None:
+                    event.inversion = _identify_inversion(root, quality, bass_note)
+
+
+# Commit B9: CRNN voicing detection threshold (lower than MT3 path)
+_VOICING_AUDIO_THRESHOLD = 0.5
+
+_OPEN_STR_MIDI = {6: 40, 5: 45, 4: 50, 3: 55, 2: 59, 1: 64}
+
+
+def _infer_voicing_from_audio(events: list[ChordEvent], y: np.ndarray, sr: int) -> None:
+    """Post-hoc estimate voicing shape from audio spectral content via CQT.
+
+    Uses CQT energy at each string's expected MIDI pitch to estimate string
+    activations, then runs the same CAGED template matching as the MT3 path.
+    Accepts lower confidence (threshold 0.5) per spec for the CRNN fallback.
+
+    Mutates events in-place with voicing_shape and voicing_position.
+    """
+    try:
+        import librosa
+    except ImportError:
+        return
+
+    window_s = 0.5
+    half_window = int(window_s / 2 * sr)
+    hop_length = 512
+    n_bins = 84  # C0 to C7 covers guitar range (E2=40 to E6=88)
+    fmin = librosa.note_to_hz('C1')
+
+    for event in events:
+        if event.chord == "N" or ":" not in event.chord:
+            continue
+
+        center = int(event.timestamp * sr)
+        start = max(0, center - half_window)
+        end = min(len(y), center + half_window)
+        segment = y[start:end]
+
+        if len(segment) < hop_length:
+            continue
+
+        cqt = np.abs(librosa.cqt(segment, sr=sr, hop_length=hop_length, n_bins=n_bins, fmin=fmin))
+        cqt_mean = np.mean(cqt, axis=1)
+
+        # Detect energy at each string's MIDI pitch, looking for spectral peaks
+        string_frets: dict[int, int] = {}
+        for string in range(1, 7):
+            open_midi = _OPEN_STR_MIDI[string]
+            # Check open string and first 12 frets
+            best_fret = -1
+            best_energy = 0.0
+            for fret in range(13):
+                midi = open_midi + fret
+                if midi < 0 or midi > 88:
+                    continue
+                bin_idx = int(round(librosa.hz_to_bins(librosa.midi_to_hz(midi), fmin=fmin, bins_per_octave=12)))
+                if 0 <= bin_idx < n_bins:
+                    energy = cqt_mean[bin_idx]
+                    if energy > best_energy:
+                        best_energy = energy
+                        best_fret = fret
+            if best_energy > 0.01:  # noise floor
+                string_frets[string] = best_fret
+            else:
+                string_frets[string] = -1
+
+        # Run template matching
+        root = event.chord.split(":")[0]
+        quality = event.chord.split(":")[1]
+
+        best_shape: str | None = None
+        best_position: int | None = None
+        best_score = 0.0
+
+        for shape_name, shape_def in _CAGED_VOICING_SHAPES.items():
+            shape_strings = shape_def["strings"]
+            pattern = shape_def["pattern"]
+            shiftable = shape_def["shiftable"]
+            max_pos = 12 if shiftable else 0
+
+            for root_fret in range(max_pos + 1):
+                expected = [pattern[i] + root_fret for i, _ in enumerate(shape_strings)]
+                match_count = 0
+                total = len(shape_strings)
+                for i, s in enumerate(shape_strings):
+                    e = expected[i]
+                    a = string_frets.get(s, -1)
+                    if e == a and a >= 0:
+                        match_count += 1
+                    elif a >= 0:
+                        match_count -= 0.5
+                    elif e >= 0 and a == -1:
+                        match_count -= 0.3
+                extra_penalty = sum(0.4 for s in range(1, 7) if s not in shape_strings and string_frets.get(s, -1) >= 0)
+                score = max(0.0, min(1.0, (match_count / total) - extra_penalty))
+                if score > best_score:
+                    best_score = score
+                    best_shape = shape_name
+                    best_position = root_fret
+
+        if best_score >= _VOICING_AUDIO_THRESHOLD and best_shape is not None:
+            event.voicing_shape = best_shape
+            event.voicing_position = best_position
 
 
 def _fallback_to_pooling(beat_data_list: list[dict]) -> list[ChordEvent]:
@@ -1106,6 +1330,9 @@ def infer_chords_dual_path(
     mix_path: Path,
     beat_grid: BeatGrid,
     stem_confidence: float,
+    *,
+    detect_bass: bool = False,
+    detect_voicing: bool = False,
 ) -> DualPathResult:
     """Run chord inference on both stem and mix, fuse predictions weighted by stem quality.
 
@@ -1118,7 +1345,7 @@ def infer_chords_dual_path(
     """
     # Fast path: no fusion needed when stem is fully trusted or paths are identical
     if stem_path == mix_path or stem_confidence >= 1.0:
-        timeline = infer_chords(stem_path, beat_grid)
+        timeline = infer_chords(stem_path, beat_grid, detect_bass=detect_bass, detect_voicing=detect_voicing)
         return DualPathResult(
             timeline=timeline,
             stem_confidence=stem_confidence,
@@ -1126,8 +1353,8 @@ def infer_chords_dual_path(
             fusion_log=[],
         )
 
-    stem_timeline = infer_chords(stem_path, beat_grid)
-    mix_timeline = infer_chords(mix_path, beat_grid)
+    stem_timeline = infer_chords(stem_path, beat_grid, detect_bass=detect_bass, detect_voicing=detect_voicing)
+    mix_timeline = infer_chords(mix_path, beat_grid, detect_bass=detect_bass, detect_voicing=detect_voicing)
 
     stem_events = stem_timeline.events
     mix_events = mix_timeline.events
@@ -1162,6 +1389,10 @@ def infer_chords_dual_path(
                 confidence=round(
                     w * stem_ev.confidence + (1 - w) * mix_ev.confidence, 3
                 ),
+                bass=stem_ev.bass,
+                inversion=stem_ev.inversion,
+                voicing_shape=stem_ev.voicing_shape,
+                voicing_position=stem_ev.voicing_position,
             ))
             continue
 
@@ -1172,9 +1403,17 @@ def infer_chords_dual_path(
         if stem_score >= mix_score:
             chosen_chord = stem_ev.chord
             chosen_conf = stem_ev.confidence
+            chosen_bass = stem_ev.bass
+            chosen_inversion = stem_ev.inversion
+            chosen_voicing_shape = stem_ev.voicing_shape
+            chosen_voicing_position = stem_ev.voicing_position
         else:
             chosen_chord = mix_ev.chord
             chosen_conf = mix_ev.confidence
+            chosen_bass = mix_ev.bass
+            chosen_inversion = mix_ev.inversion
+            chosen_voicing_shape = mix_ev.voicing_shape
+            chosen_voicing_position = mix_ev.voicing_position
 
         # Blend confidence: weighted average reflects both sources
         blended_conf = w * stem_ev.confidence + (1 - w) * mix_ev.confidence
@@ -1183,6 +1422,10 @@ def infer_chords_dual_path(
             timestamp=stem_ev.timestamp,
             chord=chosen_chord,
             confidence=round(blended_conf, 3),
+            bass=chosen_bass,
+            inversion=chosen_inversion,
+            voicing_shape=chosen_voicing_shape,
+            voicing_position=chosen_voicing_position,
         ))
 
         disagreements += 1

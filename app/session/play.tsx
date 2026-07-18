@@ -147,7 +147,7 @@ function PlayScreenInner() {
     return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
   })
 
-  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
+  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote, null, null), [keyLabel, selectedNote])
 
   const pendingGhostReference = useSessionPlayStore((s) => s.pendingGhostReference)
   const setPendingGhostReference = useSessionPlayStore((s) => s.setPendingGhostReference)

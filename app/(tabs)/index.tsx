@@ -9,7 +9,8 @@ import {
   ListMusic,
   Music,
   Play,
-  Plus
+  Plus,
+  X
 } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ScrollView, Text, View } from 'react-native'
@@ -40,6 +41,13 @@ import {
 } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_MOOD, PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { HomeSuggestion, LessonListRow, PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
+import {
+  dismissDailyLick,
+  getDailyLick,
+  isDailyLickDismissed,
+  persistDailyLick,
+  type DailyLick,
+} from '@/src/home/dailyLick'
 import { startDemoSession } from '@/src/demo/startDemoSession'
 import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
 import { startPracticePlanFromHome } from '@/src/session/practicePlanNavigation'
@@ -103,6 +111,8 @@ export default function HomeScreen() {
   const [latestPlanCompletion, setLatestPlanCompletion] = useState<PracticePlanCompletionRow | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [drillLatestError, setDrillLatestError] = useState<string | null>(null)
+  const [dailyLick, setDailyLick] = useState<DailyLick | null>(null)
+  const [dailyLickDismissed, setDailyLickDismissed] = useState(false)
   const [practicePlan, setPracticePlan] = useState<PracticePlanPayload | null>(null)
   const [practicePlanLoading, setPracticePlanLoading] = useState(false)
   const [practicePlanStartError, setPracticePlanStartError] = useState<string | null>(null)
@@ -151,6 +161,20 @@ export default function HomeScreen() {
         setSpotifyLinked(spotifyTasteLooksPresent(spotifyRaw))
 
         await useSkillStore.getState().loadFromDb()
+
+        // B7: daily lick — deterministic Slonimsky pattern
+        try {
+          const lick = getDailyLick()
+          const dismissed = await isDailyLickDismissed()
+          setDailyLick(lick)
+          setDailyLickDismissed(dismissed)
+          if (!dismissed) {
+            void persistDailyLick()
+          }
+        } catch {
+          setDailyLick(null)
+          setDailyLickDismissed(true)
+        }
 
         if (homeSuggestion?.kind === 'cold_start') {
           setPracticePlan(null)
@@ -299,6 +323,52 @@ export default function HomeScreen() {
     }
     return out
   }, [lessons, router, saveLesson, setLessonSectionIndex])
+
+  const startDailyLick = useCallback(async () => {
+    if (!dailyLick) return
+    try {
+      const plan: PracticePlanPayload = {
+        slots: [
+          {
+            slot_type: 'warmup',
+            duration_seconds: dailyLick.pattern.defaultDurationSeconds,
+            title: dailyLick.name,
+            coach_intro: dailyLick.description,
+            warmup_plan: {
+              exercises: [
+                {
+                  name: dailyLick.name,
+                  description: dailyLick.description,
+                  duration_seconds: dailyLick.pattern.defaultDurationSeconds,
+                  technique_tag: dailyLick.pattern.techniqueTags[0] ?? 'finger_independence',
+                  bpm: 80,
+                  fretboard_guide: {
+                    cells: dailyLick.pattern.fretboardCells,
+                    caption: dailyLick.pattern.caption ?? null,
+                  },
+                },
+              ],
+              total_duration_seconds: dailyLick.pattern.defaultDurationSeconds,
+            },
+          },
+        ],
+        total_duration_seconds: dailyLick.pattern.defaultDurationSeconds,
+      }
+      usePlanStore.getState().setPlan(plan)
+      router.push('/session/warmup')
+    } catch {
+      toast.error('Could not start daily lick.')
+    }
+  }, [dailyLick, router])
+
+  const onDismissDailyLick = useCallback(async () => {
+    try {
+      await dismissDailyLick()
+      setDailyLickDismissed(true)
+    } catch {
+      console.log('[DailyLick] dismiss failed')
+    }
+  }, [])
 
   const drillLatestSavedLick = useCallback(async () => {
     if (suggestion?.kind !== 'library_saved') return
@@ -601,6 +671,51 @@ export default function HomeScreen() {
             </View>
           </LinearGradient>
 
+          {dailyLick && !dailyLickDismissed && suggestion && suggestion.kind !== 'cold_start' ? (
+            <AnimatedPressable
+              onPress={() => void startDailyLick()}
+              haptic="light"
+              className="mb-6 overflow-hidden rounded-2xl border border-wood-600/50 bg-wood-800/40"
+              accessibilityRole="button"
+              accessibilityLabel="Start daily lick"
+            >
+              <View className="relative p-5">
+                <AnimatedPressable
+                  onPress={() => void onDismissDailyLick()}
+                  className="absolute right-3 top-3 z-10 h-7 w-7 items-center justify-center rounded-full bg-wood-700/60"
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss daily lick"
+                >
+                  <X color={colors.muted.brown} size={14} strokeWidth={2} />
+                </AnimatedPressable>
+                <Text className="mb-1 font-sans-medium text-[11px] uppercase tracking-wider text-amber-accent/80">
+                  Daily Lick
+                </Text>
+                <Text className="mb-2 font-serif text-xl text-cream">{dailyLick.name}</Text>
+                <Text className="mb-3 font-sans text-sm italic leading-relaxed text-cream/80">
+                  &ldquo;{dailyLick.description}&rdquo;
+                </Text>
+                <View className="flex-row flex-wrap items-center gap-2">
+                  <View className="rounded-full border border-amber-accent/45 bg-amber-accent/20 px-2.5 py-1">
+                    <Text className="font-sans-medium text-xs text-cream">
+                      Diff {dailyLick.pattern.difficulty}
+                    </Text>
+                  </View>
+                  {dailyLick.pattern.techniqueTags.map((tag) => (
+                    <View
+                      key={tag}
+                      className="rounded-full border border-wood-600/25 bg-wood-700/40 px-2.5 py-1"
+                    >
+                      <Text className="font-sans text-xs text-muted-brown">
+                        {tag.replace(/_/g, ' ')}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </AnimatedPressable>
+          ) : null}
+
           {suggestion && suggestion.kind !== 'cold_start' && weakPulseNode ? <WeakAreaPulse node={weakPulseNode} /> : null}
           <View className="mb-8">
             <RecentProgress sessions={sessionsLog.slice(0, 5)} lastPlanCompletion={latestPlanCompletion} />
@@ -669,6 +784,19 @@ export default function HomeScreen() {
                 </View>
                 <Text className="text-center font-sans-medium text-sm text-cream">Listening Mode</Text>
               </Pressable> */}
+               <View className="mt-3 flex-row gap-3">
+                 <AnimatedPressable
+                   onPress={() => router.push('/scale-explorer' as any)}
+                   className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                   accessibilityRole="button"
+                   accessibilityLabel="Scale Explorer"
+                 >
+                   <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                     <Music color={colors.amber.light} size={22} strokeWidth={2} />
+                   </View>
+                   <Text className="text-center font-sans-medium text-sm text-cream">Scales</Text>
+                 </AnimatedPressable>
+               </View>
             </View>
           </View>
         </View>

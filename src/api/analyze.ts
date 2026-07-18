@@ -544,6 +544,7 @@ export async function submitJamScore(payload: {
   pitch_class_weight_map?: Record<string, number>
   position_weight_map?: Record<string, number>
   inferred_scale_label?: string | null
+  inferred_mode?: string | null
   inference_confidence?: 'low' | 'medium' | 'high' | null
   track_id?: string | null
   track_label?: string | null
@@ -561,6 +562,7 @@ export async function submitJamScore(payload: {
       pitch_class_weight_map: pitchMap,
       position_weight_map: payload.position_weight_map ?? {},
       inferred_scale_label: payload.inferred_scale_label ?? null,
+      inferred_mode: payload.inferred_mode ?? null,
       inference_confidence: payload.inference_confidence ?? null,
       track_id: payload.track_id ?? null,
       track_label: payload.track_label ?? null,

@@ -2,6 +2,7 @@ import { Text, View } from 'react-native'
 
 import type { ChordDetection } from '@/src/chord/chordModelTypes'
 import { isNoChord } from '@/src/chord/chordVocab'
+import { formatChordDisplay } from '@/src/music/chordVoicing'
 
 export interface ChordHistoryStreamProps {
   /** Recent chord detections (newest first). */
@@ -20,7 +21,7 @@ export function ChordHistoryStream({ history }: ChordHistoryStreamProps) {
       <Text className="mr-1 font-sans text-[10px] text-muted-brown">Recent:</Text>
       {history.slice(0, 8).map((detection, i) => {
         const opacity = Math.max(0.3, 1 - i * 0.1)
-        const label = isNoChord(detection.chord) ? '—' : formatChord(detection.chord)
+        const label = isNoChord(detection.chord) ? '—' : formatChordDisplay(detection.chord)
         return (
           <View
             key={`${detection.timestamp}-${i}`}
@@ -35,11 +36,4 @@ export function ChordHistoryStream({ history }: ChordHistoryStreamProps) {
   )
 }
 
-/** Format a chord label for compact display: "C:maj" → "C", "A:min" → "Am". */
-function formatChord(chord: string): string {
-  const [root, quality] = chord.split(':')
-  if (!root) return chord
-  if (quality === 'maj') return root
-  if (quality === 'min') return `${root}m`
-  return chord
-}
+

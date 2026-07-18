@@ -99,7 +99,7 @@ class FretboardGuideCell(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     string: int = Field(..., ge=1, le=6)
-    fret: int = Field(..., ge=0, le=12)
+    fret: int = Field(..., ge=0, le=24)
     variant: FretboardGuideVariant = "primary"
     finger: int | None = Field(default=None, ge=1, le=4, description="Finger to use (1=index, 2=middle, 3=ring, 4=pinky)")
 
@@ -125,6 +125,7 @@ class WarmupExercise(BaseModel):
     technique_tag: str = Field(..., min_length=1, max_length=80)
     bpm: int = Field(..., ge=40, le=240)
     fretboard_guide: FretboardGuide | None = None
+    difficulty: int = Field(default=2, ge=1, le=3)
 
 
 class WarmupPlan(BaseModel):
@@ -713,6 +714,25 @@ class ChordEvent(BaseModel):
     timestamp: float = Field(..., description="Start time of the chord in seconds")
     chord: str = Field(..., description="Chord symbol (e.g., 'C:maj', 'N')")
     confidence: float = Field(..., ge=0.0, le=1.0)
+    # Commit B8: bass note & inversion detection
+    bass: str | None = Field(
+        default=None,
+        description="Detected bass note root (e.g., 'E', 'G#'). None when bass = chord root or unknown.",
+    )
+    inversion: int | None = Field(
+        default=None,
+        description="Inversion: None=root, 1=first, 2=second, 3=third. None when unknown or root position.",
+    )
+    # Commit B9: voicing shape & fret position detection
+    voicing_shape: str | None = Field(
+        default=None,
+        description="Detected CAGED voicing shape: 'E', 'A', 'C', 'D', 'G', or None if unknown",
+    )
+    voicing_position: int | None = Field(
+        default=None,
+        ge=0, le=24,
+        description="Fret position of the voicing (0 = open, 1-12 = barre position). None when unknown.",
+    )
     # Commit 116: LLM enrichment fields
     roman_numeral: str | None = Field(
         default=None,
@@ -948,6 +968,7 @@ class ChordCorrectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     chord: str = Field(..., min_length=1, max_length=32, description="New chord symbol (e.g., 'C:maj', 'G:7')")
+    bass: str | None = Field(default=None, description="Override bass note. None = keep existing.")
 
 
 class ChordCorrectionResponse(BaseModel):
@@ -982,11 +1003,15 @@ class NoteCorrectionResponse(BaseModel):
 
 
 class VoicingOverrideRequest(BaseModel):
-    """PATCH /analyze/{job_id}/chord/{beat_index}/voicing — set voicing shape."""
+    """PATCH /analyze/{job_id}/chord/{beat_index}/voicing — set voicing shape and position."""
 
     model_config = ConfigDict(extra="forbid")
 
-    voicing_shape: str = Field(..., min_length=1, max_length=32, description="CAGED shape label (e.g., 'E-shape', 'A-shape')")
+    voicing_shape: str = Field(..., min_length=1, max_length=32, description="CAGED shape label (e.g., 'E', 'A-shape')")
+    voicing_position: int | None = Field(
+        default=None, ge=0, le=24,
+        description="Fret position override (0 = open). None to keep existing.",
+    )
 
 
 class VoicingOverrideResponse(BaseModel):
@@ -994,6 +1019,7 @@ class VoicingOverrideResponse(BaseModel):
 
     event_index: int
     voicing_shape: str
+    voicing_position: int | None = None
     chord_timeline: ChordTimeline
 
 

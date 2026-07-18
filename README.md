@@ -88,15 +88,15 @@ Runs locally during development. Deploy to Railway, Fly.io, or Render free tier 
 2. `demucs --model htdemucs_6s --out ./stems song.wav` → 6 dedicated WAV stems: guitar, bass, drums, vocals, piano, other. The `htdemucs_6s` checkpoint is critical — it separates guitar as its own stem rather than burying it in "other." Do not use the default 4-stem model.
 3. `librosa.load(guitar_stem)` → key string (e.g., "G major"), tempo float (BPM), beat grid (array of timestamps in seconds), structure segments array (intro / verse / chorus / solo / bridge / outro, detected via onset strength + RMS energy segmentation).
 4. `whisper.transcribe(vocals_stem, word_timestamps=True)` (base model, runs locally) → lyrics with word-level timestamps. Map each word timestamp to the nearest beat in the beat grid.
-5. **MT3 inference** on guitar stem → raw token-level event stream: onset, pitch, velocity, instrument, offset per event. Simultaneously yields both chord timeline and solo notes from a single inference pass.
-6. **MT3 → Chord decoder**: aggregate sounding pitches per time slice → pitch class set → match against `CHORD_INTERVALS` template set (Jaccard score, >0.66 coverage threshold) → 25-class MIREX or 277-class chord labels with per-chord confidence.
-7. **MT3 → Solo decoder**: filter monophonic melodic line, apply beat-grid quantization, tie detection → `SoloNotes` with per-note confidence and technique tags (bends, vibrato, grace notes).
-8. **Fallback chain**: if MT3 model unavailable or confidence < 0.7, fall back to CRNN TFLite model (`chord_inference.py`) for chords and Basic Pitch (`solo_inference.py`) for solo lines. A quality gate (`_neural_model_too_noisy()`) bypasses the CRNN result when >80% of frames predict N (no-chord), falling through to chroma template matching. Basic Pitch results are cached to avoid duplicate inference between solo extraction and tab generation.
+5. **Branch A — Chord extraction (instrument-agnostic).** Input = full mix or harmonic-bed submix (bass + piano + other + guitar, drums removed) — never the guitar stem alone. MT3 (or an instrument-agnostic pitch model like Basic Pitch at "Flat" granularity) collapses all pitched, non-drum content into an aggregate pitch/chroma representation. The model does not care which instrument is sounding a note, only that it is sounding. Chroma/pitch-class aggregation → template matching against `CHORD_INTERVALS` (Jaccard score, >0.66 coverage threshold) → 25-class MIREX or 277-class chord labels. Per-chord confidence reflects chroma clarity + template match quality, decoupled from guitar-stem separation quality. (Two-branch chord/solo split; see § Lead sheet roadmap for rationale.)
+6. **Branch B — Guitar solo extraction (leakage-hardened).** Input = guitar stem (Demucs `htdemucs_6s`) as a **soft prior**, not ground truth — both the isolated stem and the full mix are fed as parallel features so overlapping unisons with other instruments are not silently dropped. MT3-style token decoder **conditioned on a fixed guitar-program embedding**, so the decoder's output vocabulary never includes non-guitar program tokens (structural leakage prevention, not post-hoc filtering). Leakage mitigation borrows techniques from **MR-MT3** (arXiv:2403.10024): memory retention (aggregated token representation from the previous segment as extra decoder context), prior token sampling (varying how far back the memory window starts during training), and token shuffling (semantics-preserving augmentation on same-timestamp ordering). A post-hoc safety net hard-filters any token outside the guitar program range before it reaches the solo decoder. Output: monophonic melodic line with beat-grid quantization, tie detection → `SoloNotes` with per-note confidence, technique tags (bends, vibrato, grace notes), and `leakage_risk` (0.0–1.0 per section).
+7. **Aggregation** — chord timeline from Branch A and solo notes from Branch B are assembled into a single `LessonJSON` with `chord_source: "full_mix" | "harmonic_bed"` at the top level and per-section `leakage_risk` alongside the existing `transcription_confidence`.
+8. **Fallback chain**: if Branch A (MT3) is unavailable or confidence < 0.7, fall back to CRNN TFLite model (`chord_inference.py`) for chords running on the full mix, and if Branch B (MT3) is unavailable, fall back to Basic Pitch (`solo_inference.py`) on the guitar stem. A quality gate (`_neural_model_too_noisy()`) bypasses the CRNN result when >80% of frames predict N (no-chord), falling through to chroma template matching. Basic Pitch results are cached to avoid duplicate inference between solo extraction and tab generation.
 9. Skeleton tab generation: from solo notes, filter ornaments — grace notes, bends shorter than 50ms, and hammer-ons/pull-offs faster than a 16th note at the song's BPM. Remaining events → `.gp5` file.
 10. Alternate position generation *(only if confidence is high)*: given key and detected primary position, compute alternate fingering map (e.g., position 2 → position 4) → second `.gp5` file.
 11. `bar_timestamps` array: use beat grid and time signature to compute one timestamp per bar (e.g., 4/4 at 72 BPM → one bar every 3.33 seconds). This drives SmartScroll.
 12. Claude API call: generate `coach_note` and `coach_explanation` strings for each solo/lead section.
-13. Return `LessonJSON` with `transcription_source: "mt3"` (or `"crnn"`, `"chroma"`) indicating which pipeline tier produced the result.
+13. Return `LessonJSON` with `transcription_source` indicating which pipeline tier produced the result for each branch (`chord_tier` + `solo_tier`).
 
 **Pipeline reliability:** Every derived output includes confidence: `key_confidence`, `tempo_confidence`, `transcription_confidence`, `section_confidence` (per section where applicable). If transcription confidence is low: mark tab as approximate, disable alternate positions, default to skeleton tab. Users can ignore or override incorrect analysis.
 
@@ -379,10 +379,12 @@ Mic listens passively while the user noodles freely — over a backing track, a 
 Target experience: **beat-aligned chord symbols**, a **clean monophonic solo line**, and **fretboard sync** to the current chord and note — matching the modular pattern (stems → beat grid → MT3 transcription → chord timeline + solo notes → MusicXML) described in the product PRD.
 
 * **Canonical score format:** MusicXML (partwise) with `<harmony>` for chords and `<note>` for the solo line; `<frame>` for chord diagrams; `<dynamics>`, `<articulations>`, `<beam>`, `<slur>`, and `<technical>` (string/fret) for full notation. **alphaTab** loads the file via its **MusicXML importer** for notation + diagrams. (Commit 108: MusicXML is now the primary render format; GP5 is retained as export-only fallback.)
-* **Primary transcription engine:** **MT3** (Google's Multi-Task Multitrack Transformer) produces both chord timeline and solo notes simultaneously from a single inference pass on the guitar stem. Replaces the previous two-phase approach (TFLite chords + Basic Pitch solo).
-* **Fallback chain:** MT3 → CRNN TFLite (cached from prior training) → Chroma template matching. Each tier is confidence-gated; the orchestrator logs which tier produced the result per job.
-* **On-device real-time inference:** The CRNN TFLite model powers Live Mic Mode (<120ms latency) for chord detection during practice. Long-term, an MT3-distilled student model will replace it.
-* **Custom model future:** The CRNN training pipeline is preserved as a distillation target. MT3 pseudo-labels (confidence-filtered >0.9) will train a smaller student model that can run on-device with near-MT3 accuracy.
+* **Primary transcription engine — two-branch architecture:**
+  - **Chord branch (instrument-agnostic):** full mix or harmonic-bed submix → aggregate pitch/chroma representation → template matching against `CHORD_INTERVALS`. The model does not care which instrument is sounding a given pitch — only that pitch is present. Decouples chord accuracy from guitar-stem separation quality.
+  - **Solo branch (leakage-hardened):** guitar stem as soft prior + full mix as parallel feature → MT3-style token decoder conditioned on a fixed guitar-program embedding. Structural leakage prevention via program-scoped vocabulary. Additional mitigation follows **MR-MT3** (arXiv:2403.10024): memory retention across segment boundaries, prior token sampling during training, and token shuffling augmentation. Output includes per-section `leakage_risk` (0.0–1.0) alongside note confidence.
+* **Fallback chain:** Branch A (chords): MT3 → CRNN TFLite (full mix) → Chroma template matching. Branch B (solo): MT3 → Basic Pitch (guitar stem). Each tier is confidence-gated; `transcription_source` indicates which tier produced each branch's result.
+* **On-device real-time inference:** The CRNN TFLite model powers Live Mic Mode (<120ms latency) for chord detection during practice. Long-term, a framewise piano-roll student model (non-autoregressive, distilled from Branch A's output) will replace the CRNN for chords, and a guitar-only-vocabulary token student model (autoregressive, distilled from Branch B's output) will handle on-device solo transcription.
+* **Custom model future:** The CRNN training pipeline is preserved as a distillation target. Two student models, not one: (1) a **framewise chord student** — non-autoregressive piano-roll model distilled from Branch A's Flat-granularity pitch output, fast and real-time-capable; (2) a **guitar-vocabulary token solo student** — autoregressive token model distilled from Branch B's program-conditioned output, smaller than MT3 because its vocabulary is limited to guitar programs only and structurally incapable of leaking non-guitar notes. Both are fine-tuned on real guitar audio (GuitarSet, isolated stems from catalog), not only Slakh2100.
 * **Machine-readable analysis:** `BeatGrid`, `ChordTimeline`, and `SoloNotes` JSON alongside the score for edits and recomputation.
 * **Engineering roadmap:** [PRIORITIES.md](PRIORITIES.md) Phase 2 Milestone A (Demucs → MT3 → chord+solo decoders → MusicXML → alphaTab + fretboard).
 
@@ -401,10 +403,10 @@ or multipart form with audio file (WAV/MP3/M4A, max 50MB).
 2. `demucs --model htdemucs_6s --out ./stems song.wav` → guitar / bass / drums / vocals / piano / other
 3. Librosa analysis on guitar stem → key, tempo, beat grid, structure segments, bar_timestamps
 4. Whisper on vocals stem → word-timestamped lyrics → mapped to beat grid
-5. **MT3 inference** on guitar stem → token-level event stream (onsets, pitches, velocities, instruments, offsets)
-6. **MT3 → Chord decoder**: aggregate sounding pitches per time slice → match against chord templates → chord timeline with per-chord confidence
-7. **MT3 → Solo decoder**: filter melodic line → beat-grid quantization → tie detection → SoloNotes with per-note confidence
-8. Fallback chain: if MT3 unavailable or confidence < 0.7, use CRNN TFLite (`chord_inference.py`) + Basic Pitch (`solo_inference.py`); final fallback: librosa chroma matching
+5. **Branch A — Chord extraction (instrument-agnostic):** full mix or harmonic-bed submix → aggregate pitch/chroma representation (model-agnostic — MT3, Basic Pitch Flat granularity, or dedicated chroma extractor) → pitch-class set → template matching against `CHORD_INTERVALS` → chord timeline with per-chord confidence. Input is never the guitar stem alone.
+6. **Branch B — Guitar solo extraction (leakage-hardened):** guitar stem (Demucs) as soft prior + full mix as secondary parallel feature → MT3-style token decoder conditioned on fixed guitar-program embedding, with MR-MT3 memory retention (previous-segment token context), prior token sampling, and token shuffling → post-hoc program-token filter → melodic line → beat-grid quantization → tie detection → SoloNotes with per-note confidence and `leakage_risk` (0.0–1.0 per section).
+7. **Aggregation:** chord timeline from Branch A and solo notes from Branch B assembled into single LessonJSON. Top-level `chord_source: "full_mix" | "harmonic_bed"` and per-section `leakage_risk` alongside `transcription_confidence`.
+8. Fallback chain: Branch A (chords) — MT3 → CRNN TFLite on full mix → chroma template matching. Branch B (solo) — MT3 → Basic Pitch on guitar stem.
 9. Skeleton `.gp5` (ornaments filtered out from solo notes)
 10. Alternate position `.gp5` *(generate only if confidence is high; otherwise omit)*
 11. Claude API call for coach_note + coach_explanation per section
@@ -421,9 +423,11 @@ Confidence fields (top-level and per section):
   "key_confidence": 0.85,
   "tempo_confidence": 0.92,
   "transcription_confidence": 0.78,
+  "chord_source": "full_mix",
   "sections": [
     {
-      "confidence": 0.81
+      "confidence": 0.81,
+      "leakage_risk": 0.12
     }
   ]
 }
@@ -441,6 +445,7 @@ Full example shape:
   "tempo": 72,
   "tempo_confidence": 0.92,
   "transcription_confidence": 0.78,
+  "chord_source": "full_mix",
   "beat_grid": [0.0, 0.833, 1.667, 2.5],
   "bar_timestamps": [0.0, 3.33, 6.67, 10.0],
   "stems": {
@@ -458,6 +463,7 @@ Full example shape:
     {
       "label": "Solo",
       "confidence": 0.81,
+      "leakage_risk": 0.12,
       "start_bar": 24,
       "end_bar": 32,
       "start_time_seconds": 79.2,
@@ -593,7 +599,7 @@ Every error should be warm, specific, and tell the user exactly what to do next.
 - Home screen with SM-2-driven session suggestion and cold start handling
 - Full 5-step session loop (Listen → Study → Slow → Play → Review)
 - Web support (React Native Web / Expo Web) alongside iOS and Android
-- Song analysis via YouTube URL or upload (yt-dlp + htdemucs_6s + librosa + Whisper + basic-pitch); upload + fallback when extraction fails
+- Song analysis via YouTube URL or upload (yt-dlp + htdemucs_6s + librosa + Whisper + two-branch architecture: full-mix chord branch + guitar-conditioned solo branch with MR-MT3 leakage mitigation); upload + fallback when extraction fails
 - Drag-and-drop audio upload on web (plus file picker)
 - 6-stem track mixer (Guitar / Bass / Drums / Vocals — independently mutable)
 - AlphaTab: WebView on mobile, direct DOM on web; shared JSON interface (Full + Skeleton toggle)

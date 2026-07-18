@@ -21,6 +21,8 @@ const colors = {
   },
   danger: '#C17B5F',
   success: '#7A9B6D',
+  /** Commit B1: Purple indicator for chromatic/tension notes outside chord. */
+  chromatic: '#9B7DB5',
 } as const
 
 export default colors

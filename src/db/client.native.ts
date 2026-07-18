@@ -13,6 +13,7 @@ import {
     MIGRATION_V12_SESSION_GHOST_MIME,
     MIGRATION_V13_SESSION_MOOD,
     MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION,
+    MIGRATION_V15_JAM_SNAPSHOT_INFERRED_MODE,
     MIGRATION_V3_APP_PREFS,
     MIGRATION_V4_SESSIONS_REVIEW,
     MIGRATION_V5_LICKS_STEMS_JSON,
@@ -28,6 +29,7 @@ import {
     ROLLBACK_V12_SESSION_GHOST_MIME,
     ROLLBACK_V13_SESSION_MOOD,
     ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION,
+    ROLLBACK_V15_JAM_SNAPSHOT_INFERRED_MODE,
     ROLLBACK_V4_SESSIONS_REVIEW,
     ROLLBACK_V5_LICKS_STEMS_JSON,
     ROLLBACK_V6_JAM_SNAPSHOT_CONTEXT,
@@ -297,6 +299,15 @@ async function applyMigrations(): Promise<void> {
       await applyMigrationWithRollback(14, MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION, ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION, async () => validateSkillNodesPreservation(getAllSkillNodes))
     } else {
       await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 14, new Date().toISOString())
+    }
+  }
+  if (current < 15) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(jam_snapshots)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    if (!names.has('inferred_mode')) {
+      await applyMigrationWithRollback(15, MIGRATION_V15_JAM_SNAPSHOT_INFERRED_MODE, ROLLBACK_V15_JAM_SNAPSHOT_INFERRED_MODE)
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 15, new Date().toISOString())
     }
   }
   for (const n of DEFAULT_SKILL_NODES) {
@@ -701,12 +712,12 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
   const pitchMap = input.pitch_class_weight_map ?? input.scale_position_map ?? {}
   const positionMap = input.position_weight_map ?? {}
   await db.runAsync(
-    `INSERT OR REPLACE INTO jam_snapshots
-     (id, date, duration_seconds, scale_position_map, pitch_class_weight_map, position_weight_map,
-      inferred_scale_label, inference_confidence, track_id, track_label, track_key, track_bpm,
-      reliability_tags, reliability_confidence, reliability_signal_quality,
-      recurring_gestures, coach_summary)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     `INSERT OR REPLACE INTO jam_snapshots
+      (id, date, duration_seconds, scale_position_map, pitch_class_weight_map, position_weight_map,
+       inferred_scale_label, inferred_mode, inference_confidence, track_id, track_label, track_key, track_bpm,
+       reliability_tags, reliability_confidence, reliability_signal_quality,
+       recurring_gestures, coach_summary)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.id,
     input.date,
     input.duration_seconds,
@@ -714,6 +725,7 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
     JSON.stringify(pitchMap),
     JSON.stringify(positionMap),
     input.inferred_scale_label ?? null,
+    input.inferred_mode ?? null,
     input.inference_confidence ?? null,
     input.track_id ?? null,
     input.track_label ?? null,
@@ -738,6 +750,7 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
     pitch_class_weight_map: string | null
     position_weight_map: string | null
     inferred_scale_label: string | null
+    inferred_mode: string | null
     inference_confidence: string | null
     track_id: string | null
     track_label: string | null
@@ -757,6 +770,7 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
     pitch_class_weight_map: parseJsonNumberRecord(r.pitch_class_weight_map ?? r.scale_position_map),
     position_weight_map: parseJsonNumberRecord(r.position_weight_map),
     inferred_scale_label: r.inferred_scale_label ?? null,
+    inferred_mode: r.inferred_mode ?? null,
     inference_confidence: parseInferenceConfidence(r.inference_confidence),
     track_id: r.track_id ?? null,
     track_label: r.track_label ?? null,

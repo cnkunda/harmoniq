@@ -556,7 +556,7 @@ import re as _re
 import time as _time
 
 _CHORD_SYMBOL_RE = _re.compile(r"^[A-G][#b]?(?:maj|min|dim|aug|sus[24]?|[2-9]|1[0-3]|7(?:#9|#5|b9|b5)?|alt)?$")
-_CAGED_SHAPES = {"E-shape", "A-shape", "D-shape", "C-shape", "G-shape"}
+_CAGED_SHAPES = {"E", "A", "C", "D", "G"}
 
 
 def _get_lesson(job_id: str):
@@ -620,9 +620,12 @@ async def correct_chord(job_id: str, beat_index: int, req: ChordCorrectionReques
     if not hasattr(event, "_original_chord") or not getattr(event, "_original_chord", None):
         event._original_chord = original_chord  # type: ignore[attr-defined]
 
-    # Update chord
+    # Update chord and optionally bass
+    update_fields: dict[str, object] = {"chord": corrected_chord, "confidence": 1.0}
+    if req.bass is not None:
+        update_fields["bass"] = req.bass
     new_events = list(lesson.chord_timeline.events)
-    new_events[beat_index] = event.model_copy(update={"chord": corrected_chord, "confidence": 1.0})
+    new_events[beat_index] = event.model_copy(update=update_fields)
     new_timeline = lesson.chord_timeline.model_copy(update={"events": new_events})
 
     # Update lesson in memory
@@ -714,25 +717,47 @@ async def set_voicing_override(job_id: str, beat_index: int, req: VoicingOverrid
     if beat_index < 0 or beat_index >= len(lesson.chord_timeline.events):
         raise HTTPException(status_code=400, detail=f"beat_index {beat_index} out of range.")
 
+    # Normalize shape: accept "E-shape" (legacy) or "E" (current)
     shape = req.voicing_shape.strip()
-    if shape not in _CAGED_SHAPES:
+    shape_short = shape.replace("-shape", "")
+    if shape_short not in _CAGED_SHAPES:
         raise HTTPException(status_code=400, detail=f"Invalid voicing shape. Must be one of: {', '.join(sorted(_CAGED_SHAPES))}")
 
     event = lesson.chord_timeline.events[beat_index]
     if not hasattr(event, "_voicing_override") or not getattr(event, "_voicing_override", None):
-        event._voicing_override = shape  # type: ignore[attr-defined]
+        event._voicing_override = shape_short  # type: ignore[attr-defined]
+    if not hasattr(event, "_voicing_position") or not getattr(event, "_voicing_position", None):
+        event._voicing_position = req.voicing_position  # type: ignore[attr-defined]
+
+    update_fields: dict[str, object] = {
+        "_voicing_override": shape_short,
+        "voicing_shape": shape_short,
+    }
+    if req.voicing_position is not None:
+        update_fields["_voicing_position"] = req.voicing_position
+        update_fields["voicing_position"] = req.voicing_position
 
     new_events = list(lesson.chord_timeline.events)
-    new_events[beat_index] = event.model_copy(update={"_voicing_override": shape})
+    new_events[beat_index] = event.model_copy(update=update_fields)
     new_timeline = lesson.chord_timeline.model_copy(update={"events": new_events})
 
     patched = lesson.model_copy(update={"chord_timeline": new_timeline})
     jobs[job_id] = job.model_copy(update={"result": patched})
     save_job_to_disk(job_id)
 
+    # Rebuild MusicXML so chord diagrams reflect the override
+    new_musicxml = _rebuild_musicxml(job_id)
+    if new_musicxml:
+        new_patched = jobs[job_id].result
+        if new_patched:
+            new_patched.musicxml = new_musicxml
+            jobs[job_id] = job.model_copy(update={"result": new_patched})
+            save_job_to_disk(job_id)
+
     return VoicingOverrideResponse(
         event_index=beat_index,
-        voicing_shape=shape,
+        voicing_shape=shape_short,
+        voicing_position=req.voicing_position,
         chord_timeline=new_timeline,
     )
 
@@ -763,12 +788,16 @@ async def get_corrections(job_id: str) -> CorrectionHistoryResponse:
                 ))
             voicing = getattr(ev, "_voicing_override", None)
             if voicing:
+                position = getattr(ev, "_voicing_position", None)
+                corrected_value: str = voicing
+                if position is not None:
+                    corrected_value = f"{voicing} pos={position}"
                 corrections.append(CorrectionHistoryItem(
                     id=f"voicing_{i}",
                     type="voicing",
                     event_or_note_index=i,
                     original_value=None,
-                    corrected_value=voicing,
+                    corrected_value=corrected_value,
                     timestamp=float(getattr(ev, "_correction_timestamp", _time.time())),
                 ))
 

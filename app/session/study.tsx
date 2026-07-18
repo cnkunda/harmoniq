@@ -21,13 +21,16 @@ import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
 import { fetchTheoryAnnotation } from '@/src/api/analyze'
 import { sessionHref } from '@/src/constants/sessionFlow'
-import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
+import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
 import { getAppPref } from '@/src/db/client'
 import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { capoSuggestion, parseKey } from '@/src/music/capoSuggestion'
+import { getScalePitchClassesFromKey } from '@/src/music/scales'
 import { getChordFunction } from '@/src/music/chordFunction'
+import { findProgressions, COMMON_PROGRESSIONS } from '@/src/music/progressionAnalysis'
+import type { ProgressionLabel } from '@/src/music/progressionAnalysis'
 import { formatChordDisplay } from '@/src/music/chordVoicing'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
@@ -176,6 +179,7 @@ function StudyScreenInner() {
   const isDemo = useIsDemoLesson()
   const router = useRouter()
   const musicActions = useMusicActions()
+  const musicState = useMusicState()
   const sessionStemRef = useRef<SessionStemAndTabHandle>(null)
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
@@ -383,6 +387,11 @@ function StudyScreenInner() {
     : 'Tap a note to infer position'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
   const degreeRootPitchClass = useMemo(() => parseKey(keyLabel)?.semitone ?? null, [keyLabel])
+  const scalePitchClasses = useMemo(() => getScalePitchClassesFromKey(keyLabel) ?? [], [keyLabel])
+  // Commit B2: Sync scale pitch classes to MusicContext when key changes
+  useEffect(() => {
+    musicActions.setScalePitchClasses(scalePitchClasses)
+  }, [scalePitchClasses, musicActions])
   const currentBar = useMemo(
     () => barIndexForPlaybackSeconds(lesson?.bar_timestamps ?? [], tick.positionSec),
     [lesson?.bar_timestamps, tick.positionSec],
@@ -403,18 +412,32 @@ function StudyScreenInner() {
         .find((e) => e.timestamp >= barTime && e.timestamp < nextBarTime && e.chord !== 'N')
       const chord = chordEvent ? formatChordDisplay(chordEvent.chord) : ''
       const roman = chordEvent?.roman_numeral ?? undefined
+      const voicing = chordEvent?.voicing_shape ?? undefined
       const barWords = words
         .filter((w) => w.timeSec >= barTime && w.timeSec < nextBarTime)
         .map((w) => w.word)
-      return { chord, text: barWords.join(' '), roman }
+      return { chord, text: barWords.join(' '), roman, voicing }
     })
   }, [chordTimelineEvents, lesson?.bar_timestamps, lesson?.lyrics_aligned])
+
+  // Commit B6: Compute progression labels from roman numeral sequence
+  const progressionLabels = useMemo(() => {
+    const romanNumerals = barsData.map(b => b.roman ?? '?')
+    const matches = findProgressions(romanNumerals, COMMON_PROGRESSIONS)
+    return matches.map(m => ({
+      startBar: m.startBar,
+      endBar: m.endBar,
+      name: m.pattern.name,
+      description: m.pattern.description,
+    } satisfies ProgressionLabel))
+  }, [barsData])
 
   const [variant, setVariant] = useState<TabVariant>('full')
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [overlayMode, setOverlayMode] = useState<FretboardOverlayMode>('off')
+  const [harmonicContextMode, setHarmonicContextMode] = useState<'key_context' | 'chord_only' | 'off'>('chord_only')
   const [preferSimplerTabs, setPreferSimplerTabs] = useState(false)
   const [transcriptionWarningDismissed, setTranscriptionWarningDismissed] = useState(false)
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
@@ -427,7 +450,31 @@ function StudyScreenInner() {
     }
   }, [])
 
-  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
+  const noteConfidence = typeof section?.confidence === 'number' ? section.confidence : (lesson?.transcription_confidence ?? null)
+  const selectionDetail = useMemo(
+    () => buildNoteSelectionDetail(keyLabel, selectedNote, musicState.currentChord, noteConfidence),
+    [keyLabel, selectedNote, musicState.currentChord, noteConfidence],
+  )
+
+  const currentChordVoicing = useMemo(() => {
+    if (currentBar == null || !chordTimelineEvents) return null
+    const timestamps = lesson?.bar_timestamps
+    if (!timestamps) return null
+    const barTime = timestamps[currentBar]
+    if (barTime == null) return null
+    const nextBarTime = currentBar + 1 < timestamps.length ? timestamps[currentBar + 1] : Infinity
+    const chordEvent = [...chordTimelineEvents]
+      .reverse()
+      .find((e) => e.timestamp >= barTime && e.timestamp < nextBarTime && e.chord !== 'N')
+    if (!chordEvent?.voicing_shape) return null
+    const pos = chordEvent.voicing_position
+    if (pos && pos > 0) {
+      const romanNumerals = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
+      const roman = romanNumerals[pos] ?? String(pos)
+      return `${chordEvent.voicing_shape}-shape barre ${roman}`
+    }
+    return `${chordEvent.voicing_shape}-shape (open)`
+  }, [currentBar, chordTimelineEvents, lesson?.bar_timestamps])
 
   const transcriptionConfidence = lesson?.transcription_confidence
   const sectionConfidence = typeof section?.confidence === 'number' ? section.confidence : 1.0
@@ -721,6 +768,10 @@ function StudyScreenInner() {
               onFretboardModeChange={setFretboardMode}
               voicingMode={voicingMode}
               onVoicingModeChange={setVoicingMode}
+              scalePitchClasses={scalePitchClasses}
+              voicingLabel={currentChordVoicing ?? undefined}
+              harmonicContextMode={harmonicContextMode}
+              onHarmonicContextModeChange={setHarmonicContextMode}
               onSelectNote={(note) => {
                 setSelectedNote(note)
                 setFretPulseKey((k) => k + 1)
@@ -772,10 +823,14 @@ function StudyScreenInner() {
                     setChordModalChord(chord)
                     setChordModalVisible(true)
                   }}
-                  barsPerLine={4}
-                  label={(section?.label ?? '') as string}
-                  labelConfidence={section?.label_confidence ?? null}
-                />
+                   progressionLabels={progressionLabels}
+                   onProgressionTap={(label) => {
+                     toast.info(`${label.name}: ${label.description}`)
+                   }}
+                   barsPerLine={4}
+                   label={(section?.label ?? '') as string}
+                   labelConfidence={section?.label_confidence ?? null}
+                 />
             </View>
 
             {/* Commit 116: Theory annotation card for current chord */}
@@ -798,6 +853,7 @@ function StudyScreenInner() {
         detail={selectionDetail}
         visible={noteModalOpen}
         onClose={() => setNoteModalOpen(false)}
+        currentChordVoicing={currentChordVoicing}
       />
 
       {/* Commit 110: Chord correction modal */}

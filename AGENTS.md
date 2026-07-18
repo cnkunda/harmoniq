@@ -173,12 +173,14 @@ Shared contract: `HarmoniqDbClient` interface in `src/db/harmoniqDbClient.ts`. P
 
 ### Backend pipeline (MT3-primary)
 
-- `POST /analyze` + `GET /analyze/{job_id}` run the full pipeline: Demucs → MT3 → chord decoder + solo decoder → MusicXML → LessonJSON.
-- **Primary transcription engine**: MT3 (Google Multi-Task Multitrack Transformer). Produces both chord timeline and solo notes simultaneously from a single inference pass on the guitar stem.
-- **Fallback chain**: MT3 → CRNN TFLite (`chord_inference.py`) → Chroma template matching. Each tier confidence-gated; `transcription_source` field indicates which tier produced the result. A quality gate (`_neural_model_too_noisy()`) at line 541 bypasses the CRNN result when >80% of frames predict N (no-chord), falling through to chroma.
+- `POST /analyze` + `GET /analyze/{job_id}` run the full pipeline: Demucs → two-branch transcription (full-mix chord branch + guitar-conditioned solo branch with MR-MT3 leakage mitigation) → MusicXML → LessonJSON.
+- **Primary transcription engine — two-branch architecture:**
+  - **Branch A (chords, instrument-agnostic):** full mix or harmonic-bed submix → aggregate pitch/chroma representation (MT3 Flat granularity or dedicated chroma extractor) → template matching against `CHORD_INTERVALS`. Chord confidence reflects chroma clarity + template match quality, decoupled from guitar-stem separation.
+  - **Branch B (solo, leakage-hardened):** guitar stem (Demucs) as soft prior + full mix as parallel feature → MT3-style token decoder conditioned on fixed guitar-program embedding, with MR-MT3 memory retention (previous-segment token context), prior token sampling, and token shuffling → post-hoc guitar-program token filter → melodic line with per-note confidence and per-section `leakage_risk` (0.0–1.0).
+- **Fallback chain**: Branch A (chords): MT3 → CRNN TFLite on full mix → Chroma template matching. Branch B (solo): MT3 → Basic Pitch on guitar stem. The quality gate (`_neural_model_too_noisy()`) at line 541 bypasses the CRNN result when >80% of frames predict N (no-chord), falling through to chroma.
 - **Basic Pitch caching**: `basic_pitch_predict_events()` in `pipeline_proof.py` caches results by audio path to avoid duplicate 60s+ inference between solo note extraction and tab generation.
-- **On-device path**: CRNN TFLite model powers Live Mic Mode (<120ms latency). Long-term target: MT3-distilled student model.
-- **Custom model training** (`build_chord_tflite.py`): preserved for Phase 3 distillation. MT3 pseudo-labels will train a smaller student model.
+- **On-device path**: CRNN TFLite model powers Live Mic Mode (<120ms latency) for chord detection. Long-term targets: (1) framewise chord student — non-autoregressive piano-roll model distilled from Branch A's output; (2) guitar-vocabulary token solo student — autoregressive model distilled from Branch B's program-conditioned output, structurally incapable of leaking non-guitar notes.
+- **Custom model training** (`build_chord_tflite.py`): preserved for Phase 3 distillation. MT3 pseudo-labels will train two smaller student models (framewise chord + guitar-vocabulary solo).
 - `torch==2.5.1` / `torchaudio==2.5.1` pinned — do not upgrade without testing Demucs.
 - MT3 requires JAX; CPU fallback auto-activates CRNN path.
 

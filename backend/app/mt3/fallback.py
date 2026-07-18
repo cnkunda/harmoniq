@@ -230,7 +230,7 @@ def _try_crnn(audio_path: Path, beat_grid: BeatGrid) -> TranscriptionResult | No
     logger.info("Tier 2: Attempting CRNN (with chroma fallback) for %s", audio_path)
 
     try:
-        chord_timeline = infer_chords(audio_path, beat_grid)
+        chord_timeline = infer_chords(audio_path, beat_grid, detect_bass=True, detect_voicing=True)
         if chord_timeline is None:
             chord_timeline = ChordTimeline(events=[])
 

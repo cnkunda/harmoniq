@@ -150,6 +150,14 @@ export interface ChordEvent {
   correction_applied?: boolean
   /** Commit 116: Confidence delta between original and LLM-corrected chord */
   correction_delta?: number
+  /** Commit B8: Detected bass note root (e.g., 'E', 'G#'). Undefined when bass = root or unknown. */
+  bass?: string
+  /** Commit B8: Inversion: undefined=root, 1=first, 2=second, 3=third. */
+  inversion?: number
+  /** Commit B9: Detected CAGED voicing shape ('E', 'A', 'C', 'D', 'G') or undefined. */
+  voicing_shape?: string
+  /** Commit B9: Fret position of the voicing (0=open, 1-12=barre). */
+  voicing_position?: number
 }
 
 export interface ChordTimelineMetadata {
@@ -290,6 +298,8 @@ export interface LessonJSON {
   stem_confidence?: number | null
   /** Commit 121: Per-section instrument confusion scores. */
   instrument_confusion_per_section?: InstrumentConfusionPerSection[]
+  /** Phase 2: Which pipeline tier produced this transcription: 'mt3', 'crnn', 'chroma', or null. */
+  transcription_source?: string | null
 }
 
 // ---- Commit 110: Correction types ----
@@ -325,6 +335,8 @@ export interface VoicingOverride {
   chordTimestamp: number
   originalShape: string
   correctedShape: string
+  /** Commit B9: Position override value. */
+  voicing_position?: number
   /** Epoch ms when override was made. */
   timestamp: number
 }
@@ -416,6 +428,7 @@ export interface JamResult {
   pitch_class_weight_map: Record<string, number>
   position_weight_map: Record<string, number>
   inferred_scale_label?: string | null
+  inferred_mode?: string | null
   inference_confidence?: 'low' | 'medium' | 'high' | null
   focus_pitch_class_key?: string | null
   focus_pitch_class_weight?: number | null

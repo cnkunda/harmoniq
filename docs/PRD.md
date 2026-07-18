@@ -140,7 +140,7 @@ The product should feel **warm, analog, handcrafted** — workshop / jazz-club l
 Aligned with README “V1 Scope Summary”:
 
 - Onboarding placement; Home with spaced-repetition-driven suggestions; full **five-step** session loop; web + native clients.
-- Analyze pipeline: YouTube + upload; **htdemucs_6s** guitar stem; librosa structure; Whisper lyrics; **MT3** as primary transcription engine (produces both chord timeline and solo notes simultaneously) → CRNN TFLite fallback → Chroma fallback; skeleton/alternate tabs when confidence allows; Claude coach strings when API present.
+- Analyze pipeline: YouTube + upload; **htdemucs_6s** stems; librosa structure; Whisper lyrics; **two-branch transcription** (full-mix chord branch instrument-agnostic + guitar-conditioned solo branch with MR-MT3 leakage mitigation) → CRNN TFLite fallback (full mix for chords) → Basic Pitch fallback (guitar stem for solo) → Chroma fallback; skeleton/alternate tabs when confidence allows; Claude coach strings when API present.
 - AlphaTab integration with shared message contract; SmartScroll via timestamps; smart metronome; section chips; mixer; pitch on device for play path.
 - Review phrasing visualization; MIDI export; lick library + drill/transpose concepts as specified in README.
 - Jam mode with bundled beds + inference + summaries.
@@ -162,6 +162,18 @@ Accounts/sync, social, chord dictionary as core curriculum, multi-instrument, pa
 | Coach | Claude requires API key; fallback copy acceptable. |
 | Offline | New analyzes need network; library/session data is device-local. |
 
+### 6.4 Known architectural risks (ML pipeline)
+
+These decisions directly affect transcription trustworthiness and are documented here so future contributors understand the "why," not just the "what":
+
+| Risk | Mitigation | Reference |
+|------|------------|-----------|
+| **Chord-source correctness:** chords derived from the guitar stem alone miss chord tones voiced by other instruments (bass, piano, etc.), producing wrong chord symbols that break user trust on first exposure. | Branch A runs instrument-agnostic chord extraction on the full mix or harmonic-bed submix (bass+piano+other+guitar, drums removed), never the guitar stem alone. | Two-branch architecture in README |
+| **Instrument leakage in solo transcription:** MT3-family models can bleed notes across instrument channels within a single autoregressive decode, and channel identity can drift between segments. Even with Demucs pre-separation, bleed-through from vocals/piano into the guitar stem produces wrong notes in tab. | Branch B uses a fixed guitar-program embedding to structurally prevent non-guitar output, plus MR-MT3 memory retention, prior token sampling, and token shuffling (arXiv:2403.10024). A post-hoc program-token filter provides a last-mile safety net. | MR-MT3 paper (§3.2-3.4), Branch B spec in README |
+| **Distillation target mismatch:** a single student model cannot serve both chord classification and monophonic solo note detection — these need different output types and training data characteristics. | Two separate student models: (1) framewise non-autoregressive chord student (piano-roll output); (2) autoregressive guitar-vocabulary token solo student (program-filtered, structurally incapable of leaking). | Phase 3 milestones in PRIORITIES.md |
+| **Inference cost doubles** with two branches (full-mix pass + guitar-conditioned pass) vs the old single-pass assumption. | Milestone D3/D4 (Redis/Celery, GPU queue) must be scoped for 2× the per-job inference load. | Milestone D in PRIORITIES.md |
+| **Stem separation quality** affects both branches differently: poor Demucs guitar separation raises solo-branch leakage_risk, while poor harmonic-bed separation (e.g., bass not isolated) lowers chord-branch confidence. Currently no explicit gate measures Demucs separation quality per job. | `leakage_risk` per section surfaces cross-stem correlation as a continuous signal. A future stem-separation-quality gate could pre-emptively flag jobs where Demucs output is unreliable. | `leakage_risk` field in LessonJSON schema |
+
 ---
 
 ## 7. Technical architecture (PRD-level)
@@ -172,7 +184,7 @@ Detail stays in README and backend README; at PRD level the system comprises:
 |-------|----------------|
 | **Client** | Expo Router app; Zustand; local DB; AlphaTab harness; expo-av / Web Audio; `react-native-audio-api` + shared pitch hook on native; Jam and session UX. |
 | **Backend (FastAPI)** | `/analyze` jobs; `/score`; `/jam-score`; `/export`; `/practice/plan`; optional coach endpoints; pipeline workers. |
-| **Analysis pipeline** | yt-dlp or upload normalize → Demucs **6-stem** → MT3 transcription (primary) → Chord decoder + Solo decoder → CRNN TFLite fallback → Chroma fallback → GP5/MusicXML → coach enrichment → **LessonJSON** with **confidence** fields and `transcription_source` tier indicator. |
+| **Analysis pipeline** | yt-dlp or upload normalize → Demucs **6-stem** → two-branch transcription: **Branch A** (full mix / harmonic bed → aggregate pitch → chord decoder) + **Branch B** (guitar stem as prior + full mix → program-conditioned MT3 with MR-MT3 memory retention → program-filtered solo decoder) → CRNN TFLite fallback (full mix, chords only) → Basic Pitch fallback (guitar stem, solo only) → Chroma fallback → GP5/MusicXML → coach enrichment → **LessonJSON** with `chord_source`, per-section `leakage_risk`, and `transcription_source` tier indicators. |
 
 **Real-time rule:** Pitch estimation during play stays **on-device** — no network in the hot path.
 

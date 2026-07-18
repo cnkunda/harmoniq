@@ -28,7 +28,7 @@ After submitting a YouTube URL for analysis:
 - Open browser DevTools Network tab
 - Confirm GET /analyze/{id} fires at most every 2–5 seconds (backoff)
 - Confirm polling stops **immediately** when status shows "complete" — zero additional requests after terminal status
-- Confirm `analysis_stage` field is present in poll responses and transitions through: `initializing` → `stems_separating` → `chords_inferring` → `solo_inferring` → `building_musicxml` → `complete`
+- Confirm `analysis_stage` field is present in poll responses and transitions through: `initializing` → `stems_separating` → `chord_branch_inferring` → `solo_branch_inferring` → `building_musicxml` → `complete`
 - FAIL if you see more than 10 requests before the ML pipeline starts (resampy/TF load is visible in the terminal)
 - FAIL if any `/analyze/{id}` request fires after status transitions to `complete` or `failed` (verifies `seenCompletedOrFailed` guard — see `src/api/analyze.ts:381`)
 

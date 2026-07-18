@@ -37,7 +37,7 @@ import { createJamPhraseSegmenter } from '@/src/jam/jamPhraseSegmenter'
 import { JAM_REFERENCE_TAB_GP5_BASE64 } from '@/src/jam/jamReferenceTabGp5Base64'
 import { pickSuggestedClassicFromWeakAreas } from '@/src/jam/jamSuggestedClassic'
 import { normalizeExternalAudioSrcForTabHarness } from '@/src/jam/normalizeJamTabAudioUri'
-import { createPitchClassHistogram } from '@/src/jam/pitchClassHistogram'
+import { createPitchClassHistogram, type BestScaleMatch } from '@/src/jam/pitchClassHistogram'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useDnaStore } from '@/src/stores/dnaStore'
@@ -74,6 +74,7 @@ export default function JamScreen() {
   const [scaleLabel, setScaleLabel] = useState('—')
   const [scalePitchClasses, setScalePitchClasses] = useState<readonly number[] | null>(null)
   const [scaleRootPitchClass, setScaleRootPitchClass] = useState<number | null>(null)
+  const [topScales, setTopScales] = useState<BestScaleMatch[]>([])
   const [overlayMode, setOverlayMode] = useState<FretboardOverlayMode>('off')
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
@@ -336,6 +337,7 @@ export default function JamScreen() {
     setScaleLabel('—')
     setScalePitchClasses(null)
     setScaleRootPitchClass(null)
+    setTopScales([])
     lastScaleUiAtRef.current = 0
     lastScaleTintRef.current = null
     jamStemTabRef.current?.clearScaleHighlight()
@@ -351,8 +353,10 @@ export default function JamScreen() {
         if (now - lastScaleUiAtRef.current < SCALE_UI_INTERVAL_MS) return
         lastScaleUiAtRef.current = now
         const scale = histogramRef.current.getBestScale()
+        const candidates = histogramRef.current.getBestScales(3)
         const label = scale ? scale.label : histogramRef.current.getBestLabel()
         setScaleLabel(label)
+        setTopScales(candidates)
         setScalePitchClasses(scale?.pitchClasses ?? null)
         setScaleRootPitchClass(scale ? ((Math.round(scale.rootMidi) % 12) + 12) % 12 : null)
         if (scale) {
@@ -438,6 +442,7 @@ export default function JamScreen() {
     const pitchClassWeightMap = hist.toScalePositionMap(durationSec)
     const bestScale = hist.getBestScale()
     const inferred = bestScale ? bestScale.label : hist.getBestLabel()
+    const inferredMode = bestScale?.inferred_mode ?? null
     const inferenceConfidence = bestScale ? confidenceFromMatchScore(bestScale.matchScore) : ('low' as const)
     const localTags: string[] = []
     if (durationSec < 10) localTags.push('signal_short_window')
@@ -473,6 +478,7 @@ export default function JamScreen() {
         scale_position_map: pitchClassWeightMap,
         inferred_scale_label: inferred === '—' ? null : inferred,
         inference_confidence: inferenceConfidence,
+        inferred_mode: inferredMode,
         track_id: trackIdForSave,
         track_label: trackLabelForSave,
         track_key: classicTrackDef.key,
@@ -507,6 +513,7 @@ export default function JamScreen() {
         pitch_class_weight_map: Object.keys(mergedPitchMap).length > 0 ? mergedPitchMap : pitchClassWeightMap,
         position_weight_map: mergedPositionMap,
         inferred_scale_label: inferred === '—' ? null : inferred,
+        inferred_mode: inferredMode,
         inference_confidence: inferenceConfidence,
         track_id: trackIdForSave,
         track_label: trackLabelForSave,
@@ -533,6 +540,7 @@ export default function JamScreen() {
     setScaleLabel('—')
     setScalePitchClasses(null)
     setScaleRootPitchClass(null)
+    setTopScales([])
     setLastJamDiagnostics({
       inferredScale: inferred === '—' ? null : inferred,
       confidence: reliabilityConfidence,
@@ -879,6 +887,42 @@ export default function JamScreen() {
                   </View>
                 </Animated.View>
                 <Text className="font-sans text-sm text-muted-brown">Listening… scale hint updates every ~2s</Text>
+                {topScales.length > 0 ? (
+                  <View className="mt-2 w-full max-w-[280px] gap-1.5">
+                    {topScales.slice(0, 3).map((s, idx) => {
+                      const barWidth = topScales[0].matchScore > 0
+                        ? (s.matchScore / topScales[0].matchScore) * 100
+                        : 0
+                      const isTop = idx === 0
+                      return (
+                        <View key={s.inferred_mode ?? idx} className="flex-row items-center gap-2">
+                          <Text
+                            className={`w-28 font-sans text-xs ${
+                              isTop ? 'font-medium text-amber-light' : 'text-cream/70'
+                            }`}
+                            numberOfLines={1}
+                          >
+                            {s.label}
+                          </Text>
+                          <View className="h-2 flex-1 rounded-full bg-wood-700/60">
+                            <View
+                              className="h-full rounded-full bg-amber-accent"
+                              style={{ width: `${barWidth}%` }}
+                            />
+                          </View>
+                          <Text className="w-10 text-right font-mono text-[10px] text-muted-brown">
+                            {Math.round(s.matchScore * 100)}%
+                          </Text>
+                        </View>
+                      )
+                    })}
+                    {topScales[0]?.matchScore != null && topScales[0].matchScore < 0.5 ? (
+                      <Text className="mt-1 text-center font-sans text-xs italic text-amber-light/80">
+                        Mixed mode — no clear scale center detected
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
                 {phraseCoachLines.observation || phraseCoachLines.suggestion ? (
                   <View className="mt-1 max-w-[320px] gap-1 px-2">
                     {phraseCoachLines.observation ? (

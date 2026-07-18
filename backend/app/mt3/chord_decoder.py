@@ -15,7 +15,7 @@ Approach (matches Guitar-TECHS / EGSet12 methodology):
 from __future__ import annotations
 
 import bisect
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 import numpy as np
 
@@ -33,6 +33,9 @@ _JACCARD_THRESHOLD = 0.66
 
 # Minimum number of simultaneous pitches to consider a chord present
 _MIN_PITCHES_FOR_CHORD = 3
+
+# Commitment B9: Minimum confidence threshold for voicing detection
+_VOICING_CONFIDENCE_THRESHOLD = 0.6
 
 # GM program numbers to consider for chord inference (guitar + piano family)
 _CHORD_INSTRUMENTS = set(range(24, 32)) | set(range(0, 8))
@@ -73,10 +76,10 @@ def decode_events_to_chord_timeline(
 
     audio_end = event_stream.audio_duration_s or max(e.time for e in events) + 1.0
 
-    active_notes = _build_active_note_grid(
+    active_notes, bass_notes = _build_active_note_grid(
         events, audio_end, prefer_guitar=prefer_guitar_programs,
     )
-    chord_events = _infer_chords_from_active_notes(active_notes, audio_end)
+    chord_events = _infer_chords_from_active_notes(active_notes, bass_notes, audio_end)
 
     beat_times = beat_grid.beats if beat_grid.beats else [0.0]
     for event in chord_events:
@@ -100,8 +103,8 @@ def _build_active_note_grid(
     audio_end: float,
     *,
     prefer_guitar: bool = True,
-) -> dict[float, dict[int, list[Mt3Event]]]:
-    """Build a time-sliced grid of active (sounding) notes.
+) -> tuple[dict[float, dict[int, list[Mt3Event]]], dict[float, int | None]]:
+    """Build a time-sliced grid of active (sounding) notes and bass pitches.
 
     For each 0.1s hop, determine which pitches are actively sounding
     by tracking onsets and offsets across the event stream. Percussion
@@ -110,7 +113,9 @@ def _build_active_note_grid(
     programs, only guitar-family events are kept.
 
     Returns:
-        Dict mapping time_slice → {pitch_class: [active_events]}
+        Tuple of (grid, bass_notes):
+        - grid: time_slice → {pitch_class: [active_events]}
+        - bass_notes: time_slice → lowest active MIDI pitch (or None)
     """
     onsets: list[Mt3Event] = []
     offsets: dict[int, list[float]] = defaultdict(list)
@@ -127,6 +132,7 @@ def _build_active_note_grid(
 
     time_slices = np.arange(0.0, audio_end + _HOP_SECONDS, _HOP_SECONDS)
     grid: dict[float, dict[int, list[Mt3Event]]] = {}
+    bass_notes: dict[float, int | None] = {}
 
     for t in time_slices:
         t = float(round(t, 2))
@@ -156,24 +162,39 @@ def _build_active_note_grid(
 
         grid[t] = active
 
-    return grid
+        # Compute lowest active MIDI pitch for bass detection.
+        # Use raw_active (all instruments) — never guitar-filtered — because
+        # the guitar often does not play the bass note (Branch A constraint
+        # from PRIORITIES.md B8).
+        lowest_midi: int | None = None
+        for note_events in raw_active.values():
+            for e in note_events:
+                if lowest_midi is None or e.pitch < lowest_midi:
+                    lowest_midi = e.pitch
+        bass_notes[t] = lowest_midi
+
+    return grid, bass_notes
 
 
 def _infer_chords_from_active_notes(
     active_notes: dict[float, dict[int, list[Mt3Event]]],
+    bass_notes: dict[float, int | None],
     audio_end: float,
 ) -> list[ChordEvent]:
     """Convert active-note grid to chord events via template matching.
 
     For each time slice, builds a pitch class set from active notes,
     scores all 23 chord templates, and picks the best match above threshold.
-    Consecutive slices with the same chord are merged.
+    Consecutive slices with the same chord are merged. Bass note and
+    inversion are derived from the lowest active MIDI pitch per slice.
     """
     chord_events: list[ChordEvent] = []
 
     prev_chord: str | None = None
     prev_start: float = 0.0
     prev_confidence: float = 0.0
+    prev_bass_counter: Counter[str] = Counter()
+    current_active_notes: dict[int, list[Mt3Event]] = {}
 
     times = sorted(active_notes.keys())
 
@@ -186,26 +207,47 @@ def _infer_chords_from_active_notes(
         else:
             chord_label, confidence = _match_chord_template(active_pcs)
 
+        low_midi = bass_notes.get(t)
+        current_bass_note = ROOT_NOTES[low_midi % 12] if low_midi is not None else None
+
         if chord_label == prev_chord:
             prev_confidence = max(prev_confidence, confidence)
+            if current_bass_note is not None:
+                prev_bass_counter[current_bass_note] += 1
+            for pc, events in active_notes[t].items():
+                if pc not in current_active_notes:
+                    current_active_notes[pc] = []
+                current_active_notes[pc].extend(events)
             continue
 
         if prev_chord is not None:
-            chord_events.append(ChordEvent(
+            chord_events.append(_make_chord_event(
                 timestamp=round(prev_start, 2),
                 chord=prev_chord,
                 confidence=round(prev_confidence, 4),
+                bass_counter=prev_bass_counter,
+                active_notes=current_active_notes,
             ))
 
         prev_chord = chord_label
         prev_start = t
         prev_confidence = confidence
+        prev_bass_counter = Counter()
+        current_active_notes = {}
+        if current_bass_note is not None and chord_label != "N":
+            prev_bass_counter[current_bass_note] += 1
+        for pc, events in active_notes[t].items():
+            if pc not in current_active_notes:
+                current_active_notes[pc] = []
+            current_active_notes[pc].extend(events)
 
     if prev_chord is not None:
-        chord_events.append(ChordEvent(
+        chord_events.append(_make_chord_event(
             timestamp=round(prev_start, 2),
             chord=prev_chord,
             confidence=round(prev_confidence, 4),
+            bass_counter=prev_bass_counter,
+            active_notes=current_active_notes,
         ))
 
     if not chord_events:
@@ -216,6 +258,94 @@ def _infer_chords_from_active_notes(
         ))
 
     return chord_events
+
+
+def _make_chord_event(
+    timestamp: float,
+    chord: str,
+    confidence: float,
+    bass_counter: Counter[str],
+    active_notes: dict[int, list[Mt3Event]] | None = None,
+) -> ChordEvent:
+    """Build a ChordEvent with bass note, inversion, and voicing.
+
+    When active_notes is provided and the chord is a named chord, attempts
+    CAGED voicing recognition from the raw MIDI pitch distribution.
+    """
+    root = chord.split(":")[0] if chord != "N" and ":" in chord else None
+    most_common_bass = bass_counter.most_common(1)[0][0] if bass_counter else None
+
+    if most_common_bass is not None and most_common_bass == root:
+        final_bass = None
+    else:
+        final_bass = most_common_bass
+
+    inversion = None
+    if final_bass is not None and root is not None and chord != "N" and ":" in chord:
+        quality = chord.split(":")[1]
+        inversion = _identify_inversion(root, quality, final_bass)
+
+    # Commit B9: CAGED voicing detection from active note pitch distribution
+    voicing_shape: str | None = None
+    voicing_position: int | None = None
+    if active_notes and chord != "N" and ":" in chord and root is not None:
+        from app.mt3.voicing_recognizer import recognize_voicing
+        quality = chord.split(":")[1]
+        result = recognize_voicing(active_notes, root, quality)
+        if result.shape and result.confidence >= _VOICING_CONFIDENCE_THRESHOLD:
+            voicing_shape = result.shape
+            voicing_position = result.position
+
+    return ChordEvent(
+        timestamp=timestamp,
+        chord=chord,
+        confidence=confidence,
+        bass=final_bass,
+        inversion=inversion,
+        voicing_shape=voicing_shape,
+        voicing_position=voicing_position,
+    )
+
+
+def _identify_inversion(
+    chord_root: str,
+    quality: str | None,
+    bass_note: str | None,
+) -> int | None:
+    """Identify chord inversion from bass note relative to chord intervals.
+
+    Args:
+        chord_root: Root note name (e.g., 'C', 'F#').
+        quality: Chord quality string (e.g., 'maj', 'min7').
+        bass_note: Detected bass note name (e.g., 'E', 'G').
+
+    Returns:
+        None for root position, 1 for first inversion (bass = 3rd),
+        2 for second inversion (bass = 5th), 3 for third inversion (bass = 7th).
+    """
+    if bass_note is None or quality is None:
+        return None
+    intervals = CHORD_INTERVALS.get(quality)
+    if intervals is None:
+        return None
+    try:
+        root_pc = ROOT_NOTES.index(chord_root)
+        bass_pc = ROOT_NOTES.index(bass_note)
+    except ValueError:
+        return None
+    semitone_distance = (bass_pc - root_pc) % 12
+
+    # Map interval positions to inversion numbers
+    for position, interval in enumerate(intervals):
+        if interval % 12 == semitone_distance:
+            if position == 1:
+                return 1
+            elif position == 2:
+                return 2
+            elif position == 3:
+                return 3
+            return None
+    return None
 
 
 def _match_chord_template(
