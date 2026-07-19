@@ -673,48 +673,49 @@ export default function HomeScreen() {
           </LinearGradient>
 
           {dailyLick && !dailyLickDismissed && suggestion && suggestion.kind !== 'cold_start' ? (
-            <AnimatedPressable
-              onPress={() => void startDailyLick()}
-              haptic="light"
-              className="mb-6 overflow-hidden rounded-2xl border border-wood-600/50 bg-wood-800/40"
-              accessibilityRole="button"
-              accessibilityLabel="Start daily lick"
-            >
-              <View className="relative p-5">
-                <AnimatedPressable
-                  onPress={() => void onDismissDailyLick()}
-                  className="absolute right-3 top-3 z-10 h-7 w-7 items-center justify-center rounded-full bg-wood-700/60"
-                  accessibilityRole="button"
-                  accessibilityLabel="Dismiss daily lick"
-                >
-                  <X color={colors.muted.brown} size={14} strokeWidth={2} />
-                </AnimatedPressable>
-                <Text className="mb-1 font-sans-medium text-[11px] uppercase tracking-wider text-amber-accent/80">
-                  Daily Lick
-                </Text>
-                <Text className="mb-2 font-serif text-xl text-cream">{dailyLick.name}</Text>
-                <Text className="mb-3 font-sans text-sm italic leading-relaxed text-cream/80">
-                  &ldquo;{dailyLick.description}&rdquo;
-                </Text>
-                <View className="flex-row flex-wrap items-center gap-2">
-                  <View className="rounded-full border border-amber-accent/45 bg-amber-accent/20 px-2.5 py-1">
-                    <Text className="font-sans-medium text-xs text-cream">
-                      Diff {dailyLick.pattern.difficulty}
-                    </Text>
-                  </View>
-                  {dailyLick.pattern.techniqueTags.map((tag) => (
-                    <View
-                      key={tag}
-                      className="rounded-full border border-wood-600/25 bg-wood-700/40 px-2.5 py-1"
-                    >
-                      <Text className="font-sans text-xs text-muted-brown">
-                        {tag.replace(/_/g, ' ')}
+            <View className="relative mb-6 overflow-hidden rounded-2xl border border-wood-600/50 bg-wood-800/40">
+              <AnimatedPressable
+                onPress={() => void startDailyLick()}
+                haptic="light"
+                accessibilityRole="button"
+                accessibilityLabel="Start daily lick"
+              >
+                <View className="p-5">
+                  <Text className="mb-1 font-sans-medium text-[11px] uppercase tracking-wider text-amber-accent/80">
+                    Daily Lick
+                  </Text>
+                  <Text className="mb-2 font-serif text-xl text-cream">{dailyLick.name}</Text>
+                  <Text className="mb-3 font-sans text-sm italic leading-relaxed text-cream/80">
+                    &ldquo;{dailyLick.description}&rdquo;
+                  </Text>
+                  <View className="flex-row flex-wrap items-center gap-2">
+                    <View className="rounded-full border border-amber-accent/45 bg-amber-accent/20 px-2.5 py-1">
+                      <Text className="font-sans-medium text-xs text-cream">
+                        Diff {dailyLick.pattern.difficulty}
                       </Text>
                     </View>
-                  ))}
+                    {dailyLick.pattern.techniqueTags.map((tag) => (
+                      <View
+                        key={tag}
+                        className="rounded-full border border-wood-600/25 bg-wood-700/40 px-2.5 py-1"
+                      >
+                        <Text className="font-sans text-xs text-muted-brown">
+                          {tag.replace(/_/g, ' ')}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
-              </View>
-            </AnimatedPressable>
+              </AnimatedPressable>
+              <AnimatedPressable
+                onPress={() => void onDismissDailyLick()}
+                className="absolute right-3 top-3 z-10 h-7 w-7 items-center justify-center rounded-full bg-wood-700/60"
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss daily lick"
+              >
+                <X color={colors.muted.brown} size={14} strokeWidth={2} />
+              </AnimatedPressable>
+            </View>
           ) : null}
 
           {suggestion && suggestion.kind !== 'cold_start' && weakPulseNode ? <WeakAreaPulse node={weakPulseNode} /> : null}

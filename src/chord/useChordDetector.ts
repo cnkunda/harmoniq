@@ -1,22 +1,27 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Platform } from 'react-native'
 
-import {
-  CHROMA_BINS,
-  FEATURE_DIM,
-  HOP_LENGTH,
-  TARGET_SR,
-  WINDOW,
-} from '@/src/chord/cqtConstants'
-import { idxToChord } from '@/src/chord/chordVocab'
+import { FEATURE_DIM, WINDOW } from '@/src/chord/cqtConstants'
+import { CqtStreamer } from '@/src/chord/computeCqt'
+import { ChordSmoother } from '@/src/chord/chordSmoothing'
+import { idxToChord, NUM_CLASSES_MIREX } from '@/src/chord/chordVocab'
 import type { ChordDetection } from '@/src/chord/chordModelTypes'
 import { useLiveChordStore } from '@/src/chord/liveChordStore'
 import { globalAudioManager } from '@/src/audio/GlobalAudioManager'
 
-/** Number of raw audio samples for the full CQT window (12.8s at 44.1kHz). */
-const WINDOW_SAMPLES = WINDOW * HOP_LENGTH
+/** How often to run model inference (ms). Decoupled from audio callback cadence. */
+const INFERENCE_INTERVAL_MS = 500
 
-/** Dynamically load a script tag — used to load onnxruntime-web from CDN on web. */
+/** Below this RMS the input is treated as silence — emit No-Chord, skip the model. */
+const RMS_SILENCE_THRESHOLD = 0.01
+
+/** Minimum real frames before running inference (front-padded until warm). */
+const MIN_FRAMES_FOR_INFERENCE = 16
+
+/** Smoothed-probability gate below which we show "—" instead of a chord. */
+const CONFIDENCE_THRESHOLD = 0.5
+
+/** Load onnxruntime-web from CDN on web (avoids bundler dynamic-import issues). */
 function loadScript(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const s = document.createElement('script')
@@ -27,8 +32,40 @@ function loadScript(url: string): Promise<void> {
   })
 }
 
-/** Ring buffer stores extra for the symmetric padding. */
-const PADDING_SAMPLES = HOP_LENGTH * (WINDOW / 2)
+/** Pinned CDN base (fallback when self-hosted assets aren't present). */
+const ORT_VERSION = '1.27.0'
+const ORT_CDN_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`
+/** Self-hosted base — populated by scripts/copy-ort-assets.mjs into public/ort/. */
+const ORT_LOCAL_BASE = '/ort/'
+
+/**
+ * Ensure onnxruntime-web is available on `window.ort`. Prefers the self-hosted
+ * copy (offline-capable, version-pinned); falls back to the pinned CDN if the
+ * local assets are missing. `wasmPaths` is pointed at whichever base succeeded so
+ * the runtime resolves its .wasm/.mjs from the same origin.
+ */
+async function ensureOrtWeb(): Promise<any> {
+  const w = window as any
+  if (w.ort) return w.ort
+
+  let base = ORT_LOCAL_BASE
+  try {
+    await loadScript(`${ORT_LOCAL_BASE}ort.all.min.js`)
+    if (!w.ort) throw new Error('local ort missing')
+  } catch {
+    base = ORT_CDN_BASE
+    await loadScript(`${ORT_CDN_BASE}ort.all.min.js`)
+  }
+
+  const ort = w.ort
+  if (!ort) throw new Error('ONNX runtime failed to initialize on web')
+  try {
+    ort.env.wasm.wasmPaths = base
+  } catch {
+    // Non-fatal; runtime will use its own default resolution.
+  }
+  return ort
+}
 
 /** Model runner interface — abstracts TFLite (sync) and ONNX (async). */
 interface ModelRunner {
@@ -36,30 +73,50 @@ interface ModelRunner {
   runAsync?(input: Float32Array): Promise<Float32Array>
 }
 
+/** L1-normalize each CQT frame in a flattened WINDOW×FEATURE_DIM tensor. */
+function normalizeWindowL1(window: Float32Array): Float32Array {
+  const out = new Float32Array(window.length)
+  const frames = Math.floor(window.length / FEATURE_DIM)
+  for (let f = 0; f < frames; f++) {
+    const off = f * FEATURE_DIM
+    let sum = 0
+    for (let b = 0; b < FEATURE_DIM; b++) sum += Math.abs(window[off + b] ?? 0)
+    const norm = Math.max(sum, 1e-8)
+    for (let b = 0; b < FEATURE_DIM; b++) out[off + b] = (window[off + b] ?? 0) / norm
+  }
+  return out
+}
+
 /**
  * Hook to orchestrate real-time chord detection from microphone input.
  *
- * Pipeline: mic → ring buffer → CQT → TFLite/ONNX → chord label
+ * Pipeline: mic → incremental CQT (streaming frames) → TFLite/ONNX → temporal
+ * smoothing → chord label.
  *
- * Uses `react-native-fast-tflite` on mobile and `onnxruntime-web` on web.
- * CQT features computed via TypeScript port of librosa.cqt.
+ * The CQT is computed one frame at a time as audio arrives (`CqtStreamer`), so
+ * inference reads a ready feature window instead of recomputing ~13 s of audio
+ * every cycle. Inference runs on a fixed interval with an in-flight guard, is
+ * gated by input level (RMS) and model confidence, and is stabilized by
+ * `ChordSmoother` (EMA + hysteresis).
  */
 export function useChordDetector() {
   const store = useLiveChordStore()
   const setListening = useLiveChordStore((s) => s.setListening)
+  const setStatus = useLiveChordStore((s) => s.setStatus)
   const setCurrentChord = useLiveChordStore((s) => s.setCurrentChord)
   const setError = useLiveChordStore((s) => s.setError)
   const setModelType = useLiveChordStore((s) => s.setModelType)
   const reset = useLiveChordStore((s) => s.reset)
 
-  const audioBufferRef = useRef<Float32Array | null>(null)
-  const writePosRef = useRef(0)
-  const frameCountRef = useRef(0)
   const recorderRef = useRef<{ stop(): unknown; clearOnAudioReady(): void } | null>(null)
   const runningRef = useRef(false)
   const modelRef = useRef<ModelRunner | null>(null)
-  const cqtRef = useRef<{ compute(audio: Float32Array): Float32Array } | null>(null)
   const modelTypeRef = useRef<'tflite' | 'onnx' | null>(null)
+  const streamerRef = useRef<CqtStreamer | null>(null)
+  const smootherRef = useRef<ChordSmoother | null>(null)
+  const inferInFlightRef = useRef(false)
+  const inferTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const latestRmsRef = useRef(0)
 
   /** Load the TFLite or ONNX model. */
   const loadModel = useCallback(async (): Promise<'tflite' | 'onnx'> => {
@@ -88,10 +145,8 @@ export function useChordDetector() {
       let ort: any
 
       if (Platform.OS === 'web') {
-        // On web, load from CDN to avoid bundler dynamic-import issues in ort.bundle.min.mjs
-        await loadScript('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/ort.all.min.js')
-        ort = (window as any).ort
-        if (!ort) throw new Error('ONNX runtime failed to initialize on web')
+        // Self-hosted (with CDN fallback) to avoid a hard runtime CDN dependency.
+        ort = await ensureOrtWeb()
       } else {
         const mod: any = await import('onnxruntime-web')
         ort = mod
@@ -100,8 +155,8 @@ export function useChordDetector() {
       const modelUrl: number = require('@/assets/models/chord_model.onnx')
       const session = await ort.InferenceSession.create(String(modelUrl))
       modelRef.current = {
-        runSync(input: Float32Array): Float32Array {
-          return new Float32Array(WINDOW * FEATURE_DIM)
+        runSync(): Float32Array {
+          return new Float32Array(NUM_CLASSES_MIREX)
         },
         async runAsync(input: Float32Array): Promise<Float32Array> {
           const tensor = new ort.Tensor('float32', input, [1, WINDOW, FEATURE_DIM])
@@ -121,135 +176,91 @@ export function useChordDetector() {
     }
   }, [setModelType])
 
-/** Load the CQT processor. */
-  const loadCqt = useCallback(async () => {
+  /** Run inference on the current feature window (interval-driven, guarded). */
+  const runInference = useCallback(async () => {
+    if (!runningRef.current || inferInFlightRef.current) return
+
+    const model = modelRef.current
+    const streamer = streamerRef.current
+    const smoother = smootherRef.current
+    if (!model || !streamer || !smoother) return
+
+    // Promote to "listening" once the feature window is fully warmed.
+    const status = useLiveChordStore.getState().status
+    if (streamer.isWarm) {
+      if (status !== 'listening') setStatus('listening')
+    } else if (status !== 'warming') {
+      setStatus('warming')
+    }
+
+    // Silence gate — emit No-Chord and skip the model (also saves CPU).
+    if (latestRmsRef.current < RMS_SILENCE_THRESHOLD) {
+      smoother.reset()
+      setCurrentChord({ chord: 'N', confidence: 0, timestamp: Date.now(), latencyMs: 0 })
+      return
+    }
+
+    if (streamer.frameCount < MIN_FRAMES_FOR_INFERENCE) return
+
+    inferInFlightRef.current = true
     try {
-      const { computeCqt } = await import('@/src/chord/computeCqt')
-      cqtRef.current = { compute: computeCqt }
-      console.log('[ChordDetector] CQT processor loaded')
-    } catch (e) {
-      throw new Error(`Failed to load CQT processor: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }, [])
+      const startMs = performance.now()
+      const modelInput = normalizeWindowL1(streamer.getWindow())
+      const probs = model.runAsync ? await model.runAsync(modelInput) : model.runSync(modelInput)
+      const latencyMs = performance.now() - startMs
 
-  /** Build the model input tensor from CQT features. */
-  const buildModelInput = useCallback((cqtFeatures: Float32Array): Float32Array => {
-    const nFrames = Math.floor(cqtFeatures.length / CHROMA_BINS)
-    const modelInput = new Float32Array(WINDOW * FEATURE_DIM)
-
-    // Use the most recent WINDOW frames (or pad with zeros if fewer)
-    const startFrame = Math.max(0, nFrames - WINDOW)
-    for (let f = 0; f < WINDOW; f++) {
-      const srcFrame = startFrame + f
-      const srcOffset = srcFrame * CHROMA_BINS
-      const dstOffset = f * FEATURE_DIM
-      if (srcFrame < nFrames) {
-        // Row-normalize (L1)
-        let sum = 0
-        for (let b = 0; b < CHROMA_BINS; b++) {
-          sum += Math.abs(cqtFeatures[srcOffset + b] ?? 0)
-        }
-        const norm = Math.max(sum, 1e-8)
-        for (let b = 0; b < CHROMA_BINS; b++) {
-          modelInput[dstOffset + b] = (cqtFeatures[srcOffset + b] ?? 0) / norm
-        }
+      if (latencyMs > 120) {
+        console.warn(
+          `[ChordDetector] Slow inference: ${latencyMs.toFixed(1)}ms ` +
+            `(threshold: 120ms, model: ${modelTypeRef.current ?? 'unknown'})`,
+        )
       }
-    }
-    return modelInput
-  }, [])
 
-  /** Parse model output probabilities into a chord detection. */
-  const parseOutput = useCallback(
-    (probs: Float32Array, latencyMs: number): ChordDetection => {
-      let maxIdx = 0
-      let maxProb = probs[0] ?? 0
-      for (let i = 1; i < probs.length; i++) {
-        if ((probs[i] ?? 0) > maxProb) {
-          maxProb = probs[i]!
-          maxIdx = i
-        }
-      }
-      return {
-        chord: idxToChord(maxIdx),
-        confidence: maxProb,
+      const result = smoother.update(probs)
+      const chord = result.index >= 0 ? idxToChord(result.index) : 'N'
+      const detection: ChordDetection = {
+        chord,
+        confidence: result.confidence,
         timestamp: Date.now(),
         latencyMs: Math.round(latencyMs),
       }
-    },
-    [],
-  )
-
-  /** Run inference on the current ring buffer contents. */
-  const runInference = useCallback(async () => {
-    const model = modelRef.current
-    const cqt = cqtRef.current
-    const buffer = audioBufferRef.current
-    if (!model || !cqt || !buffer) return
-
-    const startMs = performance.now()
-
-    // Extract the 12.8s window from the ring buffer
-    const writePos = writePosRef.current
-    const windowSamples = WINDOW_SAMPLES + PADDING_SAMPLES
-    const windowData = new Float32Array(windowSamples)
-    for (let i = 0; i < windowSamples; i++) {
-      const idx = (writePos - windowSamples + i + buffer.length) % buffer.length
-      windowData[i] = buffer[idx]!
+      setCurrentChord(detection)
+    } catch (e) {
+      console.error('[ChordDetector] inference failed:', e instanceof Error ? e.message : String(e))
+    } finally {
+      inferInFlightRef.current = false
     }
+  }, [setCurrentChord, setStatus])
 
-    // Compute CQT features → (nFrames, 144)
-    const cqtFeatures = cqt.compute(windowData)
-    const modelInput = buildModelInput(cqtFeatures)
-
-    // Run model inference (async if available, sync fallback)
-    const probs = model.runAsync
-      ? await model.runAsync(modelInput)
-      : model.runSync(modelInput)
-
-    const latencyMs = performance.now() - startMs
-
-    // AC 6: warn when on-device inference exceeds 120ms threshold
-    if (latencyMs > 120) {
-      console.warn(
-        `[ChordDetector] Slow inference: ${latencyMs.toFixed(1)}ms ` +
-        `(threshold: 120ms, model: ${modelTypeRef.current ?? 'unknown'})`,
-      )
-    }
-
-    const detection = parseOutput(probs, latencyMs)
-    setCurrentChord(detection)
-  }, [buildModelInput, parseOutput, setCurrentChord])
-
-  /** Handle incoming audio buffer from the mic. */
+  /** Handle incoming audio buffer from the mic: track RMS + feed the CQT streamer. */
   const handleAudioBuffer = useCallback(
     ({ buffer: inputBuffer, numFrames }: { buffer: { getChannelData(ch: number): Float32Array }; numFrames: number }) => {
       if (!runningRef.current) return
-
       const ch0 = inputBuffer.getChannelData(0)
       const frameCount = Math.min(numFrames, ch0.length)
-      if (frameCount < 256) return
+      if (frameCount < 1) return
+      const samples = frameCount === ch0.length ? ch0 : ch0.subarray(0, frameCount)
 
-      // Write into ring buffer
-      const ringBuffer = audioBufferRef.current
-      if (!ringBuffer) return
-
+      let sum = 0
       for (let i = 0; i < frameCount; i++) {
-        ringBuffer[writePosRef.current] = ch0[i]!
-        writePosRef.current = (writePosRef.current + 1) % ringBuffer.length
+        const v = samples[i]!
+        sum += v * v
       }
-      frameCountRef.current += 1
+      latestRmsRef.current = Math.sqrt(sum / frameCount)
 
-      // Run inference every 32 callbacks (~1.5s of audio at 46ms per callback)
-      if (frameCountRef.current % 32 === 0) {
-        void runInference()
-      }
+      streamerRef.current?.push(samples)
     },
-    [runInference],
+    [],
   )
 
   /** Stop listening: release mic, clear buffers. */
   const stopListening = useCallback(async () => {
     runningRef.current = false
+
+    if (inferTimerRef.current) {
+      clearInterval(inferTimerRef.current)
+      inferTimerRef.current = null
+    }
 
     const recorder = recorderRef.current
     if (recorder) {
@@ -262,20 +273,25 @@ export function useChordDetector() {
 
     await globalAudioManager.unregisterInstance('chord-detector')
 
-    try {
-      const { AudioManager } = await import('react-native-audio-api')
-      await AudioManager.setAudioSessionActivity(false)
-    } catch {
-      // Best-effort cleanup
+    if (Platform.OS !== 'web') {
+      try {
+        const { AudioManager } = await import('react-native-audio-api')
+        await AudioManager.setAudioSessionActivity(false)
+      } catch {
+        // Best-effort cleanup
+      }
     }
 
-    audioBufferRef.current = null
-    writePosRef.current = 0
-    frameCountRef.current = 0
+    streamerRef.current?.reset()
+    streamerRef.current = null
+    smootherRef.current = null
+    inferInFlightRef.current = false
+    latestRmsRef.current = 0
 
+    setStatus('idle')
     setListening(false)
     console.log('[ChordDetector] Listening stopped')
-  }, [setListening])
+  }, [setListening, setStatus])
 
   /** Start listening: load models, start mic, begin inference loop. */
   const startListening = useCallback(async () => {
@@ -284,66 +300,95 @@ export function useChordDetector() {
     try {
       setError(null)
       setListening(true)
+      setStatus('initializing')
 
-      // Load models in parallel
-      await Promise.all([loadCqt(), loadModel()])
+      await loadModel()
 
-      // Initialize ring buffer
-      audioBufferRef.current = new Float32Array(WINDOW_SAMPLES + PADDING_SAMPLES)
-      writePosRef.current = 0
-      frameCountRef.current = 0
-
-      // Request mic permission and start audio capture
-      const { AudioManager, AudioRecorder } = await import('react-native-audio-api')
-
-      AudioManager.setAudioSessionOptions({
-        iosCategory: 'record',
-        iosMode: 'default',
-        iosOptions: [],
+      // Fresh feature streamer + smoother for this session.
+      streamerRef.current = new CqtStreamer()
+      smootherRef.current = new ChordSmoother({
+        numClasses: NUM_CLASSES_MIREX,
+        confidenceThreshold: CONFIDENCE_THRESHOLD,
       })
+      inferInFlightRef.current = false
+      latestRmsRef.current = 0
 
-      const perm = await AudioManager.requestRecordingPermissions()
-      if (perm !== 'Granted') {
-        throw new Error('MIC_PERMISSION_DENIED')
-      }
+      // Request mic permission and start audio capture.
+      // Web has no native `AudioRecorder`, so use the Web Audio API path.
+      if (Platform.OS === 'web') {
+        const { WebMicRecorder } = await import('@/src/chord/webMicRecorder')
+        const recorder = new WebMicRecorder()
+        recorderRef.current = recorder
 
-      const sessionOk = await AudioManager.setAudioSessionActivity(true)
-      if (!sessionOk) {
-        throw new Error('Could not activate audio session')
-      }
+        recorder.onAudioReady(
+          {
+            sampleRate: 44100,
+            bufferLength: 2048,
+            channelCount: 1,
+          },
+          handleAudioBuffer,
+        )
 
-      const recorder = new AudioRecorder()
-      recorderRef.current = recorder
+        // Throws 'MIC_PERMISSION_DENIED' or a descriptive error on failure.
+        await recorder.start()
+      } else {
+        const { AudioManager, AudioRecorder } = await import('react-native-audio-api')
 
-      const ready = recorder.onAudioReady(
-        {
-          sampleRate: TARGET_SR,
-          bufferLength: 2048,
-          channelCount: 1,
-        },
-        handleAudioBuffer,
-      )
+        AudioManager.setAudioSessionOptions({
+          iosCategory: 'record',
+          iosMode: 'default',
+          iosOptions: [],
+        })
 
-      if (ready.status === 'error') {
-        await AudioManager.setAudioSessionActivity(false)
-        throw new Error(`onAudioReady failed: ${ready.message}`)
-      }
+        const perm = await AudioManager.requestRecordingPermissions()
+        if (perm !== 'Granted') {
+          throw new Error('MIC_PERMISSION_DENIED')
+        }
 
-      const started = recorder.start()
-      if (started.status === 'error') {
-        recorder.clearOnAudioReady()
-        await AudioManager.setAudioSessionActivity(false)
-        throw new Error(`start failed: ${started.message}`)
+        const sessionOk = await AudioManager.setAudioSessionActivity(true)
+        if (!sessionOk) {
+          throw new Error('Could not activate audio session')
+        }
+
+        const recorder = new AudioRecorder()
+        recorderRef.current = recorder
+
+        const ready = recorder.onAudioReady(
+          {
+            sampleRate: 44100,
+            bufferLength: 2048,
+            channelCount: 1,
+          },
+          handleAudioBuffer,
+        )
+
+        if (ready.status === 'error') {
+          await AudioManager.setAudioSessionActivity(false)
+          throw new Error(`onAudioReady failed: ${ready.message}`)
+        }
+
+        const started = recorder.start()
+        if (started.status === 'error') {
+          recorder.clearOnAudioReady()
+          await AudioManager.setAudioSessionActivity(false)
+          throw new Error(`start failed: ${started.message}`)
+        }
       }
 
       runningRef.current = true
+      setStatus('warming')
       console.log('[ChordDetector] Listening started')
+
+      // Drive inference on a fixed interval (guarded against overlap).
+      inferTimerRef.current = setInterval(() => {
+        void runInference()
+      }, INFERENCE_INTERVAL_MS)
 
       // Register with GlobalAudioManager
       globalAudioManager.registerInstance(
         'chord-detector',
         'audio-api-recorder',
-        recorder,
+        recorderRef.current,
         async () => {
           if (runningRef.current) {
             await stopListening()
@@ -354,10 +399,15 @@ export function useChordDetector() {
       const msg = e instanceof Error ? e.message : String(e)
       console.error('[ChordDetector] start failed:', msg)
       setError(msg)
+      setStatus('idle')
       setListening(false)
       runningRef.current = false
+      if (inferTimerRef.current) {
+        clearInterval(inferTimerRef.current)
+        inferTimerRef.current = null
+      }
     }
-  }, [loadModel, loadCqt, handleAudioBuffer, setError, setListening, stopListening])
+  }, [loadModel, handleAudioBuffer, runInference, setError, setListening, setStatus, stopListening])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -365,13 +415,19 @@ export function useChordDetector() {
       if (runningRef.current) {
         void stopListening()
       }
-      cqtRef.current = null
+      if (inferTimerRef.current) {
+        clearInterval(inferTimerRef.current)
+        inferTimerRef.current = null
+      }
+      streamerRef.current = null
       modelRef.current = null
+      smootherRef.current = null
     }
   }, [stopListening])
 
   return {
     isListening: store.isListening,
+    status: store.status,
     currentChord: store.currentChord,
     history: store.history,
     latencyMs: store.latencyMs,

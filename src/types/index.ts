@@ -101,6 +101,64 @@ export interface SpotifyPlaybackStatePayload {
   artists: string[]
 }
 
+/** GET /spotify/search — pass-through from Spotify. */
+export interface SpotifySearchResult {
+  tracks?: { items?: Array<Record<string, unknown>>; total?: number } | null
+  artists?: { items?: Array<Record<string, unknown>>; total?: number } | null
+  albums?: { items?: Array<Record<string, unknown>>; total?: number } | null
+  playlists?: { items?: Array<Record<string, unknown>>; total?: number } | null
+}
+
+/** GET /spotify/recommendations — pass-through from Spotify. */
+export interface SpotifyRecommendationsResult {
+  tracks: Array<Record<string, unknown>>
+  seeds: Array<Record<string, unknown>>
+}
+
+/** GET /spotify/recommendations/available-genre-seeds. */
+export interface SpotifyAvailableGenreSeeds {
+  genres: string[]
+}
+
+/** GET /spotify/playlists — pass-through from Spotify. */
+export interface SpotifyPlaylistList {
+  href: string
+  limit: number
+  next?: string | null
+  offset: number
+  previous?: string | null
+  total: number
+  items: Array<Record<string, unknown>>
+}
+
+/** GET /spotify/playlists/{playlist_id} — pass-through from Spotify. */
+export interface SpotifyPlaylistDetail {
+  id: string
+  name: string
+  description?: string | null
+  public?: boolean | null
+  collaborative: boolean
+  owner: Record<string, unknown>
+  tracks: Record<string, unknown>
+  images: Array<Record<string, unknown>>
+  uri: string
+  external_urls: Record<string, string>
+  snapshot_id: string
+  type: string
+  href: string
+}
+
+/** GET /spotify/playlists/{playlist_id}/items — pass-through from Spotify. */
+export interface SpotifyPlaylistItems {
+  href: string
+  limit: number
+  next?: string | null
+  offset: number
+  previous?: string | null
+  total: number
+  items: Array<Record<string, unknown>>
+}
+
 /** POST /taste/derive response — commit 68. */
 export interface TasteProfilePayload {
   style_label: string

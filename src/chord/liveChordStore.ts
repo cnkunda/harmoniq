@@ -1,10 +1,11 @@
 import { create } from 'zustand'
 
-import type { ChordDetection, ChordDetectorState } from '@/src/chord/chordModelTypes'
+import type { ChordDetection, ChordDetectorState, ChordDetectorStatus } from '@/src/chord/chordModelTypes'
 import { MAX_HISTORY } from '@/src/chord/chordModelTypes'
 
 type LiveChordState = ChordDetectorState & {
   setListening: (v: boolean) => void
+  setStatus: (s: ChordDetectorStatus) => void
   setCurrentChord: (d: ChordDetection) => void
   setError: (e: string | null) => void
   setLatency: (ms: number) => void
@@ -14,6 +15,7 @@ type LiveChordState = ChordDetectorState & {
 
 const INITIAL: ChordDetectorState = {
   isListening: false,
+  status: 'idle',
   currentChord: null,
   history: [],
   latencyMs: 0,
@@ -26,12 +28,20 @@ export const useLiveChordStore = create<LiveChordState>((set) => ({
 
   setListening: (isListening) => set({ isListening }),
 
+  setStatus: (status) => set({ status }),
+
   setCurrentChord: (d) =>
-    set((state) => ({
-      currentChord: d,
-      history: [d, ...state.history].slice(0, MAX_HISTORY),
-      latencyMs: d.latencyMs,
-    })),
+    set((state) => {
+      // Dedupe history: only record a new entry when the chord label actually
+      // changes, so the stream reads as a progression instead of N repeats.
+      const prev = state.history[0]
+      const isNewChord = !prev || prev.chord !== d.chord
+      return {
+        currentChord: d,
+        history: isNewChord ? [d, ...state.history].slice(0, MAX_HISTORY) : state.history,
+        latencyMs: d.latencyMs,
+      }
+    }),
 
   setError: (error) => set({ error }),
 

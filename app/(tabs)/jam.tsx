@@ -609,30 +609,26 @@ export default function JamScreen() {
       <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
         <ScrollView
           className="flex-1 px-5"
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'space-between', paddingBottom: 24 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
           showsVerticalScrollIndicator={false}
         >
-          <View className="mt-6 mb-4">
-            <Text className="mb-1 font-serif text-3xl text-cream">Jam Mode</Text>
-            <Text className="font-sans-medium text-base text-cream">{classicTrackDef.label}</Text>
+          <View className="mt-3 mb-2">
+            <Text className="mb-0.5 font-serif text-3xl text-cream">Jam Mode</Text>
+            <Text className="font-sans-medium text-sm text-cream">{classicTrackDef.label}</Text>
             <Text className="mt-0.5 font-sans text-xs text-cream/80">
               {activeJamTrackSource}
               {classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'}
               {classicTrackDef.key ? ` · ${classicTrackDef.key}` : ''}
             </Text>
             {weakAreas.length > 0 ? (
-              <Text className="mt-2 font-sans text-xs text-amber-light/90">
-                Suggested loop from your practice focus: {weakAreas.join(', ')}
+              <Text className="mt-1 font-sans text-xs text-amber-light/90">
+                Focus: {weakAreas.join(', ')}
               </Text>
             ) : null}
-            <Text className="mt-1 font-sans text-xs text-muted-brown">
-              Passive listening with scale hints. Reference score is a generic pattern (not the backing audio transcribed) — for
-              fretboard and tab scale highlights only.
-            </Text>
           </View>
 
           {activePlanJamSlot != null && currentPlan?.slots?.length ? (
-            <View className="mb-4 rounded-xl border border-amber-accent/40 bg-amber-accent/12 px-4 py-3">
+            <View className="mb-2 rounded-xl border border-amber-accent/40 bg-amber-accent/12 px-3 py-2">
               <Text className="font-sans-medium text-sm text-cream">
                 Practice plan · {currentSlotIndex + 1} of {currentPlan.slots.length}
                 {activePlanJamSlot.title?.trim() ? ` · ${activePlanJamSlot.title.trim()}` : ''}
@@ -756,14 +752,11 @@ export default function JamScreen() {
           ) : null}
 
           {!isJamming && (
-            <View className="mb-6 gap-5">
+            <View className="mb-3 gap-3">
               {/* Backing Source Section */}
-              <View className="gap-2">
-                <Text className="font-sans-medium text-sm uppercase tracking-wider text-amber-light">
+              <View className="gap-1">
+                <Text className="font-sans-medium text-xs uppercase tracking-wider text-amber-light">
                   Backing Source
-                </Text>
-                <Text className="font-sans text-xs text-muted-brown">
-                  Choose how your backing track is generated
                 </Text>
                 <View className="mt-1 gap-2">
                   <AnimatedPressable
@@ -809,14 +802,14 @@ export default function JamScreen() {
               </View>
 
               {/* Loop Style Section */}
-              <View className="gap-2">
-                <Text className="font-sans-medium text-sm uppercase tracking-wider text-amber-light">
+              <View className="gap-1">
+                <Text className="font-sans-medium text-xs uppercase tracking-wider text-amber-light">
                   Loop Style
                 </Text>
-                <Text className="font-sans text-xs text-muted-brown">
+                <Text className="font-sans text-[11px] text-muted-brown">
                   {backingMode === 'ai'
-                    ? 'Select a template (key / BPM) for AI generation'
-                    : 'Select which bundled MP3 plays when you start'}
+                    ? 'AI template from key / BPM'
+                    : 'Bundled MP3 loop'}
                 </Text>
                 <View className="mt-1 gap-2">
                   {BACKING_TRACKS.map((track) => {
@@ -860,7 +853,7 @@ export default function JamScreen() {
           )}
 
           {!isJamming && lastJamDiagnostics ? (
-            <View className="mb-4 rounded-xl border border-wood-700/45 bg-wood-800/45 p-4">
+            <View className="mb-3 rounded-xl border border-wood-700/45 bg-wood-800/45 px-4 py-3">
               <Text className="font-sans-medium text-xs uppercase tracking-wide text-muted-brown">Last jam diagnostics</Text>
               <Text className="mt-1 font-sans text-sm text-cream">
                 {lastJamDiagnostics.inferredScale ?? 'No clear scale detected'} · confidence {lastJamDiagnostics.confidence}
@@ -982,10 +975,10 @@ export default function JamScreen() {
                   />
                 </View>
               </View>
-            </View>
+          </View>
           )}
 
-          <View className="gap-3 pb-4">
+          <View className="gap-2 pb-4">
             {isJamming ? (
               <AnimatedPressable
                 onPress={() => void stopAndSave()}

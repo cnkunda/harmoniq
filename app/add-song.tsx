@@ -324,7 +324,6 @@ export default function AddSongScreen() {
           contentContainerStyle={{
             flexGrow: 1,
             paddingBottom: 40,
-            justifyContent: 'center',
           }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}

@@ -1,30 +1,36 @@
 import { useFocusEffect } from '@react-navigation/native'
 import * as Linking from 'expo-linking'
 import { useRouter } from 'expo-router'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Platform, ScrollView, Switch, Text, View } from 'react-native'
 import { Headphones, Library, Music } from 'lucide-react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  Switch,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { DiscoverPanel } from '@/components/DiscoverPanel'
 import { ErrorBanner } from '@/components/ErrorBanner'
-import { TabViewport } from '@/components/TabViewport'
-import { ActiveListenerCard } from '@/src/chord/ActiveListenerCard'
 import { getDiscoveryRecommendations } from '@/src/api/discovery'
-import colors from '@/src/constants/colors'
 import {
   createSpotifyPlaybackBridge,
   isSpotifyPlaybackBridgeSkipped,
   type SpotifyPlaybackBridgeError,
 } from '@/src/audio/spotifyPlaybackBridge'
+import { ActiveListenerCard } from '@/src/chord/ActiveListenerCard'
+import colors from '@/src/constants/colors'
 import { getAppPref, getLessonByJobId, listLessonsJournal, listSessionsJournal } from '@/src/db/client'
 import { PREF_SPOTIFY_CLIENT_SESSION } from '@/src/db/schema'
 import type { LessonListRow } from '@/src/db/types'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 import type { DiscoverySuggestion, LessonJSON, SpotifyPlaybackStatePayload } from '@/src/types'
-import { lessonStemUrl, stemRelPathToPlaybackUri } from '@/src/utils/lessonAudio'
-import { readSectionMusicXml, readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
 
 function spotifySearchUrls(query: string): string[] {
@@ -42,6 +48,8 @@ function spotifyBannerProps(error: SpotifyPlaybackBridgeError): { message: strin
 
 export default function DiscoverScreen() {
   const router = useRouter()
+  const { width } = useWindowDimensions()
+  const twoCol = width >= 640
   const tabRef = useRef<AlphaTabSurfaceRef>(null)
   const loadSkills = useSkillStore((s) => s.loadFromDb)
   const nodes = useSkillStore((s) => s.nodes)
@@ -219,19 +227,11 @@ export default function DiscoverScreen() {
     })
   }
 
-  // Derived values for tab viewport
-  const section = selectedLesson?.sections?.[0]
-  const tabs = useMemo(() => readSectionTabPayloads(section), [section])
-  const gp5Base64 = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
-  const musicXml = useMemo(() => readSectionMusicXml(section), [section])
-  const audioSrc = useMemo(() => {
-    const rel = selectedLesson?.stems?.guitar
-    if (!rel || typeof rel !== 'string') return null
-    return stemRelPathToPlaybackUri(rel) ?? lessonStemUrl(rel)
-  }, [selectedLesson?.stems?.guitar])
-
   const listenOnSpotify = useCallback(async () => {
-    if (!selectedLesson) return
+    if (!selectedLesson) {
+      setLibraryLoadError('Select a song from Your Library first to open it in Spotify.')
+      return
+    }
     const title = selectedLesson.song_title?.trim() ?? ''
     const artist = selectedLesson.artist?.trim() ?? ''
     const query = [artist, title].filter(Boolean).join(' ').trim()
@@ -240,6 +240,27 @@ export default function DiscoverScreen() {
       return
     }
     const urls = spotifySearchUrls(query)
+
+    // On web, open Spotify search in a new tab so Harmoniq keeps running.
+    // expo-linking's web `openURL` sets `window.location`, which navigates the
+    // current tab away from the app instead of opening the search.
+    if (Platform.OS === 'web') {
+      const url = urls[0]
+      if (typeof window !== 'undefined' && url) {
+        const opened = window.open(url, '_blank', 'noopener,noreferrer')
+        if (opened) return
+        // Popup blocked — fall back to same-tab navigation.
+        try {
+          await Linking.openURL(url)
+          return
+        } catch {
+          // Fall through to the shared error below.
+        }
+      }
+      setLibraryLoadError('Could not open Spotify. Allow pop-ups for Harmoniq and try again.')
+      return
+    }
+
     for (const url of urls) {
       try {
         await Linking.openURL(url)
@@ -253,63 +274,20 @@ export default function DiscoverScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
-      <ScrollView className="flex-1 px-6 py-6" contentContainerStyle={{ paddingBottom: 36 }}>
+      <ScrollView className="flex-1 px-5 py-4" contentContainerStyle={{ paddingBottom: 36 }}>
         <Text className="font-serif text-3xl text-cream">Discover</Text>
-        <Text className="mt-2 font-sans text-sm text-cream/80">
+        <Text className="mt-1 font-sans text-sm text-cream/80">
           Song recommendations and your library — play along with Spotify while tabs follow in real time.
         </Text>
 
         {/* Active Listener */}
-        <View className="mt-6">
+        <View className="mt-4">
           <ActiveListenerCard />
         </View>
 
         {recsError && <ErrorBanner message={recsError} variant="error" className="mt-4" />}
 
-        {/* Recommendations Section */}
-        <View className="mt-6 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4 shadow-soft-wood">
-          <View className="flex-row items-center gap-2">
-            <Music size={14} color={colors.amber.accent} />
-            <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Recommended songs</Text>
-          </View>
-          {recsLoading ? (
-            <View className="mt-3 flex-row items-center gap-2">
-              <ActivityIndicator color={colors.amber.accent} size="small" />
-              <Text className="font-sans text-sm text-cream/70">Loading recommendations…</Text>
-            </View>
-          ) : null}
-          {!recsLoading && suggestions.length === 0 ? (
-            <View className="mt-4 items-center gap-2">
-              <Music size={24} color={colors.amber.accent + '60'} />
-              <Text className="font-sans text-sm text-cream/70">
-                Complete more lessons to get personalized recommendations
-              </Text>
-            </View>
-          ) : (
-            <View className="mt-3 gap-2">
-              {suggestions.map((suggestion) => (
-                <AnimatedPressable
-                  key={suggestion.job_id}
-                  onPress={() => handleAnalyze(suggestion)}
-                  haptic="light"
-                  className="rounded-lg border border-wood-600/45 bg-wood-900/40 px-3 py-2.5"
-                >
-                  <Text className="font-sans-medium text-sm text-cream">{suggestion.song_title || 'Unknown Song'}</Text>
-                  <Text className="mt-0.5 font-sans text-xs text-cream/60">
-                    {suggestion.artist || 'Unknown Artist'}
-                  </Text>
-                  {suggestion.reasonLabel && (
-                    <Text className="mt-2 font-sans text-xs text-cream/70 leading-relaxed">
-                      {suggestion.reasonLabel}
-                    </Text>
-                  )}
-                </AnimatedPressable>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Library / Listening Mode Section */}
+        {/* Library / Listening Mode status banners */}
         {libraryLoadError ? <ErrorBanner message={libraryLoadError} variant="error" className="mt-4" /> : null}
         {playbackSkipped ? (
           <ErrorBanner
@@ -329,51 +307,56 @@ export default function DiscoverScreen() {
           />
         ) : null}
 
-        <View className="mt-6 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4 shadow-soft-wood">
-          <View className="flex-row items-center gap-2">
-            <Library size={14} color={colors.amber.accent} />
-            <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Your Library</Text>
-          </View>
-          <Text className="mt-1 font-sans text-xs text-cream/70">
-            Select a song to view tabs and enable Spotify follow-along
-          </Text>
-          {libraryLoading ? (
-            <View className="mt-3 flex-row items-center gap-2">
-              <ActivityIndicator color={colors.amber.accent} size="small" />
-              <Text className="font-sans text-sm text-cream/70">Loading songs…</Text>
-            </View>
-          ) : null}
-          {!libraryLoading && libraryLessons.length === 0 ? (
-            <View className="mt-4 items-center gap-2">
-              <Library size={24} color={colors.amber.accent + '60'} />
-              <Text className="font-sans text-sm text-cream/70">
-                No analyzed songs yet. Add one first from Home or Library.
-              </Text>
-            </View>
-          ) : (
-            <View className="mt-3 gap-2">
-              {libraryLessons.slice(0, 10).map((row) => {
-                const selected = row.job_id === selectedJobId
-                return (
-                  <AnimatedPressable
-                    key={row.job_id}
-                    onPress={() => setSelectedJobId(row.job_id)}
-                    haptic="light"
-                    className={`rounded-lg border px-3 py-2.5 ${
-                      selected ? 'border-amber-accent bg-amber-accent/15' : 'border-wood-600/45 bg-wood-900/40'
-                    }`}
-                  >
-                    <Text className={`font-sans-medium text-sm ${selected ? 'text-amber-accent' : 'text-cream'}`}>
-                      {row.song_title?.trim() || 'Untitled song'}
-                    </Text>
-                    <Text className="mt-0.5 font-sans text-xs text-cream/60">
-                      {row.artist?.trim() || 'Unknown artist'}
-                    </Text>
-                  </AnimatedPressable>
-                )
-              })}
-            </View>
-          )}
+        {/* Recommended songs + Your Library — responsive two-column grid */}
+        <View className={`mt-4 ${twoCol ? 'flex-row items-stretch gap-4' : 'flex-col gap-4'}`}>
+          <DiscoverPanel
+            Icon={Music}
+            title="Recommended songs"
+            subtitle="Personalized from your finished lessons"
+            loading={recsLoading}
+            loadingLabel="Loading recommendations…"
+            items={
+              suggestions.length
+                ? suggestions.map((suggestion) => ({
+                    key: suggestion.job_id,
+                    title: suggestion.song_title || 'Unknown Song',
+                    subtitle: suggestion.artist || 'Unknown Artist',
+                    caption: suggestion.reasonLabel,
+                    onPress: () => handleAnalyze(suggestion),
+                  }))
+                : undefined
+            }
+            emptyState={{
+              Icon: Music,
+              message: 'Complete more lessons to get personalized recommendations.',
+              ctaLabel: 'Add a song to analyze',
+              onCta: () => router.push('/add-song'),
+            }}
+          />
+          <DiscoverPanel
+            Icon={Library}
+            title="Your Library"
+            subtitle="Select a song for tabs & Spotify follow-along"
+            loading={libraryLoading}
+            loadingLabel="Loading songs…"
+            items={
+              libraryLessons.length
+                ? libraryLessons.slice(0, 10).map((row) => ({
+                    key: row.job_id,
+                    title: row.song_title?.trim() || 'Untitled song',
+                    subtitle: row.artist?.trim() || 'Unknown artist',
+                    selected: row.job_id === selectedJobId,
+                    onPress: () => setSelectedJobId(row.job_id),
+                  }))
+                : undefined
+            }
+            emptyState={{
+              Icon: Library,
+              message: 'No analyzed songs yet. Add one first from Home or Library.',
+              ctaLabel: 'Add a song',
+              onCta: () => router.push('/add-song'),
+            }}
+          />
         </View>
 
         {/* Spotify Controls */}
@@ -422,7 +405,7 @@ export default function DiscoverScreen() {
         </View>
 
         {/* Tab Viewport */}
-        <View className="mt-4 h-[340px] w-full">
+        {/* <View className="mt-4 h-[340px] w-full">
           <TabViewport
             ref={tabRef}
             gp5Base64={gp5Base64}
@@ -435,7 +418,7 @@ export default function DiscoverScreen() {
             onError={(message) => setLibraryLoadError(message)}
             style={{ flex: 1, height: '100%', width: '100%' }}
           />
-        </View>
+        </View> */}
       </ScrollView>
     </SafeAreaView>
   )

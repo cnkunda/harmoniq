@@ -10,7 +10,9 @@ import asyncio
 import base64
 import hashlib
 import logging
+import math
 import os
+import random
 import secrets
 import time
 from dataclasses import dataclass
@@ -25,13 +27,20 @@ logger = logging.getLogger("harmoniq.spotify")
 
 ACCOUNTS_BASE = "https://accounts.spotify.com"
 API_BASE = "https://api.spotify.com/v1"
-SCOPES = "user-top-read user-read-recently-played user-read-playback-state"
+SCOPES = "user-top-read user-read-recently-played user-read-playback-state playlist-read-private playlist-modify-public playlist-modify-private user-modify-playback-state"
+
+_RATE_LIMIT_MAX_RETRIES = 5
+_RATE_LIMIT_BASE_DELAY_MS = 1000
 
 _pending: dict[str, tuple[str, str, Literal["native", "web"]]] = {}
 """state -> (code_verifier, client_session, return_platform)."""
 
 _tokens: dict[str, _TokenBundle] = {}
 """client_session -> tokens."""
+
+
+class SpotifySessionExpired(Exception):
+    """Raised when the refresh token cannot be refreshed — client must re-authorize."""
 
 
 @dataclass
@@ -86,6 +95,74 @@ def _require_configured() -> str:
     return cid
 
 
+# ---- Rate-limit-aware HTTP client wrapper ----
+
+
+async def _spotify_api_call(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    params: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
+    data_body: dict[str, Any] | None = None,
+    timeout: float = 30.0,
+    max_retries: int = _RATE_LIMIT_MAX_RETRIES,
+) -> httpx.Response:
+    """Make a Spotify API call with automatic 429 retry and exponential backoff.
+
+    Respects the Retry-After header when present. Uses jittered exponential
+    backoff between retries when no Retry-After header is provided.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(1, max_retries + 2):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                res = await client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    params=params,
+                    json=json_body,
+                    data=data_body,
+                )
+        except httpx.TimeoutException as exc:
+            last_exc = exc
+            if attempt > max_retries:
+                raise RuntimeError(f"Spotify API timeout after {attempt} attempts.") from exc
+            delay = _RATE_LIMIT_BASE_DELAY_MS * (2 ** (attempt - 1)) * (0.5 + 0.5 * random.random())
+            logger.warning("Spotify API timeout (attempt %d/%d), retrying in %dms", attempt, max_retries, int(delay))
+            await asyncio.sleep(delay / 1000.0)
+            continue
+
+        if res.status_code == 429:
+            if attempt > max_retries:
+                logger.error("Spotify rate limit exhausted after %d retries.", max_retries)
+                raise RuntimeError("Spotify API rate limit exceeded. Try again later.")
+            raw = res.headers.get("Retry-After", "")
+            if raw:
+                try:
+                    delay = float(raw)
+                except ValueError:
+                    delay = _RATE_LIMIT_BASE_DELAY_MS * (2 ** (attempt - 1)) / 1000.0
+            else:
+                delay = _RATE_LIMIT_BASE_DELAY_MS * (2 ** (attempt - 1)) * (0.5 + 0.5 * random.random()) / 1000.0
+            logger.warning(
+                "Spotify 429 rate limited (attempt %d/%d), retrying in %.1fs",
+                attempt, max_retries, delay,
+            )
+            await asyncio.sleep(delay)
+            continue
+
+        return res
+
+    msg = f"Spotify API call failed after {max_retries + 1} attempts."
+    raise RuntimeError(msg) from last_exc
+
+
+# ---- OAuth flow ----
+
+
 def begin_authorization(
     client_session: str,
     *,
@@ -129,12 +206,12 @@ async def exchange_code(code: str, state: str) -> tuple[str, Literal["native", "
         "client_id": cid,
         "code_verifier": verifier,
     }
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            f"{ACCOUNTS_BASE}/api/token",
-            data=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+    res = await _spotify_api_call(
+        "POST",
+        f"{ACCOUNTS_BASE}/api/token",
+        data_body=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
     if res.status_code != 200:
         _pending.pop(state, None)
         logger.warning("Spotify token exchange failed status=%s", res.status_code)
@@ -207,28 +284,30 @@ def disconnect_client(client_session: str) -> None:
 
 async def _refresh_access_token(client_session: str, bundle: _TokenBundle) -> _TokenBundle:
     if not bundle.refresh_token:
-        raise ValueError("No refresh token stored for this session.")
+        raise SpotifySessionExpired("No refresh token stored for this session.")
     cid = _require_configured()
     body = {
         "grant_type": "refresh_token",
         "refresh_token": bundle.refresh_token,
         "client_id": cid,
     }
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        res = await client.post(
-            f"{ACCOUNTS_BASE}/api/token",
-            data=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+    res = await _spotify_api_call(
+        "POST",
+        f"{ACCOUNTS_BASE}/api/token",
+        data_body=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
     if res.status_code != 200:
+        _tokens.pop(client_session, None)
         logger.warning("Spotify token refresh failed status=%s", res.status_code)
-        raise ValueError("Spotify token refresh failed.")
+        raise SpotifySessionExpired("Spotify token refresh failed — re-authorization required.")
     data = res.json()
     access = data.get("access_token")
     expires_in = int(data.get("expires_in") or 3600)
     new_refresh = data.get("refresh_token")
     if not isinstance(access, str) or not access:
-        raise ValueError("Spotify refresh response missing access_token.")
+        _tokens.pop(client_session, None)
+        raise SpotifySessionExpired("Spotify refresh response missing access_token.")
     out = _TokenBundle(
         access_token=access,
         refresh_token=new_refresh if isinstance(new_refresh, str) else bundle.refresh_token,
@@ -242,61 +321,10 @@ async def _valid_access_token(client_session: str) -> str:
     key = client_session.strip()
     bundle = _tokens.get(key)
     if bundle is None:
-        raise ValueError("Spotify is not connected for this device session.")
+        raise SpotifySessionExpired("Spotify is not connected for this device session.")
     if time.time() >= bundle.expires_at:
         bundle = await _refresh_access_token(key, bundle)
     return bundle.access_token
-
-
-async def _fetch_parallel(token: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        headers = {"Authorization": f"Bearer {token}"}
-        ra, rt, rr = await asyncio.gather(
-            client.get(
-                f"{API_BASE}/me/top/artists",
-                headers=headers,
-                params={"time_range": "medium_term", "limit": "20"},
-            ),
-            client.get(
-                f"{API_BASE}/me/top/tracks",
-                headers=headers,
-                params={"time_range": "medium_term", "limit": "20"},
-            ),
-            client.get(
-                f"{API_BASE}/me/player/recently-played",
-                headers=headers,
-                params={"limit": "20"},
-            ),
-        )
-    for label, res in (("top_artists", ra), ("top_tracks", rt), ("recent", rr)):
-        if res.status_code != 200:
-            logger.warning("Spotify parallel fetch %s status=%s", label, res.status_code)
-            raise RuntimeError(f"Spotify API error ({res.status_code}) for {label}.")
-    return ra.json(), rt.json(), rr.json()
-
-
-async def _audio_features(token: str, track_ids: list[str]) -> list[dict[str, Any]]:
-    if not track_ids:
-        return []
-    out: list[dict[str, Any]] = []
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        for i in range(0, len(track_ids), 100):
-            chunk = track_ids[i : i + 100]
-            res = await client.get(
-                f"{API_BASE}/audio-features",
-                headers={"Authorization": f"Bearer {token}"},
-                params={"ids": ",".join(chunk)},
-            )
-            if res.status_code != 200:
-                logger.warning("Spotify audio-features batch failed status=%s", res.status_code)
-                raise RuntimeError("Spotify audio-features request failed.")
-            data = res.json()
-            feats = data.get("audio_features")
-            if isinstance(feats, list):
-                for item in feats:
-                    if isinstance(item, dict):
-                        out.append(item)
-    return out
 
 
 def _spotify_error_reason(res: httpx.Response) -> str:
@@ -312,6 +340,149 @@ def _spotify_error_reason(res: httpx.Response) -> str:
         if isinstance(reason, str):
             return reason.strip()
     return ""
+
+
+# ---- Helper: authenticated GET ----
+
+
+async def _spotify_get(
+    client_session: str,
+    path: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Authenticated GET to a Spotify API path."""
+    token = await _valid_access_token(client_session)
+    res = await _spotify_api_call(
+        "GET",
+        f"{API_BASE}{path}",
+        headers={"Authorization": f"Bearer {token}"},
+        params=params,
+    )
+    if res.status_code == 401:
+        raise SpotifySessionExpired("Spotify token rejected — re-authorization required.")
+    if res.status_code == 403:
+        reason = _spotify_error_reason(res)
+        if reason == "PREMIUM_REQUIRED":
+            raise PermissionError("Spotify Premium is required.")
+        raise PermissionError(f"Spotify API returned 403: {reason or 'forbidden'}")
+    if res.status_code == 204:
+        return {}
+    if res.status_code != 200:
+        logger.warning("Spotify GET %s failed status=%s", path, res.status_code)
+        raise RuntimeError(f"Spotify API error ({res.status_code}) for {path}.")
+    payload = res.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Spotify API returned non-object for {path}.")
+    return payload
+
+
+async def _spotify_put(
+    client_session: str,
+    path: str,
+    *,
+    params: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
+) -> None:
+    """Authenticated PUT to a Spotify API path."""
+    token = await _valid_access_token(client_session)
+    res = await _spotify_api_call(
+        "PUT",
+        f"{API_BASE}{path}",
+        headers={"Authorization": f"Bearer {token}"},
+        params=params,
+        json_body=json_body,
+    )
+    if res.status_code == 401:
+        raise SpotifySessionExpired("Spotify token rejected — re-authorization required.")
+    if res.status_code == 403:
+        reason = _spotify_error_reason(res)
+        if reason == "PREMIUM_REQUIRED":
+            raise PermissionError("Spotify Premium is required.")
+        raise PermissionError(f"Spotify API returned 403: {reason or 'forbidden'}")
+    if res.status_code == 204:
+        return
+    logger.warning("Spotify PUT %s failed status=%s", path, res.status_code)
+    raise RuntimeError(f"Spotify API error ({res.status_code}) for {path}.")
+
+
+async def _spotify_post(
+    client_session: str,
+    path: str,
+    *,
+    params: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Authenticated POST to a Spotify API path."""
+    token = await _valid_access_token(client_session)
+    res = await _spotify_api_call(
+        "POST",
+        f"{API_BASE}{path}",
+        headers={"Authorization": f"Bearer {token}"},
+        params=params,
+        json_body=json_body,
+    )
+    if res.status_code == 401:
+        raise SpotifySessionExpired("Spotify token rejected — re-authorization required.")
+    if res.status_code == 403:
+        reason = _spotify_error_reason(res)
+        if reason == "PREMIUM_REQUIRED":
+            raise PermissionError("Spotify Premium is required.")
+        raise PermissionError(f"Spotify API returned 403: {reason or 'forbidden'}")
+    if res.status_code == 204:
+        return {}
+    if res.status_code == 201:
+        payload = res.json()
+        return payload if isinstance(payload, dict) else {}
+    if res.status_code != 200:
+        logger.warning("Spotify POST %s failed status=%s", path, res.status_code)
+        raise RuntimeError(f"Spotify API error ({res.status_code}) for {path}.")
+    payload = res.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Spotify API returned non-object for {path}.")
+    return payload
+
+
+# ---- Taste profile ----
+
+
+async def _fetch_parallel(token: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    headers = {"Authorization": f"Bearer {token}"}
+    ra_res, rt_res, rr_res = await asyncio.gather(
+        _spotify_api_call("GET", f"{API_BASE}/me/top/artists", headers=headers, params={"time_range": "medium_term", "limit": "20"}),
+        _spotify_api_call("GET", f"{API_BASE}/me/top/tracks", headers=headers, params={"time_range": "medium_term", "limit": "20"}),
+        _spotify_api_call("GET", f"{API_BASE}/me/player/recently-played", headers=headers, params={"limit": "20"}),
+    )
+    for label, res in (("top_artists", ra_res), ("top_tracks", rt_res), ("recent", rr_res)):
+        if res.status_code == 401:
+            raise SpotifySessionExpired("Spotify token rejected during taste profile fetch.")
+        if res.status_code != 200:
+            logger.warning("Spotify parallel fetch %s status=%s", label, res.status_code)
+            raise RuntimeError(f"Spotify API error ({res.status_code}) for {label}.")
+    return ra_res.json(), rt_res.json(), rr_res.json()
+
+
+async def _audio_features(token: str, track_ids: list[str]) -> list[dict[str, Any]]:
+    if not track_ids:
+        return []
+    out: list[dict[str, Any]] = []
+    for i in range(0, len(track_ids), 100):
+        chunk = track_ids[i : i + 100]
+        res = await _spotify_api_call(
+            "GET",
+            f"{API_BASE}/audio-features",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"ids": ",".join(chunk)},
+        )
+        if res.status_code != 200:
+            logger.warning("Spotify audio-features batch failed status=%s — continuing with default audio values", res.status_code)
+            return []
+        data = res.json()
+        feats = data.get("audio_features")
+        if isinstance(feats, list):
+            for item in feats:
+                if isinstance(item, dict):
+                    out.append(item)
+    return out
 
 
 def _artists_from_item(raw: Any) -> list[str]:
@@ -414,15 +585,15 @@ async def get_playback_state(client_session: str) -> SpotifyPlaybackState:
     """
 
     token = await _valid_access_token(client_session)
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        res = await client.get(
-            f"{API_BASE}/me/player",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+    res = await _spotify_api_call(
+        "GET",
+        f"{API_BASE}/me/player",
+        headers={"Authorization": f"Bearer {token}"},
+    )
     if res.status_code == 204:
         raise RuntimeError("No active Spotify playback. Start a track on a Premium device.")
     if res.status_code == 401:
-        raise ValueError("Spotify is not connected for this device session.")
+        raise SpotifySessionExpired("Spotify is not connected for this device session.")
     if res.status_code == 403:
         reason = _spotify_error_reason(res)
         if reason == "PREMIUM_REQUIRED":
@@ -456,3 +627,227 @@ async def get_playback_state(client_session: str) -> SpotifyPlaybackState:
         track_name=track_name,
         artists=artists,
     )
+
+
+# ---- Search ----
+
+
+async def search(
+    client_session: str,
+    query: str,
+    type_filter: str = "track,artist,album",
+    limit: int = 10,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Search the Spotify catalog. Wraps GET /search (not deprecated)."""
+    if not query or not query.strip():
+        raise ValueError("Search query must not be empty.")
+    return await _spotify_get(
+        client_session,
+        "/search",
+        params={
+            "q": query.strip(),
+            "type": type_filter.strip() or "track",
+            "limit": max(1, min(50, limit)),
+            "offset": max(0, min(1000, offset)),
+        },
+    )
+
+
+# ---- Recommendations ----
+
+
+async def get_recommendations(
+    client_session: str,
+    *,
+    seed_artists: str | None = None,
+    seed_genres: str | None = None,
+    seed_tracks: str | None = None,
+    limit: int = 20,
+    market: str | None = None,
+    **tunable_attributes: float | int | None,
+) -> dict[str, Any]:
+    """Get track recommendations. Wraps GET /recommendations (not-deprecated)."""
+    params: dict[str, Any] = {
+        "limit": max(1, min(100, limit)),
+    }
+    if seed_artists:
+        params["seed_artists"] = seed_artists
+    if seed_genres:
+        params["seed_genres"] = seed_genres
+    if seed_tracks:
+        params["seed_tracks"] = seed_tracks
+    if market:
+        params["market"] = market
+    for key, val in tunable_attributes.items():
+        if val is not None:
+            params[key] = val
+    return await _spotify_get(client_session, "/recommendations", params=params)
+
+
+async def get_available_genre_seeds(client_session: str) -> dict[str, Any]:
+    """Get available genre seeds for recommendations. Wraps GET /recommendations/available-genre-seeds."""
+    return await _spotify_get(client_session, "/recommendations/available-genre-seeds")
+
+
+# ---- Playlists ----
+
+
+async def get_current_user_playlists(
+    client_session: str,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Get current user's playlists. Wraps GET /me/playlists."""
+    return await _spotify_get(
+        client_session,
+        "/me/playlists",
+        params={
+            "limit": max(1, min(50, limit)),
+            "offset": max(0, offset),
+        },
+    )
+
+
+async def get_playlist(
+    client_session: str,
+    playlist_id: str,
+    *,
+    market: str | None = None,
+    fields: str | None = None,
+    additional_types: str | None = None,
+) -> dict[str, Any]:
+    """Get a playlist. Wraps GET /playlists/{playlist_id} (not deprecated)."""
+    if not playlist_id or not playlist_id.strip():
+        raise ValueError("playlist_id must not be empty.")
+    params: dict[str, Any] = {}
+    if market:
+        params["market"] = market
+    if fields:
+        params["fields"] = fields
+    if additional_types:
+        params["additional_types"] = additional_types
+    return await _spotify_get(client_session, f"/playlists/{playlist_id.strip()}", params=params)
+
+
+async def get_playlist_items(
+    client_session: str,
+    playlist_id: str,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+    market: str | None = None,
+    fields: str | None = None,
+    additional_types: str | None = None,
+) -> dict[str, Any]:
+    """Get items in a playlist. Wraps GET /playlists/{playlist_id}/items (not deprecated).
+
+    This replaces the deprecated GET /playlists/{playlist_id}/tracks endpoint.
+    """
+    if not playlist_id or not playlist_id.strip():
+        raise ValueError("playlist_id must not be empty.")
+    params: dict[str, Any] = {
+        "limit": max(1, min(100, limit)),
+        "offset": max(0, offset),
+    }
+    if market:
+        params["market"] = market
+    if fields:
+        params["fields"] = fields
+    if additional_types:
+        params["additional_types"] = additional_types
+    return await _spotify_get(client_session, f"/playlists/{playlist_id.strip()}/items", params=params)
+
+
+# ---- Player controls ----
+
+
+async def start_playback(
+    client_session: str,
+    *,
+    device_id: str | None = None,
+    context_uri: str | None = None,
+    uris: list[str] | None = None,
+    offset: dict[str, Any] | None = None,
+    position_ms: int | None = None,
+) -> None:
+    """Start or resume playback. Wraps PUT /me/player/play (not deprecated).
+
+    Requires Spotify Premium. scopes: user-modify-playback-state
+    """
+    params: dict[str, str] = {}
+    if device_id:
+        params["device_id"] = device_id
+    body: dict[str, Any] = {}
+    if context_uri:
+        body["context_uri"] = context_uri
+    if uris is not None:
+        body["uris"] = uris
+    if offset is not None:
+        body["offset"] = offset
+    if position_ms is not None:
+        body["position_ms"] = position_ms
+    await _spotify_put(client_session, "/me/player/play", params=params or None, json_body=body or None)
+
+
+async def pause_playback(
+    client_session: str,
+    *,
+    device_id: str | None = None,
+) -> None:
+    """Pause playback. Wraps PUT /me/player/pause (not deprecated).
+
+    Requires Spotify Premium. scopes: user-modify-playback-state
+    """
+    params: dict[str, str] = {}
+    if device_id:
+        params["device_id"] = device_id
+    await _spotify_put(client_session, "/me/player/pause", params=params or None)
+
+
+async def skip_to_next(
+    client_session: str,
+    *,
+    device_id: str | None = None,
+) -> None:
+    """Skip to next track. Wraps POST /me/player/next (not deprecated).
+
+    Requires Spotify Premium. scopes: user-modify-playback-state
+    """
+    params: dict[str, str] = {}
+    if device_id:
+        params["device_id"] = device_id
+    await _spotify_post(client_session, "/me/player/next", params=params or None)
+
+
+async def skip_to_previous(
+    client_session: str,
+    *,
+    device_id: str | None = None,
+) -> None:
+    """Skip to previous track. Wraps POST /me/player/previous (not deprecated).
+
+    Requires Spotify Premium. scopes: user-modify-playback-state
+    """
+    params: dict[str, str] = {}
+    if device_id:
+        params["device_id"] = device_id
+    await _spotify_post(client_session, "/me/player/previous", params=params or None)
+
+
+async def seek_to_position(
+    client_session: str,
+    position_ms: int,
+    *,
+    device_id: str | None = None,
+) -> None:
+    """Seek to a position in the current track. Wraps PUT /me/player/seek (not deprecated).
+
+    Requires Spotify Premium. scopes: user-modify-playback-state
+    """
+    if position_ms < 0:
+        raise ValueError("position_ms must be non-negative.")
+    params: dict[str, Any] = {"position_ms": position_ms}
+    if device_id:
+        params["device_id"] = device_id
+    await _spotify_put(client_session, "/me/player/seek", params=params)

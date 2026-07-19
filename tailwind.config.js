@@ -1,5 +1,11 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  // NativeWind/react-native-css-interop defaults `darkMode` to 'media'. Its web
+  // runtime calls `colorScheme.set(...)` on startup, which throws
+  // "Cannot manually set color scheme, as dark mode is type 'media'" when left
+  // as 'media'. The app uses a fixed dark palette (no `dark:` variants), so
+  // 'class' is safe and silences that error.
+  darkMode: 'class',
   content: [
     './app/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',

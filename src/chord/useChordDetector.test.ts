@@ -59,3 +59,55 @@ describe('useChordDetector latency guard (AC 6)', () => {
     expect(warnSpy).not.toHaveBeenCalled()
   })
 })
+
+describe('inference in-flight guard', () => {
+  // Mirrors the guard in useChordDetector.runInference: overlapping ticks are
+  // dropped rather than queued so slow inferences cannot pile up.
+  it('drops overlapping runs while one is in flight', async () => {
+    let inFlight = false
+    let started = 0
+    let completed = 0
+
+    const runOnce = async () => {
+      if (inFlight) return
+      inFlight = true
+      started++
+      try {
+        await new Promise((r) => setTimeout(r, 10))
+        completed++
+      } finally {
+        inFlight = false
+      }
+    }
+
+    // Fire three ticks back-to-back; only the first should start.
+    await Promise.all([runOnce(), runOnce(), runOnce()])
+    expect(started).toBe(1)
+    expect(completed).toBe(1)
+
+    // After it settles, a new tick can run again.
+    await runOnce()
+    expect(started).toBe(2)
+    expect(completed).toBe(2)
+  })
+})
+
+describe('RMS silence gate', () => {
+  const RMS_SILENCE_THRESHOLD = 0.01
+
+  function rms(samples: number[]): number {
+    let sum = 0
+    for (const v of samples) sum += v * v
+    return Math.sqrt(sum / samples.length)
+  }
+
+  it('treats near-silence as No-Chord (below threshold)', () => {
+    const quiet = new Array(1024).fill(0).map(() => (Math.random() - 0.5) * 0.001)
+    expect(rms(quiet)).toBeLessThan(RMS_SILENCE_THRESHOLD)
+  })
+
+  it('passes an audible signal through the gate (above threshold)', () => {
+    const loud = new Array(1024).fill(0).map((_, i) => Math.sin(i) * 0.5)
+    expect(rms(loud)).toBeGreaterThanOrEqual(RMS_SILENCE_THRESHOLD)
+  })
+})

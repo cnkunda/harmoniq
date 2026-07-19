@@ -10,10 +10,19 @@ export interface ChordDetection {
   latencyMs: number
 }
 
+/** Lifecycle status of the detector, for UX feedback. */
+export type ChordDetectorStatus =
+  | 'idle'
+  | 'initializing'
+  | 'warming'
+  | 'listening'
+
 /** State of the live chord detector. */
 export interface ChordDetectorState {
   /** Whether the detector is actively listening and inferring. */
   isListening: boolean
+  /** Fine-grained lifecycle status for UI (loading model, warming up, live). */
+  status: ChordDetectorStatus
   /** Most recent chord detection (null before first inference). */
   currentChord: ChordDetection | null
   /** Ring buffer of recent detections (newest first, max 8). */

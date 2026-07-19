@@ -1074,3 +1074,82 @@ class ContributeResponse(BaseModel):
     status: str = Field(default="accepted")
     windows: int = Field(..., description="Number of CQT windows extracted")
     track_id: str = Field(..., description="Stored track identifier")
+
+
+class SpotifySearchResult(BaseModel):
+    """Raw GET /search response — pass-through from Spotify (no PII)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    tracks: dict[str, Any] | None = None
+    artists: dict[str, Any] | None = None
+    albums: dict[str, Any] | None = None
+    playlists: dict[str, Any] | None = None
+    shows: dict[str, Any] | None = None
+    episodes: dict[str, Any] | None = None
+    audiobooks: dict[str, Any] | None = None
+
+
+class SpotifyRecommendationsResult(BaseModel):
+    """Raw GET /recommendations response — pass-through from Spotify."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    tracks: list[dict[str, Any]] = Field(default_factory=list)
+    seeds: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SpotifyAvailableGenreSeeds(BaseModel):
+    """GET /recommendations/available-genre-seeds response."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    genres: list[str] = Field(default_factory=list)
+
+
+class SpotifyPlaylistList(BaseModel):
+    """GET /me/playlists response — pass-through from Spotify."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    href: str = ""
+    limit: int = 0
+    next: str | None = None
+    offset: int = 0
+    previous: str | None = None
+    total: int = 0
+    items: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SpotifyPlaylistDetail(BaseModel):
+    """GET /playlists/{playlist_id} response — pass-through from Spotify."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    collaborative: bool = False
+    description: str | None = None
+    external_urls: dict[str, str] = Field(default_factory=dict)
+    href: str = ""
+    id: str = ""
+    images: list[dict[str, Any]] = Field(default_factory=list)
+    name: str = ""
+    owner: dict[str, Any] = Field(default_factory=dict)
+    public: bool | None = None
+    snapshot_id: str = ""
+    tracks: dict[str, Any] = Field(default_factory=dict)
+    type: str = "playlist"
+    uri: str = ""
+
+
+class SpotifyPlaylistItems(BaseModel):
+    """GET /playlists/{playlist_id}/items response — pass-through from Spotify."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    href: str = ""
+    limit: int = 0
+    next: str | None = None
+    offset: int = 0
+    previous: str | None = None
+    total: int = 0
+    items: list[dict[str, Any]] = Field(default_factory=list)

@@ -15,7 +15,13 @@ import type {
   PracticePlanPayload,
   QuizAnswersPayload,
   ScoreResult,
+  SpotifyAvailableGenreSeeds,
   SpotifyPlaybackStatePayload,
+  SpotifyPlaylistDetail,
+  SpotifyPlaylistItems,
+  SpotifyPlaylistList,
+  SpotifyRecommendationsResult,
+  SpotifySearchResult,
   SpotifyTasteProfile,
   TasteProfilePayload,
 } from '@/src/types'
@@ -717,6 +723,175 @@ export async function disconnectSpotifyServer(clientSession: string): Promise<vo
     `${API_BASE_URL}/auth/spotify?client_session=${encodeURIComponent(clientSession)}`,
     { method: 'DELETE' },
   )
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+}
+
+// ---- Spotify Search ----
+
+/** GET /spotify/search — search the Spotify catalog. */
+export async function spotifySearch(
+  clientSession: string,
+  query: string,
+  options?: { type?: string; limit?: number; offset?: number },
+): Promise<SpotifySearchResult> {
+  const params = new URLSearchParams({ client_session: clientSession, q: query })
+  if (options?.type) params.set('type', options.type)
+  if (options?.limit != null) params.set('limit', String(options.limit))
+  if (options?.offset != null) params.set('offset', String(options.offset))
+  return request<SpotifySearchResult>(`/spotify/search?${params.toString()}`)
+}
+
+// ---- Spotify Recommendations ----
+
+/** GET /spotify/recommendations — get track recommendations. */
+export async function spotifyRecommendations(
+  clientSession: string,
+  options?: {
+    seed_artists?: string
+    seed_genres?: string
+    seed_tracks?: string
+    limit?: number
+    market?: string
+  },
+): Promise<SpotifyRecommendationsResult> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (options?.seed_artists) params.set('seed_artists', options.seed_artists)
+  if (options?.seed_genres) params.set('seed_genres', options.seed_genres)
+  if (options?.seed_tracks) params.set('seed_tracks', options.seed_tracks)
+  if (options?.limit != null) params.set('limit', String(options.limit))
+  if (options?.market) params.set('market', options.market)
+  return request<SpotifyRecommendationsResult>(`/spotify/recommendations?${params.toString()}`)
+}
+
+/** GET /spotify/recommendations/available-genre-seeds — get available genre seeds. */
+export async function spotifyAvailableGenreSeeds(
+  clientSession: string,
+): Promise<SpotifyAvailableGenreSeeds> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  return request<SpotifyAvailableGenreSeeds>(`/spotify/recommendations/available-genre-seeds?${params.toString()}`)
+}
+
+// ---- Spotify Playlists ----
+
+/** GET /spotify/playlists — get current user's playlists. */
+export async function spotifyGetPlaylists(
+  clientSession: string,
+  options?: { limit?: number; offset?: number },
+): Promise<SpotifyPlaylistList> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (options?.limit != null) params.set('limit', String(options.limit))
+  if (options?.offset != null) params.set('offset', String(options.offset))
+  return request<SpotifyPlaylistList>(`/spotify/playlists?${params.toString()}`)
+}
+
+/** GET /spotify/playlists/{playlist_id} — get a playlist by ID. */
+export async function spotifyGetPlaylist(
+  clientSession: string,
+  playlistId: string,
+  options?: { market?: string; fields?: string },
+): Promise<SpotifyPlaylistDetail> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (options?.market) params.set('market', options.market)
+  if (options?.fields) params.set('fields', options.fields)
+  return request<SpotifyPlaylistDetail>(
+    `/spotify/playlists/${encodeURIComponent(playlistId)}?${params.toString()}`,
+  )
+}
+
+/** GET /spotify/playlists/{playlist_id}/items — get items in a playlist. */
+export async function spotifyGetPlaylistItems(
+  clientSession: string,
+  playlistId: string,
+  options?: { limit?: number; offset?: number; market?: string; fields?: string },
+): Promise<SpotifyPlaylistItems> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (options?.limit != null) params.set('limit', String(options.limit))
+  if (options?.offset != null) params.set('offset', String(options.offset))
+  if (options?.market) params.set('market', options.market)
+  if (options?.fields) params.set('fields', options.fields)
+  return request<SpotifyPlaylistItems>(
+    `/spotify/playlists/${encodeURIComponent(playlistId)}/items?${params.toString()}`,
+  )
+}
+
+// ---- Spotify Player Controls ----
+
+/** PUT /spotify/player/play — start/resume playback. */
+export async function spotifyPlayerPlay(
+  clientSession: string,
+  options?: {
+    device_id?: string
+    context_uri?: string
+    uris?: string
+    position_ms?: number
+  },
+): Promise<void> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (options?.device_id) params.set('device_id', options.device_id)
+  if (options?.context_uri) params.set('context_uri', options.context_uri)
+  if (options?.uris) params.set('uris', options.uris)
+  if (options?.position_ms != null) params.set('position_ms', String(options.position_ms))
+  const res = await fetch(`${API_BASE_URL}/spotify/player/play?${params.toString()}`, { method: 'PUT' })
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+}
+
+/** PUT /spotify/player/pause — pause playback. */
+export async function spotifyPlayerPause(
+  clientSession: string,
+  deviceId?: string,
+): Promise<void> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (deviceId) params.set('device_id', deviceId)
+  const res = await fetch(`${API_BASE_URL}/spotify/player/pause?${params.toString()}`, { method: 'PUT' })
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+}
+
+/** POST /spotify/player/next — skip to next track. */
+export async function spotifyPlayerNext(
+  clientSession: string,
+  deviceId?: string,
+): Promise<void> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (deviceId) params.set('device_id', deviceId)
+  const res = await fetch(`${API_BASE_URL}/spotify/player/next?${params.toString()}`, { method: 'POST' })
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+}
+
+/** POST /spotify/player/previous — skip to previous track. */
+export async function spotifyPlayerPrevious(
+  clientSession: string,
+  deviceId?: string,
+): Promise<void> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (deviceId) params.set('device_id', deviceId)
+  const res = await fetch(`${API_BASE_URL}/spotify/player/previous?${params.toString()}`, { method: 'POST' })
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+}
+
+/** PUT /spotify/player/seek — seek to position in current track. */
+export async function spotifyPlayerSeek(
+  clientSession: string,
+  positionMs: number,
+  deviceId?: string,
+): Promise<void> {
+  const params = new URLSearchParams({ client_session: clientSession, position_ms: String(positionMs) })
+  if (deviceId) params.set('device_id', deviceId)
+  const res = await fetch(`${API_BASE_URL}/spotify/player/seek?${params.toString()}`, { method: 'PUT' })
   if (!res.ok && res.status !== 204) {
     const text = await res.text().catch(() => '')
     throw new ApiError(res.status, parseFastApiDetail(text))

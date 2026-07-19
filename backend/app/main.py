@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import FastAPI, HTTPException, Path as FastPath, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
@@ -41,7 +41,13 @@ from app.schemas import (
     QuickFeedbackResponse,
     ScoreRequest,
     ScoreResult,
+    SpotifyAvailableGenreSeeds,
     SpotifyPlaybackState,
+    SpotifyPlaylistDetail,
+    SpotifyPlaylistItems,
+    SpotifyPlaylistList,
+    SpotifyRecommendationsResult,
+    SpotifySearchResult,
     TheoryAnnotationRequest,
     TheoryAnnotationResponse,
 )
@@ -326,7 +332,323 @@ async def spotify_playback(client_session: str = Query(..., min_length=1, max_le
         raise HTTPException(status_code=503, detail="Spotify playback-follow disabled (HARMONIQ_SKIP_SPOTIFY_PLAYBACK=1).")
     try:
         return await spotify_api.get_playback_state(client_session)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+# ---------------------------------------------------------------------------
+# Spotify Search
+# ---------------------------------------------------------------------------
+
+@app.get(
+    "/spotify/search",
+    response_model=SpotifySearchResult,
+    tags=["Spotify"],
+    summary="Search the Spotify catalog",
+)
+async def spotify_search(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    q: str = Query(..., min_length=1, description="Search query"),
+    type: str = Query("track,artist,album", description="Comma-separated item types: track,artist,album,playlist,show,episode,audiobook"),
+    limit: int = Query(10, ge=1, le=50),
+    offset: int = Query(0, ge=0, le=1000),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    try:
+        result = await spotify_api.search(client_session, q, type_filter=type, limit=limit, offset=offset)
+        return result
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
     except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+# ---------------------------------------------------------------------------
+# Spotify Recommendations
+# ---------------------------------------------------------------------------
+
+@app.get(
+    "/spotify/recommendations",
+    response_model=SpotifyRecommendationsResult,
+    tags=["Spotify"],
+    summary="Get track recommendations based on seeds",
+)
+async def spotify_recommendations(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    seed_artists: str = Query("", description="Comma-separated seed artist IDs"),
+    seed_genres: str = Query("", description="Comma-separated seed genre names"),
+    seed_tracks: str = Query("", description="Comma-separated seed track IDs"),
+    limit: int = Query(20, ge=1, le=100),
+    market: str = Query("", description="Market code (e.g. US)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    artists = seed_artists.strip() or None
+    genres = seed_genres.strip() or None
+    tracks = seed_tracks.strip() or None
+    if not artists and not genres and not tracks:
+        raise HTTPException(status_code=400, detail="At least one of seed_artists, seed_genres, or seed_tracks must be provided.")
+    m = market.strip() or None
+    try:
+        result = await spotify_api.get_recommendations(
+            client_session,
+            seed_artists=artists,
+            seed_genres=genres,
+            seed_tracks=tracks,
+            limit=limit,
+            market=m,
+        )
+        return result
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get(
+    "/spotify/recommendations/available-genre-seeds",
+    response_model=SpotifyAvailableGenreSeeds,
+    tags=["Spotify"],
+    summary="Get available genre seeds for recommendations",
+)
+async def spotify_available_genre_seeds(
+    client_session: str = Query(..., min_length=1, max_length=256),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    try:
+        result = await spotify_api.get_available_genre_seeds(client_session)
+        return result
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+# ---------------------------------------------------------------------------
+# Spotify Playlists
+# ---------------------------------------------------------------------------
+
+@app.get(
+    "/spotify/playlists",
+    response_model=SpotifyPlaylistList,
+    tags=["Spotify"],
+    summary="Get current user's playlists",
+)
+async def spotify_playlists(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    try:
+        return await spotify_api.get_current_user_playlists(client_session, limit=limit, offset=offset)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get(
+    "/spotify/playlists/{playlist_id}",
+    response_model=SpotifyPlaylistDetail,
+    tags=["Spotify"],
+    summary="Get a playlist by ID",
+)
+async def spotify_playlist_detail(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    playlist_id: str = FastPath(..., min_length=1, description="Spotify playlist ID"),
+    market: str = Query("", description="Market code (e.g. US)"),
+    fields: str = Query("", description="Fields filter (e.g. name,owner,tracks.total)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    m = market.strip() or None
+    f = fields.strip() or None
+    try:
+        return await spotify_api.get_playlist(client_session, playlist_id, market=m, fields=f)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get(
+    "/spotify/playlists/{playlist_id}/items",
+    response_model=SpotifyPlaylistItems,
+    tags=["Spotify"],
+    summary="Get items in a playlist",
+)
+async def spotify_playlist_items(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    playlist_id: str = FastPath(..., min_length=1, description="Spotify playlist ID"),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    market: str = Query("", description="Market code (e.g. US)"),
+    fields: str = Query("", description="Fields filter"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    m = market.strip() or None
+    f = fields.strip() or None
+    try:
+        return await spotify_api.get_playlist_items(client_session, playlist_id, limit=limit, offset=offset, market=m, fields=f)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+# ---------------------------------------------------------------------------
+# Spotify Player Controls
+# ---------------------------------------------------------------------------
+
+@app.put(
+    "/spotify/player/play",
+    status_code=204,
+    tags=["Spotify"],
+    summary="Start/Resume playback (Premium required)",
+)
+async def spotify_player_play(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    device_id: str = Query("", description="Target device ID (optional)"),
+    context_uri: str = Query("", description="Context URI (album/artist/playlist)"),
+    uris: str = Query("", description="Comma-separated track URIs to play"),
+    position_ms: int = Query(0, ge=0, description="Start position in ms"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    did = device_id.strip() or None
+    cu = context_uri.strip() or None
+    uris_list = [u.strip() for u in uris.split(",") if u.strip()] if uris.strip() else None
+    pos = position_ms if position_ms > 0 else None
+    try:
+        await spotify_api.start_playback(
+            client_session,
+            device_id=did,
+            context_uri=cu,
+            uris=uris_list,
+            position_ms=pos,
+        )
+        return Response(status_code=204)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@app.put(
+    "/spotify/player/pause",
+    status_code=204,
+    tags=["Spotify"],
+    summary="Pause playback (Premium required)",
+)
+async def spotify_player_pause(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    device_id: str = Query("", description="Target device ID (optional)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    did = device_id.strip() or None
+    try:
+        await spotify_api.pause_playback(client_session, device_id=did)
+        return Response(status_code=204)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@app.post(
+    "/spotify/player/next",
+    status_code=204,
+    tags=["Spotify"],
+    summary="Skip to next track (Premium required)",
+)
+async def spotify_player_next(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    device_id: str = Query("", description="Target device ID (optional)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    did = device_id.strip() or None
+    try:
+        await spotify_api.skip_to_next(client_session, device_id=did)
+        return Response(status_code=204)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@app.post(
+    "/spotify/player/previous",
+    status_code=204,
+    tags=["Spotify"],
+    summary="Skip to previous track (Premium required)",
+)
+async def spotify_player_previous(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    device_id: str = Query("", description="Target device ID (optional)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    did = device_id.strip() or None
+    try:
+        await spotify_api.skip_to_previous(client_session, device_id=did)
+        return Response(status_code=204)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@app.put(
+    "/spotify/player/seek",
+    status_code=204,
+    tags=["Spotify"],
+    summary="Seek to position in current track (Premium required)",
+)
+async def spotify_player_seek(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    position_ms: int = Query(..., ge=0, description="Position in milliseconds"),
+    device_id: str = Query("", description="Target device ID (optional)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    did = device_id.strip() or None
+    try:
+        await spotify_api.seek_to_position(client_session, position_ms, device_id=did)
+        return Response(status_code=204)
+    except spotify_api.SpotifySessionExpired as e:
         raise HTTPException(status_code=401, detail=str(e)) from e
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e)) from e
