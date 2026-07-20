@@ -1,9 +1,53 @@
-# Harmoniq — v1 Build Prompt
-### AI-Powered Adaptive Guitar Learning App
+# Harmoniq — AMT Research & Demo App
+
+> **Automatic Music Transcription (AMT)** pipeline with a working demo app.
+> MT3-primary transcription with confidence-gated CRNN + chroma fallback.
+> Two-branch architecture: chords from full-mix, solo from guitar stem.
 
 ---
 
-## What You Are Building
+## Research Abstract
+
+Harmoniq is an open-source reference implementation of a four-tier AMT pipeline
+for guitar transcription. It uses **MT3** (Music Transcription Transformer, ICLR 2022)
+as the primary transcriber, with a **CRNN** fallback (quality-gated at >80% no-chord
+predictions) and **chroma template matching** as the last resort.
+
+**Architecture:** two-branch routing — chord extraction from the full mix
+(instrument-agnostic) and solo transcription from the isolated guitar stem
+(instrument-specific). Each branch reports per-note and per-chord confidence,
+enabling honest uncertainty display rather than silent failure.
+
+**Status:** Working pipeline, CPU-only. See [`PRIORITIES.md`](PRIORITIES.md) for
+roadmap and [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) for limitations.
+
+**Quick start:**
+
+```bash
+# Backend (requires Python 3.11+, ffmpeg)
+cd backend
+pip install -e ".[mt3]"
+python scripts/download_mt3_checkpoint.py   # downloads ~600MB checkpoint
+uvicorn app.main:app --reload --port 8000
+
+# Analyze a song (upload WAV or YouTube URL)
+curl -X POST http://localhost:8000/analyze -F "file=@song.wav"
+# Poll for result:
+curl http://localhost:8000/analyze/{job_id}
+# Returns LessonJSON with chord_timeline + solo_notes + per-section confidence
+
+# Frontend (separate terminal)
+npm install && npx expo start --web
+```
+
+**Related docs:** [`docs/RESEARCH.md`](docs/RESEARCH.md) |
+[`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
+[`docs/EVALUATION.md`](docs/EVALUATION.md) |
+[`PRIORITIES.md`](PRIORITIES.md)
+
+---
+
+## Product Vision: What You Are Building
 
 Build **Harmoniq**, a React Native **+ Web** app (iOS + Android + browser) for a specific type of guitar player: someone who can already play lead lines and rhythm but cannot yet solo expressively. The app's core promise is: *pick up your guitar, open the app, and play something that sounds musical within 20 minutes — no schedule required, no levels to grind.*
 

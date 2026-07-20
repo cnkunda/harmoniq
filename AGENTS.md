@@ -1,6 +1,7 @@
 # AGENTS.md — Harmoniq Factory Floor Manual
 
-AI-powered adaptive guitar learning app. React Native + Expo (iOS, Android, Web).
+AMT research project + demo app. React Native + Expo (iOS, Android, Web) + FastAPI backend.
+MT3-primary transcription with confidence-gated CRNN fallback and chroma last resort.
 
 **One rule above all: if anything is unclear, ask. Do not guess.**
 
@@ -31,6 +32,10 @@ python -m venv .venv-wsl && source .venv-wsl/bin/activate
 pip install -e ".[dev]"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
+# MT3 (primary transcription engine) — downloads ~600MB checkpoint
+pip install -e ".[mt3]"
+python scripts/download_mt3_checkpoint.py
+
 # MRT2 backing tracks (optional — without this, bundled MP3 loops are used)
 pip install -e ".[mrt2]"
 mrt models init && mrt models download mrt2_small
@@ -47,6 +52,9 @@ mrt models init && mrt models download mrt2_small
 | `npm run test:mobile:ios` | Detox E2E on iOS simulator |
 | `npm run audit:inventory` | Generate screen/component inventory |
 | `npm run audit:platform` | Generate platform health audit |
+| `npm run audit:ui` | Playwright route capture + vision-tool analysis -> UI/UX gap report |
+| `npm run ux:improve` | Full UX improvement loop: capture → analyze → flag gaps |
+| `npm run ux:verify` | Re-analyze existing screenshots (skip capture, just re-check) |
 | `python -m pytest -q` | All backend tests (from `backend/`) |
 | `python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py` | Chord model tests |
 | `python -m pytest -q tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py` | Viterbi decoding tests |
@@ -56,8 +64,54 @@ mrt models init && mrt models download mrt2_small
 | `python scripts/promote_model.py --list` | Show all model versions and active status |
 | `python scripts/promote_model.py --version X.Y.Z` | Promote version if better than active (gatekeeper) |
 | `python scripts/promote_model.py --version X.Y.Z --force` | Force promote (skip metric check) |
+| `python scripts/download_mt3_checkpoint.py` | Download MT3 T5-small checkpoint for transcription |
+| `python scripts/quick_smoke_test.py` | Run quick pipeline validation on bundled test audio |
+| `python scripts/pseudo_label_generate.py --audio-dir <dir>` | Generate MT3 pseudo-labels for all audio in a directory |
 
-**CI** (`.github/workflows/scoring-tests.yml`): runs frontend `vitest run` + backend pytest on 10 specific test files. Triggered on push to `main`/`master` and on all PRs.
+**Research / evaluation:**
+| `python -m pytest -q tests/test_mt3_pipeline.py tests/test_mt3_accuracy.py tests/test_mt3_performance.py` | MT3 inference tests |
+| `python -m pytest -q tests/test_guitarset_mt3_accuracy.py tests/test_guitarset_solo_accuracy.py` | GuitarSet vs MT3 accuracy |
+| `python -m pytest -q tests/test_inference_logic.py` | Fallback chain logic tests |
+| See also [`docs/RESEARCH.md`](docs/RESEARCH.md), [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md), [`docs/EVALUATION.md`](docs/EVALUATION.md), and [`docs/blog/`](docs/blog/) |
+
+## UX Improvement Loop (Playwright + vision-tool MCP)
+
+Two MCPs drive automated UI/UX gap detection and self-healing:
+
+- **Playwright MCP** — browser automation (navigation, screenshot capture)
+- **vision-tool MCP** — image analysis via 23 vision backends (Gemini, Azure, Groq, etc.)
+
+**Run from Git Bash** — frontend toolchain (npm, Node, Playwright) lives there.
+Python/vision-tool runs in WSL — the scripts auto-detect Windows and call `wsl.exe python3` transparently.
+
+### Workflow
+
+```
+npm run ux:improve  →  capture screenshots  →  analyze via vision-tool  →  flag gaps
+      ↓
+agent reads report → fixes code → re-runs → verify → loop until clean
+```
+
+1. **Start Expo web** in one terminal: `npm run web` (or `CI=1 npx expo start --web --port 8081`)
+2. **Run loop** in another terminal: `npm run ux:improve` — captures all routes, analyzes via vision-tool, writes `docs/audit/ui-feedback-report.json`
+3. Agent reads `allGapsByRoute` — each gap has `severity` (error/warning/info) and `issue` type
+4. For each error/warning gap, agent inspects the route's source file and applies a targeted fix
+5. Run `npm run ux:verify` to re-analyze existing screenshots (no new capture)
+6. Loop up to 5 iterations until `isComplete: true`
+
+### One-shot (no pre-started server)
+
+If you don't have Expo running, Playwright can auto-start it:
+```bash
+PLAYWRIGHT_USE_WEBSERVER=1 npm run ux:improve
+```
+First run takes ~3 min (Expo cold start). Subsequent runs reuse the server.
+
+### Agent instructions
+
+Detailed step-by-step workflow in `.opencode/instructions/UX_IMPROVE_LOOP.md`.
+
+**CI** (`.github/workflows/scoring-tests.yml`): runs frontend `vitest run` + backend pytest on 12 specific test files. Triggered on push to `main`/`master` and on all PRs.
 
 ---
 

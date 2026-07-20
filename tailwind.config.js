@@ -16,26 +16,30 @@ module.exports = {
     extend: {
       colors: {
         wood: {
-          900: '#2C1810',
-          800: '#3D2317',
-          700: '#3D2B1F',
-          600: '#4A3728',
+          900: '#1b120e',
+          800: '#2a1c15',
+          700: '#3a271b',
+          600: '#4a3225',
           500: '#5C4535',
         },
         amber: {
-          accent: '#D4A574',
+          accent: '#dba25e',
           light: '#E8B86D',
+          dim: 'rgba(219,162,94,0.16)',
         },
         cream: {
-          DEFAULT: '#F5E6D0',
+          DEFAULT: '#f3e7d6',
           dark: '#EDE0CC',
         },
         ivory: '#F5F0E8',
+        hairline: 'rgba(232,210,181,0.10)',
         muted: {
-          brown: '#8B7D6B',
+          brown: '#b39a86',
         },
+        muted2: '#8a7362',
         danger: '#C17B5F',
         success: '#7A9B6D',
+        ember: '#c1653a',
       },
       fontFamily: {
         serif: ['PlayfairDisplay-Regular'],

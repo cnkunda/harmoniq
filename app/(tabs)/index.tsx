@@ -13,9 +13,10 @@ import {
   Plus,
   X
 } from 'lucide-react-native'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Pressable, ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Svg, { Circle as SvgCircle, Line as SvgLine, Polygon as SvgPolygon } from 'react-native-svg'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { RecentProgress } from '@/components/RecentProgress'
@@ -100,6 +101,127 @@ function relativeDateLabel(input: unknown): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+const STRING_YS = [15, 37, 59, 81, 103, 125]
+
+interface FretCell {
+  string: number
+  fret: number
+  variant: 'primary' | 'secondary'
+}
+
+function DailyLickFretboard({ cells, caption: captionProp }: { cells: readonly FretCell[]; caption?: string | null }) {
+  const sorted = useMemo(() => [...cells].sort((a, b) => a.fret - b.fret || a.string - b.string), [cells])
+
+  const minFret = useMemo(() => Math.min(...cells.map((c) => c.fret), 0), [cells])
+  const maxFret = useMemo(() => Math.max(...cells.map((c) => c.fret), 4), [cells])
+  const fretSpan = useMemo(() => Math.max(maxFret - minFret, 3), [maxFret, minFret])
+
+  function fretToX(fret: number): number {
+    return 40 + ((fret - minFret) / fretSpan) * 480
+  }
+
+  function dotX(fret: number): number {
+    if (fret <= 0) return fretToX(-0.5)
+    return (fretToX(fret - 1) + fretToX(fret)) / 2
+  }
+
+  function stringToY(string: number): number {
+    return STRING_YS[6 - string]
+  }
+
+  const groups = useMemo(() => {
+    if (!sorted.length) return [] as FretCell[][]
+    const result: FretCell[][] = [[sorted[0]]]
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].fret - sorted[i - 1].fret > 3) {
+        result.push([sorted[i]])
+      } else {
+        result[result.length - 1].push(sorted[i])
+      }
+    }
+    return result
+  }, [sorted])
+
+  const GROUP_COLORS = [colors.amber.accent, colors.ember, '#e8bd7e', '#5a3f2d']
+
+  const connectors = useMemo(() => {
+    const result: { fromX: number; toX: number; y: number }[] = []
+    for (let i = 0; i < groups.length - 1; i++) {
+      const g1maxX = Math.max(...groups[i].map((c) => dotX(c.fret)))
+      const g2minX = Math.min(...groups[i + 1].map((c) => dotX(c.fret)))
+      const midY1 = groups[i].reduce((sum, c) => sum + stringToY(c.string), 0) / groups[i].length
+      const midY2 = groups[i + 1].reduce((sum, c) => sum + stringToY(c.string), 0) / groups[i + 1].length
+      result.push({ fromX: g1maxX + 10, toX: g2minX - 10, y: (midY1 + midY2) / 2 })
+    }
+    return result
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, minFret, maxFret, fretSpan])
+
+  if (!cells.length) return null
+
+  const displayCaption = captionProp ?? 'Position shifts left to right'
+
+  return (
+    <View className="mb-3 w-full">
+      <Svg width="100%" height={130} viewBox="0 0 560 130" preserveAspectRatio="xMidYMid meet">
+        {/* Nut line at left edge */}
+        <SvgLine x1={20} y1={15} x2={20} y2={125} stroke={colors.cream} opacity={0.3} strokeWidth={2} />
+
+        {/* Fret lines at each integer fret boundary */}
+        {Array.from({ length: fretSpan + 1 }).map((_, fi) => {
+          const x = fretToX(minFret + fi)
+          return (
+            <SvgLine key={`f${fi}`} x1={x} y1={15} x2={x} y2={125} stroke={colors.hairline} opacity={0.35} strokeWidth={0.6} />
+          )
+        })}
+
+        {/* Six string lines */}
+        {STRING_YS.map((y, si) => (
+          <SvgLine key={`s${si}`} x1={20} y1={y} x2={540} y2={y} stroke={colors.hairline} strokeWidth={si === 0 || si === 5 ? 0.6 : 0.4} />
+        ))}
+
+        {/* Dots per group, each group gets a distinct color */}
+        {groups.map((group, gi) => (
+          <React.Fragment key={`g${gi}`}>
+            {group.map((cell, di) => (
+              <SvgCircle
+                key={`d${gi}-${di}`}
+                cx={dotX(cell.fret)}
+                cy={stringToY(cell.string)}
+                r={5}
+                fill={GROUP_COLORS[gi % GROUP_COLORS.length]}
+                opacity={cell.variant === 'primary' ? 0.95 : 0.55}
+              />
+            ))}
+          </React.Fragment>
+        ))}
+
+        {/* Arrows between groups */}
+        {connectors.map((c, i) => (
+          <React.Fragment key={`a${i}`}>
+            <SvgLine x1={c.fromX} y1={c.y} x2={c.toX} y2={c.y} stroke={colors.ember} strokeWidth={2} />
+            <SvgPolygon points={`${c.toX},${c.y - 5} ${c.toX + 8},${c.y} ${c.toX},${c.y + 5}`} fill={colors.ember} />
+          </React.Fragment>
+        ))}
+      </Svg>
+      <Text className="mt-1 text-center font-mono text-[10px] text-muted2">{displayCaption}</Text>
+    </View>
+  )
+}
+
+function DifficultyDots({ level }: { level: number }) {
+  return (
+    <View className="flex-row items-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <View
+          key={i}
+          className={`h-1.5 w-1.5 rounded-full ${i < level ? 'bg-amber-accent' : 'bg-hairline'}`}
+        />
+      ))}
+    </View>
+  )
+}
+
 export default function HomeScreen() {
   const router = useRouter()
   const displayName = 'Nkunda' // TODO(auth): Replace with signed-in profile name.
@@ -114,6 +236,7 @@ export default function HomeScreen() {
   const [drillLatestError, setDrillLatestError] = useState<string | null>(null)
   const [dailyLick, setDailyLick] = useState<DailyLick | null>(null)
   const [dailyLickDismissed, setDailyLickDismissed] = useState(false)
+  const [lickDateOffset, setLickDateOffset] = useState(0)
   const [practicePlan, setPracticePlan] = useState<PracticePlanPayload | null>(null)
   const [practicePlanLoading, setPracticePlanLoading] = useState(false)
   const [practicePlanStartError, setPracticePlanStartError] = useState<string | null>(null)
@@ -130,13 +253,13 @@ export default function HomeScreen() {
   const currentPlan = usePlanStore((s) => s.currentPlan)
   const planSlotIndex = usePlanStore((s) => s.currentSlotIndex)
 
-  const planProgressFraction = useMemo(() => {
+  const validPlanSlotIndex = useMemo(() => {
     if (!practicePlan?.slots?.length || !currentPlan?.slots?.length) return 0
     if (currentPlan.slots.length !== practicePlan.slots.length) return 0
     const a = currentPlan.slots[0]?.lesson_ref ?? currentPlan.slots[0]?.title ?? ''
     const b = practicePlan.slots[0]?.lesson_ref ?? practicePlan.slots[0]?.title ?? ''
     if (a !== b) return 0
-    return Math.min(1, planSlotIndex / Math.max(1, currentPlan.slots.length))
+    return Math.min(planSlotIndex, currentPlan.slots.length - 1)
   }, [practicePlan, currentPlan, planSlotIndex])
 
   const refresh = useCallback(() => {
@@ -165,12 +288,14 @@ export default function HomeScreen() {
 
         // B7: daily lick — deterministic Slonimsky pattern
         try {
-          const lick = getDailyLick()
-          const dismissed = await isDailyLickDismissed()
+          const lickDate = new Date()
+          lickDate.setDate(lickDate.getDate() + lickDateOffset)
+          const lick = getDailyLick(lickDate)
+          const dismissed = await isDailyLickDismissed(lickDate)
           setDailyLick(lick)
           setDailyLickDismissed(dismissed)
           if (!dismissed) {
-            void persistDailyLick()
+            void persistDailyLick(lickDate)
           }
         } catch {
           setDailyLick(null)
@@ -236,7 +361,7 @@ export default function HomeScreen() {
         setPracticePlanLoading(false)
         setSpotifyLinked(false)
       })
-  }, [])
+  }, [lickDateOffset])
 
   useFocusEffect(
     useCallback(() => {
@@ -547,7 +672,7 @@ export default function HomeScreen() {
                 <TodaysPlanCard
                   plan={practicePlan}
                   sessionMinutes={recommendedMinutes}
-                  progressFraction={planProgressFraction}
+                  currentSlotIndex={validPlanSlotIndex}
                   onStart={() => void onStartPracticePlan()}
                   busy={planStartBusy}
                   errorText={practicePlanStartError}
@@ -673,7 +798,7 @@ export default function HomeScreen() {
           </LinearGradient>
 
           {dailyLick && !dailyLickDismissed && suggestion && suggestion.kind !== 'cold_start' ? (
-            <View className="relative mb-6 overflow-hidden rounded-2xl border border-wood-600/50 bg-wood-800/40">
+            <View className="relative mb-6 overflow-hidden rounded-2xl border border-hairline bg-wood-800/40">
               <AnimatedPressable
                 onPress={() => void startDailyLick()}
                 haptic="light"
@@ -688,16 +813,15 @@ export default function HomeScreen() {
                   <Text className="mb-3 font-sans text-sm italic leading-relaxed text-cream/80">
                     &ldquo;{dailyLick.description}&rdquo;
                   </Text>
+                  <DailyLickFretboard cells={dailyLick.pattern.fretboardCells} caption={dailyLick.pattern.caption} />
                   <View className="flex-row flex-wrap items-center gap-2">
-                    <View className="rounded-full border border-amber-accent/45 bg-amber-accent/20 px-2.5 py-1">
-                      <Text className="font-sans-medium text-xs text-cream">
-                        Diff {dailyLick.pattern.difficulty}
-                      </Text>
+                    <View className="flex-row items-center gap-2 rounded-full border border-hairline bg-wood-800/55 px-2.5 py-1">
+                      <DifficultyDots level={dailyLick.pattern.difficulty} />
                     </View>
                     {dailyLick.pattern.techniqueTags.map((tag) => (
                       <View
                         key={tag}
-                        className="rounded-full border border-wood-600/25 bg-wood-700/40 px-2.5 py-1"
+                        className="rounded-full border border-hairline bg-wood-700/40 px-2.5 py-1"
                       >
                         <Text className="font-sans text-xs text-muted-brown">
                           {tag.replace(/_/g, ' ')}
@@ -707,14 +831,26 @@ export default function HomeScreen() {
                   </View>
                 </View>
               </AnimatedPressable>
-              <AnimatedPressable
-                onPress={() => void onDismissDailyLick()}
-                className="absolute right-3 top-3 z-10 h-7 w-7 items-center justify-center rounded-full bg-wood-700/60"
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss daily lick"
-              >
-                <X color={colors.muted.brown} size={14} strokeWidth={2} />
-              </AnimatedPressable>
+              <View className="absolute right-3 top-3 z-10 flex-row items-center gap-1.5">
+                <View className="h-7 w-7 items-center justify-center rounded-full bg-wood-900/70">
+                  <Pressable
+                    onPress={() => setLickDateOffset((p) => p + 1)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Next lick"
+                  >
+                    <ChevronRight color={colors.amber.accent} size={14} strokeWidth={2.5} />
+                  </Pressable>
+                </View>
+                <View className="h-7 w-7 items-center justify-center rounded-full bg-wood-900/70">
+                  <Pressable
+                    onPress={() => void onDismissDailyLick()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dismiss daily lick"
+                  >
+                    <X color={colors.amber.accent} size={14} strokeWidth={2.5} />
+                  </Pressable>
+                </View>
+              </View>
             </View>
           ) : null}
 
@@ -728,7 +864,7 @@ export default function HomeScreen() {
               <Text className="mb-3 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Recently uploaded</Text>
               <View className="gap-2">
                 {recentItems.length === 0 ? (
-                  <Text className="font-sans text-sm text-muted-brown">No songs or recordings added yet.</Text>
+                  <Text className="font-sans text-sm text-muted-brown">Add a song or finish a session and it&apos;ll show up here.</Text>
                  ) : (
                    recentItems.map((item) => (
                      <AnimatedPressable

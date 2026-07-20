@@ -18,6 +18,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Phase 2 (Commits 122-148) Archive Date:** July 3, 2026 — Superseded by MT3-primary strategy. Custom model work archived as reference for Phase 3 distillation.
 **Milestone A (MT3-Primary AMT Pipeline) Archive Date:** July 5, 2026 — Complete. All 10 acceptance criteria verified.
 **Milestone B (Fretboard Dual-Mode Optimization) Archive Date:** July 17, 2026 — Complete. All 9 commits verified.
+**Milestone C (Engagement & Retention) Archive Date:** July 19, 2026 — Deferred. Not scoped for MVP. Full specs preserved below for when Phase 3 product work resumes.
 
 ---
 
@@ -1969,4 +1970,151 @@ chord books. No multiple position alternatives are offered.
   - [x] E-shape vs A-shape voicings distinguished
   - [x] CAGED positions inferred from pitch data
   - [x] Fretboard diagrams reflect detected voicing
+
+---
+
+## Milestone C: Engagement & Retention Features (Deferred)
+
+**Archive Date:** July 19, 2026
+**Reason for deferral:** These are product engagement features (analytics, feedback, session adaptation) that are not required for the AMT research MVP. The current PRIORITIES.md Phase 2 focuses on pipeline validation, documentation, and publication instead.
+
+**Current state at archive:** Correction store (`useCorrectionStore`) fully implemented with chord/note/voicing overrides and DB persistence. Jam mode (`app/(tabs)/jam.tsx`) is a full single-tab experience with backing tracks, scale detection, phrase coaching, and save flow. SM-2 spaced repetition engine (`src/spaced/sm2.ts`) powers skill node mutations. Practice plan sequencer (`backend/app/sequencer.py`) generates slot-based plans. No analytics infrastructure, no three-tier output, no multi-instrument support, no chord pulse dashboard exist.
+
+### Commit C1: User Feedback & Manual Overrides
+- **Scope:**
+  - Extend existing `useCorrectionStore` with a "report incorrect" action on any chord/note in the fretboard or chord timeline
+  - Add `POST /analyze/{job_id}/feedback` backend endpoint accepting structured feedback:
+    - `{ type: "chord_correction" | "note_correction" | "wrong_chord", event_index, original, corrected, reason? }`
+  - Persist feedback to `user_feedback` SQLite table with `job_id`, `song_id`, `user_id`, `timestamp`, `feedback_type`, `original_value`, `corrected_value`
+  - Route corrections to two distillation sets:
+    - Chord corrections → Branch A chord student's training set (exportable as `chord_feedback.json`)
+    - Note/solo corrections → Branch B solo student's training set (exportable as `solo_feedback.json`)
+  - Add feedback summary in Review screen: "You corrected 3 chords and 2 notes in this session"
+  - Add cumulative feedback stats to player profile: total corrections, most-corrected chord types
+  - Feedback dashboard in Settings: list of all corrections with revert capability
+
+### Commit C2: Jam Mode Summary Agent
+- **Scope:**
+  - Add `POST /jam/summary` backend endpoint triggered on jam save
+  - Claude Haiku-powered post-jam analysis:
+    - Input: jam snapshot (scale, confidence, phrase features, backing track, duration)
+    - Output: structured summary with per-phrase feedback
+  - Persona-switching via system prompt: "Encouraging coach" vs "Technical analyst" (user toggle in Jam settings)
+  - Output schema: `{ phrase_index, chord, clarity, intonation_cents, timing_ms, transition_from, transition_gap_ms, suggestion }`
+  - Display jam summary in a post-jam modal:
+    - Overall grade (A-F) from weighted phrase scores
+    - Top 3 strengths and top 3 areas for improvement
+    - "Practice this phrase" button → launches slow loop on weakest phrase
+  - Persist summary to `jam_snapshots.summary_json` column
+  - Add jam history list screen: `app/(tabs)/jam/history.tsx` showing past jams with summary previews
+
+### Commit C3: Play Engagement Analytics
+- **Scope:**
+  - Create `src/analytics/eventBus.ts`: lightweight custom event bus (no third-party SDK)
+    - `emit(event: AnalyticsEvent)` and `subscribe(handler)` pattern
+    - Events batched in memory, flushed to SQLite every 30 seconds or on app background
+  - Define `AnalyticsEvent` type union:
+    - `session_start`, `session_complete`, `session_step_progress`, `session_abandon`
+    - `play_along_start`, `play_along_complete`, `play_along_discard`
+    - `feature_usage`, `correction_made`, `jam_complete`
+  - Add `analytics_events` SQLite table: `id, user_id, event_type, payload_json, timestamp`
+  - Track per-user per-song engagement metrics:
+    - Total play-along duration, average session length, completion rate
+    - Most-practiced songs, most-corrected chord types
+    - Session frequency (sessions per day/week)
+  - Add opt-out toggle in Settings: "Share practice data" (default: on)
+  - Add privacy notice in onboarding: "We track practice patterns to improve your experience. Opt out anytime."
+  - Export analytics as CSV in Settings > Privacy > Export my data
+
+### Commit C4: Dynamic Session Engine
+- **Scope:**
+  - Extend `PracticePlanPayload` to support mid-session adaptation:
+    - After each slot completes, re-evaluate remaining slots based on actual performance
+    - If a slot scored <50%, insert a remediation slot before the next planned slot
+    - If a slot scored >90%, skip the next easier slot and advance
+  - Add `POST /session/plan/adapt` backend endpoint:
+    - Input: current plan state, last slot performance (accuracy, timing, completion)
+    - Output: updated remaining slots with possible insertions/removals
+  - Wire SM-2 spaced repetition into plan sequencing:
+    - `skill_mutator.ts` already computes per-skill scores — feed these into slot selection
+    - Weak skills get more frequent practice slots; strong skills get review-only slots
+  - Add plan progress persistence to `practice_plans` table:
+    - `current_slot_index`, `slot_results_json`, `adaptation_log`
+    - Resume plan after app restart from last completed slot
+  - Add plan history UI: list of completed plans with per-slot scores
+  - Add "Regenerate plan" button that re-runs `generate_practice_plan()` with updated profile
+
+### Commit C5: Orient-as-Hint
+- **Scope:**
+  - Remove Orient (`listen` step) as a mandatory linear step in the session flow
+  - Integrate orient content as a non-intrusive amber overlay in Study and Play screens:
+    - Small `?` toggle button in the toolbar (amber when active)
+    - Toggling shows/hides the orient audio clip + annotation text as a slide-down panel
+    - Panel includes play/pause for the orient WAV and the text annotation
+  - Update `SESSION_STEPS` in `sessionFlow.ts`: remove `listen` from the mandatory sequence
+  - Add orient data to `MusicContext` so it's available in Study/Play without a separate screen
+  - Preserve the orient backend endpoint (`POST /session/orient-clip`) — only the frontend routing changes
+  - Add "Skip to Study" shortcut that bypasses orient entirely
+  - Keep `listen.tsx` as a standalone screen accessible from session settings for users who want the full orient experience
+
+### Commit C6: Mastery & Integrity
+- **Scope:**
+  - Atomic SQLite transactions for all dynamic session state updates:
+    - Wrap `skill_mutator.ts` mutations in a single transaction
+    - Wrap `practice_plans` slot completion + adaptation in a single transaction
+    - Prevent partial writes on crash (dual-entry state integrity)
+  - Add `session_state` SQLite table:
+    - `session_id, plan_id, current_step, slot_results_json, started_at, updated_at`
+    - Enables crash recovery: on app restart, check for incomplete sessions and offer to resume
+  - Single-file mode vs dynamic session mode:
+    - Single-file: current behavior (one song, linear 7-step flow)
+    - Dynamic: plan-driven multi-slot flow (warmup → song → jam → review)
+  - Add mode toggle on Home screen: "Practice a song" (single) vs "Follow a plan" (dynamic)
+  - Ensure skill node updates are idempotent (same session shouldn't double-count)
+
+### Commit C7: Chord Pulse Dashboard
+- **Scope:**
+  - New screen: `app/(tabs)/progress/pulse.tsx` — scrolling chord timeline with falling notes visualizer
+  - Chord timeline: horizontal scrollable bar showing chord changes over time (reuse `ChordsAndLyrics` rendering)
+  - Falling notes: vertical piano-roll-style display below chord bar, notes fall toward a hit line (like Guitar Hero)
+    - Chord tones highlighted in amber, non-chord tones in gray
+    - Beat grid lines visible as horizontal guides
+  - Beat-synced Pulse ring animation:
+    - Circular ring at center of screen that pulses on downbeats
+    - Ring color intensity maps to current chord confidence
+    - Ring size pulses with `pulse_bpm` from BeatGrid
+  - Session-over-session chord accuracy trend: line chart showing accuracy % over last 10 sessions
+  - Chord mastery heatmap: 12xN grid (one column per chord type) showing hit rate per chord
+  - Accessible from Home screen "Pulse" card or Progress tab
+
+### Commit C8: Three-Tier Output Strategy
+- **Scope:**
+  - Define three output personas from shared LessonJSON:
+    - **Learner**: simplified view — scrolling chord chart + single-line solo melody + fretboard sync. No MusicXML, no complex notation. Large chord symbols, color-coded difficulty.
+    - **Intermediate**: standard view — slash chords + beat grid + tab notation. Current default behavior.
+    - **Transcriber**: full view — printable MusicXML, complete notation, all metadata. Export-focused.
+  - Add `output_tier` preference to `app_prefs` table: `'learner' | 'intermediate' | 'transcriber'`
+  - Backend generates all three tiers from the same LessonJSON — no separate analysis needed
+  - Frontend conditionally renders based on `output_tier`:
+    - Learner: hide MusicXML viewer, show simplified chord chart, hide complex theory
+    - Intermediate: current behavior (default)
+    - Transcriber: show full notation, add "Print" and "Export" buttons
+  - Add tier selector in Settings > Display > "notation_complexity"
+  - Auto-detect tier from `experience_level` on first launch (beginner → learner, intermediate → intermediate, advanced → transcriber)
+
+### Commit C9: Multi-Instrument Diagram Support
+- **Scope:**
+  - Extend `FretboardDiagram` to support multiple instrument types:
+    - Guitar (6-string, standard tuning) — existing
+    - Piano (keyboard layout with 2-octave range)
+    - Ukulele (4-string, GCEA tuning)
+  - Add instrument selector toggle in session toolbar: 🎸 / 🎹 / 🪕
+  - Alternate tuning support for guitar:
+    - Preset tunings: Standard (EADGBE), Drop D (DADGBE), Open G (DGDGBD), DADGAD, Half-step down (EbAbDbGbBbEb)
+    - Custom tuning: user inputs per-string notes
+    - Tuning stored in `app_prefs` as `guitar_tuning: string[]`
+  - Update `chordToFretboardCells()` and `fretboardCell.ts` to accept tuning array
+  - Update chord diagram rendering (`ChordDiagram.tsx`) to show correct string/fret for ukulele
+  - Piano mode: render 2-octave keyboard with highlighted notes for current chord/scale
+  - Transposition engine: when tuning changes, recompute all fretboard positions
 

@@ -11,7 +11,7 @@
  *   npm run test:ui          — structural tests only (no screenshots)
  *   npm run test:visual      — visual regression (updates snapshots)
  */
-import { expect, test } from "@playwright/test";
+import { expect, test, type Route } from "@playwright/test";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -28,13 +28,13 @@ function getCorpusFiles(): string[] {
 const corpusFiles = getCorpusFiles();
 
 async function serveTestAssets(page: any) {
-  await page.route("**/tests/ui/musicxml-harness.html", async (route) => {
+  await page.route("**/tests/ui/musicxml-harness.html", async (route: Route) => {
     await route.fulfill({
       contentType: "text/html",
       body: readFileSync(HARNESS_PATH, "utf-8"),
     });
   });
-  await page.route("**/tests/ui/musicxml-corpus/*", async (route) => {
+  await page.route("**/tests/ui/musicxml-corpus/*", async (route: Route) => {
     const url = route.request().url();
     const filename = url.split("/").pop() || "";
     await route.fulfill({

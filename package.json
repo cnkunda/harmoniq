@@ -22,7 +22,10 @@
     "test:mobile:android": "detox test --configuration android.emu.debug --take-screenshots all",
     "test:mobile:ios": "detox test --configuration ios.sim.debug --take-screenshots all",
     "audit:inventory": "node scripts/audit/generate-inventory.mjs",
-    "audit:platform": "node scripts/audit/generate-platform-audit.mjs"
+    "audit:platform": "node scripts/audit/generate-platform-audit.mjs",
+    "audit:ui": "node scripts/audit/audit-ui-feedback.mjs",
+    "ux:improve": "node scripts/audit/ux-improve-loop.mjs --skip-server",
+    "ux:verify": "node scripts/audit/ux-improve-loop.mjs --verify"
   },
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
