@@ -28,6 +28,7 @@ from app.routers.discovery import router as discovery_router
 from app.routers.taste import router as taste_router
 from app.routers.curriculum import router as curriculum_router
 from app.routers.mt3 import router as mt3_router
+from app.routers.ws import router as ws_router
 from app.schemas import (
     JamBackingRequest,
     JamBackingResponse,
@@ -90,10 +91,31 @@ async def _run_startup_cleanup():
 async def lifespan(application: FastAPI):
     """Run startup cleanup and yield."""
     asyncio.create_task(_run_startup_cleanup())
-    # Commit 110: reload completed/failed jobs from disk
+
+    # Initialize database connection
     try:
-        from app.jobs import load_jobs_from_disk
-        load_jobs_from_disk()
+        from app.db import init_db as _init_db
+        await asyncio.to_thread(_init_db)
+        logger.info("Database initialized")
+    except Exception:
+        logger.warning("Database not available — running without persistence")
+
+    # Load existing jobs from database (survives restarts)
+    try:
+        from app.repository import get_job as _repo_get_job
+        from app.jobs import jobs, load_jobs_from_db
+        loaded = load_jobs_from_db()
+        if loaded > 0:
+            logger.info("Loaded %d jobs from database", loaded)
+    except Exception:
+        logger.exception("Failed to load jobs from database on startup")
+
+    # Commit 110: reload completed/failed jobs from disk (fallback for legacy)
+    try:
+        from app.jobs import load_jobs_from_disk as _load_from_disk
+        disk_loaded = _load_from_disk()
+        if disk_loaded > 0:
+            logger.info("Loaded %d legacy jobs from disk", disk_loaded)
     except Exception:
         logger.exception("Failed to load jobs from disk on startup")
 
@@ -192,6 +214,7 @@ app.include_router(discovery_router)
 app.include_router(taste_router)
 app.include_router(curriculum_router)
 app.include_router(mt3_router)
+app.include_router(ws_router)
 
 
 # ---------------------------------------------------------------------------

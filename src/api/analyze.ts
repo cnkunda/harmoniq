@@ -124,6 +124,132 @@ export async function submitExportJob(payload: {
   }
 }
 
+/**
+ * WebSocket-based job status listener with polling fallback.
+ *
+ * Tries WebSocket first. If WS fails (connection refused, timeout, or
+ * the server lacks WS support), falls back to HTTP polling transparently.
+ *
+ * The `onStatus` callback receives the same `AnalyzeJob` shape as
+ * `pollAnalyzeJobCancelable`, so both transports are interchangeable.
+ */
+export function connectAnalyzeWebSocket(
+  jobId: string,
+  onStatus: (job: import('@/src/types').AnalyzeJob) => void,
+): { promise: Promise<import('@/src/types').LessonJSON>; cancel: () => void } {
+  let settled = false
+  let rejectRef: ((reason?: unknown) => void) | null = null
+  let wsRef: WebSocket | null = null
+  let pollingCancel: (() => void) | null = null
+
+  const apiBase = (() => {
+    const raw = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000'
+    return raw.replace(/^http/, 'ws')
+  })()
+
+  const promise = new Promise<import('@/src/types').LessonJSON>((resolve, reject) => {
+    rejectRef = reject
+
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined
+
+    const startPollingFallback = () => {
+      const poll = pollAnalyzeJobCancelable(jobId, onStatus, 3000)
+      pollingCancel = poll.cancel
+      poll.promise.then(resolve, reject)
+    }
+
+    // Try WebSocket
+    try {
+      const wsUrl = `${apiBase}/ws/analyze/${encodeURIComponent(jobId)}`
+      const ws = new WebSocket(wsUrl)
+      wsRef = ws
+
+      // If we don't connect within 3 seconds, fall back to polling
+      const connectTimeout = setTimeout(() => {
+        if (!settled && ws.readyState !== WebSocket.OPEN) {
+          ws.close()
+          startPollingFallback()
+        }
+      }, 3000)
+
+      ws.onopen = () => {
+        clearTimeout(connectTimeout)
+      }
+
+      ws.onmessage = (event) => {
+        if (settled) return
+        try {
+          const msg = JSON.parse(event.data) as Record<string, unknown>
+
+          if (msg.type === 'status' || msg.type === 'progress') {
+            // Map WS message shape to AnalyzeJob
+            const job: import('@/src/types').AnalyzeJob = {
+              status: (msg.status as import('@/src/types').AnalyzeJobStatus) ?? 'processing',
+              progress: typeof msg.progress === 'number' ? msg.progress : null,
+              stage_label: typeof msg.stage_label === 'string' ? msg.stage_label : null,
+              analysis_stage: typeof msg.analysis_stage === 'string' ? msg.analysis_stage : null,
+              result: null,
+              error: null,
+              error_code: null,
+              processing_started_at: null,
+            }
+            onStatus(job)
+          } else if (msg.type === 'complete') {
+            settled = true
+            ws.close()
+            const result = msg.result as Record<string, unknown> | undefined
+            if (result) {
+              resolve(result as unknown as import('@/src/types').LessonJSON)
+            } else {
+              reject(new ApiError(500, 'Analysis complete but no result'))
+            }
+          } else if (msg.type === 'failed') {
+            settled = true
+            ws.close()
+            reject(
+              new ApiError(
+                500,
+                (msg.error as string) ?? 'Analysis failed',
+                msg.error_code as string | undefined,
+              ),
+            )
+          }
+        } catch {
+          // Ignore malformed messages
+        }
+      }
+
+      ws.onerror = () => {
+        clearTimeout(connectTimeout)
+        if (!settled) {
+          startPollingFallback()
+        }
+      }
+
+      ws.onclose = () => {
+        clearTimeout(connectTimeout)
+        if (!settled) {
+          startPollingFallback()
+        }
+      }
+    } catch {
+      // WebSocket constructor threw (unlikely but possible in some environments)
+      startPollingFallback()
+    }
+  })
+
+  return {
+    promise,
+    cancel: () => {
+      if (settled) return
+      settled = true
+      wsRef?.close()
+      pollingCancel?.()
+      rejectRef?.(new AnalyzePollCancelledError())
+    },
+  }
+}
+
 export class AnalyzePollCancelledError extends Error {
   constructor() {
     super('Analyze polling was cancelled')

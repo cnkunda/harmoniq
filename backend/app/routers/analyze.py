@@ -355,6 +355,19 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
 async def analyze_status(job_id: str) -> JobStatus:
     job = jobs.get(job_id)
     if job is None:
+        # Fallback: check Postgres (survives restarts)
+        try:
+            import logging
+            _log = logging.getLogger("harmoniq.api.analyze")
+            from app.repository import get_job as _repo_get
+            db_job = _repo_get(job_id)
+            if db_job is not None:
+                # Warm the in-memory cache
+                jobs[job_id] = db_job
+                _log.info("GET /analyze/%s — loaded from DB, status=%s", job_id, db_job.status)
+                return db_job
+        except Exception:
+            logger.exception("GET /analyze/%s — DB fallback failed", job_id)
         logger.info("GET /analyze/%s — job not found, returning 404", job_id)
         raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
     logger.info("GET /analyze/%s status=%s", job_id, job.status)
@@ -373,6 +386,14 @@ async def analyze_coach_status(job_id: str) -> CoachHydrationStatus:
         raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
     status = get_coach_hydration(job_id)
     if status is None:
+        # Fallback: check Postgres
+        try:
+            from app.repository import get_coach_hydration_status as _repo_coach
+            db_status = _repo_coach(job_id)
+            if db_status is not None:
+                return db_status
+        except Exception:
+            logger.exception("GET /analyze/%s/coach — DB fallback failed", job_id)
         return CoachHydrationStatus(status="pending", sections=[], fallback_reason=None)
     return status
 
@@ -389,6 +410,14 @@ async def analyze_chord_enrichment_status(job_id: str) -> ChordEnrichmentStatus:
         raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
     status = get_chord_enrichment(job_id)
     if status is None:
+        # Fallback: check Postgres
+        try:
+            from app.repository import get_chord_enrichment_status as _repo_enrich
+            db_status = _repo_enrich(job_id)
+            if db_status is not None:
+                return db_status
+        except Exception:
+            logger.exception("GET /analyze/%s/chord-enrichment — DB fallback failed", job_id)
         return ChordEnrichmentStatus(status="pending")
     return status
 
@@ -546,6 +575,15 @@ async def beat_grid_recompute_status(job_id: str) -> BeatGridRecomputeResponse:
     """Poll recompute job status. Returns 404 if no recompute has been triggered."""
     status = get_recompute_job(job_id)
     if status is None:
+        # Fallback: check Postgres
+        try:
+            from app.repository import get_recompute_job_status as _repo_recompute
+            db_status = _repo_recompute(job_id)
+            if db_status is not None:
+                from app.schemas import BeatGridRecomputeResponse as _BGR
+                return _BGR(**db_status)
+        except Exception:
+            logger.exception("GET /analyze/%s/beat-grid/recompute — DB fallback failed", job_id)
         raise HTTPException(status_code=404, detail=f"No recompute job for {job_id}.")
     return status
 

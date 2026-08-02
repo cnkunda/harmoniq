@@ -17,12 +17,11 @@ import { ErrorBanner } from '@/components/ErrorBanner'
 import { toast } from '@/components/ToastConfig'
 import { WoodGradient } from '@/components/WoodGradient'
 import {
-    ANALYZE_MAX_PROCESSING_WALL_MS,
     AnalyzePollCancelledError,
     buildPlayerProfileFromSkillNodes,
+    connectAnalyzeWebSocket,
     loadLearningContextFromPrefs,
     parseTasteProfileJson,
-    pollAnalyzeJobCancelable,
     submitAnalyzeJob,
 } from '@/src/api/analyze'
 import { searchTabs, type TabSearchHit } from '@/src/api/tabs'
@@ -192,7 +191,7 @@ export default function AddSongScreen() {
           setPendingUploadFilename('')
         }
         setStatusText(`Job queued (${jobId.slice(0, 8)}…)`)
-        const poll = pollAnalyzeJobCancelable(
+        const transport = connectAnalyzeWebSocket(
           jobId,
           (job: AnalyzeJob) => {
             if (!aliveRef.current) return
@@ -232,22 +231,9 @@ export default function AddSongScreen() {
             }
             setStatusText(stage ?? pretty[job.status] ?? `Status: ${job.status}`)
           },
-          2000,
-          {
-            wallClockStartedAtMs: startedAtRef.current,
-            maxProcessingWallMs: ANALYZE_MAX_PROCESSING_WALL_MS,
-            onRecoverablePollError: () => {
-              if (!aliveRef.current) return
-              setStatusText('Connection issue — retrying status check…')
-            },
-            onLongRunning: () => {
-              if (!aliveRef.current) return
-              setStatusText("This one's taking longer than usual. We'll notify you when it's ready.")
-            },
-          },
         )
-        cancelRef.current = poll.cancel
-        const lesson = await poll.promise
+        cancelRef.current = transport.cancel
+        const lesson = await transport.promise
         if (!aliveRef.current) return
         const elapsed = Date.now() - startedAtRef.current
         const minWait = Math.max(0, 3000 - elapsed)

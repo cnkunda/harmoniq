@@ -39,6 +39,24 @@ from app.schemas import (BeatGrid, BeatGridRecomputeResponse,
 from app.separate import SeparationError, separate_song_to_stems
 from app.stem_quality import classify_stems_for_lesson
 
+try:
+    from app.repository import (
+        complete_job as _repo_complete_job,
+        create_job as _repo_create_job,
+        fail_job as _repo_fail_job,
+        get_job as _repo_get_job,
+        get_chord_enrichment_status as _repo_get_chord_enrichment,
+        get_coach_hydration_status as _repo_get_coach_hydration,
+        get_recompute_job_status as _repo_get_recompute,
+        update_job_progress as _repo_update_progress,
+        upsert_chord_enrichment as _repo_upsert_chord_enrichment,
+        upsert_coach_hydration as _repo_upsert_coach_hydration,
+        upsert_recompute_job as _repo_upsert_recompute,
+    )
+    _HAS_DB = True
+except ImportError:
+    _HAS_DB = False
+
 logger = logging.getLogger("harmoniq.jobs")
 logger.setLevel(logging.INFO)
 
@@ -116,6 +134,48 @@ def _delete_job_from_disk(job_id: str) -> None:
 # ---- End Commit 110 ----
 
 
+def _persist_job_to_db(job_id: str) -> None:
+    """Best-effort write the in-memory job state to Postgres."""
+    if not _HAS_DB:
+        return
+    try:
+        job = jobs.get(job_id)
+        if job is None:
+            return
+        if job.status in ("complete", "failed"):
+            if job.status == "complete" and job.result is not None:
+                _repo_complete_job(job_id, job.result)
+            else:
+                _repo_fail_job(job_id, job.error or "Unknown error", error_code=job.error_code)
+        else:
+            _repo_update_progress(
+                job_id,
+                progress=job.progress,
+                stage_label=job.stage_label,
+                analysis_stage=job.analysis_stage,
+            )
+    except Exception:
+        logger.warning("Failed to persist job to DB job_id=%s (non-fatal)", job_id)
+
+
+def load_jobs_from_db() -> int:
+    """Load active jobs from Postgres into the in-memory cache. Returns count loaded."""
+    if not _HAS_DB:
+        return 0
+    try:
+        from app.repository import list_active_jobs as _repo_list
+        active = _repo_list()
+        for js in active:
+            jobs[js.job_id] = js
+        count = len(active)
+        if count:
+            logger.info("Loaded %d jobs from database", count)
+        return count
+    except Exception:
+        logger.exception("Failed to load jobs from database")
+        return 0
+
+
 def _set_job_processing_progress(job_id: str, progress: float, stage_label: str) -> None:
     """Update progress for an in-flight job; no-op if missing or not processing."""
     current = jobs.get(job_id)
@@ -133,6 +193,7 @@ def _set_job_processing_progress(job_id: str, progress: float, stage_label: str)
         processing_started_at=float(started),
         analysis_stage=current.analysis_stage,
     )
+    _persist_job_to_db(job_id)
 
 
 def _set_job_analysis_stage(
@@ -159,6 +220,7 @@ def _set_job_analysis_stage(
         processing_started_at=float(started),
         analysis_stage=analysis_stage,
     )
+    _persist_job_to_db(job_id)
 
 
 def _lesson_with_skeleton_coach(lesson: LessonJSON) -> LessonJSON:
@@ -177,6 +239,7 @@ def _set_coach_pending(job_id: str, section_count: int) -> None:
         sections=[CoachHydrationSection(index=i, coach_note="", coach_explanation="") for i in range(max(0, section_count))],
         fallback_reason=None,
     )
+    _persist_coach_to_db(job_id)
 
 
 def _lesson_has_hydrated_coach(lesson: LessonJSON) -> bool:
@@ -212,6 +275,7 @@ def _hydrate_coach_copy_job(
     )
     patched = lesson.model_copy(update={"sections": enriched})
     jobs[job_id] = JobStatus(status="complete", result=patched, error=None)
+    _persist_job_to_db(job_id)
     save_job_to_disk(job_id)
     coach_hydration[job_id] = CoachHydrationStatus(
         status=status,
@@ -225,6 +289,7 @@ def _hydrate_coach_copy_job(
         ],
         fallback_reason=fallback_reason,
     )
+    _persist_coach_to_db(job_id)
     logger.info("coach_hydration complete job_id=%s status=%s fallback_reason=%s", job_id, status, fallback_reason)
 
 
@@ -236,6 +301,7 @@ def get_coach_hydration(job_id: str) -> CoachHydrationStatus | None:
 
 def _set_chord_enrichment_pending(job_id: str) -> None:
     chord_enrichment[job_id] = ChordEnrichmentStatus(status="pending")
+    _persist_enrichment_to_db(job_id)
 
 
 def _enrich_chord_timeline_job(
@@ -249,6 +315,7 @@ def _enrich_chord_timeline_job(
         return
 
     chord_enrichment[job_id] = ChordEnrichmentStatus(status="processing")
+    _persist_enrichment_to_db(job_id)
     lesson = job.result
 
     if not lesson.chord_timeline or not lesson.chord_timeline.events:
@@ -256,6 +323,7 @@ def _enrich_chord_timeline_job(
             status="skipped",
             fallback_reason="no_chord_timeline",
         )
+        _persist_enrichment_to_db(job_id)
         return
 
     try:
@@ -271,6 +339,7 @@ def _enrich_chord_timeline_job(
         )
         patched = lesson.model_copy(update={"chord_timeline": enriched_timeline})
         jobs[job_id] = JobStatus(status="complete", result=patched, error=None)
+        _persist_job_to_db(job_id)
         save_job_to_disk(job_id)
 
         chord_enrichment[job_id] = ChordEnrichmentStatus(
@@ -281,6 +350,7 @@ def _enrich_chord_timeline_job(
             llm_latency_p95=metrics.get("llm_latency_p95"),
             fallback_reason=None,
         )
+        _persist_enrichment_to_db(job_id)
         logger.info(
             "chord_enrichment complete job_id=%s corrected=%d/%d",
             job_id,
@@ -293,6 +363,7 @@ def _enrich_chord_timeline_job(
             status="skipped",
             fallback_reason="exception",
         )
+        _persist_enrichment_to_db(job_id)
 
 
 def get_chord_enrichment(job_id: str) -> ChordEnrichmentStatus | None:
@@ -419,6 +490,7 @@ def _process_analyze_job(
                 error=AUDIO_TOO_LONG_USER_MESSAGE,
                 error_code=ANALYZE_ERROR_AUDIO_TOO_LONG,
             )
+            _persist_job_to_db(job_id)
             return
         
         _set_job_processing_progress(job_id, 0.28, "Audio ready")
@@ -435,6 +507,7 @@ def _process_analyze_job(
             
             if reused is not None:
                 jobs[job_id] = JobStatus(status="complete", result=reused, error=None)
+                _persist_job_to_db(job_id)
                 save_job_to_disk(job_id)
                 if _lesson_has_hydrated_coach(reused):
                     coach_hydration[job_id] = CoachHydrationStatus(
@@ -449,6 +522,7 @@ def _process_analyze_job(
                         ],
                         fallback_reason=None,
                     )
+                    _persist_coach_to_db(job_id)
                 else:
                     _set_coach_pending(job_id, len(reused.sections))
                     coach_thread = threading.Thread(
@@ -572,6 +646,7 @@ def _process_analyze_job(
         logger.info("lesson cache save completed in %.2fs job_id=%s", cache_save_elapsed, job_id)
         
         jobs[job_id] = JobStatus(status="complete", result=skeleton_result, error=None, analysis_stage="complete")
+        _persist_job_to_db(job_id)
         save_job_to_disk(job_id)
         _set_coach_pending(job_id, len(skeleton_result.sections))
         coach_thread = threading.Thread(
@@ -605,6 +680,7 @@ def _process_analyze_job(
             error=YOUTUBE_URL_INVALID_USER_MESSAGE,
             error_code=ANALYZE_ERROR_YOUTUBE_INVALID,
         )
+        _persist_job_to_db(job_id)
         save_job_to_disk(job_id)
     except AudioTooShortError:
         logger.warning("worker failed job_id=%s audio too short", job_id)
@@ -614,6 +690,7 @@ def _process_analyze_job(
             error=AUDIO_TOO_SHORT_USER_MESSAGE,
             error_code=ANALYZE_ERROR_AUDIO_TOO_SHORT,
         )
+        _persist_job_to_db(job_id)
         save_job_to_disk(job_id)
     except IngestError:
         logger.exception("worker failed job_id=%s ingest error", job_id)
@@ -623,6 +700,7 @@ def _process_analyze_job(
             error=ANALYSIS_FAILED_USER_MESSAGE,
             error_code=ANALYZE_ERROR_INGEST_FAILED,
         )
+        _persist_job_to_db(job_id)
         save_job_to_disk(job_id)
     except SeparationError:
         logger.exception("worker failed job_id=%s stem separation error", job_id)
@@ -632,6 +710,7 @@ def _process_analyze_job(
             error=STEM_SEPARATION_FAILED_USER_MESSAGE,
             error_code=ANALYZE_ERROR_STEM_SEPARATION_FAILED,
         )
+        _persist_job_to_db(job_id)
         save_job_to_disk(job_id)
     except Exception:
         # Fail loudly in logs; user sees a warm, safe message.
@@ -642,6 +721,7 @@ def _process_analyze_job(
             error=ANALYSIS_FAILED_USER_MESSAGE,
             error_code=ANALYZE_ERROR_ANALYSIS_FAILED,
         )
+        _persist_job_to_db(job_id)
         save_job_to_disk(job_id)
 
 
@@ -653,7 +733,7 @@ def enqueue_analyze_job(
     player_profile: PlayerProfile | None = None,
     focus_area: CoachFocusArea | None = None,
 ) -> None:
-    """Mark job as processing and start the worker thread."""
+    """Mark job as processing and dispatch to Celery (or fallback thread)."""
     jobs[job_id] = JobStatus(
         status="processing",
         result=None,
@@ -663,7 +743,9 @@ def enqueue_analyze_job(
         processing_started_at=time.time(),
         analysis_stage="initializing",
     )
+    _persist_job_to_db(job_id)
     coach_hydration[job_id] = CoachHydrationStatus(status="pending", sections=[], fallback_reason=None)
+    _persist_coach_to_db(job_id)
     logger.info(
         "enqueue job_id=%s status=processing youtube_url=%r upload_path=%r has_profile=%s",
         job_id,
@@ -671,6 +753,24 @@ def enqueue_analyze_job(
         upload_path,
         player_profile is not None,
     )
+
+    pp_dict = player_profile.model_dump(exclude_none=True) if player_profile else None
+
+    # Try Celery first; fall back to daemon thread
+    try:
+        from app.tasks import analyze_job_task as _celery_task
+        _celery_task.delay(
+            job_id,
+            youtube_url=youtube_url,
+            upload_path=upload_path,
+            player_profile=pp_dict,
+            focus_area=focus_area,
+        )
+        logger.info("enqueue job_id=%s dispatched to Celery", job_id)
+        return
+    except Exception:
+        logger.info("Celery not available for job_id=%s; falling back to thread", job_id)
+
     t = threading.Thread(
         target=_process_analyze_job,
         kwargs={
@@ -693,7 +793,80 @@ recompute_jobs: dict[str, BeatGridRecomputeResponse] = {}
 
 def get_recompute_job(job_id: str) -> BeatGridRecomputeResponse | None:
     """Get recompute job status; returns None if no recompute in progress."""
-    return recompute_jobs.get(job_id)
+    cached = recompute_jobs.get(job_id)
+    if cached is not None:
+        return cached
+    if _HAS_DB:
+        try:
+            from app.repository import get_recompute_job_status as _repo_recompute
+            row = _repo_recompute(job_id)
+            if row is not None:
+                return BeatGridRecomputeResponse(**row)
+        except Exception:
+            logger.warning("Failed to read recompute from DB job_id=%s", job_id)
+    return None
+
+
+def _persist_coach_to_db(job_id: str) -> None:
+    if not _HAS_DB:
+        return
+    try:
+        status = coach_hydration.get(job_id)
+        if status is None:
+            return
+        from app.repository import upsert_coach_hydration as _repo_coach
+        sections = [
+            s.model_dump(exclude_none=True) if hasattr(s, "model_dump") else s
+            for s in (status.sections or [])
+        ]
+        _repo_coach(job_id, status=status.status, sections=sections, fallback_reason=status.fallback_reason)
+    except Exception:
+        logger.warning("Failed to persist coach hydration to DB job_id=%s (non-fatal)", job_id)
+
+
+def _persist_enrichment_to_db(job_id: str) -> None:
+    if not _HAS_DB:
+        return
+    try:
+        status = chord_enrichment.get(job_id)
+        if status is None:
+            return
+        from app.repository import upsert_chord_enrichment as _repo_enrich
+        _repo_enrich(
+            job_id,
+            status=status.status,
+            total_events=getattr(status, "total_events", None),
+            corrected_events=getattr(status, "corrected_events", None),
+            llm_latency_p50=getattr(status, "llm_latency_p50", None),
+            llm_latency_p95=getattr(status, "llm_latency_p95", None),
+            fallback_reason=status.fallback_reason,
+        )
+    except Exception:
+        logger.warning("Failed to persist chord enrichment to DB job_id=%s (non-fatal)", job_id)
+
+
+def _persist_recompute_to_db(job_id: str) -> None:
+    if not _HAS_DB:
+        return
+    try:
+        status = recompute_jobs.get(job_id)
+        if status is None:
+            return
+        from app.repository import upsert_recompute_job as _repo_upsert_recompute
+        _repo_upsert_recompute(
+            job_id,
+            status=status.status,
+            progress=status.progress,
+            stage_label=status.stage_label,
+            beat_grid=status.beat_grid,
+            chord_timeline=status.chord_timeline.model_dump() if status.chord_timeline else None,
+            solo_notes=status.solo_notes.model_dump() if status.solo_notes else None,
+            musicxml=status.musicxml,
+            bar_timestamps=status.bar_timestamps,
+            error=status.error,
+        )
+    except Exception:
+        logger.warning("Failed to persist recompute to DB job_id=%s (non-fatal)", job_id)
 
 
 def _set_recompute_progress(
@@ -728,10 +901,11 @@ def _set_recompute_progress(
             recompute_jobs[job_id].musicxml if job_id in recompute_jobs else None
         ),
         bar_timestamps=bar_timestamps if bar_timestamps is not None else (
-            recompute_jobs[job_id].bar_timestamps if job_id in recompute_jobs else []
+            recompute_jobs[job_id].bar_timestamps if job_id in recompute_jobs else None
         ),
         error=error,
     )
+    _persist_recompute_to_db(job_id)
 
 
 def _process_beat_grid_recompute(
@@ -951,8 +1125,20 @@ def enqueue_beat_grid_recompute(
     time_signature: str | None,
     bpm_override: float | None,
 ) -> None:
-    """Start a background thread to recompute beat grid and dependent artifacts."""
+    """Dispatch beat grid recompute to Celery (or fallback thread)."""
     _set_recompute_progress(job_id, "pending", progress=0.0, stage_label="Queued…")
+    try:
+        from app.tasks import beat_grid_recompute_task as _celery_task
+        _celery_task.delay(
+            job_id,
+            time_signature=time_signature,
+            bpm_override=bpm_override,
+        )
+        logger.info("recompute job_id=%s dispatched to Celery", job_id)
+        return
+    except Exception:
+        logger.info("Celery not available for recompute job_id=%s; falling back to thread", job_id)
+
     t = threading.Thread(
         target=_process_beat_grid_recompute,
         kwargs={"job_id": job_id, "time_signature": time_signature, "bpm_override": bpm_override},
