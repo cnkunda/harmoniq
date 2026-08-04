@@ -5,13 +5,13 @@ import { JAM_REFERENCE_TAB_GP5_BASE64 } from '@/src/jam/jamReferenceTabGp5Base64
 import { base64ToUint8Array } from './base64ToUint8Array'
 
 describe('base64ToUint8Array', () => {
-  it('decodes jam reference GP5 same as Node Buffer (1315-byte canonical stub)', () => {
+  it('decodes jam reference GP5 same as Node Buffer (1488-byte canonical stub)', () => {
     const raw = JAM_REFERENCE_TAB_GP5_BASE64.replace(/\s/g, '')
     expect(raw.length % 4).toBe(0)
     const a = base64ToUint8Array(JAM_REFERENCE_TAB_GP5_BASE64)
     const b = Buffer.from(raw, 'base64')
-    expect(a.length).toBe(1315)
-    expect(b.length).toBe(1315)
+    expect(a.length).toBe(1488)
+    expect(b.length).toBe(1488)
     expect(Buffer.from(a).equals(b)).toBe(true)
   })
 

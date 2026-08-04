@@ -270,10 +270,11 @@ def build_lesson_json_from_librosa(
     chord_timeline: ChordTimeline | None = None
     solo_notes: SoloNotes | None = None
     
+    chord_metrics: dict = {}
     try:
         # Use bass+other mix for chord inference, guitar for solo
         chord_mix_path = mix_wav_path if mix_wav_path and mix_wav_path.is_file() else guitar_stem_path
-        chord_timeline = infer_chords(chord_mix_path, beat_grid)
+        chord_timeline, chord_metrics = infer_chords(chord_mix_path, beat_grid, key_signature=summary.key_name)
         logger.info("chord inference completed for job_id=%s with %d events", job_id, len(chord_timeline.events))
     except Exception:
         logger.exception("chord inference failed for job_id=%s; continuing without chord timeline", job_id)

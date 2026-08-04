@@ -368,7 +368,7 @@ async def analyze_transcription(job_id: str):
     melodic_stem_path = stems_dir / "guitar.wav"
     if not chord_mix_path.exists() or not melodic_stem_path.exists():
         raise HTTPException(status_code=400, detail="Required stems missing.")
-    chord_timeline = infer_chords(chord_mix_path, beat_grid)
+    chord_timeline, _chord_metrics = infer_chords(chord_mix_path, beat_grid)
     solo_notes = infer_solo(melodic_stem_path, beat_grid)
     with open(job_dir / "chordTimeline.json", "w") as f:
         f.write(chord_timeline.model_dump_json(indent=2))

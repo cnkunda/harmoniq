@@ -1,14 +1,15 @@
 import * as Haptics from 'expo-haptics'
-import { Pressable, type PressableProps } from 'react-native'
+import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
 import { spring } from '@/src/constants/animations'
 
 type HapticStrength = 'light' | 'medium' | 'heavy' | 'none'
 
-export interface AnimatedPressableProps extends PressableProps {
+export interface AnimatedPressableProps extends Omit<PressableProps, 'style'> {
   haptic?: HapticStrength
   className?: string
+  style?: StyleProp<ViewStyle>
 }
 
 const HAPTIC_STYLE: Record<Exclude<HapticStrength, 'none'>, Haptics.ImpactFeedbackStyle> = {

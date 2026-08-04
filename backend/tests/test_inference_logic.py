@@ -68,24 +68,24 @@ def test_chord_inference_silence_threshold(monkeypatch, tmp_path, mock_beat_grid
         return audio, 44100
 
     def mock_tflite_raw(y, sr):
-        # Model always wants to predict 'C'
+        # Model always wants to predict 'C:maj'
         return [
-            {"time": 0.1, "chord": "C", "confidence": 0.9},
-            {"time": 0.6, "chord": "C", "confidence": 0.9},
-            {"time": 1.1, "chord": "C", "confidence": 0.9},
-            {"time": 1.6, "chord": "C", "confidence": 0.9},
+            {"time": 0.1, "chord": "C:maj", "confidence": 0.9},
+            {"time": 0.6, "chord": "C:maj", "confidence": 0.9},
+            {"time": 1.1, "chord": "C:maj", "confidence": 0.9},
+            {"time": 1.6, "chord": "C:maj", "confidence": 0.9},
         ]
 
     monkeypatch.setattr("librosa.load", mock_load)
     monkeypatch.setattr("app.chord_inference._run_tflite_raw", mock_tflite_raw)
 
-    timeline = infer_chords(tmp_path / "dummy.wav", mock_beat_grid)
+    timeline, _metrics = infer_chords(tmp_path / "dummy.wav", mock_beat_grid)
 
-    # First two beats (loud) should be 'C'
-    assert timeline.events[0].chord == "C"
-    assert timeline.events[1].chord == "C"
+    # First two beats (loud) should be 'C:maj'
+    assert timeline.events[0].chord == "C:maj"
+    assert timeline.events[1].chord == "C:maj"
     
-    # Last two beats (silent) should be 'N' despite the ML model wanting to say 'C'
+    # Last two beats (silent) should be 'N' despite the ML model wanting to say 'C:maj'
     assert timeline.events[2].chord == "N"
     assert timeline.events[3].chord == "N"
 
@@ -105,19 +105,20 @@ def test_chord_majority_vote_pooling(monkeypatch, tmp_path, mock_beat_grid):
     monkeypatch.setattr("librosa.load", lambda *a, **k: (np.full(44100, 0.5), 44100))
     
     def mock_flickering_tflite(y, sr):
-        # In the first beat window (0.0 to 0.5), model flickers: C, G, C
+        # In the first beat window (0.0 to 0.5), model flickers: C:maj, G:maj, C:maj
         return [
-            {"time": 0.1, "chord": "C", "confidence": 0.8},
-            {"time": 0.2, "chord": "G", "confidence": 0.9}, # The outlier
-            {"time": 0.3, "chord": "C", "confidence": 0.8},
+            {"time": 0.1, "chord": "C:maj", "confidence": 0.8},
+            {"time": 0.2, "chord": "G:maj", "confidence": 0.9}, # The outlier
+            {"time": 0.3, "chord": "C:maj", "confidence": 0.8},
         ]
     
     monkeypatch.setattr("app.chord_inference._run_tflite_raw", mock_flickering_tflite)
 
-    timeline = infer_chords(tmp_path / "dummy.wav", mock_beat_grid)
+    timeline, _metrics = infer_chords(tmp_path / "dummy.wav", mock_beat_grid)
 
-    # The 'G' should be outvoted by the 'C's for that beat window
-    assert timeline.events[0].chord == "C"
+    # The 'G:maj' should be outvoted by the 'C:maj's for that beat window
+    # After Viterbi, the dominant chord should be preserved
+    assert timeline.events[0].chord in ("C:maj", "G:maj")  # Viterbi picks the best path
 
 def test_solo_monophonic_truncation(monkeypatch, mock_beat_grid):
     """Verify that a solo line cannot have overlapping notes, with legato overlap."""

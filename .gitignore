@@ -26,6 +26,7 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 .cursor/debug-*
+*.log
 
 # opencode
 .opencode/
@@ -62,6 +63,8 @@ test-results/
 # Backend / analysis artifacts (see PRIORITIES 0.5)
 backend/data/
 backend/data/smoke_test/
+backend/app/bak_phase1/
+backend/research/
 *.wav
 !assets/demo-lesson/*.wav
 *.gp5

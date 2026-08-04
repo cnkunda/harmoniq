@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: TypeScript lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: tsc --noEmit
+        run: npm run lint
+
+  frontend-tests:
+    name: Vitest (all unit tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run all unit tests
+        run: npx vitest run
+
+  backend-tests:
+    name: Pytest (full suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      HARMONIQ_SKIP_DEMUCS: "1"
+      HARMONIQ_SKIP_STEMS: "1"
+      HARMONIQ_SKIP_WHISPER: "1"
+      HARMONIQ_SKIP_BASIC_PITCH: "1"
+      HARMONIQ_SKIP_PRERENDER: "1"
+      HARMONIQ_SKIP_SPOTIFY: "1"
+      HARMONIQ_SKIP_SPOTIFY_PLAYBACK: "1"
+      HARMONIQ_SKIP_TASTE_DERIVE: "1"
+      HARMONIQ_SKIP_CURRICULUM: "1"
+      HARMONIQ_SKIP_PRACTICE_PLAN: "1"
+      HARMONIQ_SKIP_STYLE_DETECT: "1"
+      HARMONIQ_SKIP_SKILL_MUTATION: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend + dev deps
+        run: pip install -e ".[dev]"
+
+      - name: Run all tests
+        run: python -m pytest -q

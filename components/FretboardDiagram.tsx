@@ -431,7 +431,7 @@ export function FretboardDiagram({
     const parsed = parseChordSymbol(musicState.currentChord)
     if (!parsed) return []
     const rootPc = noteToPitchClass(parsed.root)
-    const intervals = [...new Set(chordCells.map(c => c.interval))]
+    const intervals = [...new Set(chordCells.map(c => c.interval))].filter((iv): iv is number => iv != null)
     return intervals
       .sort((a, b) => a - b)
       .filter(iv => iv >= 0 && iv <= 12)

@@ -157,7 +157,7 @@ describe("chordToFretboardCells", () => {
     });
 
     it("plays correct open D minor 7 shape with all chord tones", () => {
-      const cells = chordToFretboardCells("D:min7", "full", "low");
+      const cells = chordToFretboardCells("D:min7", "full", "open");
 
       // Should have at least 4 chord tones (root, m3, 5, m7)
       expect(cells.length).toBeGreaterThanOrEqual(3);

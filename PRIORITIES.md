@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 ML (commits 98–102)** — **complete**.
 
 ---
 
@@ -238,7 +238,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-### Commit 99: Viterbi Decoding for Chord Progressions
+### Commit 99: Viterbi Decoding for Chord Progressions ✅ DONE
 
 **Goal:** Post-process frame-wise predictions with Viterbi algorithm to enforce plausible chord transitions and smooth sequences. Add chord stability metrics and a beat-alignment validation gate.
 
@@ -260,18 +260,18 @@ System for tracking user engagement during play-along sessions: duration, comple
 - Add half-beat (8th-note) chord change resolution: when the beat grid provides subdivided beats or the per-beat confidence-weighted vote reveals a tight tie between two different chords (confidence difference <0.15), emit two `ChordEvent`s per beat (one per half-beat) instead of one
 
 **Acceptance Criteria:**
-- [ ] Transition matrix computed from real chord progression data
-- [ ] Viterbi decoder produces smoothed chord sequences
-- [ ] Decoding latency <10ms for 30-second audio
-- [ ] Reduced chord flickering in predictions (target: 40% reduction)
-- [ ] Integration test with known chord progression (e.g., ii-V-I)
-- [ ] Viterbi decreases chord flicker rate to <5% (chord changes every 1-2 beats filtered)
-- [ ] Beat-alignment gate measures >90% of chord changes landing on beat/downbeat boundaries
-- [ ] Chord-change rate histogram reportable per-song in analysis metadata
-- [ ] Duration-aware filtering suppresses sub-1-beat chord outliers
-- [ ] Key-constrained transition costs reduce improbable chord movements (e.g., C → F#)
-- [ ] Chord timeline supports half-beat resolution: when 8th-note subdivisions are active, two chord events emitted per beat with correct timestamps
-- [ ] Beat-subdivision tie-detection: two competing chords within a single beat window with confidence difference <0.15 triggers half-beat split
+- [x] Transition matrix computed from real chord progression data
+- [x] Viterbi decoder produces smoothed chord sequences
+- [x] Decoding latency <10ms for 30-second audio
+- [x] Reduced chord flickering in predictions (target: 40% reduction)
+- [x] Integration test with known chord progression (e.g., ii-V-I)
+- [x] Viterbi decreases chord flicker rate to <5% (chord changes every 1-2 beats filtered)
+- [x] Beat-alignment gate measures >90% of chord changes landing on beat/downbeat boundaries
+- [x] Chord-change rate histogram reportable per-song in analysis metadata
+- [x] Duration-aware filtering suppresses sub-1-beat chord outliers
+- [x] Key-constrained transition costs reduce improbable chord movements (e.g., C → F#)
+- [x] Chord timeline supports half-beat resolution: when 8th-note subdivisions are active, two chord events emitted per beat with correct timestamps
+- [x] Beat-subdivision tie-detection: two competing chords within a single beat window with confidence difference <0.15 triggers half-beat split
 
 ---
 
@@ -328,7 +328,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-### Commit 102: Threshold Sensitivity Analysis & Label Noise Robustness (MT3 Paper Insight)
+### Commit 102: Threshold Sensitivity Analysis & Label Noise Robustness (MT3 Paper Insight) ✅ DONE
 
 **Goal:** Run threshold sensitivity analysis on the validation set to detect label timing noise, then add temporal jitter augmentation to make the model robust to imperfect ground truth — following MT3's Appendix D.2 methodology.
 
@@ -351,12 +351,12 @@ System for tracking user engagement during play-along sessions: duration, comple
   - Flag borderline examples for manual review
 
 **Acceptance Criteria:**
-- [ ] Threshold sensitivity analysis script produces F1-vs-tolerance curves
-- [ ] Label noise report identifies which dataset subsets have timing issues
-- [ ] Temporal jitter augmentation (±30ms) active during training
-- [ ] Model accuracy on noisy-label validation set improves by ≥3%
-- [ ] Label quality gate rejects examples with >100ms boundary jitter
-- [ ] Analysis results documented in `docs/LABEL_QUALITY.md`
+- [x] Threshold sensitivity analysis script produces F1-vs-tolerance curves
+- [x] Label noise report identifies which dataset subsets have timing issues
+- [x] Temporal jitter augmentation (±30ms) active during training
+- [x] Model accuracy on noisy-label validation set improves by ≥3%
+- [x] Label quality gate rejects examples with >100ms boundary jitter
+- [x] Analysis results documented in `docs/LABEL_QUALITY.md`
 
 ---
 

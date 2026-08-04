@@ -18,6 +18,12 @@ import numpy as np
 
 from app.schemas import BeatGrid, ChordEvent, ChordTimeline
 from app.pipeline_proof import TARGET_SR
+from app.viterbi import (
+    load_transition_matrix,
+    postprocess_chords,
+    compute_flicker_rate,
+    compute_chord_change_histogram,
+)
 
 logger = logging.getLogger("harmoniq.inference.chord")
 
@@ -177,7 +183,22 @@ def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
     return results
 
 
-def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
+def infer_chords(
+    audio_path: Path,
+    beat_grid: BeatGrid,
+    key_signature: str | None = None,
+) -> tuple[ChordTimeline, dict]:
+    """Run TFLite chord inference with Viterbi post-processing.
+
+    Args:
+        audio_path: Path to the audio file.
+        beat_grid: Beat grid for quantization.
+        key_signature: Optional key signature (e.g., "C major") for
+            key-constrained Viterbi decoding.
+
+    Returns:
+        Tuple of (ChordTimeline, metrics dict with flicker rate, beat alignment, etc.).
+    """
     try:
         import librosa
     except ImportError as exc:
@@ -187,7 +208,7 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
         y, sr = librosa.load(str(audio_path), sr=TARGET_SR, mono=True)
     except FileNotFoundError:
         logger.warning("Audio file not found at %s. Returning empty chord timeline.", audio_path)
-        return ChordTimeline(events=[])
+        return ChordTimeline(events=[]), {}
     except Exception as exc:
         raise RuntimeError(f"Error loading audio file {audio_path}: {exc}") from exc
 
@@ -196,7 +217,7 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
         _get_interpreter()
     except (FileNotFoundError, RuntimeError) as exc:
         logger.error("Chord model unavailable: %s", exc)
-        return ChordTimeline(events=[])
+        return ChordTimeline(events=[]), {}
 
     raw_frames = _run_tflite_raw(y, sr)
     logger.info("Chord inference: %d raw frames from %s", len(raw_frames), audio_path.name)
@@ -207,6 +228,7 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
     events: list[ChordEvent] = []
     beats = beat_grid.beats
     frame_times = np.array([f["time"] for f in raw_frames])
+    silent_beats: set[int] = set()
 
     for i in range(len(beats) - 1):
         start_t = beats[i]
@@ -217,6 +239,7 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
         segment_db = _get_segment_db(y_slice)
         if segment_db < relative_threshold_db:
             events.append(ChordEvent(timestamp=start_t, chord="N", confidence=1.0))
+            silent_beats.add(i)
             continue
         start_idx = int(np.searchsorted(frame_times, start_t, side="left"))
         end_idx = int(np.searchsorted(frame_times, end_t, side="left"))
@@ -238,7 +261,37 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid) -> ChordTimeline:
             avg_confidence = sum(winning_confidences) / len(winning_confidences)
         events.append(ChordEvent(timestamp=start_t, chord=most_common_chord, confidence=round(avg_confidence, 3)))
 
-    events = _smooth_chords(events)
-    chord_count = len([e for e in events if e.chord != "N"])
-    logger.info("Chord inference complete: %d/%d non-N chords", chord_count, len(events))
-    return ChordTimeline(events=events)
+    # Viterbi post-processing (replaces simple _smooth_chords)
+    transition_matrix = load_transition_matrix()
+    smoothed, metrics = postprocess_chords(
+        events=events,
+        beats=beats,
+        downbeats=beat_grid.downbeats,
+        transition_matrix=transition_matrix,
+        key_signature=key_signature,
+        frame_predictions=raw_frames,
+    )
+
+    # Re-apply volume-thresholded silence: beats that were gated to "N"
+    # must remain "N" regardless of Viterbi's smoothing.
+    re_applied = []
+    for i, ev in enumerate(smoothed.events):
+        if i in silent_beats and ev.chord != "N":
+            re_applied.append(ChordEvent(
+                timestamp=ev.timestamp,
+                chord="N",
+                confidence=1.0,
+            ))
+        else:
+            re_applied.append(ev)
+    smoothed = ChordTimeline(events=re_applied)
+
+    chord_count = len([e for e in smoothed.events if e.chord != "N"])
+    logger.info(
+        "Chord inference complete: %d/%d non-N chords, flicker=%.2f%%, beat_align=%.1f%%",
+        chord_count,
+        len(smoothed.events),
+        metrics.get("flicker_rate", 0) * 100,
+        metrics.get("beat_alignment_downbeat", 0) * 100,
+    )
+    return smoothed, metrics
