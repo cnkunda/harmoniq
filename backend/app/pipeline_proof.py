@@ -242,13 +242,18 @@ def estimate_key_literal(chroma_mean: Sequence[float]) -> tuple[str, str]:
     return root, best[1]
 
 
-def librosa_summarize(audio_path: Path) -> LibrosaSummary:
+def librosa_summarize(audio_path: Path, *, time_signature: str | None = None) -> LibrosaSummary:
     """
     Extract lightweight structure features from an audio file.
 
     Outputs are intended to be:
     - simple and robust (smoke-test level)
     - consistent with schema wiring for the frontend (bar timestamps + section labels)
+
+    Args:
+        time_signature: Optional time signature string (e.g. "4/4", "6/8").
+            When provided, bar timestamps are derived from the actual time signature
+            instead of hardcoding beats_per_bar=4.
     """
     import librosa
     import numpy as np
@@ -355,9 +360,16 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
     if not segments:
         segments = [{"label": "full", "start_s": 0.0, "end_s": duration}]
 
-    # --- Bar timestamps (assume 4/4; derive from beat grid) -----------------------
-    # beat_grid in schema is "quarter-note" timestamps; bar_timestamps are every 4 beats.
-    beats_per_bar = 4
+    # --- Bar timestamps (derive beats_per_bar from time signature) -----------------------
+    # beat_grid in schema is "quarter-note" timestamps; bar_timestamps are every N beats.
+    # For compound meters (e.g. 6/8), beats_per_bar = numerator * 4 / denominator
+    # because beat_list contains quarter-note timestamps, not pulse timestamps.
+    from app.beat_grid import parse_time_signature
+    try:
+        ts_numerator, ts_denominator = parse_time_signature(time_signature)
+        beats_per_bar = ts_numerator * 4 // ts_denominator
+    except Exception:
+        beats_per_bar = 4  # fallback to 4/4
     bar_from_beats = [beat_list[i] for i in range(0, len(beat_list), beats_per_bar)]
     bar_from_beats = [float(t) for t in bar_from_beats if t >= 0.0]
     bar_from_beats.sort()

@@ -1,0 +1,56 @@
+# Dependencies
+.venv*/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Version control
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node (frontend)
+node_modules/
+.expo/
+*.tsbuildinfo
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Documentation
+*.md
+docs/
+LICENSE
+
+# Data (persisted via volumes, not baked into image)
+data/jobs/
+data/cache/
+data/*.log
+
+# Environment (mounted via env_file)
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+tests/
+coverage/
+htmlcov/
+.pytest_cache/
+.coverage

@@ -1,4 +1,4 @@
-"""In-memory background jobs for analysis.
+"""Background jobs for analysis — Redis-backed with Celery dispatch.
 
 This implements PRIORITIES §4:
 * POST /analyze returns a job_id immediately
@@ -6,7 +6,8 @@ This implements PRIORITIES §4:
   processing -> complete | failed
 * failed jobs store a user-safe error string
 
-Scope note: single-process in-memory store is intentional for v1.
+Phase 2: In-memory dict replaced with Redis (job_store).
+Celery dispatch replaces threading when Redis is available.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import threading
 import time
 
 from app.schemas import (
+    AnalysisStage,
     CoachFocusArea,
     CoachHydrationSection,
     CoachHydrationStatus,
@@ -54,28 +56,139 @@ ANALYZE_ERROR_INGEST_FAILED = "ingest_failed"
 ANALYZE_ERROR_STEM_SEPARATION_FAILED = "stem_separation_failed"
 ANALYZE_ERROR_ANALYSIS_FAILED = "analysis_failed"
 
-# In-memory job store (single process).
-jobs: dict[str, JobStatus] = {}
-coach_hydration: dict[str, CoachHydrationStatus] = {}
+# ---------------------------------------------------------------------------
+# Job store abstraction (Redis when available, in-memory fallback)
+# ---------------------------------------------------------------------------
+
+_redis_available: bool | None = None
 
 
-def _set_job_processing_progress(job_id: str, progress: float, stage_label: str) -> None:
+def _check_redis() -> bool:
+    """Check if Redis is available; cache the result."""
+    global _redis_available
+    if _redis_available is not None:
+        return _redis_available
+    try:
+        from app.job_store import ping
+        _redis_available = ping()
+    except Exception:
+        _redis_available = False
+    return _redis_available
+
+
+def _use_redis() -> bool:
+    """Return True if we should use Redis-backed store."""
+    import os
+    # Force in-memory if explicitly disabled
+    if os.getenv("HARMONIQ_USE_REDIS", "auto").lower() in ("0", "false", "no"):
+        return False
+    return _check_redis()
+
+
+# In-memory fallback (when Redis is unavailable)
+_jobs_memory: dict[str, JobStatus] = {}
+_coach_memory: dict[str, CoachHydrationStatus] = {}
+
+
+def _get_job(job_id: str) -> JobStatus | None:
+    if _use_redis():
+        from app.job_store import get_job
+        return get_job(job_id)
+    return _jobs_memory.get(job_id)
+
+
+def _set_job(job_id: str, status: JobStatus) -> None:
+    if _use_redis():
+        from app.job_store import set_job_status
+        set_job_status(job_id, status)
+    else:
+        _jobs_memory[job_id] = status
+
+
+def _update_job(job_id: str, **fields) -> None:
+    if _use_redis():
+        from app.job_store import update_job
+        update_job(job_id, **fields)
+    else:
+        current = _jobs_memory.get(job_id)
+        if current is not None:
+            data = current.model_dump()
+            data.update({k: v for k, v in fields.items() if v is not None})
+            _jobs_memory[job_id] = JobStatus(**data)
+
+
+def _get_coach(job_id: str) -> CoachHydrationStatus | None:
+    if _use_redis():
+        from app.job_store import get_coach_hydration
+        return get_coach_hydration(job_id)
+    return _coach_memory.get(job_id)
+
+
+def _set_coach(job_id: str, status: CoachHydrationStatus) -> None:
+    if _use_redis():
+        from app.job_store import set_coach_hydration
+        set_coach_hydration(job_id, status)
+    else:
+        _coach_memory[job_id] = status
+
+
+def _publish_sse(job_id: str, event: str, data: dict) -> None:
+    """Publish an SSE event if Redis is available."""
+    if _use_redis():
+        try:
+            from app.job_store import publish_sse_event
+            publish_sse_event(job_id, event, data)
+        except Exception:
+            pass  # SSE failure should not block the pipeline
+
+
+# ---------------------------------------------------------------------------
+# Progress reporting with stage tracking
+# ---------------------------------------------------------------------------
+
+def _set_job_processing_progress(
+    job_id: str,
+    progress: float,
+    stage_label: str,
+    analysis_stage: AnalysisStage | None = None,
+) -> None:
     """Update progress for an in-flight job; no-op if missing or not processing."""
-    current = jobs.get(job_id)
+    current = _get_job(job_id)
     if current is None or current.status != "processing":
         return
     started = current.processing_started_at
     if started is None:
         started = time.time()
-    jobs[job_id] = JobStatus(
-        status="processing",
-        result=None,
-        error=None,
-        progress=max(0.0, min(1.0, float(progress))),
-        stage_label=stage_label,
-        processing_started_at=float(started),
-    )
 
+    progress_val = max(0.0, min(1.0, float(progress)))
+    fields = {
+        "status": "processing",
+        "result": None,
+        "error": None,
+        "progress": progress_val,
+        "stage_label": stage_label,
+        "processing_started_at": float(started),
+    }
+    if analysis_stage is not None:
+        fields["analysis_stage"] = analysis_stage
+
+    if _use_redis():
+        from app.job_store import set_job_progress
+        set_job_progress(job_id, progress_val, stage_label, analysis_stage)
+    else:
+        _jobs_memory[job_id] = JobStatus(**fields)
+
+    # Publish SSE progress event
+    _publish_sse(job_id, "progress", {
+        "progress": progress_val,
+        "stage_label": stage_label,
+        "analysis_stage": analysis_stage,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Lesson helpers
+# ---------------------------------------------------------------------------
 
 def _lesson_with_skeleton_coach(lesson: LessonJSON) -> LessonJSON:
     sections: list[LessonSectionStub] = []
@@ -88,10 +201,13 @@ def _lesson_with_skeleton_coach(lesson: LessonJSON) -> LessonJSON:
 
 
 def _set_coach_pending(job_id: str, section_count: int) -> None:
-    coach_hydration[job_id] = CoachHydrationStatus(
-        status="pending",
-        sections=[CoachHydrationSection(index=i, coach_note="", coach_explanation="") for i in range(max(0, section_count))],
-        fallback_reason=None,
+    _set_coach(
+        job_id,
+        CoachHydrationStatus(
+            status="pending",
+            sections=[CoachHydrationSection(index=i, coach_note="", coach_explanation="") for i in range(max(0, section_count))],
+            fallback_reason=None,
+        ),
     )
 
 
@@ -111,7 +227,7 @@ def _hydrate_coach_copy_job(
     player_profile: PlayerProfile | None,
     focus_area: CoachFocusArea | None = None,
 ) -> None:
-    job = jobs.get(job_id)
+    job = _get_job(job_id)
     if job is None or job.result is None:
         return
     lesson = job.result
@@ -127,24 +243,28 @@ def _hydrate_coach_copy_job(
         focus_area=focus_area,
     )
     patched = lesson.model_copy(update={"sections": enriched})
-    jobs[job_id] = JobStatus(status="complete", result=patched, error=None)
-    coach_hydration[job_id] = CoachHydrationStatus(
-        status=status,
-        sections=[
-            CoachHydrationSection(
-                index=i,
-                coach_note=str(getattr(sec, "coach_note", "") or ""),
-                coach_explanation=str(getattr(sec, "coach_explanation", "") or ""),
-            )
-            for i, sec in enumerate(enriched)
-        ],
-        fallback_reason=fallback_reason,
+    _set_job(job_id, JobStatus(status="complete", result=patched, error=None))
+    _set_coach(
+        job_id,
+        CoachHydrationStatus(
+            status=status,
+            sections=[
+                CoachHydrationSection(
+                    index=i,
+                    coach_note=str(getattr(sec, "coach_note", "") or ""),
+                    coach_explanation=str(getattr(sec, "coach_explanation", "") or ""),
+                )
+                for i, sec in enumerate(enriched)
+            ],
+            fallback_reason=fallback_reason,
+        ),
     )
+    _publish_sse(job_id, "complete", {"job_id": job_id, "status": "complete"})
     logger.info("coach_hydration complete job_id=%s status=%s fallback_reason=%s", job_id, status, fallback_reason)
 
 
 def get_coach_hydration(job_id: str) -> CoachHydrationStatus | None:
-    return coach_hydration.get(job_id)
+    return _get_coach(job_id)
 
 
 # Used by tests / smoke forcing.
@@ -190,9 +310,6 @@ def _stub_lesson(
     """Deterministic fake lesson for client contract tests; pipeline replaces this later."""
     song_title, artist = resolve_lesson_titles(source_metadata, source_url=source_url)
 
-    # Note: LessonJSON allows extra fields (extra="allow"), so `wav_path` can be
-    # carried forward without changing the public schema yet.
-    # No librosa pass here — match HARMONIQ_SKIP_STYLE_DETECT placeholder (D2 contract).
     return LessonJSON(
         job_id=job_id,
         song_title=song_title,
@@ -224,10 +341,8 @@ def _process_analyze_job(
 ) -> None:
     """Worker loop for one analyze job.
 
-    Thread-based on purpose: FastAPI `TestClient` polling can otherwise block
-    asyncio task progress, causing jobs to remain stuck in `processing`.
-    
-    Performance logging: Each major stage is timed to identify bottlenecks.
+    Uses Redis-backed job store when available, falls back to in-memory.
+    Each major stage is timed and reported via progress updates.
     """
     worker_start = time.time()
     logger.info("worker start job_id=%s youtube_url=%r upload_path=%r", job_id, youtube_url, upload_path)
@@ -235,12 +350,11 @@ def _process_analyze_job(
 
     try:
         if youtube_url == FORCED_EXCEPTION_INPUT:
-            # Smoke-test hook for PRIORITIES §4 acceptance criteria.
             raise RuntimeError("Forced exception from request payload")
 
         from app.ingest import ingest_youtube_or_upload_to_wav
 
-        _set_job_processing_progress(job_id, 0.12, "Preparing audio…")
+        _set_job_processing_progress(job_id, 0.12, "Preparing audio…", "ingesting")
         ingest_start = time.time()
         wav_path_obj, source_metadata = ingest_youtube_or_upload_to_wav(
             job_id,
@@ -250,8 +364,7 @@ def _process_analyze_job(
         ingest_elapsed = time.time() - ingest_start
         logger.info("ingest completed in %.2fs job_id=%s", ingest_elapsed, job_id)
         wav_path = str(wav_path_obj)
-        
-        # Check audio duration before expensive processing
+
         wav_duration = wav_file_duration_seconds(wav_path_obj)
         if wav_duration is not None and wav_duration > MAX_ANALYZE_DURATION_SECONDS:
             logger.warning(
@@ -260,40 +373,47 @@ def _process_analyze_job(
                 MAX_ANALYZE_DURATION_SECONDS,
                 job_id,
             )
-            jobs[job_id] = JobStatus(
-                status="failed",
-                result=None,
-                error=AUDIO_TOO_LONG_USER_MESSAGE,
-                error_code=ANALYZE_ERROR_AUDIO_TOO_LONG,
+            _set_job(
+                job_id,
+                JobStatus(
+                    status="failed",
+                    result=None,
+                    error=AUDIO_TOO_LONG_USER_MESSAGE,
+                    error_code=ANALYZE_ERROR_AUDIO_TOO_LONG,
+                ),
             )
+            _publish_sse(job_id, "error", {"error": AUDIO_TOO_LONG_USER_MESSAGE, "error_code": ANALYZE_ERROR_AUDIO_TOO_LONG})
             return
-        
-        _set_job_processing_progress(job_id, 0.28, "Audio ready")
+
+        _set_job_processing_progress(job_id, 0.28, "Audio ready", "ingesting")
         cache_check_start = time.time()
         cached_lesson = load_cached_lesson_for_wav(wav_path_obj, player_profile=player_profile)
         cache_check_elapsed = time.time() - cache_check_start
         logger.info("cache check completed in %.2fs job_id=%s hit=%s", cache_check_elapsed, job_id, cached_lesson is not None)
-        
+
         if cached_lesson is not None:
             reuse_start = time.time()
             reused = reuse_cached_artifacts_into_job(cached_lesson, job_id=job_id)
             reuse_elapsed = time.time() - reuse_start
             logger.info("cache reuse completed in %.2fs job_id=%s", reuse_elapsed, job_id)
-            
+
             if reused is not None:
-                jobs[job_id] = JobStatus(status="complete", result=reused, error=None)
+                _set_job(job_id, JobStatus(status="complete", result=reused, error=None))
                 if _lesson_has_hydrated_coach(reused):
-                    coach_hydration[job_id] = CoachHydrationStatus(
-                        status="complete",
-                        sections=[
-                            CoachHydrationSection(
-                                index=i,
-                                coach_note=str((sec.model_dump(exclude_none=True).get("coach_note") or "")),
-                                coach_explanation=str((sec.model_dump(exclude_none=True).get("coach_explanation") or "")),
-                            )
-                            for i, sec in enumerate(reused.sections)
-                        ],
-                        fallback_reason=None,
+                    _set_coach(
+                        job_id,
+                        CoachHydrationStatus(
+                            status="complete",
+                            sections=[
+                                CoachHydrationSection(
+                                    index=i,
+                                    coach_note=str((sec.model_dump(exclude_none=True).get("coach_note") or "")),
+                                    coach_explanation=str((sec.model_dump(exclude_none=True).get("coach_explanation") or "")),
+                                )
+                                for i, sec in enumerate(reused.sections)
+                            ],
+                            fallback_reason=None,
+                        ),
                     )
                 else:
                     _set_coach_pending(job_id, len(reused.sections))
@@ -303,12 +423,11 @@ def _process_analyze_job(
                         daemon=True,
                     )
                     coach_thread.start()
+                _publish_sse(job_id, "complete", {"job_id": job_id, "status": "complete"})
                 total_elapsed = time.time() - worker_start
                 logger.info("worker complete (cache hit) job_id=%s total=%.2fs", job_id, total_elapsed)
                 return
 
-            # Cache hit but artifacts missing — invalidate stale entry so
-            # future attempts don't re-encounter the same dead reference.
             logger.warning(
                 "cache artifacts missing for job_id=%s; invalidating cache entry and re-analyzing",
                 job_id,
@@ -316,12 +435,12 @@ def _process_analyze_job(
             invalidate_cache_for_wav(wav_path_obj, player_profile=player_profile)
 
         job_dir = get_job_dir(job_id)
-        _set_job_processing_progress(job_id, 0.4, "Separating stems…")
+        _set_job_processing_progress(job_id, 0.4, "Separating stems…", "stems_separating")
         stem_start = time.time()
         stems = separate_song_to_stems(wav_path_obj, job_dir)
         stem_elapsed = time.time() - stem_start
         logger.info("stem separation completed in %.2fs job_id=%s", stem_elapsed, job_id)
-        _set_job_processing_progress(job_id, 0.62, "Stems ready")
+        _set_job_processing_progress(job_id, 0.62, "Stems ready", "stems_separating")
         backend_root = get_data_dir().parent
         stem_abs_paths = {k: backend_root / rel for k, rel in stems.items()}
         classify_start = time.time()
@@ -339,7 +458,6 @@ def _process_analyze_job(
         guitar_rel_path = stems.get("guitar")
         vocals_rel_path = stems.get("vocals")
         if not guitar_rel_path:
-            # Separation contract should always return a guitar stem; fall back to stub.
             stub_start = time.time()
             stub = _stub_lesson(
                 job_id,
@@ -352,12 +470,25 @@ def _process_analyze_job(
             logger.info("stub lesson generated in %.2fs job_id=%s", stub_elapsed, job_id)
             result = stub
         else:
-            _set_job_processing_progress(job_id, 0.78, "Analyzing structure & tabs…")
+            _set_job_processing_progress(job_id, 0.78, "Analyzing structure & tabs…", "chords_inferring")
             guitar_stem_path = backend_root / guitar_rel_path
             vocals_stem_path = backend_root / vocals_rel_path if vocals_rel_path else None
             piano_rel = stems.get("piano")
             piano_stem_path = (backend_root / piano_rel) if piano_rel else None
             analyze_start = time.time()
+
+            def _analysis_progress_callback(stage: str, partial: LessonJSON | None) -> None:
+                """Set intermediate results as each analysis stage completes."""
+                if stage == "chords_inferring":
+                    _set_job_processing_progress(job_id, 0.82, "Chord timeline ready", "chords_inferring")
+                    _publish_sse(job_id, "stage", {"stage": "chords_inferring"})
+                elif stage == "solo_inferring":
+                    _set_job_processing_progress(job_id, 0.88, "Solo notes ready", "solo_inferring")
+                    _publish_sse(job_id, "stage", {"stage": "solo_inferring"})
+                elif stage == "building_musicxml":
+                    _set_job_processing_progress(job_id, 0.94, "Building score…", "building_musicxml")
+                    _publish_sse(job_id, "stage", {"stage": "building_musicxml"})
+
             result = build_lesson_json_from_librosa(
                 job_id,
                 guitar_stem_path=guitar_stem_path,
@@ -370,6 +501,7 @@ def _process_analyze_job(
                 stem_classification=stem_classification,
                 mix_wav_path=wav_path_obj,
                 piano_stem_path=piano_stem_path,
+                progress_callback=_analysis_progress_callback,
             )
             analyze_elapsed = time.time() - analyze_start
             logger.info("librosa analysis completed in %.2fs job_id=%s", analyze_elapsed, job_id)
@@ -377,13 +509,86 @@ def _process_analyze_job(
         skeleton_result = _lesson_with_skeleton_coach(result)
         skeleton_elapsed = time.time() - skeleton_start
         logger.info("skeleton coach preparation completed in %.2fs job_id=%s", skeleton_elapsed, job_id)
-        
+
+        # ── Commit 114: LLM Chord Enrichment (background, non-blocking) ──
+        try:
+            from app.chord_enrichment import enrich_chord_timeline
+
+            # Extract chord timeline and key from the result for enrichment
+            enrichment_key = getattr(result, "key", None)
+            enrichment_timeline = None
+            for sec in skeleton_result.sections:
+                sec_dict = sec.model_dump(exclude_none=True)
+                if "chord_timeline" in sec_dict:
+                    from app.schemas import ChordTimeline
+                    enrichment_timeline = ChordTimeline.model_validate(sec_dict["chord_timeline"])
+                    break
+
+            if enrichment_timeline and enrichment_timeline.events:
+                enriched_timeline, enrichment_metrics = enrich_chord_timeline(
+                    enrichment_timeline,
+                    key_signature=enrichment_key,
+                )
+                # Apply enriched Roman numerals back to sections
+                for sec in skeleton_result.sections:
+                    sec_dict = sec.model_dump(exclude_none=True)
+                    if "chord_timeline" in sec_dict:
+                        # Update chord events with enrichment data
+                        updated_events = []
+                        for ev in enriched_timeline.events:
+                            updated_events.append(ev.model_dump())
+                        sec_dict["chord_timeline"]["events"] = updated_events
+                        # Reconstruct section with enriched data
+                        from app.schemas import LessonSectionStub
+                        patched = LessonSectionStub(**sec_dict)
+                        idx = skeleton_result.sections.index(sec)
+                        skeleton_result.sections[idx] = patched
+                        break
+                logger.info(
+                    "chord_enrichment_sync job_id=%s applied=%d roman=%d",
+                    job_id,
+                    enrichment_metrics.get("enrichment_applied", 0),
+                    enrichment_metrics.get("roman_numerals_assigned", 0),
+                )
+        except Exception:
+            logger.debug("chord_enrichment skipped job_id=%s", job_id, exc_info=True)
+
+        # Persist intermediate artifacts to disk for restart survival
+        try:
+            from app.routers.analyze import _persist_artifacts_to_disk
+            from app.analysis_store import save_beat_grid
+            from app.schemas import BeatGrid, ChordTimeline, SoloNotes
+            ct = None
+            sn = None
+            bg = None
+            # Extract artifacts from sections if available
+            for sec in skeleton_result.sections:
+                sec_dict = sec.model_dump(exclude_none=True)
+                if "beat_grid" in sec_dict and bg is None:
+                    bg = BeatGrid.model_validate(sec_dict["beat_grid"])
+                if "chord_timeline" in sec_dict and ct is None:
+                    ct = ChordTimeline.model_validate(sec_dict["chord_timeline"])
+                if "solo_notes" in sec_dict and sn is None:
+                    sn = SoloNotes.model_validate(sec_dict["solo_notes"])
+            _persist_artifacts_to_disk(
+                job_dir,
+                beat_grid=bg,
+                chord_timeline=ct,
+                solo_notes=sn,
+            )
+            # Also save lesson.json
+            with open(job_dir / "lesson.json", "w") as f:
+                f.write(skeleton_result.model_dump_json(indent=2))
+            logger.info("intermediate artifacts persisted job_id=%s", job_id)
+        except Exception:
+            logger.exception("failed to persist intermediate artifacts job_id=%s", job_id)
+
         cache_save_start = time.time()
         save_cached_lesson_for_wav(wav_path_obj, skeleton_result, player_profile=player_profile)
         cache_save_elapsed = time.time() - cache_save_start
         logger.info("lesson cache save completed in %.2fs job_id=%s", cache_save_elapsed, job_id)
-        
-        jobs[job_id] = JobStatus(status="complete", result=skeleton_result, error=None)
+
+        _set_job(job_id, JobStatus(status="complete", result=skeleton_result, error=None))
         _set_coach_pending(job_id, len(skeleton_result.sections))
         coach_thread = threading.Thread(
             target=_hydrate_coach_copy_job,
@@ -391,6 +596,7 @@ def _process_analyze_job(
             daemon=True,
         )
         coach_thread.start()
+        _publish_sse(job_id, "complete", {"job_id": job_id, "status": "complete"})
         total_elapsed = time.time() - worker_start
         logger.info(
             "worker complete job_id=%s total=%.2fs (ingest=%.2fs, stems=%.2fs, analyze=%.2fs)",
@@ -402,45 +608,64 @@ def _process_analyze_job(
         )
     except YouTubeUrlInvalidError:
         logger.warning("worker failed job_id=%s invalid youtube_url", job_id)
-        jobs[job_id] = JobStatus(
-            status="failed",
-            result=None,
-            error=YOUTUBE_URL_INVALID_USER_MESSAGE,
-            error_code=ANALYZE_ERROR_YOUTUBE_INVALID,
+        _set_job(
+            job_id,
+            JobStatus(
+                status="failed",
+                result=None,
+                error=YOUTUBE_URL_INVALID_USER_MESSAGE,
+                error_code=ANALYZE_ERROR_YOUTUBE_INVALID,
+            ),
         )
+        _publish_sse(job_id, "error", {"error": YOUTUBE_URL_INVALID_USER_MESSAGE, "error_code": ANALYZE_ERROR_YOUTUBE_INVALID})
     except AudioTooShortError:
         logger.warning("worker failed job_id=%s audio too short", job_id)
-        jobs[job_id] = JobStatus(
-            status="failed",
-            result=None,
-            error=AUDIO_TOO_SHORT_USER_MESSAGE,
-            error_code=ANALYZE_ERROR_AUDIO_TOO_SHORT,
+        _set_job(
+            job_id,
+            JobStatus(
+                status="failed",
+                result=None,
+                error=AUDIO_TOO_SHORT_USER_MESSAGE,
+                error_code=ANALYZE_ERROR_AUDIO_TOO_SHORT,
+            ),
         )
+        _publish_sse(job_id, "error", {"error": AUDIO_TOO_SHORT_USER_MESSAGE, "error_code": ANALYZE_ERROR_AUDIO_TOO_SHORT})
     except IngestError:
         logger.exception("worker failed job_id=%s ingest error", job_id)
-        jobs[job_id] = JobStatus(
-            status="failed",
-            result=None,
-            error=ANALYSIS_FAILED_USER_MESSAGE,
-            error_code=ANALYZE_ERROR_INGEST_FAILED,
+        _set_job(
+            job_id,
+            JobStatus(
+                status="failed",
+                result=None,
+                error=ANALYSIS_FAILED_USER_MESSAGE,
+                error_code=ANALYZE_ERROR_INGEST_FAILED,
+            ),
         )
+        _publish_sse(job_id, "error", {"error": ANALYSIS_FAILED_USER_MESSAGE, "error_code": ANALYZE_ERROR_INGEST_FAILED})
     except SeparationError:
         logger.exception("worker failed job_id=%s stem separation error", job_id)
-        jobs[job_id] = JobStatus(
-            status="failed",
-            result=None,
-            error=STEM_SEPARATION_FAILED_USER_MESSAGE,
-            error_code=ANALYZE_ERROR_STEM_SEPARATION_FAILED,
+        _set_job(
+            job_id,
+            JobStatus(
+                status="failed",
+                result=None,
+                error=STEM_SEPARATION_FAILED_USER_MESSAGE,
+                error_code=ANALYZE_ERROR_STEM_SEPARATION_FAILED,
+            ),
         )
+        _publish_sse(job_id, "error", {"error": STEM_SEPARATION_FAILED_USER_MESSAGE, "error_code": ANALYZE_ERROR_STEM_SEPARATION_FAILED})
     except Exception:
-        # Fail loudly in logs; user sees a warm, safe message.
         logger.exception("worker failed job_id=%s", job_id)
-        jobs[job_id] = JobStatus(
-            status="failed",
-            result=None,
-            error=ANALYSIS_FAILED_USER_MESSAGE,
-            error_code=ANALYZE_ERROR_ANALYSIS_FAILED,
+        _set_job(
+            job_id,
+            JobStatus(
+                status="failed",
+                result=None,
+                error=ANALYSIS_FAILED_USER_MESSAGE,
+                error_code=ANALYZE_ERROR_ANALYSIS_FAILED,
+            ),
         )
+        _publish_sse(job_id, "error", {"error": ANALYSIS_FAILED_USER_MESSAGE, "error_code": ANALYZE_ERROR_ANALYSIS_FAILED})
 
 
 def enqueue_analyze_job(
@@ -451,23 +676,51 @@ def enqueue_analyze_job(
     player_profile: PlayerProfile | None = None,
     focus_area: CoachFocusArea | None = None,
 ) -> None:
-    """Mark job as processing and start the worker thread."""
-    jobs[job_id] = JobStatus(
-        status="processing",
-        result=None,
-        error=None,
-        progress=0.05,
-        stage_label="Queued…",
-        processing_started_at=time.time(),
+    """Mark job as processing and dispatch to worker.
+
+    Tries Celery dispatch first; falls back to threading if Redis is unavailable.
+    """
+    _set_job(
+        job_id,
+        JobStatus(
+            status="processing",
+            result=None,
+            error=None,
+            progress=0.05,
+            stage_label="Queued…",
+            processing_started_at=time.time(),
+        ),
     )
-    coach_hydration[job_id] = CoachHydrationStatus(status="pending", sections=[], fallback_reason=None)
+    _set_coach(job_id, CoachHydrationStatus(status="pending", sections=[], fallback_reason=None))
+
     logger.info(
-        "enqueue job_id=%s status=processing youtube_url=%r upload_path=%r has_profile=%s",
+        "enqueue job_id=%s status=processing youtube_url=%r upload_path=%r has_profile=%s redis=%s",
         job_id,
         youtube_url,
         upload_path,
         player_profile is not None,
+        _use_redis(),
     )
+
+    # Try Celery dispatch when Redis is available
+    if _use_redis():
+        try:
+            from app.tasks import process_analyze_job
+
+            player_dict = player_profile.model_dump() if player_profile else None
+            process_analyze_job.delay(
+                job_id,
+                youtube_url=youtube_url,
+                upload_path=upload_path,
+                player_profile=player_dict,
+                focus_area=focus_area.value if focus_area else None,
+            )
+            logger.info("dispatched_to_celery job_id=%s", job_id)
+            return
+        except Exception as exc:
+            logger.warning("celery_dispatch_failed job_id=%s exception=%s; falling back to thread", job_id, type(exc).__name__)
+
+    # Fallback: thread-based execution (single process)
     t = threading.Thread(
         target=_process_analyze_job,
         kwargs={
@@ -481,3 +734,39 @@ def enqueue_analyze_job(
     )
     t.start()
 
+
+# ---------------------------------------------------------------------------
+# Backwards compatibility: expose `jobs` dict for existing test imports
+# ---------------------------------------------------------------------------
+
+class _JobsProxy:
+    """Dict-like proxy that delegates to Redis or in-memory store.
+
+    Maintains the `jobs[job_id] = ...` interface used by existing tests
+    and routers, while routing reads/writes to the appropriate backend.
+    """
+
+    def __getitem__(self, key: str) -> JobStatus:
+        job = _get_job(key)
+        if job is None:
+            raise KeyError(key)
+        return job
+
+    def __setitem__(self, key: str, value: JobStatus) -> None:
+        _set_job(key, value)
+
+    def __contains__(self, key: str) -> bool:
+        return _get_job(key) is not None
+
+    def get(self, key: str, default=None) -> JobStatus | None:
+        job = _get_job(key)
+        return job if job is not None else default
+
+    def __len__(self) -> int:
+        # Approximate for in-memory; Redis would need SCAN
+        if _use_redis():
+            return -1  # Unknown
+        return len(_jobs_memory)
+
+
+jobs = _JobsProxy()

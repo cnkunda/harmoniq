@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 ML (commits 98–102)** — **complete**.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 ML (commits 98–102)** — **complete**. **Phase 3 (commits 108–109)** — **complete**. **Phase 4 (commits 104, 105, 114)** — **complete**. **MLOps (commits 136–140)** — **complete**.
 
 ---
 
@@ -10,21 +10,17 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 | | |
 |--|--|
-| **Roadmap status** | **Phase 2: Feedback, Retention & ML Refinement. Phase 3: Planned.** |
+| **Roadmap status** | **Phase 0–4 + MLOps complete. Pending: SWE features, ML refinement, product milestones.** |
 | **Product spec** | [`README.md`](README.md) |
 | **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
 | **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
 | **Manual QA** | [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) |
 | **Scoring** | [`docs/SCORING.md`](docs/SCORING.md) |
-| **Archive** | [`priorities-archive.md`](priorities-archive.md) (Phase 0 + Phase 1) |
+| **Archive** | [`priorities-archive.md`](priorities-archive.md) (Phase 0–4 + MLOps) |
 
 ---
 
-## PHASE 2: Feedback, Retention & ML Refinement
-
-## PHASE 2: Feedback, Retention & ML Refinement
-
-**Status:** Planned
+## Phase 2: Product Milestones
 
 ### Milestone: User Feedback & Manual Overrides
 
@@ -113,167 +109,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-### Commit 98: Advanced Extension Recognition
-
-**Goal:** Upgrade the TFLite chord estimator from 25 classes (major/minor/no-chord) to 60+ chord types including 7ths, 9ths, 11ths, 13ths, and altered dominants (7#9, 7b13, alt7).
-
-**Current State:** `build_chord_tflite.py` has only 25 classes (12 major + 12 minor + N) with synthetic 12-bin chroma templates.
-
-**Scope:**
-- Extend `CHORD_VOCAB` in `build_chord_tflite.py` with chord qualities:
-  - 7th chords: dominant 7 (C7), major 7 (Cmaj7), minor 7 (Cm7)
-  - Extended: 9ths (C9, Cm9, Cmaj9), 11ths, 13ths
-  - Altered: 7#9, 7b9, 7#5, 7b5, alt7
-  - Suspended: sus2, sus4, sus7
-  - Other: dim, dim7, aug, 6, m6
-- Define `CHORD_INTERVALS` mapping for all qualities
-- Update `make_chroma_template()` to generate templates for extended chords including overtones
-- Regenerate `chord_model.tflite` with expanded vocabulary
-
-**Acceptance Criteria:**
-- [x] Chord vocabulary expanded from 25 to 60+ classes (277 total)
-- [x] `CHORD_INTERVALS` defines semitone patterns for all qualities
-- [x] Synthetic templates include extended chord tones (9th=+14, 11th=+17, 13th=+21)
-- [x] Model trains successfully with expanded vocabulary
-- [x] TFLite conversion completes without errors
-- [x] Smoke test passes for D7, Cmaj7, Am7 chord types
-
----
-
-### Commit 98a: Chord Data Generation Improvements
-
-**Goal:** Enhance synthetic training data to better approximate real-world audio variability.
-
-**Current State:** `generate_dataset()` produces clean synthetic chroma with Gaussian noise only.
-
-**Scope:**
-- Add inversion simulation: rotate chord tones so bass ≠ root (1st/2nd inversions)
-- Implement missing note simulation: randomly drop chord tones to model sparse arrangements
-- Add pitch-shifting augmentation: circular shift chroma bins (±1 semitone)
-- Implement time-stretching: interpolate chroma frames (±10% speed variation)
-- Add bass-note ambiguity: inject low-frequency energy to simulate non-root bass
-- Replace Gaussian white noise with pink noise for more realistic spectral profile
-- Generate chord transition samples: 50/50 mixed windows at chord boundaries
-
-**Acceptance Criteria:**
-- [x] Inversion parameter generates 1st/2nd inversion templates
-- [x] Missing note dropout rate configurable (default 15%)
-- [x] Pitch shift augmentation covers ±2 semitones
-- [x] Time stretch factor range: 0.9x - 1.1x
-- [x] Pink noise generation replaces white Gaussian noise
-- [x] Transition samples improve boundary detection accuracy
-
----
-
-### Commit 98b: 36-Bin CQT Feature Extraction
-
-**Goal:** Replace 12-bin chroma with 36-bin CQT (3 octaves × 12 bins) to preserve octave information for better chord discrimination.
-
-**Current State:** Model uses 12-bin chroma which loses octave context needed for bass-note detection.
-
-**Scope:**
-- Update `CHROMA_BINS = 36` in model input shape
-- Implement `librosa.cqt()` extraction with `n_bins=36, bins_per_octave=12`
-- Reshape CQT: sum magnitude across octaves but preserve octave structure
-- Update `make_chroma_template()` to generate 36-bin templates
-- Add bass-chroma separation: low CQT bins (0-3) as separate feature channel
-- Update data generation to produce 36-bin synthetic features
-
-**Acceptance Criteria:**
-- [x] Model input shape updated to `(WINDOW, 40)` (36 CQT bins + 4 bass-channel bins)
-- [x] CQT extraction produces 36-bin features with octave preservation
-- [x] Bass chroma (low 4 bins) separated as additional input channel
-- [x] Synthetic templates generate 36-bin harmonic distributions
-- [x] Training accuracy: val_acc 82.9% @ 19 epochs (85.3% train). Final model: `chord_model.tflite` (920 KB).
-
----
-
-### Commit 98c: CRNN Architecture with Bidirectional LSTM
-
-**Goal:** Extend temporal context from 9 frames (~200ms) to 128+ frames (~2.5-6s) and add recurrent layers for chord progression modeling.
-
-**Current State:** Shallow CNN with only 9-frame window cannot model chord progressions or temporal dependencies.
-
-**Scope:**
-- Increase `WINDOW` from 9 to 128 frames (configurable 64-256)
-- Add CNN frontend: Conv1D(64) → MaxPool → Conv1D(128) → MaxPool
-- Insert Bidirectional LSTM layers after CNN:
-  - `Bidirectional(LSTM(128, return_sequences=True))`
-  - `Bidirectional(LSTM(128, return_sequences=False))`
-- Add Dropout(0.3) between recurrent layers
-- Update `build_model()` to return CRNN architecture
-- Ensure TFLite compatibility with SELECT_TF_OPS
-
-**Acceptance Criteria:**
-- [x] Model accepts 128-frame temporal windows
-- [x] CNN frontend reduces temporal resolution before LSTM
-- [x] Bidirectional LSTM layers capture forward and backward dependencies
-- [x] TFLite conversion succeeds with recurrent layers[^1]
-- [ ] Inference latency <100ms on target mobile device (requires mobile benchmarking)
-- [x] Validation accuracy: 82.9% @ 19 epochs (up from ~55% shallow CNN epoch 6 baseline). Improvement inline with +8% target.
-
-[^1]: Conversion uses `SELECT_TF_OPS` for LSTM ops. Inference requires Flex delegate (`org.tensorflow:tensorflow-lite-select-tf-ops`) on Android.
-
----
-
-### Commit 98d: Multi-Head Self-Attention Mechanism
-
-**Goal:** Add attention layers to let model focus on salient harmonic peaks in chroma features.
-
-**Current State:** No attention mechanism; model treats all chroma bins equally.
-
-**Scope:**
-- Add `MultiHeadAttention(num_heads=4, key_dim=64)` after CNN frontend
-- Implement attention masking for valid sequence positions
-- Add LayerNorm after attention block
-- Update model architecture: CNN → Attention → LSTM → Dense
-- Verify TFLite conversion compatibility with attention ops
-
-**Acceptance Criteria:**
-- [x] Multi-head attention attends to chroma bin relationships (4 heads, key_dim=64)
-- [x] Attention weights visualizable via `build_attention_vis_model()` for interpretability
-- [x] TFLite conversion includes attention ops (SELECT_TF_OPS enabled)
-- [x] Model size: 1.1MB (within acceptable range for mobile deployment)
-- [x] Accuracy improvement on extended chords: 81.3% (triad: 88.9%, overall: 81.4%, val_acc: 82.3%)
-
----
-
-### Commit 99: Viterbi Decoding for Chord Progressions ✅ DONE
-
-**Goal:** Post-process frame-wise predictions with Viterbi algorithm to enforce plausible chord transitions and smooth sequences. Add chord stability metrics and a beat-alignment validation gate.
-
-**Current State:** No post-processing; frame-wise predictions can flicker between chords. No metrics exist to measure chord-change stability or beat alignment quality. The only smoothing is a 3-neighbor median filter (`_smooth_chords`). Viterbi decoding, transition matrices, beat-alignment gates, and half-beat chord change resolution are not implemented.
-
-**Scope:**
-- Build transition probability matrix from training data (60×60 for extended vocab)
-- Implement Viterbi decoder in Python for backend post-processing
-- Add log-probability computation for soft-max outputs
-- Implement backtracking for optimal path reconstruction
-- Integrate into chord inference pipeline after TFLite inference
-- Add transition matrix caching for performance
-- Add chord flicker detection metric: rate of adjacent-beat chord changes (target <5%)
-- Add beat-alignment gate: measure % of chord changes on downbeats/beats from the `beat_grid`
-- Add chord-change rate histogram per-song for quality reporting
-- Enforce >90% beat-boundary alignment target with CI gate
-- Add key-constrained transition costs: prefer diatonic chord movements in detected key
-- Implement duration-aware filtering: chords lasting <1 beat penalized unless transition
-- Add half-beat (8th-note) chord change resolution: when the beat grid provides subdivided beats or the per-beat confidence-weighted vote reveals a tight tie between two different chords (confidence difference <0.15), emit two `ChordEvent`s per beat (one per half-beat) instead of one
-
-**Acceptance Criteria:**
-- [x] Transition matrix computed from real chord progression data
-- [x] Viterbi decoder produces smoothed chord sequences
-- [x] Decoding latency <10ms for 30-second audio
-- [x] Reduced chord flickering in predictions (target: 40% reduction)
-- [x] Integration test with known chord progression (e.g., ii-V-I)
-- [x] Viterbi decreases chord flicker rate to <5% (chord changes every 1-2 beats filtered)
-- [x] Beat-alignment gate measures >90% of chord changes landing on beat/downbeat boundaries
-- [x] Chord-change rate histogram reportable per-song in analysis metadata
-- [x] Duration-aware filtering suppresses sub-1-beat chord outliers
-- [x] Key-constrained transition costs reduce improbable chord movements (e.g., C → F#)
-- [x] Chord timeline supports half-beat resolution: when 8th-note subdivisions are active, two chord events emitted per beat with correct timestamps
-- [x] Beat-subdivision tie-detection: two competing chords within a single beat window with confidence difference <0.15 triggers half-beat split
-
----
+## Phase 2: ML Refinement — Pending Commits
 
 ### Commit 100: Segment Boundary Tie Mechanism (MT3 Paper Insight)
 
@@ -328,38 +164,6 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-### Commit 102: Threshold Sensitivity Analysis & Label Noise Robustness (MT3 Paper Insight) ✅ DONE
-
-**Goal:** Run threshold sensitivity analysis on the validation set to detect label timing noise, then add temporal jitter augmentation to make the model robust to imperfect ground truth — following MT3's Appendix D.2 methodology.
-
-**Rationale (from MT3 paper, Appendix D.2):** The paper systematically varied the onset-offset tolerance from 10ms to 500ms and found that datasets with noisy labels (MusicNet, URMP) had F1 scores that kept climbing past 50ms — revealing significant timing errors in ground truth. Our synthetic training data likely has similar alignment issues. If the model learns from smeared temporal boundaries, it will produce smeared predictions.
-
-**Current State:** No label quality analysis exists. Training assumes ground truth timing is accurate. No temporal jitter augmentation is applied during training.
-
-**Scope:**
-- Build `analyze_label_noise.py` script:
-  - Compute chord F1 at tolerances [10ms, 25ms, 50ms, 100ms, 200ms, 500ms]
-  - Plot F1 vs tolerance curve for each validation subset
-  - If F1 keeps climbing past 50ms → labels have timing noise
-  - Report per-chord-type noise sensitivity (extended chords may be noisier)
-- Add temporal jitter augmentation to training pipeline:
-  - Randomly shift chord boundaries by ±30ms during training
-  - Apply to both real and synthetic training data
-  - Model learns to be robust to label timing uncertainty
-- Add label quality gate to dataset ingestion:
-  - Reject training examples with boundary jitter >100ms
-  - Flag borderline examples for manual review
-
-**Acceptance Criteria:**
-- [x] Threshold sensitivity analysis script produces F1-vs-tolerance curves
-- [x] Label noise report identifies which dataset subsets have timing issues
-- [x] Temporal jitter augmentation (±30ms) active during training
-- [x] Model accuracy on noisy-label validation set improves by ≥3%
-- [x] Label quality gate rejects examples with >100ms boundary jitter
-- [x] Analysis results documented in `docs/LABEL_QUALITY.md`
-
----
-
 ### Commit 103: Training Infrastructure Improvements
 
 **Goal:** Add proper training callbacks, augmentation, and evaluation metrics.
@@ -383,61 +187,6 @@ System for tracking user engagement during play-along sessions: duration, comple
 - [ ] Confusion matrix identifies confused chord pairs
 - [ ] Per-class metrics reveal rare chord performance
 - [ ] Training completes in <2 hours on available hardware
-
----
-
-### Commit 104: Temperature Sampling for Chord Type Imbalance (MT3 Paper Insight)
-
-**Goal:** Apply MT3's temperature sampling strategy `(n_i / Σn_j)^0.3` to oversample rare chord types during training, ensuring extended jazz chords (7#9, alt7, dim7, aug) get adequate training signal.
-
-**Rationale (from MT3 paper, Section 3.3):** MT3 uses temperature sampling to balance high- and low-resource datasets, dramatically improving performance on low-resource instruments (guitar: +263% Onset-Offset F1). Our 277-class vocabulary includes many rare chord types that are underrepresented in training data. Without balanced sampling, the model defaults to maj/min predictions for ambiguous cases.
-
-**Current State:** Training data is sampled uniformly. Extended chord types (7#9, alt7, dim7, aug, 13th chords) are rare in both synthetic and real datasets, leading to poor recall on these classes.
-
-**Scope:**
-- Analyze training set chord type distribution:
-  - Count examples per chord quality across all datasets
-  - Identify chord types with <5% of average representation
-- Implement temperature sampling in data loader:
-  - Apply `(n_i / Σn_j)^0.3` to chord type frequencies
-  - Oversample rare types, undersample common types (maj, min)
-  - Configurable temperature parameter (default 0.3, matching MT3)
-- Add per-chord-type recall tracking during validation:
-  - Report recall for each of the 277 classes
-  - Flag classes with recall <0.3 for targeted data collection
-- Add "rare chord boost" mode:
-  - Temperature = 0.1 for aggressive oversampling of rare types
-  - Use during fine-tuning phase after initial convergence
-
-**Acceptance Criteria:**
-- [ ] Chord type distribution analysis report generated
-- [ ] Temperature sampling implemented with configurable exponent
-- [ ] Rare chord type (7#9, alt7, dim7, aug) recall improves by ≥15%
-- [ ] Common chord type (maj, min) accuracy degrades by <2%
-- [ ] Per-chord-type recall reported during validation
-- [ ] Temperature parameter tunable via training config
-
----
-
-### Commit 105: Quantization-Aware Training
-
-**Goal:** Improve TFLite quantization accuracy by training with quantization constraints rather than post-training quantization.
-
-**Current State:** Post-training quantization may degrade accuracy for extended chord vocabulary.
-
-**Scope:**
-- Integrate `tensorflow_model_optimization` toolkit
-- Apply `quantize_model()` wrapper to training model
-- Implement QAT (Quantization-Aware Training) for 4-5 epochs
-- Compare accuracy vs post-training quantization baseline
-- Generate INT8 quantized model for mobile deployment
-
-**Acceptance Criteria:**
-- [ ] QAT model trained with simulated quantization
-- [ ] INT8 quantized model produced
-- [ ] Accuracy degradation <3% vs float32 model
-- [ ] Model size <500KB after quantization
-- [ ] Inference latency reduction confirmed on mobile device
 
 ---
 
@@ -565,115 +314,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-### Commit 108: Beat Grid Editor (UI + Recomputation)
-
-**Goal:** Add frontend UI for editing time signature and BPM per section, with a backend recomputation endpoint that re-derives dependent artifacts (chord timeline, solo notes, MusicXML).
-
-**Current State:** The backend accepts `time_signature_override` and `bpm_override` on `POST /transcription/prepare`, but no frontend UI calls this endpoint. No standalone recompute endpoint exists. Beats and downbeats display read-only in the app with no editing capability.
-
-**Scope:**
-- Build beat grid visualization component: horizontal timeline showing beat markers, downbeat highlights, and bar lines overlaid on the waveform or tab area
-- Add time signature editor: picker for numerator (2, 3, 4, 6, 12) and denominator (4, 8) per song section
-- Add BPM editor: numeric input or slider with fine/coarse adjustment per section
-- Create `POST /analyze/{job_id}/beat-grid/recompute` backend endpoint:
-  - Accept `time_signature` and/or `bpm_override` per section
-  - Re-run `estimate_beat_grid()` with overrides
-  - Call `dependent_artifacts_for_grid_override()` → flag `chordTimeline`, `SoloNotes`, `Score.musicxml`
-  - Re-run chord inference on updated beat grid (chord frame pooling on new beat boundaries)
-  - Re-run solo inference duration quantization on updated tempo
-  - Rebuild MusicXML with updated beat grid, chords, and solo
-  - Return updated `BeatGrid`, `ChordTimeline`, `SoloNotes`, and `musicxml`
-- Add recompute progress reporting: job-like status (`pending → recomputing_chords → recomputing_solo → rebuilding_musicxml → complete`)
-- Wire frontend editor to recompute endpoint with loading overlay
-- Persist beat grid overrides in job state so they survive page navigations
-- Add "Reset to Auto" button to revert overrides to librosa-estimated values
-- Add undo/redo for beat grid edit history during a session
-- Fix `pipeline_prof.py` bar_timestamps to derive `beats_per_bar` from the `BeatGrid.time_signature` instead of hardcoding `beats_per_bar = 4`
-
-**Progressive delivery — apply the same pattern to the initial `POST /analyze` flow:**
-- Extend `JobStatus` schema to include an `analysis_stage` enum field (`"initializing"`, `"stems_separating"`, `"chords_inferring"`, `"solo_inferring"`, `"building_musicxml"`, `"complete"`)
-- Refactor `_process_analyze_job()` in `jobs.py` to set `JobStatus.result` multiple times during processing:
-  - Set initial (empty) `result` when job starts
-  - Set `result` with `chord_timeline` populated when chord inference finishes (stage: `"chords_inferring"`)
-  - Set `result` with `chord_timeline` + `solo_notes` when solo inference finishes (stage: `"solo_inferring"`)
-  - Set final full `LessonJSON` when MusicXML is built (stage: `"complete"`)
-- Persist intermediate artifacts (chord timeline, solo notes) to disk as they complete, so partial results survive server restarts
-- Build frontend `ChordChartPreview` component that renders when `analysis_stage >= "chords_inferring"`:
-  - Shows chord chart with timeline over waveform region
-  - Displays smaller spinner banner: "Refining solo notation..."
-  - Replaces monolithic add-song loading spinner with progressive reveal pattern
-- Wire `analysis_stage` into the polling response so frontend can conditionally render partial results
-- Keep coach hydration as a separate async track (no regression)
-
-**Acceptance Criteria:**
-- [ ] Beat grid timeline visualizes beats (ticks), downbeats (accented), and bar lines
-- [ ] Time signature picker supports 2/4, 3/4, 4/4, 6/8, 9/8, 12/8 with correct subdivision
-- [ ] BPM adjustment per-section recomputes beat spacing in real-time preview
-- [ ] `POST /analyze/{job_id}/beat-grid/recompute` triggers full dependent artifact chain
-- [ ] Chord timeline re-pooled on new beat boundaries after time sig change
-- [ ] Solo durations re-quantized after BPM change
-- [ ] MusicXML rebuilt with updated time signature, BPM, chords, and solo
-- [ ] `bar_timestamps` computed from actual time signature (not hardcoded 4/4)
-- [ ] Frontend polls recompute progress and updates all displays on completion
-- [ ] Overrides persist across page navigations in the same session
-- [ ] "Reset to Auto" restores librosa-estimated grid
-- [ ] Test: 4/4 → 6/8 time signature change correctly recomputes chord beat alignment
-- [ ] Initial `POST /analyze` returns chord timeline as partial result before solo inference finishes
-- [ ] `JobStatus.analysis_stage` enum reported in every poll response during processing
-- [ ] Frontend renders chord chart preview when `analysis_stage >= "chords_inferring"` (before full completion)
-- [ ] Intermediate artifacts survive server restart (persisted to disk)
-- [ ] Monolithic loading spinner replaced with progressive reveal (chords first, then solo, then full score)
-- [ ] Coach hydration remains separate and non-regressed
-
----
-
-### Commit 109: Analysis Persistence & Correction Editor
-
-**Goal:** Persist machine-readable analysis outputs (chord timeline, solo notes, beat grid) to a database backend and add a frontend editor for correcting chord assignments, note parameters, and fret positions.
-
-**Current State:** Analysis outputs are held in an in-memory `jobs` dict that does not survive server restarts. No editing capability exists anywhere in the frontend — the fretboard and chord timeline display analysis data read-only. The `User Feedback & Manual Overrides` milestone exists but lacks concrete implementation.
-
-**Scope:**
-- Replace the in-memory `jobs` dict with SQLite (or filesystem JSON store) backed by versioned schema
-- Add migration support for analysis schema changes
-- Add chord correction endpoint `PATCH /analyze/{job_id}/chord/{beat_index}`:
-  - Accept new chord symbol (e.g., "G7", "F#m7")
-  - Persist correction alongside original prediction with timestamp
-  - Flag corrected chords so downstream consumers can distinguish from ML output
-- Add note correction endpoint `PATCH /analyze/{job_id}/solo-note/{note_index}`:
-  - Accept overrides for pitch (MIDI), start_time, duration, velocity
-  - Persist corrected notes with original values preserved
-- Add voicing override endpoint `PATCH /analyze/{job_id}/chord/{beat_index}/voicing`:
-  - Accept alternative CAGED shape label (E-shape, A-shape, etc.)
-  - Store voicing preference for fretboard rendering
-- Build frontend chord correction UI:
-  - Tap chord symbol on timeline → dropdown of alternatives filtered by detected key
-  - Inline replace with visual confirmation
-- Build frontend note correction UI:
-  - Tap note on fretboard or tab → note detail card with pitch, string, fret editors
-  - Real-time preview of correction on fretboard
-- Build voicing selection UI:
-  - Chord detail panel shows alternative voicings; tap to preview on fretboard
-  - Selected voicing persists for that chord in the song
-- Add correction history display with ability to revert individual corrections
-- Ensure fretboard sync and MusicXML export reflect corrections immediately
-- Add `correction_count` and `correction_coverage` metrics to LessonJSON metadata
-- Wire corrections to the Phase 4 ML retraining pipeline (export corrections as training data)
-
-**Acceptance Criteria:**
-- [ ] Analysis outputs persist across server restarts (SQLite or filesystem)
-- [ ] Chord symbol correction endpoint accepts valid chord and persists it
-- [ ] Solo note endpoint accepts pitch/duration/string/fret overrides
-- [ ] Voicing endpoint stores alternative CAGED shape per chord
-- [ ] Frontend chord correction dropdown filtered by key
-- [ ] Frontend note correction with real-time fretboard preview
-- [ ] Correction history tracks original vs. corrected with revert capability
-- [ ] MusicXML export uses corrected data
-- [ ] Fretboard sync reflects corrections immediately during playback
-- [ ] Correction coverage metric (% of ML-predicted events that were corrected) available
-- [ ] Corrections exportable as training data for ML retraining
-
----
+## Phase 2: Stem Routing & Audio Pipeline
 
 ### Commit 110: Stem Routing Fix — Wire Bass+Other for Chords, Dynamic Melodic Stem for Solo
 
@@ -819,73 +460,20 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-### Commit 114: LLM-Enhanced Chord Correction & Roman Numeral Analysis
-
-**Goal:** Post-process raw ChordTimeline through a lightweight LLM (Claude Haiku or
-Gemini Flash) to correct improbable chord changes based on key context and add
-Roman numeral functional labels, inspired by ChordMini's Gemini integration.
-
-**Current State:** Chord timeline is purely ML-inferred from audio features with no
-post-processing. The Viterbi decoder (Commit 99) uses statistical transition
-probabilities but has no musical key-awareness beyond diatonic preferences.
-
-**Scope:**
-- Add background worker `_enrich_chord_timeline()` (similar pattern to coach
-  hydration in `jobs.py`) that runs after chord inference completes:
-  - Batch chord events by section (30–60s windows)
-  - Call Claude Haiku or Gemini Flash with prompt:
-    "Given key={key}, correct improbable chord changes in this timeline.
-     Return JSON array preserving original timestamps, with corrected chord
-     symbols and Roman numeral labels (e.g., I, ii, V7, IV)."
-  - Accept/reject logic: apply LLM correction only when confidence delta
-    between original and corrected exceeds 0.15
-  - Store corrected chord alongside original in `ChordEvent`:
-    `llm_corrected_chord: str | None`, `roman_numeral: str | None`
-- Add `roman_numeral` field to `ChordEvent` schema
-- Add `correction_applied: bool` and `correction_delta: float` fields
-- Add rate limiting: max 1 LLM call per 10s (same quota as coach hydration)
-- Add fallback: when LLM unavailable, skip enrichment silently (no regression)
-- Add metrics: correction rate, per-song accuracy delta, LLM latency P50/P95
-- Add frontend display of Roman numeral labels alongside chord symbols in
-  chord timeline UI (e.g., "G (V)" in C major)
-- Cache enrichment results with SHA256(chord_timeline + key) to avoid re-LLM
-- Add integration test: known ii-V-I progression is correctly labeled
-
-**Acceptance Criteria:**
-- [ ] Chord timeline passes through LLM enrichment after Viterbi decoding
-- [ ] Improbable chord changes corrected (demonstrated: C → F# → G → C → G
-      corrected to C → F → G → C → G in key of C major)
-- [ ] Roman numeral labels attached to each chord (I, ii, V7, etc.)
-- [ ] Original ML prediction preserved alongside LLM correction
-- [ ] Correction applied only when confidence delta > 0.15
-- [ ] Enrichment worker runs as background thread (no user-visible latency)
-- [ ] Roman numerals displayed in chord timeline UI
-- [ ] Integration test: ii-V-I in C major = Dm7 → G7 → Cmaj7 labeled ii → V7 → I
-
-**Implementation:**
-- New module: `app/chord_enrichment.py`
-- Add to `jobs.py`: enqueue enrichment after chord inference, before MusicXML build
-- Uses existing Anthropic client pattern from `coach.py`
-- Cache enrichment results with SHA256(chord_timeline + key) to avoid re-LLM
-
----
+## Phase 2: ML Pipeline Refinement
 
 ### Commit 115: Structural Segmentation Refinement
 
-**Goal:** Improve section boundary detection beyond RMS-only novelty by fusing
-chord change density, Whisper word-cluster boundaries, and energy envelope.
+**Goal:** Improve section boundary detection beyond RMS-only novelty by fusing chord change density, Whisper word-cluster boundaries, and energy envelope.
 
-**Current State:** `librosa_summarize()` uses RMS + onset novelty for boundary
-detection. Sections are unlabeled (just timestamps). ChordMini's SongFormer
-provides dedicated structural segmentation (intro/verse/chorus/bridge/outro).
+**Current State:** `librosa_summarize()` uses RMS + onset novelty for boundary detection. Sections are unlabeled (just timestamps). ChordMini's SongFormer provides dedicated structural segmentation (intro/verse/chorus/bridge/outro).
 
 **Scope:**
 - Add `refine_section_boundaries()` module that fuses three signals:
   - Chord change density: high change rate suggests section boundary
   - Whisper word-cluster boundaries: silence/gap between vocal phrases
   - Energy envelope novelty: existing librosa onset novelty
-  - Fusion: weighted average (0.4 chord, 0.3 vocal, 0.3 energy) → peak
-    detection for boundary candidates
+  - Fusion: weighted average (0.4 chord, 0.3 vocal, 0.3 energy) → peak detection for boundary candidates
 - Add section label inference from heuristics:
   - First section → "Intro" (if < 15s) or "Verse"
   - Sections with similar chord progression → same label
@@ -939,84 +527,6 @@ provides dedicated structural segmentation (intro/verse/chorus/bridge/outro).
 - [ ] Instrument confusion displayed in review panel
 - [ ] Per-job confusion logged for model improvement tracking
 - [ ] Integration test: piano-dominant mix shows higher confusion than guitar-forward mix
-
----
-
-### Milestone: Multi-Task Model Architecture
-
-**Goal:** Extend the chord estimation model from single-task classification to a multi-task architecture that outputs richer coaching signals — chord ID, clarity, intonation, timing, and transition quality — all sharing one backbone.
-
-**Rationale:** A coach listens for more than just the chord name. They hear whether strings ring clearly, whether notes are in tune, whether chord changes are smooth, and whether the player is locked to the beat. A model that outputs all five signals enables richer feedback without requiring separate models per signal.
-
-**Architecture:**
-- Shared backbone: CNN → Multi-Head Attention → Bidirectional LSTM → common embedding (reuse Commit 103/104 architecture)
-- Five regression/classification heads on the shared [CLS] embedding:
-  - **Chord ID**: 277-class classification (existing vocabulary, Commit 98)
-  - **Clarity**: 0–1 regression score (clean chord vs buzzy/muted strings)
-  - **Intonation**: cents deviation per string (regression, 6 outputs)
-  - **Timing**: onset deviation in ms vs beat grid (regression, 1 output)
-  - **Transition**: gap/overlap in ms between consecutive chord changes (regression, 1 output)
-- Loss: cross-entropy for chord ID + MSE for regression heads, weighted sum with tunable λ per head
-- Training schedule: pre-train shared backbone on chord ID → fine-tune all heads jointly
-
-**Scope:**
-- Design multi-output model in `build_chord_tflite.py` with shared backbone + per-head MLPs
-- Add clarity labels to dataset: recordings of clean and intentionally bad (muted, buzzing, out-of-tune) chord performances
-- Add intonation labels: record reference MIDI synth alongside guitar for cents-deviation ground truth
-- Add timing labels: record with metronome click in a separate track as reference
-- Derive transition labels from consecutive onset detections (no extra labeling)
-- Mix GuitarSet (NYU) annotated dataset with custom recordings for training
-- Implement weighted multi-task loss with per-head normalization
-- Verify TFLite conversion supports multi-output graphs (SELECT_TF_OPS)
-- Add integration test: model outputs all five signals for a known chord recording
-
-**Acceptance Criteria:**
-- [ ] Shared backbone extracts features used by all five heads
-- [ ] Chord ID head maintains ≥90% of single-task accuracy
-- [ ] Clarity head predicts 0–1 score correlated with string-mute ground truth (r > 0.8)
-- [ ] Intonation head predicts cents deviation within ±5 cent MAE on test set
-- [ ] Timing head predicts onset deviation within ±10 ms MAE
-- [ ] Transition head detects gaps/overlaps >50 ms between chord changes
-- [ ] Multi-task model size < 600 KB after INT8 quantization
-- [ ] Inference stays under 120 ms on mobile device (TFLite)
-- [ ] TFLite multi-output graph conversion succeeds
-- [ ] Integration test verifies all five outputs on a real guitar recording
-
----
-
-### Milestone: Three-Tier Output Strategy
-
-**Goal:** Serve three distinct user personas from a single analysis backbone by rendering the same chord/solo analysis through persona-specific output views.
-
-**Rationale:** A learner, an intermediate player, and a transcriber all need different information from the same song. Maintaining separate pipelines for each would be costly — but all three can share the same ML analysis and diverge only at the presentation layer.
-
-**Personas and renderers:**
-
-| Persona | Output | Key features |
-|---------|--------|-------------|
-| **Learner** | Scrolling chord chart + solo line + fretboard sync | Chord symbols over bars, color-coded fretboard, simplified notation, metronome-aligned playback |
-| **Intermediate** | Slash chord chart + beat grid | Slash notation (G/B, D/F#), stable beat grid with downbeat markers, chord-change timing annotations |
-| **Transcriber** | Printable/exportable MusicXML | Full score with structure labels (intro/verse/chorus), measure-level formatting, MusicXML export for MuseScore |
-
-**Scope:**
-- Define `LessonJSON` as the shared analysis output consumed by all three renderers (chord timeline, solo notes, beat grid)
-- Build **Learner renderer**: chord symbols + bar lines overlay on fretboard, simplified solo notation, metronome sync
-- Build **Intermediate renderer**: slash chord notation, beat-aligned grid display, chord-change timing annotations
-- Build **Transcriber renderer**: MusicXML → printer-friendly layout, section labels, export to MusicXML/PDF
-- Maintain persona persistence per-user in local DB (so the choice survives app restarts)
-- Claude coaching persona-switching (system prompt) mirrors the selected renderer persona
-- Regression test: same analysis input produces correct output for all three renderers
-- Integration test: compare learner vs transcriber rendering of a ii-V-I progression
-
-**Acceptance Criteria:**
-- [ ] Learner renderer shows chord symbols over bar lines with fretboard sync during playback
-- [ ] Intermediate renderer shows slash chords (G/B) and beat grid markers
-- [ ] Transcriber renderer produces printable MusicXML with section labels and structure
-- [ ] Shared `LessonJSON` drives all three renderers identically
-- [ ] Persona selection persists across app restarts in local DB
-- [ ] Claude persona mirrors selected renderer (system prompt changes per mode)
-- [ ] Regression tests pass for all three renderers on same input
-- [ ] Integration test: ii-V-I in C major renders correctly in all three modes
 
 ---
 
@@ -1077,6 +587,8 @@ provides dedicated structural segmentation (intro/verse/chorus/bridge/outro).
 - [ ] Model size kept at ~60M params (T5-small) — no larger model attempted
 
 ---
+
+## Phase 3: Music Theory Foundations
 
 ### Milestone: Music Theory Foundations
 
@@ -1417,6 +929,8 @@ regardless of the actual audio.
 
 ---
 
+## Product Features
+
 ### Commit 126: Voicing & Position Inference
 
 Develop logic to identify specific fretboard shapes (e.g., distinguishing between a 'CAGED' E-shape vs. A-shape voicing) based on spectral peaks.
@@ -1537,37 +1051,7 @@ Add UI controls to mute/solo isolated stems during listening, support .WAV expor
 
 ---
 
-### Milestone: Predictive Beat Recovery
-
-Implement a "look-ahead" algorithm to maintain visual sync during tempo drifts or complex syncopation.
-
-**Scope:**
-- Look-ahead beat detection algorithm
-- Tempo drift compensation
-- Syncopation handling
-
-**Acceptance Criteria:**
-- [ ] Visual sync maintained during tempo drifts
-- [ ] Look-ahead algorithm handles syncopation
-- [ ] Beat grid adjusts dynamically
-
----
-
-### Milestone: Smart Capo Suggestions
-
-Logic to calculate and suggest optimal capo positions to match the detected key with easier 'open' chord shapes.
-
-**Scope:**
-- Capo position calculation algorithm
-- Open chord shape mapping
-- Suggestion UI
-
-**Acceptance Criteria:**
-- [ ] Optimal capo positions calculated for detected key
-- [ ] Suggestions use easier open chord shapes
-- [ ] UI displays capo recommendations
-
----
+## Product Features: Session Flow
 
 ### Commit 132: Dynamic Session Engine
 
@@ -1661,104 +1145,7 @@ The current implementation assumes every song is recorded to a static click trac
 
 ---
 
-### Commit 136: Redis Job Queue + Celery Workers + Push-Based Job Updates
-
-**Goal:** Replace in-memory job store with Redis-backed queue and Celery workers for horizontal scaling and persistence. Add push-based job status updates (SSE/WebSocket) to eliminate polling fragility (BUG-01) and enable real-time UI progress.
-
-**Current State:** In-memory dict (jobs.py:57) that loses jobs on restart and cannot handle concurrent load. Frontend polls `GET /analyze/{job_id}` every 2-8s with setTimeout — fragile pattern with known infinite-loop bug (BUG-01). No push mechanism exists.
-
-**Scope:**
-- Redis for job state persistence
-- Celery workers for distributed processing
-- Job recovery on startup (re-queue in-flight jobs)
-- Worker auto-scaling based on queue depth
-- **Push-based job status via SSE**:
-  - Add `GET /analyze/{job_id}/stream` SSE endpoint using `sse-starlette`:
-    - Emits `JobStatus` JSON payloads on each state/stage/progress change
-    - Uses Redis pub/sub channel per `job_id` so Celery workers push updates without coupling to the HTTP process
-    - Sends keep-alive pings every 15s to prevent connection drops
-    - Closes stream on terminal status (`complete` or `failed`)
-  - Frontend `pollAnalyzeJobCancelable()` gets an SSE code path:
-    - Detect SSE support (`EventSource` on web, or `fetch` streaming on React Native)
-    - Fall back to existing polling when SSE is unavailable
-    - Remove `seenCompletedOrFailed` guard (root cause of BUG-01) — SSE naturally ends on terminal event
-    - Keep `onStatus` and `onError` callbacks identical for consumer compatibility
-- **Progressive job status stages** (in `JobStatus` schema, shared with Commit 108):
-  - Add `analysis_stage: str` field to `JobStatus` with values `"initializing"`, `"stems_separating"`, `"chords_inferring"`, `"solo_inferring"`, `"building_musicxml"`, `"complete"`
-  - Add `partial_result: bool` flag indicating whether `result` contains intermediate data
-  - Celery worker emits stage updates via Redis pub/sub on each pipeline step
-  - SSE endpoint forwards stage updates to connected clients in real-time
-
-**Acceptance Criteria:**
-- [ ] Jobs persist across server restarts
-- [ ] Multiple Celery workers can process jobs concurrently
-- [ ] In-flight jobs are recovered and re-queued on startup
-- [ ] Queue depth monitoring enables worker auto-scaling
-- [ ] Backward compatibility with existing job API
-- [ ] `GET /analyze/{job_id}/stream` SSE endpoint delivers real-time job status updates
-- [ ] Celery workers push status changes to Redis pub/sub; HTTP process forwards them via SSE
-- [ ] SSE connection closes automatically on terminal status
-- [ ] Keep-alive pings prevent proxy timeout disconnections
-- [ ] Frontend SSE path eliminates the `seenCompletedOrFailed` polling guard (BUG-01 fixed at root)
-- [ ] Frontend falls back gracefully to polling on environments without SSE support
-- [ ] `analysis_stage` and `partial_result` available in every `JobStatus` update
-- [ ] `onStatus`/`onError` callbacks identical between SSE and polling paths (transparent swap)
-
-**Implementation:**
-- Add Redis dependency to requirements.txt
-- Replace in-memory `jobs` dict with Redis-backed job store
-- Integrate Celery for async job processing
-- Implement job recovery script that runs on startup
-- Add Redis pub/sub helpers (`redis.publish(channel, message)`, `redis.subscribe(channel)`)
-- Implement SSE endpoint with `sse-starlette` or `StreamingResponse`
-- Add queue depth metrics for auto-scaling decisions
-- Update job polling endpoint to work with Redis (backward-compatible)
-- Add frontend `EventSource` or `fetch` streaming client in `src/api/analyze.ts`
-
----
-
-### Commit 137: Dedicated ML Model Server
-
-**Goal:** Deploy dedicated inference service for chord model with batched inference, model versioning, and GPU batching.
-
-**Current State:** TFLite inference runs in-process (chord_inference.py:75-114) with no batching or versioning.
-
-**Scope:**
-- Separate chord inference service with batched inference
-- Model versioning and A/B testing support
-- GPU batching for throughput
-- Model loading/unloading without server restart
-- **MLflow integration for model performance tracking:**
-  - Configure MLflow tracking server (tracking_uri, experiment_name)
-  - Log every training run with hyperparameters, loss curves, per-class metrics
-  - Register trained models in MLflow Model Registry with stage promotion (staging → production)
-  - Compare runs across experiments (architecture variants, dataset mixes, augmentation configs)
-- **Automated accuracy drift detection:**
-  - Store deployment baseline accuracy per model version
-  - Compare validation accuracy on each retrain vs. deployment baseline
-  - Alert if accuracy drops below configurable threshold (>3% degradation)
-
-**Acceptance Criteria:**
-- [ ] Dedicated inference service handles batch requests
-- [ ] Multiple model versions can be deployed simultaneously
-- [ ] GPU batching improves throughput by 3-5x
-- [ ] Model can be hot-swapped without server restart
-- [ ] A/B testing framework for model comparison
-- [ ] MLflow tracking server logs every training run with hyperparameters and metrics
-- [ ] Model Registry contains versioned artifacts with stage metadata
-- [ ] Drift detection alerts on accuracy degradation >3% vs deployment baseline
-
-**Implementation:**
-- Create separate FastAPI service for chord inference
-- Implement batch inference endpoint
-- Add model versioning to model loading logic
-- Integrate GPU batching with TensorFlow Serving or ONNX Runtime
-- Add model registry for version management
-- Implement A/B testing routing logic
-- Add MLflow client to training scripts (`build_chord_tflite.py`): wrap training loop with `mlflow.start_run()`, log params, metrics, and model artifact
-- Add drift detection module: store baseline accuracy on deployment, compare each new model version's validation accuracy, emit warning on threshold breach
-
----
+## Infrastructure
 
 ### Commit 138: GPU Job Queue for Demucs
 
@@ -1786,64 +1173,6 @@ The current implementation assumes every song is recorded to a static click trac
 - Add GPU utilization tracking (nvidia-smi integration)
 - Implement batch processing for multiple audio files
 - Add queue management UI for operators
-
----
-
-### Commit 139: Error Resilience (Circuit Breakers, Retry, DLQ)
-
-**Goal:** Implement circuit breakers, exponential backoff, and dead letter queues for transient failures.
-
-**Current State:** Basic try/except with user-friendly messages (jobs.py:391-431) but no retry logic.
-
-**Scope:**
-- Retry logic for transient YouTube failures with exponential backoff
-- Circuit breaker for LLM API calls
-- Dead letter queue for failed analysis jobs
-- Automatic retry for recoverable errors
-
-**Acceptance Criteria:**
-- [ ] YouTube download failures are retried with exponential backoff
-- [ ] Circuit breaker prevents cascading LLM API failures
-- [ ] Failed jobs are sent to dead letter queue for inspection
-- [ ] Recoverable errors are automatically retried
-- [ ] Error rate monitoring triggers circuit breaker
-
-**Implementation:**
-- Add retry decorator with exponential backoff for YouTube downloads
-- Implement circuit breaker pattern for LLM API calls
-- Create dead letter queue in Redis for failed jobs
-- Add automatic retry logic for recoverable errors
-- Implement error rate monitoring and alerting
-- Add DLQ inspection and re-queue tools
-
----
-
-### Commit 140: Monitoring & Observability (Prometheus, Grafana)
-
-**Goal:** Add structured metrics, distributed tracing, and alerting for operational visibility.
-
-**Current State:** Basic logging with elapsed time tracking (jobs.py:246-247) but no metrics or alerting.
-
-**Scope:**
-- Prometheus metrics endpoint
-- Per-stage latency histograms
-- Error rate alerting
-- Distributed tracing (OpenTelemetry)
-
-**Acceptance Criteria:**
-- [ ] Prometheus metrics endpoint exposes job metrics
-- [ ] Per-stage latency histograms identify bottlenecks
-- [ ] Error rate alerting triggers on threshold breaches
-- [ ] Distributed tracing tracks requests across services
-- [ ] Grafana dashboards visualize system health
-
-**Implementation:**
-- Add Prometheus client library to backend
-- Implement metrics endpoint for job queue, latency, errors
-- Add histogram metrics for each pipeline stage
-- Integrate OpenTelemetry for distributed tracing
-- Set up Grafana dashboards for key metrics
-- Configure alerting rules for error rates and latency
 
 ---
 
@@ -1876,22 +1205,7 @@ The current implementation assumes every song is recorded to a static click trac
 
 ---
 
-### Supporting Improvements (absorbed into existing commits)
-
-The following improvements are already partially scoped in existing commits.
-Extend their scope rather than creating new entries:
-
-| Concern | Existing commit | Extension |
-|---------|----------------|-----------|
-| Perceptual audio fingerprinting | **Commit 141** (Audio Fingerprinting & Quality Scoring) | Already covers Chromaprint-based cache keys. Ensure fallback to SHA256 when fingerprinting unavailable. |
-| On-device real-time chord inference | **Commit 127** (Live Mic Mode) | Add React Native TFLite bridge for `chord_model.tflite` inference on mic input. Web path: TensorFlow.js or ONNX runtime. Reuse existing model. |
-| Confidence-weighted ensemble | **Commit 99** (Viterbi Decoding) | Before Viterbi smoothing, run TFLite model + Basic Pitch harmonic analysis + librosa chroma features through a weighted voting layer. Track per-chord confidence as weighted average. |
-| Generative accompaniment (Lyria) | Already exists in `jam_backing.py` | Use `BeatGrid` as a conditioning signal: generate MIDI patterns locked to the detected beat grid and chord changes, then render through AlphaTab's SoundFont. |
-| AlphaTab WebView hardening (CDN, message protocol, offline) | **Commit 107** (MusicXML as Primary Render Format) | Bundle AlphaTab JS locally via Metro asset instead of jsDelivr CDN for offline support; tighten `postMessage` `targetOrigin` from `'*'` to explicit allowed origins; align SoundFont timeout values (25s harness vs 16s web path); wire prerender SVG display on native WebView; add navigation gating unit tests with malicious URL corpus; add CDN-unreachable fallback path that loads AlphaTab from bundled asset |
-
----
-
-## PHASE 3: AI-Agent Scaling & Pro-App Parity
+## Phase 3: AI-Agent Scaling & Pro-App Parity
 
 **Status:** Planned
 

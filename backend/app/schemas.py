@@ -6,6 +6,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+# Phase 2: Analysis pipeline stages for progressive progress reporting
+AnalysisStage = Literal[
+    "initializing",
+    "ingesting",
+    "stems_separating",
+    "chords_inferring",
+    "solo_inferring",
+    "building_musicxml",
+    "complete",
+]
+
 
 class SkillNode(BaseModel):
     """One skill row snapshot for personalized coach context (analyze)."""
@@ -372,7 +383,7 @@ class LessonJSON(BaseModel):
 class JobStatus(BaseModel):
     """Polling response for GET /analyze/{job_id}."""
 
-    status: Literal["processing", "complete", "failed"] = "processing"
+    status: Literal["queued", "processing", "complete", "failed"] = "processing"
     result: LessonJSON | None = None
     error: str | None = None
     error_code: str | None = Field(
@@ -388,6 +399,10 @@ class JobStatus(BaseModel):
     stage_label: str | None = Field(
         default=None,
         description="Short stage label while processing.",
+    )
+    analysis_stage: AnalysisStage | None = Field(
+        default=None,
+        description="Structured pipeline stage for frontend stage-aware UI.",
     )
     processing_started_at: float | None = Field(
         default=None,
@@ -579,6 +594,20 @@ class ChordEvent(BaseModel):
     timestamp: float = Field(..., description="Start time of the chord in seconds")
     chord: str = Field(..., description="Chord symbol (e.g., 'C:maj', 'N')")
     confidence: float = Field(..., ge=0.0, le=1.0)
+    roman_numeral: str | None = Field(
+        default=None,
+        description="Roman numeral analysis (e.g., 'I', 'ii', 'V7') when key is known",
+    )
+    llm_corrected_chord: str | None = Field(
+        default=None,
+        description="LLM-corrected chord symbol when confidence delta > threshold",
+    )
+    correction_delta: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="How much better the corrected chord fits vs original (0 = no correction)",
+    )
 
 class ChordTimeline(BaseModel):
     events: list[ChordEvent]
@@ -688,3 +717,124 @@ class DiscoveryResponse(BaseModel):
     """Response from POST /discovery/recommendations."""
 
     suggestions: list[DiscoverySuggestionItem] = Field(default_factory=list)
+
+
+# Commit 108 Schemas — Beat Grid Editor + Progressive Analysis
+
+class BeatGridRecomputeRequest(BaseModel):
+    """POST /analyze/{job_id}/beat-grid/recompute — override time signature / BPM and re-derive dependent artifacts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    time_signature: str | None = Field(
+        default=None,
+        description="Time signature override (e.g. '4/4', '6/8'). Null = keep current.",
+    )
+    bpm_override: float | None = Field(
+        default=None,
+        ge=20.0,
+        le=300.0,
+        description="BPM override. Null = keep current.",
+    )
+    reset_to_auto: bool = Field(
+        default=False,
+        description="If true, ignore time_signature/bpm_override and re-estimate from audio.",
+    )
+
+
+class BeatGridRecomputeResponse(BaseModel):
+    """Response from POST /analyze/{job_id}/beat-grid/recompute."""
+
+    job_id: str
+    beat_grid: BeatGrid
+    chord_timeline: ChordTimeline
+    solo_notes: SoloNotes
+    musicxml: str = ""
+    recompute_stage: str = "complete"
+    invalidated_artifacts: list[str] = Field(default_factory=list)
+
+
+class BeatGridRecomputeStatus(BaseModel):
+    """Polling response for beat grid recompute progress."""
+
+    status: Literal["pending", "recomputing_chords", "recomputing_solo", "rebuilding_musicxml", "complete", "failed"] = "pending"
+    beat_grid: BeatGrid | None = None
+    chord_timeline: ChordTimeline | None = None
+    solo_notes: SoloNotes | None = None
+    musicxml: str | None = None
+    error: str | None = None
+    progress: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+# Commit 109 Schemas — Analysis Persistence & Correction Editor
+
+class ChordCorrectionRequest(BaseModel):
+    """PATCH /analyze/{job_id}/chord/{beat_index} — correct a chord symbol."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    chord: str = Field(..., min_length=1, max_length=20, description="New chord symbol (e.g. 'G7', 'F#m7')")
+    reason: str | None = Field(default=None, max_length=200, description="Optional reason for correction")
+
+
+class SoloNoteCorrectionRequest(BaseModel):
+    """PATCH /analyze/{job_id}/solo-note/{note_index} — correct a solo note."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pitch: int | None = Field(default=None, ge=0, le=127, description="MIDI pitch override")
+    start_time: float | None = Field(default=None, ge=0, description="Start time override in seconds")
+    duration: float | None = Field(default=None, ge=0, description="Duration override in seconds")
+    velocity: int | None = Field(default=None, ge=0, le=127, description="Velocity override")
+    string: int | None = Field(default=None, ge=1, le=6, description="Guitar string override (1=high E)")
+    fret: int | None = Field(default=None, ge=0, le=24, description="Fret position override")
+    reason: str | None = Field(default=None, max_length=200, description="Optional reason for correction")
+
+
+class VoicingOverrideRequest(BaseModel):
+    """PATCH /analyze/{job_id}/chord/{beat_index}/voicing — override CAGED voicing shape."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    voicing_shape: str = Field(..., description="CAGED shape label (E-shape, A-shape, C-shape, D-shape, G-shape)")
+    reason: str | None = Field(default=None, max_length=200, description="Optional reason for override")
+
+
+class CorrectionRecord(BaseModel):
+    """One correction applied to analysis output."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    correction_type: Literal["chord", "solo_note", "voicing"]
+    index: int = Field(..., description="Index into the relevant array (beat_index or note_index)")
+    original_value: dict[str, Any] = Field(default_factory=dict)
+    corrected_value: dict[str, Any] = Field(default_factory=dict)
+    reason: str | None = None
+    applied_at: str = Field(default="", description="ISO timestamp of correction")
+
+
+class CorrectionHistory(BaseModel):
+    """Correction history for a job."""
+
+    job_id: str
+    corrections: list[CorrectionRecord] = Field(default_factory=list)
+    correction_count: int = 0
+    correction_coverage: float = Field(default=0.0, ge=0.0, le=1.0, description="Fraction of ML-predicted events corrected")
+
+
+class CorrectionRevertRequest(BaseModel):
+    """POST /analyze/{job_id}/corrections/revert — revert a specific correction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    correction_index: int = Field(..., ge=0, description="Index into the corrections list to revert")
+
+
+class CorrectionExportRequest(BaseModel):
+    """POST /analyze/{job_id}/corrections/export — export corrections as training data."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    include_solo_notes: bool = Field(default=True, description="Include solo note corrections")
+    include_voicings: bool = Field(default=False, description="Include voicing overrides")
+    format: Literal["json", "csv"] = Field(default="json", description="Export format")

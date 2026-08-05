@@ -731,3 +731,131 @@ export async function fetchTheoryAnnotation(payload: {
     body: JSON.stringify(payload),
   })
 }
+
+// ---------------------------------------------------------------------------
+// Commit 108: Beat Grid Recompute API
+// ---------------------------------------------------------------------------
+
+export interface BeatGridRecomputeRequest {
+  time_signature?: string | null
+  bpm_override?: number | null
+  reset_to_auto?: boolean
+}
+
+export interface BeatGridRecomputeResponse {
+  job_id: string
+  beat_grid: {
+    bpm: number
+    pulse_bpm: number
+    beats: number[]
+    downbeats: number[]
+    time_signature: { numerator: number; denominator: number }
+    tick_value: number
+  }
+  chord_timeline: { events: Array<{ timestamp: number; chord: string; confidence: number }> }
+  solo_notes: { notes: Array<{ start_time: number; duration: number; pitch: number; velocity: number }> }
+  musicxml: string
+  recompute_stage: string
+  invalidated_artifacts: string[]
+}
+
+export async function recomputeBeatGrid(
+  jobId: string,
+  payload: BeatGridRecomputeRequest,
+): Promise<BeatGridRecomputeResponse> {
+  return request<BeatGridRecomputeResponse>(`/analyze/${jobId}/beat-grid/recompute`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Commit 109: Analysis Correction APIs
+// ---------------------------------------------------------------------------
+
+export interface CorrectionRecord {
+  correction_type: 'chord' | 'solo_note' | 'voicing'
+  index: number
+  original_value: Record<string, unknown>
+  corrected_value: Record<string, unknown>
+  reason?: string | null
+  applied_at: string
+}
+
+export interface CorrectionHistory {
+  job_id: string
+  corrections: CorrectionRecord[]
+  correction_count: number
+  correction_coverage: number
+}
+
+export async function correctChord(
+  jobId: string,
+  beatIndex: number,
+  payload: { chord: string; reason?: string },
+): Promise<CorrectionRecord> {
+  return request<CorrectionRecord>(`/analyze/${jobId}/chord/${beatIndex}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function correctSoloNote(
+  jobId: string,
+  noteIndex: number,
+  payload: {
+    pitch?: number
+    start_time?: number
+    duration?: number
+    velocity?: number
+    string?: number
+    fret?: number
+    reason?: string
+  },
+): Promise<CorrectionRecord> {
+  return request<CorrectionRecord>(`/analyze/${jobId}/solo-note/${noteIndex}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function overrideVoicing(
+  jobId: string,
+  beatIndex: number,
+  payload: { voicing_shape: string; reason?: string },
+): Promise<CorrectionRecord> {
+  return request<CorrectionRecord>(`/analyze/${jobId}/chord/${beatIndex}/voicing`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function getCorrectionHistory(jobId: string): Promise<CorrectionHistory> {
+  return request<CorrectionHistory>(`/analyze/${jobId}/corrections`)
+}
+
+export async function revertCorrection(
+  jobId: string,
+  correctionIndex: number,
+): Promise<CorrectionRecord> {
+  return request<CorrectionRecord>(`/analyze/${jobId}/corrections/revert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ correction_index: correctionIndex }),
+  })
+}
+
+export async function exportCorrections(
+  jobId: string,
+  payload: { include_solo_notes?: boolean; include_voicings?: boolean; format?: 'json' | 'csv' },
+): Promise<{ format: string; data: unknown; count: number }> {
+  return request(`/analyze/${jobId}/corrections/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}

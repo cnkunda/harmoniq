@@ -211,7 +211,18 @@ def build_lesson_json_from_librosa(
     stem_classification: StemClassification | None = None,
     mix_wav_path: Path | None = None,
     piano_stem_path: Path | None = None,
+    progress_callback: "callable | None" = None,
 ) -> LessonJSON:
+    """Build a full LessonJSON from audio analysis.
+
+    Args:
+        progress_callback: Optional callable ``(stage: str, partial_lesson: LessonJSON | None) -> None``
+            called after each major pipeline stage completes. Stages:
+            ``"chords_inferring"`` (chord timeline ready),
+            ``"solo_inferring"`` (solo notes ready),
+            ``"building_musicxml"`` (MusicXML ready),
+            ``"complete"`` (final lesson).
+    """
     song_title, artist = resolve_lesson_titles(source_metadata, source_url=source_url)
 
     analysis_path = _resolve_librosa_audio_path(
@@ -260,7 +271,10 @@ def build_lesson_json_from_librosa(
     if not beat_grid_list:
         beat_grid_list = [0.0]
 
-    bar_timestamps = _sorted_unique_floats(summary.bar_timestamps_s)
+    # Derive bar_timestamps from the BeatGrid downbeats (respects actual time signature)
+    bar_timestamps = _sorted_unique_floats(beat_grid.downbeats) if beat_grid.downbeats else []
+    if not bar_timestamps:
+        bar_timestamps = _sorted_unique_floats(summary.bar_timestamps_s)
     if not bar_timestamps:
         bar_timestamps = [0.0]
     if bar_timestamps[0] > 0.05:
@@ -276,6 +290,11 @@ def build_lesson_json_from_librosa(
         chord_mix_path = mix_wav_path if mix_wav_path and mix_wav_path.is_file() else guitar_stem_path
         chord_timeline, chord_metrics = infer_chords(chord_mix_path, beat_grid, key_signature=summary.key_name)
         logger.info("chord inference completed for job_id=%s with %d events", job_id, len(chord_timeline.events))
+        if progress_callback is not None:
+            try:
+                progress_callback("chords_inferring", None)
+            except Exception:
+                pass
     except Exception:
         logger.exception("chord inference failed for job_id=%s; continuing without chord timeline", job_id)
         chord_timeline = ChordTimeline(events=[])
@@ -283,6 +302,11 @@ def build_lesson_json_from_librosa(
     try:
         solo_notes = infer_solo(guitar_stem_path, beat_grid)
         logger.info("solo inference completed for job_id=%s with %d notes", job_id, len(solo_notes.notes))
+        if progress_callback is not None:
+            try:
+                progress_callback("solo_inferring", None)
+            except Exception:
+                pass
     except Exception:
         logger.exception("solo inference failed for job_id=%s; continuing without solo notes", job_id)
         solo_notes = SoloNotes(notes=[])
@@ -418,6 +442,11 @@ def build_lesson_json_from_librosa(
                 key_signature=summary.key_name,
             )
             logger.info("MusicXML generated for job_id=%s, length=%d chars", job_id, len(musicxml_str))
+            if progress_callback is not None:
+                try:
+                    progress_callback("building_musicxml", None)
+                except Exception:
+                    pass
     except Exception:
         logger.exception("MusicXML generation failed for job_id=%s; continuing without it", job_id)
 

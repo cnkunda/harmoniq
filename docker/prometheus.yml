@@ -1,0 +1,33 @@
+# Prometheus configuration for Harmoniq
+# Scrapes backend API and Celery worker metrics
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Backend API metrics
+  - job_name: "harmoniq-backend"
+    static_configs:
+      - targets: ["backend:8000"]
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+
+  # Celery worker metrics (if exported via prometheus_client)
+  - job_name: "harmoniq-worker"
+    static_configs:
+      - targets: ["worker:8000"]
+    metrics_path: "/metrics"
+    scrape_interval: 30s
+
+  # Redis metrics (via redis_exporter if deployed)
+  # - job_name: "redis"
+  #   static_configs:
+  #     - targets: ["redis-exporter:9121"]
+
+  # MLflow metrics
+  - job_name: "harmoniq-mlflow"
+    static_configs:
+      - targets: ["mlflow:5000"]
+    metrics_path: "/metrics"
+    scrape_interval: 60s

@@ -170,7 +170,47 @@ app.include_router(curriculum_router)
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    """Health check with Redis connectivity."""
+    health_status = {"status": "ok"}
+
+    # Check Redis if configured
+    try:
+        from app.job_store import ping
+        redis_ok = ping()
+        health_status["redis"] = "ok" if redis_ok else "unreachable"
+        if not redis_ok:
+            health_status["status"] = "degraded"
+    except Exception:
+        health_status["redis"] = "unavailable"
+        health_status["status"] = "degraded"
+
+    return health_status
+
+
+# ---------------------------------------------------------------------------
+# Metrics (Prometheus)
+# ---------------------------------------------------------------------------
+
+@app.get(
+    "/metrics",
+    tags=["Observability"],
+    summary="GET /metrics — Prometheus metrics endpoint",
+)
+async def metrics():
+    from app.metrics import metrics_response
+    from app.circuit_breaker import get_all_breakers
+
+    # Update Redis health gauge
+    try:
+        from app.metrics import redis_healthy as redis_gauge
+        from app.job_store import ping
+        redis_gauge.set(1 if ping() else 0)
+    except Exception:
+        pass
+
+    # Include circuit breaker metrics
+    body = metrics_response()
+    return Response(content=body, media_type="text/plain")
 
 
 def _backend_root() -> Path:
