@@ -552,6 +552,140 @@ async def jam_score(payload: JamScoreRequest) -> JamScoreResult:
 
 
 # ---------------------------------------------------------------------------
+# Commit 111: Jam Mode Summary Agent — Claude-powered post-jam analysis
+# ---------------------------------------------------------------------------
+
+from app.jam_vocabulary import detect_patterns, extract_bundle_metrics
+from app.schemas import (
+    JamSummaryBundle,
+    JamSummaryRequest,
+    JamSummaryResponse,
+    JamVocabularyPattern,
+)
+from app.coach import (
+    JAM_SUMMARY_PERSONAS,
+    generate_jam_summary_with_claude,
+    generate_jam_summary_fallback,
+)
+
+
+def _resolve_persona(player_level: str, explicit_persona: str | None) -> str:
+    """Resolve coaching persona from player level or explicit override."""
+    if explicit_persona and explicit_persona in JAM_SUMMARY_PERSONAS:
+        return explicit_persona
+    level_map = {
+        "beginner": "learner",
+        "intermediate": "intermediate",
+        "advanced": "transcriber",
+    }
+    return level_map.get(player_level, "intermediate")
+
+
+@app.post(
+    "/jam/summary",
+    response_model=JamSummaryResponse,
+    tags=["Jam"],
+    summary="POST /jam/summary — Claude-powered post-jam analysis with vocabulary mapping",
+)
+async def jam_summary(payload: JamSummaryRequest) -> JamSummaryResponse:
+    # Normalize pitch class map
+    pitch_map: dict[str, float] = {}
+    for k, v in (payload.pitch_class_weight_map or {}).items():
+        if isinstance(k, str) and isinstance(v, (int, float)) and v >= 0:
+            pitch_map[k] = float(v)
+    total = sum(pitch_map.values())
+    if total > 0:
+        pitch_map = {k: v / total for k, v in pitch_map.items()}
+
+    # Resolve persona
+    persona = _resolve_persona(payload.player_level, payload.persona)
+
+    # Extract deterministic metrics from phrases
+    metrics = extract_bundle_metrics(
+        phrases=payload.phrases,
+        pitch_class_weight_map=pitch_map,
+        duration_seconds=payload.duration_seconds,
+    )
+
+    # Detect vocabulary patterns
+    patterns = detect_patterns(payload.phrases)
+
+    # Build pattern details for Claude prompt
+    pattern_details = ""
+    if patterns:
+        lines = []
+        for p in patterns[:5]:
+            lines.append(f"  - {p.pattern_type}: {', '.join(p.pitch_classes)} (×{p.occurrence_count}, {p.confidence:.0%} confidence)")
+        pattern_details = "\n".join(lines)
+
+    # Try Claude first, fall back to deterministic summary
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    claude_result = None
+    if api_key:
+        claude_result = generate_jam_summary_with_claude(
+            api_key=api_key,
+            duration_seconds=payload.duration_seconds,
+            inferred_scale_label=payload.inferred_scale_label,
+            inference_confidence=payload.inference_confidence,
+            track_label=payload.track_label,
+            track_key=payload.track_key,
+            track_bpm=payload.track_bpm,
+            phrase_count=metrics["phrase_count"],
+            avg_notes_per_second=metrics["avg_notes_per_second"],
+            dominant_contour=metrics["dominant_contour"],
+            vocabulary_diversity=metrics["vocabulary_diversity"],
+            pitch_class_weight_map=pitch_map,
+            vocabulary_pattern_count=len(patterns),
+            vocabulary_pattern_details=pattern_details,
+            player_level=payload.player_level,
+            previous_jam_count=payload.previous_jam_count,
+            weak_areas=payload.weak_areas,
+            persona=persona,
+        )
+
+    # Fallback to deterministic summary
+    if claude_result is None:
+        claude_result = generate_jam_summary_fallback(
+            duration_seconds=payload.duration_seconds,
+            inferred_scale_label=payload.inferred_scale_label,
+            pitch_class_weight_map=pitch_map,
+            phrase_count=metrics["phrase_count"],
+            vocabulary_diversity=metrics["vocabulary_diversity"],
+            player_level=payload.player_level,
+        )
+
+    # Build response bundle
+    bundle = JamSummaryBundle(
+        chord=payload.inferred_scale_label,
+        clarity=metrics["clarity"],
+        intonation_cents=metrics["intonation_cents"],
+        timing_ms=metrics["timing_ms"],
+        transition_from=payload.phrases[0].transition_from if payload.phrases else None,
+        transition_gap_ms=payload.phrases[0].transition_gap_ms if payload.phrases else 0.0,
+        phrase_count=metrics["phrase_count"],
+        total_notes=metrics["total_notes"],
+        avg_notes_per_second=metrics["avg_notes_per_second"],
+        dominant_contour=metrics["dominant_contour"],
+        pitch_class_distribution=pitch_map,
+        vocabulary_patterns=patterns,
+        vocabulary_diversity=metrics["vocabulary_diversity"],
+        coach_summary=claude_result["coach_summary"],
+        coach_strengths=claude_result["coach_strengths"],
+        coach_focus_areas=claude_result["coach_focus_areas"],
+        coach_next_step=claude_result["coach_next_step"],
+        persona=persona,
+        duration_seconds=payload.duration_seconds,
+        inferred_scale_label=payload.inferred_scale_label,
+        inference_confidence=payload.inference_confidence,
+    )
+
+    return JamSummaryResponse(
+        bundle=bundle,
+        coach_summary=bundle.coach_summary,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Session / Orient clip
 # ---------------------------------------------------------------------------
 

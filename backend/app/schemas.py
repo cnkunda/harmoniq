@@ -838,3 +838,130 @@ class CorrectionExportRequest(BaseModel):
     include_solo_notes: bool = Field(default=True, description="Include solo note corrections")
     include_voicings: bool = Field(default=False, description="Include voicing overrides")
     format: Literal["json", "csv"] = Field(default="json", description="Export format")
+
+
+# ---------------------------------------------------------------------------
+# Commit 111: Jam Mode Summary Agent
+# ---------------------------------------------------------------------------
+
+
+class JamPhraseMetrics(BaseModel):
+    """Per-phrase deterministic metrics extracted on-device."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    duration_ms: float = Field(..., ge=0, description="Phrase duration in milliseconds")
+    notes_per_second: float = Field(..., ge=0, description="Note density")
+    unique_pitch_classes: int = Field(..., ge=0, le=12, description="Number of distinct pitch classes (0-11)")
+    midi_span: int = Field(..., ge=0, description="MIDI range span (max - min pitch)")
+    contour: Literal["rising", "falling", "arch", "static", "mixed"] = Field(
+        default="mixed", description="Melodic contour shape"
+    )
+    beat_offset_mean: float = Field(default=0.0, description="Mean offset from beat grid (0=on-beat, 0.5=off-beat)")
+    beat_offset_std: float = Field(default=0.0, ge=0, description="Std deviation of beat offset (rhythmic consistency)")
+    home_pitch_class: str | None = Field(default=None, description="Most frequent pitch class in phrase (e.g. 'A', 'E')")
+    transition_from: str | None = Field(default=None, description="Previous chord/scale context")
+    transition_gap_ms: float = Field(default=0.0, ge=0, description="Silence gap before this phrase (ms)")
+
+
+class JamVocabularyPattern(BaseModel):
+    """Detected recurring vocabulary pattern across phrases."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pattern_id: str = Field(..., description="Unique pattern identifier (e.g. 'vocab_001')")
+    pattern_type: Literal["motif", "sequence", "arpeggio", "scale_run", "bend_figure", "repeated_note"] = Field(
+        ..., description="Category of detected pattern"
+    )
+    pitch_classes: list[str] = Field(..., description="Pitch classes in the pattern (e.g. ['A', 'C', 'E'])")
+    occurrence_count: int = Field(..., ge=2, description="Number of times this pattern appeared")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Detection confidence")
+    description: str = Field(default="", description="Human-readable description of the pattern")
+
+
+class JamSummaryBundle(BaseModel):
+    """Model-to-coach JSON bundle — deterministic metrics + Claude-generated coaching."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Deterministic metrics (computed on-device or server-side, no LLM)
+    chord: str | None = Field(default=None, description="Detected chord/scale context (e.g. 'G:maj7')")
+    clarity: float = Field(default=0.0, ge=0.0, le=1.0, description="Overall playing clarity (0-1)")
+    intonation_cents: dict[str, float] = Field(
+        default_factory=dict, description="Per-string intonation offset in cents (e.g. {'B2': -8, 'high_E': +14})"
+    )
+    timing_ms: float = Field(default=0.0, description="Average timing offset from beat grid in milliseconds")
+    transition_from: str | None = Field(default=None, description="Previous chord/scale context")
+    transition_gap_ms: float = Field(default=0.0, ge=0, description="Gap before first phrase (ms)")
+
+    # Phrase-level metrics
+    phrase_count: int = Field(default=0, ge=0, description="Number of detected phrases")
+    total_notes: int = Field(default=0, ge=0, description="Total note count")
+    avg_notes_per_second: float = Field(default=0.0, ge=0, description="Average note density")
+    dominant_contour: Literal["rising", "falling", "arch", "static", "mixed"] = Field(
+        default="mixed", description="Most common melodic contour"
+    )
+    pitch_class_distribution: dict[str, float] = Field(
+        default_factory=dict, description="Normalized pitch class weights (pc_C..pc_B)"
+    )
+
+    # Vocabulary patterns
+    vocabulary_patterns: list[JamVocabularyPattern] = Field(
+        default_factory=list, description="Detected recurring patterns"
+    )
+    vocabulary_diversity: float = Field(
+        default=0.0, ge=0.0, le=1.0,
+        description="Vocabulary diversity score (0=repetitive, 1=varied)"
+    )
+
+    # Claude-generated coaching (the LLM output)
+    coach_summary: str = Field(default="", description="1-3 sentence overall summary")
+    coach_strengths: list[str] = Field(default_factory=list, description="What went well")
+    coach_focus_areas: list[str] = Field(default_factory=list, description="Areas to work on")
+    coach_next_step: str = Field(default="", description="Specific next practice suggestion")
+
+    # Metadata
+    persona: Literal["learner", "intermediate", "transcriber"] = Field(
+        default="intermediate", description="Coaching persona used"
+    )
+    duration_seconds: int = Field(default=0, ge=0, description="Total jam duration")
+    inferred_scale_label: str | None = Field(default=None, description="Detected scale")
+    inference_confidence: Literal["low", "medium", "high"] | None = Field(default=None)
+
+
+class JamSummaryRequest(BaseModel):
+    """POST /jam/summary — Claude-powered post-jam analysis."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Core jam data
+    duration_seconds: int = Field(..., ge=0)
+    pitch_class_weight_map: dict[str, float] = Field(default_factory=dict)
+    inferred_scale_label: str | None = None
+    inference_confidence: Literal["low", "medium", "high"] | None = None
+    track_id: str | None = None
+    track_label: str | None = None
+    track_key: str | None = None
+    track_bpm: int | None = None
+
+    # Phrase-level data (persisted from device)
+    phrases: list[JamPhraseMetrics] = Field(default_factory=list, description="Per-phrase metrics from device")
+
+    # Player context for persona selection
+    player_level: Literal["beginner", "intermediate", "advanced"] = Field(
+        default="intermediate", description="Player skill level for persona selection"
+    )
+    persona: Literal["learner", "intermediate", "transcriber"] | None = Field(
+        default=None, description="Explicit persona override (auto-detected from player_level if null)"
+    )
+
+    # Optional session context
+    previous_jam_count: int = Field(default=0, ge=0, description="Number of previous jam sessions")
+    weak_areas: list[str] = Field(default_factory=list, description="Known weak areas from skill tracking")
+
+
+class JamSummaryResponse(BaseModel):
+    """Response from POST /jam/summary."""
+
+    bundle: JamSummaryBundle
+    coach_summary: str = Field(default="", description="Legacy alias for bundle.coach_summary")

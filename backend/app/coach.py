@@ -742,6 +742,199 @@ def generate_jam_coach_summary(
     ).strip() or "Jam saved. Keep connecting melodic ideas to the groove."
 
 
+# ---------------------------------------------------------------------------
+# Commit 111: Jam Mode Summary Agent — Claude-powered post-jam analysis
+# ---------------------------------------------------------------------------
+
+JAM_SUMMARY_PERSONAS = {
+    "learner": """You are a supportive guitar coach for a beginner. Use simple, encouraging language.
+Avoid music theory jargon. Focus on what the player did well and give one simple, actionable tip.
+Use analogies a non-musician would understand. Keep it under 3 sentences.""",
+    "intermediate": """You are a knowledgeable guitar coach for an intermediate player.
+Use some technical terms but explain them briefly. Balance observation with actionable advice.
+Reference specific musical concepts (scales, chord tones, phrasing). Keep it under 4 sentences.""",
+    "transcriber": """You are an analytical guitar coach focused on notation and transcription decisions.
+Use precise musical terminology. Discuss note choices, rhythmic placement, and harmonic context.
+Suggest specific notation elements (slurs, bends, vibrato marks). Keep it under 4 sentences.""",
+}
+
+JAM_SUMMARY_USER_PROMPT = """Analyze this jam session and return a JSON object with exactly these fields:
+
+{{
+  "coach_summary": "1-3 sentence overall summary of the jam",
+  "coach_strengths": ["what went well 1", "what went well 2"],
+  "coach_focus_areas": ["area to work on 1", "area to work on 2"],
+  "coach_next_step": "specific next practice suggestion"
+}}
+
+Jam data:
+- Duration: {duration_seconds}s
+- Detected scale: {scale_label} (confidence: {confidence})
+- Track: {track_label} in {track_key} at {track_bpm} BPM
+- Phrases played: {phrase_count}
+- Note density: {avg_nps:.1f} notes/second average
+- Melodic contour: {dominant_contour}
+- Vocabulary diversity: {diversity:.0%}
+- Pitch class weights: {pitch_weights}
+- Vocabulary patterns detected: {pattern_count}
+{pattern_details}
+Player context:
+- Skill level: {player_level}
+- Previous jams: {previous_jam_count}
+- Known weak areas: {weak_areas}"""
+
+
+def generate_jam_summary_with_claude(
+    *,
+    api_key: str,
+    duration_seconds: int,
+    inferred_scale_label: str | None,
+    inference_confidence: str | None,
+    track_label: str | None,
+    track_key: str | None,
+    track_bpm: int | None,
+    phrase_count: int,
+    avg_notes_per_second: float,
+    dominant_contour: str,
+    vocabulary_diversity: float,
+    pitch_class_weight_map: dict[str, float],
+    vocabulary_pattern_count: int,
+    vocabulary_pattern_details: str,
+    player_level: str,
+    previous_jam_count: int,
+    weak_areas: list[str],
+    persona: str,
+) -> dict[str, str] | None:
+    """Call Claude for jam summary with persona-aware prompting.
+
+    Returns parsed JSON dict or None on failure.
+    """
+    system_prompt = JAM_SUMMARY_PERSONAS.get(persona, JAM_SUMMARY_PERSONAS["intermediate"])
+
+    # Format pitch weights for readability
+    pitch_weights_str = ", ".join(
+        f"{k.replace('pc_', '')}: {v:.0%}"
+        for k, v in sorted(pitch_class_weight_map.items(), key=lambda kv: -kv[1])[:6]
+    ) or "sparse"
+
+    weak_areas_str = ", ".join(weak_areas[:5]) if weak_areas else "none identified"
+
+    user_prompt = JAM_SUMMARY_USER_PROMPT.format(
+        duration_seconds=duration_seconds,
+        scale_label=inferred_scale_label or "unknown",
+        confidence=inference_confidence or "low",
+        track_label=track_label or "unknown",
+        track_key=track_key or "unknown",
+        track_bpm=track_bpm or 0,
+        phrase_count=phrase_count,
+        avg_nps=avg_notes_per_second,
+        dominant_contour=dominant_contour,
+        diversity=vocabulary_diversity,
+        pitch_weights=pitch_weights_str,
+        pattern_count=vocabulary_pattern_count,
+        pattern_details=vocabulary_pattern_details,
+        player_level=player_level,
+        previous_jam_count=previous_jam_count,
+        weak_areas=weak_areas_str,
+    )
+
+    try:
+        raw = _call_claude_text(
+            api_key=api_key,
+            user_prompt=user_prompt,
+            max_tokens=350,
+            temperature=0.7,
+        )
+        data = _extract_json_object(raw)
+        if data is None:
+            logger.warning("Failed to parse Claude jam summary response")
+            return None
+
+        # Validate required fields
+        summary = data.get("coach_summary", "")
+        if not isinstance(summary, str) or not summary.strip():
+            return None
+
+        return {
+            "coach_summary": summary.strip(),
+            "coach_strengths": _ensure_string_list(data.get("coach_strengths", [])),
+            "coach_focus_areas": _ensure_string_list(data.get("coach_focus_areas", [])),
+            "coach_next_step": str(data.get("coach_next_step", "")).strip(),
+        }
+    except Exception:
+        logger.exception("Claude jam summary call failed")
+        return None
+
+
+def _ensure_string_list(value: Any) -> list[str]:
+    """Ensure value is a list of non-empty strings."""
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def generate_jam_summary_fallback(
+    *,
+    duration_seconds: int,
+    inferred_scale_label: str | None,
+    pitch_class_weight_map: dict[str, float],
+    phrase_count: int,
+    vocabulary_diversity: float,
+    player_level: str,
+) -> dict[str, str]:
+    """Deterministic fallback when Claude is unavailable."""
+    scale_str = (inferred_scale_label or "your scale").strip()
+    if scale_str.endswith("."):
+        scale_str = scale_str[:-1]
+
+    # Find dominant pitch class
+    top_note = ""
+    if pitch_class_weight_map:
+        top_key, top_val = max(pitch_class_weight_map.items(), key=lambda kv: kv[1])
+        top_note = top_key.replace("pc_", "").replace("_", "")
+        top_pct = f"{top_val:.0%}"
+    else:
+        top_pct = ""
+
+    if duration_seconds < 10:
+        return {
+            "coach_summary": "Short jam — try playing for at least 10 seconds so we can give you a proper analysis.",
+            "coach_strengths": [],
+            "coach_focus_areas": ["Play longer to get meaningful feedback"],
+            "coach_next_step": "Try a 30-second jam over the backing track.",
+        }
+
+    summary_parts = [f"You explored {scale_str}"]
+    if top_note and top_pct:
+        summary_parts.append(f"with a strong center on {top_note} ({top_pct} of notes)")
+    if phrase_count > 0:
+        summary_parts.append(f"across {phrase_count} phrases")
+    summary = ". ".join(summary_parts) + "."
+
+    strengths = []
+    if phrase_count >= 5:
+        strengths.append("Good phrase count — you're building vocabulary")
+    if vocabulary_diversity > 0.6:
+        strengths.append("Nice variety in your note choices")
+    if top_note:
+        strengths.append(f"Strong tonal center on {top_note}")
+
+    focus_areas = []
+    if vocabulary_diversity < 0.4:
+        focus_areas.append("Try exploring more notes outside your comfort zone")
+    if phrase_count < 3:
+        focus_areas.append("Aim for more phrases to develop your ideas")
+
+    next_step = f"Practice connecting phrases in {scale_str} — try starting each phrase on a different note."
+
+    return {
+        "coach_summary": summary,
+        "coach_strengths": strengths[:3],
+        "coach_focus_areas": focus_areas[:3],
+        "coach_next_step": next_step,
+    }
+
+
 def merge_coach_copy_into_sections(
     sections: list[LessonSectionStub],
     *,

@@ -81,3 +81,6 @@ backend/research/
 
 expo-env.d.ts
 # @end expo-cli
+
+# Backend test temp data
+backend/.tmp_test_data_*
