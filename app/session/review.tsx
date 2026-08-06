@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { CorrectionHistoryPanel } from '@/components/CorrectionHistoryPanel'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { PhrasingWaveformVisualizer } from '@/components/PhrasingWaveformVisualizer'
@@ -14,7 +15,7 @@ import { ScoreSummaryCard } from '@/components/ReviewSessionPanel'
 import { SessionPitchReview } from '@/components/SessionPitchReview'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
-import { ApiError, submitExportJob, submitScore } from '@/src/api/analyze'
+import { ApiError, submitExportJob, submitScore, getCorrectionHistory, revertCorrection, type CorrectionHistory } from '@/src/api/analyze'
 import { isHarmoniqSkillMutationSkipped } from '@/src/config'
 import { sessionEntryHref } from '@/src/constants/sessionFlow'
 import {
@@ -128,6 +129,10 @@ export default function ReviewScreen() {
   const [sessionCount, setSessionCount] = useState<number | null>(null)
   const [savingLick, setSavingLick] = useState(false)
   const [ghostRowForViz, setGhostRowForViz] = useState<GhostReferenceRow | null>(null)
+  const [correctionHistory, setCorrectionHistory] = useState<CorrectionHistory | null>(null)
+  const [showCorrections, setShowCorrections] = useState(false)
+
+  const jobId = typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : null
 
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
   const hasMoreSectionsInLesson = useMemo(() => {
@@ -159,6 +164,24 @@ export default function ReviewScreen() {
     () => sectionMidiBase64 ?? buildFallbackMidiBase64(lesson?.tempo, lesson?.key),
     [lesson?.key, lesson?.tempo, sectionMidiBase64],
   )
+
+  // Load correction history for this job
+  useEffect(() => {
+    if (!jobId) return
+    void getCorrectionHistory(jobId).then((h) => setCorrectionHistory(h)).catch(() => {})
+  }, [jobId])
+
+  const handleRevertCorrection = useCallback(async (correctionIndex: number) => {
+    if (!jobId) return
+    try {
+      await revertCorrection(jobId, correctionIndex)
+      toast.success('Correction reverted')
+      const updated = await getCorrectionHistory(jobId)
+      setCorrectionHistory(updated)
+    } catch (e) {
+      toast.error(`Revert failed: ${e instanceof Error ? e.message : 'unknown error'}`)
+    }
+  }, [jobId])
 
   const runScore = useCallback(async () => {
     if (!latestTake || latestTake.audioBytes.length === 0) {
@@ -607,6 +630,32 @@ export default function ReviewScreen() {
       ) : null}
 
       {score ? <ScoreSummaryCard score={score} /> : null}
+
+      {/* Correction History */}
+      {correctionHistory && correctionHistory.corrections.length > 0 ? (
+        <View className="mt-3">
+          <AnimatedPressable
+            onPress={() => setShowCorrections((v) => !v)}
+            haptic="light"
+            className="flex-row items-center justify-between rounded-lg border border-wood-600/30 bg-cream-dark/30 px-3 py-2"
+          >
+            <Text className="font-sans-medium text-xs text-amber-accent">
+              Corrections ({correctionHistory.correction_count})
+            </Text>
+            <Text className="font-sans text-[10px] text-muted-brown">
+              {showCorrections ? 'Hide' : 'Show'} · {Math.round(correctionHistory.correction_coverage * 100)}% coverage
+            </Text>
+          </AnimatedPressable>
+          {showCorrections ? (
+            <CorrectionHistoryPanel
+              corrections={correctionHistory.corrections}
+              correctionCount={correctionHistory.correction_count}
+              correctionCoverage={correctionHistory.correction_coverage}
+              onRevert={handleRevertCorrection}
+            />
+          ) : null}
+        </View>
+      ) : null}
 
       {!sectionMidiBase64 && (tabs.full || tabs.skeleton || tabs.alt) ? (
         <Text className="mt-2 font-sans text-[11px] text-muted-brown">

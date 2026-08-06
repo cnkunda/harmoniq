@@ -335,3 +335,23 @@ export interface DiscoveryResponse {
 
 /** Musical tolerance mode for scoring (commit 92). */
 export type MusicalToleranceMode = 'expressive' | 'technique'
+
+// ---------------------------------------------------------------------------
+// Commit 109: Correction types
+// ---------------------------------------------------------------------------
+
+export interface CorrectionRecord {
+  correction_type: 'chord' | 'solo_note' | 'voicing'
+  index: number
+  original_value: Record<string, unknown>
+  corrected_value: Record<string, unknown>
+  reason?: string | null
+  applied_at: string
+}
+
+export interface CorrectionHistory {
+  job_id: string
+  corrections: CorrectionRecord[]
+  correction_count: number
+  correction_coverage: number
+}

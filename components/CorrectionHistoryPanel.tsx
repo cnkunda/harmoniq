@@ -2,15 +2,9 @@ import React, { useCallback } from 'react'
 import { View, Text, FlatList } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import colors from '@/src/constants/colors'
+import type { CorrectionRecord } from '@/src/types'
 
-export interface CorrectionHistoryItem {
-  correction_type: 'chord' | 'solo_note' | 'voicing'
-  index: number
-  original_value: Record<string, unknown>
-  corrected_value: Record<string, unknown>
-  reason?: string | null
-  applied_at: string
-}
+export type CorrectionHistoryItem = CorrectionRecord
 
 export interface CorrectionHistoryPanelProps {
   corrections: CorrectionHistoryItem[]

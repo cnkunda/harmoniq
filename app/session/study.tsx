@@ -5,14 +5,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { ChordCorrectionDropdown } from '@/components/ChordCorrectionDropdown'
+import { CorrectionHistoryPanel } from '@/components/CorrectionHistoryPanel'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
+import { NoteCorrectionSheet } from '@/components/NoteCorrectionSheet'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
-import { fetchTheoryAnnotation } from '@/src/api/analyze'
+import { correctChord, correctSoloNote, getCorrectionHistory, revertCorrection, type CorrectionHistory, type CorrectionRecord } from '@/src/api/analyze'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { getAppPref } from '@/src/db/client'
 import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
@@ -151,6 +154,13 @@ function StudyScreenInner() {
   // Intelligent fretboard display mode (auto-detect or manual override)
   const [fretboardMode, setFretboardMode] = useState<'auto' | 'chords' | 'solo' | 'both'>('auto')
   const [voicingMode, setVoicingMode] = useState<'full' | 'compact'>('compact')
+
+  // Correction mode state
+  const [correctionMode, setCorrectionMode] = useState(false)
+  const [correctionHistory, setCorrectionHistory] = useState<CorrectionHistory | null>(null)
+  const [chordCorrectingBeat, setChordCorrectingBeat] = useState<number | null>(null)
+  const [noteCorrectingIndex, setNoteCorrectingIndex] = useState<number | null>(null)
+  const [noteCorrectingOriginal, setNoteCorrectingOriginal] = useState<{ pitch: number; start_time: number; duration: number; velocity: number } | null>(null)
 
   // Orient clip states (moved from separate orient.tsx screen)
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
@@ -395,6 +405,64 @@ function StudyScreenInner() {
     tabs.skeleton,
   ])
 
+  // --- Correction handlers ---
+  const jobId = lesson?.job_id?.trim() || null
+
+  const loadCorrectionHistory = useCallback(async () => {
+    if (!jobId) return
+    try {
+      const history = await getCorrectionHistory(jobId)
+      setCorrectionHistory(history)
+    } catch {
+      // Silently ignore — corrections may not exist yet
+    }
+  }, [jobId])
+
+  const handleChordCorrection = useCallback(async (beatIndex: number, chord: string) => {
+    if (!jobId) return
+    try {
+      await correctChord(jobId, beatIndex, { chord, reason: 'User correction' })
+      toast.success(`Chord corrected to ${chord}`)
+      setChordCorrectingBeat(null)
+      await loadCorrectionHistory()
+    } catch (e) {
+      toast.error(`Correction failed: ${e instanceof Error ? e.message : 'unknown error'}`)
+    }
+  }, [jobId, loadCorrectionHistory])
+
+  const handleNoteCorrection = useCallback(async (noteIndex: number, corrections: {
+    pitch?: number; start_time?: number; duration?: number; velocity?: number; string?: number; fret?: number
+  }) => {
+    if (!jobId) return
+    try {
+      await correctSoloNote(jobId, noteIndex, { ...corrections, reason: 'User correction' })
+      toast.success('Note corrected')
+      setNoteCorrectingIndex(null)
+      setNoteCorrectingOriginal(null)
+      await loadCorrectionHistory()
+    } catch (e) {
+      toast.error(`Correction failed: ${e instanceof Error ? e.message : 'unknown error'}`)
+    }
+  }, [jobId, loadCorrectionHistory])
+
+  const handleRevertCorrection = useCallback(async (correctionIndex: number) => {
+    if (!jobId) return
+    try {
+      await revertCorrection(jobId, correctionIndex)
+      toast.success('Correction reverted')
+      await loadCorrectionHistory()
+    } catch (e) {
+      toast.error(`Revert failed: ${e instanceof Error ? e.message : 'unknown error'}`)
+    }
+  }, [jobId, loadCorrectionHistory])
+
+  // Load correction history when correction mode is toggled on
+  useEffect(() => {
+    if (correctionMode) {
+      void loadCorrectionHistory()
+    }
+  }, [correctionMode, loadCorrectionHistory])
+
 
   const copyShareLink = () => {
     if (typeof window === 'undefined') {
@@ -608,14 +676,43 @@ function StudyScreenInner() {
               onSelectNote={(note) => {
                 setSelectedNote(note)
                 setFretPulseKey((k) => k + 1)
-                setNoteModalOpen(true)
+                if (correctionMode && note?.midi != null) {
+                  // In correction mode, open note correction sheet
+                  const soloNotes = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? []
+                  const matchingIdx = soloNotes.findIndex((n: SoloNote) =>
+                    Math.abs(n.pitch - note.midi!) < 2
+                  )
+                  if (matchingIdx >= 0) {
+                    const n = soloNotes[matchingIdx]
+                    setNoteCorrectingIndex(matchingIdx)
+                    setNoteCorrectingOriginal({ pitch: n.pitch, start_time: n.start_time, duration: n.duration, velocity: n.velocity ?? 80 })
+                  } else {
+                    toast.info('No matching solo note found near this position')
+                  }
+                } else {
+                  setNoteModalOpen(true)
+                }
               }}
             />
 
             <View className="mt-2">
-              <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
-                Annotations (long-press bar)
-              </Text>
+              <View className="flex-row items-center justify-between mb-2">
+                <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+                  Annotations (long-press bar)
+                </Text>
+                <AnimatedPressable
+                  onPress={() => setCorrectionMode((m) => !m)}
+                  haptic="light"
+                  className={`rounded-full px-3 py-1 border ${correctionMode
+                    ? 'border-amber-accent bg-amber-accent/20'
+                    : 'border-wood-600/35 bg-cream-dark/35'
+                  }`}
+                >
+                  <Text className={`font-sans-medium text-[10px] ${correctionMode ? 'text-amber-accent' : 'text-muted-brown'}`}>
+                    {correctionMode ? '✏️ Correcting' : 'Correct'}
+                  </Text>
+                </AnimatedPressable>
+              </View>
               <View className="flex-row flex-wrap gap-2">
                 {[...Array(Math.max(1, Math.min(lesson?.bar_timestamps?.length ?? 0, STUDY_BAR_CHIP_MAX))).keys()].map((bar) => {
                   // Get chord for this bar - check section level first, then lesson level
@@ -626,12 +723,18 @@ function StudyScreenInner() {
                     ?.reverse()
                     ?.find((e: ChordEvent) => e.timestamp <= barTime && e.chord !== 'N')
                   const chordLabel = chordForBar ? formatChordDisplay(chordForBar.chord) : '—'
+                  const chordRaw = chordForBar?.chord ?? 'N'
 
                   return (
                     <AnimatedPressable
                       key={`bar-${bar}`}
                       haptic="none"
                       onPress={() => {
+                        if (correctionMode && chordForBar) {
+                          // In correction mode, tapping opens the chord correction dropdown
+                          setChordCorrectingBeat(bar)
+                          return
+                        }
                         const stamps = lesson?.bar_timestamps
                         const t = Array.isArray(stamps) && typeof stamps[bar] === 'number' ? stamps[bar]! : 0
                         void (async () => {
@@ -646,7 +749,7 @@ function StudyScreenInner() {
                       className={`min-w-[40px] items-center rounded-full border px-2 py-1 ${bar === currentBar ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/35'
                         }`}
                       accessibilityRole="button"
-                      accessibilityHint={`${chordLabel} at bar ${bar}. Tap to seek; long press to save a practice note`}
+                      accessibilityHint={`${chordLabel} at bar ${bar}. ${correctionMode ? 'Tap to correct chord.' : 'Tap to seek; long press to save a practice note'}`}
                     >
                       <Text className={`font-mono text-[10px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-brown'}`}>
                         {chordLabel}
@@ -655,8 +758,50 @@ function StudyScreenInner() {
                   )
                 })}
               </View>
+
+              {/* Chord correction dropdown */}
+              {chordCorrectingBeat != null && jobId ? (
+                <ChordCorrectionDropdown
+                  currentChord={(() => {
+                    const barTime = lesson?.bar_timestamps?.[chordCorrectingBeat] ?? 0
+                    const chordEvents = section?.chord_timeline?.events ?? lesson?.chord_timeline?.events
+                    const found = chordEvents?.slice()?.reverse()?.find((e: ChordEvent) => e.timestamp <= barTime && e.chord !== 'N')
+                    return found?.chord ?? 'N'
+                  })()}
+                  beatIndex={chordCorrectingBeat}
+                  keySignature={lesson?.key ?? undefined}
+                  onSelect={handleChordCorrection}
+                  onCancel={() => setChordCorrectingBeat(null)}
+                  className="mt-2"
+                />
+              ) : null}
+
+              {/* Note correction sheet */}
+              {noteCorrectingIndex != null && noteCorrectingOriginal && jobId ? (
+                <NoteCorrectionSheet
+                  noteIndex={noteCorrectingIndex}
+                  originalNote={noteCorrectingOriginal}
+                  onSave={handleNoteCorrection}
+                  onCancel={() => { setNoteCorrectingIndex(null); setNoteCorrectingOriginal(null) }}
+                  className="mt-2"
+                />
+              ) : null}
+
+              {/* Correction history */}
+              {correctionMode && correctionHistory && correctionHistory.corrections.length > 0 ? (
+                <View className="mt-3">
+                  <CorrectionHistoryPanel
+                    corrections={correctionHistory.corrections}
+                    correctionCount={correctionHistory.correction_count}
+                    correctionCoverage={correctionHistory.correction_coverage}
+                    onRevert={handleRevertCorrection}
+                  />
+                </View>
+              ) : null}
+
               <Text className="mt-1 font-sans text-[11px] text-muted-brown">
                 Saved notes in this section: {Object.keys(sectionNotes).length}
+                {correctionMode ? ` · Corrections: ${correctionHistory?.correction_count ?? 0}` : ''}
               </Text>
             </View>
 

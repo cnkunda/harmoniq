@@ -10,6 +10,7 @@ export interface ChordCorrectionDropdownProps {
   onSelect: (beatIndex: number, chord: string) => void
   onCancel: () => void
   style?: object
+  className?: string
 }
 
 const CHORD_QUALITIES = ['maj', 'min', '7', 'maj7', 'min7', '9', 'min9', 'sus4', 'dim', 'aug', '6', 'min6']

@@ -774,21 +774,7 @@ export async function recomputeBeatGrid(
 // Commit 109: Analysis Correction APIs
 // ---------------------------------------------------------------------------
 
-export interface CorrectionRecord {
-  correction_type: 'chord' | 'solo_note' | 'voicing'
-  index: number
-  original_value: Record<string, unknown>
-  corrected_value: Record<string, unknown>
-  reason?: string | null
-  applied_at: string
-}
-
-export interface CorrectionHistory {
-  job_id: string
-  corrections: CorrectionRecord[]
-  correction_count: number
-  correction_coverage: number
-}
+export type { CorrectionRecord, CorrectionHistory } from '@/src/types'
 
 export async function correctChord(
   jobId: string,
