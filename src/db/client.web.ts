@@ -557,6 +557,8 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
     reliability_tags: [...(input.reliability_tags ?? [])],
     reliability_confidence: input.reliability_confidence ?? null,
     reliability_signal_quality: input.reliability_signal_quality ?? null,
+    summary_bundle_json: input.summary_bundle_json ?? null,
+    phrases_json: input.phrases_json ?? null,
   })
   await flushJams()
 }
@@ -583,6 +585,8 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
       reliability_signal_quality: typeof j.reliability_signal_quality === 'number' ? j.reliability_signal_quality : null,
       recurring_gestures: [...j.recurring_gestures],
       coach_summary: j.coach_summary,
+      summary_bundle_json: j.summary_bundle_json ?? null,
+      phrases_json: j.phrases_json ?? null,
     }))
 }
 

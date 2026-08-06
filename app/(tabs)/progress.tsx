@@ -14,6 +14,7 @@ import { listJamSnapshots, listPracticePlanCompletions, listSessionsJournal } fr
 import { mergeProgressTimeline, type ProgressTimelineItem } from '@/src/progress/mergeProgressTimeline'
 import { useDnaStore } from '@/src/stores/dnaStore'
 import { useSkillStore } from '@/src/stores/skillStore'
+import type { JamSummaryBundle } from '@/src/api/jam'
 
 function formatRelativeSessionDate(value: string): string {
   const parsed = new Date(value)
@@ -166,6 +167,14 @@ export default function ProgressScreen() {
                       const durMin = jam.duration_seconds >= 60 ? Math.round(jam.duration_seconds / 60) : null
                       const durLabel =
                         durMin != null && durMin > 0 ? `${durMin} min` : `${Math.max(0, jam.duration_seconds)}s`
+                      let summaryBundle: JamSummaryBundle | null = null
+                      if (jam.summary_bundle_json) {
+                        try {
+                          summaryBundle = JSON.parse(jam.summary_bundle_json) as JamSummaryBundle
+                        } catch {
+                          // ignore parse errors
+                        }
+                      }
                       return (
                         <View
                           key={`j-${jam.id}`}
@@ -187,9 +196,43 @@ export default function ProgressScreen() {
                             </View>
                             <Text className="font-sans text-sm text-muted-brown">{formatRelativeSessionDate(jam.date)}</Text>
                           </View>
-                          <Text className="border-t border-wood-700/50 pt-3 font-sans text-sm leading-relaxed text-cream/80">
-                            &ldquo;{jam.coach_summary?.trim() || 'Jam snapshot saved.'}&rdquo;
-                          </Text>
+                          {summaryBundle ? (
+                            <View className="border-t border-wood-700/50 pt-3">
+                              {summaryBundle.coach_summary ? (
+                                <Text className="font-sans text-sm leading-relaxed text-cream/80">
+                                  {summaryBundle.coach_summary}
+                                </Text>
+                              ) : null}
+                              {summaryBundle.coach_strengths.length > 0 ? (
+                                <Text className="mt-1.5 font-sans text-xs text-amber-light/80">
+                                  Strengths: {summaryBundle.coach_strengths.join(', ')}
+                                </Text>
+                              ) : null}
+                              {summaryBundle.coach_focus_areas.length > 0 ? (
+                                <Text className="mt-1 font-sans text-xs text-muted-brown">
+                                  Focus areas: {summaryBundle.coach_focus_areas.join(', ')}
+                                </Text>
+                              ) : null}
+                              {summaryBundle.coach_next_step ? (
+                                <Text className="mt-1 font-sans text-xs text-amber-light/70">
+                                  Next step: {summaryBundle.coach_next_step}
+                                </Text>
+                              ) : null}
+                              {summaryBundle.vocabulary_patterns.length > 0 ? (
+                                <Text className="mt-1.5 font-sans text-[11px] text-muted-brown/80">
+                                  Patterns: {summaryBundle.vocabulary_patterns.map((p) => p.description).join('; ')}
+                                </Text>
+                              ) : null}
+                              <Text className="mt-1 font-sans text-[11px] text-muted-brown/60">
+                                {summaryBundle.phrase_count} phrases · {summaryBundle.total_notes} notes · diversity{' '}
+                                {(summaryBundle.vocabulary_diversity * 100).toFixed(0)}%
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text className="border-t border-wood-700/50 pt-3 font-sans text-sm leading-relaxed text-cream/80">
+                              &ldquo;{jam.coach_summary?.trim() || 'Jam snapshot saved.'}&rdquo;
+                            </Text>
+                          )}
                         </View>
                       )
                     }

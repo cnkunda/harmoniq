@@ -40,6 +40,8 @@ function jamRow(id: string, date: string): JamSnapshotRow {
     reliability_signal_quality: null,
     recurring_gestures: [],
     coach_summary: '',
+    summary_bundle_json: null,
+    phrases_json: null,
   }
 }
 

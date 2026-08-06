@@ -251,6 +251,18 @@ export const MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION = 'ALTER TABLE skill_nodes
 /** Rollback for v14: remove schema_version column. */
 export const ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION = 'ALTER TABLE skill_nodes DROP COLUMN IF EXISTS schema_version'
 
+/** v15: jam snapshots — rich summary bundle + phrase data for Jam Mode Summary Agent. */
+export const MIGRATION_V15_JAM_SNAPSHOT_SUMMARY = [
+  'ALTER TABLE jam_snapshots ADD COLUMN summary_bundle_json TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN phrases_json TEXT',
+] as const
+
+/** Rollback for v15: remove added columns. */
+export const ROLLBACK_V15_JAM_SNAPSHOT_SUMMARY = [
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS summary_bundle_json',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS phrases_json',
+] as const
+
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },
   { id: 'phrasing', label: 'Phrasing' },

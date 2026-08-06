@@ -25,7 +25,7 @@ import {
     parseTasteProfileJson,
     submitJamScore,
 } from '@/src/api/analyze'
-import { requestJamBacking } from '@/src/api/jam'
+import { requestJamBacking, submitJamSummary, type JamPhraseMetrics, type JamSummaryBundle } from '@/src/api/jam'
 import { BACKING_TRACKS, type BackingTrackId } from '@/src/constants/backingTracks'
 import { getAllSkillNodes, getAppPref, getLessonByJobId, insertJamSnapshotRow, insertPracticePlanCompletionRow, insertSessionRow } from '@/src/db/client'
 import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
@@ -88,6 +88,7 @@ export default function JamScreen() {
     inferredScale: string | null
     confidence: 'low' | 'medium' | 'high'
     tags: string[]
+    summaryBundle: JamSummaryBundle | null
   } | null>(null)
 
   const pulse = useSharedValue(1)
@@ -103,6 +104,8 @@ export default function JamScreen() {
   const jamBackingPositionRef = useRef(0)
   const jamBpmRef = useRef<number | null>(null)
   const phraseSegmenterRef = useRef<ReturnType<typeof createJamPhraseSegmenter> | null>(null)
+  const accumulatedPhrasesRef = useRef<JamPhraseMetrics[]>([])
+  const prevPhraseEndMsRef = useRef<number | null>(null)
   const [phraseCoachLines, setPhraseCoachLines] = useState({ observation: '', suggestion: '' })
   /** Monotonic phrase segmentation clock (starts when mic opens). */
   const jamPhraseClockStartRef = useRef<number | null>(null)
@@ -143,6 +146,31 @@ export default function JamScreen() {
         const lines = coachFromPhraseFeatures(phrase, f)
         if (!lines.observation && !lines.suggestion) return
         setPhraseCoachLines(lines)
+        const pcs = phrase.notes.map((n) => {
+          const pc = ((n.midi % 12) + 12) % 12
+          return ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][pc]!
+        })
+        const uniquePcs = [...new Set(pcs)]
+        const beatOffsetSec = f.meanBeatOffsetSec
+        accumulatedPhrasesRef.current.push({
+          duration_ms: Math.max(0, phrase.endTime - phrase.startTime),
+          notes_per_second: f.notesPerSecond,
+          unique_pitch_classes: f.uniquePitchClasses,
+          midi_span: f.midiSpan,
+          contour: f.contour,
+          beat_offset_mean: beatOffsetSec != null ? beatOffsetSec * 1000 : undefined,
+          beat_offset_std:
+            f.beatOffsetVarianceSec2 != null ? Math.sqrt(f.beatOffsetVarianceSec2) * 1000 : undefined,
+          home_pitch_class: uniquePcs[0] ?? null,
+          transition_from: accumulatedPhrasesRef.current.length > 0
+            ? accumulatedPhrasesRef.current[accumulatedPhrasesRef.current.length - 1]!.home_pitch_class ?? null
+            : null,
+          transition_gap_ms:
+            prevPhraseEndMsRef.current != null
+              ? phrase.startTime - prevPhraseEndMsRef.current
+              : undefined,
+        })
+        prevPhraseEndMsRef.current = phrase.endTime
       },
     })
     phraseSegmenterRef.current = seg
@@ -337,6 +365,8 @@ export default function JamScreen() {
     setBusy(true)
     setWebMicBlocked(false)
     phraseSegmenterRef.current?.reset()
+    accumulatedPhrasesRef.current = []
+    prevPhraseEndMsRef.current = null
     setPhraseCoachLines({ observation: '', suggestion: '' })
     jamPhraseClockStartRef.current = Date.now()
     histogramRef.current = createPitchClassHistogram()
@@ -464,6 +494,8 @@ export default function JamScreen() {
     let reliabilityTags: string[] = [...localTags]
     let reliabilityConfidence: 'low' | 'medium' | 'high' = inferenceConfidence
     let reliabilitySignalQuality: number | null = null
+    let summaryBundleJson: string | null = null
+    let phrasesJson: string | null = null
 
     const trackIdForSave = backingMode === 'ai' ? AI_INSTRUMENTAL_TRACK_ID : classicTrackDef.id
     const promptSnap = lastAiPromptRef.current
@@ -505,6 +537,33 @@ export default function JamScreen() {
       mergedPositionMap = {}
     }
 
+    const phrases = accumulatedPhrasesRef.current
+    accumulatedPhrasesRef.current = []
+    prevPhraseEndMsRef.current = null
+    if (phrases.length > 0) {
+      try {
+        const summaryRes = await submitJamSummary({
+          duration_seconds: durationSeconds,
+          pitch_class_weight_map: mergedPitchMap,
+          inferred_scale_label: inferred === '—' ? null : inferred,
+          inference_confidence: inferenceConfidence,
+          track_id: trackIdForSave,
+          track_label: trackLabelForSave,
+          track_key: classicTrackDef.key,
+          track_bpm: classicTrackDef.bpm,
+          phrases,
+          weak_areas: [...weakAreas],
+        })
+        summaryBundleJson = JSON.stringify(summaryRes.bundle)
+        phrasesJson = JSON.stringify(phrases)
+        if (summaryRes.bundle.coach_summary) {
+          coachSummary = summaryRes.bundle.coach_summary
+        }
+      } catch {
+        // Summary is best-effort; jam snapshot still saves without it
+      }
+    }
+
     try {
       await insertJamSnapshotRow({
         id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -524,6 +583,8 @@ export default function JamScreen() {
         reliability_signal_quality: reliabilitySignalQuality,
         recurring_gestures: [],
         coach_summary: coachSummary,
+        summary_bundle_json: summaryBundleJson,
+        phrases_json: phrasesJson,
       })
       void useDnaStore.getState().refresh()
     } catch (e) {
@@ -544,6 +605,7 @@ export default function JamScreen() {
       inferredScale: inferred === '—' ? null : inferred,
       confidence: reliabilityConfidence,
       tags: reliabilityTags,
+      summaryBundle: summaryBundleJson ? (() => { try { return JSON.parse(summaryBundleJson) as JamSummaryBundle } catch { return null } })() : null,
     })
     setBusy(false)
     toast.success('Jam saved.')
@@ -864,6 +926,38 @@ export default function JamScreen() {
                   ? `tags: ${lastJamDiagnostics.tags.join(', ')}`
                   : 'tags: stable signal, usable map'}
               </Text>
+              {lastJamDiagnostics.summaryBundle ? (
+                <View className="mt-3 border-t border-wood-700/40 pt-3">
+                  {lastJamDiagnostics.summaryBundle.coach_summary ? (
+                    <Text className="font-sans text-sm leading-relaxed text-cream/80">
+                      {lastJamDiagnostics.summaryBundle.coach_summary}
+                    </Text>
+                  ) : null}
+                  {lastJamDiagnostics.summaryBundle.coach_strengths.length > 0 ? (
+                    <Text className="mt-1 font-sans text-xs text-amber-light/80">
+                      Strengths: {lastJamDiagnostics.summaryBundle.coach_strengths.join(', ')}
+                    </Text>
+                  ) : null}
+                  {lastJamDiagnostics.summaryBundle.coach_focus_areas.length > 0 ? (
+                    <Text className="mt-1 font-sans text-xs text-muted-brown">
+                      Focus: {lastJamDiagnostics.summaryBundle.coach_focus_areas.join(', ')}
+                    </Text>
+                  ) : null}
+                  {lastJamDiagnostics.summaryBundle.coach_next_step ? (
+                    <Text className="mt-1 font-sans text-xs text-amber-light/70">
+                      Next: {lastJamDiagnostics.summaryBundle.coach_next_step}
+                    </Text>
+                  ) : null}
+                  {lastJamDiagnostics.summaryBundle.vocabulary_patterns.length > 0 ? (
+                    <Text className="mt-1 font-sans text-xs text-muted-brown">
+                      Patterns: {lastJamDiagnostics.summaryBundle.vocabulary_patterns.map((p) => p.description).join('; ')}
+                    </Text>
+                  ) : null}
+                  <Text className="mt-1 font-sans text-[11px] text-muted-brown/70">
+                    {lastJamDiagnostics.summaryBundle.phrase_count} phrases · {lastJamDiagnostics.summaryBundle.total_notes} notes · diversity {(lastJamDiagnostics.summaryBundle.vocabulary_diversity * 100).toFixed(0)}%
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
 

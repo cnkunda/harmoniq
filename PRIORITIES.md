@@ -22,49 +22,49 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 ## Phase 2: Product Milestones
 
-### Milestone: User Feedback & Manual Overrides
+### Milestone: User Feedback & Manual Overrides ✅ COMPLETE
 
 System to tag and save manual tab corrections to refine ML confidence levels.
 
-**Scope:**
-- UI for users to mark incorrect notes/chords
-- Backend persistence of corrections
-- ML retraining pipeline incorporating user feedback
+**Scope (completed):**
+- ✅ UI for users to mark incorrect notes/chords — ChordCorrectionDropdown, NoteCorrectionSheet integrated into study.tsx
+- ✅ Backend persistence of corrections — PATCH endpoints for chord/solo-note/voicing corrections, history tracking, revert support
+- ✅ ML retraining pipeline — `backend/scripts/prepare_retraining_data.py` consumes exported corrections and generates augmented training data
+- ✅ Correction history panel in review screen
+- ✅ Type consolidation into `src/types/index.ts`
+- ✅ Backend tests: 20 passing tests covering all correction endpoints and retraining pipeline
 
 ---
 
-### Milestone: Lick Library Persistence
+### Milestone: Lick Library Persistence ✅ COMPLETE
 
 Full CRUD for saved phrases and "Drill This" micro-session logic.
 
-**Scope:**
-- SQLite schema for saved licks
-- UI for browsing, tagging, and organizing licks
-- "Drill This" generates focused micro-sessions from saved phrases
+**Scope (completed):**
+- ✅ SQLite schema for saved licks — v1 `licks` table with full CRUD (create, read, update via re-save, delete)
+- ✅ UI for browsing, tagging, and organizing licks — `app/(tabs)/library.tsx` (581 lines) with search, filter, technique tags, transpose controls
+- ✅ "Drill This" generates focused micro-sessions — `drill()` function converts lick to synthetic LessonJSON via `lessonFromSavedLick()` and navigates to `/session/study`
+- ✅ Save to Library button on Review screen
+- ✅ Home screen integration via `homeSuggestionFromLicks.ts`
+- ✅ DNA/Progress integration via `dnaStore.ts` and `dnaComputer.ts`
 
 ---
 
-### Milestone: Jam Mode Summary Agent
+### Milestone: Jam Mode Summary Agent ✅ COMPLETE
 
 Claude-powered post-jam analysis and vocabulary mapping.
 
-**Scope:**
-- Post-jam analysis endpoint
-- Vocabulary pattern detection
-- Claude integration for summary generation
-- **Concrete model-to-coach JSON bundle schema**:
-  ```json
-  {
-    "chord": "G:maj7",
-    "clarity": 0.61,
-    "intonation_cents": {"B2": -8, "high_E": +14},
-    "timing_ms": +35,
-    "transition_from": "C:maj",
-    "transition_gap_ms": 120
-  }
-  ```
-- **Persona-switching via system prompt**: learner → encouragement, simplified language; intermediate → technical feedback; transcriber → notation decisions explained
-- Model outputs fast deterministic numbers on-device; Claude is called once per phrase/segment to convert numbers into coaching language
+**Scope (completed):**
+- ✅ Post-jam analysis endpoint — `POST /jam/summary` with Claude integration + deterministic fallback
+- ✅ Vocabulary pattern detection — `backend/app/jam_vocabulary.py` (motifs, sequences, arpeggios, scale runs, bend figures, repeated notes)
+- ✅ Claude integration for summary generation — `coach.py` with streaming, circuit breaker, fallback
+- ✅ Model-to-coach JSON bundle schema — `JamSummaryBundle` with clarity, intonation, timing, transitions, vocabulary patterns
+- ✅ Persona-switching via system prompt — learner/intermediate/transcriber personas
+- ✅ Frontend API client — `submitJamSummary()` in `src/api/jam.ts`
+- ✅ Backend tests — 14 passing tests covering vocabulary detection, endpoint, fallback, personas
+- ✅ Persist phrase data in jam snapshot (device-side)
+- ✅ Wire jam summary into jam.tsx "Stop & Save" flow
+- ✅ Display rich summary in progress timeline and jam history
 
 ---
 

@@ -13,6 +13,7 @@ import {
     MIGRATION_V12_SESSION_GHOST_MIME,
     MIGRATION_V13_SESSION_MOOD,
     MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION,
+    MIGRATION_V15_JAM_SNAPSHOT_SUMMARY,
     MIGRATION_V3_APP_PREFS,
     MIGRATION_V4_SESSIONS_REVIEW,
     MIGRATION_V5_LICKS_STEMS_JSON,
@@ -28,6 +29,7 @@ import {
     ROLLBACK_V12_SESSION_GHOST_MIME,
     ROLLBACK_V13_SESSION_MOOD,
     ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION,
+    ROLLBACK_V15_JAM_SNAPSHOT_SUMMARY,
     ROLLBACK_V4_SESSIONS_REVIEW,
     ROLLBACK_V5_LICKS_STEMS_JSON,
     ROLLBACK_V6_JAM_SNAPSHOT_CONTEXT,
@@ -297,6 +299,24 @@ async function applyMigrations(): Promise<void> {
       await applyMigrationWithRollback(14, MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION, ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION, async () => validateSkillNodesPreservation(getAllSkillNodes))
     } else {
       await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 14, new Date().toISOString())
+    }
+  }
+  if (current < 15) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(jam_snapshots)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    const pendingStatements: string[] = []
+    for (const stmt of MIGRATION_V15_JAM_SNAPSHOT_SUMMARY) {
+      const col = stmt.split(' ADD COLUMN ')[1]?.split(' ')[0]
+      if (!col) continue
+      if (!names.has(col)) {
+        pendingStatements.push(stmt)
+        names.add(col)
+      }
+    }
+    if (pendingStatements.length > 0) {
+      await applyMigrationWithRollback(15, pendingStatements, ROLLBACK_V15_JAM_SNAPSHOT_SUMMARY)
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 15, new Date().toISOString())
     }
   }
   for (const n of DEFAULT_SKILL_NODES) {
@@ -705,8 +725,8 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
      (id, date, duration_seconds, scale_position_map, pitch_class_weight_map, position_weight_map,
       inferred_scale_label, inference_confidence, track_id, track_label, track_key, track_bpm,
       reliability_tags, reliability_confidence, reliability_signal_quality,
-      recurring_gestures, coach_summary)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      recurring_gestures, coach_summary, summary_bundle_json, phrases_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.id,
     input.date,
     input.duration_seconds,
@@ -724,6 +744,8 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
     input.reliability_signal_quality ?? null,
     JSON.stringify(input.recurring_gestures ?? []),
     input.coach_summary,
+    input.summary_bundle_json ?? null,
+    input.phrases_json ?? null,
   )
 }
 
@@ -748,6 +770,8 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
     reliability_signal_quality: number | null
     recurring_gestures: string | null
     coach_summary: string | null
+    summary_bundle_json: string | null
+    phrases_json: string | null
   }>('SELECT * FROM jam_snapshots ORDER BY date DESC')
   return (rows ?? []).map((r) => ({
     id: r.id,
@@ -770,6 +794,8 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
         : null,
     recurring_gestures: parseJsonArray<string>(r.recurring_gestures),
     coach_summary: r.coach_summary ?? '',
+    summary_bundle_json: r.summary_bundle_json ?? null,
+    phrases_json: r.phrases_json ?? null,
   }))
 }
 

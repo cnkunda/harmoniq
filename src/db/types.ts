@@ -176,6 +176,10 @@ export type JamSnapshotRow = {
   reliability_signal_quality: number | null
   recurring_gestures: string[]
   coach_summary: string
+  /** Serialized JamSummaryBundle from POST /jam/summary (commit 111). */
+  summary_bundle_json: string | null
+  /** Serialized JamPhraseMetrics[] captured during the jam session. */
+  phrases_json: string | null
 }
 
 /** Row when the user finishes a practice plan from Jam (final step). */
@@ -211,6 +215,10 @@ export type JamSnapshotInsertInput = {
   reliability_signal_quality?: number | null
   recurring_gestures: string[]
   coach_summary: string
+  /** Serialized JamSummaryBundle from POST /jam/summary (commit 111). */
+  summary_bundle_json?: string | null
+  /** Serialized JamPhraseMetrics[] captured during the jam session. */
+  phrases_json?: string | null
 }
 
 export type LickRow = {
