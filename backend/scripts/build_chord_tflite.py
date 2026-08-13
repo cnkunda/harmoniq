@@ -25,58 +25,24 @@ import logging
 import numpy as np
 import tensorflow as tf
 
+# Canonical vocabulary lives in real_label_vocab.py (Commit 101) — one source
+# of truth shared with prepare_real_datasets.py / real_dataset.py.  Tests
+# assert module parity, so build_chord_tflite no longer redefines it.
+from real_label_vocab import (
+    CHORD_CLASS_MAP,
+    CHORD_INTERVALS,
+    CHORD_VOCAB,
+    NO_CHORD_IDX,
+    NUM_CLASSES,
+    QUALITY_GROUPS,
+    ROOT_NOTES,
+)
+
 logger = logging.getLogger("harmoniq.build_chord_tflite")
 
 # ---------------------------------------------------------------------------
 # 1. Constants & Vocabulary
 # ---------------------------------------------------------------------------
-ROOT_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
-CHORD_INTERVALS = {
-    # Core triads
-    "maj":  [0, 4, 7],
-    "min":  [0, 3, 7],
-    # 7th chords
-    "7":    [0, 4, 7, 10],
-    "maj7": [0, 4, 7, 11],
-    "min7": [0, 3, 7, 10],
-    # Extended
-    "9":    [0, 4, 7, 10, 14],
-    "min9": [0, 3, 7, 10, 14],
-    "maj9": [0, 4, 7, 11, 14],
-    "11":   [0, 4, 7, 10, 14, 17],
-    "13":   [0, 4, 7, 10, 14, 17, 21],
-    # Altered dominants
-    "7#9":  [0, 4, 7, 10, 15],
-    "7b9":  [0, 4, 7, 10, 13],
-    "7#5":  [0, 4, 8, 10],
-    "7b5":  [0, 4, 6, 10],
-    "alt7": [0, 4, 6, 8, 10, 13, 15],
-    # Suspended
-    "sus2":  [0, 2, 7],
-    "sus4":  [0, 5, 7],
-    "7sus4": [0, 5, 7, 10],
-    # Other
-    "dim":   [0, 3, 6],
-    "dim7":  [0, 3, 6, 9],
-    "aug":   [0, 4, 8],
-    "6":     [0, 4, 7, 9],
-    "min6":  [0, 3, 7, 9],
-}
-
-# Build vocabulary as root:quality pairs, e.g. "C:maj", "D:7", "A:min7"
-CHORD_VOCAB = []
-CHORD_CLASS_MAP = []
-for quality in CHORD_INTERVALS:
-    for root_idx, root_note in enumerate(ROOT_NOTES):
-        CHORD_VOCAB.append(f"{root_note}:{quality}")
-        CHORD_CLASS_MAP.append((root_idx, quality))
-
-# No-chord token
-CHORD_VOCAB.append("N")
-CHORD_CLASS_MAP.append((-1, "N"))
-
-NUM_CLASSES     = len(CHORD_VOCAB)
 WINDOW          = 128              # Temporal context: ~12.8s at 0.1s hop (Commit 98c)
 WINDOW_MIN      = 64               # Configurable range
 WINDOW_MAX      = 256
@@ -86,14 +52,7 @@ CHROMA_BINS     = BINS_PER_OCTAVE * NUM_OCTAVES  # 36
 BASS_BINS       = 4  # Low 4 bins for bass separation
 FEATURE_DIM     = CHROMA_BINS + BASS_BINS         # 40
 
-# Quality groups for per-category accuracy tracking (Commit 98d)
-QUALITY_GROUPS = {
-    "triad":           {"maj", "min"},
-    "extended":        {"7", "maj7", "min7", "9", "min9", "maj9", "11", "13"},
-    "altered":         {"7#9", "7b9", "7#5", "7b5", "alt7"},
-    "suspended_other": {"sus2", "sus4", "7sus4", "dim", "dim7", "aug", "6", "min6"},
-    "no_chord":        {"N"},
-}
+# Quality groups for per-category accuracy tracking (Commit 98d/101)
 
 
 def compute_grouped_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
@@ -271,21 +230,26 @@ def apply_missing_notes(template: np.ndarray, quality: str, dropout_rate: float 
 
 
 def apply_pitch_shift(window: np.ndarray, shift_semitones: int = 0) -> np.ndarray:
-    """Circular shift CQT bins along pitch axis.
-    
-    Note: This crosses octave boundaries, which is an approximation
-    but effective for augmentation regularization.
+    """Transpose a (T, 40) CQT window by ``shift_semitones`` (per-octave roll).
+
+    The 36 CQT bins are three octaves of 12; each octave is rolled *within*
+    itself so register is preserved (a plain ``np.roll`` across all 36 bins
+    pushes octave-3 energy into octave-1).  The 4 bass bins are the lowest
+    bins of the rolled CQT, mirroring ``chord_inference``.
+
+    Commit 103: the class label must be transposed by the same amount
+    (mod 12) so the augmentation stays label-consistent.
+
+    Args:
+        window: (T, 40) window.
+        shift_semitones: Semitones to transpose by (0 = unchanged).
     """
     if shift_semitones == 0:
         return window
-    
     cqt = window[:, :CHROMA_BINS]
-    bass = window[:, CHROMA_BINS:]
-    
-    cqt_shifted = np.roll(cqt, shift_semitones, axis=-1)
-    bass_shifted = np.roll(bass, shift_semitones, axis=-1)
-    
-    return np.concatenate([cqt_shifted, bass_shifted], axis=-1)
+    octaves = cqt.reshape(cqt.shape[0], NUM_OCTAVES, BINS_PER_OCTAVE)
+    rolled = np.roll(octaves, shift_semitones, axis=-1).reshape(cqt.shape)
+    return np.concatenate([rolled, rolled[:, :BASS_BINS]], axis=-1)
 
 
 def apply_time_stretch(window: np.ndarray, stretch_factor: float = 1.0) -> np.ndarray:
@@ -385,29 +349,55 @@ def make_window(center_chroma: np.ndarray, noise_std: float = 0.12) -> np.ndarra
     return np.stack(frames, axis=0)
 
 
+def transpose_class_idx(class_idx: int, semitones: int) -> int:
+    """Transpose a class index by ``semitones`` (root moves, quality stays).
+
+    Label-aware companion to :func:`apply_pitch_shift` (Commit 103): the
+    audio window shifts pitch, so the training label must move with it.
+    """
+    if class_idx == NO_CHORD_IDX:
+        return NO_CHORD_IDX
+    root, quality = CHORD_CLASS_MAP[class_idx]
+    return CHORD_CLASS_MAP.index(((root + semitones) % 12, quality))
+
+
 def make_window_augmented(center_chroma: np.ndarray, noise_std: float = 0.12,
                           pitch_range: int = 2, stretch_rate: float = 0.3,
-                          stretch_range: tuple = (0.9, 1.1)) -> np.ndarray:
+                          stretch_range: tuple = (0.9, 1.1),
+                          pitch_shift: int | None = None) -> tuple[np.ndarray, int]:
     """Create augmented window with pink noise and temporal variations.
-    
-    Works with 40-bin CQT features.
+
+    Works with 40-bin CQT features.  Returns ``(window, shift)`` where
+    ``shift`` is the applied pitch transposition (0..±pitch_range) so the
+    caller can transpose the class label consistently (Commit 103).
+
+    Args:
+        center_chroma: (40,) center template.
+        noise_std: Pink-noise standard deviation.
+        pitch_range: Max |shift| in semitones.
+        stretch_rate: Fraction of windows time-stretched.
+        stretch_range: (min, max) stretch factors.
+        pitch_shift: Fixed shift (default: random uniform in [-range, range]).
     """
     frames = []
     for _ in range(WINDOW):
         noise = generate_pink_noise((FEATURE_DIM,), noise_std)
         frame = np.clip(center_chroma + noise, 0, 1)
         frames.append(frame)
-    
+
     window = np.stack(frames, axis=0)
-    
-    shift = np.random.randint(-pitch_range, pitch_range + 1)
+
+    if pitch_shift is None:
+        shift = int(np.random.randint(-pitch_range, pitch_range + 1))
+    else:
+        shift = int(pitch_shift)
     window = apply_pitch_shift(window, shift)
-    
+
     if np.random.random() < stretch_rate:
         factor = np.random.uniform(*stretch_range)
         window = apply_time_stretch(window, factor)
-    
-    return window
+
+    return window, shift
 
 
 # ---------------------------------------------------------------------------
@@ -576,6 +566,85 @@ def compute_rare_chord_metrics(
     }
 
 
+def make_synth_sample(root_idx: int, quality: str, cfg: dict | None = None) -> tuple[np.ndarray, int]:
+    """Generate one augmented synthetic window for (root_idx, quality).
+
+    Applies inversion, missing-note dropout, bass ambiguity, then the
+    augmented noise window (pink noise, pitch shift, time stretch).
+
+    Returns ``(window, shift)``; callers must transpose the class label by
+    ``shift`` via :func:`transpose_class_idx` (Commit 103 label consistency).
+    """
+    cfg = cfg or {}
+    inversion_rates = cfg.get("inversion_rates", [0.60, 0.25, 0.15])
+    dropout_rate = cfg.get("missing_note_dropout", 0.15)
+    bass_rate = cfg.get("bass_ambiguity_rate", 0.2)
+    pitch_range = cfg.get("pitch_shift_range", 2)
+    stretch_rate = cfg.get("time_stretch_rate", 0.3)
+    stretch_range = cfg.get("time_stretch_range", (0.9, 1.1))
+
+    template = make_cqt_template(root_idx, quality)
+    inversion = np.random.choice([0, 1, 2], p=inversion_rates)
+    augmented = apply_inversion(template, root_idx, quality, inversion)
+    augmented = apply_missing_notes(augmented, quality, dropout_rate)
+
+    if np.random.random() < bass_rate:
+        strength = np.random.uniform(0.1, 0.3)
+        augmented = apply_bass_ambiguity(augmented, root_idx, quality, strength)
+
+    std = 0.08 + np.random.uniform(0, 0.12)
+    return make_window_augmented(
+        augmented, std,
+        pitch_range=pitch_range,
+        stretch_rate=stretch_rate,
+        stretch_range=stretch_range,
+    )
+
+
+def generate_synthetic_batch(n: int, config: dict | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Generate ``n`` synthetic windows sampled via MT3 temperature weights.
+
+    Dedicated streaming companion to ``generate_dataset`` for the mixed
+    real/synthetic training loop (Commit 106): batch-sized generation with
+    quality weights ``(n_i/Σn_j)^T`` and a small no-chord share so the model
+    keeps the N token in its distribution.
+
+    Args:
+        n: Number of windows to generate.
+        config: Same keys as ``generate_dataset`` plus ``chord_fraction``
+                (default 0.92) and ``no_chord_std`` (default 0.05).
+
+    Returns:
+        (X (n, WINDOW, FEATURE_DIM), y (n,)) float32 / int32 arrays.
+    """
+    cfg = config or {}
+    chord_fraction = cfg.get("chord_fraction", 0.92)
+    n_chord = int(round(n * chord_fraction))
+
+    weights = compute_temperature_weights(cfg.get("temperature", 0.3))
+    qualities, w = zip(*weights.items())
+    w = np.array(w, dtype=float)
+    probs = w / w.sum()
+
+    X: list[np.ndarray] = []
+    y: list[int] = []
+    for _ in range(n_chord):
+        quality = str(np.random.choice(list(qualities), p=probs))
+        root_idx = int(np.random.randint(12))
+        class_idx = CHORD_VOCAB.index(f"{ROOT_NOTES[root_idx]}:{quality}")
+        window, shift = make_synth_sample(root_idx, quality, cfg)
+        X.append(window)
+        y.append(transpose_class_idx(class_idx, shift))
+
+    no_chord_std = cfg.get("no_chord_std", 0.05)
+    for _ in range(n - n_chord):
+        X.append(make_window(make_cqt_template(-1, "N"), no_chord_std))
+        y.append(NO_CHORD_IDX)
+
+    perm = np.random.permutation(len(y))
+    return np.array(X, dtype=np.float32)[perm], np.array(y, dtype=np.int32)[perm]
+
+
 def generate_dataset(samples_per_class: int = 200, config: dict = None):
     """Generate augmented chord dataset with realistic variability.
 
@@ -625,33 +694,18 @@ def generate_dataset(samples_per_class: int = 200, config: dict = None):
     X, y = [], []
 
     for idx, (root_idx, quality) in enumerate(CHORD_CLASS_MAP):
-        template = make_cqt_template(root_idx, quality)
-
         # Determine per-root sample count
         if quality_samples is not None:
-            n_samples = quality_samples[quality]
+            n_samples = quality_samples.get(
+                quality, max(20, int(samples_per_class * 0.05))
+            )
         else:
             n_samples = samples_per_class
 
         for _ in range(n_samples):
-            inversion = np.random.choice([0, 1, 2], p=inversion_rates)
-            augmented = apply_inversion(template, root_idx, quality, inversion)
-            augmented = apply_missing_notes(augmented, quality, dropout_rate)
-
-            if np.random.random() < bass_rate:
-                strength = np.random.uniform(0.1, 0.3)
-                augmented = apply_bass_ambiguity(augmented, root_idx, quality, strength)
-
-            std = 0.08 + np.random.uniform(0, 0.12)
-            window = make_window_augmented(
-                augmented, std,
-                pitch_range=pitch_range,
-                stretch_rate=stretch_rate,
-                stretch_range=stretch_range
-            )
-
+            window, shift = make_synth_sample(root_idx, quality, cfg)
             X.append(window)
-            y.append(idx)
+            y.append(transpose_class_idx(idx, shift))
 
     n_transitions = int(len(CHORD_CLASS_MAP) * samples_per_class * transition_rate)
     for _ in range(n_transitions):
@@ -790,15 +844,7 @@ def run_pipeline(
     model = build_model()
 
     # ── QAT wrapping (Commit 105) ──
-    if use_qat:
-        try:
-            import tensorflow_model_optimization as tfmot
-            quantize_model = tfmot.quantization.keras.quantize_model
-            model = quantize_model(model)
-            print("  QAT wrapping applied (tensorflow_model_optimization)")
-        except ImportError:
-            print("  WARNING: tensorflow_model_optimization not installed, skipping QAT")
-            use_qat = False
+    model, use_qat = apply_qat(model, use_qat)
 
     model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
 
@@ -846,10 +892,25 @@ def run_pipeline(
         print(f"  Temperature T={temperature}: rare-chord recall boost = {delta_rare:+.1%}")
 
     # ── TFLite conversion ──
+    return export_tflite(model, use_qat)
+
+
+def export_tflite(model, use_qat: bool = False, real_ds=None) -> bool:
+    """Trace the trained model to TFLite, run smoke tests, return success.
+
+    Shared by the synthetic-only pipeline (Commit 98) and the real-audio
+    pipeline (Commit 106).  When ``real_ds`` is given, the smoke test runs
+    on real windows (root accuracy must exceed 0.50) instead of synthetic
+    chord templates — after real-audio training the model no longer needs
+    to recognize idealized noise windows.
+    """
+    from real_dataset import evaluate_real
+
     print("\nTracing model to Concrete Function (Bypassing Keras serialization)...")
 
     _APP_DIR = Path(__file__).resolve().parent.parent / "app"
-    weights_path = _APP_DIR / "chord_model_weights.h5"
+    # Keras 3 requires the .weights.h5 suffix for save_weights (legacy name kept)
+    weights_path = _APP_DIR / "chord_model.weights.h5"
     model.save_weights(str(weights_path))
     print(f"Saved Keras weights to {weights_path} (for attention visualization)")
 
@@ -911,6 +972,29 @@ def run_pipeline(
             test_model = model
             use_keras_fallback = True
 
+    if real_ds is not None:
+        # Real-audio smoke: root accuracy on held-out test windows (Commit 106)
+        def predict_batch(X):
+            if use_keras_fallback:
+                return test_model.predict(X, verbose=0)
+            input_details = interp.get_input_details()[0]
+            output_details = interp.get_output_details()[0]
+            probs = []
+            for i in range(0, len(X), 64):
+                interp.set_tensor(input_details["index"], X[i : i + 64])
+                interp.invoke()
+                probs.append(interp.get_tensor(output_details["index"]))
+            return np.concatenate(probs, axis=0)
+
+        smoke_metrics = evaluate_real(predict_batch, real_ds)
+        root = smoke_metrics["overall"]["root_accuracy"]
+        n = smoke_metrics["overall"]["n_windows"]
+        all_passed = root >= 0.50
+        status = "PASS" if all_passed else "FAIL"
+        print(f"  real-window smoke: root_accuracy={root:.3f} (n={n}, "
+              f"threshold 0.50) [{status}]")
+        return all_passed
+
     if not use_keras_fallback:
         input_details = interp.get_input_details()[0]
         output_details = interp.get_output_details()[0]
@@ -958,8 +1042,236 @@ def run_pipeline(
 
     if all_passed:
         print("\nAll smoke tests PASSED")
+        return True
+    print("\nSome smoke tests FAILED")
+    return False
+
+
+# ---------------------------------------------------------------------------
+# 4a2. Quantization-Aware Training wrapper (Commit 105, fixed for Keras 3)
+# ---------------------------------------------------------------------------
+def apply_qat(model, use_qat: bool = False):
+    """Wrap a model for Quantization-Aware Training, or degrade gracefully.
+
+    ``tensorflow-model-optimization`` 0.8.1 (latest on PyPI) only supports
+    Keras 2, so on Keras 3 (TF >= 2.16) ``quantize_model`` raises
+    ValueError.  Instead of crashing the whole pipeline, we log the
+    incompatibility, return the float model, and let ``export_tflite`` apply
+    dynamic-range INT8 quantization — the mobile-size win QAT was chasing.
+
+    Returns:
+        (model, use_qat_flag) — the wrapped model (or float fallback) and
+        whether QAT is actually in effect.
+    """
+    if not use_qat:
+        return model, False
+    try:
+        import tensorflow_model_optimization as tfmot
+        wrapped = tfmot.quantization.keras.quantize_model(model)
+        print("  QAT wrapping applied (tensorflow_model_optimization)")
+        return wrapped, True
+    except ImportError:
+        print("  WARNING: tensorflow_model_optimization not installed, skipping QAT")
+    except (TypeError, ValueError) as exc:
+        if "keras" in str(exc).lower():
+            print(
+                "  WARNING: tfmot 0.8.1 does not support Keras 3 "
+                f"({exc.__class__.__name__}); falling back to dynamic-range "
+                "INT8 quantization (weights, no QAT training)"
+            )
+        else:
+            print(f"  WARNING: QAT wrapping failed ({exc}), skipping")
+    return model, False
+
+
+# ---------------------------------------------------------------------------
+# 4b. Real-audio mixed training pipeline (Commit 106)
+# ---------------------------------------------------------------------------
+def run_pipeline_real(
+    real_dir: str = None,
+    real_ratio: float = 0.7,
+    temperature: float | None = 0.3,
+    use_qat: bool = False,
+    epochs: int = 50,
+    steps_per_epoch: int = 128,
+    batch_size: int = 64,
+    seed: int = 42,
+    use_class_weights: bool = True,
+    use_real_augment: bool = True,
+    use_callbacks: bool = True,
+    max_seconds: float = 2 * 3600,
+):
+    """Train on a 70/30 mix of real-audio windows and synthetic windows.
+
+    Real windows come from ``prepare_real_datasets.py`` caches
+    (train/val/test splits by artist).  Synthetic windows stream via
+    ``generate_synthetic_batch`` with MT3 temperature weights so rare
+    qualities stay present.  Validation runs on held-out artists every
+    epoch; final metrics (full/root accuracy per artist and group,
+    per-class P/R/F1 + root confusion matrix) are written to
+    ``real_dir/eval_test.json`` alongside the TFLite export.
+
+    Commit 103 knobs:
+    - ``epochs`` default raised 12 -> 50.
+    - ``use_callbacks``: EarlyStopping (patience=5) + ReduceLROnPlateau
+      (factor=0.5, patience=3, min_lr=1e-5); best-validation weights are
+      restored from a checkpoint after training.
+    - ``use_real_augment``: label-aware pitch shift (±2 st) + time stretch
+      (0.9-1.1) applied to real windows each step.
+    - ``use_class_weights``: inverse-frequency per-class sample weights on
+      every mixed batch (real distribution dominated by maj).
+    - ``max_seconds``: hard wall-clock budget (default 2 h per the Commit
+      103 acceptance); exceeding it raises loudly instead of exporting a
+      half-trained model.
+
+    Acceptance (Commit 106): root accuracy on the Isophonics test split
+    (unseen guitarist 03) must exceed the pipeline without real audio.
+    """
+    import time
+
+    from real_dataset import (
+        AUGMENT_DEFAULTS,
+        RealChordDataset,
+        class_weight_map,
+        evaluate_real,
+        make_mixed_batch,
+        write_eval_metrics,
+    )
+    from training_callbacks import EarlyStopping, ReduceLROnPlateau
+
+    real_dir = real_dir or str(Path(__file__).resolve().parent.parent / "data" / "real_audio")
+    np.random.seed(seed)
+    rng = np.random.default_rng(seed)
+
+    print(f"Loading real-audio caches from {real_dir} ...")
+    ds_train = RealChordDataset(real_dir, "train", seed=seed)
+    ds_val = RealChordDataset(real_dir, "val", seed=seed + 1)
+    ds_test = RealChordDataset(real_dir, "test", seed=seed + 2)
+    print(f"  train: {len(ds_train.tracks)} tracks | "
+          f"artists: {', '.join(sorted(ds_train.artists))}")
+    print(f"  val:   {len(ds_val.tracks)} tracks | "
+          f"artists: {', '.join(sorted(ds_val.artists))}")
+    print(f"  test:  {len(ds_test.tracks)} tracks | "
+          f"artists: {', '.join(sorted(ds_test.artists))}")
+
+    model = build_model()
+    if use_qat:
+        model, use_qat = apply_qat(model, use_qat)
+
+    model.compile(optimizer="adam", loss="sparse_categorical_crossentropy", metrics=["accuracy"])
+    synth_cfg = {"temperature": temperature} if temperature is not None else {}
+    predict = lambda X: model.predict(X, verbose=0)
+
+    class_weights = class_weight_map(ds_train) if use_class_weights else None
+    if use_class_weights:
+        print(f"  class weights: mean={class_weights.mean():.3f} "
+              f"range=[{class_weights.min():.3f}, {class_weights.max():.3f}]")
+
+    early = EarlyStopping(patience=5)
+    lr_sched = ReduceLROnPlateau(factor=0.5, patience=3, min_lr=1e-5, initial_lr=1e-3)
+
+    def set_lr(lr: float) -> None:
+        """Apply a new learning rate to the compiled Keras optimizer."""
+        try:
+            model.optimizer.learning_rate.assign(lr)
+        except AttributeError:
+            model.optimizer.learning_rate = lr
+
+    best_path = Path(real_dir) / "best_weights.weights.h5"
+    best_epoch, best_root_acc = 0, 0.0
+    t0 = time.monotonic()
+    aug_cfg = AUGMENT_DEFAULTS if use_real_augment else None
+    print(f"\nTraining {epochs} epochs (steps/epoch={steps_per_epoch}, "
+          f"batch={batch_size}, real_ratio={real_ratio}, "
+          f"class_weights={use_class_weights}, real_augment={use_real_augment}, "
+          f"callbacks={use_callbacks})...")
+    for epoch in range(1, epochs + 1):
+        epoch_accs = []
+        for _ in range(steps_per_epoch):
+            if use_class_weights:
+                X, y, w = make_mixed_batch(
+                    ds_train,
+                    lambda n, _rng: generate_synthetic_batch(n, synth_cfg),
+                    batch_size,
+                    real_ratio=real_ratio,
+                    rng=rng,
+                    class_weights=class_weights,
+                    augment=aug_cfg,
+                )
+                _, acc = model.train_on_batch(X, y, sample_weight=w)
+            else:
+                X, y = make_mixed_batch(
+                    ds_train,
+                    lambda n, _rng: generate_synthetic_batch(n, synth_cfg),
+                    batch_size,
+                    real_ratio=real_ratio,
+                    rng=rng,
+                    augment=aug_cfg,
+                )
+                _, acc = model.train_on_batch(X, y)
+            epoch_accs.append(float(acc))
+        val_metrics = evaluate_real(predict, ds_val)
+        val_root = val_metrics["overall"]["root_accuracy"]
+        val_full = val_metrics["overall"]["full_accuracy"]
+        if use_callbacks:
+            lr_sched.on_epoch_end(epoch, val_root, set_lr=set_lr)
+        if val_root > best_root_acc:
+            best_root_acc, best_epoch = val_root, epoch
+            model.save_weights(str(best_path))
+        if use_callbacks:
+            early_stop = early.on_epoch_end(epoch, val_root)
+        else:
+            early_stop = False
+        elapsed_min = (time.monotonic() - t0) / 60
+        log_lr = f"{lr_sched.current_lr:.1e}" if use_callbacks else "-"
+        print(f"  epoch {epoch:2d}/{epochs}: train_acc={np.mean(epoch_accs):.3f} | "
+              f"val full={val_full:.3f} root={val_root:.3f} "
+              f"(best root {best_root_acc:.3f} @ {best_epoch}) | "
+              f"lr={log_lr} | {elapsed_min:.0f}m")
+        if early_stop:
+            print(f"  EARLY STOPPING: val_root did not improve for "
+                  f"{early.patience} epochs (best {best_root_acc:.3f} @ {best_epoch})")
+            break
+        if time.monotonic() - t0 > max_seconds:
+            raise RuntimeError(
+                f"training exceeded {max_seconds / 3600:.1f}h budget "
+                f"({elapsed_min:.0f} min elapsed, best val root "
+                f"{best_root_acc:.3f} @ epoch {best_epoch}) — aborting without export"
+            )
+
+    if best_epoch > 0:
+        print(f"Restoring best weights from epoch {best_epoch} "
+              f"(val root {best_root_acc:.3f})")
+        model.load_weights(str(best_path))
     else:
-        print("\nSome smoke tests FAILED")
+        print("WARNING: no epoch improved validation root accuracy; "
+              "keeping the final epoch's weights")
+
+    test_metrics = evaluate_real(predict, ds_test, with_confusion=True)
+    overall = test_metrics["overall"]
+    print("\n--- Test Split (Isophonics held-out artists) ---")
+    print(f"  windows: {overall['n_windows']}")
+    print(f"  full_accuracy:        {overall['full_accuracy']:.3f}")
+    print(f"  root_accuracy:        {overall['root_accuracy']:.3f}")
+    print(f"  root_accuracy (chord only): {overall['root_accuracy_chord_only']:.3f}")
+    print("  per artist:")
+    for artist, m in sorted(test_metrics["per_artist"].items()):
+        print(f"    {artist:12s}: root={m['root_accuracy']:.3f} (n={m['n_windows']})")
+    print("  per group:")
+    for group, acc in sorted(test_metrics["per_group"].items()):
+        print(f"    {group:18s}: {acc:.3f}")
+    print("  per quality (worst 5 by support>0):")
+    per_q = test_metrics["per_quality"]
+    for q, m in sorted(per_q.items(), key=lambda kv: kv[1]["f1"])[:5]:
+        print(f"    {q:8s}: p={m['precision']:.3f} r={m['recall']:.3f} "
+              f"f1={m['f1']:.3f} (n={m['support']})")
+    print("  top confused root pairs:")
+    for pair in test_metrics["confusion"]["top_confusions"][:10]:
+        print(f"    {pair['true']:>4s} -> {pair['predicted']:<4s} x{pair['count']}")
+    write_eval_metrics(real_dir, "test", test_metrics)
+    print(f"  metrics -> {real_dir}/eval_test.json")
+
+    return export_tflite(model, use_qat, real_ds=ds_test)
 
 
 if __name__ == "__main__":
@@ -972,9 +1284,43 @@ if __name__ == "__main__":
                         help="Disable temperature sampling (uniform)")
     parser.add_argument("--qat", action="store_true",
                         help="Enable Quantization-Aware Training (Commit 105)")
-    parser.add_argument("--epochs", type=int, default=20,
-                        help="Training epochs (default 20)")
+    parser.add_argument("--epochs", type=int, default=50,
+                        help="Training epochs (default 50, Commit 103)")
+    parser.add_argument("--real-data", type=str, default=None,
+                        help="Real-audio dir; if set, train on 70/30 mixed batches "
+                             "(Commit 106) instead of the synthetic-only pipeline")
+    parser.add_argument("--real-ratio", type=float, default=0.7,
+                        help="Fraction of real windows in mixed batches (default 0.7)")
+    parser.add_argument("--steps-per-epoch", type=int, default=128,
+                        help="Training steps per epoch in real-data mode (default 128)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for real-data mode (default 42)")
+    parser.add_argument("--no-class-weights", action="store_true",
+                        help="Disable per-class sample weighting (Commit 103)")
+    parser.add_argument("--no-real-augment", action="store_true",
+                        help="Disable label-aware pitch-shift/time-stretch on real "
+                             "windows (Commit 103)")
+    parser.add_argument("--no-callbacks", action="store_true",
+                        help="Disable EarlyStopping/ReduceLROnPlateau + best-weight "
+                             "restore (Commit 103)")
+    parser.add_argument("--max-hours", type=float, default=2.0,
+                        help="Hard wall-clock budget in hours (default 2.0)")
     args = parser.parse_args()
 
     temp = None if args.no_temperature else args.temperature
-    run_pipeline(temperature=temp, use_qat=args.qat, epochs=args.epochs)
+    if args.real_data:
+        run_pipeline_real(
+            real_dir=args.real_data,
+            real_ratio=args.real_ratio,
+            temperature=temp,
+            use_qat=args.qat,
+            epochs=args.epochs,
+            steps_per_epoch=args.steps_per_epoch,
+            seed=args.seed,
+            use_class_weights=not args.no_class_weights,
+            use_real_augment=not args.no_real_augment,
+            use_callbacks=not args.no_callbacks,
+            max_seconds=args.max_hours * 3600,
+        )
+    else:
+        run_pipeline(temperature=temp, use_qat=args.qat, epochs=args.epochs)

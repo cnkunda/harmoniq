@@ -86,11 +86,25 @@ class TestSamplesPerQuality:
             assert 20 <= count <= 800, f"Quality {quality}: {count} out of range"
 
     def test_rare_types_get_more_samples(self):
-        """Rare chord types should get more samples than common types."""
-        samples = compute_samples_per_quality(base_samples_per_class=200, temperature=0.3)
-        # "11" (count=14) should get more samples than "maj" (count=14336)
-        assert samples["11"] > samples["maj"], \
-            f"Rare type '11' ({samples['11']}) should get more than 'maj' ({samples['maj']})"
+        """Temperature sampling flattens the common/rare sample ratio.
+
+        MT3 sampling uses (n_i/Σn_j)^T; T<1 compresses the weight spread,
+        so the maj:11 ratio (≈1024× proportional) shrinks toward 1 as T
+        drops, and rare types get far more samples than their natural share.
+        """
+        s03 = compute_samples_per_quality(base_samples_per_class=200, temperature=0.3)
+        # "11" (count=14/35613) must exceed its proportional share (≈0.08)
+        assert s03["11"] > 0.08 * 200, \
+            f"Rare type '11' ({s03['11']}) should be oversampled vs proportional"
+        # Common type must still dominate absolute counts at T=0.3
+        assert s03["maj"] > s03["11"], \
+            f"'maj' ({s03['maj']}) should still outweigh '11' ({s03['11']}) at T=0.3"
+        # Lower T flattens the ratio further
+        ratio_10 = compute_samples_per_quality(200, temperature=1.0)
+        ratio_01 = compute_samples_per_quality(200, temperature=0.1)
+        assert (ratio_10["maj"] / ratio_10["11"]) > (s03["maj"] / s03["11"]) > (
+            ratio_01["maj"] / ratio_01["11"]
+        ), "maj:11 ratio must shrink monotonically as T decreases"
 
     def test_temperature_zero_gives_uniform(self):
         """At T=0, all qualities should get approximately equal samples."""
