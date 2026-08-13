@@ -4,6 +4,17 @@ Fixed for ML Inference Stability & Diagnostics (Commit 95):
   - Replaces print() with structured logging.
   - Standardized model loading with backend detection logging.
   - Diagnostics for model mismatch errors.
+
+Segment Boundary Tie Mechanism (Commit 100, MT3 paper insight):
+  - Overlap-and-blend: inference windows are placed every _WINDOW_STRIDE
+    frames (50% overlap) and per-frame predictions are accumulated with
+    triangular weights (1 - distance/half from window center). Frames near a
+    window's edge are near the center of a neighboring window, so the
+    degraded context at window edges never dominates and boundary flicker is
+    suppressed without a separate re-declaration pass.
+  - Boundary confidence penalty: predictions within _BOUNDARY_PENALTY_FRAMES
+    of the track edges (zero-padded context) have confidence scaled by
+    _BOUNDARY_CONFIDENCE_FACTOR to reduce false positives.
 """
 
 from __future__ import annotations
@@ -41,13 +52,15 @@ CHORD_VOCAB = [f"{root}:{qual}" for qual in _CHORD_QUALITIES for root in _ROOTS]
 
 _MODEL_PATH = Path(__file__).parent / "chord_model.tflite"
 _WINDOW = 128
+_WINDOW_STRIDE = _WINDOW // 2       # 50% overlap between consecutive windows
+_BOUNDARY_PENALTY_FRAMES = 2        # confidence penalty zone at track edges (0.2s @ 0.1s hop)
+_BOUNDARY_CONFIDENCE_FACTOR = 0.85
 _HOP_SEC = 0.1
 _BINS_PER_OCTAVE = 12
 _NUM_OCTAVES = 3
 _CHROMA_BINS = _BINS_PER_OCTAVE * _NUM_OCTAVES  # 36
 _BASS_BINS = 4
 _FEATURE_DIM = _CHROMA_BINS + _BASS_BINS         # 40
-_BATCH_CHUNK = 512  # Process 512 windows per TFLite invoke to cap memory
 
 
 def _get_segment_db(y_segment: np.ndarray) -> float:
@@ -118,20 +131,129 @@ def _get_interpreter():
     return interp
 
 
-def _build_windows(features: np.ndarray) -> np.ndarray:
-    """Build batched sliding windows from feature sequence.
+def _window_layout(T: int) -> tuple[list[int], np.ndarray]:
+    """Return the 50%-overlap window layout for a feature sequence.
 
-    Returns array of shape [T, _WINDOW, _FEATURE_DIM] where each slice [i]
-    is the _WINDOW-frame context centred on frame i.
+    Args:
+        T: Number of feature frames.
+
+    Returns:
+        (centers, frame_weights) where ``centers`` holds the feature-frame
+        index at the middle of each inference window (windows are ``_WINDOW``
+        frames long, strided by ``_WINDOW_STRIDE``) and ``frame_weights`` is
+        an array of shape ``(len(centers), T)`` with the triangular weight
+        ``1 - |f - center| / half`` each window contributes to every frame.
+        Every frame is covered by at least one window; frames in the overlap
+        zone are covered by two, weighted toward the nearer center.
     """
+    if T <= 0:
+        return [], np.zeros((0, 0), dtype=np.float64)
+    half = _WINDOW // 2
+    centers = list(range(0, T, _WINDOW_STRIDE))
+    frame_weights = np.zeros((len(centers), T), dtype=np.float64)
+    for k, c in enumerate(centers):
+        f_start = max(0, c - half)
+        f_end = min(T, c + half)
+        for f in range(f_start, f_end):
+            frame_weights[k, f] = 1.0 - abs(f - c) / half
+    return centers, frame_weights
+
+
+def _predict_overlap_blend(features: np.ndarray) -> tuple[list[dict], int]:
+    """Run TFLite on 50%-overlapping windows and blend per-frame predictions.
+
+    Windows are placed every ``_WINDOW_STRIDE`` frames; the predictions each
+    window produces are accumulated per frame with triangular weights (see
+    ``_window_layout``). The final per-frame prediction is the argmax of the
+    weight-normalized accumulation, so a frame sitting at the edge of one
+    window is dominated by the neighboring window that has it near its
+    center. This is the MT3-inspired overlap-and-blend: a chord held across a
+    window boundary is emitted as one stable event instead of flickering
+    between the two windows' predictions.
+
+    Returns (results, number_of_windows_blended).
+    """
+    interp = _get_interpreter()
+    inp_detail = interp.get_input_details()[0]
+    outp_detail = interp.get_output_details()[0]
+
     T = len(features)
     half = _WINDOW // 2
     pad = np.zeros((half, _FEATURE_DIM), dtype=np.float32)
     padded = np.concatenate([pad, features, pad], axis=0)
-    windows = np.zeros((T, _WINDOW, _FEATURE_DIM), dtype=np.float32)
-    for i in range(T):
-        windows[i] = padded[i : i + _WINDOW]
-    return windows
+
+    centers, frame_weights = _window_layout(T)
+    acc = np.zeros((T, len(CHORD_VOCAB)), dtype=np.float64)
+    weight_sum = np.zeros(T, dtype=np.float64)
+
+    for k, c in enumerate(centers):
+        window = padded[c : c + _WINDOW]
+        if len(window) < _WINDOW:
+            window = np.concatenate(
+                [window, np.zeros((_WINDOW - len(window), _FEATURE_DIM), dtype=np.float32)],
+                axis=0,
+            )
+        interp.set_tensor(inp_detail["index"], window[np.newaxis, :, :])
+        interp.invoke()
+        probs = interp.get_tensor(outp_detail["index"])[0].astype(np.float64)
+        acc += frame_weights[k][:, None] * probs[None, :]
+        weight_sum += frame_weights[k]
+
+    results = []
+    for f in range(T):
+        if weight_sum[f] <= 0:
+            pred_idx = 0
+            confidence = 0.0
+        else:
+            blended = acc[f] / weight_sum[f]
+            pred_idx = int(np.argmax(blended))
+            confidence = float(blended[pred_idx])
+        results.append({
+            "time": f * _HOP_SEC,
+            "chord": CHORD_VOCAB[pred_idx],
+            "confidence": confidence,
+        })
+    return results, len(centers)
+
+
+def _apply_boundary_penalty(results: list[dict]) -> int:
+    """Scale down confidence of predictions within edge frames of the track.
+
+    The first/last ``_BOUNDARY_PENALTY_FRAMES`` frames sit at the ends of the
+    feature sequence where the window context is zero-padded — the model's
+    least reliable region. Confidence is multiplied by
+    ``_BOUNDARY_CONFIDENCE_FACTOR`` there, reducing false positives at
+    segment edges. Returns the number of penalized frames.
+    """
+    n = len(results)
+    if n == 0:
+        return 0
+    edge = min(_BOUNDARY_PENALTY_FRAMES, (n + 1) // 2)
+    penalized = 0
+    for i in range(n):
+        if i < edge or i >= n - edge:
+            results[i]["confidence"] *= _BOUNDARY_CONFIDENCE_FACTOR
+            penalized += 1
+    return penalized
+
+
+def _edge_flicker_events(results: list[dict], boundary_frames: int = _BOUNDARY_PENALTY_FRAMES) -> int:
+    """Count raw-frame chord changes occurring inside the boundary zones.
+
+    These are exactly the segment-edge flicker events that overlap-and-blend
+    and the boundary confidence penalty are designed to suppress. Exposed as
+    a per-job metric so boundary flicker is observable.
+    """
+    n = len(results)
+    if n < 2:
+        return 0
+    edge = min(boundary_frames, (n + 1) // 2)
+    zones = set(range(edge)) | set(range(n - edge, n))
+    return sum(
+        1
+        for i in range(1, n)
+        if results[i]["chord"] != results[i - 1]["chord"] and (i in zones or i - 1 in zones)
+    )
 
 
 def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
@@ -154,33 +276,33 @@ def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
     # Concatenate: [36 CQT + 4 bass] = [T, 40]
     features = np.concatenate([cqt, bass], axis=1)
 
-    # Build all sliding windows at once
-    windows = _build_windows(features)  # [T, 128, 40]
+    # Overlap-and-blend inference (Commit 100: MT3 tie mechanism)
+    results, blend_windows = _predict_overlap_blend(features)
+    logger.info("Chord inference: blended %d overlapping windows", blend_windows)
 
-    interp = _get_interpreter()
-    inp_detail = interp.get_input_details()[0]
-    outp_detail = interp.get_output_details()[0]
+    penalized = _apply_boundary_penalty(results)
+    logger.info("Chord inference: boundary confidence penalty applied to %d frames", penalized)
 
-    T = len(windows)
-    all_probs = np.empty((T, len(CHORD_VOCAB)), dtype=np.float32)
+    edge_flicker = _edge_flicker_events(results)
+    logger.info("Chord inference: %d edge-flicker events after blending", edge_flicker)
 
-    # Process in chunks to cap memory usage
-    for start in range(0, T, _BATCH_CHUNK):
-        end = min(start + _BATCH_CHUNK, T)
-        chunk = windows[start:end]
-        interp.set_tensor(inp_detail["index"], chunk)
-        interp.invoke()
-        all_probs[start:end] = interp.get_tensor(outp_detail["index"])
-
-    results = []
-    for i in range(T):
-        pred_idx = int(np.argmax(all_probs[i]))
-        results.append({
-            "time": i * _HOP_SEC,
-            "chord": CHORD_VOCAB[pred_idx],
-            "confidence": float(all_probs[i][pred_idx]),
-        })
     return results
+
+
+def _boundary_metrics_for_frames(results: list[dict]) -> dict:
+    """Recompute the Commit 100 boundary-tie metrics for a raw frame list.
+
+    Pure and cheap, so callers (including tests that mock
+    ``_run_tflite_raw``) can always produce a consistent metrics dict from
+    whatever frame list was actually consumed.
+    """
+    T = len(results)
+    edge = min(_BOUNDARY_PENALTY_FRAMES, (T + 1) // 2)
+    return {
+        "blend_windows": len(_window_layout(T)[0]),
+        "boundary_frames_penalized": sum(1 for i in range(T) if i < edge or i >= T - edge),
+        "edge_flicker_events": _edge_flicker_events(results),
+    }
 
 
 def infer_chords(
@@ -271,6 +393,9 @@ def infer_chords(
         key_signature=key_signature,
         frame_predictions=raw_frames,
     )
+    # Commit 100: surface segment-boundary tie metrics (overlap blend windows,
+    # edge confidence penalties, and the edge flicker those mechanisms suppress).
+    metrics = {**metrics, **_boundary_metrics_for_frames(raw_frames)}
 
     # Re-apply volume-thresholded silence: beats that were gated to "N"
     # must remain "N" regardless of Viterbi's smoothing.

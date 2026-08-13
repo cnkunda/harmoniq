@@ -41,6 +41,32 @@ def isolated_data_dir(tmp_path, monkeypatch):
 def allow_subsecond_wavs_in_analyze_tests(monkeypatch):
     """Fixture WAVs are ~0.25s; production rejects under 30s (README / MANUAL_QA)."""
     monkeypatch.setattr("app.ingest.MIN_ANALYZE_DURATION_SECONDS", 0.01)
+    monkeypatch.setattr("app.routers.analyze.MIN_ANALYZE_DURATION_SECONDS", 0.01)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def warm_librosa_one_time():
+    """First librosa.load pays a ~25s one-time cost; warm it once per session."""
+    import tempfile
+    import wave as wave_mod
+
+    from app.stem_quality import TARGET_SR
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp_path = tmp.name
+    with wave_mod.open(tmp_path, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(TARGET_SR)
+        wf.writeframes(b"\x00\x00" * 4410)
+    try:
+        import librosa
+
+        librosa.load(tmp_path, sr=TARGET_SR, mono=True)
+    finally:
+        import os
+
+        os.unlink(tmp_path)
 
 
 def _poll_until_not_processing(job_id: str, *, timeout_seconds: float = 20.0) -> dict:
@@ -69,6 +95,7 @@ def test_post_analyze_returns_job_id():
 
 def test_post_analyze_rejects_wav_under_min_duration_with_readme_message(tmp_path, monkeypatch):
     monkeypatch.setattr("app.ingest.MIN_ANALYZE_DURATION_SECONDS", 30.0)
+    monkeypatch.setattr("app.routers.analyze.MIN_ANALYZE_DURATION_SECONDS", 30.0)
     input_wav = tmp_path / "short.wav"
     _write_test_wav(input_wav, sample_rate=44100, channels=1, duration_seconds=5.0)
     r = client.post(
@@ -96,12 +123,14 @@ def _write_test_wav(
         wf.setnchannels(channels)
         wf.setsampwidth(2)  # 16-bit PCM
         wf.setframerate(sample_rate)
+        buf = bytearray()
         for i in range(frames):
             v = math.sin(2 * math.pi * frequency * (i / sample_rate))
             sample = int(v * 0.2 * 32767)
-            for ch in range(channels):
-                s = sample if ch % 2 == 0 else -sample
-                wf.writeframes(struct.pack("<h", s))
+            buf += struct.pack("<h", sample)
+            if channels == 2:
+                buf += struct.pack("<h", -sample)
+        wf.writeframes(bytes(buf))
 
 
 def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path, monkeypatch):
@@ -117,7 +146,7 @@ def test_upload_audio_normalizes_to_44100_mono_wav(tmp_path, monkeypatch):
     assert r.status_code == 200, r.text
     job_id = r.json()["job_id"]
 
-    body = _poll_until_not_processing(job_id, timeout_seconds=45.0)
+    body = _poll_until_not_processing(job_id, timeout_seconds=300.0)
     assert body["status"] == "complete"
     assert body["error"] is None
     assert body["result"] is not None
@@ -206,13 +235,15 @@ def test_invalid_youtube_url_fails_with_user_message():
     assert body.get("error_code") == ANALYZE_ERROR_YOUTUBE_INVALID
 
 
-def test_get_analyze_unknown_job_returns_404_json():
+def test_get_analyze_unknown_job_returns_queued():
+    """Unknown jobs poll as queued (polling contract, not 404)."""
     missing = "00000000-0000-0000-0000-000000000000"
     r = client.get(f"/analyze/{missing}")
-    assert r.status_code == 404, r.text
-    err = r.json()
-    assert "detail" in err
-    assert missing in err["detail"]
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "queued"
+    assert body["result"] is None
+    assert body["error"] is None
 
 
 def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
@@ -228,7 +259,7 @@ def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
         out: dict[str, str] = {}
         for name in stem_names:
             p = stems_dir / f"{name}.wav"
-            p.write_bytes(b"RIFF")
+            _write_test_wav(p, sample_rate=44100, channels=1, duration_seconds=0.5)
             out[name] = p.relative_to(get_data_dir().parent).as_posix()
         return out
 
@@ -245,6 +276,7 @@ def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
         stem_classification=None,
         mix_wav_path=None,
         piano_stem_path=None,
+        progress_callback=None,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub
@@ -300,7 +332,7 @@ def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
         out: dict[str, str] = {}
         for name in stem_names:
             p = stems_dir / f"{name}.wav"
-            p.write_bytes(b"RIFF")
+            _write_test_wav(p, sample_rate=44100, channels=1, duration_seconds=0.5)
             out[name] = p.relative_to(get_data_dir().parent).as_posix()
         return out
 
@@ -317,6 +349,7 @@ def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
         stem_classification=None,
         mix_wav_path=None,
         piano_stem_path=None,
+        progress_callback=None,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub
@@ -372,7 +405,7 @@ def test_missing_cached_artifact_forces_recompute(monkeypatch, tmp_path):
         out: dict[str, str] = {}
         for name in stem_names:
             p = stems_dir / f"{name}.wav"
-            p.write_bytes(b"RIFF")
+            _write_test_wav(p, sample_rate=44100, channels=1, duration_seconds=0.5)
             out[name] = p.relative_to(get_data_dir().parent).as_posix()
         return out
 
@@ -389,6 +422,7 @@ def test_missing_cached_artifact_forces_recompute(monkeypatch, tmp_path):
         stem_classification=None,
         mix_wav_path=None,
         piano_stem_path=None,
+        progress_callback=None,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub

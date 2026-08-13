@@ -768,5 +768,49 @@ class _JobsProxy:
             return -1  # Unknown
         return len(_jobs_memory)
 
+    def clear(self) -> None:
+        """Delete all job state (test fixtures and admin routes)."""
+        if _use_redis():
+            from app.job_store import get_redis
+            r = get_redis()
+            keys = list(r.scan_iter(match="job:*"))
+            if keys:
+                r.delete(*keys)
+        else:
+            _jobs_memory.clear()
+
 
 jobs = _JobsProxy()
+
+
+class _CoachProxy:
+    """Dict-like proxy for coach hydration state (backend-agnostic)."""
+
+    def __getitem__(self, key: str) -> CoachHydrationStatus:
+        status = _get_coach(key)
+        if status is None:
+            raise KeyError(key)
+        return status
+
+    def __setitem__(self, key: str, value: CoachHydrationStatus) -> None:
+        _set_coach(key, value)
+
+    def __contains__(self, key: str) -> bool:
+        return _get_coach(key) is not None
+
+    def get(self, key: str, default=None) -> CoachHydrationStatus | None:
+        status = _get_coach(key)
+        return status if status is not None else default
+
+    def clear(self) -> None:
+        if _use_redis():
+            from app.job_store import get_redis
+            r = get_redis()
+            keys = list(r.scan_iter(match="coach:*"))
+            if keys:
+                r.delete(*keys)
+        else:
+            _coach_memory.clear()
+
+
+coach_hydration = _CoachProxy()

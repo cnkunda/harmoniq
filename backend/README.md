@@ -248,6 +248,30 @@ If `pip install -e ".[basicpitch]"` fails with that error (your resolver only se
 
 If inference crashes inside TensorFlow, versions are incompatible — fall back to **stub tabs** or use **macOS** / **conda** until Spotify ships a relaxed pin.
 
+## Real-audio chord model training (Commit 101/106)
+
+The chord model ships in `app/chord_model.tflite` (+ `chord_model.keras`, `chord_model.weights.h5` for inspection). It is trained on a **70/30 mix of real audio windows and synthetic templates** with the scripts in `scripts/`:
+
+```bash
+# 1. One-time dataset prep (caches under data/real_audio/ — git-ignored)
+python scripts/prepare_real_datasets.py status      # what's available
+python scripts/prepare_real_datasets.py download    # Isophonics tracks via YouTube (optional, needs yt-dlp)
+python scripts/prepare_real_datasets.py prep        # extract 40-bin CQT, align labels, gate, cache
+python scripts/prepare_real_datasets.py split       # artist-exclusive train/val/test -> split.json
+python scripts/prepare_real_datasets.py stats       # vocabulary coverage over the cache
+
+# 2. Train (mixed 70/30 real/synthetic) and export TFLite
+python scripts/build_chord_tflite.py --real-data data/real_audio --epochs 15
+
+# 3. Controlled baseline: same pipeline with 0% real audio
+python scripts/build_chord_tflite.py --real-data data/real_audio --real-ratio 0 --epochs 15
+```
+
+- **Sources:** GuitarSet (180 tracks, true guitar comp audio + chord annotations; split by player so test artist 03 is completely unseen) and Isophonics Beatles/Queen (official downloads are gone; `download` fetches YouTube audio matched to the original `.lab` spans by duration, verified within 1–2 s).
+- **Label mapping:** `scripts/real_label_vocab.py` — the canonical 277-class vocabulary plus the free-form→class mapper (slash chords, interval lists, `hdim7`, omissions, section labels). `build_chord_tflite.py` imports its vocabulary from here.
+- **Windows:** `scripts/real_dataset.py` — random-window sampler over the gated cache, 70/30 mixed-batch builder, and per-artist/per-group evaluation (full + root accuracy).
+- **Expected runtime:** ~20 min for 15 epochs × 128 steps on a CPU WSL box (first TensorFlow import ~2 min).
+
 ## License / stack
 
 Same as the parent Harmoniq repository. Not all upstream models (e.g. demucs checkpoints, whisper weights) are redistributed here — they download on first use.
