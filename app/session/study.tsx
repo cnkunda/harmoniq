@@ -15,10 +15,18 @@ import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
-import { correctChord, correctSoloNote, getCorrectionHistory, revertCorrection, type CorrectionHistory, type CorrectionRecord } from '@/src/api/analyze'
+import {
+  correctChord,
+  correctSoloNote,
+  fetchTheoryAnnotation,
+  getCorrectionHistory,
+  revertCorrection,
+  type CorrectionHistory,
+  type CorrectionRecord,
+} from '@/src/api/analyze'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { getAppPref } from '@/src/db/client'
-import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
+import { PREF_PREFER_FULL_TABS, PREF_PREFER_SIMPLER_TABS_LEGACY, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { mapLowTranscriptionConfidenceBanner, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
@@ -38,7 +46,7 @@ import {
   readFretboardShareStateFromLocation,
   type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
-import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
+import { pickTabVariant, readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { NoteEventMessage } from '@/types/tabMessage'
 
 // Transcription types (matching backend schemas)
@@ -337,7 +345,7 @@ function StudyScreenInner() {
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [overlayMode, setOverlayMode] = useState<FretboardOverlayMode>('off')
-  const [preferSimplerTabs, setPreferSimplerTabs] = useState(false)
+  const [preferFullTabs, setPreferFullTabs] = useState(false)
   const [lowConfBannerDismissed, setLowConfBannerDismissed] = useState(false)
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
 
@@ -359,7 +367,13 @@ function StudyScreenInner() {
 
   useFocusEffect(
     useCallback(() => {
-      void getAppPref(PREF_PREFER_SIMPLER_TABS).then((v) => setPreferSimplerTabs(v === '1'))
+      void Promise.all([
+        getAppPref(PREF_PREFER_FULL_TABS),
+        getAppPref(PREF_PREFER_SIMPLER_TABS_LEGACY),
+      ]).then(([v, legacy]) => {
+        // Legacy "0" (always full) maps onto the new default-off toggle.
+        setPreferFullTabs(v === '1' || (v == null && legacy === '0'))
+      })
     }, []),
   )
 
@@ -384,22 +398,12 @@ function StudyScreenInner() {
   }, [])
 
   useEffect(() => {
-    const conf = lesson?.transcription_confidence
-    const uncertain = typeof conf === 'number' && conf < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX
-    let primary: TabVariant
-    if (preferSimplerTabs && uncertain) {
-      if (tabs.skeleton) primary = 'skeleton'
-      else if (tabs.alt) primary = 'alt'
-      else primary = tabs.full ? 'full' : 'skeleton'
-    } else {
-      primary = tabs.full ? 'full' : tabs.skeleton ? 'skeleton' : tabs.alt ? 'alt' : 'full'
-    }
-    setVariant(primary)
+    setVariant(pickTabVariant(lesson?.transcription_confidence, tabs, preferFullTabs))
   }, [
     lesson?.job_id,
     lesson?.transcription_confidence,
     lessonSectionIndex,
-    preferSimplerTabs,
+    preferFullTabs,
     tabs.alt,
     tabs.full,
     tabs.skeleton,

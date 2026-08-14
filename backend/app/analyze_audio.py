@@ -16,6 +16,11 @@ from app.ingest import SourceMetadata, resolve_lesson_titles
 from app.pipeline_proof import LibrosaSummary, librosa_summarize
 from app.style_detect import infer_style_from_librosa_summary
 from app.transcribe import transcribe_vocals_to_lyrics_aligned
+from app.transcription_confidence import (
+    chord_section_confidence,
+    composite_transcription_confidence,
+    vocals_coverage_confidence,
+)
 from app.schemas import (
     BeatGrid,
     ChordEvent,
@@ -370,12 +375,48 @@ def build_lesson_json_from_librosa(
         
         sections[i] = LessonSectionStub(**section_dict)
 
-    lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
+    # ML Fallback milestone: per-section chord-model confidence (duration-
+    # weighted blended max-softmax) from each section's own chord timeline.
+    section_chord_confs: list[float | None] = []
+    for sec in sections:
+        section_chord_confs.append(
+            chord_section_confidence(
+                getattr(sec, "chord_timeline", None),
+                section_start=sec.start_time_seconds,
+            )
+        )
+
+    # The tuple's second element (word-count heuristic) is superseded by the
+    # coverage-based composite below; only the aligned rows are used here.
+    lyrics_aligned, _ = transcribe_vocals_to_lyrics_aligned(
         vocals_stem_path, beat_grid=beat_grid_list, bar_timestamps=bar_timestamps
+    )
+    vocals_cov_conf = vocals_coverage_confidence(
+        lyrics_aligned if isinstance(lyrics_aligned, list) else [],
+        len(beat_grid_list),
     )
 
     skip_tabs = stem_classification is not None and not stem_classification.guitar_stem_usable
     tab_artifacts: dict[str, str] | None = None
+
+    # Composite per-section confidence (chord softmax + vocal coverage).
+    # When the guitar stem is unusable the composite is floored at 0.25 and
+    # tabs are skipped entirely — the frontend then shows the
+    # "transcription unavailable" state instead of empty tab viewports.
+    # Sections are never empty (fallback "Intro" above), so the mean always
+    # resolves to a finite confidence.
+    guitar_usable = stem_classification is None or stem_classification.guitar_stem_usable
+    section_composite_confs = [
+        composite_transcription_confidence(
+            chord_conf if guitar_usable else None,
+            vocals_cov_conf if guitar_usable else None,
+            guitar_stem_usable=guitar_usable,
+        )
+        for chord_conf in section_chord_confs
+    ]
+    transcription_confidence = float(
+        sum(section_composite_confs) / len(section_composite_confs)
+    )
 
     if skip_tabs:
         tc = min(float(transcription_confidence), 0.25)
@@ -421,6 +462,14 @@ def build_lesson_json_from_librosa(
                 )
                 for sec in sections
             ]
+        # Per-section composite confidence overrides the uniform tabgen value
+        # so each section carries its own chord+vocal quality signal.
+        sections = [
+            LessonSectionStub(
+                **{**getattr(sec, "model_dump")(exclude_none=True), "confidence": conf}
+            )
+            for sec, conf in zip(sections, section_composite_confs)
+        ]
 
     style = infer_style_from_librosa_summary(summary)
     stem_fields = _lesson_json_stem_fields(stem_classification)

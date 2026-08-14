@@ -1,3 +1,5 @@
+import { TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
+
 /** GP5 payloads on `LessonJSON.sections[]` items (backend tabgen). */
 export type SectionTabPayloads = {
   full?: string
@@ -25,4 +27,28 @@ export function firstGp5Base64FromLessonSections(sections: unknown): string | nu
     if (gp) return gp
   }
   return null
+}
+
+export type TabVariant = 'full' | 'skeleton' | 'alt'
+
+/**
+ * ML Fallback Logic milestone: pick which tab variant to render.
+ *
+ * Automatic by default — when the lesson's transcription confidence is below
+ * the "uncertain" bar, degrade to the skeleton (or alt) tab so the learner
+ * never practices against a dubious full transcription. `preferFullTabs`
+ * ("Always use full tabs" in Settings) overrides the auto fallback.
+ */
+export function pickTabVariant(
+  confidence: number | null | undefined,
+  tabs: SectionTabPayloads,
+  preferFullTabs: boolean,
+): TabVariant {
+  const uncertain = typeof confidence === 'number' && confidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX
+  if (!preferFullTabs && uncertain) {
+    if (tabs.skeleton) return 'skeleton'
+    if (tabs.alt) return 'alt'
+    return tabs.full ? 'full' : 'skeleton'
+  }
+  return tabs.full ? 'full' : tabs.skeleton ? 'skeleton' : tabs.alt ? 'alt' : 'full'
 }

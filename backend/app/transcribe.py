@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from app.transcription_confidence import vocals_coverage_confidence
+
 logger = logging.getLogger("harmoniq.transcribe")
 logger.setLevel(logging.INFO)
 
@@ -107,7 +109,8 @@ def map_words_to_lyrics_aligned(
 
 def _estimate_transcription_confidence(*, word_count: int) -> float:
     """
-    Smoke-test heuristic confidence in [0,1].
+    Fallback confidence heuristic in [0,1] used only when no beat grid is
+    available to compute beat coverage (see ``vocals_coverage_confidence``).
 
     Whisper does not provide a single directly comparable "confidence" scalar
     for our use-case, so we use word availability as a proxy.
@@ -118,7 +121,7 @@ def _estimate_transcription_confidence(*, word_count: int) -> float:
         return 0.2
     if word_count < 12:
         return 0.45
-    return 0.7
+    return 0.85
 
 
 def transcribe_vocals_to_lyrics_aligned(
@@ -183,5 +186,11 @@ def transcribe_vocals_to_lyrics_aligned(
     if not lyrics_aligned:
         # Keep the confidence low when we failed to extract/match any usable word timestamps.
         confidence = min(confidence, 0.2)
+    else:
+        # ML Fallback milestone: beat coverage is a far better signal than the
+        # raw word count (which capped at 0.7 — below the UI "uncertain" bar).
+        coverage_conf = vocals_coverage_confidence(lyrics_aligned, len(beat_grid))
+        if coverage_conf is not None:
+            confidence = coverage_conf
     return lyrics_aligned, float(confidence)
 

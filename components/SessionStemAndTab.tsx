@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { View } from 'react-native'
+import { Text, View } from 'react-native'
 
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
@@ -298,42 +298,51 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
       {insertBetweenStemAndTab}
       {detailsAboveTab}
       <View className={tabFrameClassName}>
-        <TabViewport
-          ref={tabRef}
-          gp5Base64={gp5Base64}
-          prerenderArtifactUrl={prerenderArtifactUrl}
-          audioSrc={audioSrc}
-          transposeSemitones={transposeSemitones}
-          soundFontProfile={soundFontProfile}
-          renderPreset={tabRenderPreset}
-          runtimeDiagnosticsEnabled={isAlphaTabRuntimeDiagEnabled()}
-          onReady={onTabReady}
-          onError={onTabError}
-          onNoteEvent={onNoteEvent}
-          onSongDetails={onTabSongDetails}
-          onSongPlayback={onTabSongPlayback}
-          onScoreSeekMs={
-            showStemPanel ? (ms) => void stemPanelRef.current?.seekTransportToSeconds(ms / 1000) : undefined
-          }
-          style={{ flex: 1, height: '100%', width: '100%' }}
-          lyricWords={lyricWords}
-          playbackSec={tickRef.current?.positionSec ?? 0}
-          songTitle={lesson?.song_title ?? undefined}
-          songArtist={lesson?.artist ?? undefined}
-          tabVariant={tabVariant}
-          hasFull={!!tabs.full}
-          hasSkeleton={!!tabs.skeleton}
-          hasAlt={!!tabs.alt}
-          onTabVariantChange={onTabVariantChange ? (v) => {
-            void setAppPref(PREF_TAB_VARIANT, v)
-            onTabVariantChange(v)
-          } : undefined}
-          onSeekToStart={onSeekToStart ?? (() => {
-            void stemPanelRef.current?.seekTransportToSeconds(0).then(() => {
-              tabRef.current?.syncPlaybackTimelineMs(0)
-            })
-          })}
-        />
+        {!gp5Base64 && lesson?.tabs_unavailable_reason === 'no_isolated_guitar' ? (
+          <View className="flex-1 items-center justify-center rounded-xl border border-wood-600/40 bg-ivory px-6">
+            <Text className="font-sans-medium text-sm text-wood-900">Tab unavailable</Text>
+            <Text className="mt-1 text-center font-sans text-xs text-muted-brown">
+              Guitar tab was not generated — the isolated guitar stem was not reliable enough.
+            </Text>
+          </View>
+        ) : (
+          <TabViewport
+            ref={tabRef}
+            gp5Base64={gp5Base64}
+            prerenderArtifactUrl={prerenderArtifactUrl}
+            audioSrc={audioSrc}
+            transposeSemitones={transposeSemitones}
+            soundFontProfile={soundFontProfile}
+            renderPreset={tabRenderPreset}
+            runtimeDiagnosticsEnabled={isAlphaTabRuntimeDiagEnabled()}
+            onReady={onTabReady}
+            onError={onTabError}
+            onNoteEvent={onNoteEvent}
+            onSongDetails={onTabSongDetails}
+            onSongPlayback={onTabSongPlayback}
+            onScoreSeekMs={
+              showStemPanel ? (ms) => void stemPanelRef.current?.seekTransportToSeconds(ms / 1000) : undefined
+            }
+            style={{ flex: 1, height: '100%', width: '100%' }}
+            lyricWords={lyricWords}
+            playbackSec={tickRef.current?.positionSec ?? 0}
+            songTitle={lesson?.song_title ?? undefined}
+            songArtist={lesson?.artist ?? undefined}
+            tabVariant={tabVariant}
+            hasFull={!!tabs.full}
+            hasSkeleton={!!tabs.skeleton}
+            hasAlt={!!tabs.alt}
+            onTabVariantChange={onTabVariantChange ? (v) => {
+              void setAppPref(PREF_TAB_VARIANT, v)
+              onTabVariantChange(v)
+            } : undefined}
+            onSeekToStart={onSeekToStart ?? (() => {
+              void stemPanelRef.current?.seekTransportToSeconds(0).then(() => {
+                tabRef.current?.syncPlaybackTimelineMs(0)
+              })
+            })}
+          />
+        )}
       </View>
     </>
   )

@@ -81,8 +81,14 @@ export const ROLLBACK_V4_SESSIONS_REVIEW = [
 
 export const PREF_ONBOARDING_COMPLETE = 'onboarding_complete'
 
-/** Prefer skeleton (or alt) tab when `LessonJSON.transcription_confidence` is low (PRIORITIES §37). */
-export const PREF_PREFER_SIMPLER_TABS = 'prefer_simpler_tabs'
+/** ML Fallback milestone: "1" = always full tab (disable auto skeleton fallback).
+ *  Auto fallback to skeleton/alt is the DEFAULT (no pref needed) when
+ *  `transcription_confidence < TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX`. */
+export const PREF_PREFER_FULL_TABS = 'prefer_full_tabs'
+/** Legacy key from before the flip (old: "1" = prefer simpler tabs, the
+ *  new default).  Read as a fallback when `PREF_PREFER_FULL_TABS` is unset:
+ *  a stored `"0"` meant "always full tab" and maps to `PREF_PREFER_FULL_TABS = "1"`. */
+export const PREF_PREFER_SIMPLER_TABS_LEGACY = 'prefer_simpler_tabs'
 /** A4 reference in Hz (future tuner / playback). */
 export const PREF_STANDARD_TUNING_HZ = 'standard_tuning_hz'
 /** Short free-text style focus for coach context later. */

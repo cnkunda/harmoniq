@@ -51,8 +51,9 @@ import {
   PREF_COACH_VOICE,
   PREF_EXPERIENCE_LEVEL,
   PREF_METRONOME_DEFAULT_ON,
-  PREF_MOOD_CHECK_SKIP,
-  PREF_PREFER_SIMPLER_TABS,
+PREF_MOOD_CHECK_SKIP,
+  PREF_PREFER_FULL_TABS,
+  PREF_PREFER_SIMPLER_TABS_LEGACY,
   PREF_SPOTIFY_CLIENT_SESSION,
   PREF_SPOTIFY_TASTE_PROFILE_JSON,
   PREF_STANDARD_TUNING_HZ,
@@ -108,7 +109,7 @@ export default function SettingsScreen() {
   const user = useSkillStore((s) => s.nodes)
   const sessionsCount = 0 // TODO: Get from store when available
 
-  const [preferSimplerTabs, setPreferSimplerTabs] = useState(false)
+  const [preferFullTabs, setPreferFullTabs] = useState(false)
   const [tuningHz, setTuningHz] = useState('440')
   const [styleFocus, setStyleFocus] = useState('')
   const [metronomeDefaultOn, setMetronomeDefaultOn] = useState(true)
@@ -123,8 +124,9 @@ export default function SettingsScreen() {
   const [experienceLevelSaved, setExperienceLevelSaved] = useState<string | null>(null)
 
   const loadPrefs = useCallback(async () => {
-    const [simpler, hz, style, metro, skipMood, voice, tasteJson, derivedTasteRaw, expSaved] = await Promise.all([
-      getAppPref(PREF_PREFER_SIMPLER_TABS),
+    const [full, legacyFull, hz, style, metro, skipMood, voice, tasteJson, derivedTasteRaw, expSaved] = await Promise.all([
+      getAppPref(PREF_PREFER_FULL_TABS),
+      getAppPref(PREF_PREFER_SIMPLER_TABS_LEGACY),
       getAppPref(PREF_STANDARD_TUNING_HZ),
       getAppPref(PREF_STYLE_FOCUS),
       getAppPref(PREF_METRONOME_DEFAULT_ON),
@@ -134,7 +136,7 @@ export default function SettingsScreen() {
       getAppPref(PREF_TASTE_PROFILE_JSON),
       getAppPref(PREF_EXPERIENCE_LEVEL),
     ])
-    setPreferSimplerTabs(simpler === '1')
+    setPreferFullTabs(full === '1' || (full == null && legacyFull === '0'))
     setTuningHz(hz && hz.trim() ? hz : '440')
     setStyleFocus(style ?? '')
     setMetronomeDefaultOn(metro !== '0')
@@ -210,8 +212,8 @@ export default function SettingsScreen() {
   }, [])
 
   const persistSimpler = async (v: boolean) => {
-    setPreferSimplerTabs(v)
-    await setAppPref(PREF_PREFER_SIMPLER_TABS, v ? '1' : '0')
+    setPreferFullTabs(v)
+    await setAppPref(PREF_PREFER_FULL_TABS, v ? '1' : '0')
   }
 
   const persistTuning = async () => {
@@ -416,9 +418,9 @@ export default function SettingsScreen() {
           defaultOpen={true}
         >
           <SettingsSwitch
-            label="Prefer simpler tabs"
-            description="Uses skeleton tab when transcription confidence is low"
-            value={preferSimplerTabs}
+            label="Always use full tabs"
+            description="Keep the full tab even when transcription confidence is low (auto-switches to skeleton by default)"
+            value={preferFullTabs}
             onValueChange={(v) => void persistSimpler(v)}
           />
           <View className="mt-4 border-t border-wood-600/35 pt-4">

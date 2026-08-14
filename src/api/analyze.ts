@@ -774,6 +774,8 @@ export async function recomputeBeatGrid(
 // Commit 109: Analysis Correction APIs
 // ---------------------------------------------------------------------------
 
+import type { CorrectionHistory, CorrectionRecord } from '@/src/types'
+
 export type { CorrectionRecord, CorrectionHistory } from '@/src/types'
 
 export async function correctChord(
