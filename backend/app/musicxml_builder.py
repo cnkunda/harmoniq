@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import re
 from fractions import Fraction
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 # Lazy load music21 for performance if not always used.
 # If music21 is not installed, this will raise an ImportError at runtime.
@@ -19,6 +19,12 @@ if TYPE_CHECKING:
     import music21
 
 import logging
+from app.rhythm_quantization import (
+    quantize_seconds_to_ql,
+    quantize_to_note_type,
+    split_note_into_measures,
+    tick_to_quarter_fraction,
+)
 from app.schemas import BeatGrid, ChordTimeline, SoloNotes, TimeSignature, ChordEvent, SoloNote
 from app.guitar_position import midi_to_guitar_position
 
@@ -37,6 +43,36 @@ def _get_music21_objects():
             "The 'music21' library is required for MusicXML generation. "
             "Please install it with 'pip install music21'."
         )
+
+def _apply_rhythm(
+    m21,
+    m21_client: Any,
+    duration_ql: Fraction,
+    tolerance_ql: Fraction,
+) -> None:
+    """Assign the nearest valid rhythm (type, dots, tuplet) to a note/rest.
+
+    Without this, music21 infers types from the quarter length alone and can
+    mislabel tuplets (e.g. a triplet eighth as "eighth with half length").
+    The quantized rhythm is applied explicitly so ``<type>``, ``<dot>`` and
+    ``<time-modification>`` render correctly.
+    """
+    quantized = quantize_to_note_type(duration_ql, tolerance_ql=tolerance_ql)
+    if quantized is None:
+        m21_client.duration = m21.duration.Duration(duration_ql)
+        return
+    dur = m21.duration.Duration(duration_ql)
+    dur.type = quantized.type
+    dur.dots = quantized.dots
+    if quantized.tuplet is not None:
+        actual, normal = quantized.tuplet
+        base = m21.duration.Duration(type=quantized.base_type)
+        tuplet = m21.duration.Tuplet(actual, normal)
+        tuplet.durationActual = m21.duration.Duration(base.quarterLength)
+        tuplet.durationNormal = m21.duration.Duration(base.quarterLength)
+        dur.tuplets = (tuplet,)
+    m21_client.duration = dur
+
 
 def build_musicxml(
     beat_grid: BeatGrid,
@@ -83,29 +119,35 @@ def build_musicxml(
 
         # Determine the key
     if key_signature:
-        # Parse "C major" or "C" or "A minor" or "Am" into music21.key.Key
-        parts = key_signature.split(None, 1)
-        root = parts[0]
-        mode = parts[1].lower() if len(parts) > 1 else 'major'
-        # Normalize mode names
-        if mode in ('minor', 'min', 'm'):
-            mode_flag = 'minor'
-        else:
-            mode_flag = 'major'
+        # Prefer music21's own parser ("A minor", "Am", "C", "F# minor"...)
+        # so the mode is never collapsed to major.  Fall back to the legacy
+        # whitespace split, then to C major.
         try:
-            m21_key = m21.key.Key(root, mode_flag)
+            m21_key = m21.key.Key(key_signature)
         except Exception:
-            logger.warning("Could not parse key signature '%s'. Defaulting to C major.", key_signature)
-            m21_key = m21.key.Key('C')
+            try:
+                parts = key_signature.split(None, 1)
+                root = parts[0]
+                mode = parts[1].lower() if len(parts) > 1 else 'major'
+                # Normalize mode names
+                if mode in ('minor', 'min', 'm'):
+                    mode_flag = 'minor'
+                else:
+                    mode_flag = 'major'
+                m21_key = m21.key.Key(root, mode_flag)
+            except Exception:
+                logger.warning("Could not parse key signature '%s'. Defaulting to C major.", key_signature)
+                m21_key = m21.key.Key('C')
     else:
         m21_key = m21.key.Key('C') 
 
     m21_clef = m21.clef.TrebleClef()
 
-                # NOTE: beat_grid.tick_value is currently not used for duration calculations.
-                # Durations are derived directly from SoloNote.duration and BeatGrid.bpm.
-                # If tick_value is intended to constrain or quantize MusicXML durations,
-                # additional logic would be needed here.
+    # Commit 106: duration math runs on the beat tick grid instead of a
+    # fixed 1/8-note grid.  tick_ql is the tick size in quarter lengths
+    # (e.g. tick_value 0.25 → 1/4 = a 16th note at 120 BPM).
+    tick_ql = tick_to_quarter_fraction(beat_grid.tick_value)
+    tick_seconds = float(tick_ql) * (60.0 / beat_grid.bpm)
 
     # Calculate quarter length in seconds for duration conversions
     # beat_grid.bpm gives us beats per minute, assuming quarter notes are beats.
@@ -168,14 +210,17 @@ def build_musicxml(
 
             duration_in_this_measure_s = min(remaining_duration_s, measure_end_s - measure_start_s)
             
-            target_cumulative_ql = Fraction(round(duration_in_this_measure_s / quarter_note_duration_s * 8), 8)
-            note_duration_ql = target_cumulative_ql - current_cumulative_ql
+            note_duration_ql = quantize_seconds_to_ql(
+                duration_in_this_measure_s, quarter_note_duration_s, tick_ql
+            )
 
             if note_duration_ql > 0:
                 m21_note_segment = m21.note.Note(original_note_obj.pitch)
                 m21_note_segment.volume.velocity = original_note_obj.velocity
-                m21_note_segment.duration = m21.duration.Duration(note_duration_ql)
-                
+                _apply_rhythm(m21, m21_note_segment, note_duration_ql, tick_ql / 2)
+                m21_measure.append(m21_note_segment)
+                current_cumulative_ql += note_duration_ql
+
                 # Tie logic
                 if remaining_duration_s > duration_in_this_measure_s:
                     # If note continues to next measure, mark as tied continue
@@ -184,10 +229,7 @@ def build_musicxml(
                 else:
                     # If this is the last segment, mark as tied stop
                     m21_note_segment.tie = m21.tie.Tie('stop')
-                
-                m21_measure.append(m21_note_segment)
 
-            current_cumulative_ql = target_cumulative_ql
             current_measure_position_s = measure_start_s + duration_in_this_measure_s
 
         tied_notes_queue = next_tied_notes_queue
@@ -205,10 +247,13 @@ def build_musicxml(
         for note in notes_starting_in_this_measure:
             # Add rests for gaps before the note
             if note.start_time > current_measure_position_s:
-                target_cumulative_ql = Fraction(round((note.start_time - measure_start_s) / quarter_note_duration_s * 8), 8)
+                target_cumulative_ql = quantize_seconds_to_ql(
+                    note.start_time - measure_start_s, quarter_note_duration_s, tick_ql
+                )
                 rest_duration_ql = target_cumulative_ql - current_cumulative_ql
                 if rest_duration_ql > 0:
                     m21_rest = m21.note.Rest(rest_duration_ql)
+                    _apply_rhythm(m21, m21_rest, rest_duration_ql, tick_ql / 2)
                     m21_measure.append(m21_rest)
                 current_cumulative_ql = target_cumulative_ql
             
@@ -216,13 +261,17 @@ def build_musicxml(
             # A note can either end within this measure, or extend into the next
             duration_in_this_measure_s = min(note.duration, measure_end_s - note.start_time)
 
-            target_cumulative_ql = Fraction(round((note.start_time + duration_in_this_measure_s - measure_start_s) / quarter_note_duration_s * 8), 8)
+            target_cumulative_ql = quantize_seconds_to_ql(
+                note.start_time + duration_in_this_measure_s - measure_start_s,
+                quarter_note_duration_s,
+                tick_ql,
+            )
             note_duration_ql = target_cumulative_ql - current_cumulative_ql
 
             if note_duration_ql > 0:
                 m21_note_segment = m21.note.Note(note.pitch)
                 m21_note_segment.volume.velocity = note.velocity
-                m21_note_segment.duration = m21.duration.Duration(note_duration_ql)
+                _apply_rhythm(m21, m21_note_segment, note_duration_ql, tick_ql / 2)
 
                 if note.duration > duration_in_this_measure_s:
                     # This note extends into the next measure, so tie it
@@ -236,11 +285,14 @@ def build_musicxml(
             current_cumulative_ql = target_cumulative_ql
         
         # Add a final rest if the measure is not filled
-        measure_total_ql = Fraction(round((measure_end_s - measure_start_s) / quarter_note_duration_s * 8), 8)
+        measure_total_ql = quantize_seconds_to_ql(
+            measure_end_s - measure_start_s, quarter_note_duration_s, tick_ql
+        )
         if current_cumulative_ql < measure_total_ql:
             final_rest_duration_ql = measure_total_ql - current_cumulative_ql
             if final_rest_duration_ql > 0:
                 m21_final_rest = m21.note.Rest(final_rest_duration_ql)
+                _apply_rhythm(m21, m21_final_rest, final_rest_duration_ql, tick_ql / 2)
                 m21_measure.append(m21_final_rest)
 
 
@@ -282,6 +334,10 @@ def build_musicxml(
 
     # 5. Add technical elements (string/fret) for guitar tablature
     musicxml_output = _add_technical_elements(musicxml_output, solo_notes)
+
+    # 6. Normalize <divisions> and ensure every measure carries an explicit
+    #    <attributes> block with it (Commit 106).
+    musicxml_output = _normalize_divisions(musicxml_output)
 
     return musicxml_output
 
@@ -341,11 +397,59 @@ def _add_technical_elements(musicxml: str, solo_notes: SoloNotes) -> str:
             return match.group(0)
         
         string_num, fret_num = pitch_to_position[pitch_key]
-        technical = f"<notations><technical><string>{string_num}</string><fret>{fret_num}</fret></technical></notations>"
+        technical_inner = f"<technical><string>{string_num}</string><fret>{fret_num}</fret></technical>"
+        # Merge into an existing <notations> block (tied notes carry
+        # <tied>...</tied> there) instead of appending a duplicate, so a
+        # single <notations> holds both <tied> and <technical> — invalid
+        # duplicates would confuse AlphaTab (Commit 106).
+        if '<notations>' in note_content:
+            idx = note_content.rfind('</notations>')
+            if idx == -1:
+                return match.group(0)
+            merged = note_content[:idx] + technical_inner + note_content[idx:]
+            return opening_tag + merged + closing_tag
+        technical = f"<notations>{technical_inner}</notations>"
         # Insert technical before closing </note>
         return opening_tag + note_content + technical + closing_tag
     
     return note_pattern.sub(replace_note, musicxml)
+
+
+def _normalize_divisions(musicxml: str) -> str:
+    """Force per-measure ``<divisions>`` on an LCM-friendly tick grid.
+
+    music21 derives ``<divisions>`` from the full LCM of every duration
+    (e.g. 10080 when triplets are present), so the canonical 480 only appears
+    by accident.  This rescales the document to ``lcm(480, X)`` where X is
+    music21's divisions: common rhythms land on the canonical 480, while
+    micro-durations (64th notes) still resolve to integer tick units.  Every
+    measure without an ``<attributes>`` block receives one containing only
+    the divisions, which AlphaTab consults per measure (Commit 106).
+    """
+    div_matches = re.findall(r"<divisions>(\d+)</divisions>", musicxml)
+    if not div_matches:
+        return musicxml
+    current = max(int(x) for x in div_matches)
+    if current <= 0:
+        return musicxml
+    if current % DEFAULT_DIVISIONS != 0:
+        target = DEFAULT_DIVISIONS * current // math.gcd(DEFAULT_DIVISIONS, current)
+    else:
+        target = current
+    factor = target // current
+
+    out = re.sub(r"<divisions>\d+</divisions>", f"<divisions>{target}</divisions>", musicxml)
+    out = re.sub(r"<duration>(\d+)</duration>", lambda m: f"<duration>{int(m.group(1)) * factor}</duration>", out)
+    out = re.sub(r"<offset>(\d+)</offset>", lambda m: f"<offset>{int(m.group(1)) * factor}</offset>", out)
+
+    def _inject_per_measure(m: re.Match) -> str:
+        opening, body, closing = m.group(1), m.group(2), m.group(3)
+        if "<attributes>" in body:
+            return opening + body + closing
+        attrs = f"<attributes><divisions>{target}</divisions></attributes>"
+        return opening + attrs + body + closing
+
+    return re.sub(r"(<measure\b[^>]*>)(.*?)(</measure>)", _inject_per_measure, out, flags=re.DOTALL)
 
 
 def _midi_to_step_alter_octave(midi: int) -> tuple[str, int, int]:

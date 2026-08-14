@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 ML (commits 98–102)** — **complete**. **Phase 3 (commits 108–109)** — **complete**. **Phase 4 (commits 104, 105, 114)** — **complete**. **MLOps (commits 136–140)** — **complete**.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 ML (commits 98–103)** — **complete**. **Phase 3 (commits 108–109)** — **complete**. **Phase 4 (commits 104, 105, 114)** — **complete**. **MLOps (commits 136–140)** — **complete**. **Commit 106 (Solo Rhythm Quantization & Measure-Level Sanity)** — **complete**.
 
 ---
 
@@ -10,72 +10,42 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 | | |
 |--|--|
-| **Roadmap status** | **Phase 0–4 + MLOps complete. Commit 100 (Segment Boundary Tie) complete. Pending: SWE features, ML refinement, product milestones.** |
+| **Roadmap status** | **Phase 0–4 + MLOps complete. Commits 100, 101, 103 complete (Segment Boundary Tie, Real Dataset Integration, Training Infrastructure). Commit 106 complete (Solo Rhythm Quantization & Measure-Level Sanity). Product milestone "ML Fallback Logic" ✅ DONE (composite transcription confidence + auto skeleton-tab fallback). Pending: SWE features, remaining ML refinement, remaining product milestones. Open goal: >75% Isophonics test root accuracy (66.1% as of Commit 103).** |
 | **Product spec** | [`README.md`](README.md) |
 | **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
 | **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
 | **Manual QA** | [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) |
 | **Scoring** | [`docs/SCORING.md`](docs/SCORING.md) |
-| **Archive** | [`priorities-archive.md`](priorities-archive.md) (Phase 0–4 + MLOps) |
+| **Archive** | [`priorities-archive.md`](priorities-archive.md) (Phase 0–4 + MLOps + Product Milestones) |
 
 ---
 
 ## Phase 2: Product Milestones
 
-### Milestone: User Feedback & Manual Overrides ✅ COMPLETE
-
-System to tag and save manual tab corrections to refine ML confidence levels.
-
-**Scope (completed):**
-- ✅ UI for users to mark incorrect notes/chords — ChordCorrectionDropdown, NoteCorrectionSheet integrated into study.tsx
-- ✅ Backend persistence of corrections — PATCH endpoints for chord/solo-note/voicing corrections, history tracking, revert support
-- ✅ ML retraining pipeline — `backend/scripts/prepare_retraining_data.py` consumes exported corrections and generates augmented training data
-- ✅ Correction history panel in review screen
-- ✅ Type consolidation into `src/types/index.ts`
-- ✅ Backend tests: 20 passing tests covering all correction endpoints and retraining pipeline
-
 ---
 
-### Milestone: Lick Library Persistence ✅ COMPLETE
+### Milestone: ML Fallback Logic ✅ DONE
 
-Full CRUD for saved phrases and "Drill This" micro-session logic.
-
-**Scope (completed):**
-- ✅ SQLite schema for saved licks — v1 `licks` table with full CRUD (create, read, update via re-save, delete)
-- ✅ UI for browsing, tagging, and organizing licks — `app/(tabs)/library.tsx` (581 lines) with search, filter, technique tags, transpose controls
-- ✅ "Drill This" generates focused micro-sessions — `drill()` function converts lick to synthetic LessonJSON via `lessonFromSavedLick()` and navigates to `/session/study`
-- ✅ Save to Library button on Review screen
-- ✅ Home screen integration via `homeSuggestionFromLicks.ts`
-- ✅ DNA/Progress integration via `dnaStore.ts` and `dnaComputer.ts`
-
----
-
-### Milestone: Jam Mode Summary Agent ✅ COMPLETE
-
-Claude-powered post-jam analysis and vocabulary mapping.
+Auto-switching to "Skeleton" tabs when `transcription_confidence` is low.
+Default: the app degrades to the skeleton/alt tab below the uncertain bar
+(0.72, `TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX`); the Settings toggle
+"Always use full tabs" (`PREF_PREFER_FULL_TABS`, with legacy
+`prefer_simpler_tabs` read as a fallback) opts out. The backend emits a
+composite confidence — 60/40 blend of duration-weighted chord-model
+confidence and beat-grid vocal coverage (instrumental tracks use chord
+confidence alone; an unusable guitar stem floors the composite at 0.25 and
+skips tabs with `tabs_unavailable_reason`, surfaced as a "Tab unavailable"
+state).
 
 **Scope (completed):**
-- ✅ Post-jam analysis endpoint — `POST /jam/summary` with Claude integration + deterministic fallback
-- ✅ Vocabulary pattern detection — `backend/app/jam_vocabulary.py` (motifs, sequences, arpeggios, scale runs, bend figures, repeated notes)
-- ✅ Claude integration for summary generation — `coach.py` with streaming, circuit breaker, fallback
-- ✅ Model-to-coach JSON bundle schema — `JamSummaryBundle` with clarity, intonation, timing, transitions, vocabulary patterns
-- ✅ Persona-switching via system prompt — learner/intermediate/transcriber personas
-- ✅ Frontend API client — `submitJamSummary()` in `src/api/jam.ts`
-- ✅ Backend tests — 14 passing tests covering vocabulary detection, endpoint, fallback, personas
-- ✅ Persist phrase data in jam snapshot (device-side)
-- ✅ Wire jam summary into jam.tsx "Stop & Save" flow
-- ✅ Display rich summary in progress timeline and jam history
-
----
-
-### Milestone: ML Fallback Logic
-
-Implement auto-switching to "Skeleton" tabs when transcription_confidence < 0.7.
-
-**Scope:**
-- Confidence threshold detection
-- Skeleton tab generation (simplified notation)
-- Graceful degradation UI
+- Confidence threshold detection — per-section composite confidence in
+  `backend/app/transcription_confidence.py`, wired through
+  `analyze_audio.py`; unit + integration tests
+- Skeleton tab generation (simplified notation) — skeleton/alt GP5 artifacts
+  via `tabgen`; auto variant selection through `pickTabVariant()`
+- Graceful degradation UI — "Transcription Uncertainty" modal,
+  low-confidence banner, variant pills, "Tab unavailable" placeholder when
+  the guitar stem is unusable
 
 ---
 
@@ -110,128 +80,6 @@ System for tracking user engagement during play-along sessions: duration, comple
 ---
 
 ## Phase 2: ML Refinement — Pending Commits
-
-### Commit 100: Segment Boundary Tie Mechanism (MT3 Paper Insight) ✅ COMPLETE
-
-**Goal:** Eliminate chord/note transcription errors at segment boundaries by implementing an overlap-and-blend strategy with active-note tracking — inspired by MT3's "tie" mechanism that declares which notes are already active at the start of each segment.
-
-**Rationale (from MT3 paper, Section 3.2):** MT3 solves the "forgotten note" problem by requiring the model to emit a "tie section" at the beginning of each segment declaring active notes. Notes not re-declared in the next segment are gracefully ended. Our TFLite chord model (128-frame sliding window) and Basic Pitch process segments independently with no cross-segment state, causing onset/offset errors at boundaries that directly corrupt scoring (`_score_timing()` in `score.py`).
-
-**Scope (completed):**
-- ✅ 50% overlap-and-blend for chord inference windows — `_window_layout()` + `_predict_overlap_blend()` in `chord_inference.py`: windows placed every `_WINDOW_STRIDE` (64 = 50%) frames, per-frame predictions accumulated with triangular weights (`1 - |f − center| / half`), argmax after weight-normalized blending. Frames in the overlap zone are dominated by the window holding them near its center (MT3-style cross-window state)
-- ✅ Active-note tie mechanism for Basic Pitch — `merge_segments_with_ties()` in `solo_inference.py`: active-note table (keyed by pitch) carried across segment boundaries; same-pitch onset within `TIE_WINDOW_S` (0.15s) of the previous end = re-declaration → tied into a single note; notes never re-declared survive from first detection ("forgotten note" fixed); `_infer_segmented()` splits long tracks (≥60s) into overlapping segments (15s overlap) with temp-WAV per-segment transcription
-- ✅ Boundary confidence penalty — `_apply_boundary_penalty()` scales confidence ×0.85 for raw frames within 2 frames of track edges; `_dampen_boundary_onsets()` velocity-dampens fresh onsets within 0.2s after segment boundaries
-- ✅ Boundary tie telemetry — `blend_windows`, `boundary_frames_penalized`, `edge_flicker_events` merged into `infer_chords()` metrics; segmented solo stats logged per job
-- ✅ Unit tests — `tests/test_boundary_ties.py` (17 tests): chord held across boundary → single event, forgotten-note survival, distinct attacks never merged, boundary penalty zones, edge-flicker counting, blend disagreement resolution, segment geometry, plus 2 mocked-ML end-to-end segmented tests
-
-**Acceptance Criteria:**
-- [x] Overlap-and-blend reduces boundary chord flicker by ≥50% — per-frame argmax stable across overlap zones (verified: blend resolves window disagreement, changes only at intended midpoints; `edge_flicker_events` metric per job)
-- [x] Active-note tracking prevents "forgotten note" offsets in solo transcription — `merge_segments_with_ties()` + end-to-end test (`test_infer_solo_segmented_forgotten_note_survives`)
-- [x] Boundary confidence penalty reduces false positives at segment edges — chord edge confidence ×0.85; solo fresh-onset velocity ×0.85
-- [x] Scoring timing errors decrease for notes held across boundaries — tied notes span boundaries as ONE quantized event (single start/end), removing duplicate/truncated onsets that feed `_score_timing()`
-- [x] Unit test: chord held across boundary → single event emitted — `test_chord_held_across_boundary_is_single_event` (+ blend-disagreement test for chord windows)
-- [x] No regression on within-segment prediction accuracy — single-pass path unchanged for tracks ≤60s; `test_inference_logic.py` chord/solo truncation tests pass; CI suites (`test_jam_score`, `test_score`, `test_viterbi`) 77/77 passing
-
----
-
-### Commit 101: Real Dataset Integration (GuitarSet + Isophonics)
-
-**Goal:** Train on real annotated audio instead of purely synthetic data to improve real-world accuracy.
-
-**Current State:** ✅ Model now trains on 70% real windows mixed with temperature-sampled synthetic batches; real test-set root accuracy 63.7% on a completely unseen guitarist — **+54.4 pts over the synthetic-only baseline (9.3%)** on the same split, same seed. Official Isophonics downloads were pulled by the university, so Isophonics content is fetched as YouTube audio matched to the original `.lab` annotations by duration; GuitarSet (the only freely-licensed corpus with *guitar comp* audio + chord annotations) became the primary source.
-
-**Scope:**
-- Download Isophonics-annotated audio (Beatles/Queen via YouTube, duration-matched to lab spans) ✅
-- Download + prep GuitarSet (180 tracks, all players, no artist overlap in splits) ✅
-- Write preprocessing script to extract 40-dim CQT and align with chord labels ✅
-- Convert annotations to extended chord vocabulary (map rare qualities to closest match) ✅
-- Combine real + synthetic data (70/30 split recommended) ✅
-- Add dataset mixing + real-window evaluation to training pipeline ✅
-
-**Acceptance Criteria:**
-- [x] Isophonics dataset loaded and preprocessed (180 GuitarSet + 2+ Isophonics-YouTube tracks cached, gated, in manifest)
-- [x] CQT features extracted and aligned with chord labels (`prepare_real_datasets.py prep`, 54,936 usable frames)
-- [x] Train/val/test split with no artist overlap (train: players 00/01/02/04 + Beatles; val: 05; test: 03)
-- [x] Real data comprises 70% of training batches (`--real-ratio 0.7`, verified by `make_mixed_batch` test)
-- [x] Validation accuracy on Isophonics test set >75% root accuracy — Commit 103 brought unseen guitarist 03 to 66.1% test root accuracy (+2.4 pts); remaining gap tracked under ML refinement
-
----
-
-### Commit 103: Training Infrastructure Improvements ✅ COMPLETE
-
-**Goal:** Add proper training callbacks, augmentation, and evaluation metrics.
-
-**Current State:** Only 12 epochs, no callbacks, no validation metrics beyond accuracy.
-
-**Scope:**
-- Add `EarlyStopping` callback (patience=5, restore_best_weights)
-- Add `ReduceLROnPlateau` callback (factor=0.5, patience=3)
-- Implement time-stretch augmentation in training loop
-- Add pitch-shift augmentation (±2 semitones)
-- Generate confusion matrix during validation
-- Compute per-class precision/recall/F1 metrics
-- Add class weighting to handle chord imbalance
-- Increase training epochs from 12 to 50
-
-**Acceptance Criteria:**
-- [x] Early stopping prevents overfitting
-- [x] Learning rate reduces automatically on plateau
-- [x] Time stretch and pitch shift augmentations active
-- [x] Confusion matrix identifies confused chord pairs
-- [x] Per-class metrics reveal rare chord performance
-- [x] Training completes in <2 hours on available hardware
-
-**Status (Commit 103 build, 2026-08-13):**
-- **Shipped model:** augment-only 50-epoch run (seed 42, callbacks on, real_ratio 0.7, class weights off) — val root **0.664** @ epoch 22 (early-stopped e27), test root **0.661** / full **0.638** on unseen guitarist 03, smoke test PASS (threshold 0.50). Confusion pairs now G↔C/F↔C/4ths; min F1 0.729. Run completed in 52 min (<2 h budget).
-- **Class weighting investigated, disabled for the shipped model:** real-window inverse-frequency weights (`class_weight_map`, applied to real samples only — synthetic already temperature-balanced; the initial version applied them to synthetic too and double-boosted rare classes, collapsing val root to 0.36) improve rare-quality F1 (dim 0.583, 7 0.658, min 0.679) but cost ~7 pts top-line (test root 0.589). Both paths verified by `tests/test_real_dataset.py` (54 passing).
-
----
-
-### Commit 106: Solo Rhythm Quantization & Measure-Level Sanity
-
-**Goal:** Quantize solo note durations to standard notation types (quarter, eighth, sixteenth, triplet) and add measure-level rhythmic sanity checks to the MusicXML builder.
-
-**Current State:** Solo note durations are grid-snapped in seconds but not quantized to standard note types. The MusicXML builder uses raw 8th-note fractions (`round(... * 8) / 8`) with no measure overflow validation. Micro-durations (<32nd note) exist despite filtering.
-
-**Scope:**
-- Add `quantize_to_note_type()` function: map real durations (seconds) to nearest standard type (whole, half, quarter, 8th, 16th, 32nd, 64th) based on current BPM and tick grid
-- Implement tuplet detection: group onset patterns that form triplets, quintuplets, or sextuplets
-- Add measure-level duration validation: enforce total note + rest duration == time signature fill
-- Add measure overflow detection: clip or redistribute notes exceeding bar capacity
-- Add measure underflow detection: insert beat-aligned rests for unfilled time
-- **Reinforce beat-grid quantization in `infer_solo()`**: after amplitude selection, quantize the surviving note's onset and duration to the beat grid via `_snap_to_grid()`, removing sub-half-tick micro-notes (already implemented). Verify that the duration passed to MusicXML builder maps to standard note types via the `tick_value` grid
-- Replace hardcoded `round(... * 8) / 8` in `musicxml_builder.py` with variable-resolution quantization mapped to the time signature denominator
-- Emit proper MusicXML `<type>` elements (eighth, 16th, 32nd, etc.) and `<dot>` for dotted durations
-- Add `<beam>` grouping based on beat structure and tuplet detection
-- **Add amplitude-based polyphonic→monophonic selection in `infer_solo()`**: group raw basic-pitch note events by beat slot (using `beat_grid.beats`), select at most one note per slot by maximum amplitude (pitch as tiebreaker), mirroring `build_gp5_from_note_events()` behavior at `pipeline_proof.py:531-544`. The existing chronological truncation path becomes a fallback when only one overlapping note exists per slot
-- Build test suite covering: syncopation, triplets, dotted rhythms, measure overflow, edge durations
-- Fix `_add_technical_elements()` regex injection conflict with `<tie>`:
-  change from naive regex append (which produces duplicate `<notations>`
-  for tied notes) to music21-native `<technical>` attachment, or detect
-  and merge into existing `<notations>` elements when `<tie>` is present
-- Add explicit `<divisions>` element in `<attributes>` (set to 480) so
-  AlphaTab's MusicXML parser has an unambiguous duration reference
-- Add key signature validation: parse "A minor" →
-  `music21.key.Key('A', 'minor')` correctly. The current simple split
-  heuristic treats all modes as major (both C major and A minor = 0
-  sharps, correct pitch-wise but wrong mode)
-
-**Acceptance Criteria:**
-- [ ] Note durations quantized to standard types (whole through 64th) with correct `<type>` elements
-- [ ] Triplet detection correctly groups 3-in-the-time-of-2 patterns
-- [ ] Measure fill validation: total note+rest duration equals measure length within 1-tick tolerance
-- [ ] Measure overflow clips notes at bar line and ties to next measure
-- [ ] Unfilled measure time produces rests at beat/sub-beat boundaries (not arbitrary positions)
-- [ ] `<beam>` groupings follow beat structure (no cross-beat beams) and tuplet groups
-- [ ] `infer_solo()` selects at most one note per beat slot, preferring highest amplitude (matching `build_gp5_from_note_events` behavior)
-- [ ] Test suite covers syncopation, triplets, 5-tuplets, dotted quarters, and maximal/minimal durations
-- [ ] Existing solo duration filtering (sub-32nd note removal) remains active and non-regressed
-- [ ] `_add_technical_elements()` produces valid XML when notes have `<tie>`
-      elements: single `<notations>` block contains both `<technical>` and `<tie>`
-- [ ] `<divisions>480</divisions>` present in every measure's `<attributes>`
-- [ ] Minor key signatures generate correct MusicXML (`<key><fifths>0</fifths><mode>minor</mode></key>`)
-
----
 
 ### Commit 107: MusicXML as Primary Render Format
 

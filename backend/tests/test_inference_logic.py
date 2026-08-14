@@ -144,22 +144,58 @@ def test_solo_monophonic_truncation(monkeypatch, mock_beat_grid):
     assert solo.notes[1].start_time == 0.5 # 0.6 snapped to 0.5
     assert solo.notes[1].duration == 0.5   # 1.2 snapped to 1.0, 1.0-0.5 = 0.5
 
-def test_solo_micro_note_filtering(monkeypatch, mock_beat_grid):
-    """Ensure micro-notes that pass duration filter are preserved with minimum tick duration."""
-    
-    # One real note, one grace note that gets crushed by quantization
-    # The grace note (0.26s-0.24s played backward, or 0.24s-0.26s very short)
-    # Both start and end snap to the same grid point (0.25), but it's preserved with min duration
+def test_solo_per_slot_selection_on_polyphony(monkeypatch, mock_beat_grid):
+    """Commit 106: simultaneous notes collapse to the strongest per beat slot."""
+
+    # Two notes jamming into the same beat slot (both snap to Beat 0):
+    # the louder, higher one wins; polyphony is monophonicized.
     mock_notes = [
-        (0.0, 0.5, 60, 0.8, None),
-        (0.24, 0.26, 64, 0.8, None) # Very short note that snaps to same grid point
+        (0.1, 0.3, 60, 0.5, None),   # quiet C4
+        (0.12, 0.35, 64, 0.9, None), # louder E4
     ]
-    
+
     monkeypatch.setattr("basic_pitch.inference.predict", lambda *a, **kw: (None, None, mock_notes))
 
     solo = infer_solo(Path("dummy.wav"), mock_beat_grid)
 
-    # Both notes should survive; the micro-note gets minimum tick duration
+    assert len(solo.notes) == 1
+    assert solo.notes[0].pitch == 64
+    assert solo.notes[0].duration == 0.5
+    # 0.9 is the max input velocity → maps to MAX_MIDI_VELOCITY (120)
+    assert solo.notes[0].velocity == 120
+
+
+def test_solo_per_slot_selection_tie_breaks_by_pitch(monkeypatch, mock_beat_grid):
+    """Commit 106: equal-velocity slot collisions fall back to higher pitch."""
+
+    mock_notes = [
+        (0.1, 0.3, 60, 0.9, None),
+        (0.12, 0.35, 64, 0.9, None),
+    ]
+
+    monkeypatch.setattr("basic_pitch.inference.predict", lambda *a, **kw: (None, None, mock_notes))
+
+    solo = infer_solo(Path("dummy.wav"), mock_beat_grid)
+
+    assert len(solo.notes) == 1
+    assert solo.notes[0].pitch == 64
+
+
+def test_solo_lone_micro_note_preserved_with_min_duration(monkeypatch, mock_beat_grid):
+    """Ensure micro-notes that pass the duration filter survive in their own slot."""
+
+    # One real note in slot 0; a grace note whose start+end both snap to
+    # slot 1's grid point.  Different slots → no collapse; it keeps the
+    # minimum tick duration instead of vanishing.
+    mock_notes = [
+        (0.0, 0.5, 60, 0.8, None),
+        (0.55, 0.64, 64, 0.8, None),  # ≥ min_duration (62.5ms), start+end snap to slot 1's grid point
+    ]
+
+    monkeypatch.setattr("basic_pitch.inference.predict", lambda *a, **kw: (None, None, mock_notes))
+
+    solo = infer_solo(Path("dummy.wav"), mock_beat_grid)
+
     assert len(solo.notes) == 2
     assert solo.notes[0].pitch == 60
     assert solo.notes[1].pitch == 64

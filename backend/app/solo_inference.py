@@ -32,6 +32,7 @@ from pathlib import Path
 
 import numpy as np
 
+from app.rhythm_quantization import nearest_grid_index
 from app.schemas import BeatGrid, SoloNote, SoloNotes
 
 logger = logging.getLogger("harmoniq.inference.solo")
@@ -231,13 +232,39 @@ def _cleanup_raw_notes(
         logger.info("No solo notes after duration filtering (min_duration=%.3fs)", min_duration_s)
         return []
 
+    grid_beats = beat_grid.beats
+
+    # Commit 106: polyphony → monophonic selection per beat slot.  Basic Pitch
+    # detects chord/overlayer polyphony; at most one note may occupy a beat
+    # slot.  Keep the strongest note per slot — velocity is the amplitude
+    # proxy (basic-pitch events carry velocity, not amplitude), highest MIDI
+    # pitch breaks ties.  Mirrors build_gp5_from_note_events()'s per-slot
+    # selection (pipeline_proof.py).  The chronological truncation below
+    # remains the fallback for notes spanning multiple slots.
+    by_slot: dict[int, list] = {}
+    for note in clean:
+        slot = nearest_grid_index(note[0], grid_beats)
+        by_slot.setdefault(slot, []).append(note)
+    if by_slot:
+        clean = [
+            max(notes, key=lambda n: (float(n[3]), int(n[2]), float(n[0])))
+            for _, notes in sorted(by_slot.items())
+        ]
+        clean.sort(key=lambda n: n[0])
+        raw_count = sum(len(v) for v in by_slot.values())
+        if raw_count > len(clean):
+            logger.info(
+                "Solo slot selection collapsed %d raw notes to %d monophonic notes",
+                raw_count,
+                len(clean),
+            )
+
     max_input_velocity = max(n[3] for n in clean)
     if max_input_velocity < 0.01:
         max_input_velocity = MAX_INPUT_VELOCITY_FLOOR
 
     velocity_range = MAX_MIDI_VELOCITY - MIN_MIDI_VELOCITY
     cleaned_notes: list[SoloNote] = []
-    grid_beats = beat_grid.beats
     LEGATO_OVERLAP_S = 0.010
     tick_seconds = (60.0 / beat_grid.bpm) * beat_grid.tick_value
 
