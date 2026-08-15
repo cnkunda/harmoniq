@@ -219,7 +219,9 @@ export default function DiscoverScreen() {
   // Derived values for tab viewport
   const section = selectedLesson?.sections?.[0]
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
-  const gp5Base64 = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
+  /** MusicXML is primary (Commit 107); GP5 falls back when absent. */
+  const lessonMusicXml = selectedLesson?.musicxml?.trim() ?? null
+  const gp5Base64 = lessonMusicXml ? null : tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
   const audioSrc = useMemo(() => {
     const rel = selectedLesson?.stems?.guitar
     if (!rel || typeof rel !== 'string') return null
@@ -383,6 +385,7 @@ export default function DiscoverScreen() {
           <TabViewport
             ref={tabRef}
             gp5Base64={gp5Base64}
+            musicXml={lessonMusicXml}
             audioSrc={audioSrc}
             renderPreset="listen"
             runtimeDiagnosticsEnabled={false}

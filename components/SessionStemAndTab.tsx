@@ -162,16 +162,20 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
   const section = lesson?.sections?.[lessonSectionIndex]
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
 
+  /** MusicXML is the primary render format (Commit 107); per-section GP5 variants fall back when absent. */
+  const lessonMusicXml = useMemo(() => lesson?.musicxml?.trim() ?? null, [lesson?.musicxml])
+
   const gp5Base64 = useMemo(() => {
     const o = gp5Base64Override?.trim()
     if (o) return o
+    if (lessonMusicXml) return null
     if (tabVariant === 'full') return tabs.full ?? null
     if (tabVariant === 'skeleton') return tabs.skeleton ?? null
     if (tabVariant === 'alt') return tabs.alt ?? null
     return tabs.full ?? tabs.skeleton ?? null
-  }, [gp5Base64Override, tabVariant, tabs])
+  }, [gp5Base64Override, lessonMusicXml, tabVariant, tabs])
 
-  const gp5Key = useMemo(() => gp5Base64?.slice(0, 24) ?? '', [gp5Base64])
+  const gp5Key = useMemo(() => gp5Base64?.slice(0, 24) ?? lessonMusicXml?.slice(0, 24) ?? '', [gp5Base64, lessonMusicXml])
 
   const audioSrc = useMemo(() => {
     if (audioSrcOverride !== undefined) return audioSrcOverride
@@ -298,7 +302,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
       {insertBetweenStemAndTab}
       {detailsAboveTab}
       <View className={tabFrameClassName}>
-        {!gp5Base64 && lesson?.tabs_unavailable_reason === 'no_isolated_guitar' ? (
+        {!gp5Base64 && !lessonMusicXml && lesson?.tabs_unavailable_reason === 'no_isolated_guitar' ? (
           <View className="flex-1 items-center justify-center rounded-xl border border-wood-600/40 bg-ivory px-6">
             <Text className="font-sans-medium text-sm text-wood-900">Tab unavailable</Text>
             <Text className="mt-1 text-center font-sans text-xs text-muted-brown">
@@ -309,6 +313,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
           <TabViewport
             ref={tabRef}
             gp5Base64={gp5Base64}
+            musicXml={lessonMusicXml}
             prerenderArtifactUrl={prerenderArtifactUrl}
             audioSrc={audioSrc}
             transposeSemitones={transposeSemitones}
@@ -329,9 +334,9 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
             songTitle={lesson?.song_title ?? undefined}
             songArtist={lesson?.artist ?? undefined}
             tabVariant={tabVariant}
-            hasFull={!!tabs.full}
-            hasSkeleton={!!tabs.skeleton}
-            hasAlt={!!tabs.alt}
+            hasFull={lessonMusicXml ? false : !!tabs.full}
+            hasSkeleton={lessonMusicXml ? false : !!tabs.skeleton}
+            hasAlt={lessonMusicXml ? false : !!tabs.alt}
             onTabVariantChange={onTabVariantChange ? (v) => {
               void setAppPref(PREF_TAB_VARIANT, v)
               onTabVariantChange(v)

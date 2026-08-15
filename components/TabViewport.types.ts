@@ -6,6 +6,8 @@ import type { LyricWord } from './LyricsStrip'
 
 export type TabViewportProps = {
   gp5Base64?: string | null
+  /** MusicXML is primary (Commit 107); GP5 falls back when absent. */
+  musicXml?: string | null
   prerenderArtifactUrl?: string | null
   audioSrc?: string | null
   transposeSemitones?: number

@@ -84,3 +84,7 @@ expo-env.d.ts
 
 # Backend test temp data
 backend/.tmp_test_data_*
+# Debug scripts (temporary, not for commit)
+backend/debug_*.py
+backend/tests/fixtures/musicxml31/
+

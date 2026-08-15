@@ -161,6 +161,60 @@ def quantize_to_note_type(
     return best
 
 
+def decompose_rest_durations(
+    quarter_length: Fraction,
+    *,
+    max_pieces: int = 8,
+) -> list[QuantizedDuration]:
+    """Split a rest duration into exact, notation-valid pieces.
+
+    Rests cannot ride the nearest-rhythm tolerance the way notes can: a
+    gap rest must land exactly on the next note attack and the
+    measure-final rest must fill the measure exactly.  Tolerance-driven
+    quantization can otherwise turn a 13/4 ql final rest into a 16/5 ql
+    5-in-4 whole-tuplet rest, under-filling the measure and corrupting
+    every subsequent element offset (Commit 107).
+
+    Returns the shortest exact combination of candidate durations
+    (plain/dotted types plus tuplet shapes) that sums to
+    ``quarter_length``.  Falls back to a single raw piece (``type=""``)
+    when no exact combination exists within ``max_pieces``.
+    """
+    if quarter_length is None or quarter_length <= 0:
+        return []
+    target = Fraction(quarter_length)
+
+    candidates = [c for c in _CANDIDATES if c.quarter_length <= target]
+    candidates.sort(key=lambda c: c.quarter_length, reverse=True)
+
+    def _solve(
+        remaining: Fraction,
+        depth: int,
+        seen: set[Fraction],
+    ) -> list[QuantizedDuration] | None:
+        if remaining == 0:
+            return []
+        if depth >= max_pieces:
+            return None
+        if remaining in seen:
+            return None
+        seen.add(remaining)
+        for cand in candidates:
+            if cand.quarter_length > remaining:
+                continue
+            rest = _solve(remaining - cand.quarter_length, depth + 1, seen)
+            if rest is not None:
+                return [cand] + rest
+        return None
+
+    pieces = _solve(target, 0, set())
+    if pieces is not None:
+        return pieces
+    # No exact rhythm-valid combination exists (pathological fraction):
+    # fall back to a single raw rest of the exact length.
+    return [QuantizedDuration("", 0, None, target, "")]
+
+
 def nearest_grid_index(time_s: float, grid: Sequence[float]) -> int:
     """Index of the nearest grid entry (closest tick for a wall-clock time)."""
     if not grid:

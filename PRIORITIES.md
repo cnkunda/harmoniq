@@ -24,31 +24,6 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 ---
 
-### Milestone: ML Fallback Logic ✅ DONE
-
-Auto-switching to "Skeleton" tabs when `transcription_confidence` is low.
-Default: the app degrades to the skeleton/alt tab below the uncertain bar
-(0.72, `TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX`); the Settings toggle
-"Always use full tabs" (`PREF_PREFER_FULL_TABS`, with legacy
-`prefer_simpler_tabs` read as a fallback) opts out. The backend emits a
-composite confidence — 60/40 blend of duration-weighted chord-model
-confidence and beat-grid vocal coverage (instrumental tracks use chord
-confidence alone; an unusable guitar stem floors the composite at 0.25 and
-skips tabs with `tabs_unavailable_reason`, surfaced as a "Tab unavailable"
-state).
-
-**Scope (completed):**
-- Confidence threshold detection — per-section composite confidence in
-  `backend/app/transcription_confidence.py`, wired through
-  `analyze_audio.py`; unit + integration tests
-- Skeleton tab generation (simplified notation) — skeleton/alt GP5 artifacts
-  via `tabgen`; auto variant selection through `pickTabVariant()`
-- Graceful degradation UI — "Transcription Uncertainty" modal,
-  low-confidence banner, variant pills, "Tab unavailable" placeholder when
-  the guitar stem is unusable
-
----
-
 ### Milestone: Play Engagement Analytics
 
 System for tracking user engagement during play-along sessions: duration, completion, and discard rates.

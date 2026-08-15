@@ -193,6 +193,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
   function AlphaTabWeb(
     {
       gp5Base64,
+      musicXml,
       prerenderArtifactUrl,
       audioSrc,
       transposeSemitones = 0,
@@ -267,7 +268,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
     useEffect(() => {
       setTabFullyPainted(false)
-    }, [gp5Base64, reloadKey])
+    }, [gp5Base64, musicXml, reloadKey])
 
     useEffect(() => {
       let cancelled = false
@@ -1270,6 +1271,21 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       if (!engineReady) return
       const api = apiRef.current
       if (!api) return
+      const xml = musicXml?.trim()
+      if (xml) {
+        try {
+          const encoder = new TextEncoder()
+          const bytes = encoder.encode(xml)
+          const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+          resetSongMetaRefs()
+          api.load(buf)
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Invalid MusicXML payload'
+          setEngineError(msg)
+          onError?.(msg)
+        }
+        return
+      }
       const raw = gp5Base64?.trim()
       if (!raw) return
       try {
@@ -1283,7 +1299,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         setEngineError(msg)
         onError?.(msg)
       }
-    }, [engineReady, gp5Base64, onError, resetSongMetaRefs])
+    }, [engineReady, gp5Base64, musicXml, onError, resetSongMetaRefs])
 
     useEffect(() => {
       if (!engineReady) return

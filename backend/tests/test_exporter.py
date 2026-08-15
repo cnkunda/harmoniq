@@ -90,9 +90,9 @@ def test_export_musicxml_from_json_basic():
     # 4. Parse MusicXML with music21 and assert on content
     score = music21.converter.parse(musicxml_str)
 
-    # Check basic score structure
-    assert len(score.parts) == 1
-    part = score.parts[0]
+    # Check basic score structure (Commit 107: P1 lead sheet + P2 tab mirror)
+    assert len(score.parts) == 2
+    part = next(p for p in score.parts if p.partName == "Lead Sheet")
     assert part.partName == "Lead Sheet"
 
     # Check measures
@@ -172,11 +172,12 @@ def test_export_musicxml_16th_and_dotted_types():
     xml, _ = _build_musicxml(notes)
 
     score = music21.converter.parse(xml)
-    notes_out = [n for n in score.flatten().notes if n.isNote]
+    lead = next(p for p in score.parts if p.partName == "Lead Sheet")
+    notes_out = [n for n in lead.flatten().notes if n.isNote]
     assert [n.duration.type for n in notes_out] == ["16th", "quarter", "eighth"]
     assert [n.duration.dots for n in notes_out] == [0, 1, 1]
     # Exactly one 16th rest fills the 0.125s gap
-    rests = [e for e in score.flatten().notesAndRests if e.isRest]
+    rests = [e for e in lead.flatten().notesAndRests if e.isRest]
     assert any(r.duration.type == "16th" for r in rests)
 
 
@@ -192,7 +193,8 @@ def test_export_musicxml_triplet_rhythm():
     xml, _ = _build_musicxml(notes)
 
     score = music21.converter.parse(xml)
-    notes_out = [n for n in score.flatten().notes if n.isNote]
+    lead = next(p for p in score.parts if p.partName == "Lead Sheet")
+    notes_out = [n for n in lead.flatten().notes if n.isNote]
     assert len(notes_out) == 3
     for n in notes_out:
         assert n.duration.type == "eighth"
@@ -251,7 +253,8 @@ def test_export_musicxml_quintuplet_rhythm():
     xml, _ = _build_musicxml(notes, tick_value=0.2)
 
     score = music21.converter.parse(xml)
-    notes_out = [n for n in score.flatten().notes if n.isNote]
+    lead = next(p for p in score.parts if p.partName == "Lead Sheet")
+    notes_out = [n for n in lead.flatten().notes if n.isNote]
     assert len(notes_out) == 1
     n = notes_out[0]
     assert n.duration.quarterLength == pytest.approx(4 / 5, abs=1e-3)

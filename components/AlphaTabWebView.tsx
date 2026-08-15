@@ -32,6 +32,8 @@ const HARNESS_HTML = require('../assets/alphatab-harness/index.html') as number
 
 export type AlphaTabWebViewProps = {
   gp5Base64?: string | null
+  /** MusicXML is primary (Commit 107); GP5 falls back when absent. */
+  musicXml?: string | null
   /** Native harness does not consume server prerender JSON yet — prop exists for API parity with web. */
   prerenderArtifactUrl?: string | null
   audioSrc?: string | null
@@ -66,6 +68,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
   function AlphaTabWebView(
     {
       gp5Base64,
+      musicXml,
       prerenderArtifactUrl: _prerenderArtifactUrl,
       audioSrc,
       transposeSemitones = 0,
@@ -239,6 +242,17 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
       })
       postInbound({ type: 'setRenderPreset', presetName: renderPreset })
       postInbound({ type: 'setTranspose', semitones: Math.max(-12, Math.min(12, Math.round(transposeSemitones))) })
+      const xml = musicXml?.trim()
+      if (xml) {
+        postInbound({ type: 'setMusicXml', musicXml: xml })
+        const stemSrc = audioSrc?.trim()
+        if (stemSrc) {
+          setTimeout(() => {
+            postInbound({ type: 'setAudioSrc', audioSrc: stemSrc })
+          }, 0)
+        }
+        return
+      }
       const raw = gp5Base64?.trim()
       if (raw) {
         postInbound({ type: 'setScore', gp5Base64: raw })
@@ -250,7 +264,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           }, 0)
         }
       }
-    }, [audioSrc, harnessReady, gp5Base64, postInbound, transposeSemitones, renderPreset, soundFontProfile])
+    }, [audioSrc, harnessReady, gp5Base64, musicXml, postInbound, transposeSemitones, renderPreset, soundFontProfile])
 
     useEffect(() => {
       if (!harnessReady) return
@@ -444,7 +458,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
             <LoadingSkeleton height={10} borderRadius={6} />
           </View>
         ) : null}
-        {!gp5Base64?.trim() ? (
+        {!gp5Base64?.trim() && !musicXml?.trim() ? (
           <View
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
