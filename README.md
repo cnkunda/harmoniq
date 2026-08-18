@@ -154,10 +154,10 @@ harmoniq/
 │   ├── app/              # FastAPI routes, ML pipeline, coaches, exporters
 │   │   ├── routers/      # analyze, export, discovery, taste, curriculum
 │   │   ├── chord_model.tflite   # 277-class CRNN (1.1 MB)
-│   │   └── musicxml_builder.py  # Score generation
-│   ├── scripts/          # build_chord_tflite.py, smoke_stems.py
-│   └── tests/            # 36 test files
-├── docs/                 # CODER.md, E2E_DEMO.md, MIGRATIONS.md, audit
+│   │   └── musicxml_builder.py  # Score generation (MusicXML 3.1, DTD-validated)
+│   ├── scripts/          # build_chord_tflite.py, smoke_stems.py, alphatab_prerender.mjs
+│   └── tests/            # 36 test files (incl. musicxml corpus + DTD fixtures)
+├── docs/                 # CODER.md, E2E_DEMO.md, MIGRATIONS.md, audit, AlphaTab limitations
 └── PRIORITIES.md         # Engineering roadmap with commit-level specs
 ```
 
@@ -167,7 +167,7 @@ harmoniq/
 
 Phase 0 + Phase 1 are complete. Phase 2 (ML refinement + production infrastructure) is active. Full roadmap: [`PRIORITIES.md`](PRIORITIES.md).
 
-**Current status:** 277-class chord model (CRNN + attention, val_acc ~82%), Viterbi post-processing planned. Backend uses in-memory job queue (pending Redis/Celery upgrade). MusicXML is the canonical score format.
+**Current status:** 277-class chord model (CRNN + attention, val_acc ~82%), Viterbi post-processing planned. Backend uses in-memory job queue (pending Redis/Celery upgrade). MusicXML is the canonical score format: the analyzer emits a DTD-valid MusicXML 3.1 score (beat grid + chord timeline + solo notes + tab staff), it is persisted as `score.musicxml` on the analysis, and AlphaTab renders it directly on web and native (GP5 as fallback for legacy lessons). Known AlphaTab importer gaps: [`docs/ALPHATAB_MUSICXML_LIMITATIONS.md`](docs/ALPHATAB_MUSICXML_LIMITATIONS.md).
 
 ---
 
@@ -175,6 +175,7 @@ Phase 0 + Phase 1 are complete. Phase 2 (ML refinement + production infrastructu
 
 - **Synthetic training data only** — the chord model is trained on synthetically generated chroma templates, not real audio. Real-data training is planned (PRIORITIES Commit 101).
 - **Tab catalog is a stub** — `GET /tabs/search` returns placeholder data; swap `app/tab_catalog/provider.py` for a licensed catalog API.
+- **AlphaTab MusicXML importer is experimental upstream** — 24-case corpus (DTD-valid, no-crash rendered) gates regressions; visual fidelity of chord diagrams and non-standard tunings is not baselined. See [`docs/ALPHATAB_MUSICXML_LIMITATIONS.md`](docs/ALPHATAB_MUSICXML_LIMITATIONS.md).
 - **basic-pitch requires TensorFlow** — does not install cleanly on Windows/Linux Python 3.11+; tests stub this via `HARMONIQ_SKIP_BASIC_PITCH`.
 - **TFLite model uses Flex ops** — requires `tensorflow-lite-select-tf-ops` on mobile for inference.
 - **No user accounts** — local-first, no cloud sync.

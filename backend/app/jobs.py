@@ -570,11 +570,16 @@ def _process_analyze_job(
                     ct = ChordTimeline.model_validate(sec_dict["chord_timeline"])
                 if "solo_notes" in sec_dict and sn is None:
                     sn = SoloNotes.model_validate(sec_dict["solo_notes"])
+            # Extract MusicXML from the lesson result (Commit 107)
+            # `musicxml` is "" (not None) when builder fails — don't persist
+            # a file that looks like a valid score.
+            musicxml_val = skeleton_result.musicxml or None
             _persist_artifacts_to_disk(
                 job_dir,
                 beat_grid=bg,
                 chord_timeline=ct,
                 solo_notes=sn,
+                musicxml=musicxml_val,
             )
             # Also save lesson.json
             with open(job_dir / "lesson.json", "w") as f:

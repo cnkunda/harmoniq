@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -46,7 +47,7 @@ def test_export_disabled_503(monkeypatch: pytest.MonkeyPatch) -> None:
 # --- New MusicXML Generation Tests ---
 
 def test_export_musicxml_from_json_basic():
-    from app.schemas import BeatGrid, ChordTimeline, SoloNotes, TimeSignature, ChordEvent, SoloNote
+    from app.schemas import BeatGrid, ChordTimeline, ChordEvent, SoloNote, SoloNotes, TimeSignature, ChordEvent, SoloNote
     from app.exporter import export_musicxml_from_json
     import music21 # Will need to import music21 for parsing and assertions
 
@@ -132,7 +133,7 @@ def test_export_musicxml_from_json_basic():
 
 
 def _build_musicxml(notes, key="C major", downbeats=None, tick_value=0.25):
-    from app.schemas import BeatGrid, ChordTimeline, SoloNotes, TimeSignature, ChordEvent, SoloNote
+    from app.schemas import BeatGrid, ChordTimeline, ChordEvent, SoloNote, SoloNotes, TimeSignature, ChordEvent, SoloNote
     from app.exporter import export_musicxml_from_json
 
     beat_grid = BeatGrid(
@@ -273,3 +274,191 @@ def test_export_musicxml_minor_key_signature_parsed():
     key_sig = list(score.flatten().getElementsByClass(music21.key.Key))[0]
     assert key_sig.tonic.name == "A"
     assert key_sig.mode == "minor"
+
+
+def test_export_musicxml_dtd_structure():
+    """Validate generated MusicXML has expected DTD-related structure.
+
+    Checks that the XML is well-formed, has a DOCTYPE referencing
+    the MusicXML 3.1 Partwise DTD, and contains the expected
+    <score-partwise> root with <part-list>/<part> structure.
+    This provides structural validation that catches severely malformed
+    output (the full DTD schema validation requires lxml resolver
+    configuration beyond the test environment).
+    """
+    from app.schemas import BeatGrid, ChordTimeline, ChordEvent, SoloNote, SoloNotes, TimeSignature
+    from app.exporter import export_musicxml_from_json
+    from lxml import etree
+
+    # Build MusicXML the same way other tests do
+    beat_grid = BeatGrid(
+        bpm=120.0,
+        beats=[0.0, 0.5, 1.0, 1.5],
+        downbeats=[0.0, 2.0],
+        time_signature=TimeSignature(numerator=4, denominator=4),
+        tick_value=0.25,
+    )
+    chord_timeline = ChordTimeline(
+        events=[ChordEvent(timestamp=0.0, chord="C:maj", confidence=0.9)],
+    )
+    solo_notes = SoloNotes(
+        notes=[SoloNote(start_time=0.0, duration=0.5, pitch=60, velocity=100)],
+    )
+
+    data, _, _, _ = export_musicxml_from_json(
+        beat_grid=beat_grid,
+        chord_timeline=chord_timeline,
+        solo_notes=solo_notes,
+        title="Test Score",
+        artist="Test Artist",
+        key_signature="C major",
+    )
+    musicxml_str = data.decode("utf-8")
+
+    # Parse with lxml to verify well-formedness and DTD structure
+    root = etree.fromstring(musicxml_str.encode("utf-8"))
+
+    # Check root element
+    assert root.tag == "score-partwise", f"Expected score-partwise, got {root.tag}"
+
+    # Check for DOCTYPE referencing the Partwise DTD in the raw XML string
+    assert 'DOCTYPE' in musicxml_str, 'Missing DOCTYPE in generated MusicXML'
+    assert 'Partwise' in musicxml_str, 'DOCTYPE does not reference Partwise DTD'
+
+    # Parse with lxml and verify structural elements
+    root = etree.fromstring(musicxml_str.encode('utf-8'))
+
+    # Check for part-list and part elements (DTD-mandated structure)
+    has_part_list = root.find("part-list") is not None
+    has_part = root.find("part") is not None
+    assert has_part_list, "Missing <part-list> element (DTD required)"
+    assert has_part, "Missing <part> element (DTD required)"
+
+    # Check for version attribute
+    assert root.get("version") == "3.1", f"Expected version='3.1', got {root.get('version')}"
+
+
+_MUSICXML_DTD_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "musicxml-dtd" / "musicxml31-partwise-combined.dtd"
+
+
+def _validate_musicxml_dtd(musicxml_str: str) -> None:
+    """Validate a MusicXML string against the vendored MusicXML 3.1 Partwise
+    DTD (official W3C schema bundle, inlined into one file)."""
+    from lxml import etree
+
+    assert _MUSICXML_DTD_FIXTURE.is_file(), "missing vendored MusicXML 3.1 DTD fixture"
+    dtd = etree.DTD(str(_MUSICXML_DTD_FIXTURE))
+    root = etree.fromstring(musicxml_str.encode("utf-8"))
+    if not dtd.validate(root):
+        raise AssertionError(f"MusicXML 3.1 Partwise DTD validation failed:\n{dtd.error_log}")
+
+
+def test_export_musicxml_passes_musicxml31_dtd():
+    """CI gate (Commit 107): generated MusicXML validates against the official
+    MusicXML 3.1 Partwise DTD — the test fails on any invalid XML output."""
+    xml, _ = _build_musicxml(
+        [
+            (0.0, 0.5, 60, 100),   # C4 quarter (velocity → dynamic mark)
+            (0.5, 0.25, 62, 90),
+            (1.0, 0.375, 64, 100),
+            (1.5, 1.0, 65, 70),
+        ]
+    )
+    _validate_musicxml_dtd(xml)
+
+
+def test_export_musicxml_dtd_fails_on_invalid_xml():
+    """The DTD gate must actually reject malformed MusicXML."""
+    from app.schemas import BeatGrid, ChordTimeline, ChordEvent, SoloNote, SoloNotes, TimeSignature
+    from app.exporter import export_musicxml_from_json
+
+    beat_grid = BeatGrid(
+        bpm=120.0,
+        beats=[0.0, 0.5, 1.0, 1.5],
+        downbeats=[0.0, 2.0],
+        time_signature=TimeSignature(numerator=4, denominator=4),
+        tick_value=0.25,
+    )
+    data, _, _, _ = export_musicxml_from_json(
+        beat_grid=beat_grid,
+        chord_timeline=ChordTimeline(events=[ChordEvent(timestamp=0.0, chord="C:maj", confidence=0.9)]),
+        solo_notes=SoloNotes(notes=[SoloNote(start_time=0.0, duration=0.5, pitch=60, velocity=100)]),
+        title="Bad",
+        artist="Bad",
+        key_signature="C major",
+    )
+    bad = data.decode("utf-8").replace("<part-list>", "<part-list><bogus-element/>")
+    with pytest.raises(AssertionError):
+        _validate_musicxml_dtd(bad)
+
+
+def test_export_musicxml_notation_elements_present():
+    """Commit 107 notation surface: <harmony>+<frame> chord diagrams, dynamics,
+    articulations, slurs, and the parallel tablature part (P2) below P1."""
+    xml, _ = _build_musicxml(
+        [
+            (0.0, 0.5, 60, 100),   # velocity 100 → <f> dynamics
+            (0.5, 0.25, 62, 70),   # soft + short → <mf> + staccato
+            (0.75, 0.25, 64, 100),
+            (1.0, 0.5, 65, 70),
+            (1.5, 1.0, 67, 90),    # crosses the barline → tie
+        ]
+    )
+
+    # Chord symbols render as <harmony> with inline <frame> fretboard diagram
+    assert "<harmony>" in xml
+    assert "<frame>" in xml
+    assert "<frame-strings>" in xml and "<frame-note>" in xml
+
+    # Dynamics (velocity-mapped marks) present as <direction>/<dynamics>
+    # (music21 emits <dynamics default-x=... default-y=...>, hence the
+    # attribute-less prefix match).
+    assert "<dynamics" in xml
+    assert any(mark in xml for mark in ("<f />", "<ff />", "<mf />", "<p />"))
+
+    # Articulations present (staccato/accent/tenuto)
+    assert "<articulations>" in xml
+
+    # Slurs for legato passages
+    assert "<slur" in xml
+
+    # Parallel tablature part below the standard-notation part (P1 → P2)
+    assert xml.count("<part id=") >= 2
+    assert '<clef><sign>TAB</sign>' in xml or "<sign>TAB</sign>" in xml
+    assert "<staff-details>" in xml and "<staff-lines>6</staff-lines>" in xml
+
+    # Ties across measures
+    assert "<tied" in xml
+
+
+def test_export_musicxml_defaults_block_present():
+    """<defaults> with <scaling> 7mm/40 tenths, <page-layout>, <system-layout>
+    so AlphaTab honors the score designer's layout instead of its own."""
+    import re
+
+    xml, _ = _build_musicxml([(0.0, 0.5, 60, 100)])
+
+    defaults = re.search(r"<defaults>(.*?)</defaults>", xml, re.DOTALL)
+    assert defaults is not None, "missing <defaults> block"
+    block = defaults.group(1)
+    assert "<scaling>" in block and "<millimeters>7</millimeters>" in block and "<tenths>40</tenths>" in block
+    assert "<page-layout>" in block
+    assert "<system-layout>" in block
+    # MusicXML DTD sanity: the block itself must validate too
+    _validate_musicxml_dtd(xml)
+
+
+def test_export_musicxml_trailing_content_not_dropped():
+    """Commit 107 regression: content past the last downbeat boundary must land
+    in an extended measure (chords and tied notes were previously dropped)."""
+    import re
+
+    xml, _ = _build_musicxml(
+        [(1.5, 1.5, 60, 90)],  # starts in measure 1, tied into measure 2
+        downbeats=[0.0, 2.0],
+    )
+    # Grid extends to cover the score: P1 has measures 1 and 2
+    p1_measures = re.findall(r'<measure\b[^>]*number="(\d+)"', xml)
+    assert "2" in p1_measures, f"expected an extended measure 2, got {p1_measures}"
+    # The tied note completes: one <tied type="start"> and one <tied type="stop">
+    assert "<tied type=\"start\"" in xml and "<tied type=\"stop\"" in xml

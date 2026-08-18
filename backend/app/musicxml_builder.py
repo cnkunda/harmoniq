@@ -325,16 +325,16 @@ def build_musicxml(
 
     # Group beats into measures based on downbeats and time signature
     # downbeats are the start times of each measure
-    measure_start_times = beat_grid.downbeats
+    measure_duration_s = quarter_note_duration_s * time_sig.numerator
+    total_duration_s = max(
+        (solo_notes.notes[-1].start_time + solo_notes.notes[-1].duration if solo_notes.notes else 0.0),
+        (chord_timeline.events[-1].timestamp + quarter_note_duration_s if chord_timeline.events else 0.0),
+        measure_duration_s  # Ensure at least one measure
+    )
+    measure_start_times = list(beat_grid.downbeats)
     if not measure_start_times:
         # IMPROVED: Generate a uniform measure grid if no downbeats are provided.
         # This is a more robust fallback than just two points.
-        measure_duration_s = quarter_note_duration_s * time_sig.numerator
-        total_duration_s = max(
-            (solo_notes.notes[-1].start_time + solo_notes.notes[-1].duration if solo_notes.notes else 0.0),
-            (chord_timeline.events[-1].timestamp + quarter_note_duration_s if chord_timeline.events else 0.0),
-            measure_duration_s # Ensure at least one measure
-        )
         measure_start_times = [0.0]
         current_measure_start = 0.0
         while current_measure_start < total_duration_s:
@@ -348,6 +348,13 @@ def build_musicxml(
         # Ensure at least one measure is always created
         if len(measure_start_times) == 1:
              measure_start_times.append(measure_start_times[0] + measure_duration_s)
+    else:
+        # Commit 107: downbeats only define measure *boundaries* — the grid must
+        # be extended (on the time-signature measure duration) until it covers
+        # the whole score, or trailing notes/chords/ties fall off the last
+        # measure and are silently dropped from the rendered score.
+        while measure_start_times[-1] < total_duration_s:
+            measure_start_times.append(measure_start_times[-1] + measure_duration_s)
 
     # Keep track of notes that are tied across measures
     tied_notes_queue = []

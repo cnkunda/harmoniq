@@ -12,6 +12,9 @@ if (!config.resolver.assetExts.includes('sf2')) {
 if (!config.resolver.assetExts.includes('sf3')) {
   config.resolver.assetExts.push('sf3')
 }
+if (!config.resolver.assetExts.includes('musicxml')) {
+  config.resolver.assetExts.push('musicxml')
+}
 
 // Python venv dirs (especially WSL-created `.venv-wsl` on NTFS) confuse Metro's file watcher
 // (EACCES on `lib64` symlinks). They are never part of the JS bundle.
@@ -25,6 +28,7 @@ if (!config.resolver.assetExts.includes('sf3')) {
 // walker still descends into `lib64` (EACCES on WSL symlinks).
 config.resolver.blockList = [
   /[/\\]__tests__(?:[/\\]|$)/,
+  /[/\\]\.opencode(?:[/\\]|$)/,
   /^backend[/\\]\.venv-wsl(?:[/\\]|$)/,
   /[/\\]backend[/\\]\.venv-wsl(?:[/\\]|$)/,
   /^backend[/\\]\.venv(?:[/\\]|$)/,

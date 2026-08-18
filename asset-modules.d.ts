@@ -7,3 +7,8 @@ declare module '*.sf2' {
   const assetModuleId: number
   export default assetModuleId
 }
+
+declare module '*.musicxml' {
+  const assetModuleId: number
+  export default assetModuleId
+}

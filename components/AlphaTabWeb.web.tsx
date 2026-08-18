@@ -1436,7 +1436,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             <LoadingSkeleton height={10} borderRadius={6} />
           </View>
         ) : null}
-        {!gp5Base64?.trim() && mounted ? (
+        {!gp5Base64?.trim() && !musicXml?.trim() && mounted ? (
           <View
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"

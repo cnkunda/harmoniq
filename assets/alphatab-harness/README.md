@@ -33,6 +33,20 @@ Load a Guitar Pro 5 (binary) file from Base64 (standard base64, no `data:` prefi
 
 Invalid base64 or corrupt GP data produces an outbound **`error`** message.
 
+### `setMusicXml` (Commit 107 — primary)
+
+Load a MusicXML score from a raw XML string. **MusicXML is the primary render
+format**; `setScore` remains as the GP5 fallback. AlphaTab auto-detects the
+format from the bytes, so no format flag is needed.
+
+```json
+{ "type": "setMusicXml", "musicXml": "<?xml version=\"1.0\" ...><score-partwise>..." }
+```
+
+Invalid XML produces an outbound **`error`** message. When sending both
+`setMusicXml` and `setAudioSrc`, hosts should post `setMusicXml` first so the
+score layout is ready before the playback cursor starts.
+
 ### `setAudioSrc`
 
 ```json

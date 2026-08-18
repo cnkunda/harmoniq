@@ -854,6 +854,47 @@ Claude-powered post-jam analysis and vocabulary mapping.
 
 ---
 
+### Commit 107: MusicXML as Primary Render Format ✅ DONE
+
+**Goal:** Switch the frontend from GP5-based AlphaTab rendering to MusicXML-based rendering, making MusicXML the canonical render format for chord symbols and solo notation as declared in the product spec.
+
+**Current State:** MusicXML is the active render path — the analysis pipeline emits a DTD-valid MusicXML 3.1 score, persists it as `score.musicxml`, the prerender step renders SVGs from it, and both web (DOM AlphaTab) and native (WebView AlphaTab) render it, with GP5 as fallback for legacy lessons. Edge-case corpus (24 files), DTD validation, cross-platform render suites, and a limitations doc are all in place. (Frontend rendering path landed first in `94412af`; corpus/validation/suites/docs landed in the closing commit.)
+
+**Scope (completed):**
+- ✅ AlphaTab WebView harness (`assets/alphatab-harness/`), `AlphaTabWeb.web.tsx`, and native `AlphaTabWebView.tsx` accept MusicXML as primary input (`api.loadMusicXML()`), GP5 as fallback; web banner fixed so MusicXML-only payloads no longer show "Tab preview isn't available"
+- ✅ `musicxml_builder.py` notation completeness — dynamics, articulations, slurs (spanned elements across barlines), beams, chord diagrams (`<frame>`), parallel TAB staff, `<defaults>` (`<scaling>` 7mm/40 tenths, `<page-layout>`, `<system-layout>`)
+- ✅ `LessonJSON` schema — `musicxml` primary field; top-level `beat_grid` (legacy list-typed union), `chord_timeline`, `solo_notes`; GP5 artifacts export-only; `jobs.py` persists `score.musicxml` standalone in job dir (`or None`, never empty)
+- ✅ `alphatab_prerender.py` + `.mjs` render SVGs from MusicXML with GP5 fallback; `score_sha256_from_musicxml`
+- ✅ MusicXML 3.1 Partwise DTD validation (vendored `tests/fixtures/musicxml-dtd/`; corpus + exporter tests fail on invalid XML)
+- ✅ Edge-case corpus — 24 files (`tests/fixtures/musicxml-corpus/`, generator `scripts/generate_musicxml_corpus.py`): irregular time sigs, nested tuplets, polyrhythms, tempo changes, multi-voice staves, ties/slurs; Node AlphaTab no-crash gate (`scripts/alphatab_corpus_check.mjs` + `test_musicxml_corpus.py`)
+- ✅ Cross-platform render suites — web Playwright `tests/ui/musicxml-render.spec.ts` (4 tests, visual baselines `tests/ui/__snapshots__/`); native Detox scaffold `tests/mobile/musicxml-render.e2e.js`; hidden route `app/(tabs)/musicxml-render-test.tsx` with corpus assets bundled (`src/lib/corpusAssets.ts`, metro `assetExts`)
+- ✅ `docs/ALPHATAB_MUSICXML_LIMITATIONS.md` (living doc), README updated
+
+**Acceptance Criteria:**
+- [⚠️] Native WebView harness renders MusicXML on Android — harness, route, and Detox suite implemented; suite not green yet: the prebuild-generated `android/` lacked Detox wiring (`:detox` project, `testInstrumentationRunner`, `androidTestImplementation`) so the test instrumentation never started. Completed by **Commit 108 (Mobile E2E Fix)**. iOS uses the same `AlphaTabWebView.tsx` path — requires a macOS sim run (`npm run test:mobile:ios`)
+- [✅] Chord symbols render as `<harmony>` elements in the score (exporter test + corpus `harmony` cases)
+- [✅] Solo notation renders with correct note types, beams, rests, and ties across measures (exporter tests + corpus `ties-and-slurs`, `rest-heavy`)
+- [✅] Tablature staff appears below standard notation staff with correct string/fret (P2 part, TAB clef)
+- [✅] Chord diagrams (`<frame>`) display inline with chord symbols (harmony + frame in exporter tests)
+- [✅] Dynamics, articulations, and slurs present in generated MusicXML and render in AlphaTab
+- [⚠️] GP5 artifacts removed from primary `LessonJSON` schema; exported-only — explicit `musicxml` field added to schema
+- [✅] AlphaTab prerender produces SVGs from MusicXML input (`alphatab_prerender.py` + `.mjs` accept `musicxml` with GP5 fallback; `score_sha256_from_musicxml`)
+- [✅] Existing export flows (MusicXML download, GP5 download) continue to work (backend regression green)
+- [✅] README updated (MusicXML = active canonical render path, limitations doc linked)
+- [✅] `data/jobs/{job_id}/score.musicxml` written as standalone file during analysis
+- [✅] `<defaults>` block present in MusicXML output with `<scaling>`, `<page-layout>`, and `<system-layout>`
+- [✅] CI validates every MusicXML output against MusicXML 3.1 Partwise DTD (vendored `tests/fixtures/musicxml-dtd/`; corpus + exporter tests fail on invalid XML)
+- [✅] `LessonJSON` schema has top-level `beat_grid`, `chord_timeline`, `solo_notes` fields — note: top-level `beat_grid` stays the legacy beat-timestamp list (`score.py` requires `isinstance(beat_grid, list)`), typed `BeatGrid | list[float] | None`; full `BeatGrid` objects remain per-section
+- [⚠️] Cross-platform rendering test suite runs in CI — web green (4/4 Playwright, visual baselines within `maxDiffPixelRatio: 0.02`); native suite blocked on Detox wiring, completed by Commit 108
+- [✅] Edge-case corpus (24 files) renders without crash — backend Node AlphaTab gate 24/24 + web Playwright suite; native gate pending Commit 108
+- [✅] Known AlphaTab rendering limitations documented in repo for test writer reference (`docs/ALPHATAB_MUSICXML_LIMITATIONS.md`)
+
+**Verification:** backend corpus+exporter+prerender 29 passed; score+jam+rhythm 23 passed; analyze_api+corpus 13 passed; `tsc --noEmit` clean; web Playwright suite 4/4 (user-run); Node corpus gate 24/24.
+
+**Implementation:** `components/AlphaTabWeb.web.tsx` (MusicXML load path + banner fix), `assets/alphatab-harness/` (harness), `backend/app/musicxml_builder.py`, `backend/app/schemas.py` (top-level fields), `backend/app/jobs.py` (score.musicxml persist), `backend/app/alphatab_prerender.py` + `backend/scripts/alphatab_prerender.mjs`, `backend/scripts/generate_musicxml_corpus.py` + `backend/scripts/alphatab_corpus_check.mjs`, `backend/tests/test_musicxml_corpus.py` + `backend/tests/fixtures/musicxml-corpus/` + `backend/tests/fixtures/musicxml-dtd/`, `app/(tabs)/musicxml-render-test.tsx` (hidden route), `src/lib/corpusAssets.ts`, `metro.config.js` (musicxml assetExts), `tests/ui/musicxml-render.spec.ts` + `tests/ui/__snapshots__/`, `tests/mobile/musicxml-render.e2e.js`, `docs/ALPHATAB_MUSICXML_LIMITATIONS.md`, `README.md`.
+
+---
+
 ### Commit 114: LLM-Enhanced Chord Correction & Roman Numeral Analysis ✅ DONE
 
 **Goal:** Post-process raw ChordTimeline through a lightweight LLM (Claude Haiku or Gemini Flash) to correct improbable chord changes based on key context and add Roman numeral functional labels, inspired by ChordMini's Gemini integration.

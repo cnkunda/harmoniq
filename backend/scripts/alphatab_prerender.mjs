@@ -1,6 +1,7 @@
 /**
  * AlphaTab Node-side SVG layout prerender (PRIORITIES §59).
- * Reads JSON stdin: { gp5_base64: string, preset?: { scale?: number, stretchForce?: number } }
+ * Reads JSON stdin: { musicxml?: string, gp5_base64?: string, preset?: { scale?: number, stretchForce?: number } }
+ * MusicXML is the primary input (Commit 107); GP5 base64 is the fallback.
  * Writes JSON stdout: { ok, master_bar_count, total_width, total_height, partial_count, partials }
  */
 import * as fs from 'node:fs'
@@ -23,12 +24,17 @@ function readStdinUtf8() {
 function main() {
   return readStdinUtf8().then((raw) => {
     const input = JSON.parse(raw)
+    const musicXml = input.musicxml
     const b64 = input.gp5_base64
-    if (typeof b64 !== 'string' || !b64.trim()) {
-      throw new Error('gp5_base64 missing')
+    const xmlOk = typeof musicXml === 'string' && musicXml.trim().length > 0
+    const gp5Ok = typeof b64 === 'string' && b64.trim().length > 0
+    if (!xmlOk && !gp5Ok) {
+      throw new Error('musicxml or gp5_base64 missing')
     }
     const preset = input.preset && typeof input.preset === 'object' ? input.preset : {}
-    const buf = Buffer.from(String(b64), 'base64')
+    const buf = xmlOk
+      ? Buffer.from(musicXml, 'utf8')
+      : Buffer.from(String(b64), 'base64')
 
     const pkgPath = path.join(__dirname, '..', 'node_modules', '@coderline', 'alphatab', 'package.json')
     let alphatabVersion = 'unknown'

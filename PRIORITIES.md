@@ -2,7 +2,7 @@
 
 Three-phase product roadmap for **risk first**, **vertical slices**, and **mobile + web** parity. Follow in sequence unless a kill-switch fails.
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 2 ML (commits 98–103)** — **complete**. **Phase 3 (commits 108–109)** — **complete**. **Phase 4 (commits 104, 105, 114)** — **complete**. **MLOps (commits 136–140)** — **complete**. **Commit 106 (Solo Rhythm Quantization & Measure-Level Sanity)** — **complete**.
+**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**. **Phase 1.5 (commits 104–107)** — **complete**. **Phase 2 ML (commits 108–103)** — **complete**. **Phase 3 (commits 108–109)** — **complete**. **Phase 4 (commits 110–113)** — **complete**. **MLOps (commits 136–140)** — **complete**. **Commit 107 (MusicXML as Primary Render Format) — complete** (archived in [`priorities-archive.md`](priorities-archive.md)). **Commit 106 (Solo Rhythm Quantization & Measure-Level Sanity)** — **complete**.
 
 ---
 
@@ -10,7 +10,7 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 | | |
 |--|--|
-| **Roadmap status** | **Phase 0–4 + MLOps complete. Commits 100, 101, 103 complete (Segment Boundary Tie, Real Dataset Integration, Training Infrastructure). Commit 106 complete (Solo Rhythm Quantization & Measure-Level Sanity). Product milestone "ML Fallback Logic" ✅ DONE (composite transcription confidence + auto skeleton-tab fallback). Pending: SWE features, remaining ML refinement, remaining product milestones. Open goal: >75% Isophonics test root accuracy (66.1% as of Commit 103).** |
+| **Roadmap status** | **Phase 0–4 + MLOps complete. Commits 100, 101, 103 complete (Segment Boundary Tie, Real Dataset Integration, Training Infrastructure). Commit 106 complete (Solo Rhythm Quantization & Measure-Level Sanity). Commit 107 complete (MusicXML as Primary Render Format — archived). Product milestone "ML Fallback Logic" ✅ DONE (composite transcription confidence + auto skeleton-tab fallback). Pending: SWE features, remaining ML refinement, remaining product milestones. Open goal: >75% Isophonics test root accuracy (66.1% as of Commit 103).** |
 | **Product spec** | [`README.md`](README.md) |
 | **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
 | **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
@@ -51,86 +51,6 @@ System for tracking user engagement during play-along sessions: duration, comple
 - [ ] Events persisted to local DB and survive app restart
 - [ ] Analytics adds zero latency to audio playback or capture
 - [ ] Privacy notice displayed; user can opt out
-
----
-
-## Phase 2: ML Refinement — Pending Commits
-
-### Commit 107: MusicXML as Primary Render Format
-
-**Goal:** Switch the frontend from GP5-based AlphaTab rendering to MusicXML-based rendering, making MusicXML the canonical render format for chord symbols and solo notation as declared in the product spec.
-
-**Current State:** MusicXML is produced by the analysis pipeline but only used for download export. The frontend AlphaTab harness renders GP5 base64 exclusively. `README.md` declares MusicXML canonical but it is not the active rendering path.
-
-**Scope:**
-- Update the AlphaTab WebView harness (`assets/alphatab-harness/`) to accept and render MusicXML (`.musicxml` / XML string) as primary input via `api.loadMusicXML()` or equivalent
-- Add MusicXML loading path in `AlphaTabWeb.web.tsx` alongside existing GP5 path
-- Add MusicXML loading path in `ScoreViewer.tsx` / `AlphaTabWebView.tsx` for native rendering
-- Complete the MusicXML builder (`musicxml_builder.py`) with all standard notation elements:
-  - Dynamics (`<dynamics>`: p, mf, f, etc. mapped from note velocity)
-  - Articulations (`<articulations>`: staccato, accent, tenuto)
-  - Slurs (`<slur>` for legato passages)
-  - Beams (`<beam>` grouped by beat and tuplet structure from Commit 106)
-  - Chord diagrams (`<frame>` elements for fretboard positions)
-  - Parallel tablature staff (`<staff type="tab">`) below standard notation staff
-- Add `musicxml` primary field to `LessonJSON` schema; deprecate `tab_full_gp5_base64` as primary
-- Update `alphatab_prerender.py` to generate prerender SVGs from MusicXML instead of GP5
-- Update all frontend consumers to read from `musicxml` field with GP5 fallback
-- Remove `tab_full_gp5_base64`, `tab_skeleton_gp5_base64`, `tab_alt_position_gp5_base64` from primary `LessonJSON` type; move to export-only fields
-- Add integration tests: MusicXML round-trip through AlphaTab rendering on web and native
-- Update README to reflect MusicXML as active canonical format (remove "aspirational" language)
-- Persist Score.musicxml as standalone file in job directory:
-  write `data/jobs/{job_id}/score.musicxml` alongside existing JSON artifacts
-  (BeatGrid.json, chordTimeline.json, SoloNotes.json), enabling direct file
-  download and cache reuse of the MusicXML artifact
-- Add `<defaults>` with `<scaling>` (7mm/40 tenths matching
-  `gp_export_musicxml.py`), `<page-layout>`, and `<system-layout>` to the
-  music21 MusicXML output path. Without these, AlphaTab applies its own layout
-  defaults which may differ from the score designer's intent
-- Add MusicXML schema validation in CI: validate all generated MusicXML output
-  against the MusicXML 3.1 Partwise DTD in `tests/test_exporter.py`. Currently
-  only one test exists that parses with music21 — no DTD/XSD-level validation
-- Expose `beat_grid: BeatGrid`, `chord_timeline: ChordTimeline`, and
-  `solo_notes: SoloNotes` as top-level fields in `LessonJSON` schema.
-  Currently they're only in `MusicXMLJsonExportRequest` and per-section via
-  `extra="allow"`, requiring clients to reconstruct from sections
-- **Add cross-platform MusicXML rendering test suite:**
-  - Render each generated MusicXML on both web (DOM AlphaTab via `AlphaTabWeb.web.tsx`)
-    and native (WebView AlphaTab via `AlphaTabWebView.tsx`)
-  - Compare rendered output via Playwright visual regression screenshots (web)
-    and native screenshot comparison (Android/iOS sim)
-  - Track known AlphaTab rendering quirks as a living doc: list unsupported
-    MusicXML elements, layout differences between web and native backends
-- **Build edge-case MusicXML corpus for AlphaTab semantic loading:**
-  - Generate MusicXML with: irregular time sigs (5/4, 7/8), nested tuplets,
-    polyrhythms, extreme tempo changes, multi-voice staves
-  - Verify each edge case renders without crash on both platforms
-  - Document any parsing failures or visual discrepancies as AlphaTab bugs
-    to track upstream
-
-**Acceptance Criteria:**
-- [ ] Frontend AlphaTab renders MusicXML via `api.loadMusicXML()` on web (GP5 retained as fallback)
-- [ ] Native WebView harness renders MusicXML on both Android and iOS
-- [ ] Chord symbols render as `<harmony>` elements in the score
-- [ ] Solo notation renders with correct note types, beams, rests, and ties across measures
-- [ ] Tablature staff appears below standard notation staff with correct string/fret
-- [ ] Chord diagrams (`<frame>`) display inline with chord symbols
-- [ ] Dynamics, articulations, and slurs present in generated MusicXML and render in AlphaTab
-- [ ] GP5 artifacts removed from primary `LessonJSON` schema; exported-only
-- [ ] AlphaTab prerender produces SVGs from MusicXML input
-- [ ] Existing export flows (MusicXML download, GP5 download) continue to work
-- [ ] README updated
-- [ ] `data/jobs/{job_id}/score.musicxml` written as standalone file during analysis
-- [ ] `<defaults>` block present in MusicXML output with `<scaling>`,
-      `<page-layout>`, and `<system-layout>`
-- [ ] CI validates every MusicXML output against MusicXML 3.1 Partwise DTD;
-      test fails on invalid XML
-- [ ] `LessonJSON` schema has top-level `beat_grid`, `chord_timeline`,
-      `solo_notes` fields
-- [ ] Cross-platform rendering test suite runs in CI: web screenshots match within
-      `maxDiffPixelRatio: 0.02`; native screenshots pass visual regression
-- [ ] Edge-case corpus (20+ files) renders without crash on both platforms
-- [ ] Known AlphaTab rendering limitations documented in repo for test writer reference
 
 ---
 

@@ -364,7 +364,9 @@ class LessonJSON(BaseModel):
     tempo: float | None = None
     tempo_confidence: float | None = None
     transcription_confidence: float | None = None
-    beat_grid: list[float] = Field(default_factory=list)
+    # Legacy beat-timestamp list (metronome clicks); full BeatGrid objects live
+    # per-section and may also be hoisted here (Commit 107).
+    beat_grid: BeatGrid | list[float] | None = Field(default_factory=list)
     bar_timestamps: list[float] = Field(default_factory=list)
     stems: dict[str, str] = Field(default_factory=dict)
     lyrics_aligned: list[dict[str, Any]] = Field(default_factory=list)
@@ -378,6 +380,13 @@ class LessonJSON(BaseModel):
     tabs_unavailable_reason: str | None = None
     # Commit 82: Low SNR warning for pre-emptive transcription quality warning
     low_snr_warning: bool | None = None
+    # Commit 107: MusicXML primary render format (text XML string from analysis pipeline)
+    musicxml: str | None = None
+    # Commit 107: full analysis artifacts exposed at lesson top level so
+    # clients (AlphaTab harness, study fretboard, exporter) do not have to
+    # reconstruct them from sections.
+    chord_timeline: ChordTimeline | None = None
+    solo_notes: SoloNotes | None = None
 
 
 class JobStatus(BaseModel):

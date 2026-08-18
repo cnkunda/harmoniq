@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router'
 import {
     BarChart3,
+    FileText,
     FlaskConical,
     Home,
     Library,
@@ -93,6 +94,15 @@ export default function TabLayout() {
           title: 'Analyze',
           href: null,
           tabBarIcon: ({ color }) => <FlaskConical color={color} size={TAB_BAR_ICON_SIZE} strokeWidth={2} />,
+        }}
+      />
+      {/* Hidden from tab bar; MusicXML corpus render tests (Commit 107). */}
+      <Tabs.Screen
+        name="musicxml-render-test"
+        options={{
+          title: 'MusicXML',
+          href: null,
+          tabBarIcon: ({ color }) => <FileText color={color} size={TAB_BAR_ICON_SIZE} strokeWidth={2} />,
         }}
       />
     </Tabs>

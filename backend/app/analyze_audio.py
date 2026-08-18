@@ -520,6 +520,33 @@ def build_lesson_json_from_librosa(
         **stem_fields,
     )
     full_gp5 = tab_artifacts.get("tab_full_gp5_base64") if tab_artifacts else None
+
+    # Commit 107: hoist the full analysis artifacts to lesson top level so
+    # clients (AlphaTab harness, study fretboard, exporter) read them directly
+    # instead of reconstructing from sections. First non-empty section wins.
+    # The legacy top-level `beat_grid` field stays the beat-timestamp list
+    # (scoring contract, metronome); the full BeatGrid object remains
+    # per-section.
+    hoisted_updates: dict[str, object] = {}
+    for sec in sections:
+        sec_dict = getattr(sec, "model_dump")(exclude_none=True)
+        if "chord_timeline" in sec_dict and hoisted_updates.get("chord_timeline") is None:
+            hoisted_updates["chord_timeline"] = ChordTimeline.model_validate(sec_dict["chord_timeline"])
+        if "solo_notes" in sec_dict and hoisted_updates.get("solo_notes") is None:
+            hoisted_updates["solo_notes"] = SoloNotes.model_validate(sec_dict["solo_notes"])
+    lesson = lesson.model_copy(update=hoisted_updates) if hoisted_updates else lesson
+
     if isinstance(full_gp5, str) and full_gp5.strip():
-        lesson = enrich_lesson_with_prerender_hints(lesson, job_id=job_id, gp5_base64=full_gp5)
+        lesson = enrich_lesson_with_prerender_hints(
+            lesson,
+            job_id=job_id,
+            gp5_base64=full_gp5,
+            musicxml=musicxml_str or None,
+        )
+    elif musicxml_str.strip():
+        lesson = enrich_lesson_with_prerender_hints(
+            lesson,
+            job_id=job_id,
+            musicxml=musicxml_str,
+        )
     return lesson

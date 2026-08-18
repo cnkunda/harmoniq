@@ -48,6 +48,11 @@ def score_sha256_from_gp5_base64(gp5_base64: str) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def score_sha256_from_musicxml(musicxml: str) -> str:
+    """Commit 107: MusicXML is the primary prerender input — hash the raw XML."""
+    return hashlib.sha256(musicxml.strip().encode("utf-8")).hexdigest()
+
+
 def prerender_cache_key(score_sha256: str) -> str:
     raw = f"{ALPHATAB_EXPECT_VERSION}:{PRERENDER_PRESET_VERSION}:{score_sha256}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -67,17 +72,23 @@ def _study_preset_payload() -> dict[str, float]:
     return {"scale": 1.1, "stretchForce": 1.0}
 
 
-def _run_node_prerender(gp5_base64: str) -> dict[str, object]:
+def _run_node_prerender(*, musicxml: str | None = None, gp5_base64: str | None = None) -> dict[str, object]:
     node_bin = shutil.which("node")
     if not node_bin:
         raise RuntimeError("node binary not found on PATH")
     script = _node_script_path()
     if not script.is_file():
         raise RuntimeError(f"alphatab_prerender script missing at {script}")
-    payload = json.dumps({"gp5_base64": gp5_base64, "preset": _study_preset_payload()})
+    if musicxml is None and gp5_base64 is None:
+        raise RuntimeError("prerender needs musicxml or gp5_base64 input")
+    payload: dict[str, object] = {"preset": _study_preset_payload()}
+    if musicxml is not None:
+        payload["musicxml"] = musicxml
+    else:
+        payload["gp5_base64"] = gp5_base64
     proc = subprocess.run(
         [node_bin, str(script)],
-        input=payload.encode("utf-8"),
+        input=json.dumps(payload).encode("utf-8"),
         cwd=str(_backend_root()),
         capture_output=True,
         timeout=120,
@@ -121,7 +132,12 @@ def save_cached_bundle(cache_key: str, bundle: AlphaTabPrerenderBundle) -> None:
     p.write_text(bundle.model_dump_json(indent=2), encoding="utf-8")
 
 
-def compute_prerender_bundle(gp5_base64: str, *, score_sha256: str) -> AlphaTabPrerenderBundle | None:
+def compute_prerender_bundle(
+    *,
+    musicxml: str | None = None,
+    gp5_base64: str | None = None,
+    score_sha256: str,
+) -> AlphaTabPrerenderBundle | None:
     """Return bundle or None on failure (caller keeps lesson usable)."""
     cache_key = prerender_cache_key(score_sha256)
     cached = load_cached_bundle(cache_key)
@@ -129,7 +145,7 @@ def compute_prerender_bundle(gp5_base64: str, *, score_sha256: str) -> AlphaTabP
         return cached.model_copy(update={"preset_version": PRERENDER_PRESET_VERSION, "score_sha256": score_sha256})
 
     try:
-        raw = _run_node_prerender(gp5_base64)
+        raw = _run_node_prerender(musicxml=musicxml, gp5_base64=gp5_base64)
     except Exception:
         logger.exception("alphatab_prerender subprocess failed score_sha=%s…", score_sha256[:12])
         return None
@@ -162,20 +178,37 @@ def compute_prerender_bundle(gp5_base64: str, *, score_sha256: str) -> AlphaTabP
     return bundle
 
 
-def enrich_lesson_with_prerender_hints(lesson: LessonJSON, *, job_id: str, gp5_base64: str) -> LessonJSON:
-    """Attach hints + job-local JSON artifact when prerender succeeds; no-op if disabled or failed."""
+def enrich_lesson_with_prerender_hints(
+    lesson: LessonJSON,
+    *,
+    job_id: str,
+    gp5_base64: str | None = None,
+    musicxml: str | None = None,
+) -> LessonJSON:
+    """Attach hints + job-local JSON artifact when prerender succeeds; no-op if disabled or failed.
+
+    Commit 107: MusicXML is the primary input (matches the primary render
+    path); GP5 is the fallback when no MusicXML was produced.
+    """
     if not prerender_enabled():
         return lesson
-    if not gp5_base64.strip():
+    musicxml_clean = (musicxml or "").strip()
+    gp5_clean = (gp5_base64 or "").strip()
+    if not musicxml_clean and not gp5_clean:
         return lesson
     try:
-        sh = score_sha256_from_gp5_base64(gp5_base64)
+        if musicxml_clean:
+            sh = score_sha256_from_musicxml(musicxml_clean)
+            render_input = {"musicxml": musicxml_clean}
+        else:
+            sh = score_sha256_from_gp5_base64(gp5_clean)
+            render_input = {"gp5_base64": gp5_clean}
     except Exception:
-        logger.exception("prerender: could not decode gp5 base64 for job_id=%s", job_id)
+        logger.exception("prerender: could not hash score input for job_id=%s", job_id)
         return lesson
 
     ck = prerender_cache_key(sh)
-    bundle = compute_prerender_bundle(gp5_base64, score_sha256=sh)
+    bundle = compute_prerender_bundle(score_sha256=sh, **render_input)
     if bundle is None or not bundle.partials:
         return lesson
 

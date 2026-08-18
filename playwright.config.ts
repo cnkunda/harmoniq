@@ -33,7 +33,10 @@ export default defineConfig({
   },
   webServer: useWebServer
     ? {
-        command: `npm run web -- --non-interactive --port ${port}`,
+        // `set CI=1&&` works in cmd.exe (Windows dev) and is a no-op in sh;
+        // GitHub Actions already exports CI=true. Replaces the removed
+        // `--non-interactive` expo flag.
+        command: `set CI=1&& npm run web -- --port ${port}`,
         url: baseURL,
         timeout: 180_000,
         reuseExistingServer: !process.env.CI,
