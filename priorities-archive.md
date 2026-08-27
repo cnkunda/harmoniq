@@ -969,6 +969,12 @@ Claude-powered post-jam analysis and vocabulary mapping.
 
 ---
 
+### Commit 111: [SKIPPED] Dual-Path Confidence-Weighted Stem Fusion
+
+**Skipped:** Dual-path chord inference (run on both guitar stem AND full mix, then fuse) would double `infer_chords()` latency — already the slowest pipeline step. Commit 110's single-path routing covers the core use cases without the 2x regression. May revisit if inference becomes fast enough.
+
+---
+
 ## MLOps: Production Infrastructure (Complete)
 
 ### Commit 136: Redis Job Queue + Celery Workers + Push-Based Job Updates ✅ DONE

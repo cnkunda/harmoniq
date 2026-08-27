@@ -8,15 +8,15 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 ## At a glance
 
-| | |
-|--|--|
+|                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Roadmap status** | **Phase 0–4 + MLOps complete. Commits 100, 101, 103 complete (Segment Boundary Tie, Real Dataset Integration, Training Infrastructure). Commit 106 complete (Solo Rhythm Quantization & Measure-Level Sanity). Commit 107 complete (MusicXML as Primary Render Format — archived). Product milestone "ML Fallback Logic" ✅ DONE (composite transcription confidence + auto skeleton-tab fallback). Pending: SWE features, remaining ML refinement, remaining product milestones. Open goal: >75% Isophonics test root accuracy (66.1% as of Commit 103).** |
-| **Product spec** | [`README.md`](README.md) |
-| **UI spec** | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
-| **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
-| **Manual QA** | [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) |
-| **Scoring** | [`docs/SCORING.md`](docs/SCORING.md) |
-| **Archive** | [`priorities-archive.md`](priorities-archive.md) (Phase 0–4 + MLOps + Product Milestones) |
+| **Product spec**   | [`README.md`](README.md)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **UI spec**        | [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **E2E / release**  | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Manual QA**      | [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Scoring**        | [`docs/SCORING.md`](docs/SCORING.md)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **Archive**        | [`priorities-archive.md`](priorities-archive.md) (Phase 0–4 + MLOps + Product Milestones)                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ---
 
@@ -27,18 +27,21 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 **Goal:** Make the mobile Detox suites actually run. `npm run test:mobile` launched the app but never connected: the prebuild-generated native projects lack all Detox wiring, so the instrumentation never starts (the app itself boots fine — proven by manual launch). Fix it durably (survives `expo prebuild`), verify Android end-to-end, and leave iOS a one-command macOS run.
 
 **Current State:** `detox test` times out at 180s waiting for the "ready" handshake. Root causes, all in the gitignored prebuild output (`android/`):
+
 - the androidTest APK has no Detox runner — `:detox` project, `testInstrumentationRunner`, and `androidTestImplementation(project(...))` are all absent from the generated Gradle files
 - the debug APK is non-bundled (no `debuggableVariants = []`), so launches handshake with a live Metro; without it the app dies at launch
-- the androidTest APK merge hits jniLibs/META-INF duplicates (fbjni, libc++_shared) unless packaging pickFirsts are applied at every module level
+- the androidTest APK merge hits jniLibs/META-INF duplicates (fbjni, libc++\_shared) unless packaging pickFirsts are applied at every module level
 - iOS: Detox 20 needs **no app-side wiring** (self-contained XCUITest runner via `-xctestrun`; framework + runner built into `~/Library/Detox` by npm postinstall on macOS); needs macOS + Xcode to run
 
 **Scope:**
+
 - `scripts/detox/patch-android.js` — idempotent patcher applied by `detox:build:android` after every prebuild: links `:detox` (settings.gradle), sets `testInstrumentationRunner` + JUnit4 androidTest deps (pinned to the `fullDebug` flavor), sets `debuggableVariants = []` (JS embedded in debug APK — no Metro at test time), re-applies the androidTest APK packaging merge fixes
 - Detox native suite extended to the full bundled corpus (4 files, parity with the web suite)
 - iOS: pods guard in `scripts/detox/build-ios.js`; macOS runbook (Metro required for the debug bundle — iOS has no bundled-debug equivalent)
 - AGENTS.md testing-quirks updated (AVD override, bundled debug APK, iOS runbook)
 
 **Acceptance Criteria:**
+
 - [ ] `npm run detox:build:android` succeeds from a clean prebuild — patch script reapplies the wiring automatically
 - [ ] Patch script is idempotent — repeated builds do not duplicate Gradle blocks
 - [ ] `npm run test:mobile` passes on the Android emulator **without Metro running** — smoke boot + all 4 corpus render tests green
@@ -56,6 +59,7 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 System for tracking user engagement during play-along sessions: duration, completion, and discard rates.
 
 **Scope:**
+
 - Build lightweight event analytics system (custom event bus, no third-party SDK)
 - Track play-along start/stop events with duration counters per session
 - Track chart discard events (user closes tab or exits Play step mid-performance)
@@ -71,6 +75,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 - Make all tracking opt-out with privacy notice
 
 **Acceptance Criteria:**
+
 - [ ] Play-along duration recorded per session with second precision
 - [ ] Chart discard events captured (user exits Play step with unanswered take)
 - [ ] Session progression tracked: which of [tune, listen, study, slow, play, review] were visited
@@ -81,43 +86,11 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-## Phase 2: Stem Routing & Audio Pipeline ✅ DONE
+## Phase 2: Stem Routing & Audio Pipeline
 
-### Commit 111: Dual-Path Confidence-Weighted Stem Fusion (MT3 Paper Insight)
+### Commit 111: [SKIPPED] Dual-Path Confidence-Weighted Stem Fusion
 
-**Goal:** Run chord inference on both the guitar stem AND the full mix simultaneously, then fuse predictions weighted by stem quality confidence — mimicking MT3's multi-instrument attention without needing the model.
-
-**Rationale (from MT3 paper, Section 4.3):** MT3 achieves strong transcription on the full mix because it learns cross-instrument attention patterns. When Demucs produces a poor guitar stem (piano-dominant mix, buried guitar), our chord model gets degraded input. A dual-path approach gives the model access to both the isolated stem and the full harmonic context, fusing them based on confidence.
-
-**Current State:** `stem_quality.py` detects bad stems with binary flags but falls back to piano stem or full mix as an either/or choice. No confidence-weighted fusion exists.
-
-**Scope:**
-- Add dual-path chord inference in `chord_inference.py`:
-  - Path A: run inference on guitar stem (or selected melodic stem)
-  - Path B: run inference on full mix
-  - Both paths produce per-beat chord predictions with confidence scores
-- Implement confidence-weighted fusion:
-  - Use stem quality score from `stem_quality.py` as the fusion weight
-  - `final_prediction = w * stem_prediction + (1-w) * mix_prediction`
-  - Where `w` is the continuous stem confidence (0-1, not binary)
-  - When stem confidence is high (>0.8): prefer stem path
-  - When stem confidence is low (<0.3): prefer full mix path
-  - When moderate: blend both predictions
-- Upgrade `stem_quality.py` from binary flags to continuous confidence:
-  - Compute stem confidence from RMS ratio, spectral overlap, and onset correlation
-  - Return `stem_confidence: float` (0-1) alongside existing quality flags
-- Pass stem confidence to scoring system so it can adjust its own confidence
-- Add instrument confusion diagnostic: large divergence between stem and mix predictions = instrument confusion
-- Log fusion decisions per job for observability
-
-**Acceptance Criteria:**
-- [ ] Dual-path inference runs on both stem and full mix
-- [ ] Confidence-weighted fusion produces more accurate chords on piano-dominant mixes
-- [ ] Stem quality returns continuous confidence score (0-1), not binary flag
-- [ ] Instrument confusion detected when stem vs mix predictions diverge significantly
-- [ ] Fusion decisions logged per job
-- [ ] No regression on songs with clean guitar stems
-- [ ] Chord accuracy improves by ≥5% on songs flagged with `guitar_buried_in_mix`
+**Skipped:** Dual-path chord inference (run on both guitar stem AND full mix, then fuse) would double `infer_chords()` latency — already the slowest pipeline step. Commit 110's single-path routing (bass+other mix, quality-flag-influenced fallback) covers the core use cases without the 2x regression. May revisit if inference becomes fast enough.
 
 ---
 
@@ -128,6 +101,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** `MusicProvider` only wraps `study.tsx` (line 128). The `slow`, `play`, `listen`, and `warmup` screens have no MusicProvider, so `FretboardDiagram` receives no chord events or solo notes — the `try/catch` at `FretboardDiagram.tsx:372-377` silently swallows the error, leaving the fretboard blank during playback. Additionally, `findActiveNotes()` in `MusicContext.tsx:165-182` always picks `cells[0]` (lowest-fret MIDI resolution), ignoring the actual string/fret positions from the tab file.
 
 **Scope:**
+
 - Add `<MusicProvider>` wrapping to `app/session/slow.tsx`:
   - Extract `chordEvents`, `soloNotesArr`, `barTimestamps` from lesson/section data (same pattern as `study.tsx:122-125`)
   - Wire `onPlaybackTick` → `musicActions.setPosition()` for playback-driven chord/note lookup
@@ -145,6 +119,7 @@ System for tracking user engagement during play-along sessions: duration, comple
   - Test graceful fallback when MusicProvider is absent (existing try/catch pattern)
 
 **Acceptance Criteria:**
+
 - [ ] `slow.tsx` fretboard highlights current chord and active solo notes during playback
 - [ ] `play.tsx` fretboard highlights chord/notes from the reference track during capture
 - [ ] `listen.tsx` displays current chord symbol during orient playback
@@ -162,6 +137,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** `ffmpeg_normalize_wav()` in `pipeline_proof.py:74-108` does resampling and channel downmix only — no loudness normalization. Chunking in `audio_processing.py:45-90` generates 5-minute chunks for tracks ≥15 minutes, but no downstream module reads them (Demucs, librosa, beat_grid all operate on the full `song.wav`). yt-dlp subprocess at `pipeline_proof.py:201` has no timeout.
 
 **Scope:**
+
 - Upgrade `ffmpeg_normalize_wav()` to perform loudness normalization:
   - Add `-af loudnorm=I=-16:TP=-1.5:LRA=11` (EBU R128 standard, -16 LUFS integrated target)
   - Maintain existing resampling (44.1kHz) and downmix (mono) behavior
@@ -184,6 +160,7 @@ System for tracking user engagement during play-along sessions: duration, comple
   - yt-dlp timeout: verify exception raised on timeout
 
 **Acceptance Criteria:**
+
 - [ ] `ffmpeg_normalize_wav()` applies EBU R128 loudnorm targeting -16 LUFS
 - [ ] Normalized WAV loudness measures within ±1dB of -16 LUFS
 - [ ] All downstream pipelines (Demucs, librosa, beat_grid) accept normalized audio without regression
@@ -205,6 +182,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** `librosa_summarize()` uses RMS + onset novelty for boundary detection. Sections are unlabeled (just timestamps). ChordMini's SongFormer provides dedicated structural segmentation (intro/verse/chorus/bridge/outro).
 
 **Scope:**
+
 - Add `refine_section_boundaries()` module that fuses three signals:
   - Chord change density: high change rate suggests section boundary
   - Whisper word-cluster boundaries: silence/gap between vocal phrases
@@ -222,6 +200,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 - Add test: real song with known structure (e.g., "Gravity" verse/chorus)
 
 **Acceptance Criteria:**
+
 - [ ] Section boundaries refined using chord density + vocal gap + energy fusion
 - [ ] Sections labeled "Intro", "Verse", "Chorus", "Bridge", "Outro" where confident
 - [ ] Repeated chord progressions detected and grouped under same label
@@ -241,6 +220,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** No instrument confusion detection exists. The scoring system has no way to know if a poor transcription is due to instrument interference or genuine model uncertainty.
 
 **Scope:**
+
 - Add instrument confusion metric to `analyze_audio.py`:
   - After dual-path inference (Commit 111), compute divergence between stem and mix predictions
   - Divergence = fraction of beats where stem and mix predict different chords
@@ -256,6 +236,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 - Log instrument confusion per job for model improvement tracking
 
 **Acceptance Criteria:**
+
 - [ ] Instrument confusion metric computed per section (0-1 scale)
 - [ ] High-divergence sections flagged in LessonJSON metadata
 - [ ] Scoring confidence reduced when instrument confusion is high
@@ -273,6 +254,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Rationale:** Building a custom pipeline from scratch means limited training data and no exposure to diverse instrument timbres. MT3 was trained on thousands of hours of polyphonic audio and can serve as a free pre-trained feature extractor and label generator. The custom pipeline remains the primary inference path; MT3 is a data/features/labels augmentation layer.
 
 **Key paper insights informing this commit:**
+
 - **Model size matters less than data diversity**: MT3's T5-small (60M params) outperformed larger models because larger models overfit on music data. Our TFLite model is already appropriately sized — focus on data, not architecture.
 - **Temperature sampling is critical**: MT3's `(n_i / Σn_j)^0.3` sampling boosted guitar F1 by 263%. Apply this to our chord type sampling (see Commit 104).
 - **LODO reveals dataset gaps**: Leave-one-dataset-out experiments showed the model fails on instruments it never saw. MT3 alone won't solve guitar-specific challenges — our custom pipeline must remain independent.
@@ -280,6 +262,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 - **Don't expect zero-shot generalization**: LODO experiments show bass/synth F1 drops to 0.02-0.07 without Slakh/Cerberus training. MT3 won't handle instruments outside its training distribution.
 
 **Scope:**
+
 - **Transfer learning — MT3 encoder as feature extractor:**
   - Freeze MT3 encoder backbone (T5-based), feed 84-bin CQT through it
   - Extract encoder hidden states as feature vectors per time step
@@ -312,6 +295,7 @@ System for tracking user engagement during play-along sessions: duration, comple
   - Document which jazz chord types are MT3-competent vs MT3-blind
 
 **Acceptance Criteria:**
+
 - [ ] MT3 encoder features improve custom model chord ID accuracy by ≥5% vs scratch-trained
 - [ ] MT3-generated synthetic labels expand training set by ≥100 hours of labeled audio
 - [ ] Ensemble voting improves accuracy by ≥3% on extended chord types
@@ -339,6 +323,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** No scale/mode library exists. Only 6 pentatonic templates in `pitchClassHistogram.ts`. No interval constants — intervals are hardcoded as numbers across multiple files.
 
 **Scope:**
+
 - Create `src/music/scales.ts` with every common scale as pitch class sets (number[] 0-11):
   - **Diatonic modes**: Ionian (major), Dorian, Phrygian, Lydian, Mixolydian, Aeolian (natural minor), Locrian
   - **Harmonic minor modes**: harmonic minor, Locrian ♮6, Ionian ♯5, Dorian ♯4, Phrygian dominent, Lydian ♯2, super-Locrian bb7
@@ -354,6 +339,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 - Write unit tests: every scale's interval string sums to octave, pitch class sets have correct cardinality
 
 **Acceptance Criteria:**
+
 - [ ] `src/music/scales.ts` exports all 30+ scales as pitch class sets
 - [ ] `src/music/intervals.ts` exports `Interval` enum and helper functions
 - [ ] Every scale entry has valid pitch classes (all in 0-11 range, covers 0..11 or subset)
@@ -370,6 +356,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** No scale exploration UI exists. The fretboard only highlights chord tones (Study step) or Jam-detected pentatonic notes (Jam step). Users have no way to browse scales visually.
 
 **Scope:**
+
 - Create `app/scale-explorer/index.tsx` — new route reachable from:
   - Fretboard toolbar "Explore" button
   - Home screen "Explore Scales" suggestion card
@@ -393,6 +380,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 - Persist favorites to `user_preferences` table in local DB
 
 **Acceptance Criteria:**
+
 - [ ] Scale picker shows all 30+ scales from the scale library
 - [ ] Fretboard highlights all scale notes with root distinguished
 - [ ] Overlay toggles cycle through scale degrees, note names, interval names
@@ -412,6 +400,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** Study step fretboard shows chord tones (amber dots) and active notes (red from MusicContext). No scale context is provided. Tapping a note shows its name but no harmonic function.
 
 **Scope:**
+
 - Derive scale pitch classes from song's detected key using new `src/music/scales.ts`
 - Render three visual tiers on `FretboardDiagram`:
   - **Scale tones** — faint green circles (15% opacity) for notes in the key's scale
@@ -430,6 +419,7 @@ System for tracking user engagement during play-along sessions: duration, comple
   - Pass to `FretboardDiagram` for rendering
 
 **Acceptance Criteria:**
+
 - [ ] Scale tones visible as green circles in Study fretboard when "Key context" mode is active
 - [ ] Chord tones (amber) render as before, on top of scale tones
 - [ ] Outside notes have no highlight — visually distinct from scale/chord tones
@@ -448,6 +438,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** `pitchClassHistogram.ts:14-22` has 6 hardcoded pentatonic templates (A minor pentatonic, A blues, G major pentatonic, E minor pentatonic, C major pentatonic, D minor pentatonic). Scale detection is limited to these 6, scoring via simple pitch class overlap. No mode awareness.
 
 **Scope:**
+
 - Replace inline template array with dynamic import from `src/music/scales.ts`
 - Integrate all 30+ scales as matchable templates:
   - Group by family for secondary scoring (if multiple templates match, prefer the one in the same family)
@@ -464,6 +455,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 - Add unit tests: known pitch class distributions for each mode return correct match
 
 **Acceptance Criteria:**
+
 - [ ] Jam mode detects all 7 diatonic modes, not just pentatonic
 - [ ] Scoring uses weighted formula (overlap + root + pentatonic skeleton)
 - [ ] Top 3 candidate modes displayed in Jam UI with confidence bars
@@ -481,19 +473,22 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** Each chord gets an independent Roman numeral from `chordFunction.ts`. No analysis of consecutive chord relationships exists. The chord timeline shows individual chord symbols only.
 
 **Scope:**
+
 - Define common progression patterns as sequences of scale-degree intervals:
+
   ```typescript
   const PROGRESSION_PATTERNS = [
-    { name: 'ii-V-I', degrees: ['ii', 'V', 'I'] },
-    { name: 'I-IV-V', degrees: ['I', 'IV', 'V'] },
-    { name: 'I-vi-IV-V', degrees: ['I', 'vi', 'IV', 'V'] },
-    { name: 'ii-V-I-VI', degrees: ['ii', 'V', 'I', 'VI'] },
-    { name: 'I-V-vi-IV', degrees: ['I', 'V', 'vi', 'IV'] },
-    { name: 'i-iv-v-i', degrees: ['i', 'iv', 'v', 'i'] },
-    { name: 'ii-V', degrees: ['ii', 'V'] },
-    { name: 'V-I', degrees: ['V', 'I'] },
-  ]
+    { name: "ii-V-I", degrees: ["ii", "V", "I"] },
+    { name: "I-IV-V", degrees: ["I", "IV", "V"] },
+    { name: "I-vi-IV-V", degrees: ["I", "vi", "IV", "V"] },
+    { name: "ii-V-I-VI", degrees: ["ii", "V", "I", "VI"] },
+    { name: "I-V-vi-IV", degrees: ["I", "V", "vi", "IV"] },
+    { name: "i-iv-v-i", degrees: ["i", "iv", "v", "i"] },
+    { name: "ii-V", degrees: ["ii", "V"] },
+    { name: "V-I", degrees: ["V", "I"] },
+  ];
   ```
+
 - Implement sliding-window matcher in `chordFunction.ts` or new `src/music/progressionAnalysis.ts`:
   - After Roman numeral assignment, run a sliding window across consecutive chords
   - Match window against all progression patterns (case-sensitive for major/minor)
@@ -508,6 +503,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 - Write unit tests: known progression sequences return correct labels
 
 **Acceptance Criteria:**
+
 - [ ] Sliding window matches common progressions in chord timeline
 - [ ] ii-V-I in C major correctly labeled (Dm7 → G7 → Cmaj7)
 - [ ] I-IV-V correctly labeled across multiple keys
@@ -526,6 +522,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** Warmup pool has 3 Slonimsky exercises (tritone shift, interpolated chromatic, infrapolated major 3rd) with basic fretboard guides but no tab data. Total pool: 22 exercises.
 
 **Scope:**
+
 - Add 15 new exercises to `warmup_pool.json` covering all three Slonimsky families:
 
   **Interpolation family (5 exercises):**
@@ -562,6 +559,7 @@ System for tracking user engagement during play-along sessions: duration, comple
   - Difficulty-aware: beginner (1-2), intermediate (3), advanced (4-5)
 
 **Acceptance Criteria:**
+
 - [ ] 15 new Slonimsky exercises added to `warmup_pool.json`
 - [ ] Each exercise has valid `fretboard_guide.cells` with string/fret/finger
 - [ ] Each exercise has `difficulty` and `slonimsky_family` fields
@@ -579,18 +577,21 @@ System for tracking user engagement during play-along sessions: duration, comple
 **Current State:** No algorithmic pattern generation exists. The "Daily Lick" in Phase 3 is aspirational with no implementation. The warmup pool is hand-written JSON only.
 
 **Scope:**
+
 - Create `src/music/slonimskyGenerator.ts` (frontend-side, for fast local generation):
+
   ```typescript
   interface SlonimskyPattern {
-    name: string
-    family: 'interpolation' | 'infrapolation' | 'ultrapolation' | 'compound'
-    baseInterval: number         // semitones
-    patternNotes: number[]       // absolute MIDI notes
-    fretboardCells: { string: number, fret: number, finger: number }[]
-    difficulty: 1 | 2 | 3 | 4 | 5
-    description: string
+    name: string;
+    family: "interpolation" | "infrapolation" | "ultrapolation" | "compound";
+    baseInterval: number; // semitones
+    patternNotes: number[]; // absolute MIDI notes
+    fretboardCells: { string: number; fret: number; finger: number }[];
+    difficulty: 1 | 2 | 3 | 4 | 5;
+    description: string;
   }
   ```
+
 - **Pattern generation algorithm:**
   - **Interpolation**: Given outer interval `(root, root+interval)`, insert N chromatic steps between them. N = floor(interval/2). Result: root → root+1 → root+2 → ... → root+interval
   - **Infrapolation**: Given center note `root`, place (root-1) and (root+1) around it. For double infrapolation, (root-2) → (root-1) → root → (root+1) → (root+2)
@@ -618,6 +619,7 @@ System for tracking user engagement during play-along sessions: duration, comple
   - Track which families seen recently → avoid repeating same family within 3 days
 
 **Acceptance Criteria:**
+
 - [ ] `slonimskyGenerator.ts` produces valid `SlonimskyPattern` objects
 - [ ] Generated patterns cover all three families plus compound
 - [ ] Patterns map to playable fretboard positions within frets 1-12
@@ -642,6 +644,7 @@ produces `<bass>` inside `<harmony>`. All chords render in root position
 regardless of the actual audio.
 
 **Scope:**
+
 - Add `bass` field to `ChordEvent` schema: `bass: str | None`
   (default None, e.g. "B" for G/B, "F#" for D/F#)
 - Implement bass-note extraction from low-frequency CQT bins of the
@@ -656,6 +659,7 @@ regardless of the actual audio.
   and renders `<bass>` correctly
 
 **Acceptance Criteria:**
+
 - [ ] `ChordEvent.bass` field stores detected bass note
 - [ ] `<bass>` element emitted in MusicXML when bass ≠ root
 - [ ] AlphaTab renders slash chord notation (e.g., "G/B") from MusicXML
@@ -672,11 +676,13 @@ regardless of the actual audio.
 Develop logic to identify specific fretboard shapes (e.g., distinguishing between a 'CAGED' E-shape vs. A-shape voicing) based on spectral peaks.
 
 **Scope:**
+
 - Spectral analysis for voicing detection
 - CAGED system shape recognition
 - Position inference from audio features
 
 **Acceptance Criteria:**
+
 - [ ] System distinguishes E-shape vs A-shape voicings
 - [ ] CAGED positions inferred from spectral peaks
 - [ ] Fretboard diagrams reflect detected voicing
@@ -688,11 +694,13 @@ Develop logic to identify specific fretboard shapes (e.g., distinguishing betwee
 Implement a low-latency (<120ms) 'Active Listener' view for real-time chord detection from external audio sources (live bands/radio).
 
 **Scope:**
+
 - Real-time audio processing pipeline
 - Low-latency chord detection (<120ms)
 - UI for live audio visualization
 
 **Acceptance Criteria:**
+
 - [ ] Chord detection latency under 120ms
 - [ ] Live bands/radio audio processed in real-time
 - [ ] Active Listener UI displays detected chords
@@ -704,11 +712,13 @@ Implement a low-latency (<120ms) 'Active Listener' view for real-time chord dete
 Build a scrolling chord timeline with 'falling notes' visualizer and a beat-synced 'Pulse' ring that expands on downbeats.
 
 **Scope:**
+
 - Scrolling chord timeline component
 - Falling notes visualizer
 - Beat-synced Pulse ring animation
 
 **Acceptance Criteria:**
+
 - [ ] Chord timeline scrolls smoothly with playback
 - [ ] Falling notes animate on chord changes
 - [ ] Pulse ring expands on downbeats
@@ -720,11 +730,13 @@ Build a scrolling chord timeline with 'falling notes' visualizer and a beat-sync
 Add real-time toggles to switch between Guitar, Piano, and Ukulele diagrams, including support for alternate tunings.
 
 **Scope:**
+
 - Multi-instrument diagram components
 - Real-time instrument toggle UI
 - Alternate tuning support
 
 **Acceptance Criteria:**
+
 - [ ] Guitar, Piano, Ukulele diagrams render correctly
 - [ ] Real-time switching between instruments
 - [ ] Alternate tunings supported (Drop D, Open G, etc.)
@@ -736,11 +748,13 @@ Add real-time toggles to switch between Guitar, Piano, and Ukulele diagrams, inc
 Upgrade the analysis pipeline to 'htdemucs_6s' to allow independent 'Guitar' and 'Piano' stem isolation.
 
 **Scope:**
+
 - Upgrade Demucs model to htdemucs_6s
 - Guitar stem isolation
 - Piano stem isolation
 
 **Acceptance Criteria:**
+
 - [ ] htdemucs_6s produces 6 high-fidelity stems
 - [ ] Guitar stem isolated cleanly
 - [ ] Piano stem isolated cleanly
@@ -754,6 +768,7 @@ Add UI controls to mute/solo isolated stems during listening, support .WAV expor
 **Current State:** Backend accepts `stem_routing_override` on `POST /transcription/verify` but the frontend never sends it, and the inference pipeline ignores it (uses hardcoded `other.wav` / `guitar.wav` paths). The frontend `ListenStemPanel` has per-stem mute toggles but they are local-only. `StemMixer` is a stub component with no controls.
 
 **Scope:**
+
 - Stem mixer UI controls (mute/solo) — replace `StemMixer` stub with full component:
   - Per-stem mute/solo toggle buttons (guitar, bass, drums, vocals, piano, other)
   - Per-stem gain slider
@@ -774,6 +789,7 @@ Add UI controls to mute/solo isolated stems during listening, support .WAV expor
   - Log actual stem paths used per job for observability
 
 **Acceptance Criteria:**
+
 - [ ] Mute/solo controls work for all six stems with real-time effect
 - [ ] Per-stem gain sliders adjust volume independently
 - [ ] Individual stems exportable as .WAV
@@ -794,12 +810,14 @@ Add UI controls to mute/solo isolated stems during listening, support .WAV expor
 Implement PlanJSON ingestion and orchestrator for dynamically generated full practice plans via SM-2 scheduler.
 
 **Scope:**
+
 - SessionProvider ingests dynamic PlanJSON object
 - Plan structure: Warmup (dynamic drill based on weakest skill_node) → Song Workflow (Listen → Study → Slow → Play → Review) → Jam Session (contextual backing track)
 - UI dynamically renders progress tracker based on generated plan length
 - PlanJSON caching in SQLite for resumption
 
 **Acceptance Criteria:**
+
 - [ ] SessionProvider accepts and processes PlanJSON
 - [ ] Warmup drill generated from weakest skill_node
 - [ ] Progress tracker adapts to dynamic plan length
@@ -812,6 +830,7 @@ Implement PlanJSON ingestion and orchestrator for dynamically generated full pra
 Remove Orient as linear step; integrate as non-intrusive amber overlay (#D4860A) in Study/Play components with '?' toggle.
 
 **Scope:**
+
 - Remove Orient from linear step sequence
 - Inject Orient metadata into Study and Play components
 - Add '?' toggle / Hint button UI
@@ -819,6 +838,7 @@ Remove Orient as linear step; integrate as non-intrusive amber overlay (#D4860A)
 - Respect intermediate player flow (no interruptions)
 
 **Acceptance Criteria:**
+
 - [ ] Orient removed from session step sequence
 - [ ] Hint toggle available in Study and Play steps
 - [ ] Amber overlay displays scale shapes/root notes on activation
@@ -831,6 +851,7 @@ Remove Orient as linear step; integrate as non-intrusive amber overlay (#D4860A)
 Implement atomic SQLite updates for dynamic sessions with dual-entry state integrity.
 
 **Scope:**
+
 - Single file mode: Linear 5-step flow updates song mastery
 - Dynamic session mode: Orchestrates generated plan
 - Atomic DB updates: sessions and skill_nodes tables updated simultaneously on Jam Session completion
@@ -838,6 +859,7 @@ Implement atomic SQLite updates for dynamic sessions with dual-entry state integ
 - Resumption support from cached PlanJSON
 
 **Acceptance Criteria:**
+
 - [ ] Single file mode updates song mastery correctly
 - [ ] Dynamic mode orchestrates full plan sequence
 - [ ] Atomic transaction updates sessions + skill_nodes tables
@@ -852,6 +874,7 @@ Implement atomic SQLite updates for dynamic sessions with dual-entry state integ
 The current implementation assumes every song is recorded to a static click track. Variable BPM/tempo changes are not supported.
 
 **Evidence:**
+
 - `backend/app/beat_grid.py:46-57` - `_uniform_beat_grid()` uses a constant `step = 60.0 / bpm` with no tempo variation
 - The function name itself is `_uniform_beat_grid` - implying a single fixed tempo
 - `backend/app/beat_grid.py:125` - When `bpm_override` is provided, it generates a uniform grid without any tempo mapping
@@ -859,6 +882,7 @@ The current implementation assumes every song is recorded to a static click trac
 **Goal:** Support songs with tempo ramps, accelerandos, and live performances with variable BPM.
 
 **Scope:**
+
 - Replace `_uniform_beat_grid()` with a function that accepts an array of `(time, bpm)` pairs or tempo curve
 - Use `librosa.beat.beat_track()` with estimated tempo as a reference, not an override
 - Store tempo change events in the returned schema alongside `beats` and `downbeats`
@@ -866,6 +890,7 @@ The current implementation assumes every song is recorded to a static click trac
 - Maintain backward compatibility with static BPM interface
 
 **Acceptance Criteria:**
+
 - [ ] Beat grid handles variable BPM songs with tempo ramps
 - [ ] Tempo curve can be provided as `(time, bpm)` array
 - [ ] Grid subdivisions respect local tempo at each point
@@ -874,6 +899,7 @@ The current implementation assumes every song is recorded to a static click trac
 - [ ] Performance: variable BPM grid generation <100ms for 5-minute track
 
 **Implementation Notes:**
+
 - Consider tempo segment interpolation (linear vs exponential ramps)
 - Store base pulse tempo vs instantaneous tempo separately
 - UI consideration: visual indicator when tempo changes detected
@@ -890,12 +916,14 @@ The current implementation assumes every song is recorded to a static click trac
 **Current State:** Demucs runs synchronously per job (separate.py:277) blocking the request thread for minutes.
 
 **Scope:**
+
 - GPU job queue with priority scheduling
 - Queue depth management
 - GPU utilization tracking
 - Batch processing for multiple audio files
 
 **Acceptance Criteria:**
+
 - [ ] Demucs jobs are queued and processed asynchronously
 - [ ] Priority scheduling ensures urgent jobs run first
 - [ ] Queue depth monitoring prevents overload
@@ -903,6 +931,7 @@ The current implementation assumes every song is recorded to a static click trac
 - [ ] Batch processing improves throughput for multiple files
 
 **Implementation:**
+
 - Integrate Demucs with Celery task queue
 - Add priority levels to job schema (urgent, normal, low)
 - Implement queue depth monitoring and alerts
@@ -919,12 +948,14 @@ The current implementation assumes every song is recorded to a static click trac
 **Current State:** Content-addressed caching with SHA256 (cache.py:37-45) but no duplicate detection across different encodings.
 
 **Scope:**
+
 - Audio fingerprinting for duplicate detection
 - Quality scoring for audio input
 - Smart caching based on audio similarity
 - Compute cost reduction through deduplication
 
 **Acceptance Criteria:**
+
 - [ ] Audio fingerprinting detects duplicates across different encodings
 - [ ] Quality scoring identifies low-quality audio upfront
 - [ ] Smart caching reduces re-analysis of similar audio
@@ -932,6 +963,7 @@ The current implementation assumes every song is recorded to a static click trac
 - [ ] Fingerprint-based cache key improves hit rate
 
 **Implementation:**
+
 - Integrate audio fingerprinting library (e.g., dejavu)
 - Implement quality scoring algorithm (SNR, clipping detection)
 - Add fingerprint-based cache key alongside SHA256
@@ -950,6 +982,7 @@ The current implementation assumes every song is recorded to a static click trac
 Agentic workflow to convert MIDI + Whisper lyrics into structured MusicXML.
 
 **Scope:**
+
 - Multi-step AI pipeline
 - MIDI → MusicXML conversion
 - Lyrics alignment and annotation
@@ -961,6 +994,7 @@ Agentic workflow to convert MIDI + Whisper lyrics into structured MusicXML.
 C++/JSI bridge for real-time high-performance pitch feedback on Mobile.
 
 **Scope:**
+
 - Native module implementation
 - JSI bridge architecture
 - Sub-millisecond pitch detection
@@ -972,6 +1006,7 @@ C++/JSI bridge for real-time high-performance pitch feedback on Mobile.
 Integration for AI-generated custom-style jam tracks (Gemini Lyria fallback).
 
 **Scope:**
+
 - Lyria RealTime integration
 - Style-aware backing generation
 - Fallback to static tracks
@@ -983,6 +1018,7 @@ Integration for AI-generated custom-style jam tracks (Gemini Lyria fallback).
 Long-term data analysis to identify skill plateaus and suggest non-linear practice.
 
 **Scope:**
+
 - Skill trajectory analysis
 - Plateau detection algorithms
 - Personalized practice recommendations
@@ -1008,6 +1044,7 @@ Infrastructure limitations to address before scaling:
 Strategy for SQLite local-first operation with periodic Cloud sync.
 
 **Considerations:**
+
 - Local-first architecture
 - Conflict resolution for sync
 - Background sync scheduling
@@ -1019,6 +1056,7 @@ Strategy for SQLite local-first operation with periodic Cloud sync.
 "Daily Lick" curated feed to reduce choice paralysis.
 
 **Scope:**
+
 - Curated lick selection algorithm
 - Daily feed UI
 - Personalization based on skill level
@@ -1030,6 +1068,7 @@ Strategy for SQLite local-first operation with periodic Cloud sync.
 High-contrast modes and screen-reader support for the "analog/handcrafted" UI.
 
 **Scope:**
+
 - High-contrast theme variants
 - Screen reader labeling
 - Keyboard navigation support

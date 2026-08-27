@@ -184,6 +184,8 @@ def yt_dlp_download_audio_command(
         audio_format,
         "--audio-quality",
         "0",
+        "--js-runtimes",
+        "node",
         "-o",
         str(output_template),
         url,
