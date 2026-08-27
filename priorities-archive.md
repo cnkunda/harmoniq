@@ -1127,4 +1127,27 @@ Claude-powered post-jam analysis and vocabulary mapping.
 | API client | fetch ad-hoc | **`src/api/analyze.ts`** typed client with polling (Phase 0) |
 | Loading states | none | **`LoadingSkeleton`** Reanimated pulse component (Phase 0) |
 | Empty states | none | **`EmptyState`** component (Phase 0) |
+
+---
+
+## Phase 5 — Commits (Archived)
+
+### Commit 112: Fretboard Sync Parity — Enable Chord/Note Highlighting in All Session Screens ✅ DONE
+
+**Goal:** Extend `MusicProvider` wrapping to all session screens (`slow.tsx`, `play.tsx`, `listen.tsx`, `warmup.tsx`) so the fretboard highlights the current chord and active solo notes during every step, not only in `study.tsx`. Use tab string/fret positions from the score instead of recalculating from MIDI.
+
+**Scope:**
+- Add `<MusicProvider>` wrapping to `app/session/slow.tsx`, `play.tsx`, `listen.tsx`, `warmup.tsx`
+- Wire `onPlaybackTick` → `musicActions.setPosition()` for playback-driven chord/note lookup
+- Refactor `findActiveNotes()` in `MusicContext.tsx` to prefer tab string/fret positions when available; fall back to MIDI resolution
+- Full test coverage for `findActiveNotes()` edge cases
+
+**ACs:**
+- [x] `slow.tsx` fretboard highlights current chord and active solo notes during playback
+- [x] `play.tsx` fretboard highlights chord/notes from the reference track during capture
+- [x] `listen.tsx` displays current chord symbol during orient playback
+- [x] `warmup.tsx` fretboard responds to playback position
+- [x] `findActiveNotes()` prefers tab string/fret positions when available; falls back to MIDI resolution
+- [x] Fretboard renders gracefully when MusicProvider is absent (no crash)
+- [x] Existing `study.tsx` behavior is unchanged (non-regressed)
 | Error feedback | none | **`ErrorBanner`** inline component (Phase 0) |

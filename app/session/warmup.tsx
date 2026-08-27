@@ -4,7 +4,7 @@
  */
 import Slider from '@react-native-community/slider'
 import { useRouter } from 'expo-router'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, useWindowDimensions, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
@@ -19,6 +19,9 @@ import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
+import { useMusicTimelineData } from '@/src/session/useMusicTimelineData'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
 import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
@@ -52,6 +55,16 @@ function Pill({ children, emphasis }: { children: string; emphasis?: boolean }) 
 }
 
 export default function WarmupScreen() {
+  const { chordEvents, soloNotesArr, barTimestamps } = useMusicTimelineData()
+
+  return (
+    <MusicProvider chordEvents={chordEvents} soloNotes={soloNotesArr} barTimestamps={barTimestamps}>
+      <WarmupScreenInner />
+    </MusicProvider>
+  )
+}
+
+function WarmupScreenInner() {
   const router = useRouter()
   const { width } = useWindowDimensions()
   const twoColumn = width >= WIDE_BREAKPOINT
@@ -83,6 +96,20 @@ export default function WarmupScreen() {
   const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
 
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
+  const musicActions = useMusicActions()
+
+  const handlePlaybackTick = useCallback(
+    (ctx: PlaybackTickContext) => {
+      musicActions.setPosition(ctx.positionSec * 1000)
+      musicActions.setPlaying(ctx.playing)
+    },
+    [musicActions],
+  )
+
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     setPitchDemoFlashToken(1)
@@ -423,6 +450,7 @@ export default function WarmupScreen() {
             gp5Base64Override={gp5}
             initialMetronomeOn={false}
             tabFrameClassName="mt-2 h-[280px] w-full px-1"
+            onPlaybackTick={handlePlaybackTick}
             onTabReady={() => tabRef.current?.getTabSurface()?.setPlaybackRate(tempoMul)}
             onNoteEvent={(evt: NoteEventMessage) => {
               setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })

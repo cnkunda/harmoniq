@@ -153,6 +153,10 @@ export interface SoloNote {
   duration: number
   pitch: number
   velocity: number
+  /** Tab string 1-6 (1 = high E) when score provides fretboard position. */
+  string?: number
+  /** Fret number when score provides fretboard position. */
+  fret?: number
 }
 
 export interface SoloNotes {
@@ -191,8 +195,8 @@ export interface LessonJSON {
   bar_timestamps?: number[]
   /** Chord timeline from transcription analysis - may be at lesson level or section level. */
   chord_timeline?: { events: Array<{ timestamp: number; chord: string; confidence: number }> } | null
-  /** Solo notes from transcription analysis - may be at lesson level or section level. */
-  solo_notes?: { notes: Array<{ start_time: number; duration: number; pitch: number; velocity?: number }> } | null
+  /** Solo notes from transcription analysis - may be at lesson level or section level. String/fret are tab positions when available from score. */
+  solo_notes?: { notes: Array<{ start_time: number; duration: number; pitch: number; velocity?: number; string?: number; fret?: number }> } | null
   stems?: Record<string, string>
   lyrics_aligned?: Array<Record<string, unknown>>
   sections?: LessonSection[]

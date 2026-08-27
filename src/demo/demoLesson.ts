@@ -30,7 +30,7 @@ const CHORD_EVENTS: Array<{ timestamp: number; chord: string; confidence: number
   { timestamp: fmt(10 * BAR_DURATION), chord: 'C', confidence: 0.88 },
 ]
 
-type SoloNote = { start_time: number; duration: number; pitch: number; velocity: number }
+type SoloNote = { start_time: number; duration: number; pitch: number; velocity: number; string?: number; fret?: number }
 
 function buildSoloNotes(): SoloNote[] {
   const phrases: SoloNote[][] = [

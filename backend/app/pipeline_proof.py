@@ -165,6 +165,23 @@ def find_guitar_stem(separated_model_root: Path) -> Path:
     return matches[0]
 
 
+def _find_deno() -> str | None:
+    """Return the path to the deno binary, or None if not found."""
+    import shutil
+
+    deno = shutil.which("deno")
+    if deno:
+        return deno
+    # Check common install locations
+    for candidate in (
+        Path.home() / ".deno" / "bin" / "deno",
+        Path("/usr/local/bin/deno"),
+    ):
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
 def yt_dlp_download_audio_command(
     url: str,
     output_template: Path,
@@ -175,8 +192,7 @@ def yt_dlp_download_audio_command(
     argv to fetch best audio as WAV. Template should end in ``.%(ext)s``; when
     using ``audio_format wav``, ext is ``wav``.
     """
-    # README: yt-dlp --extract-audio --audio-format wav --audio-quality 0
-    return [
+    cmd = [
         "yt-dlp",
         "--no-playlist",
         "--extract-audio",
@@ -184,12 +200,14 @@ def yt_dlp_download_audio_command(
         audio_format,
         "--audio-quality",
         "0",
-        "--js-runtimes",
-        "node",
-        "-o",
-        str(output_template),
-        url,
     ]
+    # yt-dlp 2026.8+ requires a JS runtime for YouTube extraction.
+    # Without one, it falls back to android_vr player which gets 403'd.
+    deno_path = _find_deno()
+    if deno_path:
+        cmd += ["--js-runtimes", f"deno:{deno_path}"]
+    cmd += ["-o", str(output_template), url]
+    return cmd
 
 
 def yt_dlp_download_wav(url: str, work_dir: Path) -> Path:

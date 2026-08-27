@@ -88,48 +88,6 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ## Phase 2: Stem Routing & Audio Pipeline
 
-### Commit 111: [SKIPPED] Dual-Path Confidence-Weighted Stem Fusion
-
-**Skipped:** Dual-path chord inference (run on both guitar stem AND full mix, then fuse) would double `infer_chords()` latency — already the slowest pipeline step. Commit 110's single-path routing (bass+other mix, quality-flag-influenced fallback) covers the core use cases without the 2x regression. May revisit if inference becomes fast enough.
-
----
-
-### Commit 112: Fretboard Sync Parity — Enable Chord/Note Highlighting in All Session Screens
-
-**Goal:** Extend `MusicProvider` wrapping to all session screens (`slow.tsx`, `play.tsx`, `listen.tsx`, `warmup.tsx`) so the fretboard highlights the current chord and active solo notes during every step, not only in `study.tsx`. Use tab string/fret positions from the score instead of recalculating from MIDI.
-
-**Current State:** `MusicProvider` only wraps `study.tsx` (line 128). The `slow`, `play`, `listen`, and `warmup` screens have no MusicProvider, so `FretboardDiagram` receives no chord events or solo notes — the `try/catch` at `FretboardDiagram.tsx:372-377` silently swallows the error, leaving the fretboard blank during playback. Additionally, `findActiveNotes()` in `MusicContext.tsx:165-182` always picks `cells[0]` (lowest-fret MIDI resolution), ignoring the actual string/fret positions from the tab file.
-
-**Scope:**
-
-- Add `<MusicProvider>` wrapping to `app/session/slow.tsx`:
-  - Extract `chordEvents`, `soloNotesArr`, `barTimestamps` from lesson/section data (same pattern as `study.tsx:122-125`)
-  - Wire `onPlaybackTick` → `musicActions.setPosition()` for playback-driven chord/note lookup
-- Add `<MusicProvider>` wrapping to `app/session/play.tsx`:
-  - Same pattern; position comes from reference track playback during capture
-- Add `<MusicProvider>` wrapping to `app/session/listen.tsx`:
-  - Display current chord symbol during orient (listening) phase
-- Add `<MusicProvider>` wrapping to `app/session/warmup.tsx`:
-  - Display chord/note highlights during drill exercises
-- Refactor `findActiveNotes()` in `MusicContext.tsx` to accept optional pre-resolved string/fret positions:
-  - When available from `LessonJSON` tab data, use the actual score string/fret
-  - Fall back to `allCellsForMidi()` (current behavior) when tab data is unavailable
-- Ensure `FretboardDiagram` renders correctly in all four additional screens:
-  - Verify chord circle rendering, active note dot rendering, scale degree overlays
-  - Test graceful fallback when MusicProvider is absent (existing try/catch pattern)
-
-**Acceptance Criteria:**
-
-- [ ] `slow.tsx` fretboard highlights current chord and active solo notes during playback
-- [ ] `play.tsx` fretboard highlights chord/notes from the reference track during capture
-- [ ] `listen.tsx` displays current chord symbol during orient playback
-- [ ] `warmup.tsx` fretboard responds to playback position
-- [ ] `findActiveNotes()` prefers tab string/fret positions when available; falls back to MIDI resolution
-- [ ] Fretboard renders gracefully when MusicProvider is absent (no crash)
-- [ ] Existing `study.tsx` behavior is unchanged (non-regressed)
-
----
-
 ### Commit 113: Input Normalization & Long-Track Chunking Fix
 
 **Goal:** Add proper loudness normalization (EBU R128), fix long-track chunking so chunks are consumed downstream, add chunk offset metadata, and secure yt-dlp with a subprocess timeout.

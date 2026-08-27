@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
 
@@ -29,6 +29,9 @@ import { ghostReferenceToPlaybackUri } from '@/src/session/persistGhostTake'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { usePlayCapture } from '@/src/session/usePlayCapture'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
+import { useMusicTimelineData } from '@/src/session/useMusicTimelineData'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
@@ -39,6 +42,16 @@ import type { NoteEventMessage } from '@/types/tabMessage'
 import * as FileSystem from 'expo-file-system/legacy'
 
 export default function PlayScreen() {
+  const { chordEvents, soloNotesArr, barTimestamps } = useMusicTimelineData()
+
+  return (
+    <MusicProvider chordEvents={chordEvents} soloNotes={soloNotesArr} barTimestamps={barTimestamps}>
+      <PlayScreenInner />
+    </MusicProvider>
+  )
+}
+
+function PlayScreenInner() {
   const isDemo = useIsDemoLesson()
   const router = useRouter()
   const recordingRef = useRef(false)
@@ -99,6 +112,21 @@ export default function PlayScreen() {
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner({ disableWhen: recording })
+  const musicActions = useMusicActions()
+
+  const handlePlaybackTick = useCallback(
+    (ctx: PlaybackTickContext) => {
+      playbackTick(ctx)
+      musicActions.setPosition(ctx.positionSec * 1000)
+      musicActions.setPlaying(ctx.playing)
+    },
+    [playbackTick, musicActions],
+  )
+
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const activeMicProfile = useSessionPrefsStore((s) => s.activeMicProfile)
   const micNoiseGateRms = useSessionPrefsStore((s) => {
@@ -303,7 +331,7 @@ export default function PlayScreen() {
               ) : null}
             </View>
           }
-          onPlaybackTick={playbackTick}
+          onPlaybackTick={handlePlaybackTick}
           onNoteEvent={(evt: NoteEventMessage) => {
             hookOnNoteEvent(evt)
             setSelectedNote({ string: evt.string, fret: evt.fret, midi: Math.round(evt.midi) })

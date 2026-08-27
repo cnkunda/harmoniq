@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { DemoTourCallout } from '@/components/DemoTourCallout'
@@ -9,6 +9,7 @@ import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { barRangeToSeconds } from '@/src/music/barLoopBounds'
@@ -16,12 +17,24 @@ import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { deriveSlowLoopRegion } from '@/src/session/slowLoopRegion'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
+import { useMusicTimelineData } from '@/src/session/useMusicTimelineData'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
 export default function SlowScreen() {
+  const { chordEvents, soloNotesArr, barTimestamps } = useMusicTimelineData()
+
+  return (
+    <MusicProvider chordEvents={chordEvents} soloNotes={soloNotesArr} barTimestamps={barTimestamps}>
+      <SlowScreenInner />
+    </MusicProvider>
+  )
+}
+
+function SlowScreenInner() {
   useStepCoachNarration()
   const isDemo = useIsDemoLesson()
   const router = useRouter()
@@ -51,6 +64,20 @@ export default function SlowScreen() {
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
+  const musicActions = useMusicActions()
+
+  const handlePlaybackTick = useCallback(
+    (ctx: PlaybackTickContext) => {
+      musicActions.setPosition(ctx.positionSec * 1000)
+      musicActions.setPlaying(ctx.playing)
+    },
+    [musicActions],
+  )
+
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (!derived) {
@@ -132,6 +159,7 @@ export default function SlowScreen() {
         autoLoopRegion={playbackLoop}
         loopHighlight={loopHighlight}
         tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
+        onPlaybackTick={handlePlaybackTick}
         insertBetweenStemAndTab={
           <FretboardDiagram
             keyLabel={keyLabel}

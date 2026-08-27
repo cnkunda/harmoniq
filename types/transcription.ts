@@ -18,6 +18,8 @@ export interface SoloNote {
   duration: number
   pitch: number
   velocity?: number
+  string?: number
+  fret?: number
 }
 
 export interface SoloNotes {

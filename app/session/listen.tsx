@@ -9,16 +9,29 @@ import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
+import { useMusicTimelineData } from '@/src/session/useMusicTimelineData'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
 import colors from '@/src/constants/colors'
 import { Film, Pause, Play, X } from 'lucide-react-native'
 
 export default function ListenScreen() {
+  const { chordEvents, soloNotesArr, barTimestamps } = useMusicTimelineData()
+
+  return (
+    <MusicProvider chordEvents={chordEvents} soloNotes={soloNotesArr} barTimestamps={barTimestamps}>
+      <ListenScreenInner />
+    </MusicProvider>
+  )
+}
+
+function ListenScreenInner() {
   useStepCoachNarration()
   const isDemo = useIsDemoLesson()
   const router = useRouter()
@@ -28,6 +41,20 @@ export default function ListenScreen() {
   const lessonJobId = lesson?.job_id ?? ''
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const stemTabRef = useRef<ListenStemPanelHandle>(null)
+  const musicActions = useMusicActions()
+
+  const handlePlaybackTick = useCallback(
+    (ctx: PlaybackTickContext) => {
+      musicActions.setPosition(ctx.positionSec * 1000)
+      musicActions.setPlaying(ctx.playing)
+    },
+    [musicActions],
+  )
+
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
   const [orientAnnotation, setOrientAnnotation] = useState<string | null>(null)
@@ -164,6 +191,7 @@ export default function ListenScreen() {
       <ListenStemPanel
         ref={stemTabRef}
         autoPlayOnReady={lesson?.job_id === DEMO_LESSON_JOB_ID}
+        onPlaybackTick={handlePlaybackTick}
       />
 
       <View className="mt-6">
