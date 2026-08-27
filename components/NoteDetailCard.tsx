@@ -114,7 +114,7 @@ export function NoteDetailCard({
           <Text className="font-sans text-xs leading-relaxed text-cream">{coachText}</Text>
         </View>
 
-        <Text className="mt-4 font-sans text-[10px] text-muted-brown">
+        <Text className="mt-4 font-sans text-[10px] text-muted-light">
           Drag to reposition. Tap another note in score or fretboard to compare.
         </Text>
       </Animated.View>

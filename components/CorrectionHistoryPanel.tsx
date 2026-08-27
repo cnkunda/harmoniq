@@ -68,14 +68,14 @@ export function CorrectionHistoryPanel({
           Corrections
         </Text>
         <View className="flex-row items-center gap-2">
-          <Text className="text-xs font-sans" style={{ color: colors.muted.brown }}>
+          <Text className="text-xs font-sans" style={{ color: colors.muted.light }}>
             {correctionCount} ({Math.round(correctionCoverage * 100)}% coverage)
           </Text>
         </View>
       </View>
 
       {corrections.length === 0 ? (
-        <Text className="text-xs font-sans py-2" style={{ color: colors.muted.brown }}>
+        <Text className="text-xs font-sans py-2" style={{ color: colors.muted.light }}>
           No corrections yet
         </Text>
       ) : (
@@ -117,11 +117,11 @@ export function CorrectionHistoryPanel({
                   </Text>
                 </View>
                 {item.reason ? (
-                  <Text className="text-xs font-sans mt-1" style={{ color: colors.muted.brown }}>
+                  <Text className="text-xs font-sans mt-1" style={{ color: colors.muted.light }}>
                     {item.reason}
                   </Text>
                 ) : null}
-                <Text className="text-xs font-sans mt-0.5" style={{ color: colors.muted.brown }}>
+                <Text className="text-xs font-sans mt-0.5" style={{ color: colors.muted.light }}>
                   {formatTimestamp(item.applied_at)}
                 </Text>
               </View>

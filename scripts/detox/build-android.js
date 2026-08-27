@@ -17,6 +17,10 @@ if (!existsSync(path.resolve(process.cwd(), "android"))) {
   run("npx", ["expo", "prebuild", "--platform", "android", "--non-interactive"]);
 }
 
+// Re-apply the Detox wiring that prebuild does not generate (idempotent —
+// needed after every prebuild, safe on every build).
+run("node", ["scripts/detox/patch-android.js"]);
+
 const gradleWrapper = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
 run(gradleWrapper, ["assembleDebug", "assembleAndroidTest", "-DtestBuildType=debug"], {
   cwd: path.resolve(process.cwd(), "android"),

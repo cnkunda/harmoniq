@@ -72,7 +72,7 @@ export function PlayPitchLadderVertical({
 
   let statusTitle = 'Waiting…'
   let statusSub = 'Play to see pitch feedback'
-  let statusTone = 'text-muted-brown'
+  let statusTone = 'text-muted-light'
 
   if (isActive && cents != null && Number.isFinite(cents)) {
     const a = Math.abs(cents)
@@ -121,7 +121,7 @@ export function PlayPitchLadderVertical({
       ) : null}
       {embedded ? (
         <View className="mb-1 flex-row items-center justify-end">
-          <Text className={`font-mono text-xs ${isActive && cents != null ? 'text-wood-900' : 'text-muted-brown'}`}>
+          <Text className={`font-mono text-xs ${isActive && cents != null ? 'text-wood-900' : 'text-muted-light'}`}>
             {isActive && cents != null && Number.isFinite(cents)
               ? `${cents >= 0 ? '+' : ''}${Math.round(cents)}¢`
               : '—'}
@@ -132,7 +132,7 @@ export function PlayPitchLadderVertical({
           <Text className="shrink font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
             Live pitch vs target
           </Text>
-          <Text className={`font-mono text-sm ${isActive && cents != null ? 'text-wood-900' : 'text-muted-brown'}`}>
+          <Text className={`font-mono text-sm ${isActive && cents != null ? 'text-wood-900' : 'text-muted-light'}`}>
             {isActive && cents != null && Number.isFinite(cents)
               ? `${cents >= 0 ? '+' : ''}${Math.round(cents)}¢`
               : '—'}
@@ -155,9 +155,9 @@ export function PlayPitchLadderVertical({
             style={{ top: '35%', height: '30%' }}
           />
           <View className="absolute left-0 right-0 border-t border-wood-600/40" style={{ top: '50%' }} />
-          <Text className="absolute right-0.5 top-0.5 font-mono text-[9px] text-muted-brown">+50</Text>
-          <Text className="absolute right-0.5 top-[46%] font-mono text-[9px] text-muted-brown">0</Text>
-          <Text className="absolute bottom-0.5 right-0.5 font-mono text-[9px] text-muted-brown">-50</Text>
+          <Text className="absolute right-0.5 top-0.5 font-mono text-[9px] text-muted-light">+50</Text>
+          <Text className="absolute right-0.5 top-[46%] font-mono text-[9px] text-muted-light">0</Text>
+          <Text className="absolute bottom-0.5 right-0.5 font-mono text-[9px] text-muted-light">-50</Text>
           {isActive && cents != null ? (
             <View
               className="absolute left-1 right-1 z-10 rounded-full bg-amber-accent"
@@ -168,10 +168,10 @@ export function PlayPitchLadderVertical({
         <View className="min-w-0 flex-1 justify-center py-0.5">
           <Text className="font-mono text-[11px] text-wood-900">Target · {targetSci}</Text>
           {nextSci ? (
-            <Text className="mt-0.5 font-mono text-[10px] text-muted-brown">Was · {nextSci}</Text>
+            <Text className="mt-0.5 font-mono text-[10px] text-muted-light">Was · {nextSci}</Text>
           ) : null}
           <Text className={`mt-2 font-sans text-xl font-bold leading-tight ${statusTone}`}>{statusTitle}</Text>
-          <Text className="mt-0.5 font-sans text-xs leading-snug text-muted-brown">{statusSub}</Text>
+          <Text className="mt-0.5 font-sans text-xs leading-snug text-muted-light">{statusSub}</Text>
         </View>
       </View>
     </View>

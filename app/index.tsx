@@ -57,7 +57,7 @@ export default function EntryRedirect() {
     return (
       <View className="flex-1 items-center justify-center gap-4 bg-wood-900 px-8">
         <ActivityIndicator accessibilityLabel="Loading" color={colors.amber.light} />
-        <Text className="text-center font-sans text-sm text-muted-brown">Loading…</Text>
+        <Text className="text-center font-sans text-sm text-muted-light">Loading…</Text>
       </View>
     )
   }

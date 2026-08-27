@@ -67,7 +67,7 @@ export function ChordCorrectionDropdown({
           Correct Chord (beat {beatIndex})
         </Text>
         <AnimatedPressable onPress={onCancel} haptic="light" className="rounded-md px-2 py-1">
-          <Text className="text-xs font-sans" style={{ color: colors.muted.brown }}>
+          <Text className="text-xs font-sans" style={{ color: colors.muted.light }}>
             Cancel
           </Text>
         </AnimatedPressable>
@@ -77,7 +77,7 @@ export function ChordCorrectionDropdown({
         value={query}
         onChangeText={setQuery}
         placeholder="Search chords..."
-        placeholderTextColor={colors.muted.brown}
+        placeholderTextColor={colors.muted.light}
         className="rounded-lg px-3 py-2 mb-2 font-mono text-sm"
         style={{
           color: colors.cream,

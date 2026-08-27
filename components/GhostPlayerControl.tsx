@@ -56,13 +56,13 @@ export function GhostPlayerControl({
           className={`rounded-full px-3 py-1.5 ${disabled ? 'bg-wood-700/60' : playWithGhost ? 'bg-amber-accent/90' : 'border border-wood-600/50 bg-wood-900/20'}`}
         >
           <Text
-            className={`font-sans-medium text-xs ${disabled ? 'text-muted-brown' : playWithGhost ? 'text-wood-900' : 'text-muted-brown'}`}
+            className={`font-sans-medium text-xs ${disabled ? 'text-muted-light' : playWithGhost ? 'text-wood-900' : 'text-muted-light'}`}
           >
             {disabled ? 'Off' : playWithGhost ? 'On' : 'Off'}
           </Text>
         </AnimatedPressable>
       </View>
-      <Text className="mt-2 font-sans text-[11px] leading-snug text-muted-brown">{subtitle}</Text>
+      <Text className="mt-2 font-sans text-[11px] leading-snug text-muted-light">{subtitle}</Text>
     </View>
   )
 }

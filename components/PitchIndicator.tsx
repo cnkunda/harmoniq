@@ -104,15 +104,15 @@ export function PitchIndicator({
         />
       ) : null}
       <Text className="font-mono text-amber-accent">Pitch ladder</Text>
-      <Text className="mt-1 font-sans text-xs text-muted-brown">
+      <Text className="mt-1 font-sans text-xs text-muted-light">
         target: {hz != null ? `${hz.toFixed(1)} Hz` : '—'} {note ? `| note: ${note}` : ''}{' '}
         {typeof cents === 'number' ? `| cents: ${Math.round(cents)}` : ''} {isActive ? '| active' : ''}
       </Text>
       {activeSci ? (
-        <Text className="mt-0.5 font-sans text-[10px] text-muted-brown">MIDI name: {activeSci}</Text>
+        <Text className="mt-0.5 font-sans text-[10px] text-muted-light">MIDI name: {activeSci}</Text>
       ) : null}
       {nextSci ? (
-        <Text className="mt-0.5 font-sans text-[10px] text-muted-brown/90">Next: {nextSci}</Text>
+        <Text className="mt-0.5 font-sans text-[10px] text-muted-light/90">Next: {nextSci}</Text>
       ) : null}
       <View className="relative mt-2 h-1.5 w-full rounded-full bg-wood-600/40">
         <View className="h-1.5 w-1/2 rounded-full bg-amber-accent/80" />

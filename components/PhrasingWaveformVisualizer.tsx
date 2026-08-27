@@ -154,7 +154,7 @@ export function PhrasingWaveformVisualizer({ score, ghostRow, beatGrid, playback
               key={`beat-${i}`}
               points={`${x},0 ${x},${h}`}
               fill="none"
-              stroke={colors.muted.brown}
+              stroke={colors.muted.light}
               strokeOpacity={isDownbeat ? 0.5 : 0.25}
               strokeWidth={isDownbeat ? 0.8 : 0.5}
             />
@@ -195,14 +195,14 @@ export function PhrasingWaveformVisualizer({ score, ghostRow, beatGrid, playback
         </Svg>
         {!hasAny ? (
           <View className="absolute inset-0 items-center justify-center px-2">
-            <Text className="text-center font-sans text-[11px] text-muted-brown">
+            <Text className="text-center font-sans text-[11px] text-muted-light">
               Run score to plot reference vs your take. Ghost (faint amber) appears when a ghost reference exists for this
               section.
             </Text>
           </View>
         ) : null}
       </View>
-      <Text className="mt-2 font-sans text-[11px] text-muted-brown">
+      <Text className="mt-2 font-sans text-[11px] text-muted-light">
         Terracotta = your take · cream = reference guide · faint amber = ghost self. {ghostErr ? ` ${ghostErr}` : ''}
       </Text>
     </View>

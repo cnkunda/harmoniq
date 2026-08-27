@@ -55,7 +55,7 @@ function AlphaTabRuntimeDiagDevSection() {
       <Text className="mb-1 font-sans-medium text-xs uppercase tracking-wider text-amber-light">
         AlphaTab runtime diagnostics (Commit 61)
       </Text>
-      <Text className="mb-3 font-sans text-xs text-muted-brown">
+      <Text className="mb-3 font-sans text-xs text-muted-light">
         Run Listen or Play with diagnostics enabled; values refresh every {5000 / 1000}s.         Thresholds in{' '}
         <Text className="font-mono text-[11px] text-cream/90">docs/MANUAL_QA.md</Text> (AlphaTab runtime telemetry).
       </Text>
@@ -134,7 +134,7 @@ function BackingTrackDevSection() {
       <Text className="mb-2 font-mono text-[11px] leading-snug text-cream/90" selectable>
         API_BASE_URL: {API_BASE_URL}
       </Text>
-      <Text className="mb-3 font-sans text-xs text-muted-brown">
+      <Text className="mb-3 font-sans text-xs text-muted-light">
         Set EXPO_PUBLIC_API_URL in a root `.env` (see `.env.example`) for a LAN backend; restart Metro after
         changes.
       </Text>
@@ -143,7 +143,7 @@ function BackingTrackDevSection() {
         disabled={busy}
         className={`items-center rounded-lg py-3 ${busy ? 'bg-wood-700' : 'bg-amber-accent/90'}`}
       >
-        <Text className={`font-sans-medium text-sm ${busy ? 'text-muted-brown' : 'text-wood-900'}`}>
+        <Text className={`font-sans-medium text-sm ${busy ? 'text-muted-light' : 'text-wood-900'}`}>
           {busy ? 'Playing test sequence…' : 'Smoke-test all 5 backing tracks (expo-av)'}
         </Text>
       </AnimatedPressable>
@@ -239,7 +239,7 @@ function StemMixerDevSection() {
       <Text className="mb-1 font-sans-medium text-xs uppercase tracking-wider text-amber-light">
         Commit 14 — multi-stem mixer (native + web)
       </Text>
-      <Text className="mb-3 font-sans text-xs text-muted-brown">
+      <Text className="mb-3 font-sans text-xs text-muted-light">
         Two bundled WAVs (44.1 kHz). Toggle Guitar / Drums while playing; should not crash. Logs: StemMixer.*
       </Text>
 
@@ -269,7 +269,7 @@ function StemMixerDevSection() {
         disabled={!ready || busy}
         className={`items-center rounded-lg py-3 ${!ready || busy ? 'bg-wood-700' : 'bg-amber-accent/90'}`}
       >
-        <Text className={`font-sans-medium text-sm ${!ready || busy ? 'text-muted-brown' : 'text-wood-900'}`}>
+        <Text className={`font-sans-medium text-sm ${!ready || busy ? 'text-muted-light' : 'text-wood-900'}`}>
           {!ready ? 'Loading…' : playing ? 'Pause' : 'Play'}
         </Text>
       </AnimatedPressable>
@@ -375,7 +375,7 @@ function PitchWorkletDevSection() {
   return (
     <View className="mb-6 rounded-xl border border-wood-600/60 bg-wood-900/40 p-4">
       <Text className="mb-1 font-sans-medium text-xs uppercase tracking-wider text-amber-light">Mic + pitch (dev)</Text>
-      <Text className="mb-3 font-sans text-xs text-muted-brown">
+      <Text className="mb-3 font-sans text-xs text-muted-light">
         Start mic and hum or play a steady pitch. Live note readout uses the same estimator on web (worklet) and native
         (PCM callbacks). {platformHint}
       </Text>
@@ -390,7 +390,7 @@ function PitchWorkletDevSection() {
         disabled={busy}
         className={`items-center rounded-lg py-3 ${busy ? 'bg-wood-700' : 'bg-amber-accent/90'}`}
       >
-        <Text className={`font-sans-medium text-sm ${busy ? 'text-muted-brown' : 'text-wood-900'}`}>
+        <Text className={`font-sans-medium text-sm ${busy ? 'text-muted-light' : 'text-wood-900'}`}>
           {busy ? 'Working…' : active ? 'Stop mic' : 'Start mic'}
         </Text>
       </AnimatedPressable>
@@ -407,7 +407,7 @@ function FeedbackLayerDevSection() {
         Phase 0 — Feedback layer
       </Text>
 
-      <Text className="mb-2 font-sans text-xs text-muted-brown">AnimatedPressable (spring + haptics)</Text>
+      <Text className="mb-2 font-sans text-xs text-muted-light">AnimatedPressable (spring + haptics)</Text>
       <View className="mb-4 gap-2">
         <AnimatedPressable haptic="light" className="rounded-lg bg-amber-accent/90 px-4 py-2.5">
           <Text className="text-center font-sans-medium text-sm text-wood-900">1 · Light impact</Text>
@@ -429,13 +429,13 @@ function FeedbackLayerDevSection() {
         </AnimatedPressable>
       </View>
 
-      <Text className="mb-2 font-sans text-xs text-muted-brown">LoadingSkeleton</Text>
+      <Text className="mb-2 font-sans text-xs text-muted-light">LoadingSkeleton</Text>
       <View className="mb-4 gap-3">
         <LoadingSkeleton width="100%" height={14} borderRadius={6} />
         <LoadingSkeleton width={120} height={40} borderRadius={12} />
       </View>
 
-      <Text className="mb-2 font-sans text-xs text-muted-brown">EmptyState</Text>
+      <Text className="mb-2 font-sans text-xs text-muted-light">EmptyState</Text>
       <View className="mb-4 overflow-hidden rounded-xl border border-wood-600/40 bg-wood-900/30 py-2">
         <EmptyState
           Icon={Music}
@@ -446,7 +446,7 @@ function FeedbackLayerDevSection() {
         />
       </View>
 
-      <Text className="mb-2 font-sans text-xs text-muted-brown">ErrorBanner (warning · error · info)</Text>
+      <Text className="mb-2 font-sans text-xs text-muted-light">ErrorBanner (warning · error · info)</Text>
       <View className="mb-4 gap-3">
         <ErrorBanner message="Transcription confidence is low — tab may be approximate." variant="warning" />
         <ErrorBanner message="Could not reach the practice backend." variant="error" dismissible={false} />
@@ -457,7 +457,7 @@ function FeedbackLayerDevSection() {
         />
       </View>
 
-      <Text className="mb-2 font-sans text-xs text-muted-brown">Toast helpers</Text>
+      <Text className="mb-2 font-sans text-xs text-muted-light">Toast helpers</Text>
       <View className="flex-row flex-wrap gap-2">
         <AnimatedPressable
           haptic="light"
@@ -489,7 +489,7 @@ export default function DesignPreviewScreen() {
         <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
           <View className="px-4 pb-10 pt-2">
             <Text className="mb-1 font-serif text-2xl text-cream">Design preview</Text>
-            <Text className="mb-6 font-sans text-sm text-muted-brown">
+            <Text className="mb-6 font-sans text-sm text-muted-light">
               Design tokens, env and backing tracks, shared feedback layer, and component stubs (Phase 0).
             </Text>
 

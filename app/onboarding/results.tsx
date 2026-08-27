@@ -100,7 +100,7 @@ export default function OnboardingResultsScreen() {
     <OnboardingScreenShell currentStep={5} showProgress={false} scrollable>
       <View className="py-4">
         <Text className="text-center font-serif text-2xl text-cream">Your baseline</Text>
-        <Text className="mt-2 text-center font-sans text-sm text-muted-brown">
+        <Text className="mt-2 text-center font-sans text-sm text-muted-light">
           Five skill nodes are seeded from your three phrases. The coach note below is tailored to these averages (or
           an offline template if the server is unavailable).
         </Text>
@@ -131,7 +131,7 @@ export default function OnboardingResultsScreen() {
                 <Text className="mt-1 text-center text-[9px] leading-3 text-cream" numberOfLines={2}>
                   {s.label}
                 </Text>
-                <Text className="text-[9px] text-muted-brown">{(s.value * 100).toFixed(0)}%</Text>
+                <Text className="text-[9px] text-muted-light">{(s.value * 100).toFixed(0)}%</Text>
               </View>
             )
           })}
@@ -140,11 +140,11 @@ export default function OnboardingResultsScreen() {
         <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
           <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Coach</Text>
           {coachText == null ? (
-            <Text className="mt-2 font-sans text-sm text-muted-brown">Fetching coach note…</Text>
+            <Text className="mt-2 font-sans text-sm text-muted-light">Fetching coach note…</Text>
           ) : (
             <>
               <Text className="mt-2 font-sans text-sm leading-6 text-cream">{coachText}</Text>
-              {confidenceNote ? <Text className="mt-3 font-sans text-xs text-muted-brown">{confidenceNote}</Text> : null}
+              {confidenceNote ? <Text className="mt-3 font-sans text-xs text-muted-light">{confidenceNote}</Text> : null}
             </>
           )}
         </View>

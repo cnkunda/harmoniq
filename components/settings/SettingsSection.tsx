@@ -44,13 +44,13 @@ export function SettingsSection({
         <View className="flex-1">
           <Text className="font-sans-medium text-sm text-cream">{title}</Text>
           {description ? (
-            <Text className="mt-0.5 font-sans text-xs text-muted-brown">{description}</Text>
+            <Text className="mt-0.5 font-sans text-xs text-muted-light">{description}</Text>
           ) : null}
         </View>
         {isOpen ? (
-          <ChevronUp color={colors.muted.brown} size={20} strokeWidth={2} />
+          <ChevronUp color={colors.muted.light} size={20} strokeWidth={2} />
         ) : (
-          <ChevronDown color={colors.muted.brown} size={20} strokeWidth={2} />
+          <ChevronDown color={colors.muted.light} size={20} strokeWidth={2} />
         )}
       </AnimatedPressable>
 

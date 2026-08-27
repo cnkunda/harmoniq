@@ -326,8 +326,8 @@ export default function HomeScreen() {
 
   const durationBadge = (
     <View className="flex-row items-center gap-1 rounded-lg border border-wood-700 bg-wood-800/50 px-3 py-1.5">
-      <Clock color={colors.muted.brown} size={16} strokeWidth={2} />
-      <Text className="font-sans text-sm text-muted-brown">~{recommendedMinutes} min</Text>
+      <Clock color={colors.muted.light} size={16} strokeWidth={2} />
+      <Text className="font-sans text-sm text-muted-light">~{recommendedMinutes} min</Text>
     </View>
   )
 
@@ -354,10 +354,10 @@ export default function HomeScreen() {
         <View className="w-full max-w-4xl self-center px-6 pb-8 pt-4">
           <View className="mb-10 mt-2">
             <Text className="mb-1 font-serif text-3xl text-cream">{getGreeting(displayName)}</Text>
-            <Text className="font-sans text-base text-muted-brown">Ready to play?</Text>
+            <Text className="font-sans text-base text-muted-light">Ready to play?</Text>
           </View>
 
-          <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Your practice path</Text>
+          <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-light">Your practice path</Text>
 
           <LinearGradient
             colors={['rgba(74, 55, 40, 0.98)', 'rgba(44, 24, 16, 0.99)']}
@@ -392,14 +392,14 @@ export default function HomeScreen() {
                       <Music color={colors.amber.accent} size={28} strokeWidth={1.5} />
                     </View>
                     <Text className="mt-6 text-center font-serif text-2xl text-cream">Kick off your practice</Text>
-                    <Text className="mt-4 max-w-sm text-center font-sans text-base leading-7 text-muted-brown">
+                    <Text className="mt-4 max-w-sm text-center font-sans text-base leading-7 text-muted-light">
                       Let's get your playing faster. Take a quick style quiz, try a demo session, add a song, or connect Spotify—whatever gets you playing first.
                     </Text>
                   </View>
 
                   {/* {tasteSongHints.length > 0 ? (
                     <View className="mt-6 w-full">
-                      <Text className="mb-2 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
+                      <Text className="mb-2 font-sans-medium text-[11px] uppercase tracking-wider text-muted-light">
                         Ideas for your style (add as lessons)
                       </Text>
                       <View className="gap-2">
@@ -419,14 +419,14 @@ export default function HomeScreen() {
                           </Pressable>
                         ))}
                       </View>
-                      <Text className="mt-2 font-sans text-xs leading-5 text-muted-brown">
+                      <Text className="mt-2 font-sans text-xs leading-5 text-muted-light">
                         Pick a result, copy the link, then use Add song to turn it into tabs in Harmoniq.
                       </Text>
                     </View>
                   ) : null} */}
 
                   <View className="mt-8 w-full">
-                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
+                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-light">
                       Get started
                     </Text>
                     <View className="gap-3">
@@ -457,7 +457,7 @@ export default function HomeScreen() {
                   </View>
 
                   <View className="mt-7 w-full border-t border-wood-600/45 pt-5">
-                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
+                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-light">
                       More ways to begin
                     </Text>
                     <View className="gap-2">
@@ -518,7 +518,7 @@ export default function HomeScreen() {
                         <Text className="font-sans text-sm text-amber-light/80">{suggestion.song.artist}</Text>
                       ) : null}
                       {suggestion.song.section_label ? (
-                        <Text className="mt-1 font-sans text-xs text-muted-brown">
+                        <Text className="mt-1 font-sans text-xs text-muted-light">
                           Section: {suggestion.song.section_label}
                         </Text>
                       ) : null}
@@ -531,7 +531,7 @@ export default function HomeScreen() {
                       warmed up.&rdquo;
                     </Text>
                   </View>
-                  <Text className="mb-4 font-sans text-xs leading-5 text-muted-brown">
+                  <Text className="mb-4 font-sans text-xs leading-5 text-muted-light">
                     Full loop: Listen → Study → Slow → Play → Review (with stems). Use Library tab for saved licks only.
                   </Text>
                   <AnimatedPressable
@@ -597,7 +597,7 @@ export default function HomeScreen() {
                         <Text className="font-sans text-sm text-amber-light/80">{suggestion.song.artist}</Text>
                       ) : null}
                       {suggestion.song.section_label ? (
-                        <Text className="mt-1 font-sans text-xs text-muted-brown">
+                        <Text className="mt-1 font-sans text-xs text-muted-light">
                           Last section: {suggestion.song.section_label}
                         </Text>
                       ) : null}
@@ -611,7 +611,7 @@ export default function HomeScreen() {
                       {suggestion.node.interval_days != null ? ` · every ${suggestion.node.interval_days}d` : ''}.&rdquo;
                     </Text>
                   </View>
-                  <Text className="mb-4 font-sans text-xs leading-5 text-muted-brown">
+                  <Text className="mb-4 font-sans text-xs leading-5 text-muted-light">
                     Full loop: Listen → Study → Slow → Play → Review (with stems). Use Library tab for saved licks only.
                   </Text>
                   <AnimatedPressable
@@ -636,10 +636,10 @@ export default function HomeScreen() {
 
           <View className="flex-col gap-8">
             <View>
-              <Text className="mb-3 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Recently added</Text>
+              <Text className="mb-3 font-sans-medium text-sm uppercase tracking-wider text-muted-light">Recently added</Text>
               <View className="gap-2">
                 {recentItems.length === 0 ? (
-                  <Text className="font-sans text-sm text-muted-brown">No songs added yet.</Text>
+                  <Text className="font-sans text-sm text-muted-light">No songs added yet.</Text>
                 ) : (
                   recentItems.map((item) => (
                     <Pressable
@@ -651,9 +651,9 @@ export default function HomeScreen() {
                     >
                       <View className="flex-1 pr-2">
                         <Text className="font-sans-medium text-[15px] text-cream">{item.title}</Text>
-                        <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{item.focus}</Text>
+                        <Text className="mt-0.5 font-sans text-[11px] text-muted-light">{item.focus}</Text>
                       </View>
-                      <Text className="font-sans text-[11px] text-muted-brown">{item.dateLabel}</Text>
+                      <Text className="font-sans text-[11px] text-muted-light">{item.dateLabel}</Text>
                     </Pressable>
                   ))
                 )}
@@ -661,7 +661,7 @@ export default function HomeScreen() {
             </View>
 
             <View>
-              <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Quick actions</Text>
+              <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-light">Quick actions</Text>
               <View className="flex-row gap-3">
                 <Pressable
                   onPress={goAnalyze}

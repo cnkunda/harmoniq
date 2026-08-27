@@ -41,7 +41,7 @@ export function BpmEditor({
 
   return (
     <View style={[{ gap: 6 }, style]}>
-      <Text className="text-xs font-sans text-muted-brown">BPM</Text>
+      <Text className="text-xs font-sans text-muted-light">BPM</Text>
       <View className="flex-row items-center gap-2">
         <AnimatedPressable
           onPress={decrement}
@@ -60,7 +60,7 @@ export function BpmEditor({
           className="rounded-lg px-2 py-2"
           style={{ backgroundColor: colors.wood[700] }}
         >
-          <Text className="text-sm font-mono" style={{ color: colors.muted.brown }}>
+          <Text className="text-sm font-mono" style={{ color: colors.muted.light }}>
             -{fineStep}
           </Text>
         </AnimatedPressable>
@@ -88,7 +88,7 @@ export function BpmEditor({
           className="rounded-lg px-2 py-2"
           style={{ backgroundColor: colors.wood[700] }}
         >
-          <Text className="text-sm font-mono" style={{ color: colors.muted.brown }}>
+          <Text className="text-sm font-mono" style={{ color: colors.muted.light }}>
             +{fineStep}
           </Text>
         </AnimatedPressable>

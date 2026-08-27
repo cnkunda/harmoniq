@@ -89,7 +89,7 @@ export function BeatGridTimeline({
             y1={totalHeight - (isDownbeat ? DOWNBEAT_HEIGHT : BEAT_HEIGHT)}
             x2={x}
             y2={totalHeight}
-            stroke={isDownbeat ? colors.amber.accent : colors.muted.brown}
+            stroke={isDownbeat ? colors.amber.accent : colors.muted.light}
             strokeWidth={isDownbeat ? 2 : 1}
           />
         ))}

@@ -124,7 +124,7 @@ export function RecentProgress({
 
   return (
     <View className="mb-2">
-      <Text className="mb-2 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">
+      <Text className="mb-2 font-sans-medium text-sm uppercase tracking-wider text-muted-light">
         Recently completed
       </Text>
 
@@ -142,7 +142,7 @@ export function RecentProgress({
           </Svg>
           <View className="mt-1 flex-row justify-between px-1">
             {points.map((p, i) => (
-              <Text key={`${i}-${p}`} className="font-sans text-[11px] text-muted-brown">
+              <Text key={`${i}-${p}`} className="font-sans text-[11px] text-muted-light">
                 {(p * 100).toFixed(0)}%
               </Text>
             ))}
@@ -152,7 +152,7 @@ export function RecentProgress({
 
       {totalSessions > 0 ? (
         <View className="gap-2">
-        <Text className="font-sans text-sm text-muted-brown">
+        <Text className="font-sans text-sm text-muted-light">
           No completed sessions yet.
         </Text>
           {sessions.slice(0, 5).map((s) => (
@@ -167,20 +167,20 @@ export function RecentProgress({
             >
               <View className="flex-1 pr-2">
                 <Text className="font-sans-medium text-[15px] text-cream">{sessionCardTitle(s)}</Text>
-                <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{sessionCardSubtitle(s)}</Text>
+                <Text className="mt-0.5 font-sans text-[11px] text-muted-light">{sessionCardSubtitle(s)}</Text>
               </View>
-              <Text className="font-sans text-[11px] text-muted-brown">{relativeDateLabel(s.date)}</Text>
+              <Text className="font-sans text-[11px] text-muted-light">{relativeDateLabel(s.date)}</Text>
             </AnimatedPressable>
           ))}
         </View>
       ) : (
-        <Text className="font-sans text-sm text-muted-brown">
+        <Text className="font-sans text-sm text-muted-light">
           No completed sessions yet.
         </Text>
       )}
 
       {planNote ? (
-        <Text className="mt-2 font-sans text-xs text-muted-brown">
+        <Text className="mt-2 font-sans text-xs text-muted-light">
           Latest plan wrap-up: {planNote}.
         </Text>
       ) : null}

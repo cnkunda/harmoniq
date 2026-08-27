@@ -355,7 +355,7 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
     //       className="items-center justify-center rounded-xl border border-wood-600/45 bg-cream-dark/40 p-4"
     //       style={style}
     //     >
-    //       <Text className="text-center font-sans text-sm text-muted-brown">
+    //       <Text className="text-center font-sans text-sm text-muted-light">
     //         ScoreViewer runs in WebView on iOS/Android only. Web uses the DOM path.
     //       </Text>
     //     </View>
@@ -428,7 +428,7 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
-            <Text className="text-center font-sans text-[11px] text-muted-brown">
+            <Text className="text-center font-sans text-[11px] text-muted-light">
               MusicXML score not available for this song yet.
             </Text>
           </View>

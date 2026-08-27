@@ -305,7 +305,7 @@ export default function WarmupScreen() {
                   </Text>
                 </View>
               ) : (
-                <Text className="font-sans-medium text-xs text-muted-brown">Done</Text>
+                <Text className="font-sans-medium text-xs text-muted-light">Done</Text>
               )}
             </View>
 
@@ -331,22 +331,22 @@ export default function WarmupScreen() {
                 value={tempoMul}
                 onValueChange={setTempoMul}
                 minimumTrackTintColor={colors.amber.light}
-                maximumTrackTintColor={colors.muted.brown}
+                maximumTrackTintColor={colors.muted.light}
                 thumbTintColor={colors.wood[700]}
               />
-              <Text className="mt-1 font-sans text-xs text-muted-brown">
+              <Text className="mt-1 font-sans text-xs text-muted-light">
                 Adjusts preview only — plan stays the same.
               </Text>
             </View>
 
             {nextEx ? (
               <View className="mt-5 rounded-xl border border-wood-600/15 bg-cream-dark/35 px-3 py-2.5">
-                <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-muted-brown">Up next</Text>
+                <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-muted-light">Up next</Text>
                 <View className="mt-1 flex-row items-center justify-between gap-2">
                   <Text className="flex-1 font-sans text-sm text-wood-900" numberOfLines={2}>
                     {nextEx.name}
                   </Text>
-                  <Text className="font-sans-medium text-sm text-muted-brown">
+                  <Text className="font-sans-medium text-sm text-muted-light">
                     {formatClock(nextEx.duration_seconds)}
                   </Text>
                 </View>
@@ -445,7 +445,7 @@ export default function WarmupScreen() {
       ) : null}
 
       {completed ? (
-        <Text className="mt-4 font-sans text-sm text-muted-brown">
+        <Text className="mt-4 font-sans text-sm text-muted-light">
           Nice — you&apos;re warmed up. Tap Next section to continue your plan.
         </Text>
       ) : null}

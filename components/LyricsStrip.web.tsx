@@ -55,7 +55,7 @@ export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProp
   if (words.length === 0) {
     if (hideHeading) return null
     return (
-      <Text className="mt-2 font-sans text-xs text-muted-brown">
+      <Text className="mt-2 font-sans text-xs text-muted-light">
         Lyrics unavailable for this section.
       </Text>
     )
@@ -89,7 +89,7 @@ export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProp
                   ? 'font-sans-medium text-base text-amber-accent'
                   : i < activeIndex
                   ? 'font-sans text-sm text-wood-900/60'
-                  : 'font-sans text-sm text-muted-brown'
+                  : 'font-sans text-sm text-muted-light'
               }
             >
               {w.word}

@@ -365,7 +365,7 @@ export default function SettingsScreen() {
         {/* Header */}
         <View className="mb-6">
           <Text className="font-serif text-3xl text-cream">Settings</Text>
-          <Text className="mt-2 font-sans text-sm text-muted-brown">
+          <Text className="mt-2 font-sans text-sm text-muted-light">
             Customize your practice experience
           </Text>
         </View>
@@ -388,7 +388,7 @@ export default function SettingsScreen() {
                   {experienceLevelSaved} player
                 </Text>
               ) : (
-                <Text className="mt-1 font-sans text-sm text-muted-brown">
+                <Text className="mt-1 font-sans text-sm text-muted-light">
                   Experience level not set
                 </Text>
               )}
@@ -397,13 +397,13 @@ export default function SettingsScreen() {
           <View className="mt-4 flex-row gap-4">
             <View className="flex-1 rounded-lg bg-wood-900/40 border border-wood-600/50 p-3">
               <Text className="font-sans text-2xl font-serif text-amber-light">{user.length}</Text>
-              <Text className="mt-1 font-sans text-xs text-muted-brown uppercase tracking-wider">
+              <Text className="mt-1 font-sans text-xs text-muted-light uppercase tracking-wider">
                 Skills
               </Text>
             </View>
             <View className="flex-1 rounded-lg bg-wood-900/40 border border-wood-600/50 p-3">
               <Text className="font-sans text-2xl font-serif text-amber-light">{sessionsCount}</Text>
-              <Text className="mt-1 font-sans text-xs text-muted-brown uppercase tracking-wider">
+              <Text className="mt-1 font-sans text-xs text-muted-light uppercase tracking-wider">
                 Sessions
               </Text>
             </View>
@@ -450,7 +450,7 @@ export default function SettingsScreen() {
           description="Reference pitch for tuner features"
           defaultOpen={false}
         >
-          <Text className="font-sans text-xs text-muted-brown mb-2">A4 reference (Hz)</Text>
+          <Text className="font-sans text-xs text-muted-light mb-2">A4 reference (Hz)</Text>
           <TextInput
             value={tuningHz}
             onChangeText={setTuningHz}
@@ -475,7 +475,7 @@ export default function SettingsScreen() {
           description="Your musical preferences for coach context"
           defaultOpen={false}
         >
-          <Text className="font-sans text-xs text-muted-brown mb-2">
+          <Text className="font-sans text-xs text-muted-light mb-2">
             Short note (blues, fingerstyle, etc.)
           </Text>
           <TextInput
@@ -564,7 +564,7 @@ export default function SettingsScreen() {
                 <Text className="font-sans-medium capitalize text-amber-light">{experienceLevelSaved}</Text>
               </Text>
             ) : (
-              <Text className="font-sans text-sm text-muted-brown">
+              <Text className="font-sans text-sm text-muted-light">
                 Complete the style quiz to set your experience level
               </Text>
             )}
@@ -573,7 +573,7 @@ export default function SettingsScreen() {
                 Style lane: <Text className="font-sans-medium text-amber-light">{derivedTasteLabel}</Text>
               </Text>
             ) : (
-              <Text className="mt-2 font-sans text-sm text-muted-brown">No style preferences saved yet</Text>
+              <Text className="mt-2 font-sans text-sm text-muted-light">No style preferences saved yet</Text>
             )}
           </View>
           <AnimatedPressable
@@ -601,7 +601,7 @@ export default function SettingsScreen() {
             </Text>
             {spotifyProfile !== null &&
               (spotifyProfile.top_artists.length > 0 || spotifyProfile.top_genres.length > 0) && (
-                <Text className="mt-2 font-sans text-[11px] leading-4 text-muted-brown" numberOfLines={4}>
+                <Text className="mt-2 font-sans text-[11px] leading-4 text-muted-light" numberOfLines={4}>
                   {spotifyProfile.top_artists.slice(0, 5).join(' · ')}
                   {spotifyProfile.top_genres.length > 0
                     ? `\n${spotifyProfile.top_genres.slice(0, 6).join(', ')}`

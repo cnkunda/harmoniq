@@ -42,7 +42,7 @@ export function ChordChartPreview({
   if (!chordEvents.length) {
     return (
       <View style={[{ padding: 12 }, style]}>
-        <Text className="text-sm font-sans text-muted-brown">No chord data yet</Text>
+        <Text className="text-sm font-sans text-muted-light">No chord data yet</Text>
       </View>
     )
   }
@@ -81,7 +81,7 @@ export function ChordChartPreview({
       </View>
 
       {isPartial && (
-        <Text className="text-xs font-sans mt-2" style={{ color: colors.muted.brown }}>
+        <Text className="text-xs font-sans mt-2" style={{ color: colors.muted.light }}>
           Refining solo notation...
         </Text>
       )}

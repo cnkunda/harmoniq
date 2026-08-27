@@ -55,9 +55,9 @@ const CHOICE_CHIP_BASE =
   'min-w-0 items-center justify-center rounded-full border px-3 py-1.5'
 const CHOICE_CHIP_OFF = 'border-wood-600/40 bg-wood-900/10'
 const CHOICE_CHIP_ON = 'border-amber-accent bg-amber-accent'
-const CHOICE_LABEL_MONO_OFF = 'font-mono text-[11px] font-medium text-muted-brown'
+const CHOICE_LABEL_MONO_OFF = 'font-mono text-[11px] font-medium text-muted-light'
 const CHOICE_LABEL_MONO_ON = 'font-mono text-[11px] font-medium text-wood-900'
-const CHOICE_LABEL_SANS_OFF = 'font-sans text-xs text-muted-brown'
+const CHOICE_LABEL_SANS_OFF = 'font-sans text-xs text-muted-light'
 const CHOICE_LABEL_SANS_ON = 'font-sans text-xs font-sans-medium text-wood-900'
 
 function orderedStemIds(stems: Record<string, string>): string[] {
@@ -578,7 +578,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
 
   if (!lesson) {
     return (
-      <Text className="mt-2 font-sans text-sm text-muted-brown">
+      <Text className="mt-2 font-sans text-sm text-muted-light">
         No song loaded — add one from Home or open a session after analysis so stems can load.
       </Text>
     )
@@ -587,7 +587,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
   if (!lesson.stems || Object.keys(lesson.stems).length === 0) {
     const isDrillLick = typeof lesson.job_id === 'string' && lesson.job_id.startsWith('lick-')
     return (
-      <Text className="mt-2 font-sans text-sm text-muted-brown">
+      <Text className="mt-2 font-sans text-sm text-muted-light">
         {isDrillLick
           ? 'This saved lick has no backing stem on file. Save it again from Review after a full analysis, or open a song that includes stems.'
           : 'This song has no stem paths yet. Re-run analysis with a backend that writes stems.'}
@@ -668,7 +668,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                 {playLessonCard ? 'Play capture' : 'Current lesson'}
               </Text>
               {playLessonCard ? (
-                <Text className="font-sans text-xs leading-snug text-muted-brown">
+                <Text className="font-sans text-xs leading-snug text-muted-light">
                   Stems below are your backing track. Start capture when you are ready — Harmoniq scores pitch on each
                   beat.
                 </Text>
@@ -679,7 +679,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
               >
                 {songTitle}
               </Text>
-              <Text className="mt-1 font-sans text-xs text-muted-brown">{sectionLine}</Text>
+              <Text className="mt-1 font-sans text-xs text-muted-light">{sectionLine}</Text>
 
               {playLessonCard ? (
                 <PlayCaptureLessonCardBanner
@@ -722,7 +722,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                 <Text className="font-mono text-[13px] leading-none tracking-tight text-wood-900">
                   {loading ? '…' : ready ? fmt(scrubTimelineSec ?? positionSec) : '—'}
                 </Text>
-                <Text className="font-mono text-[13px] leading-none tracking-tight text-muted-brown">
+                <Text className="font-mono text-[13px] leading-none tracking-tight text-muted-light">
                   {loading ? '' : ready ? fmt(durationSec) : ''}
                 </Text>
               </View>
@@ -739,7 +739,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                     void seekTransportToSeconds(v)
                   }}
                   minimumTrackTintColor={colors.amber.accent}
-                  maximumTrackTintColor={colors.muted.brown}
+                  maximumTrackTintColor={colors.muted.light}
                   thumbTintColor={colors.amber.light}
                   disabled={!ready || loading || durationSec <= 0}
                 />
@@ -751,7 +751,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             <View className="mt-3 border-t border-wood-600/15 pt-3">
               <View className="mb-2 flex-row items-baseline justify-between gap-3">
                 <Text className="font-sans-medium text-sm text-wood-900">Speed</Text>
-                <Text className="font-mono text-[13px] tabular-nums tracking-tight text-muted-brown">
+                <Text className="font-mono text-[13px] tabular-nums tracking-tight text-muted-light">
                   {rate.toFixed(1)}×
                 </Text>
               </View>
@@ -781,7 +781,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           {!playLessonCard && hasUpNext ? (
             <View className="mt-3 border-t border-wood-600/20 pt-3">
               <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Up next</Text>
-              <Text className="mt-1 font-sans text-sm text-muted-brown">{`Section ${nextSectionIndex + 1}`}</Text>
+              <Text className="mt-1 font-sans text-sm text-muted-light">{`Section ${nextSectionIndex + 1}`}</Text>
             </View>
           ) : null}
         </View>
@@ -814,7 +814,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           <View className="mt-2 shrink-0 border-t border-wood-600/15 pt-3">
             <View className="mb-3 flex-row items-baseline justify-center gap-1.5">
               <Text className="font-serif text-3xl leading-none text-wood-900 tabular-nums">{effectiveMetroBpm}</Text>
-              <Text className="pb-1 font-sans text-sm text-muted-brown">BPM</Text>
+              <Text className="pb-1 font-sans text-sm text-muted-light">BPM</Text>
             </View>
             <Text className="mb-2 font-sans-medium text-sm text-wood-900">Subdivide</Text>
             <View className="flex-row flex-wrap gap-1.5">
@@ -922,11 +922,11 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                     >
                       <Icon
                         size={20}
-                        color={!hasStem ? colors.muted.brown : unmuted ? colors.amber.accent : colors.muted.brown}
+                        color={!hasStem ? colors.muted.light : unmuted ? colors.amber.accent : colors.muted.light}
                         strokeWidth={1.75}
                       />
                       <Text
-                        className={`mt-1 font-sans text-[10px] leading-tight ${unmuted && hasStem ? 'font-sans-medium text-wood-900' : 'text-muted-brown'}`}
+                        className={`mt-1 font-sans text-[10px] leading-tight ${unmuted && hasStem ? 'font-sans-medium text-wood-900' : 'text-muted-light'}`}
                       >
                         {label}
                       </Text>

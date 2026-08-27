@@ -31,7 +31,7 @@ function SparkRow({
   const hzVals = contour.map((c) => c.hz).filter((h) => h > 0)
   if (hzVals.length === 0) {
     return (
-      <Text className="font-sans text-[10px] text-muted-brown" numberOfLines={1}>
+      <Text className="font-sans text-[10px] text-muted-light" numberOfLines={1}>
         No pitch trace
       </Text>
     )
@@ -69,7 +69,7 @@ function SparkRow({
         ? 'text-success'
         : result === 'miss'
           ? 'text-danger'
-          : 'text-muted-brown'
+          : 'text-muted-light'
 
   return (
     <View className="mb-3 flex-row items-center gap-2">
@@ -98,7 +98,7 @@ export function SessionPitchReview({ noteContours, noteTargetMidis, noteResults 
   return (
     <View className="mt-3 rounded-lg border border-wood-600/45 bg-cream-dark/40 px-3 py-3">
       <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Pitch contours</Text>
-      <Text className="mt-1 font-sans text-[10px] text-muted-brown">
+      <Text className="mt-1 font-sans text-[10px] text-muted-light">
         Sage line = target Hz · Amber = your pitch (time →)
       </Text>
       <View className="mt-2">

@@ -44,13 +44,13 @@ export function PlayCaptureControls({
             {recording ? 'Finish capture' : embedded ? 'Start capture' : 'Start play capture'}
           </Text>
         </AnimatedPressable>
-        <Text className={`flex-1 text-muted-brown ${embedded ? 'font-mono text-[10px]' : 'font-mono text-[11px]'}`}>
+        <Text className={`flex-1 text-muted-light ${embedded ? 'font-mono text-[10px]' : 'font-mono text-[11px]'}`}>
           {status}
         </Text>
       </View>
 
       {autostopTriggered ? (
-        <Text className="font-sans text-xs text-muted-brown">Auto-end triggered after 5 seconds of silence.</Text>
+        <Text className="font-sans text-xs text-muted-light">Auto-end triggered after 5 seconds of silence.</Text>
       ) : null}
       {take ? (
         <Text className="font-sans text-xs text-wood-900">

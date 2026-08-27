@@ -30,6 +30,7 @@ from app.schemas import (
     PlayerProfile,
     SoloNote,
     SoloNotes,
+    StemRoutingHints,
 )
 from app.stem_quality import StemClassification
 from app.alphatab_prerender import enrich_lesson_with_prerender_hints
@@ -41,6 +42,218 @@ from app.solo_inference import infer_solo
 
 logger = logging.getLogger("harmoniq.analyze_audio")
 logger.setLevel(logging.INFO)
+
+
+def _backend_root_for_analyze() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _resolve_stem_abs_path(stem_name: str, stems: dict[str, str], guitar_stem_path: Path) -> Path | None:
+    """Resolve absolute path for a stem name via stems dict or adjacent files."""
+    backend_root = _backend_root_for_analyze()
+    rel = stems.get(stem_name)
+    if rel:
+        candidate = backend_root / rel
+        if candidate.is_file():
+            return candidate
+    # Fallback: sibling of guitar stem
+    sibling = guitar_stem_path.parent / f"{stem_name}.wav"
+    if sibling.is_file():
+        return sibling
+    return None
+
+
+def _wav_has_audio(path: Path) -> bool:
+    """Quick check that WAV exists and is non-empty (size heuristic)."""
+    try:
+        return path.is_file() and path.stat().st_size > 44  # WAV header
+    except Exception:
+        return False
+
+
+def _resolve_chord_mix_path(
+    *,
+    job_id: str,
+    stems: dict[str, str],
+    guitar_stem_path: Path,
+    mix_wav_path: Path | None,
+    stem_routing_hints: StemRoutingHints | dict[str, object] | None,
+    job_dir: Path | None,
+) -> tuple[Path, str, StemRoutingHints | None]:
+    """Resolve chord inference path: bass+other mix when possible.
+
+    Returns (path_to_use, source_label, updated_hints_or_none).
+    """
+    # Normalize hints
+    hints: StemRoutingHints | None = None
+    if stem_routing_hints is not None:
+        if isinstance(stem_routing_hints, dict):
+            try:
+                hints = StemRoutingHints.model_validate(stem_routing_hints)
+            except Exception:
+                hints = None
+        elif isinstance(stem_routing_hints, StemRoutingHints):
+            hints = stem_routing_hints
+
+    # If no hints, fallback to current hardcoded behavior
+    if hints is None:
+        fallback = mix_wav_path if mix_wav_path and mix_wav_path.is_file() else guitar_stem_path
+        return fallback, "full_mix_fallback_no_hints", None
+
+    chord_names: list[str] = list(hints.chord_mix_stems) if hints.chord_mix_stems else ["bass", "other"]
+
+    # Attempt to collect stem paths for mixing
+    stem_paths: list[Path] = []
+    for name in chord_names:
+        p = _resolve_stem_abs_path(name, stems, guitar_stem_path)
+        if p is not None and _wav_has_audio(p):
+            stem_paths.append(p)
+        else:
+            logger.info("chord_mix stem missing or empty: %s for job_id=%s", name, job_id)
+
+    # Need at least 2 stems with audio to mix
+    if len(stem_paths) >= 2:
+        # Use job_dir if provided else derive from guitar stem
+        out_dir = job_dir if job_dir is not None else guitar_stem_path.parent.parent
+        out_path = out_dir / "mixed_bass_other.wav"
+        try:
+            from app.audio_mix import mix_stems
+
+            mixed = mix_stems(stem_paths, out_path)
+            # Update hints with resolved actual path for observability
+            try:
+                backend_root = _backend_root_for_analyze().resolve()
+                rel_mixed = mixed.resolve().relative_to(backend_root).as_posix()
+            except Exception:
+                rel_mixed = str(mixed)
+            hints = hints.model_copy(update={
+                "chord_mix_path": rel_mixed,
+                "chord_source": "bass_other_mix",
+            })
+            logger.info(
+                "stem_routing chord job_id=%s source=bass_other_mix stems=%s mixed=%s",
+                job_id, chord_names, mixed,
+            )
+            return mixed, "bass_other_mix", hints
+        except Exception as exc:
+            logger.warning("bass+other mix failed job_id=%s error=%s; falling back", job_id, exc)
+
+    # Fallback to full mix or guitar
+    fallback = mix_wav_path if mix_wav_path and mix_wav_path.is_file() else guitar_stem_path
+    source = "full_mix" if (mix_wav_path and mix_wav_path.is_file()) else "guitar_fallback"
+    # Record that we fell back
+    try:
+        backend_root = _backend_root_for_analyze().resolve()
+        rel_fb = fallback.resolve().relative_to(backend_root).as_posix() if fallback.is_file() else str(fallback)
+    except Exception:
+        rel_fb = str(fallback)
+    hints = hints.model_copy(update={
+        "chord_mix_path": rel_fb,
+        "chord_source": source,
+    }) if hints else hints
+    logger.info(
+        "stem_routing chord fallback job_id=%s source=%s path=%s hints_stems=%s",
+        job_id, source, fallback, chord_names,
+    )
+    return fallback, source, hints
+
+
+def _resolve_melodic_stem_path(
+    *,
+    job_id: str,
+    stems: dict[str, str],
+    guitar_stem_path: Path,
+    stem_routing_hints: StemRoutingHints | dict[str, object] | None,
+    stem_classification: StemClassification | None,
+) -> tuple[Path, str, StemRoutingHints | None]:
+    """Resolve melodic stem for solo: selected -> guitar -> vocals."""
+    hints: StemRoutingHints | None = None
+    if stem_routing_hints is not None:
+        if isinstance(stem_routing_hints, dict):
+            try:
+                hints = StemRoutingHints.model_validate(stem_routing_hints)
+            except Exception:
+                hints = None
+        elif isinstance(stem_routing_hints, StemRoutingHints):
+            hints = stem_routing_hints
+
+    # Determine preference order: if hints provided use selected, else guitar
+    if hints is None:
+        return guitar_stem_path, "guitar_fallback_no_hints", None
+
+    selected = (hints.selected_melodic_stem or "guitar").strip() or "guitar"
+
+    # Influence by stem quality flags: if guitar flagged as near silent / buried,
+    # deprioritize guitar when it is the selected stem.
+    flags = list(stem_classification.flags) if stem_classification else []
+    flag_influenced = False
+    if selected == "guitar" and any(f in flags for f in ("guitar_near_silent", "guitar_buried_in_mix")):
+        logger.info(
+            "stem_routing solo quality flag influences routing job_id=%s flags=%s selected=%s",
+            job_id, flags, selected,
+        )
+        flag_influenced = True
+
+    # Build fallback chain: selected -> guitar -> vocals (avoid duplicates)
+    fallback_chain: list[str] = []
+    for cand in [selected, "guitar", "vocals"]:
+        if cand not in fallback_chain:
+            fallback_chain.append(cand)
+    # If flag influenced and guitar is problematic, try vocals first after selected
+    if flag_influenced and selected == "guitar":
+        fallback_chain = ["vocals", "guitar"]
+        if selected not in fallback_chain:
+            fallback_chain.append(selected)
+
+    for stem_name in fallback_chain:
+        p = _resolve_stem_abs_path(stem_name, stems, guitar_stem_path)
+        if p is not None and _wav_has_audio(p):
+            source = "selected" if stem_name == selected else stem_name
+            # Also extend to check melodic_preference_order for deeper fallback
+            try:
+                backend_root = _backend_root_for_analyze().resolve()
+                rel = p.resolve().relative_to(backend_root).as_posix()
+            except Exception:
+                rel = str(p)
+            hints = hints.model_copy(update={
+                "melodic_stem_path": rel,
+                "solo_source": source,
+            })
+            logger.info(
+                "stem_routing solo job_id=%s source=%s stem=%s path=%s flags=%s",
+                job_id, source, stem_name, p, flags,
+            )
+            return p, source, hints
+        else:
+            logger.info("melodic stem candidate missing: %s for job_id=%s", stem_name, job_id)
+
+    # Deeper fallback: iterate melodic_preference_order if present
+    for stem_name in (hints.melodic_preference_order or []):
+        if stem_name in fallback_chain:
+            continue
+        p = _resolve_stem_abs_path(stem_name, stems, guitar_stem_path)
+        if p is not None and _wav_has_audio(p):
+            try:
+                backend_root = _backend_root_for_analyze().resolve()
+                rel = p.resolve().relative_to(backend_root).as_posix()
+            except Exception:
+                rel = str(p)
+            hints = hints.model_copy(update={
+                "melodic_stem_path": rel,
+                "solo_source": stem_name,
+            })
+            logger.info("stem_routing solo fallback pref job_id=%s stem=%s path=%s", job_id, stem_name, p)
+            return p, stem_name, hints
+
+    # Final fallback to guitar (hardcoded)
+    try:
+        backend_root = _backend_root_for_analyze().resolve()
+        rel = guitar_stem_path.resolve().relative_to(backend_root).as_posix()
+    except Exception:
+        rel = str(guitar_stem_path)
+    hints = hints.model_copy(update={"melodic_stem_path": rel, "solo_source": "guitar_fallback"})
+    logger.info("stem_routing solo final fallback job_id=%s guitar %s", job_id, guitar_stem_path)
+    return guitar_stem_path, "guitar_fallback", hints
 
 TABS_UNAVAILABLE_NO_GUITAR = "no_isolated_guitar"
 
@@ -217,6 +430,8 @@ def build_lesson_json_from_librosa(
     mix_wav_path: Path | None = None,
     piano_stem_path: Path | None = None,
     progress_callback: "callable | None" = None,
+    stem_routing_hints: StemRoutingHints | dict[str, object] | None = None,
+    job_dir: Path | None = None,
 ) -> LessonJSON:
     """Build a full LessonJSON from audio analysis.
 
@@ -227,6 +442,11 @@ def build_lesson_json_from_librosa(
             ``"solo_inferring"`` (solo notes ready),
             ``"building_musicxml"`` (MusicXML ready),
             ``"complete"`` (final lesson).
+        stem_routing_hints: Commit 110 — routing hints from ``build_stem_routing_hints()``
+            (bass+other for chords, dynamic melodic stem for solo). When ``None``,
+            the hardcoded fallback paths are used.
+        job_dir: Optional job directory for writing ``mixed_bass_other.wav``.
+            If ``None``, derived from ``guitar_stem_path.parent.parent``.
     """
     song_title, artist = resolve_lesson_titles(source_metadata, source_url=source_url)
 
@@ -285,35 +505,90 @@ def build_lesson_json_from_librosa(
     if bar_timestamps[0] > 0.05:
         bar_timestamps.insert(0, 0.0)
 
+    # Commit 110: resolve stem routing for chords (bass+other mix) and solo (dynamic melodic stem)
+    resolved_hints: StemRoutingHints | None = None
+    if isinstance(stem_routing_hints, dict):
+        try:
+            resolved_hints = StemRoutingHints.model_validate(stem_routing_hints)
+        except Exception:
+            resolved_hints = None
+    elif isinstance(stem_routing_hints, StemRoutingHints):
+        resolved_hints = stem_routing_hints
+
+    chord_mix_path, chord_source, chord_hints = _resolve_chord_mix_path(
+        job_id=job_id,
+        stems=stems,
+        guitar_stem_path=guitar_stem_path,
+        mix_wav_path=mix_wav_path,
+        stem_routing_hints=resolved_hints,
+        job_dir=job_dir,
+    )
+    melodic_stem_path, solo_source, solo_hints = _resolve_melodic_stem_path(
+        job_id=job_id,
+        stems=stems,
+        guitar_stem_path=guitar_stem_path,
+        stem_routing_hints=resolved_hints,
+        stem_classification=stem_classification,
+    )
+    # Merge hints for telemetry (chord + solo resolved paths)
+    if chord_hints is not None and solo_hints is not None:
+        # chord_hints already has chord fields; merge solo fields
+        resolved_hints = chord_hints.model_copy(update={
+            "melodic_stem_path": solo_hints.melodic_stem_path,
+            "solo_source": solo_hints.solo_source,
+            "melodic_preference_order": solo_hints.melodic_preference_order or chord_hints.melodic_preference_order,
+            "selected_melodic_stem": solo_hints.selected_melodic_stem or chord_hints.selected_melodic_stem,
+        })
+    elif chord_hints is not None:
+        resolved_hints = chord_hints
+    elif solo_hints is not None:
+        resolved_hints = solo_hints
+
+    if resolved_hints is not None:
+        logger.info(
+            "stem_routing resolved job_id=%s chord_path=%s (%s) solo_path=%s (%s) flags=%s hints=%s",
+            job_id,
+            chord_mix_path,
+            chord_source,
+            melodic_stem_path,
+            solo_source,
+            list(stem_classification.flags) if stem_classification else [],
+            resolved_hints.model_dump(exclude_none=True),
+        )
+    else:
+        logger.info(
+            "stem_routing fallback job_id=%s chord_path=%s solo_path=%s flags=%s",
+            job_id, chord_mix_path, melodic_stem_path,
+            list(stem_classification.flags) if stem_classification else [],
+        )
+
     # Run transcription inference for chord timeline and solo notes
     chord_timeline: ChordTimeline | None = None
     solo_notes: SoloNotes | None = None
-    
+
     chord_metrics: dict = {}
     try:
-        # Use bass+other mix for chord inference, guitar for solo
-        chord_mix_path = mix_wav_path if mix_wav_path and mix_wav_path.is_file() else guitar_stem_path
         chord_timeline, chord_metrics = infer_chords(chord_mix_path, beat_grid, key_signature=summary.key_name)
-        logger.info("chord inference completed for job_id=%s with %d events", job_id, len(chord_timeline.events))
+        logger.info("chord inference completed for job_id=%s with %d events path=%s", job_id, len(chord_timeline.events), chord_mix_path)
         if progress_callback is not None:
             try:
                 progress_callback("chords_inferring", None)
             except Exception:
                 pass
     except Exception:
-        logger.exception("chord inference failed for job_id=%s; continuing without chord timeline", job_id)
+        logger.exception("chord inference failed for job_id=%s path=%s; continuing without chord timeline", job_id, chord_mix_path)
         chord_timeline = ChordTimeline(events=[])
-    
+
     try:
-        solo_notes = infer_solo(guitar_stem_path, beat_grid)
-        logger.info("solo inference completed for job_id=%s with %d notes", job_id, len(solo_notes.notes))
+        solo_notes = infer_solo(melodic_stem_path, beat_grid)
+        logger.info("solo inference completed for job_id=%s with %d notes path=%s", job_id, len(solo_notes.notes), melodic_stem_path)
         if progress_callback is not None:
             try:
                 progress_callback("solo_inferring", None)
             except Exception:
                 pass
     except Exception:
-        logger.exception("solo inference failed for job_id=%s; continuing without solo notes", job_id)
+        logger.exception("solo inference failed for job_id=%s path=%s; continuing without solo notes", job_id, melodic_stem_path)
         solo_notes = SoloNotes(notes=[])
 
     sections: list[LessonSectionStub] = []

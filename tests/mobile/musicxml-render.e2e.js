@@ -6,6 +6,8 @@ const { by, device, element, expect, waitFor } = require("detox");
 const CORPUS = [
   { name: "irregular-5-4", label: "corpus-title:irregular-5-4" },
   { name: "multi-voice-staff", label: "corpus-title:multi-voice-staff" },
+  { name: "nested-tuplets", label: "corpus-title:nested-tuplets" },
+  { name: "syncopation", label: "corpus-title:syncopation" },
 ];
 
 describe("MusicXML corpus renders without crash (native)", () => {

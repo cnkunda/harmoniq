@@ -70,7 +70,7 @@ export function PlayPitchBeatCard({
   return (
     <View className={shell}>
       <View className="border-b border-wood-600/25 bg-ivory/35 px-3 py-2.5">
-        <Text className="text-center font-mono text-[10px] leading-snug text-muted-brown">
+        <Text className="text-center font-mono text-[10px] leading-snug text-muted-light">
           Streak {currentStreak} beat{currentStreak === 1 ? '' : 's'} · ±{Math.round(adaptedCentsTolerance)}¢ adapts ·
           inner ≤{Math.round(innerToleranceCents)}¢
         </Text>
@@ -80,11 +80,11 @@ export function PlayPitchBeatCard({
         <View className="flex-row items-baseline justify-between gap-2">
           <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Pitch targets</Text>
           {nQueue > 0 ? (
-            <Text className="shrink font-mono text-[10px] text-muted-brown">
+            <Text className="shrink font-mono text-[10px] text-muted-light">
               {nQueue} note{nQueue === 1 ? '' : 's'}
             </Text>
           ) : (
-            <Text className="shrink font-mono text-[10px] text-muted-brown">Tab…</Text>
+            <Text className="shrink font-mono text-[10px] text-muted-light">Tab…</Text>
           )}
         </View>
 
@@ -132,7 +132,7 @@ export function PlayPitchBeatCard({
           {pct != null ? (
             <Text className="font-mono text-[10px] text-wood-900">{pct}% on-pitch</Text>
           ) : (
-            <Text className="font-mono text-[10px] text-muted-brown">—</Text>
+            <Text className="font-mono text-[10px] text-muted-light">—</Text>
           )}
         </View>
         <View className="mt-2">
@@ -142,14 +142,14 @@ export function PlayPitchBeatCard({
           <View className="mt-1.5 flex-row gap-0.5">
             {alignedLabels.map((label, i) => (
               <View key={`lb-${i}-${label}`} className="min-w-[6px] flex-1 items-center">
-                <Text className="font-mono text-[8px] text-muted-brown" numberOfLines={1}>
+                <Text className="font-mono text-[8px] text-muted-light" numberOfLines={1}>
                   {label}
                 </Text>
               </View>
             ))}
           </View>
         ) : null}
-        <Text className="mt-1.5 font-sans text-[10px] text-muted-brown">
+        <Text className="mt-1.5 font-sans text-[10px] text-muted-light">
           Hits {hit} · Close {close} · Miss {miss}
         </Text>
       </View>

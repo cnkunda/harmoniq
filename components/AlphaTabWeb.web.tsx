@@ -1358,7 +1358,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         )}
         {!mounted ? (
           <View className="min-h-[200px] items-center justify-center p-4">
-            <Text className="font-sans text-sm text-muted-brown">Preparing AlphaTab…</Text>
+            <Text className="font-sans text-sm text-muted-light">Preparing AlphaTab…</Text>
           </View>
         ) : (
           <div
@@ -1441,7 +1441,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
-            <Text className="text-center font-sans text-[11px] text-muted-brown">
+            <Text className="text-center font-sans text-[11px] text-muted-light">
               {
                 "Tab preview isn't available for this song yet. Try analyzing a song or another tab variant."
               }

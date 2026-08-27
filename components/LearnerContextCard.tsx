@@ -58,7 +58,7 @@ export function LearnerContextCard({ skillNodes }: { skillNodes: readonly SkillN
   return (
     <View className="rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
       <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Coach context</Text>
-      <Text className="mt-2 font-sans text-xs text-muted-brown">
+      <Text className="mt-2 font-sans text-xs text-muted-light">
         What you have set in Settings and the style quiz, plus the weakest skill focus we infer from practice.
       </Text>
       <View className="mt-3 gap-2">

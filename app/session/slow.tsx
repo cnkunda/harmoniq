@@ -112,7 +112,7 @@ export default function SlowScreen() {
             Slow loop: {playbackLoop.label} ({playbackLoop.startSec.toFixed(2)}s – {playbackLoop.endSec.toFixed(2)}s)
           </Text>
           {__DEV__ && derived ? (
-            <Text className="mt-1 font-mono text-[10px] text-muted-brown">Source: {derived.source}</Text>
+            <Text className="mt-1 font-mono text-[10px] text-muted-light">Source: {derived.source}</Text>
           ) : null}
         </View>
       ) : null}

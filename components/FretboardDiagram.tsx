@@ -586,7 +586,7 @@ export function FretboardDiagram({
                   accessibilityState={{ selected: fretboardMode === mode }}
                 >
                   <Text className={`font-sans text-xs ${
-                    fretboardMode === mode ? 'text-amber-accent font-medium' : 'text-muted-brown'
+                    fretboardMode === mode ? 'text-amber-accent font-medium' : 'text-muted-light'
                   }`}>{label}</Text>
                 </Pressable>
               ))}
@@ -621,7 +621,7 @@ export function FretboardDiagram({
                   accessibilityLabel={label}
                   accessibilityState={{ selected: voicingMode === mode }}
                 >
-                  <Text className={`font-sans text-[11px] ${voicingMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
+                  <Text className={`font-sans text-[11px] ${voicingMode === mode ? 'text-wood-900' : 'text-muted-light'}`}>{label}</Text>
                 </Pressable>
               ))}
             </>
@@ -648,7 +648,7 @@ export function FretboardDiagram({
                   accessibilityLabel={label}
                   accessibilityState={{ selected: overlayMode === mode }}
                 >
-                  <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
+                  <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-muted-light'}`}>{label}</Text>
                 </Pressable>
               ))}
             </>
@@ -662,7 +662,7 @@ export function FretboardDiagram({
               accessibilityLabel="Show example pitch ladder"
               accessibilityState={{ selected: pitchLadderOpen }}
             >
-              <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-muted-brown'}`}>Example</Text>
+              <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-muted-light'}`}>Example</Text>
             </Pressable>
           ) : null}
 
@@ -680,10 +680,10 @@ export function FretboardDiagram({
               accessibilityLabel={tuneActive ? 'Disable fretboard tuner' : 'Enable fretboard tuner'}
             >
               <Svg viewBox="0 0 24 24" width={16} height={16}>
-                <Circle cx={12} cy={12} r={3} stroke={colors.muted.brown} strokeWidth={1.5} fill="none" />
+                <Circle cx={12} cy={12} r={3} stroke={colors.muted.light} strokeWidth={1.5} fill="none" />
                 <Path
                   d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"
-                  stroke={colors.muted.brown} strokeWidth={1.5} strokeLinecap="round" fill="none"
+                  stroke={colors.muted.light} strokeWidth={1.5} strokeLinecap="round" fill="none"
                 />
               </Svg>
             </Pressable>
@@ -697,8 +697,8 @@ export function FretboardDiagram({
               accessibilityLabel={orientPanelOpen ? 'Hide technique hint' : 'Show technique hint'}
             >
               <Svg viewBox="0 0 24 24" width={16} height={16}>
-                <Circle cx={12} cy={12} r={10} stroke={colors.muted.brown} strokeWidth={1.5} fill="none" />
-                <Path d="M12 16v-4m0-4h.01" stroke={colors.muted.brown} strokeWidth={1.5} strokeLinecap="round" fill="none" />
+                <Circle cx={12} cy={12} r={10} stroke={colors.muted.light} strokeWidth={1.5} fill="none" />
+                <Path d="M12 16v-4m0-4h.01" stroke={colors.muted.light} strokeWidth={1.5} strokeLinecap="round" fill="none" />
               </Svg>
             </Pressable>
           ) : null}
@@ -714,7 +714,7 @@ export function FretboardDiagram({
               <Svg viewBox="0 0 24 24" width={16} height={16}>
                 <Path
                   d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8m-4-6-4-4-4 4m4-4v13"
-                  stroke={colors.muted.brown} strokeWidth={1.5} strokeLinecap="round"
+                  stroke={colors.muted.light} strokeWidth={1.5} strokeLinecap="round"
                   strokeLinejoin="round" fill="none"
                 />
               </Svg>
@@ -728,7 +728,7 @@ export function FretboardDiagram({
             {tunerState.noteName || '—'} · {typeof tunerState.cents === 'number' ? `${Math.round(tunerState.cents)}¢` : '—'} ·{' '}
             {tunerState.hz != null ? `${tunerState.hz.toFixed(1)} Hz` : 'no pitch'}
           </Text>
-          <Text className={`mt-1 font-sans text-[11px] ${tunerState.inTune ? 'text-success' : 'text-muted-brown'}`}>
+          <Text className={`mt-1 font-sans text-[11px] ${tunerState.inTune ? 'text-success' : 'text-muted-light'}`}>
             {tunerState.statusText}
           </Text>
         </View>
@@ -738,7 +738,7 @@ export function FretboardDiagram({
         <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
           <Text className="font-sans-medium text-[11px] text-wood-900">Technique Hint</Text>
           {orientAnnotation ? (
-            <Text className="mt-1 font-sans text-[11px] text-muted-brown">{orientAnnotation}</Text>
+            <Text className="mt-1 font-sans text-[11px] text-muted-light">{orientAnnotation}</Text>
           ) : null}
           {orientClipUrl ? (
             <Pressable
@@ -752,14 +752,14 @@ export function FretboardDiagram({
               </Text>
             </Pressable>
           ) : (
-            <Text className="mt-1 font-sans text-[11px] text-muted-brown">No hint clip available</Text>
+            <Text className="mt-1 font-sans text-[11px] text-muted-light">No hint clip available</Text>
           )}
         </View>
       ) : null}
 
       {pitchLadderOpen && pitchLadderSlot ? (
         <View className="mt-2">
-          <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-muted-brown">
+          <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-muted-light">
             Example · pitch ladder (Play)
           </Text>
           {pitchLadderSlot}
@@ -797,7 +797,7 @@ export function FretboardDiagram({
               x={fretCenterX(0)}
               y={26}
               textAnchor="middle"
-              fill={colors.muted.brown}
+              fill={colors.muted.light}
               fontSize={9}
               fontFamily="JetBrainsMono-Regular"
             >
@@ -809,7 +809,7 @@ export function FretboardDiagram({
                 x={fretCenterX(i + 1)}
                 y={26}
                 textAnchor="middle"
-                fill={colors.muted.brown}
+                fill={colors.muted.light}
                 fontSize={9}
                 fontFamily="JetBrainsMono-Regular"
               >
@@ -852,7 +852,7 @@ export function FretboardDiagram({
                 y1={BOARD_T - 4}
                 x2={fretWireX(i + 1)}
                 y2={BOARD_B + 4}
-                stroke={colors.muted.brown}
+                stroke={colors.muted.light}
                 strokeWidth={1.2}
                 opacity={0.7}
               />
@@ -913,7 +913,7 @@ export function FretboardDiagram({
                 y1={stringY(si)}
                 x2={SVG_W - MARGIN_R}
                 y2={stringY(si)}
-                stroke={colors.muted.brown}
+                stroke={colors.muted.light}
                 strokeWidth={stringLineThicknessPx(si) * 2.2}
                 opacity={0.75}
               />
@@ -1169,19 +1169,19 @@ export function FretboardDiagram({
                 </View>
               </View>
             ) : null}
-            <Text className="ml-auto font-mono text-[10px] text-muted-brown">Tap a note to identify position</Text>
+            <Text className="ml-auto font-mono text-[10px] text-muted-light">Tap a note to identify position</Text>
           </View>
         </View>
       ) : null}
 
       {cell ? (
-        <Text className="mt-2 font-mono text-[10px] text-muted-brown">
+        <Text className="mt-2 font-mono text-[10px] text-muted-light">
           Selected · string {cell.row + 1} (tab) · fret {cell.fret} · pulse #{pulseKey}
         </Text>
       ) : !fretGuideFooterHint && !(chordName && chordNotes.length > 0) ? (
-        <Text className="mt-2 font-mono text-[10px] text-muted-brown">Tap a note to identify position</Text>
+        <Text className="mt-2 font-mono text-[10px] text-muted-light">Tap a note to identify position</Text>
       ) : fretGuideFooterHint ? (
-        <Text className="mt-2 font-mono text-[10px] text-muted-brown">{fretGuideFooterHint}</Text>
+        <Text className="mt-2 font-mono text-[10px] text-muted-light">{fretGuideFooterHint}</Text>
       ) : null}
     </View>
   )

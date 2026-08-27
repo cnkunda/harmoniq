@@ -23,7 +23,7 @@ export function TimeSignaturePicker({ value, onChange, style }: TimeSignaturePic
 
   return (
     <View style={[{ gap: 6 }, style]}>
-      <Text className="text-xs font-sans text-muted-brown mb-1">Time Signature</Text>
+      <Text className="text-xs font-sans text-muted-light mb-1">Time Signature</Text>
       <View className="flex-row flex-wrap gap-2">
         {TIME_SIGNATURES.map((ts) => {
           const isSelected = ts.numerator === value.numerator && ts.denominator === value.denominator

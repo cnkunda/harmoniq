@@ -119,7 +119,10 @@ Phases: **orient** (`listen`) → **isolate** (`study`, `slow`) → **apply** (`
 
 - **Vitest**: only 3 test files run in CI (`aggregatePlacementScores`, `sm2`, `scoreProgressSignals`). Other test files exist but are not in CI.
 - **Playwright**: Chromium only. Visual regression uses `maxDiffPixelRatio: 0.02`, `threshold: 0.2`.
-- **Detox**: Android emulator (`Pixel_7_API_34`), iOS simulator (`iPhone 15`). Jest config at `tests/mobile/jest.config.js`.
+- **Detox**: Jest config at `tests/mobile/jest.config.js`. Android emulator AVD defaults to `Pixel_7_API_34` — override with `DETOX_ANDROID_AVD=Pixel_7` (this dev machine's AVDs: `Pixel_7`, `Medium_Phone`). iOS simulator `iPhone 15` (`DETOX_IOS_SIMULATOR` to override).
+- **Detox build flow**: `detox:build:android` runs `scripts/detox/build-android.js` → `expo prebuild` (if needed) → `scripts/detox/patch-android.js` (idempotent — re-applies the Detox Gradle wiring prebuild doesn't generate: `:detox` project, `testInstrumentationRunner`, JUnit4 androidTest deps, `debuggableVariants = []`, packaging pickFirsts) → `gradlew assembleDebug assembleAndroidTest`. The debug APK **embeds the JS bundle** — `detox test` does NOT need Metro running.
+- **Detox iOS**: macOS only (Xcode + `pod install`; Detox 20's self-contained XCUITest runner needs no app-side wiring). Runbook: `npx expo prebuild --platform ios` → `npm run detox:build:ios` → start Metro (`npx expo start` — iOS debug builds are not bundled) → `npm run test:mobile:ios`. Unverified on this repo (no macOS runner).
+- **Detox smoke failure pattern**: if `detox test` times out in `beforeAll` with "Detox can't seem to connect", the app boots but the test APK lacks the Detox runner (missing Gradle wiring) — re-run `npm run detox:build:android` and check `scripts/detox/patch-android.js` applied its patches.
 - **Starter song**: "Gravity" by John Mayer (G major pentatonic) — the default if no song is added.
 
 ---

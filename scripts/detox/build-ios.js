@@ -22,6 +22,13 @@ if (!existsSync(path.resolve(process.cwd(), "ios"))) {
   run("npx", ["expo", "prebuild", "--platform", "ios", "--non-interactive"]);
 }
 
+// Fresh prebuilds install pods on macOS; existing projects usually have them,
+// but a regenerated project without pods fails at xcodebuild with a confusing
+// error — so guard explicitly.
+if (!existsSync(path.resolve(process.cwd(), "ios/Pods"))) {
+  run("pod", ["install"], { cwd: path.resolve(process.cwd(), "ios") });
+}
+
 const appName = process.env.DETOX_IOS_APP_NAME || "Harmoniq";
 run("xcodebuild", [
   "-workspace",

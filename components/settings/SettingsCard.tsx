@@ -41,7 +41,7 @@ export function SettingsCard({
             <View className="flex-1">
               <Text className="font-serif text-xl text-cream">{title}</Text>
               {description && (
-                <Text className="mt-1 font-sans text-sm text-muted-brown leading-relaxed">
+                <Text className="mt-1 font-sans text-sm text-muted-light leading-relaxed">
                   {description}
                 </Text>
               )}
@@ -68,7 +68,7 @@ export function SettingsCard({
               {title}
             </Text>
             {description && (
-              <Text className="mt-0.5 font-sans text-xs text-muted-brown">{description}</Text>
+              <Text className="mt-0.5 font-sans text-xs text-muted-light">{description}</Text>
             )}
           </View>
         </View>

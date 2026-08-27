@@ -681,7 +681,7 @@ export default function JamScreen() {
                 Suggested loop from your practice focus: {weakAreas.join(', ')}
               </Text>
             ) : null}
-            <Text className="mt-1 font-sans text-xs text-muted-brown">
+            <Text className="mt-1 font-sans text-xs text-muted-light">
               Passive listening with scale hints. Reference score is a generic pattern (not the backing audio transcribed) — for
               fretboard and tab scale highlights only.
             </Text>
@@ -693,7 +693,7 @@ export default function JamScreen() {
                 Practice plan · {currentSlotIndex + 1} of {currentPlan.slots.length}
                 {activePlanJamSlot.title?.trim() ? ` · ${activePlanJamSlot.title.trim()}` : ''}
               </Text>
-              <Text className="mt-1 font-sans text-xs leading-snug text-muted-brown">
+              <Text className="mt-1 font-sans text-xs leading-snug text-muted-light">
                 {isFinalPlanStep
                   ? 'This is the last section in your plan. When you are done jamming, complete the session to clear the plan and go home.'
                   : 'When you are done jamming, continue to the next section in your plan.'}
@@ -818,7 +818,7 @@ export default function JamScreen() {
                 <Text className="font-sans-medium text-sm uppercase tracking-wider text-amber-light">
                   Backing Source
                 </Text>
-                <Text className="font-sans text-xs text-muted-brown">
+                <Text className="font-sans text-xs text-muted-light">
                   Choose how your backing track is generated
                 </Text>
                 <View className="mt-1 gap-2">
@@ -836,7 +836,7 @@ export default function JamScreen() {
                       <Text className={`font-sans text-sm ${backingMode === 'classic' ? 'text-amber-light' : 'text-cream'}`}>
                         Offline loop (bundled MP3)
                       </Text>
-                      <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                      <Text className="mt-0.5 font-sans text-xs text-muted-light">
                         Works fully offline — no practice server required
                       </Text>
                     </View>
@@ -855,7 +855,7 @@ export default function JamScreen() {
                       <Text className={`font-sans text-sm ${backingMode === 'ai' ? 'text-amber-light' : 'text-cream'}`}>
                         AI instrumental (server · Gemini)
                       </Text>
-                      <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                      <Text className="mt-0.5 font-sans text-xs text-muted-light">
                         Generates a fresh bed from the key/tempo of the loop you select below
                       </Text>
                     </View>
@@ -869,7 +869,7 @@ export default function JamScreen() {
                 <Text className="font-sans-medium text-sm uppercase tracking-wider text-amber-light">
                   Loop Style
                 </Text>
-                <Text className="font-sans text-xs text-muted-brown">
+                <Text className="font-sans text-xs text-muted-light">
                   {backingMode === 'ai'
                     ? 'Select a template (key / BPM) for AI generation'
                     : 'Select which bundled MP3 plays when you start'}
@@ -899,13 +899,13 @@ export default function JamScreen() {
                             {track.label}
                           </Text>
                           {templateActive && backingMode === 'ai' ? (
-                            <Text className="mt-0.5 font-sans text-xs text-muted-brown">AI template · key / tempo</Text>
+                            <Text className="mt-0.5 font-sans text-xs text-muted-light">AI template · key / tempo</Text>
                           ) : null}
                         </View>
                         {track.bpm != null ? (
-                          <Text className="font-mono text-xs text-muted-brown">{track.bpm} BPM</Text>
+                          <Text className="font-mono text-xs text-muted-light">{track.bpm} BPM</Text>
                         ) : (
-                          <Text className="font-mono text-xs text-muted-brown">ambient</Text>
+                          <Text className="font-mono text-xs text-muted-light">ambient</Text>
                         )}
                       </AnimatedPressable>
                     )
@@ -917,11 +917,11 @@ export default function JamScreen() {
 
           {!isJamming && lastJamDiagnostics ? (
             <View className="mb-4 rounded-xl border border-wood-700/45 bg-wood-800/45 p-4">
-              <Text className="font-sans-medium text-xs uppercase tracking-wide text-muted-brown">Last jam diagnostics</Text>
+              <Text className="font-sans-medium text-xs uppercase tracking-wide text-muted-light">Last jam diagnostics</Text>
               <Text className="mt-1 font-sans text-sm text-cream">
                 {lastJamDiagnostics.inferredScale ?? 'No clear scale detected'} · confidence {lastJamDiagnostics.confidence}
               </Text>
-              <Text className="mt-1 font-sans text-xs text-muted-brown">
+              <Text className="mt-1 font-sans text-xs text-muted-light">
                 {lastJamDiagnostics.tags.length > 0
                   ? `tags: ${lastJamDiagnostics.tags.join(', ')}`
                   : 'tags: stable signal, usable map'}
@@ -939,7 +939,7 @@ export default function JamScreen() {
                     </Text>
                   ) : null}
                   {lastJamDiagnostics.summaryBundle.coach_focus_areas.length > 0 ? (
-                    <Text className="mt-1 font-sans text-xs text-muted-brown">
+                    <Text className="mt-1 font-sans text-xs text-muted-light">
                       Focus: {lastJamDiagnostics.summaryBundle.coach_focus_areas.join(', ')}
                     </Text>
                   ) : null}
@@ -949,11 +949,11 @@ export default function JamScreen() {
                     </Text>
                   ) : null}
                   {lastJamDiagnostics.summaryBundle.vocabulary_patterns.length > 0 ? (
-                    <Text className="mt-1 font-sans text-xs text-muted-brown">
+                    <Text className="mt-1 font-sans text-xs text-muted-light">
                       Patterns: {lastJamDiagnostics.summaryBundle.vocabulary_patterns.map((p) => p.description).join('; ')}
                     </Text>
                   ) : null}
-                  <Text className="mt-1 font-sans text-[11px] text-muted-brown/70">
+                  <Text className="mt-1 font-sans text-[11px] text-muted-light/70">
                     {lastJamDiagnostics.summaryBundle.phrase_count} phrases · {lastJamDiagnostics.summaryBundle.total_notes} notes · diversity {(lastJamDiagnostics.summaryBundle.vocabulary_diversity * 100).toFixed(0)}%
                   </Text>
                 </View>
@@ -974,7 +974,7 @@ export default function JamScreen() {
                     </Text>
                   </View>
                 </Animated.View>
-                <Text className="font-sans text-sm text-muted-brown">Listening… scale hint updates every ~2s</Text>
+                <Text className="font-sans text-sm text-muted-light">Listening… scale hint updates every ~2s</Text>
                 {phraseCoachLines.observation || phraseCoachLines.suggestion ? (
                   <View className="mt-1 max-w-[320px] gap-1 px-2">
                     {phraseCoachLines.observation ? (
@@ -983,7 +983,7 @@ export default function JamScreen() {
                       </Text>
                     ) : null}
                     {phraseCoachLines.suggestion ? (
-                      <Text className="text-center font-sans text-sm leading-snug text-muted-brown">
+                      <Text className="text-center font-sans text-sm leading-snug text-muted-light">
                         {phraseCoachLines.suggestion}
                       </Text>
                     ) : null}

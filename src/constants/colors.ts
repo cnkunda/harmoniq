@@ -17,6 +17,8 @@ const colors = {
   ivory: '#F5F0E8',
   muted: {
     brown: '#8B7D6B',
+    light: '#B8A99A',
+    cream: '#C2B5A3',
   },
   danger: '#C17B5F',
   success: '#7A9B6D',

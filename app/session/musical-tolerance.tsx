@@ -47,7 +47,7 @@ export default function MusicalToleranceScreen() {
     <View className="flex-1 bg-ivory px-6 pt-8">
       <View className="mx-auto w-full max-w-xl rounded-2xl border border-wood-600/40 bg-cream p-6">
         <Text className="font-serif text-3xl text-wood-900">Choose your scoring mode</Text>
-        <Text className="mt-2 font-sans text-sm leading-5 text-muted-brown">
+        <Text className="mt-2 font-sans text-sm leading-5 text-muted-light">
           How should we evaluate your timing? Expressive mode allows for musical feel, while Technique mode enforces precision.
         </Text>
         <View className="mt-6 gap-3">
@@ -62,7 +62,7 @@ export default function MusicalToleranceScreen() {
               accessibilityLabel={`Select mode ${opt.label}`}
             >
               <Text className="font-sans-medium text-base text-wood-900">{opt.label}</Text>
-              <Text className="mt-1 font-sans text-xs leading-5 text-muted-brown">{opt.subtitle}</Text>
+              <Text className="mt-1 font-sans text-xs leading-5 text-muted-light">{opt.subtitle}</Text>
               <Text className="mt-2 font-sans text-[11px] text-amber-accent/80">{opt.tolerance}</Text>
             </AnimatedPressable>
           ))}
@@ -74,7 +74,7 @@ export default function MusicalToleranceScreen() {
           accessibilityRole="button"
           accessibilityLabel="Skip and use default technique mode"
         >
-          <Text className="font-sans text-xs text-muted-brown">Skip (default: Technique)</Text>
+          <Text className="font-sans text-xs text-muted-light">Skip (default: Technique)</Text>
         </AnimatedPressable>
       </View>
     </View>

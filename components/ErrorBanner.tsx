@@ -39,7 +39,7 @@ const STYLES: Record<
     bg: 'bg-wood-700/50',
     border: 'border-wood-600/50',
     text: 'text-cream/80',
-    iconColor: colors.muted.brown,
+    iconColor: colors.muted.light,
   },
 }
 

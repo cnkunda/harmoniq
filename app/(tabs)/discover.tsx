@@ -253,7 +253,7 @@ export default function DiscoverScreen() {
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
       <ScrollView className="flex-1 px-6 py-6" contentContainerStyle={{ paddingBottom: 36 }}>
         <Text className="font-serif text-3xl text-cream">Discover</Text>
-        <Text className="mt-2 font-sans text-sm text-muted-brown">
+        <Text className="mt-2 font-sans text-sm text-muted-light">
           Song recommendations and your library — play along with Spotify while tabs follow in real time.
         </Text>
 
@@ -262,9 +262,9 @@ export default function DiscoverScreen() {
         {/* Recommendations Section */}
         <View className="mt-6 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
           <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Recommended songs</Text>
-          {recsLoading ? <Text className="mt-3 font-sans text-sm text-muted-brown">Loading recommendations…</Text> : null}
+          {recsLoading ? <Text className="mt-3 font-sans text-sm text-muted-light">Loading recommendations…</Text> : null}
           {!recsLoading && suggestions.length === 0 ? (
-            <Text className="mt-3 font-sans text-sm text-muted-brown">
+            <Text className="mt-3 font-sans text-sm text-muted-light">
               Complete more lessons to get personalized recommendations
             </Text>
           ) : (
@@ -277,7 +277,7 @@ export default function DiscoverScreen() {
                   className="rounded-lg border border-wood-600/45 bg-wood-900/40 px-3 py-2.5"
                 >
                   <Text className="font-sans-medium text-sm text-cream">{suggestion.song_title || 'Unknown Song'}</Text>
-                  <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                  <Text className="mt-0.5 font-sans text-xs text-muted-light">
                     {suggestion.artist || 'Unknown Artist'}
                   </Text>
                   {suggestion.reasonLabel && (
@@ -313,12 +313,12 @@ export default function DiscoverScreen() {
 
         <View className="mt-6 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
           <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Your Library</Text>
-          <Text className="mt-1 font-sans text-xs text-muted-brown">
+          <Text className="mt-1 font-sans text-xs text-muted-light">
             Select a song to view tabs and enable Spotify follow-along
           </Text>
-          {libraryLoading ? <Text className="mt-3 font-sans text-sm text-muted-brown">Loading songs…</Text> : null}
+          {libraryLoading ? <Text className="mt-3 font-sans text-sm text-muted-light">Loading songs…</Text> : null}
           {!libraryLoading && libraryLessons.length === 0 ? (
-            <Text className="mt-3 font-sans text-sm text-muted-brown">
+            <Text className="mt-3 font-sans text-sm text-muted-light">
               No analyzed songs yet. Add one first from Home or Library.
             </Text>
           ) : (
@@ -337,7 +337,7 @@ export default function DiscoverScreen() {
                     <Text className={`font-sans-medium text-sm ${selected ? 'text-amber-light' : 'text-cream'}`}>
                       {row.song_title?.trim() || 'Untitled song'}
                     </Text>
-                    <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                    <Text className="mt-0.5 font-sans text-xs text-muted-light">
                       {row.artist?.trim() || 'Unknown artist'}
                     </Text>
                   </AnimatedPressable>
@@ -352,7 +352,7 @@ export default function DiscoverScreen() {
           <View className="flex-row items-center justify-between gap-3">
             <View className="flex-1 pr-2">
               <Text className="font-sans-medium text-sm text-cream">Follow along</Text>
-              <Text className="mt-1 font-sans text-xs text-muted-brown">
+              <Text className="mt-1 font-sans text-xs text-muted-light">
                 Sync tab cursor to Spotify playback position.
               </Text>
             </View>
@@ -365,7 +365,7 @@ export default function DiscoverScreen() {
           >
             <Text className="text-center font-sans-medium text-sm text-wood-900">Listen on Spotify</Text>
           </AnimatedPressable>
-          <Text className="mt-2 font-sans text-[11px] text-muted-brown">
+          <Text className="mt-2 font-sans text-[11px] text-muted-light">
             This opens Spotify search for the selected song. Harmoniq never starts/stops Spotify playback.
           </Text>
           {playbackState ? (

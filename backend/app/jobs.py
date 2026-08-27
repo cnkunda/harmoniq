@@ -455,6 +455,23 @@ def _process_analyze_job(
                 stem_classification.guitar_stem_usable,
                 stem_classification.analysis_audio_role,
             )
+        # Commit 110: build stem routing hints (RMS-based melodic selection, bass+other for chords)
+        stem_routing_hints: dict[str, object] | None = None
+        try:
+            from app.demucs_engine import build_stem_routing_hints
+
+            stem_routing_hints = build_stem_routing_hints(stem_abs_paths)
+            logger.info(
+                "stem_routing_hints built job_id=%s selected=%s chord_mix=%s flags=%s",
+                job_id,
+                stem_routing_hints.get("selected_melodic_stem"),
+                stem_routing_hints.get("chord_mix_stems"),
+                ",".join(stem_classification.flags) if stem_classification.flags else "",
+            )
+        except Exception as exc:
+            logger.warning("stem_routing_hints failed job_id=%s error=%s; using fallback paths", job_id, exc)
+            stem_routing_hints = None
+
         guitar_rel_path = stems.get("guitar")
         vocals_rel_path = stems.get("vocals")
         if not guitar_rel_path:
@@ -502,6 +519,8 @@ def _process_analyze_job(
                 mix_wav_path=wav_path_obj,
                 piano_stem_path=piano_stem_path,
                 progress_callback=_analysis_progress_callback,
+                stem_routing_hints=stem_routing_hints,
+                job_dir=job_dir,
             )
             analyze_elapsed = time.time() - analyze_start
             logger.info("librosa analysis completed in %.2fs job_id=%s", analyze_elapsed, job_id)

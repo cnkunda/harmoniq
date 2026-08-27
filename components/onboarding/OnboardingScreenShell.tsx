@@ -44,13 +44,13 @@ export function OnboardingScreenShell({
           accessibilityRole="button"
           accessibilityLabel="Back"
         >
-          <Text className="font-sans text-sm text-muted-brown">Back</Text>
+          <Text className="font-sans text-sm text-muted-light">Back</Text>
         </AnimatedPressable>
       ) : (
         <View className="w-9" />
       )}
       {showProgress ? (
-        <View className="w-36">
+        <View className="w-44">
           <OnboardingProgress totalSteps={totalSteps} currentStep={currentStep} />
         </View>
       ) : (
@@ -60,7 +60,7 @@ export function OnboardingScreenShell({
   ) : null
 
   const column = (
-    <View className="w-full max-w-md self-center px-6">
+    <View className="w-full max-w-md self-center px-6 md:max-w-2xl lg:max-w-3xl">
       {children}
     </View>
   )
@@ -80,14 +80,14 @@ export function OnboardingScreenShell({
             }}
           >
             {column}
-            {footer ? <View className="mt-8 w-full max-w-md self-center px-6">{footer}</View> : null}
+            {footer ? <View className="mt-8 w-full max-w-md self-center px-6 md:max-w-2xl lg:max-w-3xl">{footer}</View> : null}
           </ScrollView>
         ) : (
           <>
             <View className="flex-1 justify-center">{column}</View>
             {footer ? (
               <View className="pb-4">
-                <View className="w-full max-w-md self-center px-6">{footer}</View>
+                <View className="w-full max-w-md self-center px-6 md:max-w-2xl lg:max-w-3xl">{footer}</View>
               </View>
             ) : null}
           </>

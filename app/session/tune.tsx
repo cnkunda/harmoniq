@@ -183,9 +183,9 @@ export default function TuneScreen() {
             />
           </View>
           <View className="mt-1.5 flex-row justify-between px-0.5">
-            <Text className="font-mono text-[10px] text-muted-brown">−50</Text>
-            <Text className="font-mono text-[10px] text-muted-brown">0</Text>
-            <Text className="font-mono text-[10px] text-muted-brown">+50</Text>
+            <Text className="font-mono text-[10px] text-muted-light">−50</Text>
+            <Text className="font-mono text-[10px] text-muted-light">0</Text>
+            <Text className="font-mono text-[10px] text-muted-light">+50</Text>
           </View>
           <Text className="mt-2 text-center font-mono text-sm text-wood-800">
             {cents != null ? `${cents > 0 ? '+' : ''}${cents.toFixed(0)} cents` : '—'}
@@ -193,7 +193,7 @@ export default function TuneScreen() {
         </View>
       </View>
 
-      <Text className="mt-6 text-center font-sans text-sm leading-relaxed text-muted-brown">
+      <Text className="mt-6 text-center font-sans text-sm leading-relaxed text-muted-light">
         {noteName ? `Heard: ${noteName}. ` : ''}Play the open low E string.
       </Text>
       {tunerOk ? (
@@ -220,7 +220,7 @@ export default function TuneScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
               >
-                <Text className={`text-sm ${selected ? 'font-sans-medium text-wood-900' : 'font-sans text-muted-brown'}`}>
+                <Text className={`text-sm ${selected ? 'font-sans-medium text-wood-900' : 'font-sans text-muted-light'}`}>
                   {micProfileLabel(id)}
                 </Text>
               </AnimatedPressable>
@@ -236,13 +236,13 @@ export default function TuneScreen() {
             className={`rounded-full px-2.5 py-1 ${gateCalibrated ? 'bg-success/20' : 'bg-wood-600/15'}`}
           >
             <Text
-              className={`font-sans-medium text-[11px] uppercase tracking-wide ${gateCalibrated ? 'text-success' : 'text-muted-brown'}`}
+              className={`font-sans-medium text-[11px] uppercase tracking-wide ${gateCalibrated ? 'text-success' : 'text-muted-light'}`}
             >
               {gateCalibrated ? 'Calibrated' : 'Not calibrated'}
             </Text>
           </View>
         </View>
-        <Text className="mt-4 font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown">
+        <Text className="mt-4 font-sans-medium text-[10px] uppercase tracking-wider text-muted-light">
           RMS gate threshold
         </Text>
         <Text className="mt-1 font-mono text-base text-wood-900">{gateDisplay}</Text>
@@ -282,7 +282,7 @@ export default function TuneScreen() {
           </Text>
         </AnimatedPressable>
         <AnimatedPressable haptic="light" onPress={() => void forwardToListen()} accessibilityRole="button">
-          <Text className="text-center font-sans text-sm text-muted-brown underline">Skip for now</Text>
+          <Text className="text-center font-sans text-sm text-muted-light underline">Skip for now</Text>
         </AnimatedPressable>
       </View>
     </View>
@@ -309,7 +309,7 @@ export default function TuneScreen() {
 
       {typeof __DEV__ !== 'undefined' && __DEV__ ? (
         <View className="mt-6 rounded-lg border border-dashed border-wood-600/35 bg-cream-dark/40 px-3 py-2">
-          <Text className="font-mono text-xs text-muted-brown">
+          <Text className="font-mono text-xs text-muted-light">
             noiseGateThresholdRms ({activeMicProfile}): {gateDisplay} · live RMS: {rms.toFixed(4)}{' '}
             {Platform.OS === 'web' ? '(web)' : '(native)'}
           </Text>

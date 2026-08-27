@@ -25,23 +25,23 @@ export function DiscoveryCard({ suggestion, onAnalyze }: DiscoveryCardProps) {
           <Music color={colors.amber.accent} size={20} strokeWidth={1.5} />
         </View>
         <View className="flex-1">
-          <Text className="font-sans text-[16px] font-semibold text-cream/90">{suggestion.song_title || 'Unknown Song'}</Text>
-          <Text className="font-sans text-[14px] text-cream/60">{suggestion.artist || 'Unknown Artist'}</Text>
+          <Text className="font-sans text-[16px] font-semibold text-cream">{suggestion.song_title || 'Unknown Song'}</Text>
+          <Text className="font-sans text-[14px] text-cream/85">{suggestion.artist || 'Unknown Artist'}</Text>
           
           <View className="mt-2 flex-row flex-wrap gap-2">
             {suggestion.key && (
-              <View className="rounded-full bg-wood-700/50 px-2 py-0.5">
-                <Text className="font-sans text-[11px] text-cream/70">{suggestion.key}</Text>
+              <View className="rounded-full bg-wood-700 px-2 py-0.5">
+                <Text className="font-sans text-[11px] font-medium text-cream/90">{suggestion.key}</Text>
               </View>
             )}
             {suggestion.style_label && (
-              <View className="rounded-full bg-wood-700/50 px-2 py-0.5">
-                <Text className="font-sans text-[11px] text-cream/70">{suggestion.style_label}</Text>
+              <View className="rounded-full bg-wood-700 px-2 py-0.5">
+                <Text className="font-sans text-[11px] font-medium text-cream/90">{suggestion.style_label}</Text>
               </View>
             )}
             {suggestion.tempo && (
-              <View className="rounded-full bg-wood-700/50 px-2 py-0.5">
-                <Text className="font-sans text-[11px] text-cream/70">{Math.round(suggestion.tempo)} BPM</Text>
+              <View className="rounded-full bg-wood-700 px-2 py-0.5">
+                <Text className="font-sans text-[11px] font-medium text-cream/90">{Math.round(suggestion.tempo)} BPM</Text>
               </View>
             )}
           </View>
@@ -51,10 +51,10 @@ export function DiscoveryCard({ suggestion, onAnalyze }: DiscoveryCardProps) {
           </View>
           
           <View className="mt-3 flex-row items-center justify-between">
-            <Text className="font-sans text-[12px] text-amber-accent/80">Focus: {suggestion.techniqueFocus}</Text>
+            <Text className="font-sans text-[12px] font-medium text-amber-light">Focus: {suggestion.techniqueFocus}</Text>
             <View className="flex-row items-center gap-1">
-              <Text className="font-sans text-[12px] text-cream/60">Analyze</Text>
-              <ArrowRight color={colors.muted.brown} size={14} strokeWidth={2} />
+              <Text className="font-sans text-[12px] font-medium text-cream/90">Analyze</Text>
+              <ArrowRight color={colors.muted.light} size={14} strokeWidth={2} />
             </View>
           </View>
         </View>

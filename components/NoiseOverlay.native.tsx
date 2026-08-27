@@ -13,7 +13,7 @@ export function NoiseOverlay() {
         source={noisePng}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        style={[StyleSheet.absoluteFillObject, { opacity: 0.03 }]}
+        style={[StyleSheet.absoluteFillObject, { opacity: 0.055 }]}
         resizeMode="repeat"
       />
     </View>

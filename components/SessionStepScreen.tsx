@@ -37,9 +37,10 @@ export function SessionStepScreen({
   backButtonClassName,
   nextButtonClassName,
 }: SessionStepScreenProps) {
-  const footerRow = footerContainerClassName ?? 'flex-row gap-3 border-t border-wood-600/25 bg-ivory px-6 pb-8 pt-4'
-  const backClass = backButtonClassName ?? 'flex-1 rounded-lg border border-wood-600/55 bg-cream-dark/60 py-3'
-  const nextClass = nextButtonClassName ?? 'flex-1 rounded-lg bg-amber-accent/90 py-3'
+  const footerRow =
+    footerContainerClassName ?? 'flex-row gap-3 border-t border-wood-600/30 bg-wood-900 px-6 pb-8 pt-4 shadow-soft-wood'
+  const backClass = backButtonClassName ?? 'flex-1 rounded-xl border border-wood-600 bg-wood-800 py-3.5'
+  const nextClass = nextButtonClassName ?? 'flex-1 rounded-xl bg-amber-accent py-3.5 shadow-soft-wood'
 
   return (
     <View className="flex-1">
@@ -57,9 +58,9 @@ export function SessionStepScreen({
       >
         {!hideTitle ? (
           <>
-            <Text className="text-3xl font-serif text-wood-900">{title}</Text>
+            <Text className="font-serif text-2xl text-wood-900">{title}</Text>
             {subtitle ? (
-              <Text className="mt-2 font-sans text-sm leading-relaxed text-muted-brown">{subtitle}</Text>
+              <Text className="mt-1.5 font-sans text-sm leading-6 text-wood-600">{subtitle}</Text>
             ) : null}
           </>
         ) : null}
@@ -72,23 +73,23 @@ export function SessionStepScreen({
           {showBack ? (
             <Pressable
               onPress={onBack}
-              className={backClass}
+              className={`${backClass} items-center justify-center`}
               accessibilityRole="button"
             >
-              <Text className="text-center font-sans-medium text-wood-900">{backLabel}</Text>
+              <Text className="text-center font-sans-medium text-cream">{backLabel}</Text>
             </Pressable>
           ) : (
             <View className="flex-1" />
           )}
-           {showNext ? (
-             <Pressable
-               onPress={onNext}
-               className={`${nextClass} flex-nowrap items-center`}
-               accessibilityRole="button"
-             >
-                <Text className="text-center font-sans-medium text-wood-900 whitespace-nowrap">{nextLabel}</Text>
-             </Pressable>
-           ) : null}
+            {showNext ? (
+              <Pressable
+                onPress={onNext}
+                className={`${nextClass} flex-nowrap items-center justify-center`}
+                accessibilityRole="button"
+              >
+                 <Text className="text-center font-sans-medium text-wood-900 whitespace-nowrap">{nextLabel}</Text>
+              </Pressable>
+            ) : null}
         </View>
       )}
     </View>

@@ -943,6 +943,32 @@ Claude-powered post-jam analysis and vocabulary mapping.
 
 ---
 
+## Phase 2: Stem Routing & Audio Pipeline ✅ DONE
+
+### Commit 110: Stem Routing Fix — Wire Bass+Other for Chords, Dynamic Melodic Stem for Solo ✅ DONE
+
+**Goal:** Wire `build_stem_routing_hints()` output into the main analysis pipeline so chords are inferred from the `bass + other` stem mix (cleaner harmonic signal) and solo is inferred from a dynamically selected melodic stem, not always the guitar stem.
+
+**Scope:**
+- New module `app/audio_mix.py`: `mix_stems()` sums 2+ stem WAVs, truncate-to-shortest, peak-normalize to 0.89
+- `analyze_audio.py`: `_resolve_chord_mix_path()` builds `bass+other` mix via `mix_stems`, falls back to `full_mix`/`guitar`; `_resolve_melodic_stem_path()` chains `selected → guitar → vocals`, influenced by `guitar_near_silent`/`guitar_buried_in_mix` flags
+- `jobs.py`: calls `build_stem_routing_hints(stem_abs_paths)` and passes hints + `job_dir` into `build_lesson_json_from_librosa()`
+- `schemas.py`: `StemRoutingHints` extended with `chord_mix_path`, `melodic_stem_path`, `chord_source`, `solo_source`
+- Routing telemetry logged per job
+
+**Acceptance Criteria:**
+- [x] `mix_stems()` utility correctly sums 2+ stem WAVs into a single normalized WAV
+- [x] Chord inference uses `bass + other` stem mix (not full mix) when both stems have non-zero RMS
+- [x] Solo inference uses dynamically selected melodic stem (falls back: selected → guitar → vocals)
+- [x] Stem quality flags (`guitar_near_silent`, `guitar_buried_in_mix`) influence routing decisions
+- [x] Full hardcoded path fallback preserved when hints are unavailable
+- [x] Routing decisions logged per job for observability
+- [x] Integration test confirms multi-source chord input path
+
+**Implementation:** `backend/app/audio_mix.py` (new), `backend/app/analyze_audio.py`, `backend/app/jobs.py`, `backend/app/schemas.py`, `backend/tests/test_stem_routing.py` (4 tests).
+
+---
+
 ## MLOps: Production Infrastructure (Complete)
 
 ### Commit 136: Redis Job Queue + Celery Workers + Push-Based Job Updates ✅ DONE

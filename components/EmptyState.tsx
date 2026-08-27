@@ -19,7 +19,7 @@ export function EmptyState({ Icon, heading, subtext, ctaLabel, onCta }: EmptySta
         <Icon color={colors.amber.accent} size={36} strokeWidth={1.5} />
       </View>
       <Text className="text-center font-serif text-xl text-cream">{heading}</Text>
-      <Text className="text-center font-sans leading-relaxed text-muted-brown">{subtext}</Text>
+      <Text className="text-center font-sans leading-relaxed text-muted-light">{subtext}</Text>
       {ctaLabel && onCta && (
         <AnimatedPressable
           onPress={onCta}

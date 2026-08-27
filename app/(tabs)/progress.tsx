@@ -4,11 +4,14 @@ import { ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { CoachNote } from '@/components/CoachNote'
+import { EmptyState } from '@/components/EmptyState'
 import { LearnerContextCard } from '@/components/LearnerContextCard'
 import { RiffDNA } from '@/components/RiffDNA'
 import { SkillGraph } from '@/components/SkillGraph'
 import { WoodGradient } from '@/components/WoodGradient'
 import { summaryFromPlanCompletionRow } from '@/src/home/planCompletionSummary'
+import { BarChart3 } from 'lucide-react-native'
+import { useRouter } from 'expo-router'
 import { DEFAULT_SKILL_NODES } from '@/src/db/schema'
 import { listJamSnapshots, listPracticePlanCompletions, listSessionsJournal } from '@/src/db/client'
 import { mergeProgressTimeline, type ProgressTimelineItem } from '@/src/progress/mergeProgressTimeline'
@@ -35,6 +38,7 @@ function focusLabel(sectionLabel: string | null): string {
 }
 
 export default function ProgressScreen() {
+  const router = useRouter()
   const loadSkills = useSkillStore((s) => s.loadFromDb)
   const nodes = useSkillStore((s) => s.nodes)
   const dna = useDnaStore((s) => s.dna)
@@ -82,8 +86,8 @@ export default function ProgressScreen() {
           <View className="w-full max-w-4xl self-center px-6 pb-8 pt-4">
             <View className="mb-8 mt-4">
               <Text className="mb-2 font-serif text-3xl text-cream">Your Progress</Text>
-              <Text className="font-sans text-muted-brown">A slow-moving map of your musical feel.</Text>
-              <Text className="mt-2 font-sans text-xs text-muted-brown">
+              <Text className="font-sans text-sm leading-6 text-cream/85">A slow-moving map of your musical feel.</Text>
+              <Text className="mt-2 font-sans text-xs leading-5 text-cream/70">
                 Node movement blends accuracy, timing stability, and capture confidence so low-signal takes do not cause jumps.
               </Text>
             </View>
@@ -94,12 +98,12 @@ export default function ProgressScreen() {
 
             <View className="mb-12 flex-col gap-8 md:flex-row md:items-stretch">
               <View className="md:flex-1">
-                <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Skill Map</Text>
+                <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-light">Skill Map</Text>
                 <SkillGraph nodes={displayNodes} />
               </View>
 
               <View className="md:flex-1 md:justify-center">
-                <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">
+                <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-light">
                   Coach Summary
                 </Text>
                 <CoachNote text={coachSummary} className="h-full" />
@@ -107,17 +111,23 @@ export default function ProgressScreen() {
             </View>
 
             <View className="mb-12">
-              <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Your DNA</Text>
+              <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-light">Your DNA</Text>
               <RiffDNA dna={dna} />
             </View>
 
             <View>
-              <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Session History</Text>
-              <Text className="mb-3 font-sans text-xs text-muted-brown">
+              <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-light">Session History</Text>
+              <Text className="mb-3 font-sans text-xs text-muted-light">
                 Review scores, saved jams, and completed practice plans in one timeline.
               </Text>
               {timeline.length === 0 ? (
-                <Text className="font-sans text-sm text-muted-brown">No history yet.</Text>
+                <EmptyState
+                  Icon={BarChart3}
+                  heading="No history yet"
+                  subtext="Complete a session through Review or save a jam to see your timeline here."
+                  ctaLabel="Start a session"
+                  onCta={() => router.push('/(tabs)')}
+                />
               ) : (
                 <View className="gap-4">
                   {timeline.map((item) => {
@@ -144,11 +154,11 @@ export default function ProgressScreen() {
                               </Text>
                             </View>
                             <View className="items-end">
-                              <Text className="font-sans text-sm text-muted-brown">
+                              <Text className="font-sans text-sm text-muted-light">
                                 {formatRelativeSessionDate(session.date)}
                               </Text>
                               {durationMin != null ? (
-                                <Text className="font-sans text-xs text-muted-brown">{durationMin} min</Text>
+                                <Text className="font-sans text-xs text-muted-light">{durationMin} min</Text>
                               ) : null}
                             </View>
                           </View>
@@ -194,7 +204,7 @@ export default function ProgressScreen() {
                                 {jam.inferred_scale_label?.trim() ? ` · ${jam.inferred_scale_label.trim()}` : ''}
                               </Text>
                             </View>
-                            <Text className="font-sans text-sm text-muted-brown">{formatRelativeSessionDate(jam.date)}</Text>
+                            <Text className="font-sans text-sm text-muted-light">{formatRelativeSessionDate(jam.date)}</Text>
                           </View>
                           {summaryBundle ? (
                             <View className="border-t border-wood-700/50 pt-3">
@@ -209,7 +219,7 @@ export default function ProgressScreen() {
                                 </Text>
                               ) : null}
                               {summaryBundle.coach_focus_areas.length > 0 ? (
-                                <Text className="mt-1 font-sans text-xs text-muted-brown">
+                                <Text className="mt-1 font-sans text-xs text-muted-light">
                                   Focus areas: {summaryBundle.coach_focus_areas.join(', ')}
                                 </Text>
                               ) : null}
@@ -219,11 +229,11 @@ export default function ProgressScreen() {
                                 </Text>
                               ) : null}
                               {summaryBundle.vocabulary_patterns.length > 0 ? (
-                                <Text className="mt-1.5 font-sans text-[11px] text-muted-brown/80">
+                                <Text className="mt-1.5 font-sans text-[11px] text-muted-light/80">
                                   Patterns: {summaryBundle.vocabulary_patterns.map((p) => p.description).join('; ')}
                                 </Text>
                               ) : null}
-                              <Text className="mt-1 font-sans text-[11px] text-muted-brown/60">
+                              <Text className="mt-1 font-sans text-[11px] text-muted-light/60">
                                 {summaryBundle.phrase_count} phrases · {summaryBundle.total_notes} notes · diversity{' '}
                                 {(summaryBundle.vocabulary_diversity * 100).toFixed(0)}%
                               </Text>
@@ -257,7 +267,7 @@ export default function ProgressScreen() {
                             <Text className="font-serif text-lg text-cream">Practice plan completed</Text>
                             <Text className="font-sans text-sm text-amber-light/80">{subtitle}</Text>
                           </View>
-                          <Text className="font-sans text-sm text-muted-brown">
+                          <Text className="font-sans text-sm text-muted-light">
                             {formatRelativeSessionDate(row.completed_at)}
                           </Text>
                         </View>

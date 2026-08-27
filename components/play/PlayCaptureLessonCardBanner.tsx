@@ -45,7 +45,7 @@ export function PlayCaptureLessonCardBanner({
         >
           <Text
             className={`font-mono text-[10px] font-medium ${
-              playing && ready && !loading ? 'text-wood-900' : 'text-muted-brown'
+              playing && ready && !loading ? 'text-wood-900' : 'text-muted-light'
             }`}
           >
             {backing}
@@ -56,7 +56,7 @@ export function PlayCaptureLessonCardBanner({
       <View className="my-2.5 h-px bg-wood-600/15" />
 
       <View className="flex-row items-center gap-2.5">
-        <Mic size={18} color={recording ? colors.danger : colors.muted.brown} strokeWidth={1.75} />
+        <Mic size={18} color={recording ? colors.danger : colors.muted.light} strokeWidth={1.75} />
         <Text className="min-w-0 flex-1 font-sans-medium text-xs text-wood-900">Your guitar (mic)</Text>
         <View className="flex-row items-center gap-1.5">
           {recording ? (
@@ -68,7 +68,7 @@ export function PlayCaptureLessonCardBanner({
             }`}
           >
             <Text
-              className={`font-mono text-[10px] font-medium ${recording ? 'text-danger' : 'text-muted-brown'}`}
+              className={`font-mono text-[10px] font-medium ${recording ? 'text-danger' : 'text-muted-light'}`}
             >
               {recording ? 'Recording' : 'Idle'}
             </Text>

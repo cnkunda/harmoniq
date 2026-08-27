@@ -61,12 +61,12 @@ export default function AnalyzeDebugScreen() {
         contentContainerStyle={{ paddingBottom: 32 }}
       >
         <Text className="text-2xl font-serif text-amber-accent">Analyze (debug)</Text>
-        <Text className="mt-1 font-sans text-xs text-muted-brown">
+        <Text className="mt-1 font-sans text-xs text-muted-light">
           Backend: {API_BASE_URL}
         </Text>
         <Text className="mt-2 font-sans text-sm text-cream">
           Paste a YouTube URL or upload audio. Uses commit 18 lesson store +{' '}
-          <Text className="font-mono text-xs text-muted-brown">src/api/analyze.ts</Text>.
+          <Text className="font-mono text-xs text-muted-light">src/api/analyze.ts</Text>.
         </Text>
 
         {error ? (
@@ -92,7 +92,7 @@ export default function AnalyzeDebugScreen() {
             value={url}
             onChangeText={setUrl}
             placeholder="https://www.youtube.com/watch?v=…"
-            placeholderTextColor={colors.muted.brown}
+            placeholderTextColor={colors.muted.light}
             autoCapitalize="none"
             autoCorrect={false}
             editable={!isLoading}
@@ -137,7 +137,7 @@ export default function AnalyzeDebugScreen() {
             <LoadingSkeleton width="70%" height={16} borderRadius={8} />
             <LoadingSkeleton width="100%" height={72} borderRadius={12} />
             {jobId ? (
-              <Text className="font-mono text-xs text-muted-brown">job: {jobId}</Text>
+              <Text className="font-mono text-xs text-muted-light">job: {jobId}</Text>
             ) : null}
           </View>
         ) : null}

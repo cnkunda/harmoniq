@@ -144,7 +144,7 @@ export function OrientFretboardPlayer({
 
       {/* Timeline seek bar */}
       <View className="flex-row items-center gap-3 px-4 pb-1 pt-2">
-        <Text className="w-12 font-mono text-[11px] text-muted-brown">{timeLabel}</Text>
+        <Text className="w-12 font-mono text-[11px] text-muted-light">{timeLabel}</Text>
         <View className="flex-1">
           <Slider
             minimumValue={0}
@@ -156,7 +156,7 @@ export function OrientFretboardPlayer({
             thumbTintColor={colors.amber.accent}
           />
         </View>
-        <Text className="w-12 text-right font-mono text-[11px] text-muted-brown">{totalLabel}</Text>
+        <Text className="w-12 text-right font-mono text-[11px] text-muted-light">{totalLabel}</Text>
       </View>
 
       {/* Annotation */}

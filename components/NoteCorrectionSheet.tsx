@@ -100,7 +100,7 @@ export function NoteCorrectionSheet({
         </Text>
         <View className="flex-row gap-2">
           <AnimatedPressable onPress={onCancel} haptic="light" className="rounded-md px-2 py-1">
-            <Text className="text-xs font-sans" style={{ color: colors.muted.brown }}>
+            <Text className="text-xs font-sans" style={{ color: colors.muted.light }}>
               Cancel
             </Text>
           </AnimatedPressable>
@@ -115,7 +115,7 @@ export function NoteCorrectionSheet({
       <View className="gap-2">
         {/* Pitch */}
         <View className="flex-row items-center gap-2">
-          <Text className="text-xs font-sans w-16" style={{ color: colors.muted.brown }}>
+          <Text className="text-xs font-sans w-16" style={{ color: colors.muted.light }}>
             Pitch
           </Text>
           <TextInput
@@ -128,14 +128,14 @@ export function NoteCorrectionSheet({
               backgroundColor: colors.wood[700],
             }}
           />
-          <Text className="text-xs font-sans" style={{ color: colors.muted.brown }}>
+          <Text className="text-xs font-sans" style={{ color: colors.muted.light }}>
             {midiToNoteName(parseInt(pitch, 10) || originalNote.pitch)}
           </Text>
         </View>
 
         {/* Duration */}
         <View className="flex-row items-center gap-2">
-          <Text className="text-xs font-sans w-16" style={{ color: colors.muted.brown }}>
+          <Text className="text-xs font-sans w-16" style={{ color: colors.muted.light }}>
             Duration
           </Text>
           <TextInput
@@ -148,12 +148,12 @@ export function NoteCorrectionSheet({
               backgroundColor: colors.wood[700],
             }}
           />
-          <Text className="text-xs font-sans" style={{ color: colors.muted.brown }}>sec</Text>
+          <Text className="text-xs font-sans" style={{ color: colors.muted.light }}>sec</Text>
         </View>
 
         {/* Velocity */}
         <View className="flex-row items-center gap-2">
-          <Text className="text-xs font-sans w-16" style={{ color: colors.muted.brown }}>
+          <Text className="text-xs font-sans w-16" style={{ color: colors.muted.light }}>
             Velocity
           </Text>
           <TextInput
@@ -170,7 +170,7 @@ export function NoteCorrectionSheet({
 
         {/* Guitar string + fret */}
         <View className="flex-row items-center gap-2">
-          <Text className="text-xs font-sans w-16" style={{ color: colors.muted.brown }}>
+          <Text className="text-xs font-sans w-16" style={{ color: colors.muted.light }}>
             String
           </Text>
           <TextInput
@@ -178,14 +178,14 @@ export function NoteCorrectionSheet({
             onChangeText={setGuitarString}
             keyboardType="numeric"
             placeholder="1-6"
-            placeholderTextColor={colors.muted.brown}
+            placeholderTextColor={colors.muted.light}
             className="rounded-md px-2 py-1 font-mono text-sm flex-1"
             style={{
               color: colors.cream,
               backgroundColor: colors.wood[700],
             }}
           />
-          <Text className="text-xs font-sans w-16" style={{ color: colors.muted.brown }}>
+          <Text className="text-xs font-sans w-16" style={{ color: colors.muted.light }}>
             Fret
           </Text>
           <TextInput
@@ -193,7 +193,7 @@ export function NoteCorrectionSheet({
             onChangeText={setFret}
             keyboardType="numeric"
             placeholder="0+"
-            placeholderTextColor={colors.muted.brown}
+            placeholderTextColor={colors.muted.light}
             className="rounded-md px-2 py-1 font-mono text-sm flex-1"
             style={{
               color: colors.cream,

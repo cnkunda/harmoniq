@@ -22,7 +22,7 @@ export function SettingsSegmented({
     <View className="py-2">
       <Text className="font-sans-medium text-sm text-cream">{label}</Text>
       {description && (
-        <Text className="mt-1 font-sans text-[11px] text-muted-brown">{description}</Text>
+        <Text className="mt-1 font-sans text-[11px] text-muted-light">{description}</Text>
       )}
       <View className="mt-3 flex-row gap-2">
         {options.map((option) => {

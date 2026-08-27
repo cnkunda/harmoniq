@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { GhostButton, PrimaryButton, SecondaryButton } from '@/components/Button'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 
 export default function OnboardingMicScreen() {
@@ -57,7 +58,7 @@ export default function OnboardingMicScreen() {
       showBack
       onBack={() => router.back()}
       footer={
-        <Text className="text-center font-sans text-xs leading-5 text-muted-brown">
+        <Text className="text-center font-sans text-xs leading-5 text-muted-light">
           If you deny permission, you won&apos;t be able to use the core practice features until the microphone is
           enabled in settings.
         </Text>
@@ -65,7 +66,7 @@ export default function OnboardingMicScreen() {
     >
       <View className="items-center">
         <Text className="text-center font-serif text-2xl text-cream">Microphone</Text>
-        <Text className="mt-3 text-center font-sans text-sm leading-6 text-muted-brown">
+        <Text className="mt-3 text-center font-sans text-sm leading-6 text-muted-light">
           Harmoniq listens only to score your placement phrases. Nothing is uploaded until you run analysis on a song
           later.
         </Text>
@@ -73,7 +74,7 @@ export default function OnboardingMicScreen() {
         {status === 'denied' ? (
           <View className="mt-6 w-full rounded-lg border border-danger/35 bg-danger/10 px-3 py-3">
             <Text className="text-center font-sans text-sm text-cream">Microphone access is off for this app.</Text>
-            <Text className="mt-2 text-center font-sans text-xs text-muted-brown">
+            <Text className="mt-2 text-center font-sans text-xs text-muted-light">
               Enable the mic in system settings, then tap Refresh below.
             </Text>
             <AnimatedPressable haptic="light"
@@ -88,35 +89,37 @@ export default function OnboardingMicScreen() {
         ) : null}
 
         <View className="mt-8 w-full gap-3">
-          <AnimatedPressable haptic="light"
-            onPress={() => void request()}
-            disabled={busy || status === 'granted'}
-            className="rounded-lg bg-amber-accent px-4 py-3 disabled:opacity-40"
-            accessibilityRole="button"
-          >
-            <Text className="text-center font-sans-medium text-wood-900">
-              {status === 'granted' ? 'Microphone ready' : busy ? 'Requesting…' : 'Allow microphone'}
-            </Text>
-          </AnimatedPressable>
+          {status === 'granted' ? (
+            <View className="flex-row items-center justify-center gap-2 rounded-xl border border-success/30 bg-success/15 px-4 py-3">
+              <Text className="text-center font-sans-medium text-success">✓ Microphone ready</Text>
+            </View>
+          ) : (
+            <PrimaryButton
+              label={busy ? 'Requesting…' : 'Allow microphone'}
+              onPress={() => void request()}
+              loading={busy}
+              disabled={busy}
+              fullWidth
+              accessibilityLabel="Allow microphone"
+            />
+          )}
           {Platform.OS !== 'web' ? (
-            <AnimatedPressable haptic="light"
+            <GhostButton
+              label="Refresh status"
               onPress={() => void refresh()}
-              className="rounded-lg border border-wood-600/50 px-4 py-3"
-              accessibilityRole="button"
-            >
-              <Text className="text-center font-sans-medium text-cream">Refresh status</Text>
-            </AnimatedPressable>
+              fullWidth
+              haptic="light"
+            />
           ) : null}
         </View>
 
-        <AnimatedPressable haptic="light"
+        <PrimaryButton
+          label="Continue → 3 phrases · ~1 min"
           onPress={() => router.push({ pathname: '/onboarding/phrase/[index]', params: { index: '0' } })}
           disabled={status !== 'granted'}
-          className="mt-10 w-full rounded-lg border border-amber-accent/60 bg-wood-800/80 px-4 py-3 disabled:opacity-35"
-          accessibilityRole="button"
-        >
-          <Text className="text-center font-sans-medium text-amber-light">Next: placement phrases</Text>
-        </AnimatedPressable>
+          fullWidth
+          className="mt-10"
+        />
       </View>
     </OnboardingScreenShell>
   )

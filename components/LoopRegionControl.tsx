@@ -37,7 +37,7 @@ export function LoopRegionControl({ barCount, value, onChange, disabled }: LoopR
   return (
     <View className="mt-4 rounded-xl border border-wood-600/40 bg-cream-dark/40 p-3">
       <Text className="font-sans-medium text-sm text-wood-900">Loop region</Text>
-      <Text className="mt-1 font-sans text-xs text-muted-brown">
+      <Text className="mt-1 font-sans text-xs text-muted-light">
         Handles snap to bar boundaries; playback loops exactly on bar timestamps.
       </Text>
 
@@ -73,7 +73,7 @@ export function LoopRegionControl({ barCount, value, onChange, disabled }: LoopR
         />
       </View>
 
-      <Text className="mt-2 font-mono text-[11px] text-muted-brown">
+      <Text className="mt-2 font-mono text-[11px] text-muted-light">
         Bars {clamped.startBarIndex + 1}–{clamped.endBarIndexExclusive} ({span} bar{span === 1 ? '' : 's'})
       </Text>
     </View>

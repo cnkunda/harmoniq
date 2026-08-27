@@ -20,6 +20,33 @@ Three-phase product roadmap for **risk first**, **vertical slices**, and **mobil
 
 ---
 
+## Mobile E2E Infrastructure
+
+### Commit 108: Mobile E2E Fix — Detox Android + iOS Wiring
+
+**Goal:** Make the mobile Detox suites actually run. `npm run test:mobile` launched the app but never connected: the prebuild-generated native projects lack all Detox wiring, so the instrumentation never starts (the app itself boots fine — proven by manual launch). Fix it durably (survives `expo prebuild`), verify Android end-to-end, and leave iOS a one-command macOS run.
+
+**Current State:** `detox test` times out at 180s waiting for the "ready" handshake. Root causes, all in the gitignored prebuild output (`android/`):
+- the androidTest APK has no Detox runner — `:detox` project, `testInstrumentationRunner`, and `androidTestImplementation(project(...))` are all absent from the generated Gradle files
+- the debug APK is non-bundled (no `debuggableVariants = []`), so launches handshake with a live Metro; without it the app dies at launch
+- the androidTest APK merge hits jniLibs/META-INF duplicates (fbjni, libc++_shared) unless packaging pickFirsts are applied at every module level
+- iOS: Detox 20 needs **no app-side wiring** (self-contained XCUITest runner via `-xctestrun`; framework + runner built into `~/Library/Detox` by npm postinstall on macOS); needs macOS + Xcode to run
+
+**Scope:**
+- `scripts/detox/patch-android.js` — idempotent patcher applied by `detox:build:android` after every prebuild: links `:detox` (settings.gradle), sets `testInstrumentationRunner` + JUnit4 androidTest deps (pinned to the `fullDebug` flavor), sets `debuggableVariants = []` (JS embedded in debug APK — no Metro at test time), re-applies the androidTest APK packaging merge fixes
+- Detox native suite extended to the full bundled corpus (4 files, parity with the web suite)
+- iOS: pods guard in `scripts/detox/build-ios.js`; macOS runbook (Metro required for the debug bundle — iOS has no bundled-debug equivalent)
+- AGENTS.md testing-quirks updated (AVD override, bundled debug APK, iOS runbook)
+
+**Acceptance Criteria:**
+- [ ] `npm run detox:build:android` succeeds from a clean prebuild — patch script reapplies the wiring automatically
+- [ ] Patch script is idempotent — repeated builds do not duplicate Gradle blocks
+- [ ] `npm run test:mobile` passes on the Android emulator **without Metro running** — smoke boot + all 4 corpus render tests green
+- [ ] iOS config audited against the generated project (scheme `Harmoniq`, app name/binaryPath match) and macOS runbook documented
+- [ ] iOS suite verified on macOS via `npm run detox:build:ios` + `npm run test:mobile:ios` (pending macOS hardware — this repo has no macOS runner)
+
+---
+
 ## Phase 2: Product Milestones
 
 ---
@@ -54,38 +81,7 @@ System for tracking user engagement during play-along sessions: duration, comple
 
 ---
 
-## Phase 2: Stem Routing & Audio Pipeline
-
-### Commit 110: Stem Routing Fix — Wire Bass+Other for Chords, Dynamic Melodic Stem for Solo
-
-**Goal:** Wire `build_stem_routing_hints()` output into the main analysis pipeline so chords are inferred from the `bass + other` stem mix (cleaner harmonic signal) and solo is inferred from a dynamically selected melodic stem, not always the guitar stem.
-
-**Current State:** `build_stem_routing_hints()` in `demucs_engine.py:105-139` computes correct routing hints (RMS-based melodic stem selection, bass+other for chords) but they are returned from `/transcription/prepare` as dead metadata. The main pipeline in `jobs.py` → `analyze_audio.py` ignores all hints: chords use the full mix, solo always uses the guitar stem. No audio mixing utility exists to combine stems.
-
-**Scope:**
-- Add audio mixing utility `mix_stems(stem_paths: list[Path], output_path: Path)` in a new module `app/audio_mix.py`:
-  - Load stem WAVs, sum waveforms, normalize to prevent clipping
-  - Handle stems of different lengths (truncate to shortest or pad with silence)
-  - Return output path for downstream inference
-- Refactor `analyze_audio.py` `build_lesson_json_from_librosa()` to accept `StemRoutingHints`:
-  - For chord inference: mix `bass` + `other` stems → pass mixed path to `infer_chords()`
-  - For solo inference: use `selected_melodic_stem` from hints (with fallback chain: selected → guitar → vocals)
-- Update `jobs.py` `_process_analyze_job()` to call `build_stem_routing_hints()` and pass hints into `build_lesson_json_from_librosa()`
-- Preserve the current hardcoded paths as fallback when hints are unavailable or all stems are silent
-- Add stem routing telemetry: log which stems were used for chord and solo per job
-- Add integration test: verify bass+other mix is used for chord inference, correct melodic stem for solo
-- Update `StemRoutingHints` schema to include the actual paths used (not just hints) after routing is resolved
-
-**Acceptance Criteria:**
-- [ ] `mix_stems()` utility correctly sums 2+ stem WAVs into a single normalized WAV
-- [ ] Chord inference uses `bass + other` stem mix (not full mix) when both stems have non-zero RMS
-- [ ] Solo inference uses dynamically selected melodic stem (falls back: selected → guitar → vocals)
-- [ ] Stem quality flags (`guitar_near_silent`, `guitar_buried_in_mix`) influence routing decisions
-- [ ] Full hardcoded path fallback preserved when hints are unavailable
-- [ ] Routing decisions logged per job for observability
-- [ ] Integration test confirms multi-source chord input path
-
----
+## Phase 2: Stem Routing & Audio Pipeline ✅ DONE
 
 ### Commit 111: Dual-Path Confidence-Weighted Stem Fusion (MT3 Paper Insight)
 

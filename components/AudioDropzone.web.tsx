@@ -37,9 +37,9 @@ export function AudioDropzone({
     input.click()
   }
 
-  const border = isDragging ? colors.amber.accent : colors.wood[600]
-  const bg = isDragging ? colors.amber.accent + '14' : colors.wood[800] + '73'
-  const fg = isDragging ? colors.amber.light : colors.muted.brown
+  const border = isDragging ? colors.amber.accent : colors.amber.accent + '55'
+  const bg = isDragging ? colors.amber.accent + '14' : colors.wood[800] + 'AA'
+  const fg = isDragging ? colors.amber.light : colors.cream
 
   return (
     <div

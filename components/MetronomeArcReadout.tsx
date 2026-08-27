@@ -247,7 +247,7 @@ function MetronomeArcReadoutInner({
           <Text className="font-mono text-2xl font-medium leading-none tabular-nums text-wood-900">
             {effectiveBpm}
           </Text>
-          <Text className="pb-0.5 font-sans text-sm text-muted-brown">BPM</Text>
+          <Text className="pb-0.5 font-sans text-sm text-muted-light">BPM</Text>
         </View>
       ) : null}
     </View>

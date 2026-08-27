@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { AudioDropzone } from '@/components/AudioDropzone'
+import { PrimaryButton, SecondaryButton } from '@/components/Button'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { toast } from '@/components/ToastConfig'
 import { WoodGradient } from '@/components/WoodGradient'
@@ -336,7 +337,7 @@ export default function AddSongScreen() {
               accessibilityLabel="Close add song"
               hitSlop={8}
             >
-              <X color={colors.muted.brown} size={22} strokeWidth={2} />
+              <X color={colors.muted.light} size={22} strokeWidth={2} />
             </AnimatedPressable>
             <Text
               className="px-12 text-center font-serif text-2xl text-cream"
@@ -344,12 +345,12 @@ export default function AddSongScreen() {
             >
               Add Song
             </Text>
-            <Text className="mt-4 max-w-lg self-center text-center font-sans text-sm leading-6 text-muted-brown">
+            <Text className="mt-4 max-w-lg self-center text-center font-sans text-sm leading-6 text-muted-light">
               {subtitle}
             </Text>
 
             <View className="mt-10 w-full rounded-2xl border border-wood-700/50 bg-wood-800/40 p-8 shadow-soft-wood">
-              <Text className="mb-4 text-center font-sans-medium text-[11px] uppercase tracking-[0.12em] text-muted-brown">
+              <Text className="mb-4 text-center font-sans-medium text-[11px] uppercase tracking-[0.12em] text-muted-light">
                 Import source
               </Text>
               <View className="flex-row flex-wrap items-end justify-center gap-3">
@@ -374,7 +375,7 @@ export default function AddSongScreen() {
                         className={`min-h-[44px] justify-center rounded-full px-5 ${selected ? 'bg-wood-700' : 'border border-wood-600/70 bg-wood-900/30'} ${pillsDisabled ? 'opacity-50' : ''}`}
                       >
                         <Text
-                          className={`text-center font-sans-medium text-sm ${selected ? 'text-amber-light' : 'text-muted-brown'}`}
+                          className={`text-center font-sans-medium text-sm ${selected ? 'text-amber-light' : 'text-muted-light'}`}
                         >
                           {opt.label}
                         </Text>
@@ -390,7 +391,7 @@ export default function AddSongScreen() {
                     <Text className="text-center font-sans-medium text-xs uppercase tracking-wide text-amber-light">
                       Audio file
                     </Text>
-                    <Text className="text-center font-sans text-xs leading-5 text-muted-brown">
+                    <Text className="text-center font-sans text-xs leading-5 text-muted-light">
                       Drag and drop or click to choose MP3, WAV, or M4A. Tap Analyze file when you&apos;re ready.
                     </Text>
                     <AudioDropzone
@@ -401,12 +402,13 @@ export default function AddSongScreen() {
                       }}
                     />
                     {pendingUploadFilename ? (
-                      <Text className="text-center font-sans text-sm leading-5 text-cream" numberOfLines={2}>
-                        <Text className="text-muted-brown">Selected </Text>
-                        <Text className="font-sans-medium text-cream">{pendingUploadFilename}</Text>
-                      </Text>
+                      <View className="flex-row items-center justify-center gap-2 rounded-lg border border-success/20 bg-success/10 px-3 py-2">
+                        <Text className="font-sans text-xs text-muted-light">Selected</Text>
+                        <Text className="font-sans-medium text-sm text-cream" numberOfLines={1}>{pendingUploadFilename}</Text>
+                      </View>
                     ) : null}
-                    <AnimatedPressable haptic="light"
+                    <PrimaryButton
+                      label="Analyze file"
                       onPress={() => {
                         if (!pendingUploadFile || uiState === 'analyzing') return
                         void runAnalyze({
@@ -415,12 +417,10 @@ export default function AddSongScreen() {
                         })
                       }}
                       disabled={!canAnalyzePendingFile}
-                      className="min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3 disabled:opacity-40"
-                      accessibilityRole="button"
+                      fullWidth
+                      size="lg"
                       accessibilityLabel="Analyze selected audio file"
-                    >
-                      <Text className="text-center font-sans-medium text-base text-wood-900">Analyze file</Text>
-                    </AnimatedPressable>
+                    />
                   </View>
                 ) : null}
 
@@ -436,22 +436,21 @@ export default function AddSongScreen() {
                         if (canStartFromUrl) void runAnalyze({ youtube_url: url.trim() })
                       }}
                       placeholder="https://www.youtube.com/watch?v=..."
-                      placeholderTextColor={colors.muted.brown}
+                      placeholderTextColor={colors.muted.light}
                       keyboardType="url"
                       autoCapitalize="none"
                       autoCorrect={false}
                       editable={uiState !== 'analyzing'}
                       className="min-h-[48px] rounded-xl border border-wood-500/80 bg-ivory px-4 py-3 font-sans text-sm text-wood-900"
                     />
-                    <AnimatedPressable haptic="light"
+                    <PrimaryButton
+                      label="Analyze URL"
                       onPress={() => void runAnalyze({ youtube_url: url.trim() })}
                       disabled={!canStartFromUrl}
-                      className="min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3 disabled:opacity-40"
-                      accessibilityRole="button"
+                      fullWidth
+                      size="lg"
                       accessibilityLabel="Analyze YouTube URL"
-                    >
-                      <Text className="text-center font-sans-medium text-base text-wood-900">Analyze URL</Text>
-                    </AnimatedPressable>
+                    />
                   </View>
                 ) : null}
 
@@ -460,7 +459,7 @@ export default function AddSongScreen() {
                     <Text className="text-center font-sans-medium text-xs uppercase tracking-wide text-amber-light">
                       Tab catalog
                     </Text>
-                    <Text className="text-center font-sans text-xs leading-5 text-muted-brown">
+                    <Text className="text-center font-sans text-xs leading-5 text-muted-light">
                       Server-side stub only — no files are downloaded. A licensed catalog API can replace this later.
                     </Text>
                     <View className="mt-1 flex-row gap-3">
@@ -468,7 +467,7 @@ export default function AddSongScreen() {
                         value={tabQuery}
                         onChangeText={setTabQuery}
                         placeholder="Song or artist…"
-                        placeholderTextColor={colors.muted.brown}
+                        placeholderTextColor={colors.muted.light}
                         editable={!tabSearchBusy && uiState !== 'analyzing'}
                         className="min-h-12 flex-1 rounded-xl border border-wood-600 bg-wood-900 px-4 py-3 font-sans text-sm text-cream"
                       />
@@ -510,9 +509,9 @@ export default function AddSongScreen() {
                           >
                             <Text className="font-sans-medium text-sm text-cream">{h.title}</Text>
                             {h.artist ? (
-                              <Text className="mt-1 font-sans text-xs text-muted-brown">{h.artist}</Text>
+                              <Text className="mt-1 font-sans text-xs text-muted-light">{h.artist}</Text>
                             ) : null}
-                            <Text className="mt-2 font-sans text-[10px] uppercase tracking-wide text-muted-brown">
+                            <Text className="mt-2 font-sans text-[10px] uppercase tracking-wide text-muted-light">
                               {h.source} · {h.id}
                             </Text>
                           </View>
@@ -552,7 +551,7 @@ export default function AddSongScreen() {
                 {progressPercent != null ? `${progressPercent}%` : '—'}
               </Text>
             </View>
-            <Text className="text-center font-sans text-[11px] leading-4 text-muted-brown">
+            <Text className="text-center font-sans text-[11px] leading-4 text-muted-light">
               Usually 1–4 minutes. The bar fills when the practice server reports real stages — long separation or
               transcription steps can take a few minutes without moving the percentage.
             </Text>
@@ -565,7 +564,7 @@ export default function AddSongScreen() {
               <Check color={colors.success} size={28} strokeWidth={2.4} />
             </Animated.View>
             <Text className="mt-3 text-center font-sans-medium text-sm text-cream">Song ready</Text>
-            <Text className="mt-2 max-w-sm text-center font-sans text-xs leading-5 text-muted-brown">
+            <Text className="mt-2 max-w-sm text-center font-sans text-xs leading-5 text-muted-light">
               Review details below, then continue when you&apos;re ready.
             </Text>
           </View>
@@ -576,7 +575,7 @@ export default function AddSongScreen() {
             <Text className="text-center font-sans-medium text-sm text-amber-light">Lesson result</Text>
             {lastAnalyzeWasUploadRef.current ? (
               <View className="mt-4 gap-4">
-                <Text className="text-center font-sans text-xs leading-5 text-muted-brown">
+                <Text className="text-center font-sans text-xs leading-5 text-muted-light">
                   File uploads don&apos;t include embedded artist or title. Add them so your library stays organized.
                 </Text>
                 <View>
@@ -587,7 +586,7 @@ export default function AddSongScreen() {
                     value={uploadDisplayTitle}
                     onChangeText={setUploadDisplayTitle}
                     placeholder="Song title"
-                    placeholderTextColor={colors.muted.brown}
+                    placeholderTextColor={colors.muted.light}
                     className="min-h-[44px] rounded-xl border border-wood-600 bg-wood-900 px-4 py-3 font-sans text-sm text-cream"
                   />
                 </View>
@@ -599,7 +598,7 @@ export default function AddSongScreen() {
                     value={uploadDisplayArtist}
                     onChangeText={setUploadDisplayArtist}
                     placeholder="Artist (optional)"
-                    placeholderTextColor={colors.muted.brown}
+                    placeholderTextColor={colors.muted.light}
                     className="min-h-[44px] rounded-xl border border-wood-600 bg-wood-900 px-4 py-3 font-sans text-sm text-cream"
                   />
                 </View>
@@ -612,20 +611,19 @@ export default function AddSongScreen() {
             <Text className="mt-3 text-center font-sans text-sm text-cream">
               Sections: <Text className="font-sans-medium">{sectionCount}</Text>
             </Text>
-            <AnimatedPressable haptic="light"
+            <PrimaryButton
+              label="Continue to session →"
               onPress={continueToSession}
-              className="mt-6 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
-              accessibilityRole="button"
-            >
-              <Text className="text-center font-sans-medium text-base text-wood-900">Continue to session</Text>
-            </AnimatedPressable>
-            <AnimatedPressable haptic="light"
+              fullWidth
+              size="lg"
+              className="mt-6"
+            />
+            <SecondaryButton
+              label="Back to Home"
               onPress={() => router.replace('/')}
-              className="mt-3 min-h-[48px] justify-center rounded-xl border border-wood-600/60 bg-wood-900/50 px-4 py-3"
-              accessibilityRole="button"
-            >
-              <Text className="text-center font-sans-medium text-base text-cream">Back to Home</Text>
-            </AnimatedPressable>
+              fullWidth
+              className="mt-3"
+            />
           </View>
         ) : null}
 

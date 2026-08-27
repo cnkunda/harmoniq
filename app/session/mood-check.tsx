@@ -58,7 +58,7 @@ export default function MoodCheckScreen() {
     <View className="flex-1 bg-ivory px-6 pt-8">
       <View className="mx-auto w-full max-w-xl rounded-2xl border border-wood-600/40 bg-cream p-6">
         <Text className="font-serif text-3xl text-wood-900">How are you feeling today?</Text>
-        <Text className="mt-2 font-sans text-sm leading-5 text-muted-brown">
+        <Text className="mt-2 font-sans text-sm leading-5 text-muted-light">
           We tune your session intensity, tempo defaults, and coach tone to match your state.
         </Text>
         <View className="mt-6 gap-3">
@@ -73,7 +73,7 @@ export default function MoodCheckScreen() {
               accessibilityLabel={`Select mood ${opt.label}`}
             >
               <Text className="font-sans-medium text-base text-wood-900">{opt.label}</Text>
-              <Text className="mt-1 font-sans text-xs leading-5 text-muted-brown">{opt.subtitle}</Text>
+              <Text className="mt-1 font-sans text-xs leading-5 text-muted-light">{opt.subtitle}</Text>
             </AnimatedPressable>
           ))}
         </View>

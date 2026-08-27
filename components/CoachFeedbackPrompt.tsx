@@ -80,7 +80,7 @@ export function CoachFeedbackPrompt({ focusArea, onFeedbackSubmitted, onDismisse
           onPress={handleSkip}
           className="flex-row items-center justify-center rounded-lg bg-transparent px-2 py-2.5"
         >
-          <SkipForward color={colors.muted.brown} size={16} strokeWidth={2} />
+          <SkipForward color={colors.muted.light} size={16} strokeWidth={2} />
         </AnimatedPressable>
       </View>
     </View>

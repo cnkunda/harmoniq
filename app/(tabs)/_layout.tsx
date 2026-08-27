@@ -14,7 +14,7 @@ import {
 import colors from '@/src/constants/colors'
 
 /** Slightly larger than React Navigation default (~24) for clearer tab targets. */
-const TAB_BAR_ICON_SIZE = 26
+const TAB_BAR_ICON_SIZE = 24
 
 export default function TabLayout() {
   return (
@@ -28,7 +28,7 @@ export default function TabLayout() {
           height: 72,
         },
         tabBarActiveTintColor: colors.amber.light,
-        tabBarInactiveTintColor: colors.muted.brown,
+        tabBarInactiveTintColor: colors.muted.light,
         tabBarLabelStyle: {
           fontFamily: 'DMSans-Medium',
           fontSize: 11,
@@ -68,6 +68,7 @@ export default function TabLayout() {
         name="discover"
         options={{
           title: 'Discover',
+          href: null,
           tabBarIcon: ({ color }) => <Search color={color} size={TAB_BAR_ICON_SIZE} strokeWidth={2} />,
         }}
       />

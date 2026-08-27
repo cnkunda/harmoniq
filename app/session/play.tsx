@@ -222,7 +222,7 @@ export default function PlayScreen() {
       <View className="gap-5">
         {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
         {typeof __DEV__ !== 'undefined' && __DEV__ ? (
-          <Text className="rounded-lg border border-dashed border-wood-600/35 bg-cream-dark/40 px-3 py-2 font-mono text-xs text-muted-brown">
+          <Text className="rounded-lg border border-dashed border-wood-600/35 bg-cream-dark/40 px-3 py-2 font-mono text-xs text-muted-light">
             noiseGateThresholdRms ({activeMicProfile}):{' '}
             {micNoiseGateRms != null ? micNoiseGateRms.toFixed(4) : '—'} (Commit 62 calibration)
           </Text>
@@ -323,7 +323,7 @@ export default function PlayScreen() {
 
         {take && take.audioBytes.length > 0 ? (
           <View className="rounded-xl border border-wood-600/35 bg-cream-dark/25 px-3 py-2">
-            <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-muted-brown">
+            <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-muted-light">
               Ghost reference take
             </Text>
             <View className="flex-row items-center justify-between gap-2">
@@ -337,7 +337,7 @@ export default function PlayScreen() {
                 className={`rounded-full px-3 py-1.5 ${pendingGhostReference ? 'bg-amber-accent/90' : 'border border-wood-600/50 bg-wood-900/15'}`}
               >
                 <Text
-                  className={`font-sans-medium text-xs ${pendingGhostReference ? 'text-wood-900' : 'text-muted-brown'}`}
+                  className={`font-sans-medium text-xs ${pendingGhostReference ? 'text-wood-900' : 'text-muted-light'}`}
                 >
                   {pendingGhostReference ? 'On' : 'Off'}
                 </Text>
@@ -366,7 +366,7 @@ export default function PlayScreen() {
           onClose={() => setNoteModalOpen(false)}
         />
         {section ? (
-          <Text className="font-mono text-[10px] text-muted-brown">
+          <Text className="font-mono text-[10px] text-muted-light">
             Section: {String(section.label ?? 'Section')} {lesson?.key ? `| Key: ${lesson.key}` : ''}
           </Text>
         ) : null}

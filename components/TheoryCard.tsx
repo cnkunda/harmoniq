@@ -29,7 +29,7 @@ export function TheoryCard({
 
   // Determine tension color based on value
   const getTensionColor = () => {
-    if (tension === undefined) return 'text-muted-brown'
+    if (tension === undefined) return 'text-muted-light'
     if (tension < 0.3) return 'text-success'
     if (tension < 0.6) return 'text-amber-light'
     return 'text-danger'
@@ -63,7 +63,7 @@ export function TheoryCard({
                 <Text className="font-sans-medium text-[10px] text-amber-light">{romanNumeral}</Text>
               </View>
             </View>
-            <Text className="font-sans text-xs text-muted-brown mt-0.5">{chordFunction}</Text>
+            <Text className="font-sans text-xs text-muted-light mt-0.5">{chordFunction}</Text>
           </View>
         </View>
         {getTensionLabel() ? (
@@ -73,7 +73,7 @@ export function TheoryCard({
             </Text>
           </View>
         ) : null}
-        <Text className="text-muted-brown">{isExpanded ? '▼' : '▶'}</Text>
+        <Text className="text-muted-light">{isExpanded ? '▼' : '▶'}</Text>
       </AnimatedPressable>
 
       {/* Expanded content - rationale */}

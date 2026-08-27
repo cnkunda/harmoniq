@@ -31,7 +31,7 @@ export function SettingsSlider({
         <Text className="font-sans text-xs text-amber-light">{formatValue(value)}</Text>
       </View>
       {description && (
-        <Text className="mt-1 font-sans text-[11px] text-muted-brown">{description}</Text>
+        <Text className="mt-1 font-sans text-[11px] text-muted-light">{description}</Text>
       )}
       <Slider
         style={{ width: '100%', height: 40, marginTop: 8 }}

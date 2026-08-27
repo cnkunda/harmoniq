@@ -120,8 +120,8 @@ export function SessionChromeBar() {
                   hitSlop={10}
                   className="flex-row items-center gap-0.5"
                 >
-                  <Text className="font-sans-medium text-xs text-muted-brown">Next section</Text>
-                  <ArrowRight color={colors.muted.brown} size={14} style={{ marginTop: 2 }} />
+                  <Text className="font-sans-medium text-xs text-muted-light">Next section</Text>
+                  <ArrowRight color={colors.muted.light} size={14} style={{ marginTop: 2 }} />
                 </AnimatedPressable>
               ) : null}
             </View>
@@ -156,7 +156,7 @@ export function SessionChromeBar() {
       </View>
 
       {hasPlan && slots != null ? (
-        <Text className="border-t border-wood-600/10 px-4 py-2 font-sans text-xs text-muted-brown" numberOfLines={1}>
+        <Text className="border-t border-wood-600/10 px-4 py-2 font-sans text-xs text-muted-light" numberOfLines={1}>
           Plan · {idx + 1}/{slots.length}: {slot?.title ?? '—'}
         </Text>
       ) : null}

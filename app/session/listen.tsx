@@ -225,8 +225,8 @@ export default function ListenScreen() {
                   </AnimatedPressable>
                 ) : (
                   <View className="items-center gap-3 px-6">
-                    <Film color={colors.muted.brown} size={40} strokeWidth={1.5} />
-                    <Text className="text-center font-sans text-sm text-muted-brown">
+                    <Film color={colors.muted.light} size={40} strokeWidth={1.5} />
+                    <Text className="text-center font-sans text-sm text-muted-light">
                       {orientIsLoading
                         ? 'Loading performance guide…'
                         : orientError
@@ -238,7 +238,7 @@ export default function ListenScreen() {
               </View>
 
               <Text className="mt-6 font-serif text-2xl text-cream">Performance Guide</Text>
-              <Text className="mt-1 font-sans text-sm text-muted-brown">
+              <Text className="mt-1 font-sans text-sm text-muted-light">
                 Watch and listen to how this section is played.
               </Text>
 

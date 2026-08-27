@@ -26,7 +26,7 @@ export function SessionPlanBar() {
 
   return (
     <View className="border-b border-wood-600/25 bg-ivory px-4 py-2">
-      <Text className="font-sans text-xs text-muted-brown" numberOfLines={1}>
+      <Text className="font-sans text-xs text-muted-light" numberOfLines={1}>
         Plan · {idx + 1}/{plan.slots.length}: {slot?.title ?? '—'}
       </Text>
       {hasNext ? (

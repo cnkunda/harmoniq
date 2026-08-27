@@ -253,13 +253,18 @@ class BeatGrid(BaseModel):
     
 
 class StemRoutingHints(BaseModel):
-    """Stem selection hints handed off to chord/solo inference (commit 79 hook)."""
+    """Stem selection hints handed off to chord/solo inference (commit 79 hook, commit 110 routing)."""
 
     model_config = ConfigDict(extra="ignore")
 
     chord_mix_stems: list[str] = Field(default_factory=lambda: ["bass", "other"])
     melodic_preference_order: list[str] = Field(default_factory=list)
     selected_melodic_stem: str = "guitar"
+    # Commit 110: resolved paths after routing (observability, not just hints)
+    chord_mix_path: str | None = Field(default=None, description="Backend-relative path of bass+other mixed WAV used for chord inference")
+    melodic_stem_path: str | None = Field(default=None, description="Backend-relative path of stem used for solo inference")
+    chord_source: str | None = Field(default=None, description="How chord path was resolved: 'bass_other_mix' | 'full_mix' | 'guitar_fallback'")
+    solo_source: str | None = Field(default=None, description="How solo path was resolved: 'selected' | 'guitar' | 'vocals' | 'fallback'")
 
 
 class TranscriptionPrepareResponse(BaseModel):

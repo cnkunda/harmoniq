@@ -4,6 +4,8 @@ import { ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { PrimaryButton } from '@/components/Button'
+import { ErrorBanner } from '@/components/ErrorBanner'
 import { PhrasingVisualizerStub, ScoreSummaryCard } from '@/components/ReviewSessionPanel'
 import { WaveformPlaybackActions } from '@/components/WaveformPlaybackActions'
 import { getSessionById } from '@/src/db/client'
@@ -53,23 +55,30 @@ export default function ReviewArchiveScreen() {
     <SafeAreaView className="flex-1 bg-ivory" edges={['top', 'left', 'right']}>
       <ScrollView className="flex-1 px-5 py-4" contentContainerStyle={{ paddingBottom: 32 }}>
         <Text className="font-serif text-2xl text-wood-900">Session replay</Text>
-        <Text className="mt-1 font-sans text-sm text-muted-brown">Read-only review from your journal.</Text>
+        <Text className="mt-1 font-sans text-sm leading-6 text-wood-600">Read-only review from your journal.</Text>
 
         <AnimatedPressable haptic="light"
           onPress={() => router.back()}
-          className="mt-4 self-start rounded-lg border border-wood-600/45 bg-cream-dark/45 px-3 py-2"
+          className="mt-5 self-start rounded-xl border border-wood-600 bg-wood-800 px-5 py-3"
           accessibilityRole="button"
           accessibilityLabel="Go back"
         >
-          <Text className="font-sans-medium text-sm text-wood-900">Back</Text>
+          <Text className="font-sans-medium text-sm text-cream">← Back to journal</Text>
         </AnimatedPressable>
 
         {row === undefined ? (
-          <Text className="mt-6 font-sans text-sm text-muted-brown">Loading…</Text>
-        ) : err && !row ? (
-          <View className="mt-6 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2">
-            <Text className="font-sans text-sm text-danger">{err}</Text>
+          <View className="mt-6 gap-3">
+            <View className="h-6 w-32 rounded bg-wood-600/20" />
+            <View className="h-4 w-full rounded bg-wood-600/10" />
           </View>
+        ) : err && !row ? (
+          <ErrorBanner
+            className="mt-6"
+            variant="error"
+            message={err}
+            detail="This session may have been deleted or never saved."
+            action={{ label: 'Back to journal', onPress: () => router.back() }}
+          />
         ) : row ? (
           <>
             <View className="mt-6 rounded-xl border border-wood-600/45 bg-cream-dark/40 px-3 py-3">
@@ -77,9 +86,9 @@ export default function ReviewArchiveScreen() {
                 {[row.song_title, row.artist].filter(Boolean).join(' · ') || 'Practice session'}
               </Text>
               {row.section_label ? (
-                <Text className="mt-1 font-sans text-xs text-muted-brown">Section: {row.section_label}</Text>
+                <Text className="mt-1 font-sans text-xs text-wood-600">Section: {row.section_label}</Text>
               ) : null}
-              <Text className="mt-1 font-mono text-[11px] text-muted-brown">{row.date}</Text>
+              <Text className="mt-1 font-mono text-[11px] text-wood-600">{row.date}</Text>
               {row.coach_review ? (
                 <Text className="mt-3 font-sans text-sm leading-6 text-wood-900">{row.coach_review}</Text>
               ) : null}
@@ -100,7 +109,7 @@ export default function ReviewArchiveScreen() {
               <ScoreSummaryCard score={score} />
             ) : (
               <View className="mt-4 rounded-lg border border-wood-600/40 bg-wood-800/10 px-3 py-3">
-                <Text className="font-sans text-sm text-muted-brown">
+                <Text className="font-sans text-sm text-muted-light">
                   No score snapshot for this session. Newer sessions save full review data automatically after you run
                   score.
                 </Text>

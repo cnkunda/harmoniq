@@ -69,7 +69,7 @@ export function PlayCaptureCard({
   const mic = micStatusLabel(recording, status)
 
   const backingDot =
-    loading || !ready ? colors.muted.brown : playing ? colors.amber.accent : colors.success
+    loading || !ready ? colors.muted.light : playing ? colors.amber.accent : colors.success
   const micDot = recording ? colors.danger : status.startsWith('Capture error') ? colors.danger : colors.success
 
   const rowWrap =
@@ -83,7 +83,7 @@ export function PlayCaptureCard({
       <Text className="font-sans-medium text-sm leading-snug text-wood-900" numberOfLines={2}>
         {songTitle}
       </Text>
-      <Text className="font-sans text-xs text-muted-brown">{sectionLine}</Text>
+      <Text className="font-sans text-xs text-muted-light">{sectionLine}</Text>
 
       <View className={rowWrap}>
         <View className="min-w-0 flex-1 flex-row items-center gap-2">
@@ -98,7 +98,7 @@ export function PlayCaptureCard({
 
       <View className={rowWrap}>
         <View className="min-w-0 flex-1 flex-row items-center gap-2">
-          <Mic size={16} color={recording ? colors.danger : colors.muted.brown} strokeWidth={1.75} />
+          <Mic size={16} color={recording ? colors.danger : colors.muted.light} strokeWidth={1.75} />
           <Text className="font-sans-medium text-xs text-wood-900">Your guitar (mic)</Text>
         </View>
         <View className="flex-row items-center gap-1.5">
@@ -133,7 +133,7 @@ export function PlayCaptureCard({
       </View>
 
       {autostopTriggered ? (
-        <Text className="font-sans text-xs text-muted-brown">Auto-end triggered after 5 seconds of silence.</Text>
+        <Text className="font-sans text-xs text-muted-light">Auto-end triggered after 5 seconds of silence.</Text>
       ) : null}
       {take ? (
         <Text className="font-sans text-xs text-wood-900">

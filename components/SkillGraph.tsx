@@ -71,7 +71,7 @@ export function SkillGraph({ nodes = DEFAULT_NODES, size = 240 }: SkillGraphProp
               <SvgText
                 x={labelPoint.x}
                 y={labelPoint.y + 4}
-                fill={colors.muted.brown}
+                fill={colors.muted.light}
                 fontSize={10}
                 textAnchor="middle"
                 fontFamily="DMSans-Regular"

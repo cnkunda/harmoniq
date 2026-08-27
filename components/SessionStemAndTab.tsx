@@ -305,7 +305,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
         {!gp5Base64 && !lessonMusicXml && lesson?.tabs_unavailable_reason === 'no_isolated_guitar' ? (
           <View className="flex-1 items-center justify-center rounded-xl border border-wood-600/40 bg-ivory px-6">
             <Text className="font-sans-medium text-sm text-wood-900">Tab unavailable</Text>
-            <Text className="mt-1 text-center font-sans text-xs text-muted-brown">
+            <Text className="mt-1 text-center font-sans text-xs text-muted-light">
               Guitar tab was not generated — the isolated guitar stem was not reliable enough.
             </Text>
           </View>

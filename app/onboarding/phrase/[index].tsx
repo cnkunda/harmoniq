@@ -215,11 +215,11 @@ export default function OnboardingPhraseScreen() {
       scrollable
     >
       <View className="items-center">
-        <Text className="text-center font-mono text-xs text-muted-brown">
+        <Text className="text-center font-mono text-xs text-muted-light">
           Phrase {phraseIndex + 1} / {PLACEMENT_PHRASES.length}
         </Text>
         <Text className="mt-2 text-center font-serif text-2xl text-cream">{phrase.title}</Text>
-        <Text className="mt-3 text-center font-sans text-sm leading-6 text-muted-brown">{phrase.instruction}</Text>
+        <Text className="mt-3 text-center font-sans text-sm leading-6 text-muted-light">{phrase.instruction}</Text>
 
         <View className="mt-4 w-full h-[180px] rounded-xl border border-wood-600/50 bg-ivory overflow-hidden">
           <TabViewport

@@ -47,7 +47,7 @@ function TimingPendulum({ feel }: { feel: PlayerDNA['timing_feel'] }) {
         <View className="h-14 w-[3px] rounded-full bg-amber-accent/85" />
         <View className="-mt-1 h-4 w-4 rounded-full border-2 border-amber-accent bg-wood-900" />
       </Animated.View>
-      <Text className="mt-2 font-sans text-xs text-muted-brown">
+      <Text className="mt-2 font-sans text-xs text-muted-light">
         {feel === 'ahead' ? 'Ahead of the beat' : feel === 'behind' ? 'Behind the beat' : 'Centered time feel'}
       </Text>
     </View>
@@ -86,7 +86,7 @@ export function RiffDNA({ dna }: RiffDNAProps) {
   return (
     <View className="gap-6 rounded-xl border border-wood-700/50 bg-wood-800/50 p-5">
       <View>
-        <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-brown">Pitch-class shape</Text>
+        <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-light">Pitch-class shape</Text>
         <View className="mt-3 items-center">
           <Svg width={200} height={200} viewBox="0 0 100 100">
             <SvgCircle cx={50} cy={50} r={38} fill="none" stroke={colors.wood[600]} strokeWidth={0.4} opacity={0.5} />
@@ -102,7 +102,7 @@ export function RiffDNA({ dna }: RiffDNAProps) {
         </View>
         <View className="mt-2 flex-row flex-wrap justify-center gap-x-2 gap-y-1">
           {PC_LABELS.map((lbl, i) => (
-            <Text key={lbl} className="font-mono text-[10px] text-muted-brown">
+            <Text key={lbl} className="font-mono text-[10px] text-muted-light">
               {lbl}:{Math.round((dna.pitch_class_bias[i] ?? 0) * 100)}
             </Text>
           ))}
@@ -110,7 +110,7 @@ export function RiffDNA({ dna }: RiffDNAProps) {
       </View>
 
       <View>
-        <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-brown">Fret zones (low → high)</Text>
+        <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-light">Fret zones (low → high)</Text>
         <View className="mt-3 h-14 flex-row items-end gap-1">
           {dna.position_bias.map((v, i) => (
             <View key={i} className="flex-1 items-center justify-end">
@@ -124,15 +124,15 @@ export function RiffDNA({ dna }: RiffDNAProps) {
       </View>
 
       <View>
-        <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-brown">Timing pendulum</Text>
+        <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-light">Timing pendulum</Text>
         <TimingPendulum feel={dna.timing_feel} />
       </View>
 
       <View>
-        <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-brown">Technique mix</Text>
+        <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-light">Technique mix</Text>
         <View className="mt-3 gap-2">
           {topTech.length === 0 ? (
-            <Text className="font-sans text-sm text-muted-brown">No technique tags yet.</Text>
+            <Text className="font-sans text-sm text-muted-light">No technique tags yet.</Text>
           ) : (
             topTech.map(([label, count]) => (
               <View key={label} className="gap-1">
@@ -140,7 +140,7 @@ export function RiffDNA({ dna }: RiffDNAProps) {
                   <Text className="max-w-[70%] font-sans text-xs text-cream" numberOfLines={1}>
                     {label.replace(/^jam:/, '').replace(/^lick:/, 'Lick · ')}
                   </Text>
-                  <Text className="font-mono text-xs text-muted-brown">{count}</Text>
+                  <Text className="font-mono text-xs text-muted-light">{count}</Text>
                 </View>
                 <View className="h-2 overflow-hidden rounded-full bg-wood-900/80">
                   <View className="h-full rounded-full bg-amber-accent/90" style={{ width: `${Math.min(100, (count / maxTech) * 100)}%` }} />
@@ -151,7 +151,7 @@ export function RiffDNA({ dna }: RiffDNAProps) {
         </View>
       </View>
 
-      <Text className="font-sans text-xs text-muted-brown">First recorded: {firstLabel}</Text>
+      <Text className="font-sans text-xs text-muted-light">First recorded: {firstLabel}</Text>
     </View>
   )
 }

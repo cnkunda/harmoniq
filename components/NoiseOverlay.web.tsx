@@ -11,9 +11,10 @@ export function NoiseOverlay() {
       inset: 0,
       pointerEvents: 'none',
       zIndex: 50,
-      opacity: 0.03,
+      opacity: 0.055,
       mixBlendMode: 'overlay',
       backgroundImage: `url("${NOISE_DATA_URI}")`,
+      backgroundSize: '200px 200px',
     },
   })
 }

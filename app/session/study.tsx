@@ -712,7 +712,7 @@ function StudyScreenInner() {
                     : 'border-wood-600/35 bg-cream-dark/35'
                   }`}
                 >
-                  <Text className={`font-sans-medium text-[10px] ${correctionMode ? 'text-amber-accent' : 'text-muted-brown'}`}>
+                  <Text className={`font-sans-medium text-[10px] ${correctionMode ? 'text-amber-accent' : 'text-muted-light'}`}>
                     {correctionMode ? '✏️ Correcting' : 'Correct'}
                   </Text>
                 </AnimatedPressable>
@@ -755,7 +755,7 @@ function StudyScreenInner() {
                       accessibilityRole="button"
                       accessibilityHint={`${chordLabel} at bar ${bar}. ${correctionMode ? 'Tap to correct chord.' : 'Tap to seek; long press to save a practice note'}`}
                     >
-                      <Text className={`font-mono text-[10px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-brown'}`}>
+                      <Text className={`font-mono text-[10px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-light'}`}>
                         {chordLabel}
                       </Text>
                     </AnimatedPressable>
@@ -803,7 +803,7 @@ function StudyScreenInner() {
                 </View>
               ) : null}
 
-              <Text className="mt-1 font-sans text-[11px] text-muted-brown">
+              <Text className="mt-1 font-sans text-[11px] text-muted-light">
                 Saved notes in this section: {Object.keys(sectionNotes).length}
                 {correctionMode ? ` · Corrections: ${correctionHistory?.correction_count ?? 0}` : ''}
               </Text>

@@ -146,16 +146,16 @@ export default function TasteQuizScreen() {
       {step === 0 ? (
         <View className="w-full py-2">
           <Text className="text-center font-serif text-2xl text-cream">Artists you love</Text>
-          <Text className="mt-2 text-center font-sans text-sm text-muted-brown">
+          <Text className="mt-2 text-center font-sans text-sm text-muted-light">
             Pick at least one name (up to eight). Search filters the grid — static list, not Spotify search.
           </Text>
           <View className="mt-4 flex-row items-center rounded-lg border border-wood-600/50 bg-wood-900/50 px-3 py-2.5">
-            <Search color={colors.muted.brown} size={18} />
+            <Search color={colors.muted.light} size={18} />
             <TextInput
               value={query}
               onChangeText={setQuery}
               placeholder="Search artists…"
-              placeholderTextColor={colors.muted.brown}
+              placeholderTextColor={colors.muted.light}
               className="ml-2 flex-1 font-sans text-sm text-cream"
               accessibilityLabel="Filter artist list"
             />
@@ -190,7 +190,7 @@ export default function TasteQuizScreen() {
                       {a.name}
                     </Text>
                     <Text
-                      className="mt-2 font-sans text-[10px] uppercase tracking-wide text-muted-brown"
+                      className="mt-2 font-sans text-[10px] uppercase tracking-wide text-muted-light"
                       numberOfLines={1}
                       ellipsizeMode="tail"
                     >
@@ -209,7 +209,7 @@ export default function TasteQuizScreen() {
             accessibilityLabel="Continue to vibe step"
           >
             <Text
-              className={`text-center font-sans-medium ${canNextStep0 ? 'text-wood-900' : 'text-muted-brown'}`}
+              className={`text-center font-sans-medium ${canNextStep0 ? 'text-wood-900' : 'text-muted-light'}`}
             >
               Next
             </Text>
@@ -220,7 +220,7 @@ export default function TasteQuizScreen() {
       {step === 1 ? (
         <View className="py-2">
           <Text className="text-center font-serif text-2xl text-cream">What&apos;s your vibe?</Text>
-          <Text className="mt-2 text-center font-sans text-sm text-muted-brown">
+          <Text className="mt-2 text-center font-sans text-sm text-muted-light">
             Four lanes — pick the one that feels closest today (icons are decorative).
           </Text>
           <View className="mt-6 gap-3">
@@ -241,7 +241,7 @@ export default function TasteQuizScreen() {
                   </View>
                   <View className="flex-1">
                     <Text className="font-sans-medium text-base text-cream">{c.title}</Text>
-                    <Text className="mt-1 font-sans text-xs leading-5 text-muted-brown">{c.blurb}</Text>
+                    <Text className="mt-1 font-sans text-xs leading-5 text-muted-light">{c.blurb}</Text>
                   </View>
                 </AnimatedPressable>
               )
@@ -254,7 +254,7 @@ export default function TasteQuizScreen() {
             accessibilityRole="button"
           >
             <Text
-              className={`text-center font-sans-medium ${canNextStep1 ? 'text-wood-900' : 'text-muted-brown'}`}
+              className={`text-center font-sans-medium ${canNextStep1 ? 'text-wood-900' : 'text-muted-light'}`}
             >
               Next
             </Text>
@@ -265,7 +265,7 @@ export default function TasteQuizScreen() {
       {step === 2 ? (
         <View className="py-2">
           <Text className="text-center font-serif text-2xl text-cream">How long have you played?</Text>
-          <Text className="mt-2 text-center font-sans text-sm text-muted-brown">
+          <Text className="mt-2 text-center font-sans text-sm text-muted-light">
             We&apos;ll seed skill weights from this — you can still refine them with real sessions.
           </Text>
           <View className="mt-6 gap-3">
@@ -285,7 +285,7 @@ export default function TasteQuizScreen() {
                     <Guitar color={colors.amber.accent} size={22} strokeWidth={1.5} />
                     <View className="flex-1">
                       <Text className="font-sans-medium text-base text-cream">{o.title}</Text>
-                      <Text className="mt-1 font-sans text-xs text-muted-brown">{o.blurb}</Text>
+                      <Text className="mt-1 font-sans text-xs text-muted-light">{o.blurb}</Text>
                     </View>
                   </View>
                 </AnimatedPressable>
@@ -300,7 +300,7 @@ export default function TasteQuizScreen() {
             accessibilityLabel="Save preferences and continue"
           >
             <Text
-              className={`text-center font-sans-medium ${canSubmit && !busy ? 'text-wood-900' : 'text-muted-brown'}`}
+              className={`text-center font-sans-medium ${canSubmit && !busy ? 'text-wood-900' : 'text-muted-light'}`}
             >
               {busy ? 'Saving…' : 'Save and continue'}
             </Text>
