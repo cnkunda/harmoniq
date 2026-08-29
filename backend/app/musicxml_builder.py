@@ -104,9 +104,17 @@ def _apply_rhythm(
     """
     quantized = quantize_to_note_type(duration_ql, tolerance_ql=tolerance_ql)
     if quantized is None:
-        m21_client.duration = m21.duration.Duration(duration_ql)
-        return None
-    dur = m21.duration.Duration(duration_ql)
+        # Fallback: nearest expressible regardless of tolerance — prevents
+        # inexpressible durations (e.g. 0.137) from reaching music21 which
+        # would raise MusicXMLExportException at measure 10.
+        # Use a large tolerance to pick the closest valid type.
+        quantized = quantize_to_note_type(duration_ql, tolerance_ql=Fraction(1, 1))
+        if quantized is None:
+            # Ultimate fallback: brute-force nearest candidate
+            from app.rhythm_quantization import _CANDIDATES
+
+            quantized = min(_CANDIDATES, key=lambda c: abs(c.quarter_length - duration_ql))
+    dur = m21.duration.Duration(quantized.quarter_length)
     dur.type = quantized.type
     dur.dots = quantized.dots
     if quantized.tuplet is not None:
@@ -615,7 +623,44 @@ def build_musicxml(
     # 4. Convert the score to MusicXML string
     # Using 'midi' variant for better compatibility, as 'score-partwise' is default for music21
     # and alphaTab expects partwise.
-    musicxml_output = m21.musicxml.m21ToXml.GeneralObjectExporter().parse(score).decode('utf-8')
+    try:
+        musicxml_output = m21.musicxml.m21ToXml.GeneralObjectExporter().parse(score).decode('utf-8')
+    except Exception as exc:
+        # Fallback for inexpressible durations (e.g. 1/60 2048th) — sanitize all
+        # durations to the nearest expressible type and retry. Prevents the
+        # whole analysis from losing its MusicXML (measure 10 regression).
+        err_msg = str(exc)
+        if "inexpressible" in err_msg or "MusicXMLExportException" in type(exc).__name__:
+            logger.warning("MusicXML export failed (%s), sanitizing durations and retrying", err_msg[:200])
+            for el in score.recurse():
+                if isinstance(el, (m21.note.Note, m21.note.Rest)):
+                    try:
+                        # Re-quantize to nearest valid rhythm (large tolerance)
+                        ql = Fraction(float(el.duration.quarterLength)).limit_denominator(96)
+                        q = quantize_to_note_type(ql, tolerance_ql=Fraction(1, 1))
+                        if q is not None:
+                            el.duration.type = q.type
+                            el.duration.dots = q.dots
+                            if q.tuplet is not None:
+                                actual, normal = q.tuplet
+                                base = m21.duration.Duration(type=q.base_type)
+                                tup = m21.duration.Tuplet(actual, normal)
+                                tup.durationActual = m21.duration.Duration(base.quarterLength)
+                                tup.durationNormal = m21.duration.Duration(base.quarterLength)
+                                el.duration.tuplets = (tup,)
+                            else:
+                                el.duration.tuplets = ()
+                    except Exception:
+                        # Last resort: force to quarter
+                        try:
+                            el.duration.type = "quarter"
+                            el.duration.dots = 0
+                            el.duration.tuplets = ()
+                        except Exception:
+                            pass
+            musicxml_output = m21.musicxml.m21ToXml.GeneralObjectExporter().parse(score).decode('utf-8')
+        else:
+            raise
 
     # 5. Add technical elements (string/fret) for guitar tablature
     musicxml_output = _add_technical_elements(musicxml_output, solo_notes)

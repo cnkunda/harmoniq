@@ -211,8 +211,38 @@ def decompose_rest_durations(
     if pieces is not None:
         return pieces
     # No exact rhythm-valid combination exists (pathological fraction):
-    # fall back to a single raw rest of the exact length.
-    return [QuantizedDuration("", 0, None, target, "")]
+    # Greedy fallback: split into nearest valid pieces until remainder is
+    # expressible, ensuring we never emit an inexpressible raw type that
+    # would crash music21 (measure 10 regression).
+    out: list[QuantizedDuration] = []
+    remaining = target
+    for _ in range(max_pieces):
+        if remaining <= 0:
+            break
+        # Pick largest candidate <= remaining, or nearest if none
+        cand = next((c for c in candidates if c.quarter_length <= remaining), None)
+        if cand is None:
+            cand = min(_CANDIDATES, key=lambda c: abs(c.quarter_length - remaining))
+            # Clamp to remaining to avoid overshoot
+            if cand.quarter_length > remaining:
+                # Use the smallest valid duration and let the leftover be handled
+                cand = min(_CANDIDATES, key=lambda c: c.quarter_length)
+        out.append(cand)
+        remaining -= cand.quarter_length
+        if remaining == 0:
+            break
+        # Re-filter candidates for new remaining
+        candidates = [c for c in _CANDIDATES if c.quarter_length <= remaining]
+        if not candidates:
+            candidates = _CANDIDATES
+    if remaining != 0:
+        # Last resort: add the remainder as a single quantized piece with large tolerance
+        fallback = quantize_to_note_type(remaining, tolerance_ql=Fraction(1, 1))
+        if fallback is not None:
+            out.append(fallback)
+        else:
+            out.append(QuantizedDuration("quarter", 0, None, remaining, "quarter"))
+    return out
 
 
 def nearest_grid_index(time_s: float, grid: Sequence[float]) -> int:

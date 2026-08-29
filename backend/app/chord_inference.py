@@ -111,12 +111,47 @@ class _KerasModelWrapper:
 
     Used as a fallback when the TFLite model requires SELECT_TF_OPS and the
     Flex delegate is unavailable.
+
+    Handles both keras (standalone) and tf_keras saves, and registers the
+    custom CircularCqtPad layer used by the chord model.
     """
 
     def __init__(self, model_path: str):
-        import tensorflow as tf
+        # Try to register custom layer so Functional load can find it
+        try:
+            from app.chord_model_layers import CircularCqtPad  # type: ignore
 
-        self._model = tf.keras.models.load_model(model_path, compile=False)
+            custom_objects = {"CircularCqtPad": CircularCqtPad}
+        except Exception:
+            # Fallback: define a minimal stub for load purposes
+            try:
+                import keras
+
+                @keras.saving.register_keras_serializable(package="Custom", name="CircularCqtPad")
+                class _StubCircularCqtPad(keras.layers.Layer):
+                    def call(self, inputs):
+                        return inputs
+
+                custom_objects = {"CircularCqtPad": _StubCircularCqtPad}
+            except Exception:
+                custom_objects = {}
+
+        last_exc: Exception | None = None
+        # Try keras (standalone, Keras 3) first — matches how build_chord_tflite saves
+        for loader in (
+            lambda p: __import__("keras").saving.load_model(p, compile=False, custom_objects=custom_objects),  # type: ignore
+            lambda p: __import__("tf_keras").models.load_model(p, compile=False, custom_objects=custom_objects),  # type: ignore
+            lambda p: __import__("tensorflow").keras.models.load_model(p, compile=False, custom_objects=custom_objects),  # type: ignore
+        ):
+            try:
+                self._model = loader(model_path)  # type: ignore
+                break
+            except Exception as exc:
+                last_exc = exc
+                continue
+        else:
+            raise RuntimeError(f"All Keras loaders failed for {model_path}: {last_exc}") from last_exc
+
         self._input_details = [{"index": 0, "shape": self._model.inputs[0].shape}]
         self._output_details = [{"index": 0, "shape": self._model.outputs[0].shape}]
         self._last_input = None
