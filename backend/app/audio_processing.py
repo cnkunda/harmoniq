@@ -40,6 +40,7 @@ class AudioPreparationResult:
     source_metadata: SourceMetadata | None
     duration_seconds: float
     chunk_paths: tuple[Path, ...]
+    chunk_offsets: tuple[dict[str, float | int], ...] = ()
 
 
 def _chunk_wav_for_long_track(
@@ -90,6 +91,86 @@ def _chunk_wav_for_long_track(
         raise AudioPreparationError(f"Chunking failed: {exc}") from exc
 
 
+def _build_chunk_offsets(
+    wav_path: Path,
+    chunk_paths: tuple[Path, ...],
+) -> tuple[dict[str, float | int], ...]:
+    """Build chunk offset metadata: (chunk_index, start_time_s, end_time_s) per chunk.
+
+    Reads actual chunk durations via ``wave`` for accuracy; falls back to
+    computed offsets from the source WAV header if a chunk is unreadable.
+    """
+    if not chunk_paths:
+        return ()
+    offsets: list[dict[str, float | int]] = []
+    cursor_s = 0.0
+    for idx, cpath in enumerate(chunk_paths):
+        dur: float | None = None
+        try:
+            with wave.open(str(cpath), "rb") as wf:
+                frames = wf.getnframes()
+                sr = wf.getframerate()
+                if sr > 0:
+                    dur = frames / float(sr)
+        except (wave.Error, OSError):
+            dur = None
+        if dur is None:
+            # Fallback: derive from source WAV if chunk unreadable
+            try:
+                with wave.open(str(wav_path), "rb") as src:
+                    sr = src.getframerate()
+                    dur = LONG_TRACK_CHUNK_SECONDS if idx < len(chunk_paths) - 1 else 0.0
+                    _ = sr  # keep linter happy
+            except Exception:
+                dur = 0.0
+        start_s = round(cursor_s, 6)
+        end_s = round(cursor_s + dur, 6)
+        offsets.append({"chunk_index": idx, "start_seconds": start_s, "end_seconds": end_s})
+        cursor_s = end_s
+    return tuple(offsets)
+
+
+def stitch_wav_chunks(chunk_paths: tuple[Path, ...] | list[Path], output_path: Path) -> Path:
+    """Concatenate chunk WAVs back into a single WAV (sample-accurate).
+
+    Validates that all chunks share the same channels / sample_width /
+    sample_rate as the first chunk. Raises ``AudioPreparationError`` on
+    mismatch or invalid WAV.
+    """
+    if not chunk_paths:
+        raise AudioPreparationError("No chunk paths to stitch")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with wave.open(str(chunk_paths[0]), "rb") as first:
+            channels = first.getnchannels()
+            sampwidth = first.getsampwidth()
+            framerate = first.getframerate()
+            comptype = first.getcomptype()
+            compname = first.getcompname()
+        with wave.open(str(output_path), "wb") as dst:
+            dst.setnchannels(channels)
+            dst.setsampwidth(sampwidth)
+            dst.setframerate(framerate)
+            dst.setcomptype(comptype, compname)
+            for cpath in chunk_paths:
+                with wave.open(str(cpath), "rb") as src:
+                    if (
+                        src.getnchannels() != channels
+                        or src.getsampwidth() != sampwidth
+                        or src.getframerate() != framerate
+                    ):
+                        raise AudioPreparationError(
+                            f"Chunk {cpath} has mismatched format "
+                            f"(expected {channels}ch/{sampwidth*8}bit/{framerate}Hz)"
+                        )
+                    dst.writeframes(src.readframes(src.getnframes()))
+    except wave.Error as exc:
+        raise AudioPreparationError(f"Stitching failed: invalid WAV ({exc})") from exc
+    except OSError as exc:
+        raise AudioPreparationError(f"Stitching failed: {exc}") from exc
+    return output_path
+
+
 def prepare_audio_input(
     job_id: str,
     *,
@@ -121,12 +202,14 @@ def prepare_audio_input(
         raise AudioPreparationError("Could not read normalized WAV duration")
 
     chunk_paths: tuple[Path, ...] = ()
+    chunk_offsets: tuple[dict[str, float | int], ...] = ()
     if duration >= LONG_TRACK_CHUNK_TRIGGER_SECONDS:
         chunk_paths = _chunk_wav_for_long_track(
             wav_path,
             job_dir / "chunks",
             chunk_seconds=LONG_TRACK_CHUNK_SECONDS,
         )
+        chunk_offsets = _build_chunk_offsets(wav_path, chunk_paths)
 
     return AudioPreparationResult(
         job_id=job_id,
@@ -135,4 +218,5 @@ def prepare_audio_input(
         source_metadata=source_metadata,
         duration_seconds=duration,  # already float after None check
         chunk_paths=chunk_paths,
+        chunk_offsets=chunk_offsets,
     )

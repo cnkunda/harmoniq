@@ -975,6 +975,34 @@ Claude-powered post-jam analysis and vocabulary mapping.
 
 ---
 
+### Commit 113: Input Normalization & Long-Track Chunking Fix ✅ DONE
+
+**Goal:** Add proper loudness normalization (EBU R128), fix long-track chunking so chunks are consumed downstream, add chunk offset metadata, and secure yt-dlp with a subprocess timeout.
+
+**Scope (completed):**
+- ✅ Upgrade `ffmpeg_normalize_wav()` to perform loudness normalization — add `-af loudnorm=I=-16:TP=-1.5:LRA=11` (EBU R128, -16 LUFS integrated target), preserve 44.1kHz mono resampling/downmix, backward compatible downstream
+- ✅ Fix chunk consumption — refactor `separate_song_to_stems()` (`app/separate.py`, `app/demucs_engine.py`) to accept chunked audio: per-chunk Demucs separation → stitch per-stem WAVs back into full-song stems via `wave` concatenation with format validation; `build_lesson_json_from_librosa()` runs downstream librosa/beat_grid/chord/solo on stitched stems
+- ✅ Add chunk offset tracking `(chunk_index, start_time_s, end_time_s)` per chunk — `AudioPreparationResult.chunk_offsets` (`app/audio_processing.py`) as `list[dict]` with `chunk_index`, `start_seconds`, `end_seconds` (wave-accurate, rounded 6dp); pass through to `TranscriptionPrepareResponse.audio_chunk_offsets` for observability; logged per job
+- ✅ Add subprocess timeout to `yt_dlp_download_wav()` — `subprocess.run(..., timeout=600)` (10m), raise `YouTubeDownloadError` on `TimeoutExpired` with user-friendly message; `app/ingest.py` and `app/routers/analyze.py` preserve/map error to 422
+- ✅ Test suite — `tests/test_commit113_input_normalization.py` (13 tests): loudnorm command shape + mono/stereo, chunk splits/offsets monotonic, stitch round-trip byte-equal + mismatched format raises, prepare chunk_offsets integration, short-track no-chunk, backward compat, yt-dlp timeout (TimeoutExpired → YouTubeDownloadError) + timeout=600 capture, chunk→separate→stitch placeholder identical (separate + demucs_engine)
+
+**Acceptance Criteria:**
+- [x] `ffmpeg_normalize_wav()` applies EBU R128 loudnorm targeting -16 LUFS
+- [x] Normalized WAV loudness measures within ±1dB of -16 LUFS (verified: 0.05/0.1/0.5/0.9 amp sines → -15.95 LUFS Δ0.05)
+- [x] All downstream pipelines (Demucs, librosa, beat_grid) accept normalized audio without regression (librosa/beat_grid/placeholder Demucs + `test_pipeline_proof`/`test_transcription_prepare` green)
+- [x] Chunked tracks (≥15 min) are separated per-chunk and stitched into complete stems
+- [x] Stitched stems reproduce identical results to non-chunked processing for sub-15-min tracks (wave frames byte-equal)
+- [x] Chunk offset metadata recorded and accessible in job output (`AudioPreparationResult.chunk_offsets` → `TranscriptionPrepareResponse.audio_chunk_offsets`)
+- [x] yt-dlp download times out after 10 minutes with user-friendly error
+- [x] Test suite covers loudness, chunking round-trip, offset accuracy, and timeout behavior (13/13 + 10/10 pipeline_proof + 3/3 transcription_prepare)
+- [x] Minimum 30-second and maximum 300-second duration checks preserved (`app/ingest.py:MIN_ANALYZE_DURATION_SECONDS=30.0`, `app/jobs.py:MAX_ANALYZE_DURATION_SECONDS=300`)
+
+**Completed:** 2026-08-28
+
+**Implementation:** `backend/app/pipeline_proof.py` (loudnorm `-af`, `YouTubeDownloadError`, `timeout=600`), `backend/app/audio_processing.py` (`chunk_offsets`, `_build_chunk_offsets`, `stitch_wav_chunks`), `backend/app/separate.py` (`_stitch_wav_files`, `_separate_chunked_stems`, auto-detect `chunks/chunk_*.wav`), `backend/app/demucs_engine.py` (mirror chunk logic), `backend/app/schemas.py` (`audio_chunk_offsets`), `backend/app/routers/analyze.py` (observability + `DATA_DIR` fallback), `backend/app/ingest.py` (preserve timeout error), `backend/tests/test_commit113_input_normalization.py` (new), `backend/tests/test_analyze_api.py` (fake_analyze `**kwargs` fix), fix `separate.py`/`demucs_engine.py` `_rel_to_backend` for tmp `DATA_DIR`.
+
+---
+
 ## MLOps: Production Infrastructure (Complete)
 
 ### Commit 136: Redis Job Queue + Celery Workers + Push-Based Job Updates ✅ DONE

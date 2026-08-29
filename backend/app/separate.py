@@ -49,8 +49,12 @@ def _backend_root() -> Path:
 def _rel_to_backend_root(path: Path) -> str:
     """Return `data/...`-style paths (forward slashes) for JSON payloads."""
     p = path.resolve()
-    rel = p.relative_to(_backend_root().resolve())
-    return rel.as_posix()
+    try:
+        rel = p.relative_to(_backend_root().resolve())
+        return rel.as_posix()
+    except ValueError:
+        # Job dir is outside backend (e.g., tmp_path in tests) — return absolute posix.
+        return p.as_posix()
 
 
 def _should_skip_demucs() -> bool:
@@ -222,24 +226,146 @@ def _write_placeholder_stems(song_wav_path: Path, stems_dir: Path) -> dict[str, 
     return mapping
 
 
+def _stitch_wav_files(chunk_paths: list[Path], output_path: Path) -> Path:
+    """Concatenate WAV chunks into ``output_path`` (validates matching format)."""
+    if not chunk_paths:
+        raise SeparationError("No chunk paths to stitch")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with wave.open(str(chunk_paths[0]), "rb") as first:
+            channels = first.getnchannels()
+            sampwidth = first.getsampwidth()
+            framerate = first.getframerate()
+            comptype = first.getcomptype()
+            compname = first.getcompname()
+        with wave.open(str(output_path), "wb") as dst:
+            dst.setnchannels(channels)
+            dst.setsampwidth(sampwidth)
+            dst.setframerate(framerate)
+            dst.setcomptype(comptype, compname)
+            for cpath in chunk_paths:
+                with wave.open(str(cpath), "rb") as src:
+                    if (
+                        src.getnchannels() != channels
+                        or src.getsampwidth() != sampwidth
+                        or src.getframerate() != framerate
+                    ):
+                        raise SeparationError(
+                            f"Chunk {cpath} has mismatched format "
+                            f"(expected {channels}ch/{sampwidth*8}bit/{framerate}Hz)"
+                        )
+                    dst.writeframes(src.readframes(src.getnframes()))
+    except wave.Error as exc:
+        raise SeparationError(f"Stitching failed: invalid WAV ({exc})") from exc
+    except OSError as exc:
+        raise SeparationError(f"Stitching failed: {exc}") from exc
+    return output_path
+
+
+def _separate_chunked_stems(
+    chunk_paths: list[Path],
+    job_dir: Path,
+    stems_dir: Path,
+    model: str,
+) -> dict[str, str]:
+    """Per-chunk Demucs separation → stitch per-stem chunks into full-song stems.
+
+    Each chunk is separated via ``run_demucs_htdemucs_6s`` (or placeholder
+    copy in test/skip mode) producing per-chunk stem WAVs. Those per-stem
+    chunk WAVs are then stitched back into complete stems via ``_stitch_wav_files``.
+    Returns backend-relative paths for the six stitched stems.
+    """
+    per_stem_chunks: dict[str, list[Path]] = {k: [] for k in STEM_KEYS}
+    # Temporary per-chunk demucs outputs and per-stem holders
+    temp_dirs: list[Path] = []
+    temp_stem_holders: list[Path] = []
+    chunk_stem_root = job_dir / "_chunk_stems"
+    chunk_stem_root.mkdir(parents=True, exist_ok=True)
+    temp_stem_holders.append(chunk_stem_root)
+
+    try:
+        for idx, chunk_path in enumerate(chunk_paths):
+            if _should_skip_demucs():
+                # Placeholder: each stem chunk is a copy of the input chunk
+                for stem in STEM_KEYS:
+                    stem_chunk_path = chunk_stem_root / f"{stem}_chunk_{idx:03d}.wav"
+                    shutil.copyfile(chunk_path, stem_chunk_path)
+                    per_stem_chunks[stem].append(stem_chunk_path)
+                logger.info("chunk %d/%d placeholder stems from %s", idx + 1, len(chunk_paths), chunk_path)
+            else:
+                chunk_demucs_out = job_dir / f"_demucs_chunk_{idx:03d}"
+                temp_dirs.append(chunk_demucs_out)
+                track_dir = run_demucs_htdemucs_6s(chunk_path, chunk_demucs_out, model=model)
+                for stem in STEM_KEYS:
+                    src = _find_stem_file(track_dir, stem)
+                    stem_chunk_path = chunk_stem_root / f"{stem}_chunk_{idx:03d}.wav"
+                    shutil.copyfile(src, stem_chunk_path)
+                    per_stem_chunks[stem].append(stem_chunk_path)
+                logger.info("chunk %d/%d separated stem tracks from %s", idx + 1, len(chunk_paths), chunk_path)
+
+        # Stitch per-stem chunks into full-song stems
+        stems_dir.mkdir(parents=True, exist_ok=True)
+        mapping: dict[str, str] = {}
+        for stem in STEM_KEYS:
+            stitched_path = stems_dir / f"{stem}.wav"
+            _stitch_wav_files(per_stem_chunks[stem], stitched_path)
+            if not _is_readable_nonempty_wav(stitched_path):
+                raise SeparationError(f"Stitched stem {stitched_path} is not a readable WAV.")
+            mapping[stem] = _rel_to_backend_root(stitched_path)
+            logger.info("stitched stem %s from %d chunks -> %s", stem, len(per_stem_chunks[stem]), stitched_path)
+        return mapping
+    finally:
+        for d in temp_dirs:
+            shutil.rmtree(d, ignore_errors=True)
+        # Keep chunk_stem_root until stitched; then clean up
+        # Retain for debugging if needed; remove by default
+        shutil.rmtree(chunk_stem_root, ignore_errors=True)
+
+
 def separate_song_to_stems(
     song_wav_path: Path,
     job_dir: Path,
     *,
     cleanup_demucs_outputs: bool = True,
+    chunk_paths: list[Path] | tuple[Path, ...] | None = None,
 ) -> dict[str, str]:
-    """Separate `song_wav_path` into six stems and return JSON-ready relative paths.
-    
+    """Separate ``song_wav_path`` into six stems and return JSON-ready relative paths.
+
     Performance features:
     - Checks stem cache by audio hash to avoid re-running Demucs
     - Uses htdemucs_ft when HARMONIQ_FAST_STEMS=1 (faster but lower quality)
     - Skips separation when HARMONIQ_SKIP_STEMS=1 (placeholder stems)
+    - For tracks >=15 minutes, accepts chunked audio: each chunk is separated
+      via Demucs and per-stem chunks are stitched back into full-song stems
+      (``Commit 113`` long-track chunking fix). If ``chunk_paths`` is given
+      explicitly it is used; otherwise ``job_dir/chunks/chunk_*.wav`` is
+      auto-detected.
     """
     if not song_wav_path.exists():
         raise SeparationError(f"Input song.wav missing: {song_wav_path}")
 
     stems_dir = job_dir / "stems"
     model = _get_demucs_model()
+
+    # --- Chunk-aware path: per-chunk separate → stitch ---
+    # Auto-detect chunks if caller did not provide them (audio_processing writes them).
+    detected_chunks: list[Path] | None = None
+    if chunk_paths is None:
+        chunk_dir = job_dir / "chunks"
+        if chunk_dir.is_dir():
+            detected_chunks = sorted(chunk_dir.glob("chunk_*.wav"))
+            if not detected_chunks:
+                detected_chunks = None
+    else:
+        detected_chunks = list(chunk_paths) if chunk_paths else None
+
+    if detected_chunks:
+        logger.info(
+            "Detected %d chunk(s) for job_dir=%s — using per-chunk separation + stitch",
+            len(detected_chunks),
+            job_dir,
+        )
+        return _separate_chunked_stems(detected_chunks, job_dir, stems_dir, model)
 
     if _should_skip_demucs():
         skip_reason = (

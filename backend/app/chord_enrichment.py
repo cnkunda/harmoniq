@@ -26,11 +26,17 @@ logger = logging.getLogger("harmoniq.chord_enrichment")
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-ENRICHMENT_MODEL = os.getenv("HARMONIQ_ENRICHMENT_MODEL", "claude-haiku-4-5-20251001")
+ENRICHMENT_MODEL = os.getenv("HARMONIQ_ENRICHMENT_MODEL", "claude-haiku-4-5")
 ENRICHMENT_TIMEOUT_SECONDS = max(1.0, float(os.getenv("HARMONIQ_ENRICHMENT_TIMEOUT_MS", "10000")) / 1000.0)
 ENRICHMENT_MAX_RETRIES = 1
 CONFIDENCE_DELTA_THRESHOLD = float(os.getenv("HARMONIQ_ENRICHMENT_DELTA", "0.15"))
 RATE_LIMIT_INTERVAL = float(os.getenv("HARMONIQ_ENRICHMENT_RATE_LIMIT_S", "10.0"))
+
+# Models to try in order when the primary model returns 404.
+_ENRICHMENT_MODEL_FALLBACK: list[str] = [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929",
+]
 
 # Module-level executor for background enrichment
 _ENRICHMENT_EXECUTOR = ThreadPoolExecutor(max_workers=2)
@@ -210,19 +216,33 @@ def _call_llm_enrichment(prompt: str) -> str | None:
         from anthropic import Anthropic
 
         client = Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=ENRICHMENT_MODEL,
-            max_tokens=1024,
-            timeout=ENRICHMENT_TIMEOUT_SECONDS,
-            messages=[{"role": "user", "content": prompt}],
-            system=(
-                "You are a music theory expert. Given a chord progression and key, "
-                "correct improbable chord changes and add Roman numeral analysis. "
-                "Return ONLY a JSON array — no markdown, no explanation."
-            ),
-        )
-        text = response.content[0].text.strip()
-        return text
+        models = [ENRICHMENT_MODEL] + [m for m in _ENRICHMENT_MODEL_FALLBACK if m != ENRICHMENT_MODEL]
+        last_error: Exception | None = None
+
+        for model_id in models:
+            try:
+                response = client.messages.create(
+                    model=model_id,
+                    max_tokens=1024,
+                    timeout=ENRICHMENT_TIMEOUT_SECONDS,
+                    messages=[{"role": "user", "content": prompt}],
+                    system=(
+                        "You are a music theory expert. Given a chord progression and key, "
+                        "correct improbable chord changes and add Roman numeral analysis. "
+                        "Return ONLY a JSON array — no markdown, no explanation."
+                    ),
+                )
+                text = response.content[0].text.strip()
+                return text
+            except Exception as exc:
+                last_error = exc
+                if "404" not in str(exc) and type(exc).__name__ != "NotFoundError":
+                    raise
+                logger.warning("enrichment model %s unavailable (404), trying fallback", model_id)
+                continue
+
+        logger.warning("LLM enrichment call failed (all models): %s", type(last_error).__name__)
+        return None
     except Exception as exc:
         logger.warning("LLM enrichment call failed: %s", type(exc).__name__)
         return None

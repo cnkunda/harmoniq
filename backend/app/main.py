@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+import os
+
+# Force CPU mode for TensorFlow — the installed CuDNN 9.1.0 is incompatible
+# with TF 2.21.0 (compiled with CuDNN 9.3.0), causing "No DNN in stream
+# executor" errors on GPU. Set before any TF import.
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault("KERAS_BACKEND", "tensorflow")
+
 import asyncio
 import base64
 import json

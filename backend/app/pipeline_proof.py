@@ -78,7 +78,12 @@ def ffmpeg_normalize_command(
     sample_rate: int = TARGET_SR,
     mono: bool = True,
 ) -> list[str]:
-    """Argv for `ffmpeg` to normalize to ``sample_rate`` Hz and channel layout."""
+    """Argv for `ffmpeg` to normalize to ``sample_rate`` Hz and channel layout.
+
+    Applies EBU R128 loudness normalization targeting -16 LUFS integrated
+    (``loudnorm=I=-16:TP=-1.5:LRA=11``) before resampling/downmix.
+    Single-pass mode is used; two-pass would require a measurement pass.
+    """
     ac = "1" if mono else "2"
     return [
         "ffmpeg",
@@ -88,6 +93,8 @@ def ffmpeg_normalize_command(
         "-y",
         "-i",
         str(input_path),
+        "-af",
+        "loudnorm=I=-16:TP=-1.5:LRA=11",
         "-ar",
         str(sample_rate),
         "-ac",
@@ -103,7 +110,12 @@ def ffmpeg_normalize_wav(
     sample_rate: int = TARGET_SR,
     mono: bool = True,
 ) -> None:
-    """Resample / downmix via ffmpeg (44.1 kHz mono per Harmoniq README)."""
+    """Resample / downmix via ffmpeg (44.1 kHz mono per Harmoniq README).
+
+    Applies EBU R128 loudness normalization (-16 LUFS) in addition to
+    resampling and channel conversion. Backward compatible with all
+    downstream consumers (44.1 kHz mono WAV).
+    """
     cmd = ffmpeg_normalize_command(input_path, output_path, sample_rate=sample_rate, mono=mono)
     _run_subprocess_checked(cmd, what="ffmpeg")
 
@@ -210,15 +222,31 @@ def yt_dlp_download_audio_command(
     return cmd
 
 
+class YouTubeDownloadError(RuntimeError):
+    """Raised when yt-dlp fails or times out (user-friendly)."""
+
+    # Also considered an ingest error for router mapping.
+    pass
+
+
 def yt_dlp_download_wav(url: str, work_dir: Path) -> Path:
     """
     Download audio to ``work_dir``; return path to the produced ``.wav``.
     Caller should run :func:`ffmpeg_normalize_wav` for strict 44.1 kHz mono.
+
+    Times out after 10 minutes (600s) to avoid hanging workers.
     """
     work_dir.mkdir(parents=True, exist_ok=True)
     template = work_dir / "yt_%(id)s.%(ext)s"
     cmd = yt_dlp_download_audio_command(url, template)
-    subprocess.run(cmd, check=True, cwd=str(work_dir))
+    try:
+        subprocess.run(cmd, check=True, cwd=str(work_dir), timeout=600)
+    except subprocess.TimeoutExpired as exc:
+        raise YouTubeDownloadError(
+            "YouTube download timed out after 10 minutes. Try a shorter clip or check your connection."
+        ) from exc
+    except subprocess.CalledProcessError as exc:
+        raise YouTubeDownloadError(f"YouTube download failed: {exc}") from exc
     wavs = sorted(work_dir.glob("yt_*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not wavs:
         raise FileNotFoundError(f"yt-dlp did not produce a wav in {work_dir}")

@@ -5,7 +5,7 @@ Final Version: Uses Concrete Function tracing to bypass Keras 3 / Python 3.12
 serialization bugs.
 
 Vocabulary: 23 qualities x 12 roots + 1 No-Chord (277 total) — Advanced Extensions (Commit 98)
-Architecture: CRNN with Bidirectional LSTM + Multi-Head Self-Attention (Commit 98d)
+Architecture: CNN + Multi-Head Self-Attention + Conv1D temporal stack (TFLite builtins only, no Flex)
 Augmentation: Inversions, missing notes, pitch shift, time stretch, bass ambiguity, pink noise, transitions (Commit 98a)
 Features: 36-bin CQT with octave preservation + 4-bin bass channel (Commit 98b)
 Temperature Sampling: MT3 §3.3 (n_i/Σn_j)^0.3 for rare chord type oversampling (Commit 104)
@@ -733,12 +733,14 @@ def _circular_cqt_pad(x):
 
 
 def build_model(window: int = WINDOW, return_attention_scores: bool = False) -> tf.keras.Model:
-    """Build CRNN with CNN frontend + Multi-Head Self-Attention + Bidirectional LSTM.
+    """Build CRNN with CNN frontend + Multi-Head Self-Attention + Conv1D temporal stack.
 
-    Architecture: CNN → Attention → LayerNorm → BiLSTM → Dense (Commit 98d)
+    Architecture: CNN → Attention → LayerNorm → Conv1D → Dense (TFLite builtins only)
 
     The attention layer lets the model focus on salient harmonic peaks in the
     CQT features, improving discrimination of closely related chord qualities.
+    Conv1D temporal stack replaces BiLSTM so the model converts to TFLite
+    without SELECT_TF_OPS / Flex delegate — runs on any TFLite runtime.
 
     Args:
         window: Temporal window size (default WINDOW=128).
@@ -780,20 +782,17 @@ def build_model(window: int = WINDOW, return_attention_scores: bool = False) -> 
         x + mha_output
     )
 
-    # Bidirectional LSTM layers
-    x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(128, return_sequences=True), name="bilstm_1"
-    )(x)
+    # Temporal modelling — Conv1D stack (TFLite builtins only, no Flex)
+    x = tf.keras.layers.Conv1D(128, kernel_size=3, padding="same", activation="relu",
+                                name="conv1d_post_attn_1")(x)
+    x = tf.keras.layers.Conv1D(128, kernel_size=3, padding="same", activation="relu",
+                                name="conv1d_post_attn_2")(x)
+    x = tf.keras.layers.GlobalAveragePooling1D(name="global_avg_pool")(x)
     x = tf.keras.layers.Dropout(0.3, name="dropout_1")(x)
-
-    x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(128, return_sequences=False), name="bilstm_2"
-    )(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_2")(x)
 
     # Classifier head
     x = tf.keras.layers.Dense(256, activation="relu", name="dense_256")(x)
-    x = tf.keras.layers.Dropout(0.3, name="dropout_3")(x)
+    x = tf.keras.layers.Dropout(0.3, name="dropout_2")(x)
     outputs = tf.keras.layers.Dense(NUM_CLASSES, activation="softmax", name="chord_probs")(x)
 
     if return_attention_scores:
@@ -932,7 +931,6 @@ def export_tflite(model, use_qat: bool = False, real_ds=None) -> bool:
 
     converter.target_spec.supported_ops = [
         tf.lite.OpsSet.TFLITE_BUILTINS,
-        tf.lite.OpsSet.SELECT_TF_OPS
     ]
 
     try:
@@ -953,22 +951,27 @@ def export_tflite(model, use_qat: bool = False, real_ds=None) -> bool:
     use_keras_fallback = False
     try:
         from tflite_runtime.interpreter import Interpreter
-        interp = Interpreter(model_path=str(output_path),
-                            experimental_delegates=[
-                                Interpreter.load_delegate('libtensorflowlite_flex.so')
-                            ])
+        interp = Interpreter(model_path=str(output_path))
         interp.allocate_tensors()
-    except (ImportError, ValueError, OSError):
+        print("  TFLite interpreter: tflite_runtime (no Flex needed)")
+    except ImportError:
         try:
-            interp = tf.lite.Interpreter(
-                model_path=str(output_path),
-                experimental_delegates=[
-                    tf.lite.experimental.load_delegate('libtensorflowlite_flex.so')
-                ]
-            )
+            interp = tf.lite.Interpreter(model_path=str(output_path))
             interp.allocate_tensors()
-        except (ValueError, OSError, RuntimeError):
-            print("  Flex delegate not available, testing with Keras model instead")
+            print("  TFLite interpreter: tf.lite (no Flex needed)")
+        except Exception as exc:
+            print(f"  TFLite load failed ({exc}), testing with Keras model instead")
+            test_model = model
+            use_keras_fallback = True
+    except Exception as exc:
+        # tflite_runtime present but model failed to load
+        print(f"  tflite_runtime load failed ({exc}), trying tf.lite")
+        try:
+            interp = tf.lite.Interpreter(model_path=str(output_path))
+            interp.allocate_tensors()
+            print("  TFLite interpreter: tf.lite (no Flex needed)")
+        except Exception as exc2:
+            print(f"  TFLite load failed ({exc2}), testing with Keras model instead")
             test_model = model
             use_keras_fallback = True
 

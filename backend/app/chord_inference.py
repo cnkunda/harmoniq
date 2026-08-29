@@ -51,6 +51,7 @@ _CHORD_QUALITIES = [
 CHORD_VOCAB = [f"{root}:{qual}" for qual in _CHORD_QUALITIES for root in _ROOTS] + ["N"]
 
 _MODEL_PATH = Path(__file__).parent / "chord_model.tflite"
+_KERAS_MODEL_PATH = Path(__file__).parent / "chord_model.keras"
 _WINDOW = 128
 _WINDOW_STRIDE = _WINDOW // 2       # 50% overlap between consecutive windows
 _BOUNDARY_PENALTY_FRAMES = 2        # confidence penalty zone at track edges (0.2s @ 0.1s hop)
@@ -89,46 +90,116 @@ def _smooth_chords(events: list[ChordEvent]) -> list[ChordEvent]:
     return smoothed
 
 
+def _load_flex_delegate():
+    """Try to load the TFLite Flex delegate for SELECT_TF_OPS support.
+
+    Returns a delegate list (empty if Flex is unavailable).
+    """
+    try:
+        import tensorflow as tf
+
+        delegate = tf.lite.experimental.load_delegate("libtensorflowlite_flex.so")
+        logger.info("Flex delegate loaded for SELECT_TF_OPS support")
+        return [delegate]
+    except Exception:
+        logger.debug("Flex delegate unavailable — SELECT_TF_OPS ops will fail")
+        return []
+
+
+class _KerasModelWrapper:
+    """Thin wrapper around a Keras model that mimics the TFLite Interpreter API.
+
+    Used as a fallback when the TFLite model requires SELECT_TF_OPS and the
+    Flex delegate is unavailable.
+    """
+
+    def __init__(self, model_path: str):
+        import tensorflow as tf
+
+        self._model = tf.keras.models.load_model(model_path, compile=False)
+        self._input_details = [{"index": 0, "shape": self._model.inputs[0].shape}]
+        self._output_details = [{"index": 0, "shape": self._model.outputs[0].shape}]
+        self._last_input = None
+
+    def get_input_details(self):
+        return self._input_details
+
+    def get_output_details(self):
+        return self._output_details
+
+    def set_tensor(self, index, value):
+        self._last_input = value
+
+    def invoke(self):
+        self._output = self._model(self._last_input, training=False)
+
+    def get_tensor(self, index):
+        return self._output.numpy()
+
+    def allocate_tensors(self):
+        pass  # No-op for Keras
+
+
 @lru_cache(maxsize=1)
 def _get_interpreter():
-    """Load the TFLite interpreter once and cache it for the process lifetime.
+    """Load the model once and cache it for the process lifetime.
 
-    Tries tflite-runtime first, falls back to TensorFlow Lite, then raises.
+    Tries tflite-runtime first (with Flex delegate if available), falls back
+    to TensorFlow Lite, then falls back to the Keras model directly.
     """
     path = str(_MODEL_PATH)
-    if not _MODEL_PATH.exists():
-        raise FileNotFoundError(f"Chord model not found at {_MODEL_PATH}")
+    if not _MODEL_PATH.exists() and not _KERAS_MODEL_PATH.exists():
+        raise FileNotFoundError(
+            f"Neither chord model found at {_MODEL_PATH} nor {_KERAS_MODEL_PATH}"
+        )
 
     # Try tflite-runtime (lighter dependency)
     try:
         import tflite_runtime.interpreter as tflite
 
-        interp = tflite.Interpreter(model_path=path)
+        flex_delegates = _load_flex_delegate()
+        interp = tflite.Interpreter(
+            model_path=path,
+            experimental_delegates=flex_delegates or None,
+        )
         logger.info("Chord model loaded via tflite-runtime")
+        interp.allocate_tensors()
+        return interp
     except ImportError:
-        # Fall back to TensorFlow Lite
-        try:
-            import tensorflow as tf
-
-            interp = tf.lite.Interpreter(model_path=path)
-            logger.info("Chord model loaded via TensorFlow Lite")
-        except ImportError as exc:
-            raise RuntimeError(
-                "Chord inference requires tflite-runtime or tensorflow. "
-                "Install with: pip install tflite-runtime"
-            ) from exc
+        pass
     except Exception as exc:
-        raise RuntimeError(f"Failed to load chord model at {path}: {exc}") from exc
+        logger.warning("TFLite load failed (%s), trying Keras fallback", exc)
 
-    interp.allocate_tensors()
-    input_details = interp.get_input_details()
-    output_details = interp.get_output_details()
-    logger.debug(
-        "Chord model input shape=%s output shape=%s",
-        input_details[0].get("shape"),
-        output_details[0].get("shape"),
+    # Fall back to TensorFlow Lite
+    try:
+        import tensorflow as tf
+
+        flex_delegates = _load_flex_delegate()
+        interp = tf.lite.Interpreter(
+            model_path=path,
+            experimental_delegates=flex_delegates or None,
+        )
+        logger.info("Chord model loaded via TensorFlow Lite")
+        interp.allocate_tensors()
+        return interp
+    except Exception as exc:
+        logger.warning("TFLite interpreter failed (%s), trying Keras model", exc)
+
+    # Fall back to Keras model directly (no Flex delegate needed)
+    if _KERAS_MODEL_PATH.exists():
+        try:
+            wrapper = _KerasModelWrapper(str(_KERAS_MODEL_PATH))
+            logger.info("Chord model loaded via Keras (fallback)")
+            return wrapper
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to load Keras chord model at {_KERAS_MODEL_PATH}: {exc}"
+            ) from exc
+
+    raise RuntimeError(
+        "Chord inference requires tflite-runtime or tensorflow. "
+        "Install with: pip install tflite-runtime"
     )
-    return interp
 
 
 def _window_layout(T: int) -> tuple[list[int], np.ndarray]:

@@ -268,7 +268,7 @@ class StemRoutingHints(BaseModel):
 
 
 class TranscriptionPrepareResponse(BaseModel):
-    """`POST /transcription/prepare` payload (commit 78)."""
+    """`POST /transcription/prepare` payload (commit 78, extended 113)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -277,6 +277,10 @@ class TranscriptionPrepareResponse(BaseModel):
     beat_grid: BeatGrid
     stem_routing: StemRoutingHints
     audio_chunk_paths: list[str] = Field(default_factory=list)
+    audio_chunk_offsets: list[dict] = Field(
+        default_factory=list,
+        description="Per-chunk offset metadata: {chunk_index, start_seconds, end_seconds} (Commit 113)",
+    )
     invalidated_artifacts: list[str] = Field(default_factory=list)
 
 

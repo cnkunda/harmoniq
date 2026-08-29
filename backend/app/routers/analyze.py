@@ -21,6 +21,7 @@ from app.beat_grid import (
 )
 from app.chord_inference import infer_chords
 from app.demucs_engine import DemucsEngineError, build_stem_routing_hints, separate_with_demucs
+from app.pipeline_proof import YouTubeDownloadError
 from app.ingest import AUDIO_TOO_SHORT_USER_MESSAGE, MIN_ANALYZE_DURATION_SECONDS, get_job_dir, wav_file_duration_seconds
 from app.jobs import (
     ANALYSIS_FAILED_USER_MESSAGE,
@@ -178,18 +179,29 @@ def _run_transcription_prepare_pipeline(
     backend_root = _backend_root().resolve()
     stem_abs_paths: dict[str, Path] = {}
     for key, rel in stems.items():
-        stem_abs_paths[key] = backend_root / rel
+        p = Path(rel)
+        stem_abs_paths[key] = p if p.is_absolute() else backend_root / rel
     stem_routing = build_stem_routing_hints(stem_abs_paths)
     invalidated: list[str] = []
     if time_signature_override is not None or bpm_override is not None:
         invalidated = dependent_artifacts_for_grid_override()
-    audio_chunk_paths = [str(p.relative_to(backend_root).as_posix()) for p in prepared.chunk_paths]
+    def _rel_or_abs(p: Path) -> str:
+        try:
+            return str(p.resolve().relative_to(backend_root).as_posix())
+        except ValueError:
+            return str(p.resolve().as_posix())
+    audio_chunk_paths = [_rel_or_abs(p) for p in prepared.chunk_paths]
+    # Persist offsets for observability; also log per job
+    audio_chunk_offsets = [dict(o) for o in (prepared.chunk_offsets or ())]
+    if audio_chunk_offsets:
+        logger.info("chunk_offsets job_id=%s offsets=%s", job_id, audio_chunk_offsets)
     return TranscriptionPrepareResponse(
         job_id=job_id,
         stems=stems,
         beat_grid=BeatGrid.model_validate(beat_grid_payload),
         stem_routing=stem_routing,
         audio_chunk_paths=audio_chunk_paths,
+        audio_chunk_offsets=audio_chunk_offsets,
         invalidated_artifacts=invalidated,
     )
 
@@ -260,6 +272,8 @@ async def transcription_prepare(request: Request) -> TranscriptionPrepareRespons
         raise HTTPException(status_code=413, detail="Upload exceeds max allowed size (50MB).") from None
     except UnsupportedMimeTypeError as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from None
+    except YouTubeDownloadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (AudioPreparationError, DemucsEngineError, BeatGridComputationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception:

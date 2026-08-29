@@ -277,6 +277,9 @@ def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
         mix_wav_path=None,
         piano_stem_path=None,
         progress_callback=None,
+        stem_routing_hints=None,
+        job_dir=None,
+        **kwargs,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub
@@ -350,6 +353,9 @@ def test_pipeline_version_bump_forces_recompute(monkeypatch, tmp_path):
         mix_wav_path=None,
         piano_stem_path=None,
         progress_callback=None,
+        stem_routing_hints=None,
+        job_dir=None,
+        **kwargs,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub
@@ -423,6 +429,9 @@ def test_missing_cached_artifact_forces_recompute(monkeypatch, tmp_path):
         mix_wav_path=None,
         piano_stem_path=None,
         progress_callback=None,
+        stem_routing_hints=None,
+        job_dir=None,
+        **kwargs,
     ):
         call_counts["analyze"] += 1
         from app.schemas import LessonJSON, LessonSectionStub

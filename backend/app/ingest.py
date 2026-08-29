@@ -17,7 +17,7 @@ from typing import TypedDict
 from urllib.parse import parse_qs, urlparse
 
 from app.pipeline_proof import TARGET_SR as DEFAULT_TARGET_SR
-from app.pipeline_proof import ffmpeg_normalize_wav, yt_dlp_download_wav
+from app.pipeline_proof import YouTubeDownloadError, ffmpeg_normalize_wav, yt_dlp_download_wav
 from app.youtube_meta import extract_youtube_metadata
 
 logger = logging.getLogger("harmoniq.ingest")
@@ -229,6 +229,8 @@ def ingest_youtube_or_upload_to_wav(
                 sample_rate=target_sr,
                 mono=True,
             )
+        except YouTubeDownloadError:
+            raise  # preserve timeout / user-friendly message + type
         except Exception as e:
             # Distinguish between invalid URL vs transient failures.
             # NOTE: These strings match yt-dlp error messages as of ~2024.x.

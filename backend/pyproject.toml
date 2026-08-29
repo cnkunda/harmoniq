@@ -48,6 +48,7 @@ dependencies = [
 [project.optional-dependencies]
 basicpitch = [
     "basic-pitch>=0.4.0",
+    "onnxruntime>=1.17.0",
 ]
 dev = [
     "httpx>=0.27.0",

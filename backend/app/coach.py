@@ -18,7 +18,7 @@ from app.schemas import CoachFocusArea, LessonSectionStub, MoodState, PlayerProf
 logger = logging.getLogger("harmoniq.coach")
 logger.setLevel(logging.INFO)
 
-MODEL_ID = os.getenv("HARMONIQ_MODEL_ID", "claude-sonnet-4-20250514")
+MODEL_ID = os.getenv("HARMONIQ_MODEL_ID", "claude-haiku-4-5")
 COACH_TIMEOUT_SECONDS = max(0.5, float(os.getenv("HARMONIQ_COACH_TIMEOUT_MS", "8000")) / 1000.0)
 PRACTICE_PLAN_INTRO_TIMEOUT_SECONDS = min(8.0, COACH_TIMEOUT_SECONDS)
 QUICK_FEEDBACK_TIMEOUT_SECONDS = 5.0
@@ -370,6 +370,12 @@ FALLBACK_COACH_EXPLANATION = (
     "Think about phrasing like a short sentence with a clear breath."
 )
 
+# Models to try in order when the primary MODEL_ID returns 404.
+_MODEL_FALLBACK_CHAIN: list[str] = [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-5-20250929",
+]
+
 FALLBACK_ONBOARDING_PLACEMENT = (
     "Your placement takes give us a usable baseline for pitch, phrasing, and timing. "
     "What usually opens up first is a little more air between ideas — micro-pauses make the next note feel intentional instead of rushed. "
@@ -406,31 +412,49 @@ def _call_claude_streaming(
     client = Anthropic(api_key=api_key)
     chunks: list[str] = []
     first_chunk_time: float | None = None
-    with client.messages.stream(
-        model=MODEL_ID,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        system=BASE_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
-    ) as stream:
-        for evt in stream:
-            t = getattr(evt, "type", "")
-            if t != "content_block_delta":
-                continue
-            delta = getattr(evt, "delta", None)
-            text = getattr(delta, "text", None)
-            if isinstance(text, str) and text:
-                if first_chunk_time is None:
-                    first_chunk_time = time.perf_counter() - start_time
-                chunks.append(text)
-    total_time = time.perf_counter() - start_time
-    logger.info(
-        "claude_streaming timing total_ms=%.0f first_chunk_ms=%s tokens=%d",
-        total_time * 1000,
-        "%.0f" % (first_chunk_time * 1000) if first_chunk_time else "null",
-        max_tokens,
-    )
-    return "".join(chunks).strip()
+
+    models_to_try = [MODEL_ID] + [m for m in _MODEL_FALLBACK_CHAIN if m != MODEL_ID]
+    last_error: Exception | None = None
+
+    for model_id in models_to_try:
+        try:
+            with client.messages.stream(
+                model=model_id,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=BASE_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_prompt}],
+            ) as stream:
+                for evt in stream:
+                    t = getattr(evt, "type", "")
+                    if t != "content_block_delta":
+                        continue
+                    delta = getattr(evt, "delta", None)
+                    text = getattr(delta, "text", None)
+                    if isinstance(text, str) and text:
+                        if first_chunk_time is None:
+                            first_chunk_time = time.perf_counter() - start_time
+                        chunks.append(text)
+            total_time = time.perf_counter() - start_time
+            logger.info(
+                "claude_streaming timing total_ms=%.0f first_chunk_ms=%s tokens=%d model=%s",
+                total_time * 1000,
+                "%.0f" % (first_chunk_time * 1000) if first_chunk_time else "null",
+                max_tokens,
+                model_id,
+            )
+            return "".join(chunks).strip()
+        except Exception as exc:
+            last_error = exc
+            error_name = getattr(exc, "__class__", type(exc)).__name__
+            # Only retry on 404 (model not found) — other errors are definitive
+            if "404" not in str(exc) and error_name != "NotFoundError":
+                raise
+            logger.warning("coach model %s unavailable (404), trying fallback", model_id)
+            continue
+
+    # All models failed — re-raise the last error
+    raise last_error  # type: ignore[misc]
 
 
 # Backward-compatible alias used by existing tests/mocks.
