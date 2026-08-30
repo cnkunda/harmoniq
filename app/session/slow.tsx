@@ -134,12 +134,12 @@ function SlowScreenInner() {
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.slow}</DemoTourCallout> : null}
       {playbackLoop ? (
-        <View className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-3 py-2">
+        <View className="rounded-lg border border-wood-600/20 bg-cream px-3 py-2 shadow-sm">
           <Text className="font-sans text-xs text-wood-900">
             Slow loop: {playbackLoop.label} ({playbackLoop.startSec.toFixed(2)}s – {playbackLoop.endSec.toFixed(2)}s)
           </Text>
           {__DEV__ && derived ? (
-            <Text className="mt-1 font-mono text-[10px] text-muted-light">Source: {derived.source}</Text>
+            <Text className="mt-1 font-mono text-[10px] text-wood-600">Source: {derived.source}</Text>
           ) : null}
         </View>
       ) : null}

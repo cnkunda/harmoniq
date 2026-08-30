@@ -37,8 +37,8 @@ export function GhostPlayerControl({
       : 'Enable to mix your saved ghost take at 20% under the backing track while recording.'
 
   return (
-    <View className="rounded-xl border border-wood-600/40 bg-cream-dark/35 px-3 py-2">
-      <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-amber-accent">
+    <View className="rounded-xl border border-wood-600/20 bg-cream px-3 py-2 shadow-sm">
+      <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-wood-600">
         Ghost player
       </Text>
       <View className="flex-row items-center justify-between gap-3">
@@ -53,16 +53,16 @@ export function GhostPlayerControl({
           onPress={() => {
             if (!disabled) onTogglePlayWithGhost(!playWithGhost)
           }}
-          className={`rounded-full px-3 py-1.5 ${disabled ? 'bg-wood-700/60' : playWithGhost ? 'bg-amber-accent/90' : 'border border-wood-600/50 bg-wood-900/20'}`}
+          className={`rounded-full px-3 py-1.5 ${disabled ? 'bg-wood-600/20' : playWithGhost ? 'bg-amber-accent' : 'border border-wood-600/25 bg-white'}`}
         >
           <Text
-            className={`font-sans-medium text-xs ${disabled ? 'text-muted-light' : playWithGhost ? 'text-wood-900' : 'text-muted-light'}`}
+            className={`font-sans-medium text-xs ${disabled ? 'text-wood-600' : playWithGhost ? 'text-wood-900' : 'text-wood-600'}`}
           >
             {disabled ? 'Off' : playWithGhost ? 'On' : 'Off'}
           </Text>
         </AnimatedPressable>
       </View>
-      <Text className="mt-2 font-sans text-[11px] leading-snug text-muted-light">{subtitle}</Text>
+      <Text className="mt-2 font-sans text-[11px] leading-snug text-wood-600">{subtitle}</Text>
     </View>
   )
 }

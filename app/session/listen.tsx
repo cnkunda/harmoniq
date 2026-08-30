@@ -198,7 +198,7 @@ function ListenScreenInner() {
         <AnimatedPressable haptic="light"
           onPress={openOrientModal}
           disabled={orientIsLoading}
-          className="min-h-[80px] items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/35 py-4 active:bg-wood-700/50 disabled:opacity-50"
+          className="min-h-[80px] items-center justify-center gap-3 rounded-xl border border-wood-600/30 bg-wood-900 py-4 shadow-sm active:bg-wood-800 disabled:opacity-50"
           accessibilityRole="button"
           accessibilityLabel={
             orientIsLoading

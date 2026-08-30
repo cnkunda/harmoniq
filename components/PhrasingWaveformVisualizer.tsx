@@ -142,11 +142,11 @@ export function PhrasingWaveformVisualizer({ score, ghostRow, beatGrid, playback
   const playheadX = playbackProgress * w
 
   return (
-    <View className="mt-3 rounded-lg border border-wood-600/45 bg-cream-dark/40 px-3 py-3">
-      <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+    <View className="mt-3 rounded-lg border border-wood-600/20 bg-cream px-3 py-3 shadow-sm">
+      <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">
         Phrasing visualizer
       </Text>
-      <View className="mt-2 h-28 w-full overflow-hidden rounded-md border border-wood-600/45 bg-ivory">
+      <View className="mt-2 h-28 w-full overflow-hidden rounded-md border border-wood-600/20 bg-white">
         <Svg viewBox={`0 0 ${w} ${h}`} width="100%" height="100%" preserveAspectRatio="none">
           {/* Beat grid lines */}
           {beatGridLines.map(({ x, isDownbeat }, i) => (
@@ -195,14 +195,14 @@ export function PhrasingWaveformVisualizer({ score, ghostRow, beatGrid, playback
         </Svg>
         {!hasAny ? (
           <View className="absolute inset-0 items-center justify-center px-2">
-            <Text className="text-center font-sans text-[11px] text-muted-light">
+            <Text className="text-center font-sans text-[11px] text-wood-600">
               Run score to plot reference vs your take. Ghost (faint amber) appears when a ghost reference exists for this
               section.
             </Text>
           </View>
         ) : null}
       </View>
-      <Text className="mt-2 font-sans text-[11px] text-muted-light">
+      <Text className="mt-2 font-sans text-[11px] text-wood-600">
         Terracotta = your take · cream = reference guide · faint amber = ghost self. {ghostErr ? ` ${ghostErr}` : ''}
       </Text>
     </View>

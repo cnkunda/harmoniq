@@ -45,9 +45,9 @@ export default function MusicalToleranceScreen() {
 
   return (
     <View className="flex-1 bg-ivory px-6 pt-8">
-      <View className="mx-auto w-full max-w-xl rounded-2xl border border-wood-600/40 bg-cream p-6">
+      <View className="mx-auto w-full max-w-xl rounded-2xl border border-wood-600/20 bg-cream p-6 shadow-sm">
         <Text className="font-serif text-3xl text-wood-900">Choose your scoring mode</Text>
-        <Text className="mt-2 font-sans text-sm leading-5 text-muted-light">
+        <Text className="mt-2 font-sans text-sm leading-5 text-wood-600">
           How should we evaluate your timing? Expressive mode allows for musical feel, while Technique mode enforces precision.
         </Text>
         <View className="mt-6 gap-3">
@@ -57,13 +57,13 @@ export default function MusicalToleranceScreen() {
               haptic="light"
               disabled={busy}
               onPress={() => void commitAndGo(opt.id)}
-              className="rounded-xl border border-wood-600/45 bg-wood-800/10 px-4 py-3 active:opacity-90 disabled:opacity-50"
+              className="rounded-xl border border-wood-600/20 bg-white px-4 py-3 shadow-sm active:opacity-90 disabled:opacity-50"
               accessibilityRole="button"
               accessibilityLabel={`Select mode ${opt.label}`}
             >
               <Text className="font-sans-medium text-base text-wood-900">{opt.label}</Text>
-              <Text className="mt-1 font-sans text-xs leading-5 text-muted-light">{opt.subtitle}</Text>
-              <Text className="mt-2 font-sans text-[11px] text-amber-accent/80">{opt.tolerance}</Text>
+              <Text className="mt-1 font-sans text-xs leading-5 text-wood-600">{opt.subtitle}</Text>
+              <Text className="mt-2 font-sans text-[11px] font-medium text-wood-600">{opt.tolerance}</Text>
             </AnimatedPressable>
           ))}
         </View>
@@ -74,7 +74,7 @@ export default function MusicalToleranceScreen() {
           accessibilityRole="button"
           accessibilityLabel="Skip and use default technique mode"
         >
-          <Text className="font-sans text-xs text-muted-light">Skip (default: Technique)</Text>
+          <Text className="font-sans text-xs text-wood-600">Skip (default: Technique)</Text>
         </AnimatedPressable>
       </View>
     </View>

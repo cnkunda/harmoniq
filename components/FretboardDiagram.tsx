@@ -553,22 +553,22 @@ export function FretboardDiagram({
     : 0
 
   return (
-    <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/45 p-3">
+    <View className="mt-3 rounded-xl border border-wood-600/20 bg-cream p-3 shadow-sm">
       <View className="flex-row items-start justify-between gap-5">
         <View className="gap-1" style={{ minWidth: 130 }}>
-          <Text className="font-sans-medium text-[10px] uppercase tracking-[0.14em] text-amber-accent">Position map</Text>
+          <Text className="font-sans-medium text-[10px] uppercase tracking-[0.14em] text-wood-600">Position map</Text>
           <View className="flex-row items-baseline gap-2">
             <Text className="font-sans text-base font-semibold text-wood-900">{keyLabel}</Text>
             {capoText ? (
-              <View className="rounded-full border border-amber-accent/25 bg-amber-accent/10 px-[7px] py-0.5">
-                <Text className="text-[10px] font-medium text-amber-accent/70">{capoText}</Text>
+              <View className="rounded-full border border-amber-accent/25 bg-amber-accent/15 px-[7px] py-0.5">
+                <Text className="text-[10px] font-medium text-wood-900">{capoText}</Text>
               </View>
             ) : null}
           </View>
         </View>
         <View className="flex-1 flex-row flex-wrap items-center justify-end gap-1.5">
           {onFretboardModeChange && (
-            <View className="flex-row rounded-full border border-wood-600/45 bg-cream-dark/30 p-0.5 gap-[2px]">
+            <View className="flex-row rounded-full border border-wood-600/25 bg-white p-0.5 gap-[2px]">
               {([
                 { mode: 'auto' as const, label: 'Auto' },
                 { mode: 'chords' as const, label: 'Chord' },
@@ -586,7 +586,7 @@ export function FretboardDiagram({
                   accessibilityState={{ selected: fretboardMode === mode }}
                 >
                   <Text className={`font-sans text-xs ${
-                    fretboardMode === mode ? 'text-amber-accent font-medium' : 'text-muted-light'
+                    fretboardMode === mode ? 'text-wood-900 font-medium' : 'text-wood-600'
                   }`}>{label}</Text>
                 </Pressable>
               ))}
@@ -621,7 +621,7 @@ export function FretboardDiagram({
                   accessibilityLabel={label}
                   accessibilityState={{ selected: voicingMode === mode }}
                 >
-                  <Text className={`font-sans text-[11px] ${voicingMode === mode ? 'text-wood-900' : 'text-muted-light'}`}>{label}</Text>
+                  <Text className={`font-sans text-[11px] ${voicingMode === mode ? 'text-wood-900' : 'text-wood-600'}`}>{label}</Text>
                 </Pressable>
               ))}
             </>
@@ -648,7 +648,7 @@ export function FretboardDiagram({
                   accessibilityLabel={label}
                   accessibilityState={{ selected: overlayMode === mode }}
                 >
-                  <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-muted-light'}`}>{label}</Text>
+                  <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-wood-600'}`}>{label}</Text>
                 </Pressable>
               ))}
             </>
@@ -657,12 +657,12 @@ export function FretboardDiagram({
           {showPitchLadderControl ? (
             <Pressable
               onPress={() => setPitchLadderOpen((o) => !o)}
-              className={`rounded-full border px-3 py-1.5 ${pitchLadderOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'}`}
+              className={`rounded-full border px-3 py-1.5 ${pitchLadderOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/30 bg-white'}`}
               accessibilityRole="button"
               accessibilityLabel="Show example pitch ladder"
               accessibilityState={{ selected: pitchLadderOpen }}
             >
-              <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-muted-light'}`}>Example</Text>
+              <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-wood-600'}`}>Example</Text>
             </Pressable>
           ) : null}
 
@@ -728,7 +728,7 @@ export function FretboardDiagram({
             {tunerState.noteName || '—'} · {typeof tunerState.cents === 'number' ? `${Math.round(tunerState.cents)}¢` : '—'} ·{' '}
             {tunerState.hz != null ? `${tunerState.hz.toFixed(1)} Hz` : 'no pitch'}
           </Text>
-          <Text className={`mt-1 font-sans text-[11px] ${tunerState.inTune ? 'text-success' : 'text-muted-light'}`}>
+          <Text className={`mt-1 font-sans text-[11px] ${tunerState.inTune ? 'text-wood-900 font-sans-medium' : 'text-wood-600'}`}>
             {tunerState.statusText}
           </Text>
         </View>
@@ -738,7 +738,7 @@ export function FretboardDiagram({
         <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
           <Text className="font-sans-medium text-[11px] text-wood-900">Technique Hint</Text>
           {orientAnnotation ? (
-            <Text className="mt-1 font-sans text-[11px] text-muted-light">{orientAnnotation}</Text>
+            <Text className="mt-1 font-sans text-[11px] text-wood-600">{orientAnnotation}</Text>
           ) : null}
           {orientClipUrl ? (
             <Pressable
@@ -752,14 +752,14 @@ export function FretboardDiagram({
               </Text>
             </Pressable>
           ) : (
-            <Text className="mt-1 font-sans text-[11px] text-muted-light">No hint clip available</Text>
+            <Text className="mt-1 font-sans text-[11px] text-wood-600">No hint clip available</Text>
           )}
         </View>
       ) : null}
 
       {pitchLadderOpen && pitchLadderSlot ? (
         <View className="mt-2">
-          <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-muted-light">
+          <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-wood-600">
             Example · pitch ladder (Play)
           </Text>
           {pitchLadderSlot}
@@ -1126,42 +1126,42 @@ export function FretboardDiagram({
         <View className="mt-2 border-t border-wood-600/20 pt-3">
           <View className="flex-row items-center">
             <View className="flex-row items-baseline gap-3 pr-4 border-r border-wood-600/20">
-              <Text className="font-serif text-3xl tracking-tight text-amber-accent">
+              <Text className="font-serif text-3xl tracking-tight text-wood-900">
                 {chordName}
               </Text>
               {chordFullName ? (
-                <Text className="text-[11px] uppercase tracking-widest text-amber-accent/60 font-medium">
+                <Text className="text-[11px] uppercase tracking-widest text-wood-600 font-medium">
                   {chordFullName}
                 </Text>
               ) : null}
             </View>
             <View className="px-4 border-r border-wood-600/20">
-              <Text className="text-[9px] uppercase tracking-wider text-amber-accent/50 mb-0.5">
+              <Text className="text-[9px] uppercase tracking-wider text-wood-600 mb-0.5">
                 Notes
               </Text>
               <View className="flex-row items-center gap-1.5">
                 {chordNotes.map((note, idx) => (
                   <View key={note} className="flex-row items-center gap-1.5">
                     {idx > 0 && (
-                      <View className="h-1 w-1 rounded-full bg-amber-accent/30" />
+                      <View className="h-1 w-1 rounded-full bg-wood-600/30" />
                     )}
-                    <Text className="text-sm font-medium text-amber-accent">{note}</Text>
+                    <Text className="text-sm font-medium text-wood-900">{note}</Text>
                   </View>
                 ))}
               </View>
             </View>
             {chordExtensions.length > 0 ? (
               <View className="flex-1 pl-4">
-                <Text className="text-[9px] uppercase tracking-wider text-amber-accent/50 mb-1">
+                <Text className="text-[9px] uppercase tracking-wider text-wood-600 mb-1">
                   Extended harmony
                 </Text>
                 <View className="flex-row flex-wrap gap-1.5">
                   {chordExtensions.map((ext) => (
                     <View
                       key={ext}
-                      className="rounded-full border border-wood-600/30 px-2 py-0.5"
+                      className="rounded-full border border-wood-600/30 bg-cream px-2 py-0.5"
                     >
-                      <Text className="text-[10px] font-medium text-amber-accent/70">
+                      <Text className="text-[10px] font-medium text-wood-600">
                         {ext}
                       </Text>
                     </View>
@@ -1169,19 +1169,19 @@ export function FretboardDiagram({
                 </View>
               </View>
             ) : null}
-            <Text className="ml-auto font-mono text-[10px] text-muted-light">Tap a note to identify position</Text>
+            <Text className="ml-auto font-mono text-[10px] text-wood-600">Tap a note to identify position</Text>
           </View>
         </View>
       ) : null}
 
       {cell ? (
-        <Text className="mt-2 font-mono text-[10px] text-muted-light">
+        <Text className="mt-2 font-mono text-[10px] text-wood-600">
           Selected · string {cell.row + 1} (tab) · fret {cell.fret} · pulse #{pulseKey}
         </Text>
       ) : !fretGuideFooterHint && !(chordName && chordNotes.length > 0) ? (
-        <Text className="mt-2 font-mono text-[10px] text-muted-light">Tap a note to identify position</Text>
+        <Text className="mt-2 font-mono text-[10px] text-wood-600">Tap a note to identify position</Text>
       ) : fretGuideFooterHint ? (
-        <Text className="mt-2 font-mono text-[10px] text-muted-light">{fretGuideFooterHint}</Text>
+        <Text className="mt-2 font-mono text-[10px] text-wood-600">{fretGuideFooterHint}</Text>
       ) : null}
     </View>
   )

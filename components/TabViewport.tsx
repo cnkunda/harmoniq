@@ -69,11 +69,11 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
     }, [onSongDetails])
 
     const isLight = renderPreset === 'light'
-    const cardBg = isLight ? 'bg-ivory' : 'bg-wood-900'
+    const cardBg = isLight ? 'bg-white' : 'bg-wood-900'
     const dividerBorder = isLight ? 'border-wood-600/20' : 'border-wood-600/40'
     const textColor = isLight ? 'text-wood-900' : 'text-cream'
-    const pillBase = isLight ? 'border-wood-600/30 bg-cream-dark/40' : 'border-wood-600/35 bg-transparent'
-    const pillActiveBase = 'border-amber-accent bg-amber-accent/10'
+    const pillBase = isLight ? 'border-wood-600/25 bg-cream' : 'border-wood-600/35 bg-transparent'
+    const pillActiveBase = 'border-amber-accent bg-amber-accent'
 
     const displayTitle = songTitle || songMeta?.title
     const displayArtist = songArtist || songMeta?.artist
@@ -92,13 +92,13 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
           className={`rounded-full border px-2.5 py-1 ${active ? pillActiveBase : pillBase}`}
           accessibilityRole="button"
         >
-          <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${active ? 'text-amber-accent' : 'text-muted-light'}`}>{label}</Text>
+          <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${active ? 'text-wood-900' : 'text-wood-600'}`}>{label}</Text>
         </AnimatedPressable>
       )
     }
 
     return (
-      <View style={[style, { overflow: 'hidden' }]} className={`flex-1 flex-col rounded-xl border border-wood-600/40 ${cardBg}`}>
+      <View style={[style, { overflow: 'hidden' }]} className={`flex-1 flex-col rounded-xl border border-wood-600/20 shadow-sm ${cardBg}`}>
         {/* Header: left = title/artist, right = controls */}
         {showHeader && (
           <View className={`flex-row items-center gap-3 border-b ${dividerBorder} px-3 py-2.5`}>
@@ -110,12 +110,12 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
                 </Text>
               )}
               {displayArtist && (
-                <Text className="font-sans text-[11px] leading-tight text-muted-light" numberOfLines={1}>
+                <Text className="font-sans text-[11px] leading-tight text-wood-600" numberOfLines={1}>
                   {displayArtist}
                 </Text>
               )}
               {songMeta?.tempoBpm ? (
-                <Text className="font-sans text-[10px] leading-tight text-amber-accent/80">
+                <Text className="font-sans text-[10px] leading-tight text-wood-500">
                   {Math.round(songMeta.tempoBpm)} BPM
                 </Text>
               ) : null}
@@ -133,7 +133,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
                   className={`rounded-full border px-2.5 py-1 ${showLyrics ? pillActiveBase : pillBase}`}
                   accessibilityRole="button"
                 >
-                  <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${showLyrics ? 'text-amber-accent' : 'text-muted-light'}`}>Lyrics</Text>
+                  <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${showLyrics ? 'text-wood-900' : 'text-wood-600'}`}>Lyrics</Text>
                 </AnimatedPressable>
               )}
               {onSeekToStart && (
@@ -143,7 +143,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
                   className={`rounded-full border px-2.5 py-1 ${pillBase}`}
                   accessibilityRole="button"
                 >
-                  <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-muted-light">⏮ Start</Text>
+                  <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-wood-600">⏮ Start</Text>
                 </AnimatedPressable>
               )}
             </View>

@@ -46,7 +46,7 @@ export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProp
   if (words.length === 0) {
     if (hideHeading) return null
     return (
-      <Text className="mt-2 font-sans text-xs text-muted-light">
+      <Text className="mt-2 font-sans text-xs text-wood-600">
         Lyrics unavailable for this section.
       </Text>
     )
@@ -55,7 +55,7 @@ export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProp
   return (
     <View className={hideHeading ? "w-full" : "mt-2 w-full"}>
       {!hideHeading && (
-        <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+        <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-wood-600">
           Lyrics
         </Text>
       )}
@@ -71,12 +71,12 @@ export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProp
             <Text
               key={`${i}-${w.timeSec}`}
               onLayout={(event) => handleWordLayout(i, event)}
-              className={
+                className={
                 i === activeIndex
                   ? 'font-sans-medium text-base text-amber-accent'
                   : i < activeIndex
-                  ? 'font-sans text-sm text-wood-900/60'
-                  : 'font-sans text-sm text-muted-light'
+                  ? 'font-sans text-sm text-wood-600'
+                  : 'font-sans text-sm text-wood-600'
               }
             >
               {w.word}

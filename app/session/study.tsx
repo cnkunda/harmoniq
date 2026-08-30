@@ -556,8 +556,8 @@ function StudyScreenInner() {
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.study}</DemoTourCallout> : null}
 
       {showTranscriptionWarningModal && (
-        <View className="mx-4 rounded-lg border border-amber-accent/50 bg-amber-accent/10 p-4">
-          <Text className="mb-2 font-sans-medium text-amber-accent">
+        <View className="mx-4 rounded-lg border border-amber-accent/30 bg-amber-accent/12 p-4">
+          <Text className="mb-2 font-sans-medium text-wood-900">
             Transcription Uncertainty
           </Text>
           <Text className="mb-3 font-sans text-sm text-wood-900">
@@ -576,8 +576,8 @@ function StudyScreenInner() {
                   <AnimatedPressable
                     key={stemName}
                     className={`rounded-md border px-3 py-1.5 ${stemRoutingOverride === stemName
-                      ? 'border-amber-accent bg-amber-accent/20'
-                      : 'border-wood-600/30 bg-wood-800/50'
+                      ? 'border-amber-accent bg-amber-accent'
+                      : 'border-wood-600/25 bg-white'
                       }`}
                     onPress={() => {
                       setStemRoutingOverride(stemName)
@@ -586,7 +586,7 @@ function StudyScreenInner() {
                     }}
                   >
                     <Text
-                      className={`font-sans-medium text-xs ${stemRoutingOverride === stemName ? 'text-amber-accent' : 'text-cream'
+                      className={`font-sans-medium text-xs ${stemRoutingOverride === stemName ? 'text-wood-900' : 'text-wood-600'
                         }`}
                     >
                       {stemName}
@@ -612,12 +612,12 @@ function StudyScreenInner() {
               </Text>
             </AnimatedPressable>
             <AnimatedPressable
-              className="flex-1 rounded-md border border-wood-600/30 bg-wood-800/50 px-3 py-2"
+              className="flex-1 rounded-md border border-wood-600/25 bg-white px-3 py-2"
               onPress={() => {
                 setShowTranscriptionWarningModal(false)
               }}
             >
-              <Text className="text-center font-sans-medium text-sm text-cream">
+              <Text className="text-center font-sans-medium text-sm text-wood-600">
                 Continue Anyway
               </Text>
             </AnimatedPressable>
@@ -703,18 +703,18 @@ function StudyScreenInner() {
 
             <View className="mt-2">
               <View className="flex-row items-center justify-between mb-2">
-                <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+                <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">
                   Annotations (long-press bar)
                 </Text>
                 <AnimatedPressable
                   onPress={() => setCorrectionMode((m) => !m)}
                   haptic="light"
                   className={`rounded-full px-3 py-1 border ${correctionMode
-                    ? 'border-amber-accent bg-amber-accent/20'
-                    : 'border-wood-600/35 bg-cream-dark/35'
+                    ? 'border-amber-accent bg-amber-accent'
+                    : 'border-wood-600/25 bg-white'
                   }`}
                 >
-                  <Text className={`font-sans-medium text-[10px] ${correctionMode ? 'text-amber-accent' : 'text-muted-light'}`}>
+                  <Text className={`font-sans-medium text-[10px] ${correctionMode ? 'text-wood-900' : 'text-wood-600'}`}>
                     {correctionMode ? '✏️ Correcting' : 'Correct'}
                   </Text>
                 </AnimatedPressable>
@@ -752,12 +752,12 @@ function StudyScreenInner() {
                         const text = `Practice note @ bar ${bar} (${new Date().toLocaleTimeString()})`
                         setAnnotation(sectionKey, bar, text)
                       }}
-                      className={`min-w-[40px] items-center rounded-full border px-2 py-1 ${bar === currentBar ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/35'
+                      className={`min-h-[36px] min-w-[44px] items-center justify-center rounded-full border px-2 py-1.5 ${bar === currentBar ? 'border-amber-accent bg-amber-accent' : 'border-wood-600/25 bg-white'
                         }`}
                       accessibilityRole="button"
                       accessibilityHint={`${chordLabel} at bar ${bar}. ${correctionMode ? 'Tap to correct chord.' : 'Tap to seek; long press to save a practice note'}`}
                     >
-                      <Text className={`font-mono text-[10px] ${bar === currentBar ? 'text-wood-900' : 'text-muted-light'}`}>
+                      <Text className={`font-mono text-[10px] ${bar === currentBar ? 'text-wood-900' : 'text-wood-600'}`}>
                         {chordLabel}
                       </Text>
                     </AnimatedPressable>
@@ -805,7 +805,7 @@ function StudyScreenInner() {
                 </View>
               ) : null}
 
-              <Text className="mt-1 font-sans text-[11px] text-muted-light">
+              <Text className="mt-1 font-sans text-[11px] text-wood-600">
                 Saved notes in this section: {Object.keys(sectionNotes).length}
                 {correctionMode ? ` · Corrections: ${correctionHistory?.correction_count ?? 0}` : ''}
               </Text>

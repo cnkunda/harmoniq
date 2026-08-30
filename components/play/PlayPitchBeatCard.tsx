@@ -7,7 +7,7 @@ import type { TabNoteQueueEntry } from '@/src/session/usePlayCapture'
 const VISIBLE = 7
 const CENTER = Math.floor(VISIBLE / 2)
 
-const CHIP_OFF = 'items-center justify-center rounded-full border border-wood-600/40 bg-wood-900/10 px-2 py-1.5'
+const CHIP_OFF = 'items-center justify-center rounded-full border border-wood-600/25 bg-white px-2 py-1.5'
 const CHIP_ON =
   'min-w-[52px] items-center justify-center rounded-full border border-amber-accent bg-amber-accent px-3 py-2'
 
@@ -69,8 +69,8 @@ export function PlayPitchBeatCard({
 
   return (
     <View className={shell}>
-      <View className="border-b border-wood-600/25 bg-ivory/35 px-3 py-2.5">
-        <Text className="text-center font-mono text-[10px] leading-snug text-muted-light">
+      <View className="border-b border-wood-600/20 bg-cream px-3 py-2.5">
+        <Text className="text-center font-mono text-[10px] leading-snug text-wood-600">
           Streak {currentStreak} beat{currentStreak === 1 ? '' : 's'} · ±{Math.round(adaptedCentsTolerance)}¢ adapts ·
           inner ≤{Math.round(innerToleranceCents)}¢
         </Text>
@@ -78,13 +78,13 @@ export function PlayPitchBeatCard({
 
       <View className="px-3 pb-3 pt-3">
         <View className="flex-row items-baseline justify-between gap-2">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Pitch targets</Text>
+          <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">Pitch targets</Text>
           {nQueue > 0 ? (
-            <Text className="shrink font-mono text-[10px] text-muted-light">
+            <Text className="shrink font-mono text-[10px] text-wood-600">
               {nQueue} note{nQueue === 1 ? '' : 's'}
             </Text>
           ) : (
-            <Text className="shrink font-mono text-[10px] text-muted-light">Tab…</Text>
+            <Text className="shrink font-mono text-[10px] text-wood-600">Tab…</Text>
           )}
         </View>
 
@@ -128,11 +128,11 @@ export function PlayPitchBeatCard({
 
       <View className="px-3 pb-3 pt-3">
         <View className="flex-row items-baseline justify-between gap-2">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Score · by beat</Text>
+          <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">Score · by beat</Text>
           {pct != null ? (
             <Text className="font-mono text-[10px] text-wood-900">{pct}% on-pitch</Text>
           ) : (
-            <Text className="font-mono text-[10px] text-muted-light">—</Text>
+            <Text className="font-mono text-[10px] text-wood-600">—</Text>
           )}
         </View>
         <View className="mt-2">
@@ -142,14 +142,14 @@ export function PlayPitchBeatCard({
           <View className="mt-1.5 flex-row gap-0.5">
             {alignedLabels.map((label, i) => (
               <View key={`lb-${i}-${label}`} className="min-w-[6px] flex-1 items-center">
-                <Text className="font-mono text-[8px] text-muted-light" numberOfLines={1}>
+                <Text className="font-mono text-[8px] text-wood-600" numberOfLines={1}>
                   {label}
                 </Text>
               </View>
             ))}
           </View>
         ) : null}
-        <Text className="mt-1.5 font-sans text-[10px] text-muted-light">
+        <Text className="mt-1.5 font-sans text-[10px] text-wood-600">
           Hits {hit} · Close {close} · Miss {miss}
         </Text>
       </View>

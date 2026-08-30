@@ -27,7 +27,7 @@ const TUNER_RING_STROKE = 7
 const TUNER_RING_C = 2 * Math.PI * TUNER_RING_R
 const CENTS_UI_CLAMP = 50
 
-const SECTION_EYEBROW_CLASS = 'font-sans-medium text-xs uppercase tracking-wide text-amber-accent'
+const SECTION_EYEBROW_CLASS = 'font-sans-medium text-xs uppercase tracking-wide text-wood-600'
 
 function centsFromHzToTargetMidi(hz: number, targetMidi: number): number {
   const midiFloat = 69 + 12 * Math.log2(hz / 440)
@@ -183,9 +183,9 @@ export default function TuneScreen() {
             />
           </View>
           <View className="mt-1.5 flex-row justify-between px-0.5">
-            <Text className="font-mono text-[10px] text-muted-light">−50</Text>
-            <Text className="font-mono text-[10px] text-muted-light">0</Text>
-            <Text className="font-mono text-[10px] text-muted-light">+50</Text>
+            <Text className="font-mono text-[10px] text-wood-600">−50</Text>
+            <Text className="font-mono text-[10px] text-wood-600">0</Text>
+            <Text className="font-mono text-[10px] text-wood-600">+50</Text>
           </View>
           <Text className="mt-2 text-center font-mono text-sm text-wood-800">
             {cents != null ? `${cents > 0 ? '+' : ''}${cents.toFixed(0)} cents` : '—'}
@@ -193,11 +193,11 @@ export default function TuneScreen() {
         </View>
       </View>
 
-      <Text className="mt-6 text-center font-sans text-sm leading-relaxed text-muted-light">
+      <Text className="mt-6 text-center font-sans text-sm leading-relaxed text-wood-600">
         {noteName ? `Heard: ${noteName}. ` : ''}Play the open low E string.
       </Text>
       {tunerOk ? (
-        <Text className="mt-2 text-center font-sans text-sm text-success">In range — ready to continue.</Text>
+        <Text className="mt-2 text-center font-sans text-sm font-sans-medium text-wood-900">In range — ready to continue.</Text>
       ) : null}
     </View>
   )
@@ -215,12 +215,12 @@ export default function TuneScreen() {
                 haptic="light"
                 onPress={() => void setActiveMicProfile(id)}
                 className={`rounded-full border px-3 py-2 ${
-                  selected ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-cream-dark/35'
+                  selected ? 'border-amber-accent bg-amber-accent' : 'border-wood-600/25 bg-white'
                 }`}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
               >
-                <Text className={`text-sm ${selected ? 'font-sans-medium text-wood-900' : 'font-sans text-muted-light'}`}>
+                <Text className={`text-sm ${selected ? 'font-sans-medium text-wood-900' : 'font-sans text-wood-600'}`}>
                   {micProfileLabel(id)}
                 </Text>
               </AnimatedPressable>
@@ -236,13 +236,13 @@ export default function TuneScreen() {
             className={`rounded-full px-2.5 py-1 ${gateCalibrated ? 'bg-success/20' : 'bg-wood-600/15'}`}
           >
             <Text
-              className={`font-sans-medium text-[11px] uppercase tracking-wide ${gateCalibrated ? 'text-success' : 'text-muted-light'}`}
+              className={`font-sans-medium text-[11px] uppercase tracking-wide ${gateCalibrated ? 'text-wood-900' : 'text-wood-600'}`}
             >
               {gateCalibrated ? 'Calibrated' : 'Not calibrated'}
             </Text>
           </View>
         </View>
-        <Text className="mt-4 font-sans-medium text-[10px] uppercase tracking-wider text-muted-light">
+        <Text className="mt-4 font-sans-medium text-[10px] uppercase tracking-wider text-wood-600">
           RMS gate threshold
         </Text>
         <Text className="mt-1 font-mono text-base text-wood-900">{gateDisplay}</Text>
@@ -250,7 +250,7 @@ export default function TuneScreen() {
           haptic="light"
           onPress={beginCalibration}
           disabled={calibrating || !hydrated}
-          className={`mt-4 rounded-lg border border-wood-600/55 bg-cream-dark/60 py-3 ${calibrating ? 'opacity-60' : ''}`}
+          className={`mt-4 rounded-lg border border-wood-600/25 bg-white py-3 shadow-sm ${calibrating ? 'opacity-60' : ''}`}
           accessibilityRole="button"
         >
           <Text className="text-center font-sans-medium text-sm text-wood-900">
@@ -282,7 +282,7 @@ export default function TuneScreen() {
           </Text>
         </AnimatedPressable>
         <AnimatedPressable haptic="light" onPress={() => void forwardToListen()} accessibilityRole="button">
-          <Text className="text-center font-sans text-sm text-muted-light underline">Skip for now</Text>
+          <Text className="text-center font-sans text-sm text-wood-600 underline">Skip for now</Text>
         </AnimatedPressable>
       </View>
     </View>
@@ -308,8 +308,8 @@ export default function TuneScreen() {
       </View>
 
       {typeof __DEV__ !== 'undefined' && __DEV__ ? (
-        <View className="mt-6 rounded-lg border border-dashed border-wood-600/35 bg-cream-dark/40 px-3 py-2">
-          <Text className="font-mono text-xs text-muted-light">
+        <View className="mt-6 rounded-lg border border-dashed border-wood-600/25 bg-cream px-3 py-2">
+          <Text className="font-mono text-xs text-wood-600">
             noiseGateThresholdRms ({activeMicProfile}): {gateDisplay} · live RMS: {rms.toFixed(4)}{' '}
             {Platform.OS === 'web' ? '(web)' : '(native)'}
           </Text>

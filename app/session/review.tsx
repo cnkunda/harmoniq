@@ -554,13 +554,13 @@ export default function ReviewScreen() {
             noteResults={currentSession.noteResults}
           />
           {currentSession.bpmDriftSampleCount >= BPM_DRIFT_NOTE_MINIMUM ? (
-            <Text className="mt-2 font-sans text-xs text-muted-light">
+            <Text className="mt-2 font-sans text-xs text-wood-600">
               Timing vs beat (mean): {currentSession.bpmDrift >= 0 ? '+' : ''}
               {Math.round(currentSession.bpmDrift)} ms — {currentSession.bpmDrift >= 0 ? 'ahead of grid' : 'behind grid'}
             </Text>
           ) : null}
           {currentSession.bestStreak > currentSession.bestStreakAtSessionStart ? (
-            <Text className="mt-1 font-sans text-xs text-muted-light">
+            <Text className="mt-1 font-sans text-xs text-wood-600">
               New high clean-streak this session: {currentSession.bestStreak} beats (previous best at start:{' '}
               {currentSession.bestStreakAtSessionStart}).
             </Text>
@@ -572,43 +572,43 @@ export default function ReviewScreen() {
         <AnimatedPressable haptic="light"
           onPress={() => void runScore()}
           disabled={busy}
-          className="rounded-lg bg-amber-accent/90 px-4 py-2 disabled:opacity-40"
+          className="rounded-lg bg-amber-accent px-4 py-2.5 shadow-sm disabled:opacity-40"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">{busy ? 'Scoring…' : 'Run score'}</Text>
         </AnimatedPressable>
         <AnimatedPressable
           onPress={() => void exportMidi()}
-          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
+          className="rounded-lg border border-wood-600/25 bg-white px-3.5 py-2"
           accessibilityRole="button"
         >
-          <Text className="font-sans-medium text-wood-900">Export MIDI</Text>
+          <Text className="font-sans text-wood-600 text-sm">Export MIDI</Text>
         </AnimatedPressable>
         <AnimatedPressable
           onPress={() => void exportMusicXml()}
-          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
+          className="rounded-lg border border-wood-600/25 bg-white px-3.5 py-2"
           accessibilityRole="button"
         >
-          <Text className="font-sans-medium text-wood-900">Export MusicXML</Text>
+          <Text className="font-sans text-wood-600 text-sm">Export MusicXML</Text>
         </AnimatedPressable>
         <AnimatedPressable haptic="light"
           onPress={() => void saveLick()}
           disabled={savingLick}
-          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2 disabled:opacity-40"
+          className="rounded-lg border border-wood-600/25 bg-white px-3.5 py-2 disabled:opacity-40"
           accessibilityRole="button"
         >
-          <Text className="font-sans-medium text-wood-900">{savingLick ? 'Saving…' : 'Save to Library'}</Text>
+          <Text className="font-sans text-wood-600 text-sm">{savingLick ? 'Saving…' : 'Save to Library'}</Text>
         </AnimatedPressable>
         <AnimatedPressable haptic="light"
           onPress={() => router.push('/library')}
-          className="rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
+          className="rounded-lg border border-wood-600/25 bg-white px-3.5 py-2"
           accessibilityRole="button"
         >
-          <Text className="font-sans-medium text-wood-900">Open Library</Text>
+          <Text className="font-sans text-wood-600 text-sm">Open Library</Text>
         </AnimatedPressable>
       </View>
 
-      <Text className="mt-2 font-mono text-[11px] text-muted-light">{exportState}</Text>
+      <Text className="mt-2 font-mono text-[11px] text-wood-600">{exportState}</Text>
 
       {reviewError ? (
         <ErrorBanner
@@ -637,12 +637,12 @@ export default function ReviewScreen() {
           <AnimatedPressable
             onPress={() => setShowCorrections((v) => !v)}
             haptic="light"
-            className="flex-row items-center justify-between rounded-lg border border-wood-600/30 bg-cream-dark/30 px-3 py-2"
+            className="flex-row items-center justify-between rounded-lg border border-wood-600/20 bg-cream px-3 py-2 shadow-sm"
           >
-            <Text className="font-sans-medium text-xs text-amber-accent">
+            <Text className="font-sans-medium text-xs text-wood-900">
               Corrections ({correctionHistory.correction_count})
             </Text>
-            <Text className="font-sans text-[10px] text-muted-light">
+            <Text className="font-sans text-[10px] text-wood-600">
               {showCorrections ? 'Hide' : 'Show'} · {Math.round(correctionHistory.correction_coverage * 100)}% coverage
             </Text>
           </AnimatedPressable>
@@ -658,15 +658,15 @@ export default function ReviewScreen() {
       ) : null}
 
       {!sectionMidiBase64 && (tabs.full || tabs.skeleton || tabs.alt) ? (
-        <Text className="mt-2 font-sans text-[11px] text-muted-light">
+        <Text className="mt-2 font-sans text-[11px] text-wood-600">
           Using generated fallback MIDI for export (section has no `midi_base64` yet).
         </Text>
       ) : null}
 
-      <Text className="mt-3 font-sans text-[11px] text-muted-light">
+      <Text className="mt-3 font-sans text-[11px] text-wood-600">
         Recording buffer: {latestTake ? `${(latestTake.durationMs / 1000).toFixed(1)}s / ${latestTake.audioBytes.length} bytes` : 'none'}
       </Text>
-      <Text className="mt-1 font-sans text-[11px] text-muted-light">
+      <Text className="mt-1 font-sans text-[11px] text-wood-600">
         Persisted sessions (local DB): {sessionCount ?? '...'}
       </Text>
     </SessionStepScreen>

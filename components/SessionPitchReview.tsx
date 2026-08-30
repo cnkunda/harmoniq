@@ -31,7 +31,7 @@ function SparkRow({
   const hzVals = contour.map((c) => c.hz).filter((h) => h > 0)
   if (hzVals.length === 0) {
     return (
-      <Text className="font-sans text-[10px] text-muted-light" numberOfLines={1}>
+      <Text className="font-sans text-[10px] text-wood-600" numberOfLines={1}>
         No pitch trace
       </Text>
     )
@@ -64,12 +64,12 @@ function SparkRow({
 
   const labelClass =
     result === 'vibrato'
-      ? 'text-amber-accent'
+      ? 'text-wood-600'
       : result === 'hit' || result === 'close'
-        ? 'text-success'
+        ? 'text-wood-900'
         : result === 'miss'
-          ? 'text-danger'
-          : 'text-muted-light'
+          ? 'text-wood-600'
+          : 'text-wood-600'
 
   return (
     <View className="mb-3 flex-row items-center gap-2">
@@ -96,9 +96,9 @@ export interface SessionPitchReviewProps {
 export function SessionPitchReview({ noteContours, noteTargetMidis, noteResults }: SessionPitchReviewProps) {
   if (noteContours.length === 0) return null
   return (
-    <View className="mt-3 rounded-lg border border-wood-600/45 bg-cream-dark/40 px-3 py-3">
-      <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Pitch contours</Text>
-      <Text className="mt-1 font-sans text-[10px] text-muted-light">
+    <View className="mt-3 rounded-lg border border-wood-600/20 bg-cream px-3 py-3 shadow-sm">
+      <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">Pitch contours</Text>
+      <Text className="mt-1 font-sans text-[10px] text-wood-600">
         Sage line = target Hz · Amber = your pitch (time →)
       </Text>
       <View className="mt-2">

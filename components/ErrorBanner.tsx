@@ -24,15 +24,15 @@ const STYLES: Record<
   { bg: string; border: string; text: string; iconColor: string }
 > = {
   warning: {
-    bg: 'bg-amber-accent/10',
+    bg: 'bg-amber-accent/12',
     border: 'border-amber-accent/30',
-    text: 'text-amber-light',
-    iconColor: colors.amber.light,
+    text: 'text-wood-900',
+    iconColor: colors.amber.accent,
   },
   error: {
     bg: 'bg-danger/10',
     border: 'border-danger/30',
-    text: 'text-danger',
+    text: 'text-wood-900',
     iconColor: colors.danger,
   },
   info: {

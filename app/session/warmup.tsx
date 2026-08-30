@@ -266,7 +266,7 @@ function WarmupScreenInner() {
     >
       <View className={`mt-1 ${colClass}`}>
         <View className={leftColClass}>
-          <Text className="font-sans-medium text-xs uppercase tracking-wider text-amber-accent">SESSION WARM-UP</Text>
+          <Text className="font-sans-medium text-xs uppercase tracking-wider text-wood-600">SESSION WARM-UP</Text>
 
           <View className="mt-4 items-center">
             <WarmupTimerRing
@@ -321,7 +321,7 @@ function WarmupScreenInner() {
         <View className={rightColClass}>
           <View className="rounded-2xl border border-wood-600/20 bg-white px-4 pb-4 pt-3.5 shadow-sm">
             <View className="flex-row items-center justify-between">
-              <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+              <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">
                 Exercise {completed ? exercises.length : exerciseIndex + 1} of {exercises.length}
               </Text>
               {!completed ? (
@@ -332,7 +332,7 @@ function WarmupScreenInner() {
                   </Text>
                 </View>
               ) : (
-                <Text className="font-sans-medium text-xs text-muted-light">Done</Text>
+                <Text className="font-sans-medium text-xs text-wood-600">Done</Text>
               )}
             </View>
 
@@ -349,7 +349,7 @@ function WarmupScreenInner() {
             <View className="mt-4">
               <View className="mb-1.5 flex-row items-center justify-between">
                 <Text className="font-sans-medium text-xs text-wood-800">Playback tempo</Text>
-                <Text className="font-sans-medium text-xs text-amber-accent">{displayBpm} BPM</Text>
+                <Text className="font-sans-medium text-xs text-wood-900">{displayBpm} BPM</Text>
               </View>
               <Slider
                 minimumValue={0.55}
@@ -361,19 +361,19 @@ function WarmupScreenInner() {
                 maximumTrackTintColor={colors.muted.light}
                 thumbTintColor={colors.wood[700]}
               />
-              <Text className="mt-1 font-sans text-xs text-muted-light">
+              <Text className="mt-1 font-sans text-xs text-wood-600">
                 Adjusts preview only — plan stays the same.
               </Text>
             </View>
 
             {nextEx ? (
-              <View className="mt-5 rounded-xl border border-wood-600/15 bg-cream-dark/35 px-3 py-2.5">
-                <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-muted-light">Up next</Text>
+              <View className="mt-5 rounded-xl border border-wood-600/15 bg-cream px-3 py-2.5">
+                <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-wood-600">Up next</Text>
                 <View className="mt-1 flex-row items-center justify-between gap-2">
                   <Text className="flex-1 font-sans text-sm text-wood-900" numberOfLines={2}>
                     {nextEx.name}
                   </Text>
-                  <Text className="font-sans-medium text-sm text-muted-light">
+                  <Text className="font-sans-medium text-sm text-wood-600">
                     {formatClock(nextEx.duration_seconds)}
                   </Text>
                 </View>
@@ -473,7 +473,7 @@ function WarmupScreenInner() {
       ) : null}
 
       {completed ? (
-        <Text className="mt-4 font-sans text-sm text-muted-light">
+        <Text className="mt-4 font-sans text-sm text-wood-600">
           Nice — you&apos;re warmed up. Tap Next section to continue your plan.
         </Text>
       ) : null}

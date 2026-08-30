@@ -20,8 +20,8 @@ export interface SessionDesktopRailProps {
 export function SessionDesktopRail({ activeStep }: SessionDesktopRailProps) {
   const activeIndex = SESSION_STEPS.indexOf(activeStep)
   return (
-    <View className="hidden w-56 shrink-0 gap-0 border-r border-wood-600/20 bg-wood-900/40 px-4 py-6 md:flex">
-      <Text className="mb-4 font-sans-medium text-[11px] uppercase tracking-widest text-cream/60">Session</Text>
+    <View className="hidden w-56 shrink-0 gap-0 border-r border-wood-600/20 bg-wood-900 px-4 py-6 md:flex">
+      <Text className="mb-4 font-sans-medium text-[11px] uppercase tracking-widest text-cream/70">Session</Text>
       {SESSION_STEPS.map((step, i) => {
         const isActive = step === activeStep
         const isPast = i < activeIndex
@@ -40,7 +40,7 @@ export function SessionDesktopRail({ activeStep }: SessionDesktopRailProps) {
               >
                 <Text
                   className={`font-mono text-xs ${
-                    isActive ? 'text-wood-900' : isPast ? 'text-amber-light' : 'text-muted-light'
+                    isActive ? 'text-wood-900' : isPast ? 'text-amber-light' : 'text-cream/60'
                   }`}
                 >
                   {isPast ? '✓' : i + 1}
@@ -52,14 +52,14 @@ export function SessionDesktopRail({ activeStep }: SessionDesktopRailProps) {
             </View>
             <View className="flex-1 pb-6 pt-1">
               <Text
-                className={`font-sans-medium text-sm ${isActive ? 'text-cream' : isPast ? 'text-cream/70' : 'text-muted-light'}`}
+                className={`font-sans-medium text-sm ${isActive ? 'text-cream' : isPast ? 'text-cream/80' : 'text-cream/60'}`}
               >
                 {STEP_LABELS[step]}
               </Text>
               {PHASE_FOR_STEP[step] ? (
-                <Text className="font-sans text-[11px] capitalize text-cream/40">{PHASE_FOR_STEP[step]}</Text>
+                <Text className="font-sans text-[11px] capitalize text-cream/50">{PHASE_FOR_STEP[step]}</Text>
               ) : (
-                <Text className="font-sans text-[11px] text-cream/40">prep</Text>
+                <Text className="font-sans text-[11px] text-cream/50">prep</Text>
               )}
             </View>
           </View>

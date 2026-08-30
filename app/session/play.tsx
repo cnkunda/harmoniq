@@ -250,7 +250,7 @@ function PlayScreenInner() {
       <View className="gap-5">
         {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
         {typeof __DEV__ !== 'undefined' && __DEV__ ? (
-          <Text className="rounded-lg border border-dashed border-wood-600/35 bg-cream-dark/40 px-3 py-2 font-mono text-xs text-muted-light">
+          <Text className="rounded-lg border border-dashed border-wood-600/25 bg-cream px-3 py-2 font-mono text-xs text-wood-600">
             noiseGateThresholdRms ({activeMicProfile}):{' '}
             {micNoiseGateRms != null ? micNoiseGateRms.toFixed(4) : '—'} (Commit 62 calibration)
           </Text>
@@ -350,8 +350,8 @@ function PlayScreenInner() {
         />
 
         {take && take.audioBytes.length > 0 ? (
-          <View className="rounded-xl border border-wood-600/35 bg-cream-dark/25 px-3 py-2">
-            <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-muted-light">
+          <View className="rounded-xl border border-wood-600/20 bg-cream px-3 py-2 shadow-sm">
+            <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-wood-600">
               Ghost reference take
             </Text>
             <View className="flex-row items-center justify-between gap-2">
@@ -362,10 +362,10 @@ function PlayScreenInner() {
                 accessibilityRole="switch"
                 accessibilityState={{ checked: pendingGhostReference }}
                 onPress={() => setPendingGhostReference(!pendingGhostReference)}
-                className={`rounded-full px-3 py-1.5 ${pendingGhostReference ? 'bg-amber-accent/90' : 'border border-wood-600/50 bg-wood-900/15'}`}
+                className={`rounded-full px-3 py-1.5 ${pendingGhostReference ? 'bg-amber-accent' : 'border border-wood-600/25 bg-white'}`}
               >
                 <Text
-                  className={`font-sans-medium text-xs ${pendingGhostReference ? 'text-wood-900' : 'text-muted-light'}`}
+                  className={`font-sans-medium text-xs ${pendingGhostReference ? 'text-wood-900' : 'text-wood-600'}`}
                 >
                   {pendingGhostReference ? 'On' : 'Off'}
                 </Text>
@@ -394,7 +394,7 @@ function PlayScreenInner() {
           onClose={() => setNoteModalOpen(false)}
         />
         {section ? (
-          <Text className="font-mono text-[10px] text-muted-light">
+          <Text className="font-mono text-[10px] text-wood-600">
             Section: {String(section.label ?? 'Section')} {lesson?.key ? `| Key: ${lesson.key}` : ''}
           </Text>
         ) : null}
