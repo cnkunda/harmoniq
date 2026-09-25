@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Harmoniq MusicXML Rendering Test Harness</title>
+  <style>
+    body { margin: 0; padding: 0; background: #1a1a1a; }
+    #alpha-tab { width: 100%; height: 100vh; }
+    #status {
+      position: fixed; top: 8px; right: 8px; padding: 4px 8px;
+      background: rgba(0,0,0,0.7); color: #0f0; font: 12px monospace;
+      z-index: 1000; border-radius: 4px;
+    }
+    #status.error { color: #f00; }
+    #status.loading { color: #ff0; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.8.3/dist/alphaTab.min.js"></script>
+</head>
+<body>
+  <div id="status" class="loading">Loading AlphaTab...</div>
+  <div id="alpha-tab"></div>
+  <script>
+    var statusEl = document.getElementById('status');
+    var api = new alphaTab.AlphaTabApi(document.getElementById('alpha-tab'), {
+      core: {
+        fontDirectory: 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.8.3/dist/font/',
+        file: null,
+        logLevel: 1
+      },
+      display: {
+        staveProfile: 'Default',
+        layoutMode: 'Page'
+      },
+      notation: {
+        elements: {
+          scoreTitle: true,
+          scoreSubTitle: true,
+          scoreArtist: true,
+          scoreAlbum: true,
+          scoreWordsAndMusic: true,
+          guitarTuning: true
+        }
+      }
+    });
+
+    api.renderFinished.on(function() {
+      statusEl.textContent = 'RENDER_COMPLETE';
+      statusEl.className = '';
+      // Notify parent frame if in iframe
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: 'alphatab-render-complete' }, '*');
+      }
+    });
+
+    api.error.on(function(e) {
+      statusEl.textContent = 'ERROR: ' + (e ? e.message || e : 'unknown');
+      statusEl.className = 'error';
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: 'alphatab-error', message: String(e) }, '*');
+      }
+    });
+
+    // Accept MusicXML via postMessage
+    window.addEventListener('message', function(event) {
+      var msg = event.data;
+      if (!msg || !msg.type) return;
+
+      if (msg.type === 'setMusicXml' && typeof msg.musicXml === 'string') {
+        statusEl.textContent = 'Loading MusicXML...';
+        statusEl.className = 'loading';
+        try {
+          var encoder = new TextEncoder();
+          var bytes = encoder.encode(msg.musicXml);
+          api.load(bytes.buffer);
+        } catch (e) {
+          statusEl.textContent = 'ERROR: ' + (e.message || e);
+          statusEl.className = 'error';
+        }
+        return;
+      }
+
+      if (msg.type === 'setMusicXmlFile' && typeof msg.url === 'string') {
+        statusEl.textContent = 'Fetching MusicXML...';
+        statusEl.className = 'loading';
+        fetch(msg.url)
+          .then(function(r) { return r.text(); })
+          .then(function(xml) {
+            var encoder = new TextEncoder();
+            var bytes = encoder.encode(xml);
+            api.load(bytes.buffer);
+          })
+          .catch(function(e) {
+            statusEl.textContent = 'ERROR fetching: ' + e.message;
+            statusEl.className = 'error';
+          });
+        return;
+      }
+    });
+
+    // Also accept MusicXML via URL query param ?file=path
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      var file = params.get('file');
+      if (file) {
+        statusEl.textContent = 'Loading from URL...';
+        statusEl.className = 'loading';
+        fetch(file)
+          .then(function(r) { return r.text(); })
+          .then(function(xml) {
+            var encoder = new TextEncoder();
+            var bytes = encoder.encode(xml);
+            api.load(bytes.buffer);
+          })
+          .catch(function(e) {
+            statusEl.textContent = 'ERROR: ' + e.message;
+            statusEl.className = 'error';
+          });
+      }
+    })();
+  </script>
+</body>
+</html>

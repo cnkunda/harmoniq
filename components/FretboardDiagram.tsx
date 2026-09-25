@@ -1,4 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient'
+import { Lightbulb, Link, Music } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Platform,
@@ -33,6 +34,7 @@ import {
 
 import { spring } from '@/src/constants/animations'
 import colors from '@/src/constants/colors'
+import { SECTION_EYEBROW_CLASS } from '@/src/constants/uiTokens'
 import {
   NUM_FRETS,
   OPEN_MIDI_BY_ROW,
@@ -65,6 +67,8 @@ type FretboardDiagramProps = {
   pulseKey?: number
   scalePitchClasses?: readonly number[] | null
   onSelectNote?: (note: { string: number; fret: number; midi: number }) => void
+  /** Commit 110: Tap a solo note (red) to open note correction UI. */
+  onNoteTap?: (noteIndex: number, note: { string: number; fret: number; midi: number }) => void
   lastCellResult?: FretboardLastCellResult | null
   overlayMode?: FretboardOverlayMode
   degreeRootPitchClass?: number | null
@@ -97,6 +101,12 @@ type FretboardDiagramProps = {
   onFretboardModeChange?: (mode: 'auto' | 'chords' | 'solo' | 'both') => void
   voicingMode?: 'full' | 'compact'
   onVoicingModeChange?: (mode: 'full' | 'compact') => void
+  /** Commit B2: Harmonic context overlay mode. */
+  harmonicContextMode?: 'key_context' | 'chord_only' | 'off'
+  /** Commit B2: Callback when harmonic context mode changes. */
+  onHarmonicContextModeChange?: (mode: 'key_context' | 'chord_only' | 'off') => void
+  /** Commit B9: Voicing label text (e.g., 'E-shape', 'A-shape barre VII'). */
+  voicingLabel?: string
 }
 
 const FINGER_COLORS: Record<number, { fill: string; border: string }> = {
@@ -106,7 +116,13 @@ const FINGER_COLORS: Record<number, { fill: string; border: string }> = {
   4: { fill: '#F87171', border: '#EF4444' },
 }
 
-const NOTE_ACTIVE_RED = '#E53935'
+const CHORD_CIRCLE_OPACITY_DEFAULT = 0.85
+const CHORD_CIRCLE_OPACITY_NON_ROOT_DEFAULT = 0.55
+const CHORD_CIRCLE_OPACITY_ENHANCED = 0.3
+
+const SOLO_NOTE_ACTIVE_RED = '#E53935'
+const SOLO_NOTE_CORE_TERRACOTTA = '#C17B5F'
+const SOLO_NOTE_GLOW_AMBER = '#E8B86D'
 
 const SCALE_DEGREE_LABELS: Record<number, string> = {
   0: '1', 1: 'b2', 2: '2', 3: 'b3', 4: '3', 5: '4',
@@ -333,6 +349,7 @@ export function FretboardDiagram({
   onSelectNote,
   lastCellResult = null,
   overlayMode = 'off',
+  voicingLabel,
   degreeRootPitchClass = null,
   enableKeyboardInput = false,
   showOverlayControls = false,
@@ -363,6 +380,8 @@ export function FretboardDiagram({
   onFretboardModeChange,
   voicingMode,
   onVoicingModeChange,
+  harmonicContextMode = 'chord_only',
+  onHarmonicContextModeChange,
 }: FretboardDiagramProps) {
   const [pitchLadderOpen, setPitchLadderOpen] = useState(() => pitchLadderDefaultExpanded ?? true)
   const [orientPanelOpen, setOrientPanelOpen] = useState(false)
@@ -384,7 +403,7 @@ export function FretboardDiagram({
   const chordCells = useMemo(() => {
     if (chordCellsProp && chordCellsProp.length > 0) return chordCellsProp
     if (musicState?.currentChord && musicState.currentChord !== 'N') {
-      const cells = chordToFretboardCells(musicState.currentChord, voicingMode ?? 'compact', 'low')
+      const cells = chordToFretboardCells(musicState.currentChord, voicingMode ?? 'full', 'low')
       return cells.map(c => ({ string: c.string, fret: c.fret, interval: c.interval }))
     }
     return []
@@ -401,17 +420,22 @@ export function FretboardDiagram({
   const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
   const CHORD_FULL_NAMES: Record<string, string> = {
-    maj: 'Major', min: 'Minor', dim: 'Diminished', aug: 'Augmented',
+    maj: 'Major', min: 'Minor', dim: 'Diminished', dim7: 'Diminished 7th',
+    aug: 'Augmented',
     '7': 'Dominant 7th', maj7: 'Major 7th', min7: 'Minor 7th',
     '7sus4': '7th Sus 4', sus4: 'Sus 4', sus2: 'Sus 2',
     '6': 'Major 6th', min6: 'Minor 6th',
     '9': 'Dominant 9th', maj9: 'Major 9th', min9: 'Minor 9th',
+    '7b9': '7th ♭9', '7#9': '7th ♯9', '7b5': '7th ♭5', '7#5': '7th ♯5',
+    alt7: 'Altered 7th',
+    '11': 'Dominant 11th', '13': 'Dominant 13th',
   }
 
   const EXTENSIONS: Record<string, string[]> = {
     maj: ['7', 'maj7', '6', '9', 'maj9'],
     min: ['m7', 'm9', 'm11', 'm13', 'mM7'],
     dim: ['dim7', 'm7b5'],
+    dim7: ['m7b5'],
     aug: ['aug7', 'maj7#5'],
     '7': ['9', '13', '7sus4', '7#9', '7b9'],
     maj7: ['9', '13', 'maj9', '#11'],
@@ -422,8 +446,15 @@ export function FretboardDiagram({
     '6': ['7', 'maj7', '9'],
     min6: ['m7', 'm9'],
     '9': ['13', '7#9', '7b9'],
+    '7b9': ['13', '7#9', 'alt7'],
+    '7#9': ['13', '7b9', 'alt7'],
+    '7b5': ['9', '13'],
+    '7#5': ['9', '13'],
+    alt7: ['7b9', '7#9', '7b5', '7#5'],
     maj9: ['13', '#11'],
     min9: ['11', '13'],
+    '11': ['13'],
+    '13': ['11', '7#9', '7b9'],
   }
 
   const chordNotes = useMemo(() => {
@@ -431,11 +462,11 @@ export function FretboardDiagram({
     const parsed = parseChordSymbol(musicState.currentChord)
     if (!parsed) return []
     const rootPc = noteToPitchClass(parsed.root)
-    const intervals = [...new Set(chordCells.map(c => c.interval))].filter((iv): iv is number => iv != null)
+    const intervals = [...new Set(chordCells.map(c => c.interval))]
     return intervals
-      .sort((a, b) => a - b)
-      .filter(iv => iv >= 0 && iv <= 12)
-      .map(iv => NOTE_NAMES[(rootPc + iv) % 12])
+      .sort((a, b) => (a ?? 0) - (b ?? 0))
+      .filter((iv) => iv != null && iv >= 0 && iv <= 12)
+      .map((iv) => NOTE_NAMES[(rootPc + iv!) % 12])
   }, [musicState?.currentChord, chordCells])
 
   const chordFullName = useMemo(() => {
@@ -472,6 +503,32 @@ export function FretboardDiagram({
     if (!fretboardMode || fretboardMode === 'auto' || fretboardMode === 'both' || fretboardMode === 'solo') return true
     return false
   }, [fretboardMode])
+
+  // Commit B1: Enhanced dual-view modes (auto / both) get modified visuals
+  const isEnhancedView = fretboardMode === 'auto' || fretboardMode === 'both'
+
+  const chordPcSet = useMemo(() => {
+    if (!chordCells?.length || !musicState?.currentChord || musicState.currentChord === 'N') return new Set<number>()
+    const parsed = parseChordSymbol(musicState.currentChord)
+    if (!parsed) return new Set<number>()
+    const rootPc = noteToPitchClass(parsed.root)
+    const pcs = new Set<number>()
+    for (const c of chordCells) {
+      if (c.interval != null) {
+        pcs.add((rootPc + (c.interval % 12)) % 12)
+      }
+    }
+    return pcs
+  }, [chordCells, musicState?.currentChord])
+
+  // Commit B2: Set of "string-fret" keys occupied by chord circles to avoid double-rendering
+  const chordPosSet = useMemo(() => {
+    if (!chordCells?.length) return new Set<string>()
+    return new Set(chordCells.map((c) => `${c.string}-${c.fret}`))
+  }, [chordCells])
+
+  // Chord circle opacity based on mode
+  const chordOpacity = isEnhancedView ? CHORD_CIRCLE_OPACITY_ENHANCED : CHORD_CIRCLE_OPACITY_DEFAULT
 
   const onSvgLayout = useCallback((e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width
@@ -553,22 +610,27 @@ export function FretboardDiagram({
     : 0
 
   return (
-    <View className="mt-3 rounded-xl border border-wood-600/20 bg-cream p-3 shadow-sm">
+    <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/45 p-3">
       <View className="flex-row items-start justify-between gap-5">
         <View className="gap-1" style={{ minWidth: 130 }}>
-          <Text className="font-sans-medium text-[10px] uppercase tracking-[0.14em] text-wood-600">Position map</Text>
+          <Text className={SECTION_EYEBROW_CLASS}>Position map</Text>
           <View className="flex-row items-baseline gap-2">
             <Text className="font-sans text-base font-semibold text-wood-900">{keyLabel}</Text>
             {capoText ? (
-              <View className="rounded-full border border-amber-accent/25 bg-amber-accent/15 px-[7px] py-0.5">
-                <Text className="text-[10px] font-medium text-wood-900">{capoText}</Text>
+              <View className="rounded-full border border-amber-accent/25 bg-amber-accent/10 px-2 py-0.5">
+                <Text className="text-[10px] font-medium text-amber-accent/70">{capoText}</Text>
+              </View>
+            ) : null}
+            {voicingLabel ? (
+              <View className="rounded-full border border-wood-600/30 bg-wood-900/10 px-2 py-0.5">
+                <Text className="text-[9px] font-mono text-amber-accent/60">{voicingLabel}</Text>
               </View>
             ) : null}
           </View>
         </View>
         <View className="flex-1 flex-row flex-wrap items-center justify-end gap-1.5">
           {onFretboardModeChange && (
-            <View className="flex-row rounded-full border border-wood-600/25 bg-white p-0.5 gap-[2px]">
+            <View className="flex-row rounded-full border border-wood-600/45 bg-cream-dark/30 p-0.5 gap-[2px]">
               {([
                 { mode: 'auto' as const, label: 'Auto' },
                 { mode: 'chords' as const, label: 'Chord' },
@@ -586,7 +648,7 @@ export function FretboardDiagram({
                   accessibilityState={{ selected: fretboardMode === mode }}
                 >
                   <Text className={`font-sans text-xs ${
-                    fretboardMode === mode ? 'text-wood-900 font-medium' : 'text-wood-600'
+                    fretboardMode === mode ? 'text-amber-accent font-medium' : 'text-muted-brown'
                   }`}>{label}</Text>
                 </Pressable>
               ))}
@@ -621,15 +683,46 @@ export function FretboardDiagram({
                   accessibilityLabel={label}
                   accessibilityState={{ selected: voicingMode === mode }}
                 >
-                  <Text className={`font-sans text-[11px] ${voicingMode === mode ? 'text-wood-900' : 'text-wood-600'}`}>{label}</Text>
+                  <Text className={`font-sans text-[11px] ${voicingMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
                 </Pressable>
               ))}
             </>
           )}
 
-          {showOverlayControls && (
+          {onHarmonicContextModeChange && (
             <>
               {!!onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both') ? (
+                <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
+              ) : null}
+              <View className="flex-row rounded-full border border-wood-600/45 bg-cream-dark/30 p-0.5 gap-[2px]">
+                {([
+                  { mode: 'key_context' as const, label: 'Key' },
+                  { mode: 'chord_only' as const, label: 'Chord' },
+                  { mode: 'off' as const, label: 'Off' },
+                ] as const).map(({ mode, label }) => (
+                  <Pressable
+                    key={mode}
+                    onPress={() => onHarmonicContextModeChange(mode)}
+                    className={`rounded-full px-4 py-1.5 ${
+                      harmonicContextMode === mode ? 'bg-amber-accent/20' : ''
+                    }`}
+                    accessibilityRole="button"
+                    accessibilityLabel={label}
+                    accessibilityState={{ selected: harmonicContextMode === mode }}
+                  >
+                    <Text className={`font-sans text-xs ${
+                      harmonicContextMode === mode ? 'text-amber-accent font-medium' : 'text-muted-brown'
+                    }`}>{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
+
+          {showOverlayControls && (
+            <>
+              {(!!onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both'))
+                || !!onHarmonicContextModeChange ? (
                 <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
               ) : null}
               {([
@@ -648,7 +741,7 @@ export function FretboardDiagram({
                   accessibilityLabel={label}
                   accessibilityState={{ selected: overlayMode === mode }}
                 >
-                  <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-wood-600'}`}>{label}</Text>
+                  <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
                 </Pressable>
               ))}
             </>
@@ -657,12 +750,12 @@ export function FretboardDiagram({
           {showPitchLadderControl ? (
             <Pressable
               onPress={() => setPitchLadderOpen((o) => !o)}
-              className={`rounded-full border px-3 py-1.5 ${pitchLadderOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/30 bg-white'}`}
+              className={`rounded-full border px-3 py-1.5 ${pitchLadderOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'}`}
               accessibilityRole="button"
               accessibilityLabel="Show example pitch ladder"
               accessibilityState={{ selected: pitchLadderOpen }}
             >
-              <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-wood-600'}`}>Example</Text>
+              <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-muted-brown'}`}>Example</Text>
             </Pressable>
           ) : null}
 
@@ -675,31 +768,22 @@ export function FretboardDiagram({
             <Pressable
               onPress={onToggleTune}
               disabled={tuneDisabled}
-              className={`h-[34px] w-[34px] items-center justify-center rounded-lg border ${tuneActive ? 'border-success bg-success/25' : 'border-wood-600/45'} ${tuneDisabled ? 'opacity-45' : ''}`}
+              className={`h-[34px] w-[34px] items-center justify-center rounded-full border ${tuneActive ? 'border-success bg-success/25' : 'border-wood-600/45'} ${tuneDisabled ? 'opacity-50' : ''}`}
               accessibilityRole="button"
               accessibilityLabel={tuneActive ? 'Disable fretboard tuner' : 'Enable fretboard tuner'}
             >
-              <Svg viewBox="0 0 24 24" width={16} height={16}>
-                <Circle cx={12} cy={12} r={3} stroke={colors.muted.light} strokeWidth={1.5} fill="none" />
-                <Path
-                  d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"
-                  stroke={colors.muted.light} strokeWidth={1.5} strokeLinecap="round" fill="none"
-                />
-              </Svg>
+              <Music size={16} color={colors.muted.brown} />
             </Pressable>
           ) : null}
 
           {showOrientControl ? (
             <Pressable
               onPress={() => { setOrientPanelOpen((o) => !o); onToggleOrient?.() }}
-              className={`h-[34px] w-[34px] items-center justify-center rounded-lg border ${orientPanelOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45'}`}
+              className={`h-[34px] w-[34px] items-center justify-center rounded-full border ${orientPanelOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45'}`}
               accessibilityRole="button"
               accessibilityLabel={orientPanelOpen ? 'Hide technique hint' : 'Show technique hint'}
             >
-              <Svg viewBox="0 0 24 24" width={16} height={16}>
-                <Circle cx={12} cy={12} r={10} stroke={colors.muted.light} strokeWidth={1.5} fill="none" />
-                <Path d="M12 16v-4m0-4h.01" stroke={colors.muted.light} strokeWidth={1.5} strokeLinecap="round" fill="none" />
-              </Svg>
+              <Lightbulb size={16} color={colors.muted.brown} />
             </Pressable>
           ) : null}
 
@@ -707,28 +791,22 @@ export function FretboardDiagram({
             <Pressable
               onPress={onCopyShareLink}
               disabled={!onCopyShareLink}
-              className={`h-[34px] w-[34px] items-center justify-center rounded-lg border border-wood-600/45 ${onCopyShareLink ? '' : 'opacity-50'}`}
+              className={`h-[34px] w-[34px] items-center justify-center rounded-full border border-wood-600/45 ${onCopyShareLink ? '' : 'opacity-50'}`}
               accessibilityRole="button"
               accessibilityLabel="Copy share link"
             >
-              <Svg viewBox="0 0 24 24" width={16} height={16}>
-                <Path
-                  d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8m-4-6-4-4-4 4m4-4v13"
-                  stroke={colors.muted.light} strokeWidth={1.5} strokeLinecap="round"
-                  strokeLinejoin="round" fill="none"
-                />
-              </Svg>
+              <Link size={16} color={colors.muted.brown} />
             </Pressable>
           ) : null}
         </View>
       </View>
       {tuneActive && tunerState ? (
         <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
-          <Text className="font-mono text-[11px] text-wood-900">
+          <Text className="font-mono text-xs text-wood-900">
             {tunerState.noteName || '—'} · {typeof tunerState.cents === 'number' ? `${Math.round(tunerState.cents)}¢` : '—'} ·{' '}
             {tunerState.hz != null ? `${tunerState.hz.toFixed(1)} Hz` : 'no pitch'}
           </Text>
-          <Text className={`mt-1 font-sans text-[11px] ${tunerState.inTune ? 'text-wood-900 font-sans-medium' : 'text-wood-600'}`}>
+          <Text className={`mt-1 font-sans text-xs ${tunerState.inTune ? 'text-success' : 'text-muted-brown'}`}>
             {tunerState.statusText}
           </Text>
         </View>
@@ -736,9 +814,9 @@ export function FretboardDiagram({
 
       {orientPanelOpen && showOrientControl ? (
         <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
-          <Text className="font-sans-medium text-[11px] text-wood-900">Technique Hint</Text>
+          <Text className={SECTION_EYEBROW_CLASS}>Technique Hint</Text>
           {orientAnnotation ? (
-            <Text className="mt-1 font-sans text-[11px] text-wood-600">{orientAnnotation}</Text>
+            <Text className="mt-1 font-sans text-xs text-muted-brown">{orientAnnotation}</Text>
           ) : null}
           {orientClipUrl ? (
             <Pressable
@@ -747,19 +825,19 @@ export function FretboardDiagram({
               accessibilityRole="button"
               accessibilityLabel={orientIsPlaying ? 'Pause technique clip' : 'Play technique clip'}
             >
-              <Text className="font-sans-medium text-[11px] text-wood-900">
+              <Text className="font-sans-medium text-xs text-wood-900">
                 {orientIsPlaying ? 'Pause' : 'Play Clip'}
               </Text>
             </Pressable>
           ) : (
-            <Text className="mt-1 font-sans text-[11px] text-wood-600">No hint clip available</Text>
+            <Text className="mt-1 font-sans text-xs text-muted-brown">No hint clip available</Text>
           )}
         </View>
       ) : null}
 
       {pitchLadderOpen && pitchLadderSlot ? (
         <View className="mt-2">
-          <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-wood-600">
+          <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-muted-brown">
             Example · pitch ladder (Play)
           </Text>
           {pitchLadderSlot}
@@ -780,8 +858,8 @@ export function FretboardDiagram({
                 <Stop offset="100%" stopColor={colors.wood[900]} />
               </SvgLinearGradient>
               <SvgRadialGradient id="noteGlow" cx="50%" cy="50%" r="50%">
-                <Stop offset="0%" stopColor={NOTE_ACTIVE_RED} stopOpacity="0.35" />
-                <Stop offset="100%" stopColor={NOTE_ACTIVE_RED} stopOpacity="0" />
+                <Stop offset="0%" stopColor={SOLO_NOTE_ACTIVE_RED} stopOpacity="0.35" />
+                <Stop offset="100%" stopColor={SOLO_NOTE_ACTIVE_RED} stopOpacity="0" />
               </SvgRadialGradient>
               <SvgRadialGradient id="chordRootGlow" cx="50%" cy="50%" r="50%">
                 <Stop offset="0%" stopColor="#D4A574" stopOpacity="0.45" />
@@ -797,7 +875,7 @@ export function FretboardDiagram({
               x={fretCenterX(0)}
               y={26}
               textAnchor="middle"
-              fill={colors.muted.light}
+              fill={colors.muted.brown}
               fontSize={9}
               fontFamily="JetBrainsMono-Regular"
             >
@@ -809,7 +887,7 @@ export function FretboardDiagram({
                 x={fretCenterX(i + 1)}
                 y={26}
                 textAnchor="middle"
-                fill={colors.muted.light}
+                fill={colors.muted.brown}
                 fontSize={9}
                 fontFamily="JetBrainsMono-Regular"
               >
@@ -852,7 +930,7 @@ export function FretboardDiagram({
                 y1={BOARD_T - 4}
                 x2={fretWireX(i + 1)}
                 y2={BOARD_B + 4}
-                stroke={colors.muted.light}
+                stroke={colors.muted.brown}
                 strokeWidth={1.2}
                 opacity={0.7}
               />
@@ -913,19 +991,21 @@ export function FretboardDiagram({
                 y1={stringY(si)}
                 x2={SVG_W - MARGIN_R}
                 y2={stringY(si)}
-                stroke={colors.muted.light}
+                stroke={colors.muted.brown}
                 strokeWidth={stringLineThicknessPx(si) * 2.2}
                 opacity={0.75}
               />
             ))}
 
-            {/* Scale highlights */}
-            {Array.from({ length: 6 }).map((_, si) =>
+            {/* Commit B2: Scale tone circles — only in key_context mode */}
+            {harmonicContextMode === 'key_context' && Array.from({ length: 6 }).map((_, si) =>
               Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
                 if (!scaleHighlightActive(scalePitchClasses, si, col)) return null
                 const midi = OPEN_MIDI_BY_ROW[si]! + col
-                const isActiveNote = activeNotes.some(n => n.midi === midi)
-                if (isActiveNote) return null // don't double-highlight
+                const posKey = `${si + 1}-${col}`
+                // Skip positions occupied by active solo notes or chord circles
+                if (activeNotes.some(n => n.midi === midi)) return null
+                if (chordPosSet.has(posKey)) return null
                 return (
                   <Circle
                     key={`sc-${si}-${col}`}
@@ -951,6 +1031,18 @@ export function FretboardDiagram({
               // Check if this note is already an active note
               const isActiveChordNote = activeNotes.some(n => n.string === cc.string && n.fret === cc.fret)
               if (isActiveChordNote) return null // active notes render separately
+              if (isEnhancedView) {
+                return (
+                  <Circle
+                    key={`ch-${idx}`}
+                    cx={fretCenterX(col)}
+                    cy={stringY(si)}
+                    r={isRoot ? 7 : 5}
+                    fill={colors.amber.accent}
+                    opacity={CHORD_CIRCLE_OPACITY_ENHANCED}
+                  />
+                )
+              }
               return (
                 <Circle
                   key={`ch-${idx}`}
@@ -958,14 +1050,14 @@ export function FretboardDiagram({
                   cy={stringY(si)}
                   r={isRoot ? 8 : 6}
                   fill={isRoot ? colors.amber.accent : colors.amber.light}
-                  opacity={isRoot ? 0.85 : 0.55}
+                  opacity={isRoot ? CHORD_CIRCLE_OPACITY_DEFAULT : CHORD_CIRCLE_OPACITY_NON_ROOT_DEFAULT}
                   stroke={isRoot ? colors.amber.accent : colors.amber.light}
                   strokeWidth={0.5}
                 />
               )
             })}
 
-            {/* Active notes (red glow + text) */}
+            {/* Active notes (terracotta + glow ring in enhanced modes, red in solo mode) */}
             {showSoloNotes && activeNotes.map((note, idx) => {
               const si = note.string - 1
               const col = note.fret
@@ -973,10 +1065,37 @@ export function FretboardDiagram({
               const cx = fretCenterX(col)
               const cy = stringY(si)
               const pitchLabel = note.midi ? pitchClassLabelFromMidi(note.midi) : ''
+              if (isEnhancedView) {
+                const notePc = note.midi != null ? ((Math.round(note.midi) % 12) + 12) % 12 : -1
+                const isChordTone = chordPcSet.has(notePc)
+                const ringColor = isChordTone ? colors.amber.light : colors.chromatic
+                const glowColor = isChordTone ? colors.amber.light : colors.chromatic
+                return (
+                  <G key={`an-${idx}`}>
+                    <Circle cx={cx} cy={cy} r={14} fill={glowColor} opacity={0.2} />
+                    <Circle cx={cx} cy={cy} r={7} fill={SOLO_NOTE_CORE_TERRACOTTA} />
+                    <Circle cx={cx} cy={cy} r={10} fill="none" stroke={ringColor} strokeWidth={2} opacity={0.9} />
+                    {pitchLabel ? (
+                      <SvgText
+                        x={cx}
+                        y={cy + 3.5}
+                        textAnchor="middle"
+                        fill={colors.white}
+                        fontSize={8}
+                        fontWeight="700"
+                        stroke={colors.wood[900]}
+                        strokeWidth={2.5}
+                      >
+                        {pitchLabel}
+                      </SvgText>
+                    ) : null}
+                  </G>
+                )
+              }
               return (
                 <G key={`an-${idx}`}>
                   <Circle cx={cx} cy={cy} r={14} fill="url(#noteGlow)" />
-                  <Circle cx={cx} cy={cy} r={7} fill={NOTE_ACTIVE_RED} />
+                  <Circle cx={cx} cy={cy} r={7} fill={SOLO_NOTE_ACTIVE_RED} />
                   {pitchLabel ? (
                     <SvgText
                       x={cx}
@@ -1120,48 +1239,99 @@ export function FretboardDiagram({
             </View>
           )
         })}
+
+        {/* Mobile touch targets overlay (≥44px for accessibility) */}
+        {Platform.OS !== 'web' && svgSize.w > 0 && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: svgSize.w,
+              height: svgSize.h,
+            }}
+            pointerEvents="box-none"
+          >
+            {Array.from({ length: 6 }).map((_, si) =>
+              Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
+                const cxFrac = fretCenterX(col) / SVG_W
+                const cyFrac = stringY(si) / SVG_H
+                const left = (cxFrac * svgSize.w) - 22
+                const top = (cyFrac * svgSize.h) - 22
+                return (
+                  <Pressable
+                    key={`mt-${si}-${col}`}
+                    onPress={() => handleCellPress(si, col)}
+                    style={{
+                      position: 'absolute',
+                      left: Math.max(0, left),
+                      top: Math.max(0, top),
+                      width: 44,
+                      height: 44,
+                    }}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`String ${si + 1}, fret ${col}`}
+                  />
+                )
+              }),
+            )}
+          </View>
+        )}
+
+        {/* Keyboard shortcut overlay on web */}
+        {enableKeyboardInput && Platform.OS === 'web' && (
+          <View
+            className="absolute bottom-1 right-1 rounded-md border border-wood-600/30 bg-wood-900/80 px-2 py-1"
+            pointerEvents="none"
+          >
+            <Text className="font-mono text-[9px] text-muted-brown">
+              ⌨ 1-0=frets · Q–P=str6 · A–L=str5 · Z–M=str4 · ⇧shift flips top 2 rows
+            </Text>
+          </View>
+        )}
       </View>
 
       {chordName && chordNotes.length > 0 ? (
         <View className="mt-2 border-t border-wood-600/20 pt-3">
           <View className="flex-row items-center">
             <View className="flex-row items-baseline gap-3 pr-4 border-r border-wood-600/20">
-              <Text className="font-serif text-3xl tracking-tight text-wood-900">
+              <Text className="font-serif text-3xl tracking-tight text-amber-accent">
                 {chordName}
               </Text>
               {chordFullName ? (
-                <Text className="text-[11px] uppercase tracking-widest text-wood-600 font-medium">
+                <Text className="text-[11px] uppercase tracking-widest text-amber-accent/60 font-medium">
                   {chordFullName}
                 </Text>
               ) : null}
             </View>
             <View className="px-4 border-r border-wood-600/20">
-              <Text className="text-[9px] uppercase tracking-wider text-wood-600 mb-0.5">
+              <Text className="text-[9px] uppercase tracking-wider text-amber-accent/50 mb-0.5">
                 Notes
               </Text>
               <View className="flex-row items-center gap-1.5">
                 {chordNotes.map((note, idx) => (
                   <View key={note} className="flex-row items-center gap-1.5">
                     {idx > 0 && (
-                      <View className="h-1 w-1 rounded-full bg-wood-600/30" />
+                      <View className="h-1 w-1 rounded-full bg-amber-accent/30" />
                     )}
-                    <Text className="text-sm font-medium text-wood-900">{note}</Text>
+                    <Text className="text-sm font-medium text-amber-accent">{note}</Text>
                   </View>
                 ))}
               </View>
             </View>
             {chordExtensions.length > 0 ? (
               <View className="flex-1 pl-4">
-                <Text className="text-[9px] uppercase tracking-wider text-wood-600 mb-1">
+                <Text className="text-[9px] uppercase tracking-wider text-amber-accent/50 mb-1">
                   Extended harmony
                 </Text>
                 <View className="flex-row flex-wrap gap-1.5">
                   {chordExtensions.map((ext) => (
                     <View
                       key={ext}
-                      className="rounded-full border border-wood-600/30 bg-cream px-2 py-0.5"
+                      className="rounded-full border border-wood-600/30 px-2 py-0.5"
                     >
-                      <Text className="text-[10px] font-medium text-wood-600">
+                      <Text className="text-[10px] font-medium text-amber-accent/70">
                         {ext}
                       </Text>
                     </View>
@@ -1169,19 +1339,19 @@ export function FretboardDiagram({
                 </View>
               </View>
             ) : null}
-            <Text className="ml-auto font-mono text-[10px] text-wood-600">Tap a note to identify position</Text>
+            <Text className="ml-auto font-mono text-[10px] text-muted-brown">Tap a note to identify position</Text>
           </View>
         </View>
       ) : null}
 
       {cell ? (
-        <Text className="mt-2 font-mono text-[10px] text-wood-600">
+        <Text className="mt-2 font-mono text-[10px] text-muted-brown">
           Selected · string {cell.row + 1} (tab) · fret {cell.fret} · pulse #{pulseKey}
         </Text>
       ) : !fretGuideFooterHint && !(chordName && chordNotes.length > 0) ? (
-        <Text className="mt-2 font-mono text-[10px] text-wood-600">Tap a note to identify position</Text>
+        <Text className="mt-2 font-mono text-[10px] text-muted-brown">Tap a note to identify position</Text>
       ) : fretGuideFooterHint ? (
-        <Text className="mt-2 font-mono text-[10px] text-wood-600">{fretGuideFooterHint}</Text>
+        <Text className="mt-2 font-mono text-[10px] text-muted-brown">{fretGuideFooterHint}</Text>
       ) : null}
     </View>
   )

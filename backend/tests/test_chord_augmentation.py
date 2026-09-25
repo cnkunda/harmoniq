@@ -13,48 +13,17 @@ os.environ["KERAS_BACKEND"] = "tensorflow"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-# Import only numpy-dependent parts by extracting them
-# We'll define the constants and functions inline for testing
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-ROOT_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+from app.chord_vocab import CHORD_INTERVALS, ROOT_NOTES, CHORD_VOCAB, NUM_CLASSES
 
-CHORD_INTERVALS = {
-    "maj":  [0, 4, 7],
-    "min":  [0, 3, 7],
-    "7":    [0, 4, 7, 10],
-    "maj7": [0, 4, 7, 11],
-    "min7": [0, 3, 7, 10],
-    "9":    [0, 4, 7, 10, 14],
-    "min9": [0, 3, 7, 10, 14],
-    "maj9": [0, 4, 7, 11, 14],
-    "11":   [0, 4, 7, 10, 14, 17],
-    "13":   [0, 4, 7, 10, 14, 17, 21],
-    "7#9":  [0, 4, 7, 10, 15],
-    "7b9":  [0, 4, 7, 10, 13],
-    "7#5":  [0, 4, 8, 10],
-    "7b5":  [0, 4, 6, 10],
-    "alt7": [0, 4, 6, 8, 10, 13, 15],
-    "sus2":  [0, 2, 7],
-    "sus4":  [0, 5, 7],
-    "7sus4": [0, 5, 7, 10],
-    "dim":   [0, 3, 6],
-    "dim7":  [0, 3, 6, 9],
-    "aug":   [0, 4, 8],
-    "6":     [0, 4, 7, 9],
-    "min6":  [0, 3, 7, 9],
-}
-
-CHORD_VOCAB = []
+# Build chord class map for testing
 CHORD_CLASS_MAP = []
 for quality in CHORD_INTERVALS:
     for root_idx, root_note in enumerate(ROOT_NOTES):
-        CHORD_VOCAB.append(f"{root_note}:{quality}")
         CHORD_CLASS_MAP.append((root_idx, quality))
-
-CHORD_VOCAB.append("N")
 CHORD_CLASS_MAP.append((-1, "N"))
 
-NUM_CLASSES  = len(CHORD_VOCAB)
 WINDOW       = 9
 CHROMA_BINS  = 12
 
@@ -203,23 +172,45 @@ def make_transition_window(template_a: np.ndarray, template_b: np.ndarray, mix_r
 
 def make_window_augmented(center_chroma: np.ndarray, noise_std: float = 0.12,
                           pitch_range: int = 2, stretch_rate: float = 0.3,
-                          stretch_range: tuple = (0.9, 1.1)) -> np.ndarray:
+                          stretch_range: tuple = (0.9, 1.1)) -> tuple[np.ndarray, int]:
+    """Create augmented window with pink noise and temporal variations.
+
+    Returns (window, shift_semitones) so callers can adjust labels
+    to match the applied pitch shift.
+    """
     frames = []
     for _ in range(WINDOW):
         noise = generate_pink_noise((CHROMA_BINS,), noise_std)
         frame = np.clip(center_chroma + noise, 0, 1)
         frames.append(frame)
-    
+
     window = np.stack(frames, axis=0)
-    
+
     shift = np.random.randint(-pitch_range, pitch_range + 1)
     window = apply_pitch_shift(window, shift)
-    
+
     if np.random.random() < stretch_rate:
         factor = np.random.uniform(*stretch_range)
         window = apply_time_stretch(window, factor)
-    
-    return window
+
+    return window, shift
+
+
+def _adjust_label_for_shift(idx: int, shift: int, n_classes_per_quality: int = 12,
+                             n_chord_classes: int | None = None) -> int:
+    """Adjust class index to match a pitch-shifted feature.
+
+    When CQT bins are rolled by N semitones, the chord root must
+    also shift: C:maj shifted +2 becomes D:maj. N class stays unchanged.
+    """
+    if n_chord_classes is None:
+        n_chord_classes = len(CHORD_INTERVALS) * n_classes_per_quality
+    if shift == 0 or idx >= n_chord_classes:
+        return idx
+    quality_pos = idx // n_classes_per_quality
+    root = idx % n_classes_per_quality
+    new_root = (root + shift) % n_classes_per_quality
+    return quality_pos * n_classes_per_quality + new_root
 
 
 def generate_dataset(samples_per_class: int = 1500, config: dict = None):
@@ -231,31 +222,34 @@ def generate_dataset(samples_per_class: int = 1500, config: dict = None):
     stretch_range = cfg.get("time_stretch_range", (0.9, 1.1))
     bass_rate = cfg.get("bass_ambiguity_rate", 0.2)
     transition_rate = cfg.get("transition_rate", 0.3)
-    
+
+    n_chord_classes = len(CHORD_INTERVALS) * 12
     X, y = [], []
-    
+
     for idx, (root_idx, quality) in enumerate(CHORD_CLASS_MAP):
         template = make_chroma_template(root_idx, quality)
-        
+
         for _ in range(samples_per_class):
             inversion = np.random.choice([0, 1, 2], p=inversion_rates)
             augmented = apply_inversion(template, root_idx, quality, inversion)
             augmented = apply_missing_notes(augmented, quality, dropout_rate)
-            
+
             if np.random.random() < bass_rate:
                 strength = np.random.uniform(0.1, 0.3)
                 augmented = apply_bass_ambiguity(augmented, root_idx, quality, strength)
-            
+
             std = 0.08 + np.random.uniform(0, 0.12)
-            window = make_window_augmented(
+            window, shift = make_window_augmented(
                 augmented, std,
                 pitch_range=pitch_range,
                 stretch_rate=stretch_rate,
                 stretch_range=stretch_range
             )
-            
+
+            # Adjust label to match pitch shift
+            adjusted_idx = _adjust_label_for_shift(idx, shift)
             X.append(window)
-            y.append(idx)
+            y.append(adjusted_idx)
     
     n_transitions = int(len(CHORD_CLASS_MAP) * samples_per_class * transition_rate)
     for _ in range(n_transitions):
@@ -431,3 +425,112 @@ class TestDatasetGeneration:
         expected_base = n_classes * 10
         expected_transitions = int(n_classes * 10 * 0.3)
         assert len(X) >= expected_base + expected_transitions * 0.5
+
+
+class TestPitchShiftLabelSync:
+    """Verify that pitch-shifted synthetic data has correct labels."""
+
+    def test_shift_C_maj_to_D_maj(self):
+        template = make_chroma_template(0, "maj")
+        window, shift = make_window_augmented(
+            template, noise_std=0.01, pitch_range=2, stretch_rate=0.0
+        )
+        # With stretch_rate=0 and small noise, shift is the only augmentation
+        assert isinstance(shift, int)
+        assert -2 <= shift <= 2
+
+    def test_adjust_label_C_maj_shift_2(self):
+        idx = CHORD_CLASS_MAP.index((0, "maj"))  # C:maj
+        adjusted = _adjust_label_for_shift(idx, 2)
+        expected = CHORD_CLASS_MAP.index((2, "maj"))  # D:maj
+        assert adjusted == expected, f"C:maj+2 should be D:maj, got {CHORD_VOCAB[adjusted]}"
+
+    def test_adjust_label_wraps_around(self):
+        idx = CHORD_CLASS_MAP.index((11, "maj"))  # B:maj
+        adjusted = _adjust_label_for_shift(idx, 1)
+        expected = CHORD_CLASS_MAP.index((0, "maj"))  # C:maj
+        assert adjusted == expected, f"B:maj+1 should be C:maj, got {CHORD_VOCAB[adjusted]}"
+
+    def test_adjust_label_negative_shift(self):
+        idx = CHORD_CLASS_MAP.index((0, "maj"))  # C:maj
+        adjusted = _adjust_label_for_shift(idx, -1)
+        expected = CHORD_CLASS_MAP.index((11, "maj"))  # B:maj
+        assert adjusted == expected, f"C:maj-1 should be B:maj, got {CHORD_VOCAB[adjusted]}"
+
+    def test_N_class_unchanged(self):
+        idx = CHORD_CLASS_MAP.index((-1, "N"))  # N
+        adjusted = _adjust_label_for_shift(idx, 2)
+        assert adjusted == idx, "N class should be unchanged after pitch shift"
+
+    def test_zero_shift_unchanged(self):
+        idx = CHORD_CLASS_MAP.index((5, "min"))
+        adjusted = _adjust_label_for_shift(idx, 0)
+        assert adjusted == idx, "Zero shift should leave label unchanged"
+
+    def test_quality_preserved_across_all_shifts(self):
+        """After label adjustment, the quality (maj, min, 7, etc.) must stay the same."""
+        for quality in list(CHORD_INTERVALS.keys())[:5]:
+            for root in range(12):
+                idx = CHORD_CLASS_MAP.index((root, quality))
+                for shift in [-2, -1, 1, 2]:
+                    adjusted = _adjust_label_for_shift(idx, shift)
+                    adjusted_quality = CHORD_CLASS_MAP[adjusted][1]
+                    assert adjusted_quality == quality, \
+                        f"Quality changed from {quality} to {adjusted_quality} " \
+                        f"for root {root} shift {shift}"
+
+    def test_generated_dataset_label_distribution(self):
+        """In a large dataset, each quality should have all 12 roots represented
+        (label adjustment shouldn't systematically delete any class)."""
+        X, y = generate_dataset(samples_per_class=20)
+        unique_labels = set(y)
+        # At minimum, we should see all 277 classes represented
+        # (some may be missing due to randomness, but >265 is expected)
+        assert len(unique_labels) > 265, \
+            f"Only {len(unique_labels)}/277 classes present after label adjustment"
+
+
+class TestAcousticRealism:
+    """Tests for acoustic realism augmentations — import from production module."""
+
+    def test_body_resonance_changes_spectrum(self):
+        pytest.importorskip("tensorflow")
+        from scripts.build_chord_tflite import apply_guitar_body_resonance
+        from app.cqt_constants import CHROMA_BINS, BASS_BINS
+        feat_dim = CHROMA_BINS + BASS_BINS  # 144
+        template = np.ones(feat_dim, dtype=np.float32) / feat_dim
+        result = apply_guitar_body_resonance(template, strength=0.5)
+        assert result.shape == template.shape
+        assert not np.allclose(result, template)
+
+    def test_strumming_attenuates_early_frames(self):
+        pytest.importorskip("tensorflow")
+        from scripts.build_chord_tflite import apply_strumming_onset, FEATURE_DIM
+        window = np.ones((64, FEATURE_DIM), dtype=np.float32)
+        result = apply_strumming_onset(window, "maj", n_strum_frames=4)
+        assert result[0, 0] < 1.0
+        assert abs(result[-1, 0] - 1.0) < 1e-6
+
+    def test_strumming_skips_no_chord(self):
+        pytest.importorskip("tensorflow")
+        from scripts.build_chord_tflite import apply_strumming_onset, FEATURE_DIM
+        window = np.ones((64, FEATURE_DIM), dtype=np.float32)
+        result = apply_strumming_onset(window, "N", n_strum_frames=4)
+        np.testing.assert_array_equal(result, window)
+
+    def test_cqt_leakage_spreads_energy(self):
+        pytest.importorskip("tensorflow")
+        from scripts.build_chord_tflite import apply_cqt_leakage, CHROMA_BINS, FEATURE_DIM
+        window = np.zeros((9, FEATURE_DIM), dtype=np.float32)
+        window[:, 6] = 1.0
+        result = apply_cqt_leakage(window, leakage_strength=1.0)
+        assert result[0, 5] > 0.0
+        assert result[0, 7] > 0.0
+        assert result[0, 6] > result[0, 5]
+
+    def test_cqt_leakage_zero_strength_unchanged(self):
+        pytest.importorskip("tensorflow")
+        from scripts.build_chord_tflite import apply_cqt_leakage, FEATURE_DIM
+        window = np.random.randn(9, FEATURE_DIM).astype(np.float32)
+        result = apply_cqt_leakage(window, leakage_strength=0.0)
+        np.testing.assert_array_equal(result, window)

@@ -3,8 +3,9 @@
  * Uses the AlphaTab library: https://alphatab.net/docs/introduction
  */
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import colors from '@/src/constants/colors'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { resolveBundledSoundFontUrlForProfile } from '@/src/audio/soundfontBundled'
@@ -268,7 +269,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
 
     useEffect(() => {
       setTabFullyPainted(false)
-    }, [gp5Base64, musicXml, reloadKey])
+    }, [gp5Base64, reloadKey])
 
     useEffect(() => {
       let cancelled = false
@@ -1267,25 +1268,32 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       transposeSemitones,
     ])
 
+    // Commit 108: Prefer MusicXML over GP5 for score loading
     useEffect(() => {
       if (!engineReady) return
       const api = apiRef.current
       if (!api) return
       const xml = musicXml?.trim()
-      if (xml) {
-        try {
-          const encoder = new TextEncoder()
-          const bytes = encoder.encode(xml)
-          const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-          resetSongMetaRefs()
-          api.load(buf)
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : 'Invalid MusicXML payload'
-          setEngineError(msg)
-          onError?.(msg)
-        }
-        return
+      if (!xml) return
+      try {
+        const encoder = new TextEncoder()
+        const bytes = encoder.encode(xml)
+        const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+        resetSongMetaRefs()
+        api.load(buf)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Invalid MusicXML payload'
+        setEngineError(msg)
+        onError?.(msg)
       }
+    }, [engineReady, musicXml, onError, resetSongMetaRefs])
+
+    useEffect(() => {
+      if (!engineReady) return
+      const api = apiRef.current
+      if (!api) return
+      // Skip GP5 loading if MusicXML is available (loaded via effect above)
+      if (musicXml?.trim()) return
       const raw = gp5Base64?.trim()
       if (!raw) return
       try {
@@ -1351,14 +1359,14 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         {(bootError || engineError) && (
           <View className="border-b border-amber-accent/30 bg-amber-accent/10 px-3 py-2">
             <Text className="font-sans text-xs text-wood-900">{bootError ?? engineError}</Text>
-            <Pressable onPress={onRetry} className="mt-2 self-start" accessibilityRole="button">
-              <Text className="font-sans-medium text-xs text-amber-accent underline">Retry</Text>
-            </Pressable>
+             <AnimatedPressable onPress={onRetry} className="mt-2 self-start" accessibilityRole="button">
+               <Text className="font-sans-medium text-xs text-amber-accent underline">Retry</Text>
+             </AnimatedPressable>
           </View>
         )}
         {!mounted ? (
           <View className="min-h-[200px] items-center justify-center p-4">
-            <Text className="font-sans text-sm text-muted-light">Preparing AlphaTab…</Text>
+            <Text className="font-sans text-sm text-muted-brown">Preparing AlphaTab…</Text>
           </View>
         ) : (
           <div
@@ -1441,9 +1449,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
-            <Text className="text-center font-sans text-[11px] text-muted-light">
+            <Text className="text-center font-sans text-[11px] text-muted-brown">
               {
-                "Tab preview isn't available for this song yet. Try analyzing a song or another tab variant."
+                "Score isn't available for this song yet. Try analyzing a song or another tab variant."
               }
             </Text>
           </View>

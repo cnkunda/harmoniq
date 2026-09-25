@@ -12,8 +12,11 @@ if (!config.resolver.assetExts.includes('sf2')) {
 if (!config.resolver.assetExts.includes('sf3')) {
   config.resolver.assetExts.push('sf3')
 }
-if (!config.resolver.assetExts.includes('musicxml')) {
-  config.resolver.assetExts.push('musicxml')
+if (!config.resolver.assetExts.includes('tflite')) {
+  config.resolver.assetExts.push('tflite')
+}
+if (!config.resolver.assetExts.includes('onnx')) {
+  config.resolver.assetExts.push('onnx')
 }
 
 // Python venv dirs (especially WSL-created `.venv-wsl` on NTFS) confuse Metro's file watcher
@@ -28,13 +31,13 @@ if (!config.resolver.assetExts.includes('musicxml')) {
 // walker still descends into `lib64` (EACCES on WSL symlinks).
 config.resolver.blockList = [
   /[/\\]__tests__(?:[/\\]|$)/,
-  /[/\\]\.opencode(?:[/\\]|$)/,
   /^backend[/\\]\.venv-wsl(?:[/\\]|$)/,
   /[/\\]backend[/\\]\.venv-wsl(?:[/\\]|$)/,
   /^backend[/\\]\.venv(?:[/\\]|$)/,
   /[/\\]backend[/\\]\.venv(?:[/\\]|$)/,
   /[/\\]\.venv-wsl(?:[/\\]|$)/,
   /[/\\]\.venv(?:[/\\]|$)/,
+  /[/\\]\.opencode(?:[/\\]|$)/,
 ]
 
 module.exports = withNativeWind(config, { input: './global.css' })

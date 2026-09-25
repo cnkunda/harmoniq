@@ -26,7 +26,14 @@ This overwrites the five MP3s under `assets/backing-tracks/`. Older builds used 
 
 ## AI instrumental beds (Jam mode)
 
-When the practice server has `GEMINI_API_KEY`, the app can call **`POST /jam/backing`** and play returned **WAV** (44.1 kHz) as the Jam backing (Gemini Lyria provider). Those files are **generated per session**, not checked into this folder; keep API usage and licensing per your Google/Gemini terms. If generation is unavailable, backend falls back to these bundled loops.
+When the practice server has MRT2 (Magenta RealTime 2) installed, the app calls **`POST /jam/backing`** and plays returned **WAV** (48 kHz) as the Jam backing. The backing is generated via MRT2 from a text prompt describing style, key, and tempo — see `backend/app/jam_backing.py`. If MRT2 is unavailable (e.g., first-time setup without `mrt models init`), the backend falls back to bundled loops.
+
+Install MRT2:
+```bash
+pip install magenta-rt
+mrt models init
+mrt models download mrt2_small
+```
 
 If/when these bundled loops are replaced by external licensed recordings, add exact title/artist/license/URL rows here.
 

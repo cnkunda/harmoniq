@@ -50,3 +50,14 @@ def test_spotify_playback_no_active_device(monkeypatch: pytest.MonkeyPatch, clie
     monkeypatch.setattr("app.main.spotify_api.get_playback_state", _fake_playback)
     res = client.get("/spotify/playback", params={"client_session": "test-session"})
     assert res.status_code == 409
+
+
+def test_spotify_playback_session_expired(monkeypatch: pytest.MonkeyPatch, client: TestClient) -> None:
+    from app.spotify import SpotifySessionExpired
+
+    async def _fake_playback(_: str) -> SpotifyPlaybackState:
+        raise SpotifySessionExpired("Spotify token expired.")
+
+    monkeypatch.setattr("app.main.spotify_api.get_playback_state", _fake_playback)
+    res = client.get("/spotify/playback", params={"client_session": "test-session"})
+    assert res.status_code == 401

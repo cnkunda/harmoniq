@@ -2,7 +2,7 @@ import { Asset } from 'expo-asset'
 import { Audio, type AVPlaybackStatus } from 'expo-av'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from 'react-native'
+import { ActivityIndicator, Platform, ScrollView, Text, View } from 'react-native'
 import Animated, {
     cancelAnimation,
     useAnimatedStyle,
@@ -37,7 +37,7 @@ import { createJamPhraseSegmenter } from '@/src/jam/jamPhraseSegmenter'
 import { JAM_REFERENCE_TAB_GP5_BASE64 } from '@/src/jam/jamReferenceTabGp5Base64'
 import { pickSuggestedClassicFromWeakAreas } from '@/src/jam/jamSuggestedClassic'
 import { normalizeExternalAudioSrcForTabHarness } from '@/src/jam/normalizeJamTabAudioUri'
-import { createPitchClassHistogram } from '@/src/jam/pitchClassHistogram'
+import { createPitchClassHistogram, type BestScaleMatch } from '@/src/jam/pitchClassHistogram'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useDnaStore } from '@/src/stores/dnaStore'
@@ -74,6 +74,7 @@ export default function JamScreen() {
   const [scaleLabel, setScaleLabel] = useState('—')
   const [scalePitchClasses, setScalePitchClasses] = useState<readonly number[] | null>(null)
   const [scaleRootPitchClass, setScaleRootPitchClass] = useState<number | null>(null)
+  const [topScales, setTopScales] = useState<BestScaleMatch[]>([])
   const [overlayMode, setOverlayMode] = useState<FretboardOverlayMode>('off')
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
@@ -116,14 +117,7 @@ export default function JamScreen() {
   const lastScaleTintRef = useRef<{ rootMidi: number; intervals: readonly number[] } | null>(null)
   const classicTrackDef = BACKING_TRACKS.find((t) => t.id === classicTrackId) ?? BACKING_TRACKS[0]
   jamBpmRef.current = classicTrackDef.bpm ?? null
-  const activeJamTrackLine =
-    backingMode === 'ai'
-      ? `AI instrumental (server · Gemini) · template: ${classicTrackDef.label} · ${classicTrackDef.key}${
-          classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'
-        }`
-      : `Offline loop (bundled) · ${classicTrackDef.label} · ${classicTrackDef.key}${
-          classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'
-        }`
+  const activeJamTrackSource = backingMode === 'ai' ? 'AI instrumental · MRT2' : 'Offline loop (bundled)'
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
 
   const currentPlan = usePlanStore((s) => s.currentPlan)
@@ -373,6 +367,7 @@ export default function JamScreen() {
     setScaleLabel('—')
     setScalePitchClasses(null)
     setScaleRootPitchClass(null)
+    setTopScales([])
     lastScaleUiAtRef.current = 0
     lastScaleTintRef.current = null
     jamStemTabRef.current?.clearScaleHighlight()
@@ -388,8 +383,10 @@ export default function JamScreen() {
         if (now - lastScaleUiAtRef.current < SCALE_UI_INTERVAL_MS) return
         lastScaleUiAtRef.current = now
         const scale = histogramRef.current.getBestScale()
+        const candidates = histogramRef.current.getBestScales(3)
         const label = scale ? scale.label : histogramRef.current.getBestLabel()
         setScaleLabel(label)
+        setTopScales(candidates)
         setScalePitchClasses(scale?.pitchClasses ?? null)
         setScaleRootPitchClass(scale ? ((Math.round(scale.rootMidi) % 12) + 12) % 12 : null)
         if (scale) {
@@ -423,7 +420,7 @@ export default function JamScreen() {
       if (e instanceof ApiError) {
         if (e.status === 503) {
           toast.error(
-            'AI backing needs GEMINI_API_KEY on the practice server. Choose a classic loop or configure the backend.',
+            'AI backing needs MRT2 model files on the practice server. Choose a classic loop or install magenta-rt.',
           )
         } else {
           toast.error(e.message || 'Could not generate backing track')
@@ -475,6 +472,7 @@ export default function JamScreen() {
     const pitchClassWeightMap = hist.toScalePositionMap(durationSec)
     const bestScale = hist.getBestScale()
     const inferred = bestScale ? bestScale.label : hist.getBestLabel()
+    const inferredMode = bestScale?.inferred_mode ?? null
     const inferenceConfidence = bestScale ? confidenceFromMatchScore(bestScale.matchScore) : ('low' as const)
     const localTags: string[] = []
     if (durationSec < 10) localTags.push('signal_short_window')
@@ -512,6 +510,7 @@ export default function JamScreen() {
         scale_position_map: pitchClassWeightMap,
         inferred_scale_label: inferred === '—' ? null : inferred,
         inference_confidence: inferenceConfidence,
+        inferred_mode: inferredMode,
         track_id: trackIdForSave,
         track_label: trackLabelForSave,
         track_key: classicTrackDef.key,
@@ -573,6 +572,7 @@ export default function JamScreen() {
         pitch_class_weight_map: Object.keys(mergedPitchMap).length > 0 ? mergedPitchMap : pitchClassWeightMap,
         position_weight_map: mergedPositionMap,
         inferred_scale_label: inferred === '—' ? null : inferred,
+        inferred_mode: inferredMode,
         inference_confidence: inferenceConfidence,
         track_id: trackIdForSave,
         track_label: trackLabelForSave,
@@ -601,6 +601,7 @@ export default function JamScreen() {
     setScaleLabel('—')
     setScalePitchClasses(null)
     setScaleRootPitchClass(null)
+    setTopScales([])
     setLastJamDiagnostics({
       inferredScale: inferred === '—' ? null : inferred,
       confidence: reliabilityConfidence,
@@ -670,25 +671,26 @@ export default function JamScreen() {
       <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
         <ScrollView
           className="flex-1 px-5"
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'space-between', paddingBottom: 24 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
           showsVerticalScrollIndicator={false}
         >
-          <View className="mt-6 mb-4">
-            <Text className="mb-1 font-serif text-3xl text-cream">Jam Mode</Text>
-            <Text className="font-sans text-sm text-cream/95">Active jam track: {activeJamTrackLine}</Text>
+          <View className="mt-3 mb-2">
+            <Text className="mb-0.5 font-serif text-3xl text-cream">Jam Mode</Text>
+            <Text className="font-sans-medium text-sm text-cream">{classicTrackDef.label}</Text>
+            <Text className="mt-0.5 font-sans text-xs text-cream/80">
+              {activeJamTrackSource}
+              {classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'}
+              {classicTrackDef.key ? ` · ${classicTrackDef.key}` : ''}
+            </Text>
             {weakAreas.length > 0 ? (
               <Text className="mt-1 font-sans text-xs text-amber-light/90">
-                Suggested loop from your practice focus: {weakAreas.join(', ')}
+                Focus: {weakAreas.join(', ')}
               </Text>
             ) : null}
-            <Text className="mt-1 font-sans text-xs text-muted-light">
-              Passive listening with scale hints. Reference score is a generic pattern (not the backing audio transcribed) — for
-              fretboard and tab scale highlights only.
-            </Text>
           </View>
 
           {activePlanJamSlot != null && currentPlan?.slots?.length ? (
-            <View className="mb-4 rounded-xl border border-amber-accent/40 bg-amber-accent/12 px-4 py-3">
+            <View className="mb-2 rounded-xl border border-amber-accent/40 bg-amber-accent/12 px-3 py-2">
               <Text className="font-sans-medium text-sm text-cream">
                 Practice plan · {currentSlotIndex + 1} of {currentPlan.slots.length}
                 {activePlanJamSlot.title?.trim() ? ` · ${activePlanJamSlot.title.trim()}` : ''}
@@ -812,14 +814,11 @@ export default function JamScreen() {
           ) : null}
 
           {!isJamming && (
-            <View className="mb-6 gap-5">
+            <View className="mb-3 gap-3">
               {/* Backing Source Section */}
-              <View className="gap-2">
-                <Text className="font-sans-medium text-sm uppercase tracking-wider text-amber-light">
+              <View className="gap-1">
+                <Text className="font-sans-medium text-xs uppercase tracking-wider text-amber-light">
                   Backing Source
-                </Text>
-                <Text className="font-sans text-xs text-muted-light">
-                  Choose how your backing track is generated
                 </Text>
                 <View className="mt-1 gap-2">
                   <AnimatedPressable
@@ -853,7 +852,7 @@ export default function JamScreen() {
                   >
                     <View className="flex-1 pr-2">
                       <Text className={`font-sans text-sm ${backingMode === 'ai' ? 'text-amber-light' : 'text-cream'}`}>
-                        AI instrumental (server · Gemini)
+                        AI instrumental (server · MRT2)
                       </Text>
                       <Text className="mt-0.5 font-sans text-xs text-muted-light">
                         Generates a fresh bed from the key/tempo of the loop you select below
@@ -865,14 +864,14 @@ export default function JamScreen() {
               </View>
 
               {/* Loop Style Section */}
-              <View className="gap-2">
-                <Text className="font-sans-medium text-sm uppercase tracking-wider text-amber-light">
+              <View className="gap-1">
+                <Text className="font-sans-medium text-xs uppercase tracking-wider text-amber-light">
                   Loop Style
                 </Text>
-                <Text className="font-sans text-xs text-muted-light">
+                <Text className="font-sans text-[11px] text-muted-brown">
                   {backingMode === 'ai'
-                    ? 'Select a template (key / BPM) for AI generation'
-                    : 'Select which bundled MP3 plays when you start'}
+                    ? 'AI template from key / BPM'
+                    : 'Bundled MP3 loop'}
                 </Text>
                 <View className="mt-1 gap-2">
                   {BACKING_TRACKS.map((track) => {
@@ -916,8 +915,8 @@ export default function JamScreen() {
           )}
 
           {!isJamming && lastJamDiagnostics ? (
-            <View className="mb-4 rounded-xl border border-wood-700/45 bg-wood-800/45 p-4">
-              <Text className="font-sans-medium text-xs uppercase tracking-wide text-muted-light">Last jam diagnostics</Text>
+            <View className="mb-3 rounded-xl border border-wood-700/45 bg-wood-800/45 px-4 py-3">
+              <Text className="font-sans-medium text-xs uppercase tracking-wide text-muted-brown">Last jam diagnostics</Text>
               <Text className="mt-1 font-sans text-sm text-cream">
                 {lastJamDiagnostics.inferredScale ?? 'No clear scale detected'} · confidence {lastJamDiagnostics.confidence}
               </Text>
@@ -974,7 +973,43 @@ export default function JamScreen() {
                     </Text>
                   </View>
                 </Animated.View>
-                <Text className="font-sans text-sm text-muted-light">Listening… scale hint updates every ~2s</Text>
+                <Text className="font-sans text-sm text-muted-brown">Listening… scale hint updates every ~2s</Text>
+                {topScales.length > 0 ? (
+                  <View className="mt-2 w-full max-w-[280px] gap-1.5">
+                    {topScales.slice(0, 3).map((s, idx) => {
+                      const barWidth = topScales[0].matchScore > 0
+                        ? (s.matchScore / topScales[0].matchScore) * 100
+                        : 0
+                      const isTop = idx === 0
+                      return (
+                        <View key={s.inferred_mode ?? idx} className="flex-row items-center gap-2">
+                          <Text
+                            className={`w-28 font-sans text-xs ${
+                              isTop ? 'font-medium text-amber-light' : 'text-cream/70'
+                            }`}
+                            numberOfLines={1}
+                          >
+                            {s.label}
+                          </Text>
+                          <View className="h-2 flex-1 rounded-full bg-wood-700/60">
+                            <View
+                              className="h-full rounded-full bg-amber-accent"
+                              style={{ width: `${barWidth}%` }}
+                            />
+                          </View>
+                          <Text className="w-10 text-right font-mono text-[10px] text-muted-brown">
+                            {Math.round(s.matchScore * 100)}%
+                          </Text>
+                        </View>
+                      )
+                    })}
+                    {topScales[0]?.matchScore != null && topScales[0].matchScore < 0.5 ? (
+                      <Text className="mt-1 text-center font-sans text-xs italic text-amber-light/80">
+                        Mixed mode — no clear scale center detected
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
                 {phraseCoachLines.observation || phraseCoachLines.suggestion ? (
                   <View className="mt-1 max-w-[320px] gap-1 px-2">
                     {phraseCoachLines.observation ? (
@@ -1034,10 +1069,10 @@ export default function JamScreen() {
                   />
                 </View>
               </View>
-            </View>
+          </View>
           )}
 
-          <View className="gap-3 pb-4">
+          <View className="gap-2 pb-4">
             {isJamming ? (
               <AnimatedPressable
                 onPress={() => void stopAndSave()}

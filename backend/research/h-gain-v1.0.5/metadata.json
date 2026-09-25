@@ -1,0 +1,71 @@
+{
+  "model_name": "H-GAIN",
+  "version": "1.0.5",
+  "architecture": "CRNN",
+  "training_stages": {
+    "stage_1": {
+      "name": "Synthetic-heavy training",
+      "epochs": 30,
+      "lr_schedule": "CosineDecayRestarts 1e-3 → 1e-5",
+      "data_mix": "All real + all synthetic"
+    },
+    "stage_2": {
+      "name": "Real-heavy fine-tuning",
+      "epochs": "31-37 (early stopped, patience=25)",
+      "lr_schedule": "CosineDecay 1e-4 → 1e-5",
+      "data_mix": "80% real / 20% synthetic"
+    },
+    "stage_3": {
+      "name": "Quantization-Aware Training (QAT)",
+      "epochs": 5,
+      "lr": 1e-4,
+      "output": "FP16 dynamic (INT8 failed — FlexTensorListReserve unsupported)"
+    }
+  },
+  "pipeline": {
+    "demucs_version": "4.0",
+    "librosa_version": "0.10.0"
+  },
+  "hyperparameters": {
+    "total_epochs": 37,
+    "batch_size": 64,
+    "temperature": 0.5,
+    "label_smoothing": 0.1,
+    "multi_task_heads": ["chord_probs", "root_probs", "presence"],
+    "augmentation": [
+      "pitch_shift", "time_stretch", "pink_noise", "mixup",
+      "cqt_reverb", "fine_detune", "spectral_tilt", "random_gain",
+      "guitar_body_resonance", "strumming_onset", "cqt_leakage",
+      "distribution_matching"
+    ],
+    "domain_adaptation": [
+      "cqt_distribution_matching",
+      "per_source_loss_weighting",
+      "gradual_curriculum_transition",
+      "asymmetric_augmentation",
+      "real_n_templates",
+      "temperature_resampling"
+    ]
+  },
+  "metrics": {
+    "val_accuracy": 0.4854,
+    "val_accuracy_real": 0.3468,
+    "val_accuracy_synthetic": 0.6933,
+    "domain_gap": 0.3465,
+    "val_chord_probs_accuracy": 0.4854,
+    "val_loss": 3.2029,
+    "guitarset_test_accuracy": 0.111,
+    "guitarset_test_triad_f1": 0.098,
+    "guitarset_test_overall_f1": 0.424,
+    "note": "Early stopped at epoch 37 — real accuracy plateaued at ~34.5%"
+  },
+  "changes_from_v1.0.4": [
+    "Multi-task model: chord_probs + root_probs + presence heads",
+    "Stage 2 real-heavy fine-tuning with gradual curriculum",
+    "12 domain adaptation techniques for synthetic-to-real bridging",
+    "QAT pipeline (FP16 dynamic quantization)",
+    "Temperature-based rare quality resampling (tau=0.5)",
+    "Solo harmony enrichment (Commit 123)"
+  ],
+  "timestamp": "2026-06-14T04:54:54Z"
+}

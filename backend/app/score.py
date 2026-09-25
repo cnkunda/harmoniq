@@ -38,6 +38,31 @@ from app.scoring_constants import (
 TARGET_SR = 22050
 logger = logging.getLogger("harmoniq.score")
 
+_ONSET_DEDUP_MIN_GAP_MS = 50
+
+
+def _deduplicate_onsets(onsets: np.ndarray, min_gap_ms: float = _ONSET_DEDUP_MIN_GAP_MS) -> np.ndarray:
+    """Remove phantom duplicate onsets within min_gap_ms of each other.
+
+    Keeps the first onset in each cluster. Used to clean up reference
+    onsets after boundary tie merging (Commit 100).
+
+    Args:
+        onsets: Sorted or unsorted onset times in seconds.
+        min_gap_ms: Minimum gap between onsets to keep both.
+
+    Returns:
+        Deduplicated onset array, sorted.
+    """
+    if onsets.size == 0:
+        return onsets
+
+    sorted_onsets = np.sort(onsets)
+    min_gap_s = min_gap_ms / 1000.0
+
+    mask = np.concatenate([[True], np.diff(sorted_onsets) >= min_gap_s])
+    return sorted_onsets[mask]
+
 
 def _decode_recording(request: ScoreRequest) -> tuple[np.ndarray, int]:
     try:
@@ -137,8 +162,16 @@ def _score_timing(
     # Use MIDI note events as reference timing if available
     reference_onsets = None
     if solo_notes and hasattr(solo_notes, 'notes') and solo_notes.notes:
-        reference_onsets = np.array([note.start_time for note in solo_notes.notes])
-        logger.info("score.timing using %d MIDI note events as reference", len(reference_onsets))
+        raw_onsets = np.array([note.start_time for note in solo_notes.notes])
+        reference_onsets = _deduplicate_onsets(raw_onsets)
+        dedup_count = len(raw_onsets) - len(reference_onsets)
+        if dedup_count > 0:
+            logger.info(
+                "score.timing using %d MIDI note events as reference (%d boundary duplicates removed)",
+                len(reference_onsets), dedup_count,
+            )
+        else:
+            logger.info("score.timing using %d MIDI note events as reference", len(reference_onsets))
     
     if onset_times.size < 2:
         return 0.25, 0.25, [], 0.0, 0.0
@@ -317,6 +350,10 @@ def _coach_paragraph_from_score(
         parts.append("We saw uneven timing residuals—shorter phrases usually help.")
     if any(f in reliability_flags for f in ("signal_low", "signal_near_silence", "voiced_sparse")):
         parts.append("Signal was light—move closer to the mic on the next pass.")
+    if "low_stem_quality" in reliability_flags:
+        parts.append("The isolated guitar stem was degraded (piano bleed or low energy), so chord reference accuracy may be reduced.")
+    if "high_instrument_confusion" in reliability_flags:
+        parts.append("The transcription here is uncertain — other instruments may be interfering with the chord analysis.")
     if confidence == "low":
         parts.append("Confidence is low on this capture, so treat these numbers as directional.")
     return " ".join(parts).strip()
@@ -340,7 +377,27 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
         reliability_flags.append("voiced_sparse")
     if timing_p95_ms > 185:
         reliability_flags.append("timing_unstable")
+
+    # Commit 112: incorporate stem confidence into scoring reliability
+    stem_conf = payload.stem_confidence
+    if stem_conf is not None and stem_conf < 0.5:
+        reliability_flags.append("low_stem_quality")
+
+    # Commit 121: incorporate instrument confusion into scoring reliability
+    instrument_conf = payload.instrument_confusion
+    if instrument_conf is not None and instrument_conf > 0.3:
+        reliability_flags.append("high_instrument_confusion")
+
     confidence = _confidence_from_signal(signal_quality, voiced_ratio, harmonic_ratio)
+
+    # Downgrade confidence when stem quality is poor — the transcription reference
+    # may be unreliable, making scoring numbers less trustworthy.
+    if stem_conf is not None and stem_conf < 0.3 and confidence != "low":
+        confidence = "low"
+    # Downgrade confidence when instrument confusion is very high — chord predictions
+    # are unreliable, so scoring numbers should be treated as directional.
+    if instrument_conf is not None and instrument_conf > 0.5 and confidence != "low":
+        confidence = "low"
     if reliability_flags:
         logger.info(
             "score.reliability flags=%s confidence=%s signal_quality=%.3f voiced_ratio=%.3f",
@@ -395,5 +452,7 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
             confidence=confidence,
             signal_quality=round(signal_quality, 3),
             reliability_flags=reliability_flags,
+            stem_confidence=stem_conf,
+            instrument_confusion=instrument_conf,
         ),
     )

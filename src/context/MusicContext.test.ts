@@ -15,11 +15,13 @@ describe('musicReducer', () => {
   it('starts with sensible defaults', () => {
     expect(INITIAL_MUSIC_STATE).toEqual({
       currentChord: null,
+      currentChordRoman: null,
       activeNotes: [],
       currentBar: 0,
       positionMs: 0,
       isPlaying: false,
       playerReady: false,
+      scalePitchClasses: [],
     })
   })
 
@@ -54,12 +56,14 @@ describe('musicReducer', () => {
       type: 'SET_POSITION',
       positionMs: 1234,
       currentChord: 'Am',
+      currentChordRoman: 'vi',
       activeNotes: [{ string: 3, fret: 2 }],
       currentBar: 2,
     }
     const next = musicReducer(INITIAL_MUSIC_STATE, action)
     expect(next.positionMs).toBe(1234)
     expect(next.currentChord).toBe('Am')
+    expect(next.currentChordRoman).toBe('vi')
     expect(next.activeNotes).toEqual([{ string: 3, fret: 2 }])
     expect(next.currentBar).toBe(2)
   })
@@ -70,6 +74,7 @@ describe('musicReducer', () => {
       type: 'SET_POSITION',
       positionMs: 500,
       currentChord: 'C',
+      currentChordRoman: 'I',
       activeNotes: [],
       currentBar: 0,
     })

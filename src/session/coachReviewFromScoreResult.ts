@@ -47,6 +47,9 @@ function heuristicCoachReview(result: ScoreResult): string {
   if (flags.some((f) => f === 'signal_low' || f === 'signal_near_silence' || f === 'voiced_sparse')) {
     parts.push('Signal was light—move closer to the mic on the next pass.')
   }
+  if (flags.includes('high_instrument_confusion')) {
+    parts.push('Instrument interference may affect chord accuracy — treat results as directional.')
+  }
   if (conf === 'low') {
     parts.push('Confidence is low on this capture, so treat these numbers as directional.')
   }

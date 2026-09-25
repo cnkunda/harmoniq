@@ -7,42 +7,136 @@ Fixed for ML Inference Stability & Diagnostics (Commit 95):
   - Replaces print() with structured logging for diagnostics.
   - Logs which model format is in use on each inference call.
 
-Segment Boundary Tie Mechanism (Commit 100, MT3 paper insight):
-  - Long tracks are split into overlapping segments. Each segment is
-    transcribed independently with basic-pitch, then ``merge_segments_with_ties``
-    applies the MT3 "tie section": an active-note table (keyed by pitch) is
-    carried across segment boundaries. A note detected in the next segment
-    whose onset falls within ``TIE_WINDOW_S`` of the previous same-pitch
-    note's end is treated as a re-declaration and tied into a single
-    continuous note; notes never re-declared survive from their first
-    detection (the "forgotten note" failure mode) instead of being dropped at
-    the boundary.
-  - Fresh onsets inside ``BOUNDARY_WINDOW_S`` after a segment boundary are
-    velocity-dampened: the model's partial-context predictions there are the
-    most likely false positives.
+Commit 107: Amplitude-based beat-slot selection and improved duration filtering.
+  - Groups raw notes by beat slot, keeping only highest amplitude per slot.
+  - Filters sub-32nd note durations for cleaner notation.
 """
 
 from __future__ import annotations
 
 import bisect
 import logging
-import tempfile
-import wave
+from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 
-import numpy as np
-
-from app.rhythm_quantization import nearest_grid_index
 from app.schemas import BeatGrid, SoloNote, SoloNotes
 
 logger = logging.getLogger("harmoniq.inference.solo")
 
-# Commit 100: segment geometry and tie parameters.
-SEGMENT_LENGTH_S = 60.0
-SEGMENT_OVERLAP_S = 15.0
-TIE_WINDOW_S = 0.15          # re-declaration tolerance (~2 frames at 0.1s hop)
-BOUNDARY_WINDOW_S = 0.2      # fresh-onset damping zone after a segment boundary
-BOUNDARY_VELOCITY_FACTOR = 0.85
+
+@dataclass
+class ActiveNote:
+    """A note still ringing at a segment boundary (Commit 100 tie mechanism)."""
+    start_time: float
+    pitch: int
+    velocity: float
+    end_time: float
+
+
+class TieRegistry:
+    """Tracks active notes across segment boundaries and resolves ties.
+
+    Inspired by MT3's tie section mechanism: notes not re-declared in the
+    next segment are gracefully ended; matching notes are merged.
+    """
+
+    def __init__(
+        self,
+        bpm: float,
+        tie_epsilon_s: float = 0.050,
+        velocity_tolerance: float = 0.3,
+        max_sustain_beats: int = 4,
+    ):
+        self.active_notes: list[ActiveNote] = []
+        self.last_segment_end: float = 0.0
+        self.beat_duration = 60.0 / bpm if bpm > 0 else 0.5
+        self.tie_epsilon_s = tie_epsilon_s
+        self.velocity_tolerance = velocity_tolerance
+        self.max_sustain_beats = max_sustain_beats
+
+    def register_segment_end(self, notes: list[SoloNote], segment_end: float):
+        """Collect notes still ringing at the segment boundary."""
+        self.active_notes = []
+        for note in notes:
+            note_end = note.start_time + note.duration
+            if note_end > segment_end:
+                self.active_notes.append(ActiveNote(
+                    start_time=note.start_time,
+                    pitch=note.pitch,
+                    velocity=float(note.velocity),
+                    end_time=note_end,
+                ))
+        self.last_segment_end = segment_end
+
+    def resolve_segment_start(self, notes: list[SoloNote]) -> list[SoloNote]:
+        """Merge tied notes, close truncated ones, keep new notes.
+
+        Returns deduplicated note list with cross-boundary ties resolved.
+        """
+        output: list[SoloNote] = []
+        matched_indices: set[int] = set()
+
+        for active in self.active_notes:
+            max_duration = self.max_sustain_beats * self.beat_duration
+            if active.end_time - active.start_time > max_duration:
+                active.end_time = active.start_time + max_duration
+
+            match_idx = self._find_matching_note(notes, active)
+
+            if match_idx is not None:
+                matched_indices.add(match_idx)
+                new_note = notes[match_idx]
+                merged_duration = new_note.start_time + new_note.duration - active.start_time
+                output.append(SoloNote(
+                    start_time=round(active.start_time, 3),
+                    duration=round(merged_duration, 3),
+                    pitch=active.pitch,
+                    velocity=int(max(active.velocity, new_note.velocity)),
+                ))
+            else:
+                truncated_duration = min(self.last_segment_end, active.end_time) - active.start_time
+                if truncated_duration > 0:
+                    output.append(SoloNote(
+                        start_time=round(active.start_time, 3),
+                        duration=round(truncated_duration, 3),
+                        pitch=active.pitch,
+                        velocity=int(active.velocity),
+                    ))
+
+        for i, note in enumerate(notes):
+            if i not in matched_indices:
+                output.append(note)
+
+        output.sort(key=lambda n: n.start_time)
+        return output
+
+    def _find_matching_note(
+        self,
+        notes: list[SoloNote],
+        active: ActiveNote,
+    ) -> int | None:
+        """Find a note in the next segment that matches the active note.
+
+        Criteria: same pitch (±1 semitone), onset within epsilon of boundary,
+        velocity within tolerance.
+        """
+        for i, note in enumerate(notes):
+            pitch_match = abs(note.pitch - active.pitch) <= 1
+            onset_near_boundary = abs(note.start_time - self.last_segment_end) <= self.tie_epsilon_s
+            if not (pitch_match and onset_near_boundary):
+                continue
+
+            if active.velocity > 0:
+                vel_ratio = abs(note.velocity - active.velocity) / active.velocity
+                velocity_match = vel_ratio <= self.velocity_tolerance
+            else:
+                velocity_match = True
+
+            if velocity_match:
+                return i
+
+        return None
 
 
 def _snap_to_grid(time_s: float, grid_beats: list[float]) -> float:
@@ -59,6 +153,26 @@ def _snap_to_grid(time_s: float, grid_beats: list[float]) -> float:
     return before if abs(time_s - before) < abs(time_s - after) else after
 
 
+def _beat_slot_index(start_s: float, beat_times: list[float], bpm: float) -> int:
+    """Map wall-clock seconds to a beat slot index.
+
+    When beat_times has at least two samples, assign each note to the
+    beat interval containing it. Otherwise fall back to uniform quarter spacing.
+    """
+    s = float(start_s)
+    if not beat_times or len(beat_times) < 2:
+        spq = 60.0 / max(bpm, 1.0)
+        return max(0, int(s / spq))
+    if s <= beat_times[0]:
+        return 0
+    for i in range(len(beat_times) - 1):
+        if beat_times[i] <= s < beat_times[i + 1]:
+            return i
+    span = max(beat_times[-1] - beat_times[-2], 1e-3)
+    extra = max(0, int((s - beat_times[-1]) / span))
+    return len(beat_times) - 1 + extra
+
+
 def _detect_model_type(model_path: Path) -> str:
     """Return a human-readable label for the model format."""
     if not model_path.exists():
@@ -72,19 +186,18 @@ def _detect_model_type(model_path: Path) -> str:
 def _try_inference(audio_path: Path, model_path: Path | None, beat_grid: BeatGrid) -> list | None:
     """Attempt inference with a specific model path. Returns raw notes or None on failure."""
     try:
-        from basic_pitch.inference import predict
+        from app.pipeline_proof import basic_pitch_predict_events
 
-        _, _, raw_note_events = predict(
-            str(audio_path),
-            model_or_model_path=str(model_path) if model_path else None,
-            onset_threshold=0.6,
-            frame_threshold=0.4,
-            minimum_note_length=0.0,
+        midi_tempo = beat_grid.bpm if beat_grid.bpm > 0 else None
+        note_events = basic_pitch_predict_events(
+            audio_path,
+            model_path=model_path,
+            midi_tempo=midi_tempo,
         )
-        return raw_note_events
-    except AttributeError as exc:
-        logger.warning("Model format error with %s: %s", model_path, exc)
-        return None
+        raw_events: list[tuple[float, float, float, float, float]] = []
+        for ne in note_events:
+            raw_events.append((ne.start_s, ne.end_s, float(ne.pitch_midi), float(ne.amplitude), 0.0))
+        return raw_events
     except ImportError as exc:
         logger.warning("basic-pitch dependency missing: %s", exc)
         return None
@@ -93,188 +206,109 @@ def _try_inference(audio_path: Path, model_path: Path | None, beat_grid: BeatGri
         return None
 
 
-# ---------------------------------------------------------------------------
-# Commit 100: segment geometry + MT3-style active-note tie mechanism
-# ---------------------------------------------------------------------------
+def infer_solo(melodic_stem_path: Path, beat_grid: BeatGrid) -> SoloNotes:
+    try:
+        from basic_pitch import ICASSP_2022_MODEL_PATH
+        from basic_pitch.inference import predict
+    except ImportError:
+        logger.warning("basic-pitch not installed. Returning empty solo notes.")
+        return SoloNotes(notes=[])
 
+    # Build fallback chain of model paths to try
+    default_model = ICASSP_2022_MODEL_PATH
+    model_candidates: list[Path | None] = [default_model]
 
-def _segment_ranges(
-    duration_s: float,
-    segment_length_s: float = SEGMENT_LENGTH_S,
-    overlap_s: float = SEGMENT_OVERLAP_S,
-) -> list[tuple[float, float]]:
-    """Split a duration into overlapping segments.
+    # If the default is a TF SavedModel dir, also try ONNX
+    if default_model.is_dir():
+        onnx_path = default_model.with_name("nmp.onnx")
+        if onnx_path.exists():
+            model_candidates.append(onnx_path)
+    # If the default is ONNX, also try the TF SavedModel
+    elif default_model.suffix == ".onnx":
+        tf_path = default_model.with_name("nmp")
+        if tf_path.is_dir():
+            model_candidates.append(tf_path)
 
-    Segments are ``segment_length_s`` long and stride by
-    ``segment_length_s - overlap_s``, so consecutive segments share an
-    overlap zone in which notes spanning a boundary are detected twice — the
-    raw material the tie mechanism needs to declare continuations.
-    """
-    if duration_s <= 0:
-        return []
-    if duration_s <= segment_length_s:
-        return [(0.0, duration_s)]
-    stride = segment_length_s - overlap_s
-    if stride <= 0:
-        stride = segment_length_s / 2.0
-    ranges: list[tuple[float, float]] = []
-    start = 0.0
-    while start < duration_s - 1e-9:
-        end = min(start + segment_length_s, duration_s)
-        ranges.append((start, end))
-        if end >= duration_s - 1e-9:
+    raw_note_events = None
+    model_used: Path | None = None
+    model_label = "none"
+
+    for candidate in model_candidates:
+        if candidate is None or (not candidate.exists() and not candidate.is_dir()):
+            continue
+        model_label = _detect_model_type(candidate)
+        logger.info("Trying solo model: %s (%s)", candidate.name, model_label)
+        raw_note_events = _try_inference(melodic_stem_path, candidate, beat_grid)
+        if raw_note_events is not None:
+            model_used = candidate
+            logger.info("Solo inference succeeded with %s (%s)", candidate.name, model_label)
             break
-        start += stride
-    return ranges
+        logger.warning("Solo model %s failed, trying next fallback", candidate.name)
 
+    if raw_note_events is None:
+        logger.error("All solo model formats failed — returning empty solo notes. (model=%s)", model_label)
+        return SoloNotes(notes=[])
 
-def merge_segments_with_ties(
-    segmented_notes: list[list[tuple[float, float, int, float]]],
-    tie_window_s: float = TIE_WINDOW_S,
-) -> list[tuple[float, float, int, float]]:
-    """Merge per-segment note lists into one timeline using MT3 tie semantics.
+    # Minimum duration threshold: keep grace notes that resolve to a single
+    # tick after quantization. The 0.1 multiplier lets through notes as
+    # short as ~6ms at 120 BPM; the quantization step assigns them a
+    # one-tick duration rather than dropping them outright.
+    seconds_per_32nd = (60.0 / beat_grid.bpm) / 8.0
+    min_duration_s = max(0.005, seconds_per_32nd * 0.1)
 
-    Each element of ``segmented_notes`` holds notes detected in one segment
-    as ``(start_time_s, end_time_s, pitch_midi, velocity)`` in absolute time.
-
-    An "active notes" table (keyed by MIDI pitch) is carried across segment
-    boundaries. When a note in the next segment has the same pitch and its
-    onset falls within ``tie_window_s`` of the previous same-pitch note's
-    end, it is a re-declaration (MT3's tie section): the two detections are
-    tied into a single continuous note (start from the first, end/velocity
-    extended from the max). A note that is never re-declared is emitted
-    intact from its first detection, so notes the model fails to re-detect
-    after a boundary — the "forgotten note" failure mode — are not dropped
-    and not shortened.
-
-    Notes are assumed sorted by start time within each segment.
-    """
-    result: list[tuple[float, float, int, float]] = []
-    active: dict[int, int] = {}  # pitch -> index of the current note in `result`
-
-    for segment in segmented_notes:
-        for start, end, pitch, velocity in sorted(segment, key=lambda n: n[0]):
-            prev_idx = active.get(int(pitch))
-            if prev_idx is not None:
-                prev_start, prev_end, prev_pitch, prev_velocity = result[prev_idx]
-                if start <= prev_end + tie_window_s:
-                    result[prev_idx] = (
-                        prev_start,
-                        max(prev_end, end),
-                        prev_pitch,
-                        max(prev_velocity, velocity),
-                    )
-                    continue
-            result.append((start, end, int(pitch), float(velocity)))
-            active[int(pitch)] = len(result) - 1
-    return result
-
-
-def _dampen_boundary_onsets(
-    notes: list[tuple[float, float, int, float]],
-    segment_starts: list[float],
-    window_s: float = BOUNDARY_WINDOW_S,
-    factor: float = BOUNDARY_VELOCITY_FACTOR,
-) -> tuple[list[tuple[float, float, int, float]], int]:
-    """Velocity-dampen fresh onsets just after segment boundaries.
-
-    A note whose onset lands inside ``window_s`` after a segment start was
-    only ever seen with a truncated context window — exactly where the model
-    emits spurious attacks. Continuations tied from the previous segment keep
-    their earlier onset and are never dampened.
-
-    Returns (notes, number_dampened).
-    """
-    dampened = 0
-    out: list[tuple[float, float, int, float]] = []
-    for start, end, pitch, velocity in notes:
-        if any(b <= start < b + window_s for b in segment_starts):
-            velocity = float(velocity) * factor
-            dampened += 1
-        out.append((start, end, int(pitch), velocity))
-    return out, dampened
-
-
-def _to_absolute_notes(note_events: list, offset_s: float) -> list[tuple[float, float, int, float]]:
-    """Convert basic-pitch 5-tuples to 4-tuples shifted into absolute time."""
-    abs_notes: list[tuple[float, float, int, float]] = []
-    for note in note_events:
-        start_time, end_time, pitch, velocity, _ = note
-        abs_notes.append((start_time + offset_s, end_time + offset_s, int(pitch), float(velocity)))
-    return abs_notes
-
-
-# ---------------------------------------------------------------------------
-# Shared post-processing
-# ---------------------------------------------------------------------------
-
-
-def _cleanup_raw_notes(
-    raw_notes: list,
-    beat_grid: BeatGrid,
-    min_duration_s: float,
-    model_label: str,
-) -> list[SoloNote]:
-    """Filter, unify, quantize, and velocity-map raw notes (shared paths)."""
-    MAX_INPUT_VELOCITY_FLOOR = 0.5
     MIN_MIDI_VELOCITY = 40
     MAX_MIDI_VELOCITY = 120
 
-    clean: list[tuple[float, float, int, float]] = []
-    for note in raw_notes:
-        start_time, end_time, pitch, velocity = note[0], note[1], note[2], note[3]
+    raw_notes: list[tuple[float, float, float, float]] = []
+    for note in raw_note_events:
+        start_time, end_time, pitch, velocity, _ = note
         duration = end_time - start_time
         if duration < min_duration_s:
             continue
-        clean.append((start_time, end_time, int(pitch), float(velocity)))
+        raw_notes.append((start_time, end_time, pitch, velocity))
 
-    if not clean:
+    if not raw_notes:
         logger.info("No solo notes after duration filtering (min_duration=%.3fs)", min_duration_s)
-        return []
+        return SoloNotes(notes=[])
 
+    # Amplitude-based beat-slot selection: keep only highest amplitude note per slot
+    # This enforces monophony and removes polyphonic overlap (mirrors build_gp5_from_note_events)
     grid_beats = beat_grid.beats
+    by_slot: dict[int, list[tuple[float, float, float, float]]] = defaultdict(list)
+    for start_time, end_time, pitch, velocity in raw_notes:
+        # Use the quantized start time so grace notes that snap to a different
+        # grid point than the surrounding long note land in their own slot.
+        q_start = _snap_to_grid(start_time, grid_beats)
+        slot = _beat_slot_index(q_start, grid_beats, beat_grid.bpm)
+        by_slot[slot].append((start_time, end_time, pitch, velocity))
 
-    # Commit 106: polyphony → monophonic selection per beat slot.  Basic Pitch
-    # detects chord/overlayer polyphony; at most one note may occupy a beat
-    # slot.  Keep the strongest note per slot — velocity is the amplitude
-    # proxy (basic-pitch events carry velocity, not amplitude), highest MIDI
-    # pitch breaks ties.  Mirrors build_gp5_from_note_events()'s per-slot
-    # selection (pipeline_proof.py).  The chronological truncation below
-    # remains the fallback for notes spanning multiple slots.
-    by_slot: dict[int, list] = {}
-    for note in clean:
-        slot = nearest_grid_index(note[0], grid_beats)
-        by_slot.setdefault(slot, []).append(note)
-    if by_slot:
-        clean = [
-            max(notes, key=lambda n: (float(n[3]), int(n[2]), float(n[0])))
-            for _, notes in sorted(by_slot.items())
-        ]
-        clean.sort(key=lambda n: n[0])
-        raw_count = sum(len(v) for v in by_slot.values())
-        if raw_count > len(clean):
-            logger.info(
-                "Solo slot selection collapsed %d raw notes to %d monophonic notes",
-                raw_count,
-                len(clean),
-            )
+    selected_notes: list[tuple[float, float, float, float]] = []
+    for slot in sorted(by_slot.keys()):
+        candidates = by_slot[slot]
+        best = max(candidates, key=lambda n: (n[3], n[2]))  # amplitude, then pitch
+        selected_notes.append(best)
 
-    max_input_velocity = max(n[3] for n in clean)
+    if len(selected_notes) < len(raw_notes):
+        logger.info(
+            "Beat-slot selection: %d notes → %d notes (%d removed as non-dominant)",
+            len(raw_notes), len(selected_notes), len(raw_notes) - len(selected_notes),
+        )
+
+    max_input_velocity = max(n[3] for n in selected_notes)
     if max_input_velocity < 0.01:
-        max_input_velocity = MAX_INPUT_VELOCITY_FLOOR
+        max_input_velocity = 0.5
 
     velocity_range = MAX_MIDI_VELOCITY - MIN_MIDI_VELOCITY
     cleaned_notes: list[SoloNote] = []
     LEGATO_OVERLAP_S = 0.010
-    tick_seconds = (60.0 / beat_grid.bpm) * beat_grid.tick_value
 
-    for start_time, end_time, pitch, velocity in clean:
+    for start_time, end_time, pitch, velocity in selected_notes:
         duration = end_time - start_time
         q_start = _snap_to_grid(start_time, grid_beats)
         q_end = _snap_to_grid(end_time, grid_beats)
         q_duration = q_end - q_start
         if q_duration <= 0:
-            q_duration = tick_seconds
+            q_duration = (60.0 / beat_grid.bpm) * beat_grid.tick_value
         if cleaned_notes and q_start < (cleaned_notes[-1].start_time + cleaned_notes[-1].duration):
             prev_note = cleaned_notes[-1]
             prev_note.duration = q_start - prev_note.start_time + LEGATO_OVERLAP_S
@@ -285,167 +319,75 @@ def _cleanup_raw_notes(
         cleaned_notes.append(SoloNote(
             start_time=round(q_start, 3),
             duration=round(q_duration, 3),
-            pitch=pitch,
+            pitch=int(pitch),
             velocity=midi_velocity,
         ))
 
+    cleaned_notes = _merge_boundary_notes(cleaned_notes, beat_grid.bpm)
+
     logger.info("Solo inference complete: %d notes (model=%s)", len(cleaned_notes), model_label)
-    return cleaned_notes
-
-
-def _model_candidates() -> list[Path | None]:
-    """Build the fallback chain of model paths to try."""
-    try:
-        from basic_pitch import ICASSP_2022_MODEL_PATH
-    except ImportError:
-        return []
-
-    default_model = ICASSP_2022_MODEL_PATH
-    candidates: list[Path | None] = [default_model]
-
-    # If the default is a TF SavedModel dir, also try ONNX
-    if default_model.is_dir():
-        onnx_path = default_model.with_name("nmp.onnx")
-        if onnx_path.exists():
-            candidates.append(onnx_path)
-    # If the default is ONNX, also try the TF SavedModel
-    elif default_model.suffix == ".onnx":
-        tf_path = default_model.with_name("nmp")
-        if tf_path.is_dir():
-            candidates.append(tf_path)
-    return candidates
-
-
-def _run_model_chain(audio_path: Path, beat_grid: BeatGrid) -> tuple[list | None, str]:
-    """Run the model fallback chain against one audio file.
-
-    Returns (raw_note_events or None, model_label).
-    """
-    candidates = _model_candidates()
-    model_label = "none"
-    for candidate in candidates:
-        if candidate is None or (not candidate.exists() and not candidate.is_dir()):
-            continue
-        model_label = _detect_model_type(candidate)
-        logger.info("Trying solo model: %s (%s)", candidate.name, model_label)
-        raw_note_events = _try_inference(audio_path, candidate, beat_grid)
-        if raw_note_events is not None:
-            logger.info("Solo inference succeeded with %s (%s)", candidate.name, model_label)
-            return raw_note_events, model_label
-        logger.warning("Solo model %s failed, trying next fallback", candidate.name)
-    return None, model_label
-
-
-def _write_wav(path: Path, y: np.ndarray, sr: int) -> None:
-    """Write float audio to a 16-bit PCM WAV (for segment inference)."""
-    pcm16 = np.clip(y, -1.0, 1.0)
-    pcm16 = (pcm16 * 32767.0).astype(np.int16)
-    with wave.open(str(path), "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sr)
-        wf.writeframes(pcm16.tobytes())
-
-
-def infer_solo(
-    melodic_stem_path: Path,
-    beat_grid: BeatGrid,
-    segment_length_s: float = SEGMENT_LENGTH_S,
-    overlap_s: float = SEGMENT_OVERLAP_S,
-) -> SoloNotes:
-    try:
-        from basic_pitch import ICASSP_2022_MODEL_PATH  # noqa: F401  (import check)
-    except ImportError:
-        logger.warning("basic-pitch not installed. Returning empty solo notes.")
-        return SoloNotes(notes=[])
-
-    # Minimum duration threshold
-    min_duration_s = (60.0 / beat_grid.bpm) * (beat_grid.tick_value * 0.5)
-
-    # Duration is only needed to decide whether segmentation is required;
-    # a missing/unreadable file falls back to single-pass. soundfile is used
-    # directly (it is a librosa dependency) because librosa.get_duration
-    # falls back to the deprecated audioread on unreadable paths, which can
-    # stall for tens of seconds on a missing file.
-    duration_s: float | None = None
-    if melodic_stem_path.is_file():
-        try:
-            import soundfile as sf
-
-            duration_s = float(sf.info(str(melodic_stem_path)).duration)
-        except Exception:
-            logger.warning("Could not read audio duration for %s; using single-pass", melodic_stem_path)
-
-    ranges = _segment_ranges(duration_s if duration_s is not None else -1.0, segment_length_s, overlap_s)
-    if duration_s is not None and len(ranges) > 1:
-        raw_note_events, model_label = _infer_segmented(melodic_stem_path, ranges, beat_grid)
-    else:
-        raw_note_events, model_label = _run_model_chain(melodic_stem_path, beat_grid)
-
-    if raw_note_events is None:
-        logger.error("All solo model formats failed — returning empty solo notes. (model=%s)", model_label)
-        return SoloNotes(notes=[])
-
-    normalized = [
-        (n[0], n[1], int(n[2]), float(n[3])) for n in raw_note_events
-    ]
-    cleaned_notes = _cleanup_raw_notes(normalized, beat_grid, min_duration_s, model_label)
     return SoloNotes(notes=cleaned_notes)
 
 
-def _infer_segmented(
-    audio_path: Path,
-    ranges: list[tuple[float, float]],
-    beat_grid: BeatGrid,
-) -> tuple[list | None, str]:
-    """Transcribe audio in overlapping segments and tie notes across boundaries.
+def _merge_boundary_notes(
+    notes: list[SoloNote],
+    bpm: float,
+    window_sec: float = 12.8,
+) -> list[SoloNote]:
+    """Post-inference merge pass: resolve ties at chord window boundaries.
 
-    Each segment is written to a temporary WAV, transcribed with the model
-    fallback chain, offset into absolute time, then merged with the MT3
-    active-note tie mechanism. Fresh onsets inside the boundary damping zone
-    are velocity-penalized.
+    Applies the TieRegistry mechanism to notes that span virtual segment
+    boundaries (every 128 chord frames = 12.8s at _HOP_SEC=0.1).
 
-    Returns (merged notes as basic-pitch-style 5-tuples or None, model_label).
+    Args:
+        notes: Quantized solo notes from Basic Pitch.
+        bpm: Tempo for sustain timeout calculation.
+        window_sec: Duration of one non-overlapping chord window.
+
+    Returns:
+        Deduplicated note list with cross-boundary ties merged.
     """
-    import librosa
+    if not notes:
+        return []
 
-    duration_s = ranges[-1][1]
-    model_label = "none"
-    segmented_notes: list[list[tuple[float, float, int, float]]] = []
-    for start_s, end_s in ranges:
-        y_slice, sr = librosa.load(
-            str(audio_path), sr=44100, mono=True, offset=start_s, duration=end_s - start_s
-        )
-        if len(y_slice) == 0:
+    registry = TieRegistry(bpm=bpm)
+    all_notes = list(notes)
+    result: list[SoloNote] = []
+
+    boundaries = []
+    b = window_sec
+    max_time = max(n.start_time + n.duration for n in all_notes)
+    while b < max_time:
+        boundaries.append(b)
+        b += window_sec
+
+    segment_start = 0.0
+    pending_notes: list[SoloNote] = []
+
+    for boundary in boundaries:
+        segment_notes = [n for n in all_notes if n.start_time < boundary]
+        remaining = [n for n in all_notes if n.start_time >= boundary]
+
+        if not segment_notes:
+            segment_start = boundary
             continue
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp_path = Path(tmp.name)
-        try:
-            _write_wav(tmp_path, y_slice, sr)
-            segment_events, model_label = _run_model_chain(tmp_path, beat_grid)
-            if segment_events is None:
-                logger.warning("Segment [%.1f, %.1f) failed; skipping", start_s, end_s)
-                continue
-            segment_offsets = _to_absolute_notes(segment_events, start_s)
-            segmented_notes.append(segment_offsets)
-        finally:
-            tmp_path.unlink(missing_ok=True)
 
-    if not segmented_notes:
-        return None, model_label
+        registry.register_segment_end(segment_notes, boundary)
+        resolved = registry.resolve_segment_start(remaining)
 
-    merged = merge_segments_with_ties(segmented_notes)
-    boundary_starts = [start_s for start_s, _ in ranges[1:]]
-    dampened, n_dampened = _dampen_boundary_onsets(merged, boundary_starts)
-    logger.info(
-        "Solo segmented inference: %d segments, %d raw notes -> %d tied notes "
-        "(%d boundary onsets dampened, track=%.1fs)",
-        len(segmented_notes),
-        sum(len(s) for s in segmented_notes),
-        len(merged),
-        n_dampened,
-        duration_s,
-    )
+        closed_notes = [n for n in segment_notes if n.start_time + n.duration <= boundary]
+        result.extend(closed_notes)
 
-    # Rebuild 5-tuples (bend=None) so downstream code has one canonical shape.
-    return [(s, e, p, v, None) for s, e, p, v in dampened], model_label
+        all_notes = remaining
+        segment_start = boundary
+
+    result.extend(all_notes)
+    result.sort(key=lambda n: (n.start_time, n.pitch))
+
+    if len(result) < len(notes):
+        logger.info(
+            "Boundary tie merge: %d notes → %d notes (%d merged)",
+            len(notes), len(result), len(notes) - len(result),
+        )
+
+    return result

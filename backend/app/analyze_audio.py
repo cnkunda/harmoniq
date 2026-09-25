@@ -8,19 +8,16 @@ commits (whisper + tabs) isolated.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.ingest import SourceMetadata, resolve_lesson_titles
 from app.pipeline_proof import LibrosaSummary, librosa_summarize
 from app.style_detect import infer_style_from_librosa_summary
 from app.transcribe import transcribe_vocals_to_lyrics_aligned
-from app.transcription_confidence import (
-    chord_section_confidence,
-    composite_transcription_confidence,
-    vocals_coverage_confidence,
-)
+from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
 from app.schemas import (
     BeatGrid,
     ChordEvent,
@@ -33,227 +30,21 @@ from app.schemas import (
     StemRoutingHints,
 )
 from app.stem_quality import StemClassification
+from app.repeat_detection import detect_repeated_sections
 from app.alphatab_prerender import enrich_lesson_with_prerender_hints
 from app.musicxml_builder import build_musicxml
 from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidence, generate_tab_artifacts_for_guitar_stem
 from app.beat_grid import estimate_beat_grid
-from app.chord_inference import infer_chords
+from app.chord_enrichment import assign_roman_numerals
+from app.chord_inference import infer_chords, infer_chords_dual_path
+from app.instrument_confusion import compute_per_section_confusion
+from app.mt3 import transcribe_with_fallback, get_transcription_source_label
 from app.solo_inference import infer_solo
+from app.solo_harmony_analyzer import SoloHarmonizer
+from app.section_refinement import refine_section_boundaries
 
 logger = logging.getLogger("harmoniq.analyze_audio")
 logger.setLevel(logging.INFO)
-
-
-def _backend_root_for_analyze() -> Path:
-    return Path(__file__).resolve().parents[1]
-
-
-def _resolve_stem_abs_path(stem_name: str, stems: dict[str, str], guitar_stem_path: Path) -> Path | None:
-    """Resolve absolute path for a stem name via stems dict or adjacent files."""
-    backend_root = _backend_root_for_analyze()
-    rel = stems.get(stem_name)
-    if rel:
-        candidate = backend_root / rel
-        if candidate.is_file():
-            return candidate
-    # Fallback: sibling of guitar stem
-    sibling = guitar_stem_path.parent / f"{stem_name}.wav"
-    if sibling.is_file():
-        return sibling
-    return None
-
-
-def _wav_has_audio(path: Path) -> bool:
-    """Quick check that WAV exists and is non-empty (size heuristic)."""
-    try:
-        return path.is_file() and path.stat().st_size > 44  # WAV header
-    except Exception:
-        return False
-
-
-def _resolve_chord_mix_path(
-    *,
-    job_id: str,
-    stems: dict[str, str],
-    guitar_stem_path: Path,
-    mix_wav_path: Path | None,
-    stem_routing_hints: StemRoutingHints | dict[str, object] | None,
-    job_dir: Path | None,
-) -> tuple[Path, str, StemRoutingHints | None]:
-    """Resolve chord inference path: bass+other mix when possible.
-
-    Returns (path_to_use, source_label, updated_hints_or_none).
-    """
-    # Normalize hints
-    hints: StemRoutingHints | None = None
-    if stem_routing_hints is not None:
-        if isinstance(stem_routing_hints, dict):
-            try:
-                hints = StemRoutingHints.model_validate(stem_routing_hints)
-            except Exception:
-                hints = None
-        elif isinstance(stem_routing_hints, StemRoutingHints):
-            hints = stem_routing_hints
-
-    # If no hints, fallback to current hardcoded behavior
-    if hints is None:
-        fallback = mix_wav_path if mix_wav_path and mix_wav_path.is_file() else guitar_stem_path
-        return fallback, "full_mix_fallback_no_hints", None
-
-    chord_names: list[str] = list(hints.chord_mix_stems) if hints.chord_mix_stems else ["bass", "other"]
-
-    # Attempt to collect stem paths for mixing
-    stem_paths: list[Path] = []
-    for name in chord_names:
-        p = _resolve_stem_abs_path(name, stems, guitar_stem_path)
-        if p is not None and _wav_has_audio(p):
-            stem_paths.append(p)
-        else:
-            logger.info("chord_mix stem missing or empty: %s for job_id=%s", name, job_id)
-
-    # Need at least 2 stems with audio to mix
-    if len(stem_paths) >= 2:
-        # Use job_dir if provided else derive from guitar stem
-        out_dir = job_dir if job_dir is not None else guitar_stem_path.parent.parent
-        out_path = out_dir / "mixed_bass_other.wav"
-        try:
-            from app.audio_mix import mix_stems
-
-            mixed = mix_stems(stem_paths, out_path)
-            # Update hints with resolved actual path for observability
-            try:
-                backend_root = _backend_root_for_analyze().resolve()
-                rel_mixed = mixed.resolve().relative_to(backend_root).as_posix()
-            except Exception:
-                rel_mixed = str(mixed)
-            hints = hints.model_copy(update={
-                "chord_mix_path": rel_mixed,
-                "chord_source": "bass_other_mix",
-            })
-            logger.info(
-                "stem_routing chord job_id=%s source=bass_other_mix stems=%s mixed=%s",
-                job_id, chord_names, mixed,
-            )
-            return mixed, "bass_other_mix", hints
-        except Exception as exc:
-            logger.warning("bass+other mix failed job_id=%s error=%s; falling back", job_id, exc)
-
-    # Fallback to full mix or guitar
-    fallback = mix_wav_path if mix_wav_path and mix_wav_path.is_file() else guitar_stem_path
-    source = "full_mix" if (mix_wav_path and mix_wav_path.is_file()) else "guitar_fallback"
-    # Record that we fell back
-    try:
-        backend_root = _backend_root_for_analyze().resolve()
-        rel_fb = fallback.resolve().relative_to(backend_root).as_posix() if fallback.is_file() else str(fallback)
-    except Exception:
-        rel_fb = str(fallback)
-    hints = hints.model_copy(update={
-        "chord_mix_path": rel_fb,
-        "chord_source": source,
-    }) if hints else hints
-    logger.info(
-        "stem_routing chord fallback job_id=%s source=%s path=%s hints_stems=%s",
-        job_id, source, fallback, chord_names,
-    )
-    return fallback, source, hints
-
-
-def _resolve_melodic_stem_path(
-    *,
-    job_id: str,
-    stems: dict[str, str],
-    guitar_stem_path: Path,
-    stem_routing_hints: StemRoutingHints | dict[str, object] | None,
-    stem_classification: StemClassification | None,
-) -> tuple[Path, str, StemRoutingHints | None]:
-    """Resolve melodic stem for solo: selected -> guitar -> vocals."""
-    hints: StemRoutingHints | None = None
-    if stem_routing_hints is not None:
-        if isinstance(stem_routing_hints, dict):
-            try:
-                hints = StemRoutingHints.model_validate(stem_routing_hints)
-            except Exception:
-                hints = None
-        elif isinstance(stem_routing_hints, StemRoutingHints):
-            hints = stem_routing_hints
-
-    # Determine preference order: if hints provided use selected, else guitar
-    if hints is None:
-        return guitar_stem_path, "guitar_fallback_no_hints", None
-
-    selected = (hints.selected_melodic_stem or "guitar").strip() or "guitar"
-
-    # Influence by stem quality flags: if guitar flagged as near silent / buried,
-    # deprioritize guitar when it is the selected stem.
-    flags = list(stem_classification.flags) if stem_classification else []
-    flag_influenced = False
-    if selected == "guitar" and any(f in flags for f in ("guitar_near_silent", "guitar_buried_in_mix")):
-        logger.info(
-            "stem_routing solo quality flag influences routing job_id=%s flags=%s selected=%s",
-            job_id, flags, selected,
-        )
-        flag_influenced = True
-
-    # Build fallback chain: selected -> guitar -> vocals (avoid duplicates)
-    fallback_chain: list[str] = []
-    for cand in [selected, "guitar", "vocals"]:
-        if cand not in fallback_chain:
-            fallback_chain.append(cand)
-    # If flag influenced and guitar is problematic, try vocals first after selected
-    if flag_influenced and selected == "guitar":
-        fallback_chain = ["vocals", "guitar"]
-        if selected not in fallback_chain:
-            fallback_chain.append(selected)
-
-    for stem_name in fallback_chain:
-        p = _resolve_stem_abs_path(stem_name, stems, guitar_stem_path)
-        if p is not None and _wav_has_audio(p):
-            source = "selected" if stem_name == selected else stem_name
-            # Also extend to check melodic_preference_order for deeper fallback
-            try:
-                backend_root = _backend_root_for_analyze().resolve()
-                rel = p.resolve().relative_to(backend_root).as_posix()
-            except Exception:
-                rel = str(p)
-            hints = hints.model_copy(update={
-                "melodic_stem_path": rel,
-                "solo_source": source,
-            })
-            logger.info(
-                "stem_routing solo job_id=%s source=%s stem=%s path=%s flags=%s",
-                job_id, source, stem_name, p, flags,
-            )
-            return p, source, hints
-        else:
-            logger.info("melodic stem candidate missing: %s for job_id=%s", stem_name, job_id)
-
-    # Deeper fallback: iterate melodic_preference_order if present
-    for stem_name in (hints.melodic_preference_order or []):
-        if stem_name in fallback_chain:
-            continue
-        p = _resolve_stem_abs_path(stem_name, stems, guitar_stem_path)
-        if p is not None and _wav_has_audio(p):
-            try:
-                backend_root = _backend_root_for_analyze().resolve()
-                rel = p.resolve().relative_to(backend_root).as_posix()
-            except Exception:
-                rel = str(p)
-            hints = hints.model_copy(update={
-                "melodic_stem_path": rel,
-                "solo_source": stem_name,
-            })
-            logger.info("stem_routing solo fallback pref job_id=%s stem=%s path=%s", job_id, stem_name, p)
-            return p, stem_name, hints
-
-    # Final fallback to guitar (hardcoded)
-    try:
-        backend_root = _backend_root_for_analyze().resolve()
-        rel = guitar_stem_path.resolve().relative_to(backend_root).as_posix()
-    except Exception:
-        rel = str(guitar_stem_path)
-    hints = hints.model_copy(update={"melodic_stem_path": rel, "solo_source": "guitar_fallback"})
-    logger.info("stem_routing solo final fallback job_id=%s guitar %s", job_id, guitar_stem_path)
-    return guitar_stem_path, "guitar_fallback", hints
 
 TABS_UNAVAILABLE_NO_GUITAR = "no_isolated_guitar"
 
@@ -345,6 +136,7 @@ def _lesson_json_stem_fields(stem_classification: StemClassification | None) -> 
             "guitar_stem_usable": True,
             "analysis_audio_role": "guitar_stem",
             "tabs_unavailable_reason": None,
+            "stem_confidence": None,
         }
     return {
         "stem_isolation_warning": stem_classification.user_warning,
@@ -354,6 +146,7 @@ def _lesson_json_stem_fields(stem_classification: StemClassification | None) -> 
         "tabs_unavailable_reason": (
             TABS_UNAVAILABLE_NO_GUITAR if not stem_classification.guitar_stem_usable else None
         ),
+        "stem_confidence": stem_classification.stem_confidence,
     }
 
 
@@ -429,25 +222,10 @@ def build_lesson_json_from_librosa(
     stem_classification: StemClassification | None = None,
     mix_wav_path: Path | None = None,
     piano_stem_path: Path | None = None,
-    progress_callback: "callable | None" = None,
-    stem_routing_hints: StemRoutingHints | dict[str, object] | None = None,
-    job_dir: Path | None = None,
+    on_stage: Callable[[str, float, str], None] | None = None,
+    routing_hints: StemRoutingHints | None = None,
+    stem_abs_paths: dict[str, Path] | None = None,
 ) -> LessonJSON:
-    """Build a full LessonJSON from audio analysis.
-
-    Args:
-        progress_callback: Optional callable ``(stage: str, partial_lesson: LessonJSON | None) -> None``
-            called after each major pipeline stage completes. Stages:
-            ``"chords_inferring"`` (chord timeline ready),
-            ``"solo_inferring"`` (solo notes ready),
-            ``"building_musicxml"`` (MusicXML ready),
-            ``"complete"`` (final lesson).
-        stem_routing_hints: Commit 110 — routing hints from ``build_stem_routing_hints()``
-            (bass+other for chords, dynamic melodic stem for solo). When ``None``,
-            the hardcoded fallback paths are used.
-        job_dir: Optional job directory for writing ``mixed_bass_other.wav``.
-            If ``None``, derived from ``guitar_stem_path.parent.parent``.
-    """
     song_title, artist = resolve_lesson_titles(source_metadata, source_url=source_url)
 
     analysis_path = _resolve_librosa_audio_path(
@@ -496,112 +274,304 @@ def build_lesson_json_from_librosa(
     if not beat_grid_list:
         beat_grid_list = [0.0]
 
-    # Derive bar_timestamps from the BeatGrid downbeats (respects actual time signature)
-    bar_timestamps = _sorted_unique_floats(beat_grid.downbeats) if beat_grid.downbeats else []
-    if not bar_timestamps:
-        bar_timestamps = _sorted_unique_floats(summary.bar_timestamps_s)
+    # Commit 109: Derive bar_timestamps from BeatGrid.downbeats (time-sig-aware)
+    # instead of pipeline_proof.py's hardcoded 4/4 assumption.
+    bar_timestamps = list(beat_grid.downbeats) if beat_grid.downbeats else [0.0]
     if not bar_timestamps:
         bar_timestamps = [0.0]
     if bar_timestamps[0] > 0.05:
         bar_timestamps.insert(0, 0.0)
 
-    # Commit 110: resolve stem routing for chords (bass+other mix) and solo (dynamic melodic stem)
-    resolved_hints: StemRoutingHints | None = None
-    if isinstance(stem_routing_hints, dict):
-        try:
-            resolved_hints = StemRoutingHints.model_validate(stem_routing_hints)
-        except Exception:
-            resolved_hints = None
-    elif isinstance(stem_routing_hints, StemRoutingHints):
-        resolved_hints = stem_routing_hints
-
-    chord_mix_path, chord_source, chord_hints = _resolve_chord_mix_path(
-        job_id=job_id,
-        stems=stems,
-        guitar_stem_path=guitar_stem_path,
-        mix_wav_path=mix_wav_path,
-        stem_routing_hints=resolved_hints,
-        job_dir=job_dir,
-    )
-    melodic_stem_path, solo_source, solo_hints = _resolve_melodic_stem_path(
-        job_id=job_id,
-        stems=stems,
-        guitar_stem_path=guitar_stem_path,
-        stem_routing_hints=resolved_hints,
-        stem_classification=stem_classification,
-    )
-    # Merge hints for telemetry (chord + solo resolved paths)
-    if chord_hints is not None and solo_hints is not None:
-        # chord_hints already has chord fields; merge solo fields
-        resolved_hints = chord_hints.model_copy(update={
-            "melodic_stem_path": solo_hints.melodic_stem_path,
-            "solo_source": solo_hints.solo_source,
-            "melodic_preference_order": solo_hints.melodic_preference_order or chord_hints.melodic_preference_order,
-            "selected_melodic_stem": solo_hints.selected_melodic_stem or chord_hints.selected_melodic_stem,
-        })
-    elif chord_hints is not None:
-        resolved_hints = chord_hints
-    elif solo_hints is not None:
-        resolved_hints = solo_hints
-
-    if resolved_hints is not None:
-        logger.info(
-            "stem_routing resolved job_id=%s chord_path=%s (%s) solo_path=%s (%s) flags=%s hints=%s",
-            job_id,
-            chord_mix_path,
-            chord_source,
-            melodic_stem_path,
-            solo_source,
-            list(stem_classification.flags) if stem_classification else [],
-            resolved_hints.model_dump(exclude_none=True),
-        )
-    else:
-        logger.info(
-            "stem_routing fallback job_id=%s chord_path=%s solo_path=%s flags=%s",
-            job_id, chord_mix_path, melodic_stem_path,
-            list(stem_classification.flags) if stem_classification else [],
-        )
-
     # Run transcription inference for chord timeline and solo notes
     chord_timeline: ChordTimeline | None = None
     solo_notes: SoloNotes | None = None
+    transcription_source: str | None = None
 
-    chord_metrics: dict = {}
-    try:
-        chord_timeline, chord_metrics = infer_chords(chord_mix_path, beat_grid, key_signature=summary.key_name)
-        logger.info("chord inference completed for job_id=%s with %d events path=%s", job_id, len(chord_timeline.events), chord_mix_path)
-        if progress_callback is not None:
-            try:
-                progress_callback("chords_inferring", None)
-            except Exception:
-                pass
-    except Exception:
-        logger.exception("chord inference failed for job_id=%s path=%s; continuing without chord timeline", job_id, chord_mix_path)
-        chord_timeline = ChordTimeline(events=[])
+    # === Phase 2, Milestone A: MT3-Primary transcription ===
+    # Uses the fallback chain: MT3 → CRNN TFLite → Chroma matching.
+    # When MT3 is unavailable or confidence is low, falls back gracefully.
+    # ===
+    if on_stage:
+        on_stage("mt3_inferring", 0.60, "Transcribing with MT3…")
 
-    try:
-        solo_notes = infer_solo(melodic_stem_path, beat_grid)
-        logger.info("solo inference completed for job_id=%s with %d notes path=%s", job_id, len(solo_notes.notes), melodic_stem_path)
-        if progress_callback is not None:
+    # Resolve the best available audio source for transcription
+    chord_mix_path = mix_wav_path if (mix_wav_path and mix_wav_path.is_file()) else guitar_stem_path
+    solo_source_path = guitar_stem_path
+
+    if routing_hints is not None and stem_abs_paths is not None:
+        valid_chord_stems = resolve_chord_stems(
+            stem_abs_paths, routing_hints.chord_mix_stems
+        )
+        if len(valid_chord_stems) >= 2:
             try:
-                progress_callback("solo_inferring", None)
+                job_dir = Path(wav_path).parent
+                chord_mix_path = mix_stems(
+                    valid_chord_stems,
+                    job_dir / "chord_mix.wav",
+                )
+                routing_hints.resolved_chord_mix_keys = list(routing_hints.chord_mix_stems)
+                routing_hints.resolved_chord_path = str(chord_mix_path)
+                logger.info(
+                    "stem_routing job_id=%s chord_mix stems=%s → %s",
+                    job_id, routing_hints.chord_mix_stems, chord_mix_path,
+                )
             except Exception:
-                pass
+                logger.exception(
+                    "stem_routing job_id=%s chord_mix failed; falling back to %s",
+                    job_id, chord_mix_path,
+                )
+                if not routing_hints.fallback_reason:
+                    routing_hints.fallback_reason = "mix_failed"
+                routing_hints.resolved_chord_path = str(chord_mix_path)
+        else:
+            if not routing_hints.fallback_reason:
+                routing_hints.fallback_reason = "insufficient_stems"
+            routing_hints.resolved_chord_path = str(chord_mix_path)
+
+        try:
+            resolved_solo, chosen_stem = resolve_solo_stem(
+                stem_abs_paths, routing_hints.selected_melodic_stem
+            )
+            solo_source_path = resolved_solo
+            routing_hints.resolved_solo_path = str(resolved_solo)
+            if chosen_stem != routing_hints.selected_melodic_stem:
+                if not routing_hints.fallback_reason:
+                    routing_hints.fallback_reason = f"solo_{chosen_stem}"
+                logger.info(
+                    "stem_routing job_id=%s solo_fallback selected=%s → used=%s reason=%s",
+                    job_id, routing_hints.selected_melodic_stem, chosen_stem, routing_hints.fallback_reason,
+                )
+            else:
+                logger.info(
+                    "stem_routing job_id=%s solo_stem=%s (no fallback)", job_id, chosen_stem,
+                )
+        except KeyError:
+            logger.exception(
+                "stem_routing job_id=%s solo resolution failed; using guitar stem",
+                job_id,
+            )
+            if not routing_hints.fallback_reason:
+                routing_hints.fallback_reason = "solo_resolution_failed"
+            routing_hints.resolved_solo_path = str(guitar_stem_path)
+            solo_source_path = guitar_stem_path
+    # === End routing block ===
+
+    instrument_confusion: float | None = None
+    dual_fusion_log: list[dict] | None = None
+
+    # Try MT3 fallback chain first (chords + solo notes together)
+    try:
+        mt3_result = transcribe_with_fallback(
+            chord_mix_path,
+            beat_grid,
+            use_mt3=True,
+        )
+        chord_timeline = mt3_result.chord_timeline
+        solo_notes = mt3_result.solo_notes
+        transcription_source = mt3_result.source
+
+        logger.info(
+            "MT3 fallback chain for job_id=%s source=%s confidence=%.2f "
+            "chord_events=%d solo_notes=%d%s",
+            job_id, mt3_result.source, mt3_result.mean_confidence,
+            len(chord_timeline.events), len(solo_notes.notes),
+            f" fallback={mt3_result.fallback_reason}" if mt3_result.fallback_reason else "",
+        )
     except Exception:
-        logger.exception("solo inference failed for job_id=%s path=%s; continuing without solo notes", job_id, melodic_stem_path)
-        solo_notes = SoloNotes(notes=[])
+        logger.exception(
+            "MT3 transcription failed for job_id=%s; falling back to CRNN",
+            job_id,
+        )
+        transcription_source = "crnn"
+
+    # If MT3 chain returned none or no results, run legacy CRNN inference
+    if chord_timeline is None or len(chord_timeline.events) == 0:
+        logger.info("MT3 produced no chords for job_id=%s; running CRNN fallback", job_id)
+        if on_stage:
+            on_stage("chords_inferring", 0.65, "Inferring chords (fallback)…")
+
+        stem_conf = stem_classification.stem_confidence if stem_classification else 1.0
+        use_dual_path = (
+            stem_classification is not None
+            and stem_conf < 1.0
+            and guitar_stem_path.is_file()
+            and chord_mix_path != guitar_stem_path
+        )
+
+        try:
+            if use_dual_path:
+                dual_result = infer_chords_dual_path(
+                    stem_path=guitar_stem_path,
+                    mix_path=chord_mix_path,
+                    beat_grid=beat_grid,
+                    stem_confidence=stem_conf,
+                )
+                chord_timeline = dual_result.timeline
+                instrument_confusion = dual_result.instrument_confusion
+                dual_fusion_log = dual_result.fusion_log
+            else:
+                chord_timeline = infer_chords(chord_mix_path, beat_grid)
+            transcription_source = "crnn"
+            logger.info(
+                "CRNN chord inference for job_id=%s: %d events (dual_path=%s)",
+                job_id, len(chord_timeline.events), use_dual_path,
+            )
+        except Exception:
+            logger.exception("CRNN chord inference failed for job_id=%s", job_id)
+            chord_timeline = ChordTimeline(events=[])
+            transcription_source = "none"
+
+    # If MT3 didn't produce solo notes, run Basic Pitch fallback
+    if solo_notes is None or len(solo_notes.notes) == 0:
+        if on_stage:
+            on_stage("solo_inferring", 0.78, "Inferring solo notation (fallback)…")
+        try:
+            solo_notes = infer_solo(solo_source_path, beat_grid)
+            logger.info(
+                "Basic Pitch solo inference for job_id=%s: %d notes",
+                job_id, len(solo_notes.notes),
+            )
+        except Exception:
+            logger.exception("solo inference failed for job_id=%s", job_id)
+            solo_notes = SoloNotes(notes=[])
+
+    # Commit 116: Assign deterministic Roman numeral labels to all chord events
+    if chord_timeline.events and summary.key_name:
+        assign_roman_numerals(chord_timeline.events, summary.key_name)
+
+    # Commit 112: flag high instrument confusion in stem quality flags
+    if instrument_confusion is not None and instrument_confusion > 0.3:
+        if stem_classification is not None:
+            existing_flags = list(stem_classification.flags)
+            if "high_instrument_confusion" not in existing_flags:
+                existing_flags.append("high_instrument_confusion")
+                stem_classification = StemClassification(
+                    guitar_stem_usable=stem_classification.guitar_stem_usable,
+                    analysis_audio_role=stem_classification.analysis_audio_role,
+                    flags=tuple(existing_flags),
+                    user_warning=stem_classification.user_warning,
+                    stem_confidence=stem_classification.stem_confidence,
+                )
+
+    # Commit 123: Solo harmony enrichment — cross-reference solo notes with chord timeline
+    harmonized_solo = None
+    per_bar_analysis = None
+    if (
+        chord_timeline
+        and solo_notes
+        and chord_timeline.events
+        and solo_notes.notes
+        and summary.key_name
+    ):
+        try:
+            harmonizer = SoloHarmonizer(chord_timeline, solo_notes, beat_grid, summary.key_name)
+            harmonized_solo = harmonizer.harmonized_solo
+            per_bar_analysis = harmonizer.per_bar_analysis
+            logger.info(
+                "solo harmony analysis completed for job_id=%s: %d notes, %d bars",
+                job_id, harmonized_solo.note_count, len(per_bar_analysis),
+            )
+        except Exception:
+            logger.exception("solo harmony analysis failed for job_id=%s; skipping", job_id)
+
+    # Commit 117: Run Whisper before section construction so refinement has
+    # all three signals (chords, vocals, energy).
+    lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
+        vocals_stem_path, beat_grid=beat_grid_list, bar_timestamps=bar_timestamps
+    )
+
+    # Commit 117: Refine section boundaries by fusing chord density, vocal gaps,
+    # and energy envelope novelty. Falls back to RMS boundaries on failure.
+    refined_segments: list[dict[str, Any]] = summary.segments
+    if (
+        summary.onset_novelty is not None
+        and summary.rms_curve is not None
+        and summary.times is not None
+        and chord_timeline is not None
+        and len(chord_timeline.events) > 0
+    ):
+        try:
+            chord_events = [(e.timestamp, e.chord) for e in chord_timeline.events]
+            refined_segments = refine_section_boundaries(
+                rms_boundaries=[s.get("start_s", 0.0) for s in summary.segments],
+                chord_events=chord_events,
+                lyrics_aligned=lyrics_aligned,
+                onset_novelty=summary.onset_novelty,
+                rms_curve=summary.rms_curve,
+                times=summary.times,
+                song_duration=summary.duration_s,
+                spectral_centroid_curve=summary.spectral_centroid,
+            )
+            logger.info(
+                "section refinement completed for job_id=%s: %d segments",
+                job_id,
+                len(refined_segments),
+            )
+        except Exception:
+            logger.exception(
+                "section refinement failed for job_id=%s; using original segments",
+                job_id,
+            )
+
+    # Commit 118: Detect repeated sections via chroma self-similarity
+    if (
+        summary.chroma is not None
+        and summary.times is not None
+        and len(refined_segments) >= 2
+    ):
+        try:
+            # Build boundaries: all segment start times + end time of last segment
+            seg_starts = [s.get("start", s.get("start_s", 0.0)) for s in refined_segments]
+            last_seg = refined_segments[-1]
+            last_end = last_seg.get("end", last_seg.get("end_s"))
+            if last_end is None:
+                last_end = summary.duration_s
+            boundaries = seg_starts + [float(last_end)]
+            repeat_results = detect_repeated_sections(
+                chroma=summary.chroma,
+                times=summary.times,
+                boundaries=boundaries,
+                existing_labels=[s.get("label", "Section") for s in refined_segments],
+            )
+            if repeat_results is not None:
+                for seg, ri in zip(refined_segments, repeat_results):
+                    seg["repeat_group_id"] = ri["repeat_group_id"]
+                    seg["is_repeated"] = ri["is_repeated"]
+                    seg["repeat_count"] = ri["repeat_count"]
+                    seg["repeat_index"] = ri["repeat_index"]
+                    seg["label"] = ri["label"]
+                logger.info(
+                    "repeat detection completed for job_id=%s: %d groups",
+                    job_id,
+                    len(set(ri["repeat_group_id"] for ri in repeat_results)),
+                )
+        except Exception:
+            logger.exception(
+                "repeat detection failed for job_id=%s; labels unchanged", job_id
+            )
 
     sections: list[LessonSectionStub] = []
     section_starts: list[float | None] = []
-    
-    for seg in summary.segments:
+
+    for seg in refined_segments:
         label = seg.get("label") if isinstance(seg, dict) else None
         if not isinstance(label, str) or not label.strip():
             label = "Section"
-        start_raw = seg.get("start_s") if isinstance(seg, dict) else None
+        # Commit 117: refined segments use "start"/"end" keys; fall back to "start_s"
+        start_raw = seg.get("start") if isinstance(seg, dict) else None
+        if start_raw is None:
+            start_raw = seg.get("start_s") if isinstance(seg, dict) else None
+        end_raw = seg.get("end") if isinstance(seg, dict) else None
+        if end_raw is None:
+            end_raw = seg.get("end_s") if isinstance(seg, dict) else None
         start_time_seconds = (
             float(start_raw) if isinstance(start_raw, (int, float)) else None
         )
+        end_time_seconds = (
+            float(end_raw) if isinstance(end_raw, (int, float)) else None
+        )
+        # Commit 117: extract label_confidence from refined segments
+        label_confidence = seg.get("label_confidence") if isinstance(seg, dict) else None
         section_starts.append(start_time_seconds)
         # Placeholder confidence (overwritten once we have transcription confidence).
         sections.append(
@@ -609,6 +579,13 @@ def build_lesson_json_from_librosa(
                 label=label,
                 confidence=0.6,
                 start_time_seconds=start_time_seconds,
+                end_time_seconds=end_time_seconds,
+                label_confidence=float(label_confidence) if isinstance(label_confidence, (int, float)) else None,
+                # Commit 118: repetition metadata
+                repeat_group_id=seg.get("repeat_group_id") if isinstance(seg, dict) else None,
+                is_repeated=seg.get("is_repeated") if isinstance(seg, dict) else None,
+                repeat_count=seg.get("repeat_count") if isinstance(seg, dict) else None,
+                repeat_index=seg.get("repeat_index") if isinstance(seg, dict) else None,
             )
         )
 
@@ -616,10 +593,19 @@ def build_lesson_json_from_librosa(
         sections = [LessonSectionStub(label="Intro", confidence=0.3, start_time_seconds=0.0)]
         section_starts = [0.0]
 
+    # Commit 119: fall back to "Section N" when label confidence < 0.6
+    for i, sec in enumerate(sections):
+        lc = sec.label_confidence
+        if lc is not None and lc < 0.6:
+            sec.label = f"Section {i + 1}"
+
     # Attach transcription data to each section
     for i, section in enumerate(sections):
         section_start = section.start_time_seconds
-        section_end = section_starts[i + 1] if i + 1 < len(section_starts) else None
+        # Commit 117: prefer end_time_seconds from refined segment, fall back to next start
+        section_end = section.end_time_seconds
+        if section_end is None:
+            section_end = section_starts[i + 1] if i + 1 < len(section_starts) else None
         
         # Filter transcription data for this section's time range
         section_chord_timeline = None
@@ -648,50 +634,28 @@ def build_lesson_json_from_librosa(
         if section_beat_grid:
             section_dict["beat_grid"] = section_beat_grid.model_dump()
         
+        # Commit 108: Generate per-section MusicXML
+        if section_beat_grid and section_chord_timeline and section_solo_notes:
+            try:
+                section_musicxml = build_musicxml(
+                    beat_grid=section_beat_grid,
+                    chord_timeline=section_chord_timeline,
+                    solo_notes=section_solo_notes,
+                    title=song_title or "Harmoniq Score",
+                    artist=artist or "Harmoniq AI",
+                    key_signature=summary.key_name,
+                )
+                section_dict["musicxml"] = section_musicxml
+            except Exception:
+                logger.exception(
+                    "Per-section MusicXML generation failed for section %d of job_id=%s",
+                    i, job_id,
+                )
+        
         sections[i] = LessonSectionStub(**section_dict)
-
-    # ML Fallback milestone: per-section chord-model confidence (duration-
-    # weighted blended max-softmax) from each section's own chord timeline.
-    section_chord_confs: list[float | None] = []
-    for sec in sections:
-        section_chord_confs.append(
-            chord_section_confidence(
-                getattr(sec, "chord_timeline", None),
-                section_start=sec.start_time_seconds,
-            )
-        )
-
-    # The tuple's second element (word-count heuristic) is superseded by the
-    # coverage-based composite below; only the aligned rows are used here.
-    lyrics_aligned, _ = transcribe_vocals_to_lyrics_aligned(
-        vocals_stem_path, beat_grid=beat_grid_list, bar_timestamps=bar_timestamps
-    )
-    vocals_cov_conf = vocals_coverage_confidence(
-        lyrics_aligned if isinstance(lyrics_aligned, list) else [],
-        len(beat_grid_list),
-    )
 
     skip_tabs = stem_classification is not None and not stem_classification.guitar_stem_usable
     tab_artifacts: dict[str, str] | None = None
-
-    # Composite per-section confidence (chord softmax + vocal coverage).
-    # When the guitar stem is unusable the composite is floored at 0.25 and
-    # tabs are skipped entirely — the frontend then shows the
-    # "transcription unavailable" state instead of empty tab viewports.
-    # Sections are never empty (fallback "Intro" above), so the mean always
-    # resolves to a finite confidence.
-    guitar_usable = stem_classification is None or stem_classification.guitar_stem_usable
-    section_composite_confs = [
-        composite_transcription_confidence(
-            chord_conf if guitar_usable else None,
-            vocals_cov_conf if guitar_usable else None,
-            guitar_stem_usable=guitar_usable,
-        )
-        for chord_conf in section_chord_confs
-    ]
-    transcription_confidence = float(
-        sum(section_composite_confs) / len(section_composite_confs)
-    )
 
     if skip_tabs:
         tc = min(float(transcription_confidence), 0.25)
@@ -737,17 +701,36 @@ def build_lesson_json_from_librosa(
                 )
                 for sec in sections
             ]
-        # Per-section composite confidence overrides the uniform tabgen value
-        # so each section carries its own chord+vocal quality signal.
-        sections = [
-            LessonSectionStub(
-                **{**getattr(sec, "model_dump")(exclude_none=True), "confidence": conf}
-            )
-            for sec, conf in zip(sections, section_composite_confs)
-        ]
 
     style = infer_style_from_librosa_summary(summary)
     stem_fields = _lesson_json_stem_fields(stem_classification)
+
+    # Commit 121: Per-section instrument confusion from dual-path fusion log
+    per_section_confusion = compute_per_section_confusion(
+        sections=sections,
+        chord_timeline=chord_timeline,
+        fusion_log=dual_fusion_log or [],
+    )
+
+    # Commit 121: Log per-job instrument confusion for model improvement tracking
+    if instrument_confusion is not None:
+        per_section_summary = [
+            {
+                "section_index": s.section_index,
+                "label": s.label,
+                "confusion": round(s.instrument_confusion, 3),
+                "is_high": s.is_high_confusion,
+                "beats": s.beat_count,
+                "disagreements": s.disagreement_count,
+            }
+            for s in per_section_confusion
+        ]
+        logger.info(
+            "instrument_confusion job_id=%s confusion=%.3f per_section=%s",
+            job_id,
+            instrument_confusion,
+            json.dumps(per_section_summary) if per_section_summary else "[]",
+        )
 
     # Commit 82: Set low_snr_warning for pre-emptive transcription quality warning
     # Trigger warning when transcription confidence is very low (< 0.5)
@@ -755,6 +738,8 @@ def build_lesson_json_from_librosa(
 
     # Generate MusicXML lead sheet with chords and solo notes
     musicxml_str = ""
+    if on_stage:
+        on_stage("building_musicxml", 0.88, "Building MusicXML…")
     try:
         if chord_timeline and solo_notes and beat_grid:
             musicxml_str = build_musicxml(
@@ -766,11 +751,6 @@ def build_lesson_json_from_librosa(
                 key_signature=summary.key_name,
             )
             logger.info("MusicXML generated for job_id=%s, length=%d chars", job_id, len(musicxml_str))
-            if progress_callback is not None:
-                try:
-                    progress_callback("building_musicxml", None)
-                except Exception:
-                    pass
     except Exception:
         logger.exception("MusicXML generation failed for job_id=%s; continuing without it", job_id)
 
@@ -792,36 +772,32 @@ def build_lesson_json_from_librosa(
         wav_path=wav_path,
         low_snr_warning=low_snr_warning,
         musicxml=musicxml_str,
+        chord_timeline=chord_timeline,
+        solo_notes=solo_notes,
+        beat_grid_structured=beat_grid,
+        stem_routing=routing_hints,
+        instrument_confusion=instrument_confusion,
+        instrument_confusion_per_section=per_section_confusion,
+        harmonized_solo=harmonized_solo,
+        per_bar_analysis=per_bar_analysis,
+        transcription_source=transcription_source,
         **stem_fields,
     )
+
+    # Commit 108: Persist score.musicxml as standalone file in job directory
+    if musicxml_str:
+        try:
+            job_dir = Path("data") / "jobs" / job_id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "score.musicxml").write_text(musicxml_str, encoding="utf-8")
+            logger.info("Persisted score.musicxml for job_id=%s", job_id)
+        except Exception:
+            logger.exception("Failed to persist score.musicxml for job_id=%s", job_id)
+
     full_gp5 = tab_artifacts.get("tab_full_gp5_base64") if tab_artifacts else None
-
-    # Commit 107: hoist the full analysis artifacts to lesson top level so
-    # clients (AlphaTab harness, study fretboard, exporter) read them directly
-    # instead of reconstructing from sections. First non-empty section wins.
-    # The legacy top-level `beat_grid` field stays the beat-timestamp list
-    # (scoring contract, metronome); the full BeatGrid object remains
-    # per-section.
-    hoisted_updates: dict[str, object] = {}
-    for sec in sections:
-        sec_dict = getattr(sec, "model_dump")(exclude_none=True)
-        if "chord_timeline" in sec_dict and hoisted_updates.get("chord_timeline") is None:
-            hoisted_updates["chord_timeline"] = ChordTimeline.model_validate(sec_dict["chord_timeline"])
-        if "solo_notes" in sec_dict and hoisted_updates.get("solo_notes") is None:
-            hoisted_updates["solo_notes"] = SoloNotes.model_validate(sec_dict["solo_notes"])
-    lesson = lesson.model_copy(update=hoisted_updates) if hoisted_updates else lesson
-
     if isinstance(full_gp5, str) and full_gp5.strip():
-        lesson = enrich_lesson_with_prerender_hints(
-            lesson,
-            job_id=job_id,
-            gp5_base64=full_gp5,
-            musicxml=musicxml_str or None,
-        )
-    elif musicxml_str.strip():
-        lesson = enrich_lesson_with_prerender_hints(
-            lesson,
-            job_id=job_id,
-            musicxml=musicxml_str,
-        )
+        lesson = enrich_lesson_with_prerender_hints(lesson, job_id=job_id, gp5_base64=full_gp5, musicxml=musicxml_str)
+    elif musicxml_str:
+        # Commit 108: Even without GP5, try prerendering from MusicXML
+        lesson = enrich_lesson_with_prerender_hints(lesson, job_id=job_id, musicxml=musicxml_str)
     return lesson

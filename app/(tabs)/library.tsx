@@ -1,12 +1,11 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { useRouter, type Href } from 'expo-router'
-import { Bookmark, Filter, Music, Search } from 'lucide-react-native'
+import { Filter, Music, Search, Sparkles } from 'lucide-react-native'
 import { useCallback, useMemo, useState } from 'react'
 import { Alert, Platform, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import { PrimaryButton } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { WoodGradient } from '@/components/WoodGradient'
 import { ApiError, submitExportJob } from '@/src/api/analyze'
@@ -329,32 +328,40 @@ export default function LibraryScreen() {
           <View className="w-full max-w-6xl self-center px-6 pb-6 pt-4">
             <View className="mb-6 mt-4">
               <Text className="mb-2 font-serif text-3xl text-cream">Library</Text>
-              <Text className="font-sans text-sm leading-6 text-cream/85">
+              <Text className="font-sans text-muted-brown">
                 Full songs you&apos;ve analyzed, and licks saved from Review.
               </Text>
             </View>
 
-            <View className="mb-6 flex-row rounded-xl border border-wood-700 bg-wood-800/50 p-1">
+            <View className="mb-6 flex-row rounded-2xl border border-wood-600/50 bg-transparent p-1.5 shadow-sm shadow-black/20">
               <AnimatedPressable haptic="light"
                 onPress={() => setLibraryTab('lessons')}
-                className={`flex-1 rounded-lg py-2.5 ${libraryTab === 'lessons' ? 'bg-wood-700' : ''}`}
+                className={`flex-1 rounded-xl py-2.5 ${
+                  libraryTab === 'lessons'
+                    ? 'bg-amber-light shadow-inner-wood'
+                    : 'bg-transparent'
+                }`}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: libraryTab === 'lessons' }}
               >
                 <Text
-                  className={`text-center font-sans-medium text-sm ${libraryTab === 'lessons' ? 'text-amber-light' : 'text-muted-light'}`}
+                  className={`text-center font-sans-medium text-sm ${libraryTab === 'lessons' ? 'text-wood-900' : 'text-muted-brown'}`}
                 >
                   Songs
                 </Text>
               </AnimatedPressable>
               <AnimatedPressable haptic="light"
                 onPress={() => setLibraryTab('licks')}
-                className={`flex-1 rounded-lg py-2.5 ${libraryTab === 'licks' ? 'bg-wood-700' : ''}`}
+                className={`flex-1 rounded-xl py-2.5 ${
+                  libraryTab === 'licks'
+                    ? 'bg-amber-light shadow-inner-wood'
+                    : 'bg-transparent'
+                }`}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: libraryTab === 'licks' }}
               >
                 <Text
-                  className={`text-center font-sans-medium text-sm ${libraryTab === 'licks' ? 'text-amber-light' : 'text-muted-light'}`}
+                  className={`text-center font-sans-medium text-sm ${libraryTab === 'licks' ? 'text-wood-900' : 'text-muted-brown'}`}
                 >
                   Licks
                 </Text>
@@ -364,13 +371,13 @@ export default function LibraryScreen() {
             <View className="mb-10 flex-row items-center gap-3">
               <View className="relative min-h-14 flex-1 overflow-hidden rounded-xl border border-wood-700 bg-wood-800/60 shadow-inner-wood">
                 <View className="pointer-events-none absolute bottom-0 left-3 top-0 z-10 justify-center">
-                  <Search color={colors.muted.light} size={18} />
+                  <Search color={colors.muted.brown} size={18} />
                 </View>
                 <TextInput
                   value={search}
                   onChangeText={setSearch}
                   placeholder={searchPlaceholder}
-                  placeholderTextColor={colors.muted.light}
+                  placeholderTextColor={colors.muted.brown}
                   className="min-h-14 flex-1 py-3 pl-10 pr-4 font-sans text-sm text-cream"
                 />
               </View>
@@ -381,8 +388,8 @@ export default function LibraryScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Toggle filters"
                 >
-                  <Filter color={showFilters ? colors.cream : colors.muted.light} size={18} />
-                  <Text className={`font-sans text-sm ${showFilters ? 'text-cream' : 'text-muted-light'}`}>
+                  <Filter color={showFilters ? colors.cream : colors.muted.brown} size={18} />
+                  <Text className={`font-sans text-sm ${showFilters ? 'text-cream' : 'text-muted-brown'}`}>
                     {showFilters ? 'Hide' : 'Filter'}
                   </Text>
                 </AnimatedPressable>
@@ -401,7 +408,7 @@ export default function LibraryScreen() {
                         songFilter === s ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/35'
                       }`}
                     >
-                      <Text className={`font-sans text-xs ${songFilter === s ? 'text-wood-900' : 'text-muted-light'}`}>
+                      <Text className={`font-sans text-xs ${songFilter === s ? 'text-wood-900' : 'text-muted-brown'}`}>
                         {s === 'all' ? 'All songs' : s}
                       </Text>
                     </AnimatedPressable>
@@ -422,7 +429,7 @@ export default function LibraryScreen() {
                           : 'border-wood-600/45 bg-cream-dark/35'
                       }`}
                     >
-                      <Text className={`font-sans text-xs ${techniqueFilter === t ? 'text-wood-900' : 'text-muted-light'}`}>
+                      <Text className={`font-sans text-xs ${techniqueFilter === t ? 'text-wood-900' : 'text-muted-brown'}`}>
                         {t === 'all' ? 'All techniques' : t}
                       </Text>
                     </AnimatedPressable>
@@ -442,16 +449,17 @@ export default function LibraryScreen() {
                 lessons.length === 0 ? (
                   <EmptyState
                     Icon={Music}
-                    heading="No analyzed songs yet"
-                    subtext="Add a song from YouTube or upload an audio file to get your first lesson."
-                    ctaLabel="Add song →"
+                    heading="No songs yet"
+                    subtext="Add one from Analyze to start building your library."
+                    ctaLabel="Add a song"
                     onCta={() => router.push('/add-song')}
                   />
                 ) : (
-                  <View className="items-center gap-3 py-20">
-                    <Text className="font-sans text-sm text-cream/80">No songs match your search.</Text>
-                    <Text className="font-sans text-xs text-muted-light">Try a different title or artist.</Text>
-                  </View>
+                  <EmptyState
+                    Icon={Search}
+                    heading="No matches"
+                    subtext="No songs match your search."
+                  />
                 )
               ) : (
                 <View className="flex-row flex-wrap gap-4">
@@ -461,8 +469,8 @@ export default function LibraryScreen() {
                       className="w-full rounded-xl border border-wood-700/50 bg-wood-800/40 p-4 md:w-[48%] lg:w-[31%]"
                     >
                       <Text className="font-serif text-lg text-cream">{row.song_title?.trim() || 'Untitled song'}</Text>
-                      <Text className="mt-0.5 font-sans text-xs text-muted-light">{row.artist?.trim() || 'Unknown artist'}</Text>
-                      <Text className="mt-2 font-sans text-xs text-muted-light">
+                      <Text className="mt-0.5 font-sans text-xs text-muted-brown">{row.artist?.trim() || 'Unknown artist'}</Text>
+                      <Text className="mt-2 font-sans text-xs text-muted-brown">
                         {row.section_count} {row.section_count === 1 ? 'section' : 'sections'} · {relativeDateLabel(row.analyzed_at)}
                       </Text>
                       <View className="mt-3 flex-row flex-wrap items-center gap-2">
@@ -503,24 +511,23 @@ export default function LibraryScreen() {
             ) : emptyLicks ? (
               licks.length === 0 ? (
                 <EmptyState
-                  Icon={Bookmark}
+                  Icon={Sparkles}
                   heading="No saved licks yet"
-                  subtext="Licks you save from Review will appear here for quick drill practice."
-                  ctaLabel="Go to Progress"
-                  onCta={() => router.push('/(tabs)/progress')}
+                  subtext="Snippets you save from a song will show up here for quick practice."
                 />
               ) : (
-                <View className="items-center gap-3 py-20">
-                  <Text className="font-sans text-sm text-cream/80">No licks match your search.</Text>
-                  <Text className="font-sans text-xs text-muted-light">Adjust filters or try another keyword.</Text>
-                </View>
+                <EmptyState
+                  Icon={Search}
+                  heading="No matches"
+                  subtext="No licks found matching your search."
+                />
               )
             ) : (
               <View className="flex-row flex-wrap gap-4">
                 {filteredLicks.map((lick) => (
                   <View key={lick.id} className="w-full rounded-xl border border-wood-700/50 bg-wood-800/40 p-4 md:w-[48%] lg:w-[31%]">
                     <Text className="font-serif text-lg text-cream">{lick.song_title?.trim() || 'Untitled lick'}</Text>
-                    <Text className="mt-0.5 font-sans text-xs text-muted-light">{lick.artist?.trim() || 'Unknown artist'}</Text>
+                    <Text className="mt-0.5 font-sans text-xs text-muted-brown">{lick.artist?.trim() || 'Unknown artist'}</Text>
 
                     <View className="mt-3 flex-row flex-wrap items-center gap-2">
                       {(lick.technique_tags ?? []).slice(0, 2).map((tag) => (
@@ -530,7 +537,7 @@ export default function LibraryScreen() {
                       ))}
                       {lick.position ? (
                         <View className="rounded bg-wood-700 px-2 py-1">
-                          <Text className="font-sans text-[10px] uppercase tracking-wider text-muted-light">{lick.position}</Text>
+                          <Text className="font-sans text-[10px] uppercase tracking-wider text-muted-brown">{lick.position}</Text>
                         </View>
                       ) : null}
                     </View>
@@ -555,7 +562,7 @@ export default function LibraryScreen() {
                               selected ? 'border-amber-accent bg-amber-accent/25' : 'border-wood-600/45 bg-cream-dark/35'
                             }`}
                           >
-                            <Text className={`font-mono text-[11px] ${selected ? 'text-wood-900' : 'text-muted-light'}`}>
+                            <Text className={`font-mono text-[11px] ${selected ? 'text-wood-900' : 'text-muted-brown'}`}>
                               {n > 0 ? `+${n}` : n}
                             </Text>
                           </AnimatedPressable>

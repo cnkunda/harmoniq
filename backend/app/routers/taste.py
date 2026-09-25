@@ -37,7 +37,7 @@ async def taste_spotify(client_session: str = Query(..., min_length=1, max_lengt
         raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
     try:
         return await spotify_api.build_taste_profile(client_session)
-    except ValueError as e:
+    except spotify_api.SpotifySessionExpired as e:
         raise HTTPException(status_code=401, detail=str(e)) from e
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e

@@ -73,7 +73,7 @@ function SparkRow({
 
   return (
     <View className="mb-3 flex-row items-center gap-2">
-      <Text className={`w-14 font-sans text-[10px] ${labelClass}`} numberOfLines={1}>
+      <Text className={`min-w-16 font-sans text-[10px] ${labelClass}`} numberOfLines={1}>
         {resultLabel}
       </Text>
       <Svg width={W} height={H}>

@@ -70,6 +70,7 @@ If a migration fails:
 - V12: Add ghost_recording_mime to sessions
 - V13: Add mood to sessions
 - V14: Add schema_version to skill_nodes (Jazz Extensions support)
+- V15: Add inferred_mode to jam_snapshots (Milestone B — Commit B3)
 
 ## Web (IndexedDB) Migrations
 

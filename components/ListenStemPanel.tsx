@@ -1,9 +1,10 @@
 import Slider from '@react-native-community/slider'
 import { useIsFocused } from '@react-navigation/native'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react'
-import { Platform, Pressable, ScrollView, Switch, Text, View } from 'react-native'
+import { Platform, ScrollView, Switch, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { BeatGridEditorPanel } from '@/components/BeatGridEditorPanel'
 import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
 import { PlayCaptureLessonCardBanner } from '@/components/play'
 import { MetronomeArcReadout } from '@/components/MetronomeArcReadout'
@@ -17,6 +18,7 @@ import { useMetronome } from '@/src/audio/useMetronome'
 import colors from '@/src/constants/colors'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { SESSION_PLAYBACK_CARD_CLASS } from '@/src/constants/sessionPlaybackCard'
+import { CHOICE_CHIP_BASE, CHOICE_CHIP_OFF, CHOICE_CHIP_ON, CHOICE_LABEL_MONO_OFF, CHOICE_LABEL_MONO_ON, CHOICE_LABEL_SANS_OFF, CHOICE_LABEL_SANS_ON } from '@/src/constants/uiTokens'
 import { logFirstAudioPlay } from '@/src/analytics/firstAudioPlay'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { useLessonStore } from '@/src/stores/lessonStore'
@@ -46,19 +48,6 @@ const METRO_SUBDIV_OPTIONS: { value: MetronomeSubdivision; label: string }[] = [
   { value: 2, label: '1/8' },
   { value: 4, label: '1/16' },
 ]
-
-/**
- * Choice chips (speed %, subdivide, sections): one inactive/active system — filled accent
- * when selected, neutral surface + hairline border when not (standard segmented / filter-chip pattern).
- */
-const CHOICE_CHIP_BASE =
-  'min-w-0 items-center justify-center rounded-full border px-3 py-1.5'
-const CHOICE_CHIP_OFF = 'border-wood-600/30 bg-white'
-const CHOICE_CHIP_ON = 'border-amber-accent bg-amber-accent'
-const CHOICE_LABEL_MONO_OFF = 'font-mono text-[11px] font-medium text-wood-600'
-const CHOICE_LABEL_MONO_ON = 'font-mono text-[11px] font-medium text-wood-900'
-const CHOICE_LABEL_SANS_OFF = 'font-sans text-xs text-wood-600'
-const CHOICE_LABEL_SANS_ON = 'font-sans text-xs font-sans-medium text-wood-900'
 
 function orderedStemIds(stems: Record<string, string>): string[] {
   const keys = Object.keys(stems)
@@ -578,7 +567,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
 
   if (!lesson) {
     return (
-      <Text className="mt-2 font-sans text-sm text-wood-600">
+      <Text className="mt-2 font-sans text-sm text-muted-brown">
         No song loaded — add one from Home or open a session after analysis so stems can load.
       </Text>
     )
@@ -587,7 +576,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
   if (!lesson.stems || Object.keys(lesson.stems).length === 0) {
     const isDrillLick = typeof lesson.job_id === 'string' && lesson.job_id.startsWith('lick-')
     return (
-      <Text className="mt-2 font-sans text-sm text-wood-600">
+      <Text className="mt-2 font-sans text-sm text-muted-brown">
         {isDrillLick
           ? 'This saved lick has no backing stem on file. Save it again from Review after a full analysis, or open a song that includes stems.'
           : 'This song has no stem paths yet. Re-run analysis with a backend that writes stems.'}
@@ -610,6 +599,11 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
   const currentSectionLabel =
     sections[lessonSectionIndex] != null
       ? parseSectionRecord(sections[lessonSectionIndex] as Record<string, unknown>).label
+      : null
+
+  const currentSectionConfidence =
+    sections[lessonSectionIndex] != null
+      ? parseSectionRecord(sections[lessonSectionIndex] as Record<string, unknown>).labelConfidence
       : null
 
   const sectionLine =
@@ -641,13 +635,13 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           <Text className="font-sans text-xs text-wood-900">
             Loop active: {loopRegion.label ?? 'target bar'} ({fmt(loopRegion.startSec)} - {fmt(loopRegion.endSec)})
           </Text>
-          <Pressable
-            onPress={() => setLoopRegion(null)}
-            className="mt-2 self-start rounded-md border border-wood-600/45 bg-cream-dark/50 px-2.5 py-1.5"
-            accessibilityRole="button"
-          >
-            <Text className="font-sans text-xs text-wood-900">Clear loop</Text>
-          </Pressable>
+           <AnimatedPressable
+             onPress={() => setLoopRegion(null)}
+             className="mt-2 self-start rounded-md border border-wood-600/45 bg-cream-dark/50 px-2.5 py-1.5"
+             accessibilityRole="button"
+           >
+             <Text className="font-sans text-xs text-wood-900">Clear loop</Text>
+           </AnimatedPressable>
         </View>
       ) : null}
 
@@ -664,11 +658,11 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             })
           ) : (
             <>
-              <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-wood-600">
+              <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
                 {playLessonCard ? 'Play capture' : 'Current lesson'}
               </Text>
               {playLessonCard ? (
-                <Text className="font-sans text-xs leading-snug text-wood-600">
+                <Text className="font-sans text-xs leading-snug text-muted-brown">
                   Stems below are your backing track. Start capture when you are ready — Harmoniq scores pitch on each
                   beat.
                 </Text>
@@ -679,7 +673,10 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
               >
                 {songTitle}
               </Text>
-              <Text className="mt-1 font-sans text-xs text-wood-600">{sectionLine}</Text>
+              <Text className="mt-1 font-sans text-xs text-muted-brown">{sectionLine}</Text>
+              {currentSectionConfidence != null && currentSectionConfidence < 0.6 ? (
+                <Text className="font-sans text-[10px] text-danger/70">Label confidence: {Math.round(currentSectionConfidence * 100)}% — may not match musical content</Text>
+              ) : null}
 
               {playLessonCard ? (
                 <PlayCaptureLessonCardBanner
@@ -702,27 +699,27 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             } flex-row items-center gap-2.5`}
           >
             <View className="w-12 shrink-0 items-center">
-              <Pressable
-                onPress={() => void togglePlay()}
-                disabled={!ready || loading}
-                className="h-12 w-12 items-center justify-center rounded-full bg-amber-accent disabled:opacity-40"
-                accessibilityRole="button"
-                accessibilityLabel={playing ? 'Pause' : 'Play'}
-                hitSlop={10}
-              >
-                {playing ? (
-                  <Pause color={colors.wood[900]} size={22} fill={colors.wood[900]} strokeWidth={0} />
-                ) : (
-                  <Play color={colors.wood[900]} size={22} fill={colors.wood[900]} strokeWidth={0} />
-                )}
-              </Pressable>
+               <AnimatedPressable
+                 onPress={() => void togglePlay()}
+                 disabled={!ready || loading}
+                 className="h-12 w-12 items-center justify-center rounded-full bg-amber-accent disabled:opacity-40"
+                 accessibilityRole="button"
+                 accessibilityLabel={playing ? 'Pause' : 'Play'}
+                 hitSlop={10}
+               >
+                 {playing ? (
+                   <Pause color={colors.wood[900]} size={22} fill={colors.wood[900]} strokeWidth={0} />
+                 ) : (
+                   <Play color={colors.wood[900]} size={22} fill={colors.wood[900]} strokeWidth={0} />
+                 )}
+               </AnimatedPressable>
             </View>
             <View className="min-w-0 flex-1 justify-center">
               <View className="mb-1.5 flex-row items-baseline justify-between gap-3 pl-px pr-px">
                 <Text className="font-mono text-[13px] leading-none tracking-tight text-wood-900">
                   {loading ? '…' : ready ? fmt(scrubTimelineSec ?? positionSec) : '—'}
                 </Text>
-                <Text className="font-mono text-[13px] leading-none tracking-tight text-wood-600">
+                <Text className="font-mono text-[13px] leading-none tracking-tight text-muted-brown">
                   {loading ? '' : ready ? fmt(durationSec) : ''}
                 </Text>
               </View>
@@ -739,7 +736,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                     void seekTransportToSeconds(v)
                   }}
                   minimumTrackTintColor={colors.amber.accent}
-                  maximumTrackTintColor={colors.muted.light}
+                  maximumTrackTintColor={colors.muted.brown}
                   thumbTintColor={colors.amber.light}
                   disabled={!ready || loading || durationSec <= 0}
                 />
@@ -751,7 +748,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             <View className="mt-3 border-t border-wood-600/15 pt-3">
               <View className="mb-2 flex-row items-baseline justify-between gap-3">
                 <Text className="font-sans-medium text-sm text-wood-900">Speed</Text>
-                <Text className="font-mono text-[13px] tabular-nums tracking-tight text-wood-600">
+                <Text className="font-mono text-[13px] tabular-nums tracking-tight text-muted-brown">
                   {rate.toFixed(1)}×
                 </Text>
               </View>
@@ -759,19 +756,19 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                 {SPEED_PRESETS.map(({ label, value }) => {
                   const active = Math.abs(rate - value) < RATE_MATCH_EPS
                   return (
-                    <Pressable
-                      key={label}
-                      onPress={() => void onSeekRate(value)}
-                      disabled={!ready || loading}
-                      className={`flex-1 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
-                        !ready || loading ? 'opacity-40' : ''
-                      }`}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      accessibilityLabel={`Speed ${label}`}
-                    >
-                      <Text className={active ? CHOICE_LABEL_MONO_ON : CHOICE_LABEL_MONO_OFF}>{label}</Text>
-                    </Pressable>
+                     <AnimatedPressable
+                       key={label}
+                       onPress={() => void onSeekRate(value)}
+                       disabled={!ready || loading}
+                       className={`flex-1 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
+                         !ready || loading ? 'opacity-40' : ''
+                       }`}
+                       accessibilityRole="button"
+                       accessibilityState={{ selected: active }}
+                       accessibilityLabel={`Speed ${label}`}
+                     >
+                       <Text className={active ? CHOICE_LABEL_MONO_ON : CHOICE_LABEL_MONO_OFF}>{label}</Text>
+                     </AnimatedPressable>
                   )
                 })}
               </View>
@@ -780,8 +777,8 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
 
           {!playLessonCard && hasUpNext ? (
             <View className="mt-3 border-t border-wood-600/20 pt-3">
-              <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">Up next</Text>
-              <Text className="mt-1 font-sans text-sm text-wood-600">{`Section ${nextSectionIndex + 1}`}</Text>
+              <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Up next</Text>
+              <Text className="mt-1 font-sans text-sm text-muted-brown">{`Section ${nextSectionIndex + 1}`}</Text>
             </View>
           ) : null}
         </View>
@@ -789,7 +786,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
         {/* Metronome */}
         <View className={playbackCardClass}>
           <View className="mb-2 shrink-0 flex-row items-center justify-between gap-2">
-            <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">Metronome</Text>
+            <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Metronome</Text>
             <Switch
               value={metronomeOn}
               onValueChange={setMetronomeOn}
@@ -814,7 +811,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           <View className="mt-2 shrink-0 border-t border-wood-600/15 pt-3">
             <View className="mb-3 flex-row items-baseline justify-center gap-1.5">
               <Text className="font-serif text-3xl leading-none text-wood-900 tabular-nums">{effectiveMetroBpm}</Text>
-              <Text className="pb-1 font-sans text-sm text-wood-600">BPM</Text>
+              <Text className="pb-1 font-sans text-sm text-muted-brown">BPM</Text>
             </View>
             <Text className="mb-2 font-sans-medium text-sm text-wood-900">Subdivide</Text>
             <View className="flex-row flex-wrap gap-1.5">
@@ -840,12 +837,25 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           </View>
         </View>
 
+        {/* Commit 109: Beat grid editor panel — expandable within metronome card */}
+        <View className="px-1 pb-2">
+          <BeatGridEditorPanel
+            lesson={lesson}
+            beatGrid={lesson?.beat_grid_structured ?? null}
+            durationSec={durationSec}
+            playbackPositionSec={positionSec}
+            onRecomputeComplete={(updated) => {
+              useLessonStore.getState().saveLesson(updated)
+            }}
+          />
+        </View>
+
         {stemsColumnReplacement != null ? (
           stemsColumnReplacement
         ) : (
           /* Stems + optional sections */
           <View className={playbackCardClass}>
-            <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-wood-600">Stems</Text>
+            <Text className="mb-2 font-sans-medium text-base uppercase tracking-wide text-amber-accent">Stems</Text>
             {(() => {
               const warn =
                 typeof lesson.stem_isolation_warning === 'string' && lesson.stem_isolation_warning.trim()
@@ -861,7 +871,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
               if (!body) return null
               return (
                 <View className="mb-3 rounded-lg border border-danger/35 bg-danger/10 px-3 py-2">
-                  <Text className="font-sans text-xs leading-snug text-wood-900">{body}</Text>
+                  <Text className="font-sans text-base leading-snug text-wood-900">{body}</Text>
                 </View>
               )
             })()}
@@ -872,21 +882,29 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                   <View className="flex-row flex-wrap gap-1.5 pb-1">
                     {sections.map((raw, i) => {
                       const sec = raw as Record<string, unknown>
-                      const { label } = parseSectionRecord(sec)
+                      const { label, isRepeated, repeatCount, repeatIndex, labelConfidence } = parseSectionRecord(sec)
+                      // Backend pre-computes the suffix, but fallback if raw label lacks it
+                      const displayLabel =
+                        isRepeated && repeatCount != null && repeatIndex != null && !label.includes('(')
+                          ? `${label} (${repeatIndex} of ${repeatCount})`
+                          : label
                       const active = i === lessonSectionIndex
+                      const isUncertain = labelConfidence != null && labelConfidence < 0.6
                       return (
-                        <Pressable
-                          key={`${i}-${label}`}
-                          onPress={() => void onChip(i)}
-                          disabled={!ready || loading}
-                          className={`shrink-0 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
-                            !ready || loading ? 'opacity-40' : ''
-                          }`}
-                          accessibilityRole="button"
-                          accessibilityState={{ selected: active }}
-                        >
-                          <Text className={active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>{label}</Text>
-                        </Pressable>
+                         <AnimatedPressable
+                           key={`${i}-${label}`}
+                           onPress={() => void onChip(i)}
+                           disabled={!ready || loading}
+                           className={`shrink-0 ${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${
+                             !ready || loading ? 'opacity-40' : ''
+                           } ${isUncertain ? 'border-danger/30' : ''}`}
+                           accessibilityRole="button"
+                           accessibilityState={{ selected: active }}
+                         >
+                           <Text className={active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>
+                             {displayLabel}{isUncertain ? ' ?' : ''}
+                           </Text>
+                         </AnimatedPressable>
                       )
                     })}
                   </View>
@@ -905,32 +923,32 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                   const disabled = !ready || loading || !hasStem
                   const tileBusy = hasStem && (!ready || loading)
                   return (
-                    <Pressable
-                      key={id}
-                      onPress={() => toggleStem(id)}
-                      disabled={disabled}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${label} stem, ${unmuted ? 'on' : 'off'}`}
-                      accessibilityState={{ disabled }}
-                      className={`w-[32%] max-w-[32%] shrink-0 items-center rounded-lg border px-1.5 py-1.5 ${
-                        !hasStem
-                          ? 'border-wood-600/25 bg-cream-dark/20 opacity-45'
-                          : unmuted
-                            ? 'border-amber-accent bg-ivory/60'
-                            : 'border-wood-600/40 bg-wood-900/5'
-                      } ${tileBusy ? 'opacity-45' : ''}`}
-                    >
-                      <Icon
-                        size={20}
-                        color={!hasStem ? colors.muted.light : unmuted ? colors.amber.accent : colors.wood[500]}
-                        strokeWidth={1.75}
-                      />
-                      <Text
-                        className={`mt-1 font-sans text-[10px] leading-tight ${unmuted && hasStem ? 'font-sans-medium text-wood-900' : 'text-wood-600'}`}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
+                     <AnimatedPressable
+                       key={id}
+                       onPress={() => toggleStem(id)}
+                       disabled={disabled}
+                       accessibilityRole="button"
+                       accessibilityLabel={`${label} stem, ${unmuted ? 'on' : 'off'}`}
+                       accessibilityState={{ disabled }}
+                       className={`w-[32%] max-w-[32%] shrink-0 items-center rounded-lg border px-1.5 py-1.5 ${
+                         !hasStem
+                           ? 'border-wood-600/25 bg-cream-dark/20 opacity-45'
+                           : unmuted
+                             ? 'border-amber-accent bg-ivory/60'
+                             : 'border-wood-600/40 bg-wood-900/5'
+                       } ${tileBusy ? 'opacity-45' : ''}`}
+                     >
+                       <Icon
+                         size={20}
+                         color={!hasStem ? colors.muted.brown : unmuted ? colors.amber.accent : colors.muted.brown}
+                         strokeWidth={1.75}
+                       />
+                       <Text
+                         className={`mt-1 font-sans text-[10px] leading-tight ${unmuted && hasStem ? 'font-sans-medium text-wood-900' : 'text-muted-brown'}`}
+                       >
+                         {label}
+                       </Text>
+                     </AnimatedPressable>
                   )
                 })}
               </View>

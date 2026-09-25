@@ -1,15 +1,20 @@
 import { Audio } from 'expo-av'
 import * as Linking from 'expo-linking'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import { GhostButton, PrimaryButton, SecondaryButton } from '@/components/Button'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
+import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
+import { ONBOARDING_STEP_WITHOUT_QUIZ, ONBOARDING_WITHOUT_QUIZ_TOTAL } from '@/src/constants/onboardingSteps'
 
 export default function OnboardingMicScreen() {
   const router = useRouter()
+  const { quizTaken } = useLocalSearchParams<{ quizTaken?: string }>()
+  const hasQuiz = quizTaken === '1'
+  const currentStep = hasQuiz ? 3 : ONBOARDING_STEP_WITHOUT_QUIZ.mic
+  const totalSteps = hasQuiz ? 7 : ONBOARDING_WITHOUT_QUIZ_TOTAL
   const [status, setStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown')
   const [busy, setBusy] = useState(false)
 
@@ -54,11 +59,12 @@ export default function OnboardingMicScreen() {
 
   return (
     <OnboardingScreenShell
-      currentStep={2}
+      currentStep={currentStep}
+      totalSteps={totalSteps}
       showBack
       onBack={() => router.back()}
       footer={
-        <Text className="text-center font-sans text-xs leading-5 text-muted-light">
+        <Text className="text-center font-sans text-xs leading-5 text-muted-brown">
           If you deny permission, you won&apos;t be able to use the core practice features until the microphone is
           enabled in settings.
         </Text>
@@ -66,15 +72,15 @@ export default function OnboardingMicScreen() {
     >
       <View className="items-center">
         <Text className="text-center font-serif text-2xl text-cream">Microphone</Text>
-        <Text className="mt-3 text-center font-sans text-sm leading-6 text-muted-light">
+        <Text className="mt-3 text-center font-sans text-sm leading-6 text-muted-brown">
           Harmoniq listens only to score your placement phrases. Nothing is uploaded until you run analysis on a song
           later.
         </Text>
 
         {status === 'denied' ? (
-          <View className="mt-6 w-full rounded-lg border border-danger/35 bg-danger/10 px-3 py-3">
+          <View className="mt-6 w-full rounded-xl border border-danger/35 bg-danger/10 px-3 py-3">
             <Text className="text-center font-sans text-sm text-cream">Microphone access is off for this app.</Text>
-            <Text className="mt-2 text-center font-sans text-xs text-muted-light">
+            <Text className="mt-2 text-center font-sans text-xs text-muted-brown">
               Enable the mic in system settings, then tap Refresh below.
             </Text>
             <AnimatedPressable haptic="light"
@@ -89,37 +95,41 @@ export default function OnboardingMicScreen() {
         ) : null}
 
         <View className="mt-8 w-full gap-3">
-          {status === 'granted' ? (
-            <View className="flex-row items-center justify-center gap-2 rounded-xl border border-success/30 bg-success/15 px-4 py-3">
-              <Text className="text-center font-sans-medium text-success">✓ Microphone ready</Text>
-            </View>
-          ) : (
-            <PrimaryButton
-              label={busy ? 'Requesting…' : 'Allow microphone'}
-              onPress={() => void request()}
-              loading={busy}
-              disabled={busy}
-              fullWidth
-              accessibilityLabel="Allow microphone"
-            />
-          )}
+          <AnimatedPressable haptic="light"
+            onPress={() => void request()}
+            disabled={busy || status === 'granted'}
+            className={`rounded-xl px-4 py-3 ${status === 'granted' || busy ? DISABLED_BTN_CLASS : 'bg-amber-accent'}`}
+            accessibilityRole="button"
+          >
+            <Text
+              className={`text-center font-sans-medium ${status === 'granted' || busy ? 'text-muted-brown' : 'text-wood-900'}`}
+            >
+              {status === 'granted' ? 'Microphone ready' : busy ? 'Requesting…' : 'Allow microphone'}
+            </Text>
+          </AnimatedPressable>
           {Platform.OS !== 'web' ? (
-            <GhostButton
-              label="Refresh status"
+            <AnimatedPressable haptic="light"
               onPress={() => void refresh()}
-              fullWidth
-              haptic="light"
-            />
+              className="rounded-xl border border-wood-600/50 px-4 py-3"
+              accessibilityRole="button"
+            >
+              <Text className="text-center font-sans-medium text-cream">Refresh status</Text>
+            </AnimatedPressable>
           ) : null}
         </View>
 
-        <PrimaryButton
-          label="Continue → 3 phrases · ~1 min"
-          onPress={() => router.push({ pathname: '/onboarding/phrase/[index]', params: { index: '0' } })}
+        <AnimatedPressable haptic="light"
+          onPress={() => router.push({ pathname: '/onboarding/phrase/[index]', params: { index: '0', quizTaken: hasQuiz ? '1' : undefined } })}
           disabled={status !== 'granted'}
-          fullWidth
-          className="mt-10"
-        />
+          className={`mt-10 w-full rounded-xl border px-4 py-3 ${status === 'granted' ? 'border-amber-accent/60 bg-wood-800/80' : `${DISABLED_BTN_CLASS} border-transparent`}`}
+          accessibilityRole="button"
+        >
+          <Text
+            className={`text-center font-sans-medium ${status === 'granted' ? 'text-amber-light' : 'text-muted-brown'}`}
+          >
+            Next: placement phrases
+          </Text>
+        </AnimatedPressable>
       </View>
     </OnboardingScreenShell>
   )

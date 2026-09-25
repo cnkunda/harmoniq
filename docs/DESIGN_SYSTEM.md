@@ -25,6 +25,26 @@
 | Audio | `expo-av` (`expo-audio` if SDK requires) |
 | Tab rendering | AlphaTab via WebView harness (native) / DOM (web) |
 
+---
+
+## Type Scale
+
+| Level | Size | Class | Font | Usage |
+|---|---|---|---|---|
+| Display | 30 | `text-3xl` | `font-serif` | Page titles (`Jam Mode`, `First time here`) |
+| H2 | 24 | `text-2xl` | `font-serif` | Section titles |
+| H3 | 20 | `text-xl` | `font-serif` | Card titles in lists |
+| Title | 16 | `text-base` | `font-sans-medium` | Tab labels, button labels |
+| Body | 14 | `text-sm` | `font-sans` | Body copy, list items |
+| Caption | 12 | `text-xs` | `font-sans` | Helper text, timestamps, metadata |
+| Eyebrow | 10 | `text-[10px]` uppercase `tracking-[0.18em]` | `font-sans-medium` | Phase labels (Orient, Isolate, …) |
+| Mono | 14 | `text-sm` | `font-mono` | Tuner readings, code, hashes |
+
+Color tones for text:
+- Primary: `text-cream` on dark surfaces, `text-wood-900` on light/amber surfaces
+- Secondary: `text-muted-brown` (AA contrast on `bg-wood-900`)
+- Accent: `text-amber-accent` or `text-amber-light`
+
 **NativeWind note:** `className` works directly on `View`, `Text`, `Pressable`, `TextInput`, etc. in NativeWind v4. No `styled()` wrapper needed. Opacity color modifiers (`bg-wood-800/40`) require NativeWind v4 and colors defined as hex. CSS `grid` is not available in RN — use `flex-row flex-wrap` instead.
 
 ---
@@ -604,59 +624,91 @@ export function CoachNote({ text, className = '' }: CoachNoteProps) {
 
 ```components/SessionStepper.tsx
 import { View, Text } from 'react-native'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
+import { useEffect } from 'react'
 
-const STEPS = ['Listen', 'Study', 'Slow', 'Play', 'Review']
+import { SESSION_STEPS, type SessionStep } from '@/src/constants/sessionFlow'
 
-interface SessionStepperProps {
-  currentStep: number // 1–5
+export interface SessionStepperProps {
+  currentStep: number // 1–7
+  steps?: readonly SessionStep[]
+  compact?: boolean
 }
 
-export function SessionStepper({ currentStep }: SessionStepperProps) {
-  const trackPercent = ((currentStep - 1) / (STEPS.length - 1)) * 100
+function stepLabel(s: SessionStep): string {
+  switch (s) {
+    case 'tune':              return 'Tune'
+    case 'musical-tolerance': return 'Tolerance'
+    default:                  return s.charAt(0).toUpperCase() + s.slice(1)
+  }
+}
+
+export function SessionStepper({
+  currentStep,
+  steps = SESSION_STEPS,
+  compact = false,
+}: SessionStepperProps) {
+  const totalSteps    = steps.length
+  const trackPercent  = totalSteps > 1 ? ((currentStep - 1) / (totalSteps - 1)) * 100 : 0
+  const trackWidth    = useSharedValue(0)
+
+  useEffect(() => {
+    trackWidth.value = withSpring(trackPercent, { damping: 18, stiffness: 160 })
+  }, [trackPercent, trackWidth])
+
+  const animatedTrackStyle = useAnimatedStyle(() => ({
+    width: `${Math.max(0, Math.min(100, trackWidth.value))}%`,
+  }))
 
   return (
-    <View className="w-full py-3 px-2">
+    <View className="w-full px-2">
       <View className="flex-row justify-between items-center relative">
         {/* Background track */}
-        <View className="absolute left-0 right-0 top-[11px] h-[2px] bg-wood-700" />
+        <View className="absolute left-0 right-0 top-[11px] z-0 h-[2px] bg-wood-800" />
 
-        {/* Active track */}
-        <View
-          className="absolute top-[11px] h-[2px] bg-amber-accent"
-          style={{ width: `${trackPercent}%` }}
+        {/* Animated active track */}
+        <Animated.View
+          style={animatedTrackStyle}
+          className="absolute top-[11px] z-0 h-[2px] bg-amber-accent"
         />
 
-        {STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const stepNum  = index + 1
           const isActive = stepNum === currentStep
           const isPast   = stepNum < currentStep
 
           return (
-            <View key={step} className="items-center z-10">
+            <View key={step} className="z-10 items-center">
               <View
                 className={`w-6 h-6 rounded-full items-center justify-center ${
                   isActive
                     ? 'bg-amber-accent'
                     : isPast
-                    ? 'bg-wood-600 border border-amber-accent/30'
+                    ? 'bg-wood-700 border border-amber-accent/30'
                     : 'bg-wood-800 border border-wood-600'
                 }`}
               >
                 <Text
-                  className={`text-[10px] font-sans-medium ${
-                    isActive ? 'text-wood-900' : isPast ? 'text-amber-light/50' : 'text-muted-brown'
+                  className={`text-[10px] ${
+                    isActive
+                      ? 'font-sans-medium text-wood-900'
+                      : isPast
+                      ? 'font-sans text-amber-light/50'
+                      : 'font-sans text-muted-brown'
                   }`}
                 >
                   {stepNum}
                 </Text>
               </View>
-              <Text
-                className={`text-[9px] uppercase tracking-wider font-sans-medium mt-1 ${
-                  isActive ? 'text-amber-light' : isPast ? 'text-cream/60' : 'text-muted-brown/50'
-                }`}
-              >
-                {step}
-              </Text>
+              {compact ? null : (
+                <Text
+                  className={`text-[9px] uppercase tracking-wider font-sans-medium mt-1 ${
+                    isActive ? 'text-amber-accent' : isPast ? 'text-cream/60' : 'text-muted-brown/50'
+                  }`}
+                >
+                  {stepLabel(step)}
+                </Text>
+              )}
             </View>
           )
         })}
@@ -671,30 +723,42 @@ import { View } from 'react-native'
 import { useMemo } from 'react'
 
 interface WaveformVisualizerProps {
-  isPlaying:       boolean
+  isPlaying?:       boolean
   progress?:       number            // 0–1
   highlightRegion?:[number, number]  // [start, end] as 0–1 fractions
+  className?:      string
+}
+
+const BAR_COUNT = 60
+
+function seededValue(index: number, seed: number): number {
+  const x = Math.sin(index * 127.1 + seed * 311.7) * 43758.5453
+  return x - Math.floor(x)
 }
 
 export function WaveformVisualizer({
+  isPlaying = false,
   progress = 0,
   highlightRegion,
+  className = '',
 }: WaveformVisualizerProps) {
-  const bars = useMemo(
+  const barData = useMemo(
     () =>
-      Array.from({ length: 60 }).map((_, i) => {
-        const sin = Math.sin(i * 0.2) * 0.5 + 0.5
-        const cos = Math.cos(i * 0.5) * 0.5 + 0.5
-        return Math.max(0.1, sin * 0.6 + cos * 0.4)
+      Array.from({ length: BAR_COUNT }).map((_, i) => {
+        const sin    = Math.sin(i * 0.2) * 0.5 + 0.5
+        const cos    = Math.cos(i * 0.5) * 0.5 + 0.5
+        const base   = Math.max(0.1, sin * 0.6 + cos * 0.4)
+        const breathe = 0.85 + seededValue(i, 42) * 0.3
+        return { base, breathe }
       }),
     [],
   )
 
   return (
-    <View className="w-full h-24 flex-row items-end overflow-hidden rounded-lg bg-wood-800/50 border border-wood-700/50 p-2 relative">
+    <View className={`w-full h-24 flex-row items-end overflow-hidden rounded-xl border border-wood-700/40 bg-wood-800/50 p-2 ${className}`}>
       {/* Progress overlay */}
       <View
-        className="absolute left-2 top-2 bottom-2 bg-amber-accent/10 border-r border-amber-accent/50 z-10"
+        className="absolute left-0 top-0 bottom-0 z-10 bg-amber-accent/10 border-r border-amber-accent/40"
         style={{ width: `${progress * 100}%` }}
         pointerEvents="none"
       />
@@ -702,7 +766,7 @@ export function WaveformVisualizer({
       {/* Loop highlight */}
       {highlightRegion && (
         <View
-          className="absolute top-2 bottom-2 bg-amber-light/10 border-l border-r border-amber-light/30"
+          className="absolute top-0 bottom-0 z-0 rounded-sm border-x border-amber-light/25 bg-amber-light/10"
           style={{
             left:  `${highlightRegion[0] * 100}%`,
             width: `${(highlightRegion[1] - highlightRegion[0]) * 100}%`,
@@ -711,13 +775,17 @@ export function WaveformVisualizer({
         />
       )}
 
-      {bars.map((height, i) => {
-        const isPast = i / bars.length <= progress
+      {barData.map(({ base, breathe }, i) => {
+        const isPast = i / BAR_COUNT <= progress
         return (
           <View
             key={i}
-            className={`flex-1 rounded-t-sm mx-[0.5px] ${isPast ? 'bg-amber-accent' : 'bg-wood-600'}`}
-            style={{ height: `${height * 100}%`, minHeight: 4, opacity: isPast ? 1 : 0.5 }}
+            className={`mx-[0.5px] flex-1 rounded-t-sm ${isPast ? 'bg-amber-accent' : 'bg-wood-600'}`}
+            style={{
+              height:    isPlaying ? `${base * breathe * 100}%` : `${base * 100}%`,
+              minHeight: 4,
+              opacity:   isPast ? 1 : 0.5,
+            }}
           />
         )
       })}
@@ -801,40 +869,87 @@ export function StemMixer({ onMuteChange, defaults }: StemMixerProps) {
 ```
 
 ```components/PitchIndicator.tsx
+import { useEffect } from 'react'
 import { View, Text } from 'react-native'
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
+  useAnimatedProps,
+  withSequence,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated'
-import { useEffect, useState } from 'react'
+
+import colors from '@/src/constants/colors'
+import { CHROMATIC_NOTE_NAMES } from '@/src/music/noteNames'
+import type { NoteResultLabel } from '@/src/session/noteAccuracyBeats'
 
 interface PitchIndicatorProps {
   note:     string
   cents:    number   // -50 to +50
   isActive: boolean
+  /** Upcoming tab note (one event behind current). */
+  nextTargetMidi?: number | null
+  /** Latest closed beat result — drives transient ladder flash. */
+  windowResult?: NoteResultLabel | null
+  /** Increment to retrigger flash even when result repeats. */
+  windowFlashToken?: number
 }
 
-export function PitchIndicator({ note, cents, isActive }: PitchIndicatorProps) {
-  const [barWidth, setBarWidth]  = useState(0)
-  const dotOffset = useSharedValue(0)
+function midiToHz(midi: number): number {
+  return 440 * Math.pow(2, (midi - 69) / 12)
+}
 
+function midiToScientificPitchName(midi: number): string {
+  const rounded = Math.round(midi)
+  const octave  = Math.floor(rounded / 12) - 1
+  return `${CHROMATIC_NOTE_NAMES[((rounded % 12) + 12) % 12]}${octave}`
+}
+
+/** Sage / amber / terracotta flash per closed beat — shared with Play pitch ladder. */
+export const PITCH_WINDOW_FLASH_BG: Partial<Record<NoteResultLabel, string>> = {
+  hit:     colors.success,
+  close:   colors.amber.accent,
+  miss:    colors.danger,
+  vibrato: colors.amber.light,
+  ignored: colors.wood[600],
+}
+
+export function PitchIndicator({ note, cents, isActive, targetMidi, nextTargetMidi, windowResult, windowFlashToken = 0 }: PitchIndicatorProps) {
+  const [barWidth, setBarWidth]  = useState(0)
+  const dotOffset   = useSharedValue(0)
+  const flashOpacity = useSharedValue(0)
+
+  const hz = typeof targetMidi === 'number' && Number.isFinite(targetMidi) ? midiToHz(targetMidi) : null
+
+  // Tuning dot spring
   useEffect(() => {
     if (barWidth > 0) {
       const clamped = Math.max(-50, Math.min(50, cents))
-      // Map [-50, 50] → [0, barWidth], then center the 12px dot
-      dotOffset.value = withSpring(
-        ((clamped + 50) / 100) * barWidth - 6,
-        { stiffness: 300, damping: 20 },
-      )
+      dotOffset.value = withSpring(((clamped + 50) / 100) * barWidth - 6, { stiffness: 300, damping: 20 })
     }
-  }, [cents, barWidth])
+  }, [cents, barWidth, dotOffset])
 
-  const dotStyle = useAnimatedStyle(() => ({
-    left: dotOffset.value,
-  }))
+  // Beat flash animation
+  useEffect(() => {
+    if (!windowResult || windowResult === 'ignored' || windowFlashToken <= 0) return
+    flashOpacity.value = 0
+    flashOpacity.value = withSequence(
+      withTiming(0.55, { duration: 70 }),
+      withTiming(0,    { duration: 420 }),
+    )
+  }, [windowFlashToken, windowResult, flashOpacity])
+
+  const dotStyle = useAnimatedStyle(() => ({ left: dotOffset.value }))
+  const flashStyle = useAnimatedStyle(() => ({ opacity: flashOpacity.value }))
 
   const isPerfect = Math.abs(cents) < 5
+  const flashColor = windowResult && windowResult !== 'ignored'
+    ? (PITCH_WINDOW_FLASH_BG[windowResult] ?? colors.wood[600])
+    : colors.wood[600]
+
+  const activeSci = typeof targetMidi === 'number' && Number.isFinite(targetMidi) ? midiToScientificPitchName(targetMidi) : null
+  const nextSci   = typeof nextTargetMidi === 'number' && Number.isFinite(nextTargetMidi) ? midiToScientificPitchName(nextTargetMidi) : null
 
   if (!isActive) {
     return (
@@ -845,57 +960,53 @@ export function PitchIndicator({ note, cents, isActive }: PitchIndicatorProps) {
   }
 
   return (
-    <View className="h-32 bg-wood-800/60 rounded-2xl border border-wood-700/50 items-center justify-center overflow-hidden px-6">
-      <Text className="text-4xl font-serif text-cream mb-4">{note}</Text>
+    <View className="relative overflow-hidden rounded-xl border border-wood-700/40 bg-wood-800/60 px-6 items-center justify-center h-36">
+      {/* Beat flash overlay */}
+      {windowResult && windowResult !== 'ignored' ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 12, backgroundColor: flashColor }, flashStyle]}
+        />
+      ) : null}
+
+      <Text className="text-4xl font-serif text-cream mb-3">{note}</Text>
 
       {/* Tuning bar */}
       <View
         className="w-full h-1.5 bg-wood-900 rounded-full relative"
         onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}
       >
-        {/* Centre tick */}
-        <View
-          className="absolute bg-wood-500"
-          style={{ left: barWidth / 2 - 0.5, top: -4, width: 1, height: 10 }}
-        />
-
-        <Animated.View
-          style={[
-            dotStyle,
-            {
-              position:        'absolute',
-              top:             -4,
-              width:           12,
-              height:          12,
-              borderRadius:    6,
-              backgroundColor: isPerfect ? '#7A9B6D' : '#D4A574',
-            },
-          ]}
-        />
+        <View className="absolute bg-wood-500" style={{ left: barWidth / 2 - 0.5, top: -4, width: 1, height: 10 }} />
+        <Animated.View style={[dotStyle, { position: 'absolute', top: -4, width: 12, height: 12, borderRadius: 6, backgroundColor: isPerfect ? colors.success : colors.amber.accent }]} />
       </View>
 
       <View className="flex-row justify-between w-full mt-2">
         <Text className="text-[10px] text-muted-brown uppercase tracking-wider font-sans">Flat</Text>
         <Text className={`text-[10px] uppercase tracking-wider font-sans ${isPerfect ? 'text-success' : 'text-muted-brown'}`}>
-          In Tune
+          {isPerfect ? 'In Tune' : `${typeof cents === 'number' ? `${cents > 0 ? '+' : ''}${Math.round(cents)}¢` : '—'}`}
         </Text>
         <Text className="text-[10px] text-muted-brown uppercase tracking-wider font-sans">Sharp</Text>
       </View>
+
+      {activeSci ? <Text className="mt-1 font-mono text-[10px] text-muted-brown">target {activeSci}</Text> : null}
+      {nextSci  ? <Text className="font-mono text-[10px] text-muted-brown/70">{nextSci} next</Text> : null}
     </View>
   )
 }
 ```
 
 ```components/LickCard.tsx
-import { View, Text, Pressable } from 'react-native'
+import { View, Text } from 'react-native'
 import { Play, Tag } from 'lucide-react-native'
-import type { Lick } from '@/src/types'
+
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import colors from '@/src/constants/colors'
+import type { Lick } from '@/src/types'
 
 interface LickCardProps {
-  lick:      Lick
-  onPlay?:   () => void
-  onDrill?:  () => void
+  lick:     Lick
+  onPlay?:  () => void
+  onDrill?: () => void
 }
 
 export function LickCard({ lick, onPlay, onDrill }: LickCardProps) {
@@ -906,12 +1017,13 @@ export function LickCard({ lick, onPlay, onDrill }: LickCardProps) {
           <Text className="font-serif text-lg text-cream mb-0.5">{lick.song_title}</Text>
           <Text className="text-sm text-muted-brown font-sans">{lick.artist}</Text>
         </View>
-        <Pressable
+        <AnimatedPressable
+          haptic="light"
           onPress={onPlay}
           className="w-10 h-10 rounded-full bg-wood-800 items-center justify-center border border-wood-600"
         >
           <Play color={colors.amber.accent} size={16} fill={colors.amber.accent} style={{ marginLeft: 2 }} />
-        </Pressable>
+        </AnimatedPressable>
       </View>
 
       <View className="flex-row flex-wrap gap-2 mb-3">
@@ -936,18 +1048,21 @@ export function LickCard({ lick, onPlay, onDrill }: LickCardProps) {
 
       <View className="pt-3 border-t border-wood-700/50">
         <Text className="text-sm text-cream/80 italic leading-relaxed font-sans">
-          "{lick.coach_oneliner}"
+          &ldquo;{lick.coach_oneliner}&rdquo;
         </Text>
       </View>
 
-      <Pressable
-        onPress={onDrill}
-        className="mt-3 bg-wood-700 border border-wood-600 rounded-lg py-2 items-center"
-      >
-        <Text className="text-xs text-amber-light font-sans-medium uppercase tracking-wider">
-          Drill this
-        </Text>
-      </Pressable>
+      {onDrill && (
+        <AnimatedPressable
+          haptic="light"
+          onPress={onDrill}
+          className="mt-3 bg-wood-700 border border-wood-600 rounded-lg py-2 items-center"
+        >
+          <Text className="text-xs text-amber-light font-sans-medium uppercase tracking-wider">
+            Drill this
+          </Text>
+        </AnimatedPressable>
+      )}
     </View>
   )
 }
@@ -957,63 +1072,73 @@ export function LickCard({ lick, onPlay, onDrill }: LickCardProps) {
 // Radar chart using react-native-svg (no recharts dependency).
 import { View } from 'react-native'
 import Svg, { Polygon, Line, Circle, Text as SvgText, G } from 'react-native-svg'
-import type { SkillNode } from '@/src/types'
 
-interface SkillGraphProps {
-  nodes: SkillNode[]
-  size?: number
+import colors from '@/src/constants/colors'
+
+type GraphNode = {
+  id:    string
+  label: string
+  score: number
 }
 
-export function SkillGraph({ nodes, size = 280 }: SkillGraphProps) {
-  const center = size / 2
-  const radius = 90
-  const levels = 5
-  const total  = nodes.length
+interface SkillGraphProps {
+  nodes?: GraphNode[]
+  size?:  number
+}
 
-  const angleOf = (i: number) => (i * 2 * Math.PI) / total - Math.PI / 2
-  const ptAt = (angle: number, r: number) => ({
+const DEFAULT_NODES: GraphNode[] = [
+  { id: 'timing',   label: 'Timing',   score: 0.62 },
+  { id: 'pitch',    label: 'Pitch',    score: 0.74 },
+  { id: 'phrasing', label: 'Phrasing', score: 0.58 },
+  { id: 'dynamics', label: 'Dynamics', score: 0.46 },
+  { id: 'tone',     label: 'Tone',     score: 0.67 },
+]
+
+export function SkillGraph({ nodes = DEFAULT_NODES, size = 240 }: SkillGraphProps) {
+  const safeNodes = nodes.length >= 3 ? nodes : DEFAULT_NODES
+  const center    = size / 2
+  const radius    = Math.min(90, size * 0.35)
+  const levels    = 4
+  const total     = safeNodes.length
+
+  const angleOf  = (i: number) => (i * 2 * Math.PI) / total - Math.PI / 2
+  const pointAt  = (angle: number, r: number) => ({
     x: center + r * Math.cos(angle),
     y: center + r * Math.sin(angle),
   })
 
+  const clampScore = (s: number) => Math.max(0, Math.min(1, Number.isFinite(s) ? s : 0))
+
   const gridPolygons = Array.from({ length: levels }, (_, lvl) => {
     const r = (radius / levels) * (lvl + 1)
-    return nodes.map((_, i) => {
-      const pt = ptAt(angleOf(i), r)
+    return safeNodes.map((_, i) => {
+      const pt = pointAt(angleOf(i), r)
       return `${pt.x},${pt.y}`
     }).join(' ')
   })
 
-  const dataPoints = nodes.map((n, i) => {
-    const r  = n.score * radius
-    const pt = ptAt(angleOf(i), r)
+  const dataPolygon = safeNodes.map((n, i) => {
+    const pt = pointAt(angleOf(i), clampScore(n.score) * radius)
     return `${pt.x},${pt.y}`
   }).join(' ')
 
   return (
-    <View className="w-full bg-wood-800/40 rounded-2xl border border-wood-700/50 p-4 items-center">
+    <View className="w-full items-center rounded-2xl border border-wood-700/50 bg-wood-800/40 p-4">
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         {/* Grid rings */}
         {gridPolygons.map((pts, i) => (
-          <Polygon key={i} points={pts} fill="none" stroke="#4A3728" strokeWidth={1} />
+          <Polygon key={i} points={pts} fill="none" stroke={colors.wood[600]} strokeWidth={1} />
         ))}
 
         {/* Axis lines + labels */}
-        {nodes.map((node, i) => {
+        {safeNodes.map((node, i) => {
           const angle   = angleOf(i)
-          const axisEnd = ptAt(angle, radius)
-          const label   = ptAt(angle, radius + 22)
+          const axisEnd = pointAt(angle, radius)
+          const label   = pointAt(angle, radius + 18)
           return (
             <G key={node.id}>
-              <Line x1={center} y1={center} x2={axisEnd.x} y2={axisEnd.y} stroke="#4A3728" strokeWidth={1} />
-              <SvgText
-                x={label.x}
-                y={label.y + 4}
-                fill="#8B7D6B"
-                fontSize={11}
-                textAnchor="middle"
-                fontFamily="DMSans-Regular"
-              >
+              <Line x1={center} y1={center} x2={axisEnd.x} y2={axisEnd.y} stroke={colors.wood[600]} strokeWidth={1} />
+              <SvgText x={label.x} y={label.y + 4} fill={colors.muted.brown} fontSize={10} textAnchor="middle" fontFamily="DMSans-Regular">
                 {node.label}
               </SvgText>
             </G>
@@ -1021,12 +1146,12 @@ export function SkillGraph({ nodes, size = 280 }: SkillGraphProps) {
         })}
 
         {/* Data polygon */}
-        <Polygon points={dataPoints} fill="#D4A574" fillOpacity={0.2} stroke="#D4A574" strokeWidth={2} />
+        <Polygon points={dataPolygon} fill={colors.amber.accent} fillOpacity={0.2} stroke={colors.amber.accent} strokeWidth={2} />
 
         {/* Data dots */}
-        {nodes.map((n, i) => {
-          const pt = ptAt(angleOf(i), n.score * radius)
-          return <Circle key={n.id} cx={pt.x} cy={pt.y} r={4} fill="#D4A574" />
+        {safeNodes.map((node, i) => {
+          const pt = pointAt(angleOf(i), clampScore(node.score) * radius)
+          return <Circle key={node.id} cx={pt.x} cy={pt.y} r={3.5} fill={colors.amber.accent} />
         })}
       </Svg>
     </View>
@@ -1035,8 +1160,9 @@ export function SkillGraph({ nodes, size = 280 }: SkillGraphProps) {
 ```
 
 ```components/TabView.tsx
-// Stub component for AlphaTab integration (commits 21–22).
-// Replace contents with AlphaTabWebView (native) or AlphaTabWeb (web).
+// Full tablature display — hand-coded ASCII tab data.
+// In future commits: replaced with AlphaTabWebView (native) or AlphaTabWeb (web)
+// when gp5_base64 is available from the backend.
 import { View, Text, ScrollView } from 'react-native'
 
 interface TabViewProps {
@@ -1044,15 +1170,23 @@ interface TabViewProps {
   label?:      string
 }
 
-const FULL_TAB = `e|-------------------------------|
-B|-------7---10b12--10~----------|
-G|---7-9---7---------------------|
-D|-9-----------------------------|`
+const FULL_TAB = [
+  'e|--------------------------------|--------------------------------|',
+  'B|-------7---10b12--10~-----------|-------7---10b12r10p7-----------|',
+  'G|---7-9---7----------------------|---7-9---7------------9b11~-----|',
+  'D|-9------------------------------|-9------------------------------|',
+  'A|--------------------------------|--------------------------------|',
+  'E|--------------------------------|--------------------------------|',
+].join('\n')
 
-const SKELETON_TAB = `e|-------------------------------|
-B|-----------10b12---------------|
-G|-------------------------------|
-D|-9-----------------------------|`
+const SKELETON_TAB = [
+  'e|--------------------------------|--------------------------------|',
+  'B|-----------10b12----------------|-----------10b12r10-------------|',
+  'G|--------------------------------|----------------------9b11~-----|',
+  'D|-9------------------------------|-9------------------------------|',
+  'A|--------------------------------|--------------------------------|',
+  'E|--------------------------------|--------------------------------|',
+].join('\n')
 
 export function TabView({ isSkeleton = false, label }: TabViewProps) {
   return (
@@ -1074,6 +1208,418 @@ export function TabView({ isSkeleton = false, label }: TabViewProps) {
       </ScrollView>
     </View>
   )
+}
+```
+
+---
+
+```components/BeatCounter.tsx
+import { useEffect } from 'react'
+import { View, Text } from 'react-native'
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated'
+
+import colors from '@/src/constants/colors'
+
+interface BeatCounterProps {
+  bpm:       number
+  isPlaying?: boolean
+  /** Reset pulse when bar changes. */
+  resetKey?: number
+}
+
+/**
+ * BPM display with a pulsing dot synced to the beat interval.
+ * Used inside ChordsAndLyrics.
+ */
+export function BeatCounter({ bpm, isPlaying = false, resetKey = 0 }: BeatCounterProps) {
+  const pulse = useSharedValue(1)
+
+  useEffect(() => {
+    pulse.value = 1
+    if (isPlaying) {
+      const intervalMs = (60000 / bpm) / 2
+      pulse.value = withRepeat(withTiming(0.3, { duration: Math.max(100, intervalMs) }), -1, true)
+    } else {
+      pulse.value = withTiming(0, { duration: 200 })
+    }
+  }, [isPlaying, bpm, resetKey, pulse])
+
+  const dotStyle = useAnimatedStyle(() => ({ opacity: pulse.value }))
+
+  return (
+    <View className="flex-row items-center gap-1.5">
+      <Animated.View style={[dotStyle, { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.amber.accent }]} />
+      <Text className="font-mono text-[11px] text-muted-brown tabular-nums">♩ {bpm}</Text>
+    </View>
+  )
+}
+```
+
+```components/SectionNavigator.tsx
+import { useMemo, useRef, useCallback } from 'react'
+import { ScrollView, View, Text } from 'react-native'
+
+import { AnimatedPressable } from '@/components/AnimatedPressable'
+
+const CHIP_W  = 32
+const CHIP_GAP = 4
+const VISIBLE_COUNT = 11
+
+interface SectionNavigatorProps {
+  currentBar: number
+  totalBars:  number
+  onJump:     (barIndex: number) => void
+}
+
+/**
+ * Horizontal scrolling bar-number chip navigator.
+ * Only shows ~11 chips at a time, centered on the active bar.
+ */
+export function SectionNavigator({ currentBar, totalBars, onJump }: SectionNavigatorProps) {
+  const windowStart = useMemo(() => {
+    const half = Math.floor(VISIBLE_COUNT / 2)
+    return Math.max(0, Math.min(currentBar - half, Math.max(0, totalBars - VISIBLE_COUNT)))
+  }, [currentBar, totalBars])
+
+  const visibleBars = useMemo(
+    () => Array.from({ length: Math.min(VISIBLE_COUNT, totalBars) }, (_, i) => windowStart + i),
+    [windowStart, totalBars],
+  )
+
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="py-1">
+      <View className="flex-row" style={{ gap: CHIP_GAP }}>
+        {visibleBars.map((bar) => {
+          const isActive = bar === currentBar
+          return (
+            <AnimatedPressable
+              key={bar}
+              haptic="none"
+              onPress={() => onJump(bar)}
+              className={`w-8 h-8 items-center justify-center rounded-full border ${
+                isActive
+                  ? 'border-amber-accent bg-amber-accent/20'
+                  : 'border-wood-600/40 bg-wood-900/30'
+              }`}
+            >
+              <Text className={`font-mono text-[11px] ${isActive ? 'text-amber-accent font-medium' : 'text-muted-brown'}`}>
+                {bar + 1}
+              </Text>
+            </AnimatedPressable>
+          )
+        })}
+      </View>
+    </ScrollView>
+  )
+}
+```
+
+```components/ChordDiagram.tsx
+import { useMemo } from 'react'
+import { View, Text } from 'react-native'
+import { Svg, Circle, Line } from 'react-native-svg'
+
+import colors from '@/src/constants/colors'
+import { chordToFretboardCells, formatChordDisplay } from '@/src/music/chordVoicing'
+
+const FRET_COUNT    = 4
+const STRING_COUNT  = 6
+
+type Size = 'sm' | 'md' | 'lg'
+
+const SIZE_CONFIG: Record<Size, { cellW: number; cellH: number; padX: number; padY: number; dotR: number; labelSize: number }> = {
+  sm: { cellW: 18, cellH: 14, padX: 8,  padY: 6,  dotR: 3.5, labelSize: 9  },
+  md: { cellW: 24, cellH: 18, padX: 10, padY: 8,  dotR: 4.5, labelSize: 10 },
+  lg: { cellW: 30, cellH: 22, padX: 12, padY: 10, dotR: 5.5, labelSize: 11 },
+}
+
+interface ChordDiagramProps {
+  name:     string
+  size?:    Size
+  isActive?: boolean
+}
+
+/**
+ * SVG fretboard diagram for a single chord.
+ * Uses `chordToFretboardCells` from the music module for programmatic voicing.
+ */
+export function ChordDiagram({ name, size = 'md', isActive = false }: ChordDiagramProps) {
+  const cfg = SIZE_CONFIG[size]
+  const svgW = cfg.padX * 2 + cfg.cellW * (FRET_COUNT + 1)
+  const svgH = cfg.padY * 2 + cfg.cellH * (STRING_COUNT - 1)
+
+  const cells = useMemo(() => chordToFretboardCells(name, 'compact', 'open'), [name])
+
+  const noteDots = useMemo(() =>
+    cells.map((cell) => {
+      const row = 6 - cell.string
+      return {
+        x:        cell.fret === 0 ? cfg.padX - cfg.cellW / 2 : cfg.padX + (cell.fret - 1) * cfg.cellW + cfg.cellW / 2,
+        y:        cfg.padY + row * cfg.cellH,
+        fret:     cell.fret,
+        interval: cell.interval,
+      }
+    }),
+    [cells, cfg],
+  )
+
+  return (
+    <View className="items-center">
+      <Svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
+        {/* Strings (horizontal lines) */}
+        {Array.from({ length: STRING_COUNT }).map((_, si) => (
+          <Line key={`s${si}`} x1={cfg.padX} y1={cfg.padY + si * cfg.cellH} x2={cfg.padX + cfg.cellW * (FRET_COUNT + 1)} y2={cfg.padY + si * cfg.cellH}
+            stroke={colors.wood[500]} strokeWidth={si === 0 ? 2 : 1} strokeLinecap="round" />
+        ))}
+        {/* Frets (vertical lines) */}
+        {Array.from({ length: FRET_COUNT + 2 }).map((_, fi) => (
+          <Line key={`f${fi}`} x1={cfg.padX + fi * cfg.cellW} y1={cfg.padY} x2={cfg.padX + fi * cfg.cellW} y2={cfg.padY + cfg.cellH * (STRING_COUNT - 1)}
+            stroke={fi === 0 ? colors.wood[400] : colors.wood[600]} strokeWidth={fi === 0 || fi === FRET_COUNT + 1 ? 2.5 : 0.8} strokeLinecap="round" />
+        ))}
+        {/* Note dots */}
+        {noteDots.map((dot, i) => (
+          <Circle key={i} cx={dot.x} cy={dot.y} r={dot.fret === 0 ? cfg.dotR - 0.5 : cfg.dotR}
+            fill={dot.fret === 0 ? 'none' : (dot.interval === 0 ? colors.amber.accent : `${colors.amber.accent}80`)}
+            stroke={colors.amber.accent} strokeWidth={dot.fret === 0 ? 1.5 : 0.8} />
+        ))}
+      </Svg>
+      <Text className={`mt-1 font-mono ${isActive ? 'text-amber-accent' : 'text-muted-brown'}`} style={{ fontSize: cfg.labelSize }}>
+        {formatChordDisplay(name)}
+      </Text>
+    </View>
+  )
+}
+```
+
+```components/ChordsAndLyrics.tsx
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LayoutChangeEvent, ScrollView, Text, View } from 'react-native'
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated'
+import { Lock, Minus, Play, Plus, Pause, Unlock } from 'lucide-react-native'
+
+import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { BeatCounter } from './BeatCounter'
+import { ChordDiagram } from './ChordDiagram'
+import { SectionNavigator } from './SectionNavigator'
+
+import colors from '@/src/constants/colors'
+import { spring, timing } from '@/src/constants/animations'
+
+interface BarData {
+  chord:  string
+  chord2?: string
+  text?:  string
+}
+
+interface ChordsAndLyricsProps {
+  bars:       BarData[]
+  currentBar?: number
+  bpm?:       number
+  onBarPress?: (barIndex: number) => void
+  onBarLongPress?: (barIndex: number) => void
+}
+
+const CHROMATIC = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+function transposeChord(chord: string, semitones: number): string {
+  if (!chord || semitones === 0) return chord
+  const match = chord.match(/^([A-G][#b]?)(.*)$/)
+  if (!match) return chord
+  const [, root, suffix] = match
+  const flatToSharp: Record<string, string> = { Db: 'C#', Eb: 'D#', Gb: 'F#', Ab: 'G#', Bb: 'A#' }
+  const normalized = flatToSharp[root] || root
+  const idx = CHROMATIC.indexOf(normalized)
+  if (idx === -1) return chord
+  return CHROMATIC[(idx + semitones + 12 * 4) % 12] + suffix
+}
+
+/**
+ * Full chords-and-lyrics view with bar-by-bar navigation,
+ * transpose/capo/auto-scroll toolbar, and chord diagram previews.
+ * Used in Study and Slow session screens.
+ */
+export function ChordsAndLyrics({ bars, currentBar, bpm = 92, onBarPress }: ChordsAndLyricsProps) {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [internalBar, setInternalBar] = useState(0)
+  const [transpose, setTranspose] = useState(0)
+  const [capo, setCapo] = useState(0)
+  const [autoScroll, setAutoScroll] = useState(true)
+  const [scrollViewHeight, setScrollViewHeight] = useState(0)
+
+  const activeBar = currentBar ?? internalBar
+  const isControlled = currentBar !== undefined
+  const scrollRef = useRef<ScrollView>(null)
+  const barLayouts = useRef<Record<number, { y: number; height: number }>>({})
+
+  // Auto-advance bars when playing
+  useEffect(() => {
+    if (isControlled || !isPlaying) return
+    const interval = (60000 / bpm) * 4  // 4 beats per bar
+    const id = setInterval(() => setInternalBar((b) => (b + 1) % bars.length), interval)
+    return () => clearInterval(id)
+  }, [isPlaying, bars.length, isControlled, bpm])
+
+  // Auto-scroll active bar into view
+  useEffect(() => {
+    if (!autoScroll || !scrollRef.current) return
+    const layout = barLayouts.current[activeBar]
+    if (!layout || !scrollViewHeight) return
+    const target = layout.y - scrollViewHeight / 2 + layout.height / 2
+    scrollRef.current.scrollTo({ y: Math.max(0, target), animated: true })
+  }, [activeBar, autoScroll, scrollViewHeight])
+
+  const handleBarPress = useCallback((bar: number) => {
+    if (!isControlled) setInternalBar(bar)
+    onBarPress?.(bar)
+  }, [isControlled, onBarPress])
+
+  const displayedChord = useCallback((chord: string) => transposeChord(chord, transpose), [transpose])
+
+  const uniqueChords = useMemo(
+    () => Array.from(new Set(bars.flatMap((b) => [b.chord, b.chord2].filter(Boolean) as string[]))).map(displayedChord),
+    [bars, displayedChord],
+  )
+
+  const activeChord = displayedChord(bars[activeBar]?.chord || '')
+  const nextChord   = displayedChord(bars[(activeBar + 1) % bars.length]?.chord || '')
+
+  return (
+    <View className="rounded-xl border border-wood-700/40 bg-wood-800/40 p-4">
+      {/* Header */}
+      <View className="flex-row items-center justify-between mb-3">
+        <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Chords & Lyrics</Text>
+        <View className="flex-row items-center gap-3">
+          <BeatCounter bpm={bpm} isPlaying={isPlaying} resetKey={activeBar} />
+          <Text className="font-mono text-[10px] text-muted-brown/70 tabular-nums">Bar {activeBar + 1}/{bars.length}</Text>
+          {!isControlled && (
+            <AnimatedPressable haptic="none" onPress={() => setIsPlaying((p) => !p)} accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
+              className="w-7 h-7 items-center justify-center rounded-full border border-wood-600/60 bg-wood-900/70">
+              {isPlaying ? <Pause size={12} color={colors.amber.accent} /> : <Play size={12} color={colors.amber.accent} style={{ marginLeft: 1 }} />}
+            </AnimatedPressable>
+          )}
+        </View>
+      </View>
+
+      {/* Section Navigator */}
+      <View className="mb-3">
+        <SectionNavigator currentBar={activeBar} totalBars={bars.length} onJump={handleBarPress} />
+      </View>
+
+      {/* Toolbar: Transpose, Capo, Auto-scroll */}
+      <View className="flex-row items-center justify-between rounded-lg border border-wood-700/30 bg-wood-900/30 p-2 mb-4">
+        <ToolControl label="Key" value={transpose === 0 ? '0' : `${transpose > 0 ? '+' : ''}${transpose}`}
+          onDecrement={() => setTranspose((t) => t - 1)} onIncrement={() => setTranspose((t) => t + 1)} />
+        <ToolControl label="Capo" value={capo === 0 ? 'Off' : `${capo}fr`}
+          onDecrement={() => setCapo((c) => Math.max(0, c - 1))} onIncrement={() => setCapo((c) => Math.min(12, c + 1))} />
+        <AnimatedPressable haptic="none" onPress={() => setAutoScroll((a) => !a)}
+          className={`flex-row items-center gap-1 rounded-md border px-2 py-1 ${autoScroll ? 'border-amber-accent/30 bg-amber-accent/10' : 'border-wood-700/50 bg-wood-900/40'}`}>
+          {autoScroll ? <Lock size={10} color={colors.amber.light} /> : <Unlock size={10} color={colors.muted.brown} />}
+          <Text className={`font-mono text-[9px] uppercase tracking-wider ${autoScroll ? 'text-amber-light' : 'text-muted-brown'}`}>Scroll</Text>
+        </AnimatedPressable>
+      </View>
+
+      {/* Scrollable bar list */}
+      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} className="max-h-[260px]"
+        onLayout={(e) => setScrollViewHeight(e.nativeEvent.layout.height)}>
+        <View className="flex-row flex-wrap py-2" style={{ gap: 16 }}>
+          {bars.map((bar, idx) => {
+            const isActive = idx === activeBar
+            const chord  = displayedChord(bar.chord)
+            const chord2 = bar.chord2 ? displayedChord(bar.chord2) : undefined
+            return (
+              <AnimatedPressable key={idx} haptic="none" onPress={() => handleBarPress(idx)}
+                onLayout={(e: LayoutChangeEvent) => { barLayouts.current[idx] = e.nativeEvent.layout }} className="relative">
+                <View className="flex-row items-end mb-1" style={{ gap: 6 }}>
+                  <Text className={`font-mono text-xs leading-none tracking-tight ${isActive ? 'text-amber-light' : 'text-amber-accent/80'}`}>{chord}</Text>
+                  {chord2 && <Text className={`font-mono text-xs leading-none tracking-tight ${isActive ? 'text-amber-light' : 'text-amber-accent/60'}`}>{chord2}</Text>}
+                </View>
+                {bar.text && <Text className={`font-serif text-base leading-snug ${isActive ? 'text-ivory' : 'text-cream/70'}`}>{bar.text}</Text>}
+                {isActive && <ActiveBarMarker />}
+              </AnimatedPressable>
+            )
+          })}
+        </View>
+      </ScrollView>
+
+      {/* Active / Next Chord Diagram Preview */}
+      <View className="mt-4 pt-3 border-t border-wood-700/40">
+        <View className="flex-row gap-4">
+          <View className="flex-1">
+            <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/80 mb-2">Now Playing</Text>
+            <View className="flex-row items-end gap-3">
+              <FadeView key={`active-${activeChord}`}><ChordDiagram name={activeChord} size="md" isActive /></FadeView>
+              <View className="opacity-60">
+                <Text className="font-mono text-[9px] uppercase tracking-wider text-muted-brown mb-1">Next</Text>
+                <FadeView key={`next-${nextChord}`}><ChordDiagram name={nextChord} size="sm" /></FadeView>
+              </View>
+            </View>
+          </View>
+          <View className="flex-1 min-w-0">
+            <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/80 mb-2">Used In Song</Text>
+            <View className="flex-row flex-wrap gap-2">
+              {uniqueChords.map((c) => (
+                <View key={c} className={c === activeChord ? '' : 'opacity-50'}>
+                  <ChordDiagram name={c} size="sm" isActive={c === activeChord} />
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  )
+}
+
+function ToolControl({ label, value, onDecrement, onIncrement }: {
+  label: string; value: string; onDecrement: () => void; onIncrement: () => void
+}) {
+  return (
+    <View className="flex-row items-center gap-1.5">
+      <Text className="font-mono text-[9px] uppercase tracking-wider text-muted-brown">{label}</Text>
+      <View className="flex-row items-center rounded-md border border-wood-700/50 bg-wood-900/60">
+        <AnimatedPressable haptic="none" onPress={onDecrement} className="w-6 h-6 items-center justify-center">
+          <Minus size={10} color={colors.muted.brown} />
+        </AnimatedPressable>
+        <Text className="font-mono text-[10px] text-cream w-8 text-center tabular-nums">{value}</Text>
+        <AnimatedPressable haptic="none" onPress={onIncrement} className="w-6 h-6 items-center justify-center">
+          <Plus size={10} color={colors.muted.brown} />
+        </AnimatedPressable>
+      </View>
+    </View>
+  )
+}
+
+function ActiveBarMarker() {
+  const opacity = useSharedValue(0)
+  const scaleX  = useSharedValue(0.3)
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: 250 })
+    scaleX.value  = withSpring(1, spring.gentle)
+  }, [opacity, scaleX])
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scaleX: scaleX.value }] }))
+  return <Animated.View style={[style, { height: 2, backgroundColor: colors.amber.accent, marginTop: 6, borderRadius: 1 }]} />
+}
+
+function FadeView({ children, fadeKey }: { children: React.ReactNode; fadeKey?: string }) {
+  const opacity     = useSharedValue(0)
+  const translateY  = useSharedValue(6)
+  useEffect(() => {
+    opacity.value = 0; translateY.value = 6
+    opacity.value = withTiming(1, { duration: timing.normal })
+    translateY.value = withTiming(0, { duration: timing.normal })
+  }, [fadeKey, opacity, translateY])
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ translateY: translateY.value }] }))
+  return <Animated.View style={style}>{children}</Animated.View>
 }
 ```
 
@@ -2427,6 +2973,20 @@ export default function ReviewScreen() {
 
 > These patterns close the gap between "functional" and Yousician-level polished. Apply them across every screen from Phase 2 onward. The single highest-leverage change is replacing every bare `Pressable` with `AnimatedPressable`.
 
+### Elevation System
+
+The dark wood theme relies on layered translucency rather than drop shadows (which look muddy on dark backgrounds). Use these levels consistently:
+
+| Level | Recipe | Usage |
+|---|---|---|
+| `flat` | (no surface) | Tab bar background, `bg-wood-900` page |
+| `raised` | `border border-wood-600/50 bg-wood-800/80` | Settings sections, form fields |
+| `elevated` | `border border-wood-600/40 bg-wood-800/50` + `WoodGradient variant="card"` | Cards (lesson cards, stat cards) |
+| `overlay` | `bg-wood-800/95` + `border-wood-600/60` | Modals, toasts, action sheets |
+| `accent` | `bg-amber-accent/90` | Primary CTAs (taste-quiz Continue, Add Song) |
+
+When stacking levels (e.g. card on modal), never exceed 3 visible levels. Decorative amber circles (`bg-amber-accent/5 … /10`) and noise overlays add depth without raising visual weight.
+
 ### Rule: every touchable element must respond visually and haptically.
 
 ```components/AnimatedPressable.tsx
@@ -2689,6 +3249,58 @@ export const toast = {
     Toast.show({ type: 'error', text1: text, visibilityTime: 3500, position: 'bottom' }),
 }
 ```
+
+---
+
+### UX Patterns from the Web Prototype
+
+These interaction patterns were refined in the original Vite prototype and carried into the React Native build. They reinforce the "jazz club lighting, not mobile game" feel.
+
+#### Card hover / active state pattern
+
+Every interactive card should subtly lift on press and glow at its border. Use `AnimatedPressable` for touch feedback and layer the visual state with Tailwind groups:
+
+```ts
+/** Inspiration pattern: card that whispers "touch me" on hover.
+ *  In React Native, the scaled press provides the lift; the
+ *  border/background transition is handled by className toggling.
+ *
+ *  ClassNames for card hover states in the design:
+ *    resting:  border-wood-600/40 bg-card-gradient shadow-soft-wood
+ *    active:   border-amber-accent/40 shadow-[0_6px_24px_-4px_rgba(212,165,116,0.15)]
+ *    glow:     bg-amber-accent/[0.03]
+ */
+```
+
+#### Waveform breathing bars
+
+The WaveformVisualizer uses deterministic seeded values per bar so bar height + "breathing" multiplier are stable across renders. Each bar has a unique `breathe` factor (`0.85 + seededValue(i, 42) * 0.3`) — when `isPlaying` is true, bar heights multiply by `breathe`, creating a subtle pulsing effect.
+
+```ts
+seededValue(index, seed) = sin(index * 127.1 + seed * 311.7) fractional part
+```
+
+No external animation driver needed — the breathing is baked into the layout heights.
+
+#### Section chip pill navigator
+
+The `SectionNavigator` uses a horizontal scroll of numbered chips. The active chip has a filled amber background + border; inactive chips are transparent with muted-brown text. On bar change, the scroll window recenters around the active bar. This is mirrored in `ChordsAndLyrics` for the bar-by-bar lyric view.
+
+#### Chord transposition / capo toolbar
+
+The `ChordsAndLyrics` toolbar lets users transpose by semitone or simulate a capo. Transposition is a pure `transposeChord()` function that normalizes flats to sharps, shifts the root by semitones, and preserves chord suffixes (`m`, `7`, `m7`, etc.). The capo control is purely visual — it tracks the fret number but transposition applies to all displayed chords.
+
+#### Animated active bar marker
+
+The `ActiveBarMarker` in `ChordsAndLyrics` is a `react-native-reanimated` sub-component that scales in horizontally (`scaleX: 0.3 → 1.0` with spring) and fades in (`opacity: 0 → 1` with timing). It sits below the current bar's lyrics as a subtle amber underline.
+
+#### Beat-pulse indicator
+
+`BeatCounter` flashes a small amber dot at half the BPM interval using `withRepeat(withTiming(0.3))`. The dot resets when `resetKey` changes (e.g. when the active bar changes). A static "♩ {bpm}" label sits beside it for reference.
+
+#### Fade-in chord diagram transitions
+
+The `FadeView` wrapper animates opacity and translateY when its `key` prop changes. This is used to subtly animate chord diagram swaps in the "Now Playing" / "Next" preview section. Both `spring.gentle` and `timing.normal` (from `@/src/constants/animations`) are used.
 
 ---
 

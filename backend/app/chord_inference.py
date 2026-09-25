@@ -1,67 +1,194 @@
-"""TFLite Chord Inference with Volume Thresholding and Beat Pooling (Commit 79).
+"""Chord Inference with Viterbi Decoding (Commit 99).
 
-Fixed for ML Inference Stability & Diagnostics (Commit 95):
-  - Replaces print() with structured logging.
-  - Standardized model loading with backend detection logging.
-  - Diagnostics for model mismatch errors.
+Pipeline:
+  Audio → CRNN (Keras or TFLite) → enriched beat pooling
+       → half-beat tie-detection → Viterbi decoding → metrics → ChordTimeline
 
-Segment Boundary Tie Mechanism (Commit 100, MT3 paper insight):
-  - Overlap-and-blend: inference windows are placed every _WINDOW_STRIDE
-    frames (50% overlap) and per-frame predictions are accumulated with
-    triangular weights (1 - distance/half from window center). Frames near a
-    window's edge are near the center of a neighboring window, so the
-    degraded context at window edges never dominates and boundary flicker is
-    suppressed without a separate re-declaration pass.
-  - Boundary confidence penalty: predictions within _BOUNDARY_PENALTY_FRAMES
-    of the track edges (zero-padded context) have confidence scaled by
-    _BOUNDARY_CONFIDENCE_FACTOR to reduce false positives.
+Inference chain (auto-selects best available):
+  1. Keras model (.keras) — full CRNN, Python backend only
+  2. TFLite model (.tflite) — mobile-optimized, requires Flex delegate
+  3. Chroma template matching — pure librosa, always available
+
+Replaces the old _smooth_chords median filter with statistically optimal
+Viterbi sequence decoding using a music-theory transition matrix.
+
+Dual role (Commit A2.2):
+  1. On-device real-time inference (Live Mic Mode) via TFLite model
+  2. Fallback inference engine when MT3 is unavailable or confidence is low
+  3. Future student model for MT3 knowledge distillation
 """
 
 from __future__ import annotations
 
 import logging
 import math
-from collections import Counter
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+import os as _os
+_os.environ["TF_USE_LEGACY_KERAS"] = "1"  # Model config references tf_keras (legacy Keras 2.x)
 
 from app.schemas import BeatGrid, ChordEvent, ChordTimeline
 from app.pipeline_proof import TARGET_SR
-from app.viterbi import (
-    load_transition_matrix,
-    postprocess_chords,
-    compute_flicker_rate,
-    compute_chord_change_histogram,
-)
+from app.caged_shapes import CAGED_SHAPES as _CAGED_VOICING_SHAPES
+from app.chord_vocab import CHORD_INTERVALS as _CHORD_INTERVALS
 
 logger = logging.getLogger("harmoniq.inference.chord")
 
 _ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-_CHORD_QUALITIES = [
-    "maj", "min",
-    "7", "maj7", "min7",
-    "9", "min9", "maj9", "11", "13",
-    "7#9", "7b9", "7#5", "7b5", "alt7",
-    "sus2", "sus4", "7sus4",
-    "dim", "dim7", "aug", "6", "min6",
-]
 
-CHORD_VOCAB = [f"{root}:{qual}" for qual in _CHORD_QUALITIES for root in _ROOTS] + ["N"]
+# MIREX 25-class vocabulary (Commit A: vocab reduction 277→25)
+from app.chord_vocab import (
+    MIREX_VOCAB, NUM_CLASSES_MIREX, MIREX_TO_IDX, MIREX_QUALITY_MAP,
+    ROOT_NOTES as _ROOT_NOTES,
+)
 
-_MODEL_PATH = Path(__file__).parent / "chord_model.tflite"
-_KERAS_MODEL_PATH = Path(__file__).parent / "chord_model.keras"
-_WINDOW = 128
-_WINDOW_STRIDE = _WINDOW // 2       # 50% overlap between consecutive windows
-_BOUNDARY_PENALTY_FRAMES = 2        # confidence penalty zone at track edges (0.2s @ 0.1s hop)
-_BOUNDARY_CONFIDENCE_FACTOR = 0.85
-_HOP_SEC = 0.1
-_BINS_PER_OCTAVE = 12
-_NUM_OCTAVES = 3
-_CHROMA_BINS = _BINS_PER_OCTAVE * _NUM_OCTAVES  # 36
-_BASS_BINS = 4
-_FEATURE_DIM = _CHROMA_BINS + _BASS_BINS         # 40
+CHORD_VOCAB = MIREX_VOCAB
+_CHORD_TO_IDX = MIREX_TO_IDX
+_NUM_CLASSES = NUM_CLASSES_MIREX  # 25
+
+# Restricted vocabulary for the chroma fallback path (Commit: chroma quality fix).
+# 12-bin chroma vectors cannot discriminate altered-dominant qualities.
+# The chroma path emits 5 qualities (maj, min, 7, maj7, min7) which map to
+# MIREX's maj/min via MIREX_QUALITY_MAP (7→maj, maj7→maj, min7→min).
+_CHROMA_QUALITIES = ["maj", "min", "7", "maj7", "min7"]
+CHROMA_VOCAB = [f"{root}:{qual}" for qual in _CHROMA_QUALITIES for root in _ROOTS] + ["N"]
+_CHROMA_TO_IDX = {chord: i for i, chord in enumerate(CHROMA_VOCAB)}
+# Map each chroma candidate to its 25-class MIREX index
+_CHROMA_TO_FULL_IDX = np.array([
+    MIREX_TO_IDX.get(label, NUM_CLASSES_MIREX - 1) for label in CHROMA_VOCAB
+], dtype=np.int64)
+_NUM_CHROMA = len(CHROMA_VOCAB)  # 61
+
+_TFLITE_PATH = Path(__file__).parent / "chord_model.tflite"
+_KERAS_PATH = Path(__file__).parent / "chord_model.keras"
+from app.cqt_constants import (WINDOW as _WINDOW, HOP_FRAMES as _HOP_FRAMES,
+                                HOP_SEC as _HOP_SEC, BINS_PER_OCTAVE as _BINS_PER_OCTAVE,
+                                NUM_OCTAVES as _NUM_OCTAVES, CHROMA_BINS as _CHROMA_BINS,
+                                BASS_BINS as _BASS_BINS, FEATURE_DIM as _FEATURE_DIM)
+_BATCH_CHUNK = 512
+
+# Track which inference tier the last _run_inference call used.
+# Set by _run_inference; read by fallback.py::_try_crnn via get_last_inference_tier().
+_last_inference_tier: str = "none"
+
+
+def get_last_inference_tier() -> str:
+    """Return which inference tier the last _run_inference call used.
+
+    Returns:
+        One of ``"crnn"`` (Keras or TFLite model) or ``"chroma"`` (template matching).
+    """
+    return _last_inference_tier
+
+
+def _detect_bass_note(audio_segment: np.ndarray, sr: int) -> str | None:
+    """Detect the bass note from an audio segment using spectral peak in the low range.
+
+    Computes an STFT, finds the strongest spectral peak in the 65-200 Hz
+    bass range, and converts the peak frequency to a note name. Returns None
+    when the segment is too short or no confident peak is found.
+
+    Args:
+        audio_segment: Audio segment as a 1D numpy array.
+        sr: Sample rate in Hz.
+
+    Returns:
+        Note name (e.g., 'C', 'F#') or None if detection fails.
+    """
+    if len(audio_segment) < 256:
+        return None
+    try:
+        import librosa
+        D = np.abs(librosa.stft(audio_segment))
+        freqs = librosa.fft_frequencies(sr=sr)
+        bass_mask = (freqs >= 65.0) & (freqs <= 200.0)
+        if not np.any(bass_mask):
+            return None
+        bass_spectrum = D[bass_mask]
+        bass_mean = np.mean(bass_spectrum, axis=1)
+        peak_idx = int(np.argmax(bass_mean))
+        peak_freq = float(freqs[bass_mask][peak_idx])
+        if peak_freq <= 0:
+            return None
+        midi = 12.0 * np.log2(peak_freq / 440.0) + 69.0
+        midi_int = int(round(midi))
+        if midi_int < 0 or midi_int > 127:
+            return None
+        return _ROOTS[midi_int % 12]
+    except Exception:
+        return None
+
+
+def _identify_inversion(
+    chord_root: str,
+    quality: str | None,
+    bass_note: str | None,
+) -> int | None:
+    """Identify chord inversion from bass note relative to chord intervals.
+
+    Args:
+        chord_root: Root note name (e.g., 'C', 'F#').
+        quality: Chord quality string (e.g., 'maj', 'min7').
+        bass_note: Detected bass note name (e.g., 'E', 'G').
+
+    Returns:
+        None for root position, 1 for first inversion (bass = 3rd),
+        2 for second inversion (bass = 5th), 3 for third inversion (bass = 7th).
+    """
+    if bass_note is None or quality is None:
+        return None
+    intervals = _CHORD_INTERVALS.get(quality)
+    if intervals is None:
+        return None
+    try:
+        root_pc = _ROOTS.index(chord_root)
+        bass_pc = _ROOTS.index(bass_note)
+    except ValueError:
+        return None
+    semitone_distance = (bass_pc - root_pc) % 12
+
+    for position, interval in enumerate(intervals):
+        if interval % 12 == semitone_distance:
+            if position == 1:
+                return 1
+            elif position == 2:
+                return 2
+            elif position == 3:
+                return 3
+            return None
+    return None
+
+
+def _circular_cqt_pad(x):
+    """Circular padding on 144-bin CQT.
+
+    Replicates the Lambda layer from the training script (build_chord_tflite.py).
+    Required for Keras model deserialization — the function must be available
+    in the inference module so Keras can resolve the Lambda layer reference.
+    With BASS_BINS=0, the entire FEATURE_DIM is the CQT, so we circular-pad
+    the full input.
+    """
+    import tensorflow as tf
+    return tf.concat([x[:, :, -1:], x, x[:, :, :1]], axis=-1)
+
+
+class CircularCqtPad:
+    """Placeholder — actual tf.keras.layers.Layer subclass defined in _get_keras_model()."""
+    pass
+
+# Precomputed triangular window for overlap-and-blend (Commit 100)
+_TRIANGULAR_WINDOW = np.minimum(
+    np.arange(_WINDOW) / (_WINDOW / 2),
+    (_WINDOW - 1 - np.arange(_WINDOW)) / (_WINDOW / 2 - 1)
+).astype(np.float32)
+
+TIE_THRESHOLD = 0.15
+SUBDIVISION_RATIO = 0.65
+MIN_HALF_BEAT_DURATION = 0.3  # seconds — skip split for beats shorter than this
+N_CONFIDENCE_THRESHOLD = 0.2  # Default to N when model confidence is below this
 
 
 def _get_segment_db(y_segment: np.ndarray) -> float:
@@ -74,6 +201,7 @@ def _get_segment_db(y_segment: np.ndarray) -> float:
 
 
 def _smooth_chords(events: list[ChordEvent]) -> list[ChordEvent]:
+    """Fallback 3-point median filter. Kept for compatibility; Viterbi replaces this."""
     if len(events) < 3:
         return events
     smoothed = events[:]
@@ -90,343 +218,753 @@ def _smooth_chords(events: list[ChordEvent]) -> list[ChordEvent]:
     return smoothed
 
 
-def _load_flex_delegate():
-    """Try to load the TFLite Flex delegate for SELECT_TF_OPS support.
+# ---------------------------------------------------------------------------
+# Model loading: Keras (primary) → TFLite (mobile) → Chroma (fallback)
+# ---------------------------------------------------------------------------
 
-    Returns a delegate list (empty if Flex is unavailable).
+@lru_cache(maxsize=1)
+def _get_keras_model():
+    """Load the full Keras CRNN model for Python backend inference.
+
+    Uses custom_objects to resolve the CircularCqtPad custom layer
+    that was saved during model training (build_chord_tflite.py).
+
+    Returns the model or raises if .keras file is missing/unloadable.
     """
+    if not _KERAS_PATH.exists():
+        raise FileNotFoundError(f"Keras model not found at {_KERAS_PATH}")
+
+    import os
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # Force CPU-only (GPU crashes on WSL2)
+    import tensorflow as tf
+
+    # Define the CircularCqtPad layer here where tf is available
+    class _CircularPadImpl(tf.keras.layers.Layer):
+        def call(self, x):
+            return tf.concat([x[:, :, -1:], x, x[:, :, :1]], axis=-1)
+        def compute_output_shape(self, input_shape):
+            return (input_shape[0], input_shape[1], input_shape[2] + 2)
+        def get_config(self):
+            return super().get_config()
+
     try:
-        import tensorflow as tf
-
-        delegate = tf.lite.experimental.load_delegate("libtensorflowlite_flex.so")
-        logger.info("Flex delegate loaded for SELECT_TF_OPS support")
-        return [delegate]
-    except Exception:
-        logger.debug("Flex delegate unavailable — SELECT_TF_OPS ops will fail")
-        return []
-
-
-class _KerasModelWrapper:
-    """Thin wrapper around a Keras model that mimics the TFLite Interpreter API.
-
-    Used as a fallback when the TFLite model requires SELECT_TF_OPS and the
-    Flex delegate is unavailable.
-
-    Handles both keras (standalone) and tf_keras saves, and registers the
-    custom CircularCqtPad layer used by the chord model.
-    """
-
-    def __init__(self, model_path: str):
-        # Try to register custom layer so Functional load can find it
+        model = tf.keras.models.load_model(
+            str(_KERAS_PATH),
+            custom_objects={
+                "_circular_cqt_pad": _circular_cqt_pad,
+                "CircularCqtPad": _CircularPadImpl,
+                "Custom>CircularCqtPad": _CircularPadImpl,
+            },
+            safe_mode=False,
+        )
+        logger.info("Chord model loaded via Keras (%s)", _KERAS_PATH.name)
+        return model
+    except Exception as keras_err:
+        logger.warning("Keras loading failed with TF_USE_LEGACY_KERAS=1: %s", keras_err)
+        logger.info("Retrying with TF_USE_LEGACY_KERAS=0 (native Keras 3.x)")
+        _os.environ["TF_USE_LEGACY_KERAS"] = "0"
         try:
-            from app.chord_model_layers import CircularCqtPad  # type: ignore
-
-            custom_objects = {"CircularCqtPad": CircularCqtPad}
-        except Exception:
-            # Fallback: define a minimal stub for load purposes
-            try:
-                import keras
-
-                @keras.saving.register_keras_serializable(package="Custom", name="CircularCqtPad")
-                class _StubCircularCqtPad(keras.layers.Layer):
-                    def call(self, inputs):
-                        return inputs
-
-                custom_objects = {"CircularCqtPad": _StubCircularCqtPad}
-            except Exception:
-                custom_objects = {}
-
-        last_exc: Exception | None = None
-        # Try keras (standalone, Keras 3) first — matches how build_chord_tflite saves
-        for loader in (
-            lambda p: __import__("keras").saving.load_model(p, compile=False, custom_objects=custom_objects),  # type: ignore
-            lambda p: __import__("tf_keras").models.load_model(p, compile=False, custom_objects=custom_objects),  # type: ignore
-            lambda p: __import__("tensorflow").keras.models.load_model(p, compile=False, custom_objects=custom_objects),  # type: ignore
-        ):
-            try:
-                self._model = loader(model_path)  # type: ignore
-                break
-            except Exception as exc:
-                last_exc = exc
-                continue
-        else:
-            raise RuntimeError(f"All Keras loaders failed for {model_path}: {last_exc}") from last_exc
-
-        self._input_details = [{"index": 0, "shape": self._model.inputs[0].shape}]
-        self._output_details = [{"index": 0, "shape": self._model.outputs[0].shape}]
-        self._last_input = None
-
-    def get_input_details(self):
-        return self._input_details
-
-    def get_output_details(self):
-        return self._output_details
-
-    def set_tensor(self, index, value):
-        self._last_input = value
-
-    def invoke(self):
-        self._output = self._model(self._last_input, training=False)
-
-    def get_tensor(self, index):
-        return self._output.numpy()
-
-    def allocate_tensors(self):
-        pass  # No-op for Keras
+            import importlib
+            importlib.reload(tf.keras)
+            model = tf.keras.models.load_model(
+                str(_KERAS_PATH),
+                custom_objects={
+                    "_circular_cqt_pad": _circular_cqt_pad,
+                    "CircularCqtPad": _CircularPadImpl,
+                    "Custom>CircularCqtPad": _CircularPadImpl,
+                },
+                safe_mode=False,
+            )
+            logger.info("Chord model loaded via Keras 3.x (%s)", _KERAS_PATH.name)
+            return model
+        except Exception as keras3_err:
+            logger.warning("Keras 3.x loading also failed: %s", keras3_err)
+            raise RuntimeError(
+                f"Failed to load Keras model at {_KERAS_PATH}: "
+                f"legacy={keras_err}, native={keras3_err}"
+            ) from keras_err
 
 
 @lru_cache(maxsize=1)
 def _get_interpreter():
-    """Load the model once and cache it for the process lifetime.
+    """Load the TFLite interpreter once and cache it for the process lifetime."""
+    path = str(_TFLITE_PATH)
+    if not _TFLITE_PATH.exists():
+        raise FileNotFoundError(f"TFLite model not found at {_TFLITE_PATH}")
 
-    Tries tflite-runtime first (with Flex delegate if available), falls back
-    to TensorFlow Lite, then falls back to the Keras model directly.
-    """
-    path = str(_MODEL_PATH)
-    if not _MODEL_PATH.exists() and not _KERAS_MODEL_PATH.exists():
-        raise FileNotFoundError(
-            f"Neither chord model found at {_MODEL_PATH} nor {_KERAS_MODEL_PATH}"
-        )
-
-    # Try tflite-runtime (lighter dependency)
     try:
         import tflite_runtime.interpreter as tflite
 
-        flex_delegates = _load_flex_delegate()
-        interp = tflite.Interpreter(
-            model_path=path,
-            experimental_delegates=flex_delegates or None,
-        )
+        interp = tflite.Interpreter(model_path=path)
         logger.info("Chord model loaded via tflite-runtime")
-        interp.allocate_tensors()
-        return interp
     except ImportError:
-        pass
-    except Exception as exc:
-        logger.warning("TFLite load failed (%s), trying Keras fallback", exc)
-
-    # Fall back to TensorFlow Lite
-    try:
-        import tensorflow as tf
-
-        flex_delegates = _load_flex_delegate()
-        interp = tf.lite.Interpreter(
-            model_path=path,
-            experimental_delegates=flex_delegates or None,
-        )
-        logger.info("Chord model loaded via TensorFlow Lite")
-        interp.allocate_tensors()
-        return interp
-    except Exception as exc:
-        logger.warning("TFLite interpreter failed (%s), trying Keras model", exc)
-
-    # Fall back to Keras model directly (no Flex delegate needed)
-    if _KERAS_MODEL_PATH.exists():
         try:
-            wrapper = _KerasModelWrapper(str(_KERAS_MODEL_PATH))
-            logger.info("Chord model loaded via Keras (fallback)")
-            return wrapper
-        except Exception as exc:
+            import tensorflow as tf
+
+            interp = tf.lite.Interpreter(model_path=path)
+            logger.info("Chord model loaded via TensorFlow Lite")
+        except ImportError as exc:
             raise RuntimeError(
-                f"Failed to load Keras chord model at {_KERAS_MODEL_PATH}: {exc}"
+                "Chord inference requires tflite-runtime or tensorflow. "
+                "Install with: pip install tflite-runtime"
             ) from exc
+    except Exception as exc:
+        raise RuntimeError(f"Failed to load chord model at {path}: {exc}") from exc
 
-    raise RuntimeError(
-        "Chord inference requires tflite-runtime or tensorflow. "
-        "Install with: pip install tflite-runtime"
+    try:
+        interp.allocate_tensors()
+    except Exception:
+        import glob as _glob
+        _flex_libs = _glob.glob(
+            str(Path(tf.__file__).resolve().parent / "lite" / "**" / "*flex*"),
+            recursive=True,
+        )
+        if not _flex_libs:
+            raise RuntimeError(
+                "Chord TFLite model requires SELECT_TF_OPS (Flex delegate) but "
+                "libtensorflowlite_flex.so not found in TF installation. "
+                "Install the full tensorflow package (not tensorflow-cpu) or "
+                "rebuild model without BiLSTM ops."
+            ) from None
+        logger.info("allocate_tensors failed — retrying with Flex delegate (SELECT_TF_OPS)")
+        from tensorflow.lite.python import interpreter as _tflite_interp
+        flex_delegate = _tflite_interp.load_delegate(str(_flex_libs[0]))
+        interp = tf.lite.Interpreter(
+            model_path=path, experimental_delegates=[flex_delegate]
+        )
+        interp.allocate_tensors()
+    input_details = interp.get_input_details()
+    output_details = interp.get_output_details()
+    logger.debug(
+        "Chord model input shape=%s output shape=%s",
+        input_details[0].get("shape"),
+        output_details[0].get("shape"),
     )
+    return interp
 
 
-def _window_layout(T: int) -> tuple[list[int], np.ndarray]:
-    """Return the 50%-overlap window layout for a feature sequence.
-
-    Args:
-        T: Number of feature frames.
+def _extract_features(y: np.ndarray, sr: int) -> tuple[np.ndarray, int]:
+    """Extract CQT features and build sliding windows.
 
     Returns:
-        (centers, frame_weights) where ``centers`` holds the feature-frame
-        index at the middle of each inference window (windows are ``_WINDOW``
-        frames long, strided by ``_WINDOW_STRIDE``) and ``frame_weights`` is
-        an array of shape ``(len(centers), T)`` with the triangular weight
-        ``1 - |f - center| / half`` each window contributes to every frame.
-        Every frame is covered by at least one window; frames in the overlap
-        zone are covered by two, weighted toward the nearer center.
+        (windows, hop) where windows has shape [T_overlap, _WINDOW, _FEATURE_DIM]
     """
-    if T <= 0:
-        return [], np.zeros((0, 0), dtype=np.float64)
-    half = _WINDOW // 2
-    centers = list(range(0, T, _WINDOW_STRIDE))
-    frame_weights = np.zeros((len(centers), T), dtype=np.float64)
-    for k, c in enumerate(centers):
-        f_start = max(0, c - half)
-        f_end = min(T, c + half)
-        for f in range(f_start, f_end):
-            frame_weights[k, f] = 1.0 - abs(f - c) / half
-    return centers, frame_weights
+    import librosa
+
+    hop = int(sr * _HOP_SEC)
+    cqt = librosa.cqt(y=y, sr=sr, hop_length=hop, n_bins=_CHROMA_BINS,
+                       bins_per_octave=_BINS_PER_OCTAVE)
+    cqt = np.abs(cqt)
+    cqt = cqt.T.astype(np.float32)
+
+    norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
+    features = cqt / norms
+    windows = _build_windows(features)
+    return windows, hop
 
 
-def _predict_overlap_blend(features: np.ndarray) -> tuple[list[dict], int]:
-    """Run TFLite on 50%-overlapping windows and blend per-frame predictions.
+def _build_windows(features: np.ndarray) -> np.ndarray:
+    """Build overlapping sliding windows from feature sequence.
 
-    Windows are placed every ``_WINDOW_STRIDE`` frames; the predictions each
-    window produces are accumulated per frame with triangular weights (see
-    ``_window_layout``). The final per-frame prediction is the argmax of the
-    weight-normalized accumulation, so a frame sitting at the edge of one
-    window is dominated by the neighboring window that has it near its
-    center. This is the MT3-inspired overlap-and-blend: a chord held across a
-    window boundary is emitted as one stable event instead of flickering
-    between the two windows' predictions.
+    Uses 50% overlap (hop = _HOP_FRAMES) with symmetric padding.
 
-    Returns (results, number_of_windows_blended).
+    Returns array of shape [T_overlap, _WINDOW, _FEATURE_DIM].
     """
+    T = len(features)
+    pad = np.zeros((_WINDOW // 2, _FEATURE_DIM), dtype=np.float32)
+    padded = np.concatenate([pad, features, pad], axis=0)
+
+    T_overlap = (T + _HOP_FRAMES - 1) // _HOP_FRAMES
+    windows = np.zeros((T_overlap, _WINDOW, _FEATURE_DIM), dtype=np.float32)
+    for k in range(T_overlap):
+        start = k * _HOP_FRAMES
+        windows[k] = padded[start : start + _WINDOW]
+    return windows
+
+
+def _merge_overlapping_predictions(
+    window_probs: np.ndarray,
+    num_frames: int,
+) -> np.ndarray:
+    """Merge per-window predictions using triangular windowing overlap-and-blend.
+
+    Args:
+        window_probs: Shape [T_overlap, _WINDOW, _NUM_CLASSES], per-frame
+            probability distributions from each overlapping window.
+        num_frames: Original frame count T (before padding/overlap).
+
+    Returns:
+        Merged probabilities of shape [T, _NUM_CLASSES].
+    """
+    T_overlap, W, N = window_probs.shape
+    accum_probs = np.zeros((num_frames, N), dtype=np.float64)
+    accum_weights = np.zeros(num_frames, dtype=np.float64)
+
+    for k in range(T_overlap):
+        for p in range(W):
+            f = k * _HOP_FRAMES + p - _WINDOW // 2
+            if 0 <= f < num_frames:
+                w = float(_TRIANGULAR_WINDOW[p])
+                accum_weights[f] += w
+                accum_probs[f] += w * window_probs[k, p]
+
+    merged = accum_probs / accum_weights[:, None].clip(1e-8)
+    return merged.astype(np.float32)
+
+
+_BOUNDARY_PENALTY_FRAMES = 2
+_BOUNDARY_PENALTY_MIN = 0.7
+
+
+def _apply_boundary_penalty(probs: np.ndarray) -> np.ndarray:
+    """Apply multiplicative confidence penalty near internal window boundaries.
+
+    Reduces confidence for frames within _BOUNDARY_PENALTY_FRAMES of every
+    original non-overlapping window edge (every _WINDOW frames). This makes
+    the Viterbi decoder prefer self-transitions at boundaries, reducing
+    spurious chord changes.
+
+    Probabilities are re-normalized after penalty to preserve emission strength.
+
+    Args:
+        probs: Shape [T, _NUM_CLASSES], merged probability distributions.
+
+    Returns:
+        Penalized and re-normalized probabilities (rows sum to 1.0).
+    """
+    T = probs.shape[0]
+    result = probs.copy()
+
+    boundary_indices = list(range(_WINDOW, T, _WINDOW))
+
+    for b in boundary_indices:
+        for d in range(-_BOUNDARY_PENALTY_FRAMES, _BOUNDARY_PENALTY_FRAMES + 1):
+            idx = b + d
+            if 0 <= idx < T:
+                distance = abs(d)
+                if distance == 0:
+                    penalty = _BOUNDARY_PENALTY_MIN
+                else:
+                    penalty = _BOUNDARY_PENALTY_MIN + (1.0 - _BOUNDARY_PENALTY_MIN) * (distance / _BOUNDARY_PENALTY_FRAMES)
+                result[idx] *= penalty
+
+    # Re-normalize to preserve emission strength
+    row_sums = result.sum(axis=1, keepdims=True)
+    row_sums = np.where(row_sums == 0, 1.0, row_sums)
+    result = result / row_sums
+
+    return result
+
+
+def _run_keras_raw(y: np.ndarray, sr: int) -> list[dict]:
+    """Run inference using the full Keras CRNN model.
+
+    The model outputs (batch, 277) — a single classification per window.
+    We expand these per-window predictions to a per-frame timeline by
+    accumulating votes from all windows that cover each frame position.
+    """
+    windows, hop = _extract_features(y, sr)
+    model = _get_keras_model()
+
+    T_overlap = len(windows)
+
+    # Model outputs (batch, 277) — single classification per window
+    all_probs = np.zeros((T_overlap, _NUM_CLASSES), dtype=np.float32)
+
+    for start in range(0, T_overlap, _BATCH_CHUNK):
+        end = min(start + _BATCH_CHUNK, T_overlap)
+        chunk = windows[start:end]
+        pred = model.predict(chunk, verbose=0)
+        if isinstance(pred, dict):
+            pred = pred["chord_probs"]
+        elif isinstance(pred, list):
+            pred = pred[0]  # Ordering-sensitive fallback
+        all_probs[start:end] = pred
+
+    # Diagnostic: check per-window prediction diversity
+    window_preds = np.argmax(all_probs, axis=1)
+    unique_preds = np.unique(window_preds, return_counts=True)
+    window_bc = np.bincount(window_preds)
+    top_indices = np.argsort(-window_bc)[:5]
+    logger.info("Keras per-window predictions: %d windows, %d unique chords", T_overlap, len(unique_preds[0]))
+    for idx in top_indices:
+        count = int(window_bc[idx])
+        logger.info("  %s: %d windows (%.1f%%)", CHORD_VOCAB[idx], count, 100.0 * count / T_overlap)
+
+    # Expand per-window predictions to per-frame timeline
+    # Each window covers _WINDOW frames at _HOP_FRAMES stride
+    T = T_overlap * _HOP_FRAMES - _WINDOW // 2
+    merged_probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+    counts = np.zeros(T, dtype=np.float32)
+
+    for i in range(T_overlap):
+        frame_start = i * _HOP_FRAMES
+        frame_end = frame_start + _WINDOW
+        for f in range(frame_start, min(frame_end, T)):
+            merged_probs[f] += all_probs[i]
+            counts[f] += 1
+
+    # Normalize by vote count
+    valid = counts > 0
+    merged_probs[valid] /= counts[valid, np.newaxis]
+
+    results = []
+    for i in range(T):
+        pred_idx = int(np.argmax(merged_probs[i]))
+        results.append({
+            "time": i * _HOP_SEC,
+            "chord": CHORD_VOCAB[pred_idx],
+            "confidence": float(merged_probs[i][pred_idx]),
+            "probs": merged_probs[i],
+        })
+    return results
+
+
+def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
+    """Run inference using the TFLite model.
+
+    The model outputs (batch, 277) — a single classification per window.
+    Uses vote-accumulation to expand per-window predictions to per-frame
+    timeline, matching the Keras inference path.
+    """
+    windows, hop = _extract_features(y, sr)
+
     interp = _get_interpreter()
     inp_detail = interp.get_input_details()[0]
     outp_detail = interp.get_output_details()[0]
 
-    T = len(features)
-    half = _WINDOW // 2
-    pad = np.zeros((half, _FEATURE_DIM), dtype=np.float32)
-    padded = np.concatenate([pad, features, pad], axis=0)
+    T_overlap = len(windows)
 
-    centers, frame_weights = _window_layout(T)
-    acc = np.zeros((T, len(CHORD_VOCAB)), dtype=np.float64)
-    weight_sum = np.zeros(T, dtype=np.float64)
+    all_probs = np.empty((T_overlap, _NUM_CLASSES), dtype=np.float32)
 
-    for k, c in enumerate(centers):
-        window = padded[c : c + _WINDOW]
-        if len(window) < _WINDOW:
-            window = np.concatenate(
-                [window, np.zeros((_WINDOW - len(window), _FEATURE_DIM), dtype=np.float32)],
-                axis=0,
-            )
-        interp.set_tensor(inp_detail["index"], window[np.newaxis, :, :])
+    for start in range(0, T_overlap, _BATCH_CHUNK):
+        end = min(start + _BATCH_CHUNK, T_overlap)
+        chunk = windows[start:end]
+        interp.set_tensor(inp_detail["index"], chunk)
         interp.invoke()
-        probs = interp.get_tensor(outp_detail["index"])[0].astype(np.float64)
-        acc += frame_weights[k][:, None] * probs[None, :]
-        weight_sum += frame_weights[k]
+        output = interp.get_tensor(outp_detail["index"])
+        all_probs[start:end] = output
+
+    # Vote-accumulation: each window's prediction votes for all 128 frames
+    T = T_overlap * _HOP_FRAMES - _WINDOW // 2
+    merged_probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+    counts = np.zeros(T, dtype=np.float32)
+
+    for i in range(T_overlap):
+        frame_start = i * _HOP_FRAMES
+        frame_end = frame_start + _WINDOW
+        for f in range(frame_start, min(frame_end, T)):
+            merged_probs[f] += all_probs[i]
+            counts[f] += 1
+
+    valid = counts > 0
+    merged_probs[valid] /= counts[valid, np.newaxis]
 
     results = []
-    for f in range(T):
-        if weight_sum[f] <= 0:
-            pred_idx = 0
-            confidence = 0.0
-        else:
-            blended = acc[f] / weight_sum[f]
-            pred_idx = int(np.argmax(blended))
-            confidence = float(blended[pred_idx])
+    for i in range(T):
+        pred_idx = int(np.argmax(merged_probs[i]))
         results.append({
-            "time": f * _HOP_SEC,
+            "time": i * _HOP_SEC,
             "chord": CHORD_VOCAB[pred_idx],
-            "confidence": confidence,
+            "confidence": float(merged_probs[i][pred_idx]),
+            "probs": merged_probs[i],
         })
-    return results, len(centers)
-
-
-def _apply_boundary_penalty(results: list[dict]) -> int:
-    """Scale down confidence of predictions within edge frames of the track.
-
-    The first/last ``_BOUNDARY_PENALTY_FRAMES`` frames sit at the ends of the
-    feature sequence where the window context is zero-padded — the model's
-    least reliable region. Confidence is multiplied by
-    ``_BOUNDARY_CONFIDENCE_FACTOR`` there, reducing false positives at
-    segment edges. Returns the number of penalized frames.
-    """
-    n = len(results)
-    if n == 0:
-        return 0
-    edge = min(_BOUNDARY_PENALTY_FRAMES, (n + 1) // 2)
-    penalized = 0
-    for i in range(n):
-        if i < edge or i >= n - edge:
-            results[i]["confidence"] *= _BOUNDARY_CONFIDENCE_FACTOR
-            penalized += 1
-    return penalized
-
-
-def _edge_flicker_events(results: list[dict], boundary_frames: int = _BOUNDARY_PENALTY_FRAMES) -> int:
-    """Count raw-frame chord changes occurring inside the boundary zones.
-
-    These are exactly the segment-edge flicker events that overlap-and-blend
-    and the boundary confidence penalty are designed to suppress. Exposed as
-    a per-job metric so boundary flicker is observable.
-    """
-    n = len(results)
-    if n < 2:
-        return 0
-    edge = min(boundary_frames, (n + 1) // 2)
-    zones = set(range(edge)) | set(range(n - edge, n))
-    return sum(
-        1
-        for i in range(1, n)
-        if results[i]["chord"] != results[i - 1]["chord"] and (i in zones or i - 1 in zones)
-    )
-
-
-def _run_tflite_raw(y: np.ndarray, sr: int) -> list[dict]:
-    import librosa
-
-    hop = int(sr * _HOP_SEC)
-
-    # Extract 36-bin CQT
-    cqt = librosa.cqt(y=y, sr=sr, hop_length=hop, n_bins=36, bins_per_octave=12)
-    cqt = np.abs(cqt)
-    cqt = cqt.T.astype(np.float32)
-
-    # Normalize per frame
-    norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
-    cqt = cqt / norms
-
-    # Extract bass channel (bins 0-3)
-    bass = cqt[:, :4]
-
-    # Concatenate: [36 CQT + 4 bass] = [T, 40]
-    features = np.concatenate([cqt, bass], axis=1)
-
-    # Overlap-and-blend inference (Commit 100: MT3 tie mechanism)
-    results, blend_windows = _predict_overlap_blend(features)
-    logger.info("Chord inference: blended %d overlapping windows", blend_windows)
-
-    penalized = _apply_boundary_penalty(results)
-    logger.info("Chord inference: boundary confidence penalty applied to %d frames", penalized)
-
-    edge_flicker = _edge_flicker_events(results)
-    logger.info("Chord inference: %d edge-flicker events after blending", edge_flicker)
-
     return results
 
 
-def _boundary_metrics_for_frames(results: list[dict]) -> dict:
-    """Recompute the Commit 100 boundary-tie metrics for a raw frame list.
+def _run_chroma_raw(y: np.ndarray, sr: int, hop_length: int = 512) -> list[dict]:
+    """Run chord estimation via chroma template matching (no neural model needed).
 
-    Pure and cheap, so callers (including tests that mock
-    ``_run_tflite_raw``) can always produce a consistent metrics dict from
-    whatever frame list was actually consumed.
+    Uses cosine similarity between per-frame chroma vectors and a restricted
+    chord template set (maj, min, 7, maj7, min7, N). The output probability
+    distribution is projected back into the full 277-class space so the
+    downstream Viterbi decoder sees a consistent schema regardless of which
+    inference path produced the emissions.
+
+    Less accurate than the CRNN but always available, and now restricted to
+    qualities that 12-bin chroma can actually discriminate.
     """
-    T = len(results)
-    edge = min(_BOUNDARY_PENALTY_FRAMES, (T + 1) // 2)
+    import librosa
+
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length)
+    chroma = chroma.T.astype(np.float32)
+
+    templates = _build_chroma_templates()  # [_NUM_CHROMA, 12]
+    n_idx_chroma = _CHROMA_TO_IDX["N"]
+
+    T = len(chroma)
+    chroma_probs = np.zeros((T, _NUM_CHROMA), dtype=np.float32)
+
+    for i in range(T):
+        frame = chroma[i]
+        norm = np.linalg.norm(frame)
+        if norm < 1e-8:
+            chroma_probs[i, n_idx_chroma] = 1.0
+            continue
+
+        frame_norm = frame / norm
+        similarities = templates @ frame_norm
+
+        softmax_sim = similarities - similarities.max()
+        exp_sim = np.exp(softmax_sim * 5.0)
+        exp_sim /= exp_sim.sum()
+        chroma_probs[i] = exp_sim
+
+    all_probs = _project_chroma_to_full(chroma_probs)
+
+    chroma_times = librosa.frames_to_time(np.arange(T), sr=sr, hop_length=hop_length)
+
+    results = []
+    for i in range(T):
+        pred_idx = int(np.argmax(all_probs[i]))
+        results.append({
+            "time": float(chroma_times[i]),
+            "chord": CHORD_VOCAB[pred_idx],
+            "confidence": float(all_probs[i][pred_idx]),
+            "probs": all_probs[i],
+        })
+    return results
+
+
+def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
+    """Run chord inference using the best available model.
+
+    Chain: Keras → TFLite → Chroma template matching.
+    Falls through to chroma when the neural model produces mostly N (no-chord)
+    predictions, which indicates the model has low confidence for this audio.
+    """
+    global _last_inference_tier
+
+    try:
+        raw_frames = _run_keras_raw(y, sr)
+        _last_inference_tier = "crnn"
+        logger.info("Chord inference: %d frames (Keras CRNN)", len(raw_frames))
+        if _neural_model_too_noisy(raw_frames):
+            logger.warning("CRNN model predicts >80%% N chords; falling through to TFLite")
+        else:
+            return raw_frames
+    except Exception as exc:
+        logger.warning("Keras inference unavailable: %s", exc)
+
+    try:
+        raw_frames = _run_tflite_raw(y, sr)
+        _last_inference_tier = "crnn"
+        logger.info("Chord inference: %d frames (TFLite CRNN)", len(raw_frames))
+        if not _neural_model_too_noisy(raw_frames):
+            return raw_frames
+        logger.warning("TFLite model predicts >80%% N chords; falling back to chroma")
+    except Exception as exc:
+        logger.warning("TFLite inference unavailable: %s", exc)
+
+    _last_inference_tier = "chroma"
+    raw_frames = _run_chroma_raw(y, sr)
+    logger.warning("Falling back to chroma template matching (%d frames)", len(raw_frames))
+    return raw_frames
+
+
+def _neural_model_too_noisy(raw_frames: list[dict], n_threshold: float = 0.80) -> bool:
+    """Check if the neural model's predictions are dominated by N (no-chord).
+
+    When >80% of frames are N, the model likely can't find meaningful chords
+    in this audio, and chroma template matching should be preferred.
+    """
+    if not raw_frames:
+        return True
+    n_count = sum(1 for f in raw_frames if f.get("chord") == "N")
+    ratio = n_count / len(raw_frames)
+    if ratio >= n_threshold:
+        logger.info("Model predictions: %.1f%% N chords (%d/%d frames) — quality gate triggered", 100.0 * ratio, n_count, len(raw_frames))
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Chroma template cache
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def _build_chroma_templates() -> np.ndarray:
+    """Build 12-bin chroma templates for the restricted chroma vocabulary.
+
+    Returns:
+        np.ndarray of shape [_NUM_CHROMA, 12], row-normalized.
+
+    Only the discriminable qualities (maj, min, 7, maj7, min7, N) are
+    included. The Keras/TFLite models still operate over the full 277-class
+    vocabulary; this restricted set is used only by the chroma fallback
+    (see :func:`_run_chroma_raw`).
+    """
+    templates = np.zeros((_NUM_CHROMA, 12), dtype=np.float32)
+
+    for idx, chord_label in enumerate(CHROMA_VOCAB):
+        if chord_label == "N":
+            templates[idx] = 1.0 / 12
+            continue
+
+        root_str, quality = chord_label.split(":")
+        root_idx = _ROOTS.index(root_str)
+        intervals = _CHORD_INTERVALS.get(quality, [0, 4, 7])
+
+        template = np.zeros(12, dtype=np.float32)
+        for semitone in intervals:
+            pitch_class = (root_idx + semitone) % 12
+            weight = 1.0 if semitone <= 12 else 0.7
+            template[pitch_class] += weight
+            template[(pitch_class + 7) % 12] += 0.3
+
+        norm = np.linalg.norm(template)
+        if norm > 0:
+            template /= norm
+        templates[idx] = template
+
+    return templates
+
+
+def _project_chroma_to_full(chroma_probs: np.ndarray) -> np.ndarray:
+    """Project [T, _NUM_CHROMA] probabilities to [T, 277] full vocabulary.
+
+    The chroma path can only emit chords from the restricted 61-class
+    vocabulary. To feed the Viterbi decoder (which expects the full 277
+    classes), the chroma probability mass for each restricted class is
+    placed entirely at the corresponding full-vocabulary index. All other
+    full-vocabulary entries get zero probability.
+    """
+    T = chroma_probs.shape[0]
+    full_probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+    # Fancy-index assignment: for each frame, write the chroma column i
+    # into the full column _CHROMA_TO_FULL_IDX[i].
+    full_probs[:, _CHROMA_TO_FULL_IDX] = chroma_probs
+    return full_probs
+
+
+# ---------------------------------------------------------------------------
+# Beat pooling, half-beat detection, key estimation
+# ---------------------------------------------------------------------------
+
+def _detect_resolution_mode(beats: list[float], bpm: float) -> str:
+    """Detect if the beat grid is already at half-beat (8th-note) resolution.
+
+    Returns:
+        "half-beat" if median inter-beat interval < 65% of expected quarter-note.
+        "beat" otherwise.
+    """
+    if len(beats) < 3:
+        return "beat"
+
+    intervals = np.diff(beats)
+    median_interval = float(np.median(intervals))
+    expected_qn = 60.0 / bpm if bpm > 0 else 0.5
+
+    if median_interval < expected_qn * SUBDIVISION_RATIO:
+        return "half-beat"
+    return "beat"
+
+
+def _pool_beat_window(
+    window_frames: list[dict],
+    start_t: float,
+    end_t: float,
+) -> dict:
+    """Pool frame predictions within a beat window into a full distribution.
+
+    Returns:
+        Dict with timestamp, probs [25], top candidates, confidence gap,
+        first/second half distributions, and metadata.
+    """
+    probs_sum = np.zeros(_NUM_CLASSES, dtype=np.float64)
+    first_half_sum = np.zeros(_NUM_CLASSES, dtype=np.float64)
+    second_half_sum = np.zeros(_NUM_CLASSES, dtype=np.float64)
+    mid_t = (start_t + end_t) / 2
+
+    for f in window_frames:
+        p = f["probs"]
+        probs_sum += p
+        if f["time"] < mid_t:
+            first_half_sum += p
+        else:
+            second_half_sum += p
+
+    total = probs_sum.sum()
+    if total > 0:
+        probs = probs_sum / total
+        first_half = first_half_sum / max(first_half_sum.sum(), 1e-10)
+        second_half = second_half_sum / max(second_half_sum.sum(), 1e-10)
+    else:
+        probs = np.ones(_NUM_CLASSES, dtype=np.float64) / _NUM_CLASSES
+        first_half = probs.copy()
+        second_half = probs.copy()
+
+    top_idx = int(np.argmax(probs))
+    top_conf = float(probs[top_idx])
+
+    second_probs = probs.copy()
+    second_probs[top_idx] = -1
+    second_idx = int(np.argmax(second_probs))
+    second_conf = float(probs[second_idx])
+
+    first_half_top = int(np.argmax(first_half))
+    second_half_top = int(np.argmax(second_half))
+
     return {
-        "blend_windows": len(_window_layout(T)[0]),
-        "boundary_frames_penalized": sum(1 for i in range(T) if i < edge or i >= T - edge),
-        "edge_flicker_events": _edge_flicker_events(results),
+        "timestamp": start_t,
+        "probs": probs.astype(np.float32),
+        "top_chord_idx": top_idx,
+        "top_confidence": top_conf,
+        "second_chord_idx": second_idx,
+        "second_confidence": second_conf,
+        "confidence_gap": top_conf - second_conf,
+        "frame_count": len(window_frames),
+        "duration_sec": end_t - start_t,
+        "first_half_probs": first_half.astype(np.float32),
+        "second_half_probs": second_half.astype(np.float32),
+        "first_half_top": first_half_top,
+        "second_half_top": second_half_top,
     }
 
 
-def infer_chords(
-    audio_path: Path,
-    beat_grid: BeatGrid,
-    key_signature: str | None = None,
-) -> tuple[ChordTimeline, dict]:
-    """Run TFLite chord inference with Viterbi post-processing.
+def _split_half_beat(beat_data: dict) -> list[dict]:
+    """Split a beat into two half-beat events when tie-detection triggers.
 
-    Args:
-        audio_path: Path to the audio file.
-        beat_grid: Beat grid for quantization.
-        key_signature: Optional key signature (e.g., "C major") for
-            key-constrained Viterbi decoding.
+    Trigger: confidence_gap < 0.15 AND first_half_top != second_half_top.
 
     Returns:
-        Tuple of (ChordTimeline, metrics dict with flicker rate, beat alignment, etc.).
+        List of two beat-data dicts (first half, second half).
+        Returns original beat as single-element list if duration < MIN_HALF_BEAT_DURATION.
     """
+    if beat_data["duration_sec"] < MIN_HALF_BEAT_DURATION:
+        logger.debug("Skipping half-beat split at t=%.2f: duration=%.3fs < min=%.1fs",
+                     beat_data["timestamp"], beat_data["duration_sec"], MIN_HALF_BEAT_DURATION)
+        return [beat_data]
+    duration = beat_data["duration_sec"]
+    half_dur = duration / 2
+
+    first = {
+        "timestamp": beat_data["timestamp"],
+        "probs": beat_data["first_half_probs"],
+        "top_chord_idx": beat_data["first_half_top"],
+        "top_confidence": float(beat_data["first_half_probs"][beat_data["first_half_top"]]),
+        "second_chord_idx": 0,
+        "second_confidence": 0.0,
+        "confidence_gap": 0.0,
+        "frame_count": beat_data["frame_count"],
+        "duration_sec": half_dur,
+        "is_half_beat": True,
+    }
+
+    second = {
+        "timestamp": beat_data["timestamp"] + half_dur,
+        "probs": beat_data["second_half_probs"],
+        "top_chord_idx": beat_data["second_half_top"],
+        "top_confidence": float(beat_data["second_half_probs"][beat_data["second_half_top"]]),
+        "second_chord_idx": 0,
+        "second_confidence": 0.0,
+        "confidence_gap": 0.0,
+        "frame_count": beat_data["frame_count"],
+        "duration_sec": half_dur,
+        "is_half_beat": True,
+    }
+
+    return [first, second]
+
+
+def _estimate_key_from_audio(y: np.ndarray, sr: int) -> tuple[int, str, float]:
+    """Estimate musical key using Krumhansl-Schmuckler correlation.
+
+    Returns:
+        (key_root_0_11, mode_str, confidence_float)
+    """
+    import librosa
+
+    KS_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+    KS_MINOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+
+    try:
+        chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+        chroma_mean = chroma.mean(axis=1)
+    except Exception:
+        return 0, "major", 0.0
+
+    chroma_list = chroma_mean.tolist()
+    if len(chroma_list) != 12:
+        return 0, "major", 0.0
+
+    best_corr = -math.inf
+    best: tuple[int, str] = (0, "major")
+
+    for mode, profile in [("major", KS_MAJOR), ("minor", KS_MINOR)]:
+        for shift in range(12):
+            rotated = profile[shift:] + profile[:shift]
+            c = sum(a * b for a, b in zip(chroma_list, rotated))
+            if c > best_corr:
+                best_corr = c
+                best = (shift, mode)
+
+    confidence = min(best_corr / 50.0, 1.0)
+    return best[0], best[1], confidence
+
+
+# ---------------------------------------------------------------------------
+# Main inference entry point
+# ---------------------------------------------------------------------------
+
+def _reject_spurious_n(
+    optimal_path: np.ndarray,
+    emission_probs: np.ndarray,
+    n_idx: int,
+    entropy_threshold: float = 0.4,
+    confidence_gap_threshold: float = 0.15,
+) -> np.ndarray:
+    """Reject N predictions where the model is uncertain.
+
+    If the Viterbi path labels a frame as N but the emission distribution
+    has high entropy (flat, uncertain) and the top-2 confidence gap is
+    small, the N is likely a spurious escape-hatch prediction. We replace
+    it with the next-highest non-N class.
+
+    Args:
+        optimal_path: (T,) Viterbi-decoded chord indices.
+        emission_probs: (T, C) per-frame probability distributions.
+        n_idx: Index of the N (no-chord) class.
+        entropy_threshold: Frames with emission entropy above this are
+            considered uncertain (default 0.4, range ~0-4.0 for 25 classes).
+        confidence_gap_threshold: If top-2 confidence gap is below this,
+            the model is split between two predictions.
+
+    Returns:
+        Corrected path with spurious N predictions replaced.
+    """
+    corrected = optimal_path.copy()
+    n_mask = optimal_path == n_idx
+    if not n_mask.any():
+        return corrected
+
+    probs_n_frames = emission_probs[n_mask]
+    # Normalized entropy: H / log(C) — ranges [0, 1]
+    log_c = np.log(float(emission_probs.shape[1]))
+    entropy = -np.sum(probs_n_frames * np.log(probs_n_frames + 1e-10), axis=1) / log_c
+
+    for i, is_n in enumerate(np.where(n_mask)[0]):
+        if entropy[i] < entropy_threshold:
+            continue
+        frame_probs = emission_probs[is_n]
+        top2_indices = np.argpartition(-frame_probs, 2)[:2]
+        top2_conf = frame_probs[top2_indices]
+        sorted_confs = np.sort(top2_conf)[::-1]
+        gap = sorted_confs[0] - sorted_confs[1] if len(sorted_confs) > 1 else 1.0
+        if gap < confidence_gap_threshold:
+            # Replace with top non-N prediction
+            candidates = np.argsort(-frame_probs)
+            for candidate in candidates:
+                if candidate != n_idx:
+                    corrected[is_n] = candidate
+                    break
+
+    return corrected
+
+
+def infer_chords(audio_path: Path, beat_grid: BeatGrid, *, detect_bass: bool = False, detect_voicing: bool = False) -> ChordTimeline:
     try:
         import librosa
     except ImportError as exc:
@@ -436,27 +974,40 @@ def infer_chords(
         y, sr = librosa.load(str(audio_path), sr=TARGET_SR, mono=True)
     except FileNotFoundError:
         logger.warning("Audio file not found at %s. Returning empty chord timeline.", audio_path)
-        return ChordTimeline(events=[]), {}
+        return ChordTimeline(events=[])
     except Exception as exc:
         raise RuntimeError(f"Error loading audio file {audio_path}: {exc}") from exc
 
-    # Verify model is loadable before running expensive chroma extraction
-    try:
-        _get_interpreter()
-    except (FileNotFoundError, RuntimeError) as exc:
-        logger.error("Chord model unavailable: %s", exc)
-        return ChordTimeline(events=[]), {}
+    raw_frames = _run_inference(y, sr)
 
-    raw_frames = _run_tflite_raw(y, sr)
-    logger.info("Chord inference: %d raw frames from %s", len(raw_frames), audio_path.name)
+    if raw_frames and "probs" in raw_frames[0]:
+        all_probs = np.array([f["probs"] for f in raw_frames])
+        penalized_probs = _apply_boundary_penalty(all_probs)
+        boundary_changes = int(np.sum(np.abs(np.diff(np.argmax(penalized_probs, axis=1))) != 0) -
+                                np.sum(np.abs(np.diff(np.argmax(all_probs, axis=1))) != 0))
+        logger.debug("Boundary penalty applied: %d fewer frame-level chord changes", max(0, -boundary_changes))
+        for i, f in enumerate(raw_frames):
+            f["probs"] = penalized_probs[i]
+            pred_idx = int(np.argmax(penalized_probs[i]))
+            f["chord"] = CHORD_VOCAB[pred_idx]
+            f["confidence"] = float(penalized_probs[i][pred_idx])
 
     track_peak_db = _get_segment_db(y)
     relative_threshold_db = track_peak_db - 30.0
 
-    events: list[ChordEvent] = []
     beats = beat_grid.beats
+    if len(beats) < 2:
+        return ChordTimeline(events=[])
+
+    if beat_grid.bpm < 30 or beat_grid.bpm > 240:
+        logger.warning("Unusual BPM detected: %.1f (range 30-240 expected)", beat_grid.bpm)
+
     frame_times = np.array([f["time"] for f in raw_frames])
-    silent_beats: set[int] = set()
+
+    resolution_mode = _detect_resolution_mode(beats, beat_grid.bpm)
+    logger.info("Beat grid resolution mode: %s (bpm=%.1f)", resolution_mode, beat_grid.bpm)
+
+    beat_data_list: list[dict] = []
 
     for i in range(len(beats) - 1):
         start_t = beats[i]
@@ -465,64 +1016,499 @@ def infer_chords(
         end_sample = int(end_t * sr)
         y_slice = y[start_sample:end_sample]
         segment_db = _get_segment_db(y_slice)
+
         if segment_db < relative_threshold_db:
-            events.append(ChordEvent(timestamp=start_t, chord="N", confidence=1.0))
-            silent_beats.add(i)
+            n_probs = np.zeros(_NUM_CLASSES, dtype=np.float32)
+            n_idx = _CHORD_TO_IDX.get("N", _NUM_CLASSES - 1)
+            n_probs[n_idx] = 1.0
+            beat_data_list.append({
+                "timestamp": start_t,
+                "probs": n_probs,
+                "top_chord_idx": n_idx,
+                "top_confidence": 1.0,
+                "second_chord_idx": 0,
+                "second_confidence": 0.0,
+                "confidence_gap": 1.0,
+                "frame_count": 0,
+                "duration_sec": end_t - start_t,
+                "first_half_probs": n_probs.copy(),
+                "second_half_probs": n_probs.copy(),
+                "first_half_top": n_idx,
+                "second_half_top": n_idx,
+                "is_half_beat": False,
+            })
             continue
+
         start_idx = int(np.searchsorted(frame_times, start_t, side="left"))
         end_idx = int(np.searchsorted(frame_times, end_t, side="left"))
         window_frames = raw_frames[start_idx:end_idx]
+
         if not window_frames:
-            events.append(
-                ChordEvent(timestamp=start_t, chord=events[-1].chord if events else "N", confidence=0.5)
-            )
+            prev_chord = beat_data_list[-1]["top_chord_idx"] if beat_data_list else _CHORD_TO_IDX.get("N", _NUM_CLASSES - 1)
+            prev_probs = np.zeros(_NUM_CLASSES, dtype=np.float32)
+            prev_probs[prev_chord] = 1.0
+            beat_data_list.append({
+                "timestamp": start_t,
+                "probs": prev_probs,
+                "top_chord_idx": prev_chord,
+                "top_confidence": 0.5,
+                "second_chord_idx": 0,
+                "second_confidence": 0.0,
+                "confidence_gap": 0.5,
+                "frame_count": 0,
+                "duration_sec": end_t - start_t,
+                "first_half_probs": prev_probs.copy(),
+                "second_half_probs": prev_probs.copy(),
+                "first_half_top": prev_chord,
+                "second_half_top": prev_chord,
+                "is_half_beat": False,
+            })
             continue
-        chord_confidences: Counter = Counter()
-        for f in window_frames:
-            chord_confidences[f["chord"]] += f["confidence"]
-        if not chord_confidences:
-            most_common_chord = "N"
-            avg_confidence = 0.5
+
+        bd = _pool_beat_window(window_frames, start_t, end_t)
+        bd["is_half_beat"] = False
+        beat_data_list.append(bd)
+
+    if resolution_mode == "beat":
+        expanded_data: list[dict] = []
+        for bd in beat_data_list:
+            if (
+                bd["confidence_gap"] < TIE_THRESHOLD
+                and bd["frame_count"] >= 2
+                and bd["first_half_top"] != bd["second_half_top"]
+                and bd["probs"][bd["first_half_top"]] != 1.0
+            ):
+                splits = _split_half_beat(bd)
+                expanded_data.extend(splits)
+                logger.debug(
+                    "Half-beat split at t=%.2f: %s → %s",
+                    bd["timestamp"],
+                    CHORD_VOCAB[splits[0]["top_chord_idx"]],
+                    CHORD_VOCAB[splits[1]["top_chord_idx"]],
+                )
+            else:
+                expanded_data.append(bd)
+        beat_data_list = expanded_data
+    else:
+        for bd in beat_data_list:
+            bd["is_half_beat"] = True
+
+    T = len(beat_data_list)
+    emission_probs = np.zeros((T, _NUM_CLASSES), dtype=np.float32)
+    duration_beats_arr = np.zeros(T, dtype=np.float32)
+    timestamps = np.zeros(T, dtype=np.float64)
+
+    beat_unit = 60.0 / beat_grid.bpm if beat_grid.bpm > 0 else 0.5
+
+    for t, bd in enumerate(beat_data_list):
+        emission_probs[t] = bd["probs"]
+        duration_beats_arr[t] = bd["duration_sec"] / beat_unit
+        timestamps[t] = bd["timestamp"]
+
+    key_root, key_mode, key_conf = _estimate_key_from_audio(y, sr)
+    logger.info("Detected key: %s %s (confidence=%.2f)", _ROOTS[key_root], key_mode, key_conf)
+
+    try:
+        from app.chord_transitions import (
+            apply_key_constraint,
+            get_transition_matrix,
+        )
+        from app.viterbi_decoder import ViterbiChordDecoder, probs_to_log_probs
+
+        base_matrix = get_transition_matrix()
+
+        # Chroma-based key detection routinely returns 0.35-0.4 on real songs.
+        # Lowered threshold from 0.6 to 0.3 so key constraint activates more
+        # often — even a weak key signal is better than none for restricting
+        # the 277-class transition space.
+        if key_conf >= 0.3:
+            trans_matrix = apply_key_constraint(base_matrix, key_root, key_mode)
         else:
-            most_common_chord = chord_confidences.most_common(1)[0][0]
-            winning_confidences = [f["confidence"] for f in window_frames if f["chord"] == most_common_chord]
-            avg_confidence = sum(winning_confidences) / len(winning_confidences)
-        events.append(ChordEvent(timestamp=start_t, chord=most_common_chord, confidence=round(avg_confidence, 3)))
+            trans_matrix = base_matrix
+            logger.info("Key confidence low (%.2f), using unconstrained transition matrix", key_conf)
 
-    # Viterbi post-processing (replaces simple _smooth_chords)
-    transition_matrix = load_transition_matrix()
-    smoothed, metrics = postprocess_chords(
-        events=events,
-        beats=beats,
-        downbeats=beat_grid.downbeats,
-        transition_matrix=transition_matrix,
-        key_signature=key_signature,
-        frame_predictions=raw_frames,
-    )
-    # Commit 100: surface segment-boundary tie metrics (overlap blend windows,
-    # edge confidence penalties, and the edge flicker those mechanisms suppress).
-    metrics = {**metrics, **_boundary_metrics_for_frames(raw_frames)}
+        trans_log_probs = probs_to_log_probs(trans_matrix)
+        emission_log_probs = probs_to_log_probs(emission_probs)
 
-    # Re-apply volume-thresholded silence: beats that were gated to "N"
-    # must remain "N" regardless of Viterbi's smoothing.
-    re_applied = []
-    for i, ev in enumerate(smoothed.events):
-        if i in silent_beats and ev.chord != "N":
-            re_applied.append(ChordEvent(
-                timestamp=ev.timestamp,
-                chord="N",
-                confidence=1.0,
+        decoder = ViterbiChordDecoder(
+            transition_log_probs=trans_log_probs,
+            vocab_size=_NUM_CLASSES,
+            chord_vocab=CHORD_VOCAB,
+        )
+
+        optimal_path, _ = decoder.decode(
+            emission_log_probs,
+            duration_beats=duration_beats_arr,
+            # Bumped from 0.5 to 1.5 to bias the decoder toward self-transitions.
+            # With the synthetic transition matrix and noisy chroma emissions, the
+            # default 0.5 produced ~3 changes/bar; 1.5 brings it under 1.5/bar.
+            duration_penalty_weight=1.5,
+        )
+
+        # Diagnostic: compare emission predictions vs Viterbi path
+        emission_preds = np.argmax(emission_probs, axis=1)
+        emission_unique = np.unique(emission_preds, return_counts=True)
+        viterbi_unique = np.unique(optimal_path, return_counts=True)
+        emission_changes = np.sum(np.diff(emission_preds) != 0)
+        viterbi_changes = np.sum(np.diff(optimal_path) != 0)
+        changes_per_bar_vit = viterbi_changes / (T / 4) if T >= 4 else 0.0
+        logger.info("Viterbi diagnostic: emission=%d unique chords, %d changes; viterbi=%d unique chords, %d changes (%.1f/bar)",
+                     len(emission_unique[0]), emission_changes, len(viterbi_unique[0]), viterbi_changes, changes_per_bar_vit)
+        if changes_per_bar_vit > 3.0:
+            logger.warning("Viterbi chord change rate high (%.1f/bar) — consider tuning duration_penalty_weight or TIE_THRESHOLD", changes_per_bar_vit)
+        # Top-5 emission — use np.bincount directly (avoids unique lookup crash)
+        emit_bc = np.bincount(emission_preds)
+        emit_top = np.argsort(-emit_bc)[:5]
+        for idx in emit_top:
+            cnt = int(emit_bc[idx])
+            logger.info("  emit: %s %.1f%%", CHORD_VOCAB[idx], 100.0 * cnt / T)
+        # Top-5 Viterbi — use np.bincount directly
+        vit_bc = np.bincount(optimal_path)
+        vit_top = np.argsort(-vit_bc)[:5]
+        for idx in vit_top:
+            cnt = int(vit_bc[idx])
+            logger.info("  viterbi: %s %.1f%%", CHORD_VOCAB[idx], 100.0 * cnt / T)
+
+        # Commit 148 Phase 1c: entropy-based N escape hatch rejection
+        n_idx = _CHORD_TO_IDX.get("N", _NUM_CLASSES - 1)
+        corrected_path = _reject_spurious_n(optimal_path, emission_probs, n_idx)
+
+        events: list[ChordEvent] = []
+        for t in range(T):
+            chord_idx = int(corrected_path[t])
+            events.append(ChordEvent(
+                timestamp=float(timestamps[t]),
+                chord=CHORD_VOCAB[chord_idx],
+                confidence=round(float(emission_probs[t, chord_idx]), 3),
             ))
-        else:
-            re_applied.append(ev)
-    smoothed = ChordTimeline(events=re_applied)
 
-    chord_count = len([e for e in smoothed.events if e.chord != "N"])
+    except Exception as exc:
+        logger.error("Viterbi decoding failed: %s. Falling back to beat-pooling + median filter.", exc)
+        events = _fallback_to_pooling(beat_data_list)
+        events = _smooth_chords(events)
+
+    # Commit B8: post-hoc bass note and inversion detection from audio
+    if detect_bass and events and 'y' in locals() and 'sr' in locals():
+        _attach_bass_and_inversion(events, y, sr)
+
+    # Commit B9: post-hoc voicing detection from audio (best-effort, lower accuracy than MT3)
+    if detect_voicing and events and 'y' in locals() and 'sr' in locals():
+        _infer_voicing_from_audio(events, y, sr)
+
+    chord_count = len([e for e in events if e.chord != "N"])
+    logger.info("Chord inference complete: %d/%d non-N chords", chord_count, len(events))
+
+    try:
+        from app.chord_metrics import assemble_chord_metrics
+        metadata = assemble_chord_metrics(events, beat_grid)
+    except Exception as exc:
+        logger.warning("Failed to compute chord metrics for %s: %s", audio_path, exc)
+        metadata = None
+
+    return ChordTimeline(events=events, metadata=metadata)
+
+
+def _attach_bass_and_inversion(events: list[ChordEvent], y: np.ndarray, sr: int) -> None:
+    """Post-hoc attach bass notes and inversion to chord events from audio.
+
+    For each event, extracts a window of audio centered on the event timestamp
+    and uses spectral peak detection in the bass range (65-200 Hz) to determine
+    the bass note. Inversion is then derived from chord intervals.
+
+    Args:
+        events: Chord events to annotate in-place.
+        y: Full audio waveform.
+        sr: Sample rate.
+    """
+    window_s = 0.5
+    half_window_samples = int(window_s / 2 * sr)
+    for event in events:
+        if event.chord == "N":
+            event.bass = None
+            event.inversion = None
+            continue
+        center = int(event.timestamp * sr)
+        start = max(0, center - half_window_samples)
+        end = min(len(y), center + half_window_samples)
+        segment = y[start:end]
+        bass_note = _detect_bass_note(segment, sr)
+        if bass_note is not None:
+            root = event.chord.split(":")[0] if ":" in event.chord else None
+            if root is not None and bass_note == root:
+                event.bass = None
+            else:
+                event.bass = bass_note
+                quality = event.chord.split(":")[1] if ":" in event.chord else None
+                if root is not None and quality is not None:
+                    event.inversion = _identify_inversion(root, quality, bass_note)
+
+
+# Commit B9: CRNN voicing detection threshold (lower than MT3 path)
+_VOICING_AUDIO_THRESHOLD = 0.5
+
+_OPEN_STR_MIDI = {6: 40, 5: 45, 4: 50, 3: 55, 2: 59, 1: 64}
+
+
+def _infer_voicing_from_audio(events: list[ChordEvent], y: np.ndarray, sr: int) -> None:
+    """Post-hoc estimate voicing shape from audio spectral content via CQT.
+
+    Uses CQT energy at each string's expected MIDI pitch to estimate string
+    activations, then runs the same CAGED template matching as the MT3 path.
+    Accepts lower confidence (threshold 0.5) per spec for the CRNN fallback.
+
+    Mutates events in-place with voicing_shape and voicing_position.
+    """
+    try:
+        import librosa
+    except ImportError:
+        return
+
+    window_s = 0.5
+    half_window = int(window_s / 2 * sr)
+    hop_length = 512
+    n_bins = 84  # C0 to C7 covers guitar range (E2=40 to E6=88)
+    fmin = librosa.note_to_hz('C1')
+
+    for event in events:
+        if event.chord == "N" or ":" not in event.chord:
+            continue
+
+        center = int(event.timestamp * sr)
+        start = max(0, center - half_window)
+        end = min(len(y), center + half_window)
+        segment = y[start:end]
+
+        if len(segment) < hop_length:
+            continue
+
+        cqt = np.abs(librosa.cqt(segment, sr=sr, hop_length=hop_length, n_bins=n_bins, fmin=fmin))
+        cqt_mean = np.mean(cqt, axis=1)
+
+        # Detect energy at each string's MIDI pitch, looking for spectral peaks
+        string_frets: dict[int, int] = {}
+        for string in range(1, 7):
+            open_midi = _OPEN_STR_MIDI[string]
+            # Check open string and first 12 frets
+            best_fret = -1
+            best_energy = 0.0
+            for fret in range(13):
+                midi = open_midi + fret
+                if midi < 0 or midi > 88:
+                    continue
+                bin_idx = int(round(12 * np.log2(librosa.midi_to_hz(midi) / fmin)))
+                if 0 <= bin_idx < n_bins:
+                    energy = cqt_mean[bin_idx]
+                    if energy > best_energy:
+                        best_energy = energy
+                        best_fret = fret
+            if best_energy > 0.01:  # noise floor
+                string_frets[string] = best_fret
+            else:
+                string_frets[string] = -1
+
+        # Run template matching
+        root = event.chord.split(":")[0]
+        quality = event.chord.split(":")[1]
+
+        best_shape: str | None = None
+        best_position: int | None = None
+        best_score = 0.0
+
+        for shape_name, shape_def in _CAGED_VOICING_SHAPES.items():
+            shape_strings = shape_def["strings"]
+            pattern = shape_def["pattern"]
+            shiftable = shape_def["shiftable"]
+            max_pos = 12 if shiftable else 0
+
+            for root_fret in range(max_pos + 1):
+                expected = [pattern[i] + root_fret for i, _ in enumerate(shape_strings)]
+                match_count = 0
+                total = len(shape_strings)
+                for i, s in enumerate(shape_strings):
+                    e = expected[i]
+                    a = string_frets.get(s, -1)
+                    if e == a and a >= 0:
+                        match_count += 1
+                    elif a >= 0:
+                        match_count -= 0.5
+                    elif e >= 0 and a == -1:
+                        match_count -= 0.3
+                extra_penalty = sum(0.4 for s in range(1, 7) if s not in shape_strings and string_frets.get(s, -1) >= 0)
+                score = max(0.0, min(1.0, (match_count / total) - extra_penalty))
+                if score > best_score:
+                    best_score = score
+                    best_shape = shape_name
+                    best_position = root_fret
+
+        if best_score >= _VOICING_AUDIO_THRESHOLD and best_shape is not None:
+            event.voicing_shape = best_shape
+            event.voicing_position = best_position
+
+
+def _fallback_to_pooling(beat_data_list: list[dict]) -> list[ChordEvent]:
+    """Fallback: use beat-pooling winners without Viterbi."""
+    events = []
+    for bd in beat_data_list:
+        events.append(ChordEvent(
+            timestamp=bd["timestamp"],
+            chord=CHORD_VOCAB[bd["top_chord_idx"]],
+            confidence=round(bd["top_confidence"], 3),
+        ))
+    return events
+
+
+# ---------------------------------------------------------------------------
+# Dual-path confidence-weighted stem fusion (Commit 112)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class DualPathResult:
+    """Result of dual-path chord inference with confidence-weighted fusion."""
+
+    timeline: ChordTimeline
+    stem_confidence: float
+    instrument_confusion: float
+    fusion_log: list[dict]
+
+
+def infer_chords_dual_path(
+    stem_path: Path,
+    mix_path: Path,
+    beat_grid: BeatGrid,
+    stem_confidence: float,
+    *,
+    detect_bass: bool = False,
+    detect_voicing: bool = False,
+) -> DualPathResult:
+    """Run chord inference on both stem and mix, fuse predictions weighted by stem quality.
+
+    When stem_confidence is high (>0.8), prefer stem path.
+    When stem_confidence is low (<0.3), prefer full mix path.
+    When moderate, blend both predictions.
+
+    Instrument confusion is detected when stem and mix predict different chords
+    on a significant fraction of beats.
+    """
+    # Fast path: no fusion needed when stem is fully trusted or paths are identical
+    if stem_path == mix_path or stem_confidence >= 1.0:
+        timeline = infer_chords(stem_path, beat_grid, detect_bass=detect_bass, detect_voicing=detect_voicing)
+        return DualPathResult(
+            timeline=timeline,
+            stem_confidence=stem_confidence,
+            instrument_confusion=0.0,
+            fusion_log=[],
+        )
+
+    stem_timeline = infer_chords(stem_path, beat_grid, detect_bass=detect_bass, detect_voicing=detect_voicing)
+    mix_timeline = infer_chords(mix_path, beat_grid, detect_bass=detect_bass, detect_voicing=detect_voicing)
+
+    stem_events = stem_timeline.events
+    mix_events = mix_timeline.events
+
+    # Both timelines should have the same beat grid, so timestamps align.
+    # Build a lookup from timestamp → mix event for robust matching.
+    mix_by_ts: dict[float, ChordEvent] = {}
+    for e in mix_events:
+        mix_by_ts[round(e.timestamp, 4)] = e
+
+    fused_events: list[ChordEvent] = []
+    fusion_log: list[dict] = []
+    disagreements = 0
+
+    w = stem_confidence  # shorthand
+
+    for stem_ev in stem_events:
+        ts_key = round(stem_ev.timestamp, 4)
+        mix_ev = mix_by_ts.get(ts_key)
+
+        if mix_ev is None:
+            # No corresponding mix event — use stem prediction as-is
+            fused_events.append(stem_ev)
+            continue
+
+        # Fusion: pick the chord from the path weighted by stem confidence.
+        # When both agree, no fusion ambiguity.
+        if stem_ev.chord == mix_ev.chord:
+            fused_events.append(ChordEvent(
+                timestamp=stem_ev.timestamp,
+                chord=stem_ev.chord,
+                confidence=round(
+                    w * stem_ev.confidence + (1 - w) * mix_ev.confidence, 3
+                ),
+                bass=stem_ev.bass,
+                inversion=stem_ev.inversion,
+                voicing_shape=stem_ev.voicing_shape,
+                voicing_position=stem_ev.voicing_position,
+            ))
+            continue
+
+        # Disagreement: use confidence-weighted selection
+        stem_score = w * stem_ev.confidence
+        mix_score = (1 - w) * mix_ev.confidence
+
+        if stem_score >= mix_score:
+            chosen_chord = stem_ev.chord
+            chosen_conf = stem_ev.confidence
+            chosen_bass = stem_ev.bass
+            chosen_inversion = stem_ev.inversion
+            chosen_voicing_shape = stem_ev.voicing_shape
+            chosen_voicing_position = stem_ev.voicing_position
+        else:
+            chosen_chord = mix_ev.chord
+            chosen_conf = mix_ev.confidence
+            chosen_bass = mix_ev.bass
+            chosen_inversion = mix_ev.inversion
+            chosen_voicing_shape = mix_ev.voicing_shape
+            chosen_voicing_position = mix_ev.voicing_position
+
+        # Blend confidence: weighted average reflects both sources
+        blended_conf = w * stem_ev.confidence + (1 - w) * mix_ev.confidence
+
+        fused_events.append(ChordEvent(
+            timestamp=stem_ev.timestamp,
+            chord=chosen_chord,
+            confidence=round(blended_conf, 3),
+            bass=chosen_bass,
+            inversion=chosen_inversion,
+            voicing_shape=chosen_voicing_shape,
+            voicing_position=chosen_voicing_position,
+        ))
+
+        disagreements += 1
+        fusion_log.append({
+            "timestamp": stem_ev.timestamp,
+            "stem_chord": stem_ev.chord,
+            "stem_confidence": round(stem_ev.confidence, 3),
+            "mix_chord": mix_ev.chord,
+            "mix_confidence": round(mix_ev.confidence, 3),
+            "chosen": chosen_chord,
+            "fusion_weight": round(w, 3),
+        })
+
+    total = len(stem_events)
+    instrument_confusion = disagreements / total if total > 0 else 0.0
+
+    # Preserve Viterbi metadata from stem timeline if available
+    metadata = stem_timeline.metadata.copy() if stem_timeline.metadata else {}
+    metadata["dual_path"] = {
+        "stem_confidence": round(w, 4),
+        "instrument_confusion": round(instrument_confusion, 4),
+        "disagreement_count": disagreements,
+        "total_beats": total,
+        "fusion_weight": round(w, 4),
+    }
+
+    fused_timeline = ChordTimeline(events=fused_events, metadata=metadata)
+
     logger.info(
-        "Chord inference complete: %d/%d non-N chords, flicker=%.2f%%, beat_align=%.1f%%",
-        chord_count,
-        len(smoothed.events),
-        metrics.get("flicker_rate", 0) * 100,
-        metrics.get("beat_alignment_downbeat", 0) * 100,
+        "Dual-path fusion complete: %d/%d beats disagreed (%.1f%% confusion), "
+        "stem_conf=%.2f",
+        disagreements, total, 100.0 * instrument_confusion, w,
     )
-    return smoothed, metrics
+
+    return DualPathResult(
+        timeline=fused_timeline,
+        stem_confidence=round(w, 4),
+        instrument_confusion=round(instrument_confusion, 4),
+        fusion_log=fusion_log,
+    )

@@ -1,11 +1,13 @@
-"""LLM-Enhanced Chord Correction & Roman Numeral Analysis (Commit 114).
+"""Chord enrichment: deterministic Roman numeral labels + LLM correction (Commit 116).
 
-Post-processes raw ChordTimeline through a lightweight LLM (Claude Haiku) to:
-1. Correct improbable chord changes based on key context
-2. Add Roman numeral functional labels (I, ii, V7, IV, etc.)
-3. Cache results with SHA256 to avoid redundant LLM calls
+Two-layer enrichment:
+  1. Deterministic Roman numeral assignment (always runs, zero latency).
+  2. LLM-based improbable-chord correction (background thread, optional).
 
-Inspired by ChordMini's Gemini integration and MT3's musical reasoning.
+The LLM layer calls Claude Haiku to correct improbable chord changes and
+refine Roman numeral labels for non-diatonic chords. It runs as a background
+worker after the main analysis completes, following the same pattern as
+coach hydration in jobs.py.
 """
 
 from __future__ import annotations
@@ -19,433 +21,501 @@ import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from typing import Any
 
+from app.chord_vocab import CHORD_INTERVALS, ROOT_NOTES
 from app.schemas import ChordEvent, ChordTimeline
 
 logger = logging.getLogger("harmoniq.chord_enrichment")
+logger.setLevel(logging.INFO)
 
 # ---------------------------------------------------------------------------
-# Configuration
+# LLM configuration
 # ---------------------------------------------------------------------------
-ENRICHMENT_MODEL = os.getenv("HARMONIQ_ENRICHMENT_MODEL", "claude-haiku-4-5")
-ENRICHMENT_TIMEOUT_SECONDS = max(1.0, float(os.getenv("HARMONIQ_ENRICHMENT_TIMEOUT_MS", "10000")) / 1000.0)
-ENRICHMENT_MAX_RETRIES = 1
-CONFIDENCE_DELTA_THRESHOLD = float(os.getenv("HARMONIQ_ENRICHMENT_DELTA", "0.15"))
-RATE_LIMIT_INTERVAL = float(os.getenv("HARMONIQ_ENRICHMENT_RATE_LIMIT_S", "10.0"))
 
-# Models to try in order when the primary model returns 404.
-_ENRICHMENT_MODEL_FALLBACK: list[str] = [
-    "claude-haiku-4-5-20251001",
-    "claude-sonnet-4-5-20250929",
-]
+MODEL_ID = os.getenv("HARMONIQ_CHORD_ENRICHMENT_MODEL", "claude-haiku-4-5-20251001")
+ENRICHMENT_TIMEOUT_SECONDS = max(
+    0.5, float(os.getenv("HARMONIQ_CHORD_ENRICHMENT_TIMEOUT_MS", "12000")) / 1000.0
+)
+ENRICHMENT_RATE_LIMIT_SECONDS = 10.0
+ENRICHMENT_CONFIDENCE_THRESHOLD = 0.15
 
-# Module-level executor for background enrichment
-_ENRICHMENT_EXECUTOR = ThreadPoolExecutor(max_workers=2)
+_EXECUTOR = ThreadPoolExecutor(max_workers=2)
 
-# In-process rate limiter
-_last_enrichment_call: float = 0.0
+# Lazy import for anthropic (avoids hard dependency at module load time)
+_Anthropic: type | None = None
 
-# In-process SHA256 cache: key → enriched result
-_enrichment_cache: dict[str, list[dict]] = {}
-_CACHE_MAX_SIZE = 256
+# In-memory cache: SHA256(key + chord_timeline_json) → enriched timeline dict
+_cache: dict[str, dict[str, Any]] = {}
 
-# Roman numeral mapping: quality → Roman numeral pattern
-_ROMAN_NUMERALS: dict[str, dict[str, str]] = {
-    "major": {
-        "I": "I", "II": "II", "III": "III", "IV": "IV", "V": "V", "VI": "VI", "VII": "VII",
-    },
-    "minor": {
-        "I": "i", "II": "ii", "III": "iii", "IV": "iv", "V": "v", "VI": "vi", "VII": "vii",
-    },
+
+# ---------------------------------------------------------------------------
+# Deterministic Roman numeral assignment
+# ---------------------------------------------------------------------------
+
+# Diatonic degree → Roman numeral mapping (semitone offset from key root)
+_MAJOR_DEGREE_ROMAN: dict[int, str] = {
+    0: "I",
+    2: "ii",
+    4: "iii",
+    5: "IV",
+    7: "V",
+    9: "vi",
+    11: "vii°",
 }
 
-# Quality to chord function mapping
-_QUALITY_FUNCTION: dict[str, str] = {
-    "maj": "", "min": "m", "7": "7", "maj7": "maj7", "min7": "m7",
-    "9": "9", "min9": "m9", "maj9": "maj9", "11": "11", "13": "13",
-    "7#9": "7#9", "7b9": "7b9", "7#5": "7#5", "7b5": "7b5", "alt7": "7alt",
-    "sus2": "sus2", "sus4": "sus4", "7sus4": "7sus4",
-    "dim": "dim", "dim7": "dim7", "aug": "aug", "6": "6", "min6": "m6",
+_MINOR_DEGREE_ROMAN: dict[int, str] = {
+    0: "i",
+    2: "ii°",
+    3: "III",
+    5: "iv",
+    7: "v",
+    8: "VI",
+    10: "VII",
 }
 
-# Semitone offsets from key root to scale degrees
-# Major key: I=0, ii=2, iii=4, IV=5, V=7, vi=9, vii=11
-_MAJOR_SEMITONE_TO_DEGREE = {0: 1, 2: 2, 4: 3, 5: 4, 7: 5, 9: 6, 11: 7}
-# Minor key: i=0, ii=2, III=3, iv=5, v=7, VI=8, VII=10
-_MINOR_SEMITONE_TO_DEGREE = {0: 1, 2: 2, 3: 3, 5: 4, 7: 5, 8: 6, 10: 7}
-
-_NOTE_TO_SEMITONE = {
-    "C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5,
-    "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11,
+# Seventh chord quality suffixes → Roman numeral suffix
+_SEVENTH_SUFFIX: dict[str, str] = {
+    "7": "7",
+    "maj7": "maj7",
+    "min7": "7",
+    "9": "9",
+    "min9": "9",
+    "maj9": "maj9",
+    "11": "11",
+    "13": "13",
+    "7#9": "7#9",
+    "7b9": "7b9",
+    "7#5": "7#5",
+    "7b5": "7b5",
+    "alt7": "7alt",
+    "dim7": "°7",
+    "7sus4": "7sus4",
 }
 
-# Degree → Roman numeral (lowercase = minor quality expected in key)
-_DEGREE_TO_ROMAN_MAJOR = {1: "I", 2: "ii", 3: "iii", 4: "IV", 5: "V", 6: "vi", 7: "vii"}
-_DEGREE_TO_ROMAN_MINOR = {1: "i", 2: "ii", 3: "III", 4: "iv", 5: "v", 6: "VI", 7: "VII"}
+# Qualities that are "minor-family" (lowercase Roman numerals)
+_MINOR_FAMILY = {"min", "min7", "min9", "min6", "dim", "dim7"}
+
+# Qualities that are "major-family" (uppercase Roman numerals)
+_MAJOR_FAMILY = {"maj", "maj7", "maj9", "6"}
+
+# Qualities that are "dominant" (uppercase Roman numerals)
+_DOMINANT_FAMILY = {"7", "7#9", "7b9", "7#5", "7b5", "alt7", "7sus4"}
+
+# Suspended chords — treat as major-family for case
+_SUS_FAMILY = {"sus2", "sus4"}
+
+# Augmented — treat as major-family for case
+_AUG_FAMILY = {"aug"}
 
 
-# ---------------------------------------------------------------------------
-# Deterministic Roman Numeral computation (no LLM needed)
-# ---------------------------------------------------------------------------
-def compute_roman_numeral(chord: str, key_signature: str | None) -> str | None:
-    """Compute Roman numeral for a chord given the key signature.
+def _parse_key(key: str) -> tuple[int, str]:
+    """Parse key string like 'C major', 'A minor', 'C', 'A#m' → (root_semitone, mode).
 
-    This is a deterministic music-theory computation, not LLM-based.
-    Returns None when key is unknown or chord is "N".
+    Returns (root_semitone 0-11, 'major'|'minor').
     """
-    if not key_signature or chord == "N":
-        return None
+    key = key.strip()
+    if not key:
+        return 0, "major"
 
-    # Parse key: "C major" → root="C", mode="major"; "A minor" → root="A", mode="minor"
-    parts = key_signature.strip().split()
-    if len(parts) < 2:
-        return None
-    key_root = parts[0]
-    mode = parts[1].lower()
+    # Handle patterns: "C major", "C minor", "A minor", "Cmaj", "Amin", "C", "Am"
+    m = re.match(r"^([A-G][#b]?)(.*)$", key)
+    if not m:
+        return 0, "major"
 
-    # Parse chord: "C:maj" → root="C", quality="maj"; "G:7" → root="G", quality="7"
-    chord_parts = chord.split(":")
-    if len(chord_parts) < 2:
-        return None
-    chord_root = chord_parts[0]
-    quality = chord_parts[1]
+    root_str = m.group(1)
+    mode_str = m.group(2).strip().lower()
 
-    # Compute semitone offset from key root to chord root
-    key_semitone = _NOTE_TO_SEMITONE.get(key_root)
-    chord_semitone = _NOTE_TO_SEMITONE.get(chord_root)
-    if key_semitone is None or chord_semitone is None:
-        return None
+    # Normalize root to semitone
+    root_str = root_str.replace("b", "")
+    if root_str not in ROOT_NOTES:
+        return 0, "major"
+    root_semi = ROOT_NOTES.index(root_str)
 
-    interval = (chord_semitone - key_semitone) % 12
+    # Determine mode
+    if mode_str in ("minor", "min", "m"):
+        return root_semi, "minor"
+    return root_semi, "major"
 
-    # Look up scale degree from semitone interval
-    if mode == "minor":
-        degree = _MINOR_SEMITONE_TO_DEGREE.get(interval)
-        degree_map = _DEGREE_TO_ROMAN_MINOR
+
+def _parse_chord_symbol(chord: str) -> tuple[int, str]:
+    """Parse chord symbol like 'C:maj', 'D:min7', 'G:7', 'N' → (root_semitone, quality).
+
+    Returns (-1, 'N') for no-chord.
+    """
+    if chord == "N" or not chord:
+        return -1, "N"
+
+    parts = chord.split(":")
+    if len(parts) != 2:
+        return -1, "N"
+
+    root_str, qual = parts
+    root_str = root_str.replace("b", "")
+    if root_str not in ROOT_NOTES:
+        return -1, "N"
+
+    return ROOT_NOTES.index(root_str), qual
+
+
+def _root_to_degree(root_semitone: int, key_root: int) -> int:
+    """Convert absolute root semitone to scale degree (0-11) relative to key root."""
+    return (root_semitone - key_root) % 12
+
+
+def _is_minor_quality(qual: str) -> bool:
+    """Check if chord quality implies minor-family (lowercase Roman)."""
+    return qual in _MINOR_FAMILY
+
+
+def _is_major_quality(qual: str) -> bool:
+    """Check if chord quality implies major-family (uppercase Roman)."""
+    return qual in (_MAJOR_FAMILY | _DOMINANT_FAMILY | _SUS_FAMILY | _AUG_FAMILY)
+
+
+def compute_roman_numeral(chord: str, key: str) -> str:
+    """Compute Roman numeral label for a chord in a given key.
+
+    Handles diatonic triads, sevenths, and non-diatonic chords.
+
+    Examples:
+        compute_roman_numeral("C:maj", "C major") → "I"
+        compute_roman_numeral("D:min7", "C major") → "ii7"
+        compute_roman_numeral("G:7", "C major") → "V7"
+        compute_roman_numeral("F#:min", "C major") → "#IVm"
+        compute_roman_numeral("N", "C major") → ""
+    """
+    if chord == "N" or not chord:
+        return ""
+
+    key_root, key_mode = _parse_key(key)
+    root_semi, qual = _parse_chord_symbol(chord)
+    if root_semi < 0:
+        return ""
+
+    degree = _root_to_degree(root_semi, key_root)
+
+    # Build Roman numeral from degree
+    base_roman = _get_base_roman(degree, key_mode, qual)
+
+    # Add quality suffix for seventh/extended chords
+    suffix = _get_quality_suffix(qual)
+
+    return base_roman + suffix
+
+
+def _get_base_roman(degree: int, key_mode: str, qual: str) -> str:
+    """Get the base Roman numeral (no quality suffix) for a diatonic degree."""
+    if key_mode == "minor":
+        diatonic_map = _MINOR_DEGREE_ROMAN
     else:
-        degree = _MAJOR_SEMITONE_TO_DEGREE.get(interval)
-        degree_map = _DEGREE_TO_ROMAN_MAJOR
+        diatonic_map = _MAJOR_DEGREE_ROMAN
 
-    if degree is None:
-        return None
+    # Check if this degree is in the diatonic map
+    if degree in diatonic_map:
+        base = diatonic_map[degree]
+        # Adjust case based on actual chord quality
+        if _is_minor_quality(qual):
+            return base.lower() if base[0].isupper() else base
+        if _is_major_quality(qual):
+            return base.upper() if base[0].islower() else base
+        return base
 
-    roman_base = degree_map[degree]
+    # Non-diatonic: compute accidental prefix
+    # Find closest diatonic degree
+    diatonic_degrees = sorted(diatonic_map.keys())
+    closest = min(diatonic_degrees, key=lambda d: min((degree - d) % 12, (d - degree) % 12))
+    distance = (degree - closest) % 12
 
-    # Adjust case based on actual chord quality vs expected quality in key
-    # Lowercase = minor/dim quality, Uppercase = major/aug quality
-    is_major_quality = quality in ("maj", "6") or quality.startswith("maj")
-    is_minor_quality = quality in ("min",) or quality.startswith("min") or quality == "dim"
+    base = diatonic_map[closest]
 
-    if is_major_quality and roman_base[0].islower():
-        roman_base = roman_base.upper()
-    elif is_minor_quality and roman_base[0].isupper():
-        roman_base = roman_base.lower()
+    # Build accidental prefix
+    if distance <= 6:
+        prefix = "#" * distance
+    else:
+        prefix = "b" * (12 - distance)
 
-    # Build suffix: only include extension/alteration part
-    suffix = ""
-    if quality in ("7", "9", "11", "13"):
-        suffix = quality
-    elif quality in ("min7", "min9"):
-        suffix = "7" if quality == "min7" else "9"
-    elif quality in ("maj7", "maj9"):
-        suffix = "maj7" if quality == "maj7" else "maj9"
-    elif quality in ("7#9", "7b9", "7#5", "7b5", "alt7", "7sus4"):
-        suffix = quality
-    elif quality in ("sus2", "sus4"):
-        suffix = quality
-    elif quality == "dim7":
-        suffix = "dim7"
-    elif quality == "min6":
-        suffix = "6"
-    elif quality == "6":
-        suffix = "6"
-
-    return f"{roman_base}{suffix}"
+    # Apply case based on quality
+    roman = prefix + base
+    if _is_minor_quality(qual):
+        return roman.lower() if roman[len(prefix)].isupper() else roman
+    if _is_major_quality(qual):
+        return roman.upper() if roman[len(prefix)].islower() else roman
+    return roman
 
 
-# ---------------------------------------------------------------------------
-# SHA256 cache helpers
-# ---------------------------------------------------------------------------
-def _cache_key(chord_timeline: ChordTimeline, key_signature: str | None) -> str:
-    """Compute SHA256 cache key from chord timeline + key."""
-    payload = json.dumps({
-        "chords": [(e.timestamp, e.chord, e.confidence) for e in chord_timeline.events],
-        "key": key_signature,
-    }, sort_keys=True)
-    return hashlib.sha256(payload.encode()).hexdigest()
+def _get_quality_suffix(qual: str) -> str:
+    """Get the quality suffix for a Roman numeral from chord quality.
+
+    For simple triads (maj, min, dim, aug), the base Roman numeral already
+    encodes the quality via case (uppercase=major, lowercase=minor) and the
+    ° symbol. Only add suffixes for seventh/extended/special qualities.
+    """
+    # Simple triads — no suffix needed (case + ° handle it)
+    if qual in ("maj", "min", "dim", "aug"):
+        return ""
+    if qual in ("sus2",):
+        return "sus2"
+    if qual in ("sus4",):
+        return "sus4"
+    if qual in ("6",):
+        return "6"
+    if qual in ("min6",):
+        return "m6"
+    # Seventh/extended qualities
+    return _SEVENTH_SUFFIX.get(qual, "")
 
 
-def _get_cached(cache_key: str) -> list[dict] | None:
-    """Retrieve cached enrichment result."""
-    return _enrichment_cache.get(cache_key)
+def assign_roman_numerals(events: list[ChordEvent], key: str) -> list[ChordEvent]:
+    """Assign deterministic Roman numeral labels to all chord events.
 
-
-def _set_cached(cache_key: str, result: list[dict]) -> None:
-    """Store enrichment result in cache with LRU eviction."""
-    if len(_enrichment_cache) >= _CACHE_MAX_SIZE:
-        # Evict oldest entry
-        oldest_key = next(iter(_enrichment_cache))
-        del _enrichment_cache[oldest_key]
-    _enrichment_cache[cache_key] = result
-
-
-# ---------------------------------------------------------------------------
-# Rate limiter
-# ---------------------------------------------------------------------------
-def _rate_limit_wait() -> None:
-    """Block until rate limit interval has elapsed since last call."""
-    global _last_enrichment_call
-    elapsed = time.time() - _last_enrichment_call
-    if elapsed < RATE_LIMIT_INTERVAL:
-        time.sleep(RATE_LIMIT_INTERVAL - elapsed)
-    _last_enrichment_call = time.time()
+    Returns the same list (mutated in place) for convenience.
+    """
+    for event in events:
+        event.roman_numeral = compute_roman_numeral(event.chord, key)
+    return events
 
 
 # ---------------------------------------------------------------------------
-# LLM call (follows coach.py pattern)
+# LLM enrichment (background worker)
 # ---------------------------------------------------------------------------
-def _call_llm_enrichment(prompt: str) -> str | None:
-    """Call Claude Haiku for chord enrichment. Returns raw text or None on failure."""
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+
+def _build_enrichment_prompt(
+    key: str,
+    chord_batch: list[dict[str, Any]],
+) -> str:
+    """Build the prompt for Claude Haiku chord correction."""
+    chords_str = json.dumps(
+        [{"timestamp": c["timestamp"], "chord": c["chord"]} for c in chord_batch],
+        indent=None,
+    )
+    return (
+        f"Given key={key}, correct improbable chord changes in this timeline. "
+        f"Return a JSON array preserving original timestamps, with corrected chord "
+        f"symbols and Roman numeral labels (e.g., I, ii, V7, IV). "
+        f"Only correct chords that are clearly wrong for the key — if a chord is "
+        f"plausible, keep the original. "
+        f"Input: {chords_str}"
+    )
+
+
+def _call_claude_enrichment(
+    *,
+    api_key: str,
+    key: str,
+    chord_batch: list[dict[str, Any]],
+) -> list[dict[str, Any]] | None:
+    """Call Claude Haiku for chord correction. Returns parsed JSON or None on failure."""
     if not api_key:
-        logger.debug("No ANTHROPIC_API_KEY set; skipping LLM enrichment")
         return None
 
-    _rate_limit_wait()
+    # Kill-switch
+    if os.getenv("HARMONIQ_SKIP_CHORD_ENRICHMENT", "").strip() == "1":
+        return None
+
+    # Pytest guard
+    if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("HARMONIQ_ENABLE_ENRICHMENT_IN_TESTS") != "1":
+        return None
 
     try:
-        from anthropic import Anthropic
+        # Lazy import anthropic to avoid hard dependency at module load time
+        global _Anthropic
+        if _Anthropic is None:
+            from anthropic import Anthropic as _AnthropicCls
+            _Anthropic = _AnthropicCls
 
-        client = Anthropic(api_key=api_key)
-        models = [ENRICHMENT_MODEL] + [m for m in _ENRICHMENT_MODEL_FALLBACK if m != ENRICHMENT_MODEL]
-        last_error: Exception | None = None
+        client = _Anthropic(api_key=api_key)
+        prompt = _build_enrichment_prompt(key, chord_batch)
 
-        for model_id in models:
-            try:
-                response = client.messages.create(
-                    model=model_id,
-                    max_tokens=1024,
-                    timeout=ENRICHMENT_TIMEOUT_SECONDS,
-                    messages=[{"role": "user", "content": prompt}],
-                    system=(
-                        "You are a music theory expert. Given a chord progression and key, "
-                        "correct improbable chord changes and add Roman numeral analysis. "
-                        "Return ONLY a JSON array — no markdown, no explanation."
-                    ),
-                )
-                text = response.content[0].text.strip()
-                return text
-            except Exception as exc:
-                last_error = exc
-                if "404" not in str(exc) and type(exc).__name__ != "NotFoundError":
-                    raise
-                logger.warning("enrichment model %s unavailable (404), trying fallback", model_id)
-                continue
+        response = client.messages.create(
+            model=MODEL_ID,
+            max_tokens=1024,
+            temperature=0.0,
+            messages=[{"role": "user", "content": prompt}],
+        )
 
-        logger.warning("LLM enrichment call failed (all models): %s", type(last_error).__name__)
+        text = response.content[0].text if response.content else ""
+
+        # Extract JSON array from response
+        json_match = re.search(r"\[.*\]", text, re.DOTALL)
+        if not json_match:
+            logger.warning("LLM enrichment: no JSON array in response")
+            return None
+
+        parsed = json.loads(json_match.group())
+        if not isinstance(parsed, list):
+            logger.warning("LLM enrichment: response is not a list")
+            return None
+
+        return parsed
+
+    except Exception:
+        logger.exception("LLM enrichment call failed")
         return None
-    except Exception as exc:
-        logger.warning("LLM enrichment call failed: %s", type(exc).__name__)
-        return None
 
 
-# ---------------------------------------------------------------------------
-# Prompt construction
-# ---------------------------------------------------------------------------
-def _build_enrichment_prompt(
-    chord_events: list[ChordEvent],
-    key_signature: str,
-    section_start: float | None = None,
-    section_end: float | None = None,
-) -> str:
-    """Build the LLM prompt for chord correction + Roman numeral labeling."""
-    # Format chord timeline for the LLM
-    chord_lines = []
-    for i, ev in enumerate(chord_events):
-        chord_lines.append(f"  {i}: {ev.chord} (t={ev.timestamp:.2f}s, conf={ev.confidence:.2f})")
-
-    chord_text = "\n".join(chord_lines)
-
-    prompt = f"""Given key={key_signature}, correct improbable chord changes in this timeline.
-
-Chord timeline:
-{chord_text}
-
-Return a JSON array preserving original timestamps, with corrected chord
-symbols and Roman numeral labels (e.g., I, ii, V7, IV).
-
-Each element: {{"index": <int>, "corrected_chord": "<chord>", "roman_numeral": "<roman>", "confidence_delta": <float 0-1>}}
-
-Rules:
-- Only correct chords that are clearly wrong for the key (e.g., F# in key of C major → F)
-- confidence_delta = how much better the corrected chord fits than the original (0 = no change)
-- If a chord is fine as-is, set corrected_chord = original and confidence_delta = 0
-- Roman numerals: uppercase for major (I, IV, V), lowercase for minor (ii, iii, vi)
-- Return ONLY the JSON array, no other text."""
-
-    return prompt
+def _compute_cache_key(key: str, events: list[ChordEvent]) -> str:
+    """Compute SHA256 cache key from key + chord timeline."""
+    timeline_str = json.dumps(
+        [{"t": e.timestamp, "c": e.chord} for e in events],
+        sort_keys=True,
+    )
+    raw = f"{key}|{timeline_str}"
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
-# ---------------------------------------------------------------------------
-# Main enrichment function
-# ---------------------------------------------------------------------------
+def _apply_llm_corrections(
+    events: list[ChordEvent],
+    llm_results: list[dict[str, Any]],
+    key: str,
+) -> int:
+    """Apply LLM corrections to events. Returns count of corrections applied."""
+    # Build lookup by timestamp
+    llm_by_time: dict[float, dict[str, Any]] = {}
+    for item in llm_results:
+        t = item.get("timestamp")
+        if t is not None:
+            llm_by_time[float(t)] = item
+
+    corrected = 0
+    for event in events:
+        llm_item = llm_by_time.get(event.timestamp)
+        if llm_item is None:
+            continue
+
+        llm_chord = llm_item.get("chord", event.chord)
+        llm_roman = llm_item.get("roman_numeral")
+
+        if llm_chord == event.chord:
+            # LLM kept original — still update Roman numeral if provided
+            if llm_roman:
+                event.roman_numeral = llm_roman
+            continue
+
+        # Apply correction: set corrected chord and mark
+        event.llm_corrected_chord = llm_chord
+        event.correction_applied = True
+        event.correction_delta = abs(event.confidence - 0.5)  # heuristic delta
+        event.chord = llm_chord
+
+        # Update Roman numeral from LLM or recompute
+        if llm_roman:
+            event.roman_numeral = llm_roman
+        else:
+            event.roman_numeral = compute_roman_numeral(llm_chord, key)
+
+        corrected += 1
+
+    return corrected
+
+
 def enrich_chord_timeline(
-    chord_timeline: ChordTimeline,
-    key_signature: str | None = None,
-    section_range: tuple[float, float] | None = None,
-) -> tuple[ChordTimeline, dict]:
-    """Enrich chord timeline with LLM correction and Roman numeral labels.
+    events: list[ChordEvent],
+    key: str,
+    *,
+    api_key: str = "",
+) -> tuple[list[ChordEvent], dict[str, Any]]:
+    """Run LLM enrichment on a chord timeline.
 
-    Args:
-        chord_timeline: Raw chord timeline from Viterbi post-processing.
-        key_signature: Song key (e.g., "C major"). If None, Roman numerals are skipped.
-        section_range: Optional (start, end) time range to enrich.
-
-    Returns:
-        Tuple of (enriched ChordTimeline, metrics dict).
+    Returns (enriched_events, metrics) where metrics contains:
+      - corrected_events: int
+      - llm_latency_p50: float | None
+      - llm_latency_p95: float | None
+      - cache_hit: bool
     """
-    if not chord_timeline.events:
-        return chord_timeline, {"enrichment_applied": 0, "llm_called": False}
-
-    # Filter to section range if specified
-    events = chord_timeline.events
-    if section_range is not None:
-        start, end = section_range
-        events = [e for e in events if start <= e.timestamp < end]
-
-    # Check cache
-    cache_key = _cache_key(ChordTimeline(events=events), key_signature)
-    cached = _get_cached(cache_key)
-    if cached is not None:
-        logger.debug("Cache hit for enrichment key=%s", cache_key[:12])
-        enriched = _apply_enrichment(chord_timeline, events, cached, section_range)
-        return enriched, {
-            "enrichment_applied": sum(1 for r in cached if r.get("confidence_delta", 0) > 0),
-            "llm_called": False,
-            "roman_numerals_assigned": sum(1 for r in cached if r.get("roman_numeral")),
-            "cache_hit": True,
-        }
-
-    # Deterministic Roman numerals (no LLM needed)
-    deterministic_results = []
-    for ev in events:
-        roman = compute_roman_numeral(ev.chord, key_signature)
-        deterministic_results.append({
-            "index": events.index(ev),
-            "corrected_chord": ev.chord,
-            "roman_numeral": roman,
-            "confidence_delta": 0.0,
-        })
-
-    # Try LLM enrichment for chord correction
-    llm_called = False
-    if key_signature and len(events) >= 2:
-        prompt = _build_enrichment_prompt(events, key_signature)
-        raw_response = _call_llm_enrichment(prompt)
-        llm_called = raw_response is not None
-
-        if raw_response:
-            try:
-                # Parse LLM response
-                # Strip markdown code fences if present
-                cleaned = raw_response.strip()
-                if cleaned.startswith("```"):
-                    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-                    cleaned = re.sub(r"\s*```$", "", cleaned)
-
-                llm_results = json.loads(cleaned)
-                if isinstance(llm_results, list):
-                    # Merge LLM corrections with deterministic Roman numerals
-                    for llm_item in llm_results:
-                        idx = llm_item.get("index", -1)
-                        if 0 <= idx < len(deterministic_results):
-                            delta = llm_item.get("confidence_delta", 0.0)
-                            if delta > CONFIDENCE_DELTA_THRESHOLD:
-                                deterministic_results[idx]["corrected_chord"] = llm_item.get(
-                                    "corrected_chord", deterministic_results[idx]["corrected_chord"]
-                                )
-                                deterministic_results[idx]["confidence_delta"] = delta
-                            # Always use LLM Roman numeral if available
-                            if llm_item.get("roman_numeral"):
-                                deterministic_results[idx]["roman_numeral"] = llm_item["roman_numeral"]
-            except (json.JSONDecodeError, KeyError, TypeError) as exc:
-                logger.warning("Failed to parse LLM enrichment response: %s", exc)
-
-    # Cache the result
-    _set_cached(cache_key, deterministic_results)
-
-    return _apply_enrichment(chord_timeline, events, deterministic_results, section_range), {
-        "enrichment_applied": sum(1 for r in deterministic_results if r["confidence_delta"] > 0),
-        "llm_called": llm_called,
-        "roman_numerals_assigned": sum(1 for r in deterministic_results if r["roman_numeral"]),
+    metrics: dict[str, Any] = {
+        "corrected_events": 0,
+        "llm_latency_p50": None,
+        "llm_latency_p95": None,
+        "cache_hit": False,
     }
 
+    if not events:
+        return events, metrics
 
-def _apply_enrichment(
-    original_timeline: ChordTimeline,
+    # Always assign deterministic Roman numerals first
+    assign_roman_numerals(events, key)
+
+    # Skip LLM enrichment when no API key or kill-switch active
+    if not api_key:
+        return events, metrics
+
+    if os.getenv("HARMONIQ_SKIP_CHORD_ENRICHMENT", "").strip() == "1":
+        return events, metrics
+
+    # Check cache
+    cache_key = _compute_cache_key(key, events)
+    if cache_key in _cache:
+        cached = _cache[cache_key]
+        metrics["cache_hit"] = True
+        metrics["corrected_events"] = cached.get("corrected_events", 0)
+        # Apply cached corrections
+        _apply_llm_corrections(events, cached.get("llm_results", []), key)
+        return events, metrics
+
+    # Batch events by 30-60s windows
+    batch_size = max(1, int(ENRICHMENT_RATE_LIMIT_SECONDS))
+    batches: list[list[dict[str, Any]]] = []
+    current_batch: list[dict[str, Any]] = []
+    batch_start = events[0].timestamp
+
+    for event in events:
+        current_batch.append({"timestamp": event.timestamp, "chord": event.chord})
+        if len(current_batch) >= batch_size or (event.timestamp - batch_start) >= 60.0:
+            batches.append(current_batch)
+            current_batch = []
+            batch_start = event.timestamp
+    if current_batch:
+        batches.append(current_batch)
+
+    # Call LLM for each batch with rate limiting
+    all_llm_results: list[dict[str, Any]] = []
+    latencies: list[float] = []
+
+    for i, batch in enumerate(batches):
+        if i > 0:
+            time.sleep(ENRICHMENT_RATE_LIMIT_SECONDS)
+
+        t0 = time.time()
+        result = _call_claude_enrichment(
+            api_key=api_key,
+            key=key,
+            chord_batch=batch,
+        )
+        latency = time.time() - t0
+        latencies.append(latency)
+
+        if result is not None:
+            all_llm_results.extend(result)
+
+    # Apply corrections
+    corrected = _apply_llm_corrections(events, all_llm_results, key)
+    metrics["corrected_events"] = corrected
+
+    # Compute latency percentiles
+    if latencies:
+        sorted_lat = sorted(latencies)
+        p50_idx = len(sorted_lat) // 2
+        metrics["llm_latency_p50"] = sorted_lat[p50_idx]
+        p95_idx = int(len(sorted_lat) * 0.95)
+        metrics["llm_latency_p95"] = sorted_lat[min(p95_idx, len(sorted_lat) - 1)]
+
+    # Cache results
+    _cache[cache_key] = {
+        "llm_results": all_llm_results,
+        "corrected_events": corrected,
+    }
+
+    return events, metrics
+
+
+def enrich_lesson_chord_timeline(
     events: list[ChordEvent],
-    results: list[dict],
-    section_range: tuple[float, float] | None,
-) -> ChordTimeline:
-    """Apply enrichment results back to the full chord timeline."""
-    # Build lookup: timestamp → enrichment
-    enrichment_by_ts: dict[float, dict] = {}
-    for r in results:
-        if r["index"] < len(events):
-            enrichment_by_ts[events[r["index"]].timestamp] = r
+    key: str,
+    *,
+    api_key: str = "",
+) -> list[ChordEvent]:
+    """Convenience wrapper: assign Roman numerals + run LLM enrichment.
 
-    enriched_events = []
-    for ev in original_timeline.events:
-        enrichment = enrichment_by_ts.get(ev.timestamp)
-        if enrichment:
-            enriched_events.append(ChordEvent(
-                timestamp=ev.timestamp,
-                chord=enrichment["corrected_chord"],
-                confidence=ev.confidence,
-                roman_numeral=enrichment.get("roman_numeral"),
-                llm_corrected_chord=enrichment["corrected_chord"] if enrichment["confidence_delta"] > 0 else None,
-                correction_delta=enrichment.get("confidence_delta", 0.0),
-            ))
-        else:
-            enriched_events.append(ev)
-
-    return ChordTimeline(events=enriched_events)
-
-
-# ---------------------------------------------------------------------------
-# Background worker (called from jobs.py)
-# ---------------------------------------------------------------------------
-def enrich_chord_timeline_background(
-    job_id: str,
-    chord_timeline: ChordTimeline,
-    key_signature: str | None = None,
-    on_complete: Any | None = None,
-) -> None:
-    """Run chord enrichment in a background thread.
-
-    Args:
-        job_id: Job ID for logging.
-        chord_timeline: Chord timeline to enrich.
-        key_signature: Song key for Roman numeral computation.
-        on_complete: Optional callback(enriched_timeline, metrics) on completion.
+    Returns enriched events.
     """
-    def _worker():
-        try:
-            enriched, metrics = enrich_chord_timeline(
-                chord_timeline,
-                key_signature=key_signature,
-            )
-            logger.info(
-                "chord_enrichment_complete job_id=%s applied=%d llm_called=%s roman=%d",
-                job_id,
-                metrics.get("enrichment_applied", 0),
-                metrics.get("llm_called", False),
-                metrics.get("roman_numerals_assigned", 0),
-            )
-            if on_complete:
-                on_complete(enriched, metrics)
-        except Exception:
-            logger.exception("chord_enrichment_failed job_id=%s", job_id)
-            if on_complete:
-                on_complete(chord_timeline, {"enrichment_applied": 0, "llm_called": False, "error": True})
-
-    _ENRICHMENT_EXECUTOR.submit(_worker)
+    enrich_chord_timeline(events, key, api_key=api_key)
+    return events

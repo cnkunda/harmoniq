@@ -13,6 +13,7 @@ import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { PitchIndicator } from '@/components/PitchIndicator'
 
 import { SkillGraph } from '@/components/SkillGraph'
+import type { Lick } from '@/src/types'
 import { StemMixer } from '@/components/StemMixer'
 import { TabView } from '@/components/TabView'
 import { toast } from '@/components/ToastConfig'
@@ -246,22 +247,22 @@ function StemMixerDevSection() {
       <View className="mb-3 flex-row items-center justify-between">
         <Text className="font-sans text-sm text-cream">Guitar</Text>
         <Switch
-          value={guitarOn}
-          onValueChange={setGuitarOn}
-          disabled={!ready || busy}
-          trackColor={{ false: colors.wood[500], true: '#D4860A80' }}
-          thumbColor={guitarOn ? colors.creamDark : colors.wood[600]}
-        />
+           value={guitarOn}
+           onValueChange={setGuitarOn}
+           disabled={!ready || busy}
+           trackColor={{ false: colors.wood[500], true: 'rgba(212, 165, 116, 0.5)' }}
+           thumbColor={guitarOn ? colors.creamDark : colors.wood[600]}
+         />
       </View>
       <View className="mb-4 flex-row items-center justify-between">
         <Text className="font-sans text-sm text-cream">Drums</Text>
         <Switch
-          value={drumsOn}
-          onValueChange={setDrumsOn}
-          disabled={!ready || busy}
-          trackColor={{ false: colors.wood[500], true: '#D4860A80' }}
-          thumbColor={drumsOn ? colors.creamDark : colors.wood[600]}
-        />
+           value={drumsOn}
+           onValueChange={setDrumsOn}
+           disabled={!ready || busy}
+           trackColor={{ false: colors.wood[500], true: 'rgba(212, 165, 116, 0.5)' }}
+           thumbColor={drumsOn ? colors.creamDark : colors.wood[600]}
+         />
       </View>
 
       <AnimatedPressable haptic="light"
@@ -479,10 +480,6 @@ function FeedbackLayerDevSection() {
 }
 
 export default function DesignPreviewScreen() {
-  if (!__DEV__) {
-    return null
-  }
-
   return (
     <WoodGradient variant="background" className="flex-1">
       <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
@@ -545,7 +542,19 @@ export default function DesignPreviewScreen() {
               <WaveformVisualizer />
               <StemMixer />
               <PitchIndicator />
-              <LickCard />
+              <LickCard lick={{
+                id: 'preview-lick',
+                song_title: 'Gravity',
+                artist: 'John Mayer',
+                key: 'G major',
+                scale: 'G Major Pentatonic',
+                position: 'Position 2',
+                tab_gp5_base64: '',
+                coach_oneliner: 'A masterclass in tension and release — hold that bend until it hurts.',
+                technique_tags: ['pre-bend', 'vibrato', 'space'],
+                user_annotations: [],
+                date_saved: '2026-03-25',
+              }} />
               <SkillGraph />
               <TabView />
             </View>

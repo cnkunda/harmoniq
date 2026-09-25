@@ -1,7 +1,7 @@
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { useRouter } from 'expo-router'
 import { useCallback, useMemo } from 'react'
 import { Text, View } from 'react-native'
-import { AnimatedPressable } from '@/components/AnimatedPressable'
 import Animated, { FadeIn } from 'react-native-reanimated'
 import Svg, { Polyline } from 'react-native-svg'
 
@@ -124,7 +124,7 @@ export function RecentProgress({
 
   return (
     <View className="mb-2">
-      <Text className="mb-2 font-sans-medium text-sm uppercase tracking-wider text-muted-light">
+      <Text className="mb-2 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">
         Recently completed
       </Text>
 
@@ -142,7 +142,7 @@ export function RecentProgress({
           </Svg>
           <View className="mt-1 flex-row justify-between px-1">
             {points.map((p, i) => (
-              <Text key={`${i}-${p}`} className="font-sans text-[11px] text-muted-light">
+              <Text key={`${i}-${p}`} className="font-sans text-[11px] text-muted-brown">
                 {(p * 100).toFixed(0)}%
               </Text>
             ))}
@@ -152,9 +152,6 @@ export function RecentProgress({
 
       {totalSessions > 0 ? (
         <View className="gap-2">
-        <Text className="font-sans text-sm text-muted-light">
-          No completed sessions yet.
-        </Text>
           {sessions.slice(0, 5).map((s) => (
             <AnimatedPressable
               key={s.id}
@@ -167,23 +164,23 @@ export function RecentProgress({
             >
               <View className="flex-1 pr-2">
                 <Text className="font-sans-medium text-[15px] text-cream">{sessionCardTitle(s)}</Text>
-                <Text className="mt-0.5 font-sans text-[11px] text-muted-light">{sessionCardSubtitle(s)}</Text>
+                <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{sessionCardSubtitle(s)}</Text>
               </View>
-              <Text className="font-sans text-[11px] text-muted-light">{relativeDateLabel(s.date)}</Text>
+              <Text className="font-sans text-[11px] text-muted-brown">{relativeDateLabel(s.date)}</Text>
             </AnimatedPressable>
           ))}
         </View>
       ) : (
-        <Text className="font-sans text-sm text-muted-light">
-          No completed sessions yet.
+        <Text className="font-sans text-sm text-muted-brown">
+          Finish your first session and your progress will appear here.
         </Text>
       )}
 
-      {planNote ? (
-        <Text className="mt-2 font-sans text-xs text-muted-light">
+      {/* {planNote ? (
+        <Text className="mt-2 font-sans text-xs text-muted-brown">
           Latest plan wrap-up: {planNote}.
         </Text>
-      ) : null}
+      ) : null} */}
     </View>
   )
 }

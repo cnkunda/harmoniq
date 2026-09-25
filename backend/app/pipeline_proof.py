@@ -9,21 +9,37 @@ platform notes (Basic Pitch + TensorFlow on Windows/Linux Python 3.11+).
 
 from __future__ import annotations
 
+import logging
 import math
+import os
 import subprocess
 import sys
+import wave
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+import numpy as np
+
+logger = logging.getLogger("harmoniq.pipeline_proof")
+
 # --- Constants aligned with README / PRIORITIES --------------------------------
 
-DEMUCS_MODEL = "htdemucs_6s"
+DEMUCS_MODEL = os.getenv("HARMONIQ_DEMUCS_MODEL", "htdemucs_6s")
 TARGET_SR = 44100
+
+# Demucs stem separation optimization (Commit 111a)
+# Segment size and overlap to prevent OOM on long tracks, matching Hybrid Demucs tutorial
+DEMUCS_SEGMENT_SIZE = 7  # seconds (htdemucs_6s max is 7.8s)
+DEMUCS_OVERLAP = 0.1  # fraction of segment (0.1 = 1 second overlap per side)
 
 # Long-running CLIs may print a lot of stderr; only the tail is attached to failures.
 _SUBPROCESS_FAIL_SNIP = 8000
+
+
+class YouTubeDownloadError(RuntimeError):
+    """Raised when yt-dlp download fails or times out."""
 
 
 def _run_subprocess_checked(cmd: list[str], *, what: str, timeout: int | None = None) -> None:
@@ -78,11 +94,10 @@ def ffmpeg_normalize_command(
     sample_rate: int = TARGET_SR,
     mono: bool = True,
 ) -> list[str]:
-    """Argv for `ffmpeg` to normalize to ``sample_rate`` Hz and channel layout.
+    """Argv for `ffmpeg` to normalize to ``sample_rate`` Hz and channel layout with EBU R128 loudness normalization.
 
-    Applies EBU R128 loudness normalization targeting -16 LUFS integrated
-    (``loudnorm=I=-16:TP=-1.5:LRA=11``) before resampling/downmix.
-    Single-pass mode is used; two-pass would require a measurement pass.
+    Applies loudnorm targeting -16 LUFS integrated (EBU R128 standard) while
+    preserving existing resampling (44.1kHz) and downmix (mono) behavior.
     """
     ac = "1" if mono else "2"
     return [
@@ -93,12 +108,12 @@ def ffmpeg_normalize_command(
         "-y",
         "-i",
         str(input_path),
-        "-af",
-        "loudnorm=I=-16:TP=-1.5:LRA=11",
         "-ar",
         str(sample_rate),
         "-ac",
         ac,
+        "-af",
+        "loudnorm=I=-16:TP=-1.5:LRA=11",
         str(output_path),
     ]
 
@@ -110,14 +125,55 @@ def ffmpeg_normalize_wav(
     sample_rate: int = TARGET_SR,
     mono: bool = True,
 ) -> None:
-    """Resample / downmix via ffmpeg (44.1 kHz mono per Harmoniq README).
+    """Resample, downmix, and apply EBU R128 loudness normalization (-16 LUFS) via ffmpeg.
 
-    Applies EBU R128 loudness normalization (-16 LUFS) in addition to
-    resampling and channel conversion. Backward compatible with all
-    downstream consumers (44.1 kHz mono WAV).
+    Produces 44.1 kHz mono WAV with loudnorm filter applied, per Harmoniq README and Commit 115.
     """
     cmd = ffmpeg_normalize_command(input_path, output_path, sample_rate=sample_rate, mono=mono)
     _run_subprocess_checked(cmd, what="ffmpeg")
+
+
+def concatenate_wavs(
+    input_paths: Sequence[Path],
+    output_path: Path,
+    *,
+    channels: int = 1,
+    sample_width: int = 2,
+    sample_rate: int = TARGET_SR,
+) -> Path:
+    """Concatenate multiple PCM WAV files into a single file.
+
+    All inputs must share the same format (sample rate, channels, sample width).
+    Uses stdlib ``wave`` module for consistency with ``_chunk_wav_for_long_track``.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with wave.open(str(output_path), "wb") as dst:
+            dst.setnchannels(channels)
+            dst.setsampwidth(sample_width)
+            dst.setframerate(sample_rate)
+            for inp in input_paths:
+                with wave.open(str(inp), "rb") as src:
+                    dst.writeframes(src.readframes(src.getnframes()))
+        return output_path
+    except (wave.Error, OSError) as exc:
+        raise RuntimeError(f"WAV concatenation failed: {exc}") from exc
+
+
+def _resolve_demucs_device() -> str:
+    """Pick the torch device for the Demucs subprocess.
+
+    Default is ``cpu`` because the WSL2 dev box's GTX 1050 (4GB) cannot
+    reliably hold htdemucs_6s + the Keras chord model + basic-pitch at
+    once, and torch's CUDA context can survive across subprocesses and
+    fail mid-load with ``No CUDA GPUs are available``. Set
+    ``HARMONIQ_DEMUCS_DEVICE=cuda`` to opt in on hardware with a real
+    GPU (>=8GB VRAM recommended).
+    """
+    override = os.getenv("HARMONIQ_DEMUCS_DEVICE", "").strip().lower()
+    if override in ("cpu", "cuda", "mps"):
+        return override
+    return "cpu"
 
 
 def demucs_separate_command(
@@ -127,18 +183,124 @@ def demucs_separate_command(
     model: str = DEMUCS_MODEL,
     python_executable: str | None = None,
 ) -> list[str]:
-    """Argv to run Demucs with the ``htdemucs_6s`` six-stem checkpoint."""
+    """Argv to run Demucs with the ``htdemucs_6s`` six-stem checkpoint.
+
+    Includes optimization flags (Commit 111a):
+    - --segment: process in chunks to prevent OOM on long tracks
+    - --overlap: overlap ratio for smooth boundaries
+    - --device: explicit CUDA/CPU selection (default CPU; see _resolve_demucs_device)
+    """
     py = python_executable or sys.executable
+    device = _resolve_demucs_device()
+
     return [
         py,
         "-m",
         "demucs",
         "-n",
         model,
+        "--segment",
+        str(DEMUCS_SEGMENT_SIZE),
+        "--overlap",
+        str(DEMUCS_OVERLAP),
+        "--device",
+        device,
         "--out",
         str(out_dir),
         str(input_wav),
     ]
+
+
+def normalize_audio_for_demucs(input_wav: Path, output_wav: Path) -> tuple[float, float]:
+    """Normalize audio (mean/std) before Demucs separation for improved quality.
+    
+    Optimization (Commit 111a): Following the Hybrid Demucs tutorial, normalize the waveform
+    by subtracting its mean and dividing by its standard deviation. This centers the audio
+    around zero and scales it to unit variance, which can improve the model's input quality.
+    
+    Args:
+        input_wav: Path to input WAV file (44.1 kHz mono from ingest)
+        output_wav: Path where normalized WAV will be written
+        
+    Returns:
+        Tuple of (mean, std) for denormalization after Demucs separation
+    """
+    try:
+        import numpy as np
+        import soundfile as sf
+    except ImportError as e:
+        raise RuntimeError(f"normalize_audio_for_demucs requires numpy and soundfile: {e}")
+    
+    # Load audio
+    waveform, sr = sf.read(str(input_wav))
+    
+    # Ensure mono
+    if waveform.ndim == 2:
+        waveform = waveform.mean(axis=1)
+    
+    # Compute mean and std
+    mean = float(np.mean(waveform))
+    std = float(np.std(waveform))
+    
+    # Avoid division by zero
+    if std < 1e-8:
+        std = 1.0
+    
+    # Normalize: (waveform - mean) / std
+    normalized = (waveform - mean) / std
+    
+    # Write normalized WAV
+    sf.write(str(output_wav), normalized, sr)
+    
+    return mean, std
+
+
+def denormalize_stems(
+    stems_dir: Path,
+    mean: float,
+    std: float,
+    stem_keys: Sequence[str] = ("guitar", "bass", "drums", "vocals", "piano", "other"),
+) -> None:
+    """Denormalize stems after Demucs separation to restore original scale.
+    
+    Optimization (Commit 111a): After Demucs has processed the normalized audio,
+    denormalize the output stems by reversing the normalization:
+    stems * std + mean
+    
+    Args:
+        stems_dir: Directory containing the separated stems
+        mean: Mean value used for normalization
+        std: Std value used for normalization
+        stem_keys: Names of stem files to denormalize
+    """
+    try:
+        import numpy as np
+        import soundfile as sf
+    except ImportError as e:
+        raise RuntimeError(f"denormalize_stems requires numpy and soundfile: {e}")
+    
+    for stem_key in stem_keys:
+        stem_path = stems_dir / f"{stem_key}.wav"
+        if not stem_path.exists():
+            continue
+        
+        # Load stem
+        waveform, sr = sf.read(str(stem_path))
+        
+        # Denormalize: stems * std + mean
+        denormalized = waveform * std + mean
+
+        # Clip to float32 WAV range to avoid encoding artifacts
+        clipped = np.clip(denormalized, -1.0, 1.0).astype(np.float32)
+        clipped_count = int(np.sum(np.abs(denormalized) > 1.0))
+        if clipped_count > 0:
+            logger.warning(
+                "Clipped %d samples in %s (max=%.4f)",
+                clipped_count, stem_key, float(np.max(np.abs(denormalized))),
+            )
+
+        # Write back
+        sf.write(str(stem_path), clipped, sr)
 
 
 def run_demucs_htdemucs_6s(
@@ -177,23 +339,6 @@ def find_guitar_stem(separated_model_root: Path) -> Path:
     return matches[0]
 
 
-def _find_deno() -> str | None:
-    """Return the path to the deno binary, or None if not found."""
-    import shutil
-
-    deno = shutil.which("deno")
-    if deno:
-        return deno
-    # Check common install locations
-    for candidate in (
-        Path.home() / ".deno" / "bin" / "deno",
-        Path("/usr/local/bin/deno"),
-    ):
-        if candidate.exists():
-            return str(candidate)
-    return None
-
-
 def yt_dlp_download_audio_command(
     url: str,
     output_template: Path,
@@ -204,7 +349,8 @@ def yt_dlp_download_audio_command(
     argv to fetch best audio as WAV. Template should end in ``.%(ext)s``; when
     using ``audio_format wav``, ext is ``wav``.
     """
-    cmd = [
+    # README: yt-dlp --extract-audio --audio-format wav --audio-quality 0
+    return [
         "yt-dlp",
         "--no-playlist",
         "--extract-audio",
@@ -212,21 +358,10 @@ def yt_dlp_download_audio_command(
         audio_format,
         "--audio-quality",
         "0",
+        "-o",
+        str(output_template),
+        url,
     ]
-    # yt-dlp 2026.8+ requires a JS runtime for YouTube extraction.
-    # Without one, it falls back to android_vr player which gets 403'd.
-    deno_path = _find_deno()
-    if deno_path:
-        cmd += ["--js-runtimes", f"deno:{deno_path}"]
-    cmd += ["-o", str(output_template), url]
-    return cmd
-
-
-class YouTubeDownloadError(RuntimeError):
-    """Raised when yt-dlp fails or times out (user-friendly)."""
-
-    # Also considered an ingest error for router mapping.
-    pass
 
 
 def yt_dlp_download_wav(url: str, work_dir: Path) -> Path:
@@ -234,19 +369,18 @@ def yt_dlp_download_wav(url: str, work_dir: Path) -> Path:
     Download audio to ``work_dir``; return path to the produced ``.wav``.
     Caller should run :func:`ffmpeg_normalize_wav` for strict 44.1 kHz mono.
 
-    Times out after 10 minutes (600s) to avoid hanging workers.
+    Raises:
+        YouTubeDownloadError: If the subprocess times out after 10 minutes.
     """
     work_dir.mkdir(parents=True, exist_ok=True)
     template = work_dir / "yt_%(id)s.%(ext)s"
     cmd = yt_dlp_download_audio_command(url, template)
     try:
-        subprocess.run(cmd, check=True, cwd=str(work_dir), timeout=600)
-    except subprocess.TimeoutExpired as exc:
+        subprocess.run(cmd, check=True, timeout=600, cwd=str(work_dir))
+    except subprocess.TimeoutExpired:
         raise YouTubeDownloadError(
-            "YouTube download timed out after 10 minutes. Try a shorter clip or check your connection."
-        ) from exc
-    except subprocess.CalledProcessError as exc:
-        raise YouTubeDownloadError(f"YouTube download failed: {exc}") from exc
+            "Download timed out after 10 minutes. Try a shorter clip or a different source."
+        )
     wavs = sorted(work_dir.glob("yt_*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not wavs:
         raise FileNotFoundError(f"yt-dlp did not produce a wav in {work_dir}")
@@ -267,6 +401,196 @@ class LibrosaSummary:
     bar_timestamps_s: list[float]
     key_confidence: float
     tempo_confidence: float
+    # Commit 117: raw curves for section refinement (numpy arrays, optional for
+    # backward compatibility with callers that construct LibrosaSummary manually).
+    onset_novelty: Any = None
+    rms_curve: Any = None
+    times: Any = None
+    # Commit 118: chroma CQT for repeat detection (12, n_frames)
+    chroma: Any = None
+    # Commit 119: spectral centroid curve for section classification
+    spectral_centroid: Any = None
+
+
+# ---- Section Features & Classifier (Commit 119) -----------------------------
+
+
+@dataclass
+class SectionFeatures:
+    """Per-section audio features for semantic label classification."""
+    mean_energy: float = 0.0
+    energy_variance: float = 0.0
+    spectral_centroid_mean: float | None = None
+    chord_density: float = 0.0
+    harmonic_stability: float | None = None
+    energy_trend: float = 0.0
+    relative_duration: float = 0.0
+    position: str = "middle"
+    duration: float = 0.0
+    is_repeated: bool = False
+
+
+_INTRO_MAX_DURATION: float = 15.0
+_INTRO_ENERGY_THRESHOLD: float = 0.35
+_CHORUS_ENERGY_THRESHOLD: float = 0.6
+_SOLO_CENTROID_THRESHOLD: float = 0.7
+_SOLO_MAX_CHORD_DENSITY: float = 1.5
+_BRIDGE_HARMONIC_SHIFT_THRESHOLD: float = 0.15
+_PRECHORUS_MAX_DURATION: float = 10.0
+_PRECHORUS_ENERGY_RISE_THRESHOLD: float = 0.1
+
+
+def classify_section(features: SectionFeatures) -> tuple[str, float]:
+    """Rule-based section label classifier using per-section audio features.
+
+    Returns (label, confidence) where confidence is 0-1.
+    Rules follow PRIORITIES.md Commit 119 pseudocode with pre-chorus additions.
+    """
+    if features.position in ("first", "only") and features.duration < _INTRO_MAX_DURATION and features.mean_energy < _INTRO_ENERGY_THRESHOLD:
+        return ("Intro", 0.85)
+
+    if features.position == "last" and features.energy_trend < 0:
+        return ("Outro", 0.80)
+
+    if features.is_repeated and features.mean_energy > _CHORUS_ENERGY_THRESHOLD:
+        return ("Chorus", 0.75)
+
+    if (
+        not features.is_repeated
+        and features.harmonic_stability is not None
+        and features.harmonic_stability < _BRIDGE_HARMONIC_SHIFT_THRESHOLD
+    ):
+        return ("Bridge", 0.70)
+
+    if (
+        features.spectral_centroid_mean is not None
+        and features.spectral_centroid_mean > _SOLO_CENTROID_THRESHOLD
+        and features.chord_density < _SOLO_MAX_CHORD_DENSITY
+    ):
+        return ("Solo", 0.70)
+
+    return ("Verse", 0.50)
+
+
+def compute_section_features(
+    segments: list[dict[str, Any]],
+    song_duration: float,
+    rms_curve: np.ndarray,
+    times: np.ndarray,
+    spectral_centroid_curve: np.ndarray | None,
+    chroma: np.ndarray | None,
+    chord_events: list[tuple[float, str]],
+) -> list[dict[str, Any]]:
+    """Compute per-section audio features and classify each segment.
+
+    Enriches each segment dict with ``features`` (SectionFeatures) and
+    updates ``label`` / ``label_confidence`` via :func:`classify_section`.
+    """
+    if not segments:
+        return segments
+
+    for i, seg in enumerate(segments):
+        start_t = seg.get("start_s", seg.get("start", 0.0))
+        end_t = seg.get("end_s", seg.get("end", song_duration))
+        duration = end_t - start_t
+
+        if duration <= 0:
+            seg["label"] = "Section"
+            seg["label_confidence"] = 0.0
+            continue
+
+        rms_mask = (times >= start_t) & (times < end_t)
+        section_rms = rms_curve[rms_mask] if rms_mask.any() else np.array([0.0])
+        mean_energy = float(section_rms.mean())
+        energy_variance = float(section_rms.var()) if len(section_rms) > 1 else 0.0
+
+        energy_trend = 0.0
+        if rms_mask.sum() >= 4:
+            energy_trend = float(np.polyfit(times[rms_mask], section_rms, 1)[0])
+
+        sc_mean: float | None = None
+        if spectral_centroid_curve is not None and rms_mask.any():
+            sc_values = spectral_centroid_curve[rms_mask]
+            if len(sc_values) > 0:
+                sc_mean = float(sc_values.mean())
+
+        harmonic_stability: float | None = None
+        if chroma is not None:
+            c_mask = (times >= start_t) & (times < end_t)
+            if c_mask.any():
+                section_chroma = chroma[:, c_mask]
+                if section_chroma.shape[1] >= 2:
+                    per_pitch_var = float(np.var(section_chroma, axis=1).mean())
+                    harmonic_stability = max(0.0, 1.0 - min(1.0, per_pitch_var * 5.0))
+                else:
+                    harmonic_stability = 0.5
+
+        section_chords = [c for t, c in chord_events if start_t <= t < end_t]
+        if len(section_chords) >= 2 and duration > 0:
+            changes = sum(1 for j in range(1, len(section_chords)) if section_chords[j] != section_chords[j - 1])
+            chord_density = changes / duration
+        else:
+            chord_density = 0.0
+
+        if len(segments) == 1:
+            position = "only"
+        elif i == 0:
+            position = "first"
+        elif i == len(segments) - 1:
+            position = "last"
+        else:
+            position = "middle"
+
+        is_repeated = seg.get("is_repeated", False)
+
+        features = SectionFeatures(
+            mean_energy=mean_energy,
+            energy_variance=energy_variance,
+            spectral_centroid_mean=sc_mean,
+            chord_density=chord_density,
+            harmonic_stability=harmonic_stability,
+            energy_trend=energy_trend,
+            relative_duration=duration / song_duration if song_duration > 0 else 0.0,
+            position=position,
+            duration=duration,
+            is_repeated=is_repeated,
+        )
+        seg["features"] = features
+
+    _detect_pre_chorus(segments)
+
+    for seg in segments:
+        features: SectionFeatures = seg.get("features")
+        if features is None:
+            seg["label"] = "Verse"
+            seg["label_confidence"] = 0.5
+            continue
+        label, confidence = classify_section(features)
+        seg["label"] = label
+        seg["label_confidence"] = confidence
+
+    return segments
+
+
+def _detect_pre_chorus(segments: list[dict[str, Any]]) -> None:
+    """Two-pass pre-chorus detection between Verse and Chorus."""
+    for i in range(1, len(segments) - 1):
+        prev = segments[i - 1]
+        curr = segments[i]
+        nxt = segments[i + 1]
+        f: SectionFeatures | None = curr.get("features")
+        if f is None:
+            continue
+        prev_label = prev.get("label", "")
+        next_label = nxt.get("label", "")
+        if (
+            f.duration < _PRECHORUS_MAX_DURATION
+            and f.energy_trend > _PRECHORUS_ENERGY_RISE_THRESHOLD
+            and prev_label == "Verse"
+            and next_label in ("Chorus", "Solo")
+        ):
+            curr["label"] = "Pre-Chorus"
+            curr["label_confidence"] = 0.70
 
 
 def estimate_key_literal(chroma_mean: Sequence[float]) -> tuple[str, str]:
@@ -290,21 +614,15 @@ def estimate_key_literal(chroma_mean: Sequence[float]) -> tuple[str, str]:
     return root, best[1]
 
 
-def librosa_summarize(audio_path: Path, *, time_signature: str | None = None) -> LibrosaSummary:
+def librosa_summarize(audio_path: Path) -> LibrosaSummary:
     """
     Extract lightweight structure features from an audio file.
 
     Outputs are intended to be:
     - simple and robust (smoke-test level)
     - consistent with schema wiring for the frontend (bar timestamps + section labels)
-
-    Args:
-        time_signature: Optional time signature string (e.g. "4/4", "6/8").
-            When provided, bar timestamps are derived from the actual time signature
-            instead of hardcoding beats_per_bar=4.
     """
     import librosa
-    import numpy as np
 
     y, sr = librosa.load(str(audio_path), sr=TARGET_SR, mono=True)
     duration = float(len(y) / sr)
@@ -337,6 +655,7 @@ def librosa_summarize(audio_path: Path, *, time_signature: str | None = None) ->
 
     # librosa feature extraction assumes enough signal length. If chroma fails, we still
     # return tempo/beat info.
+    chroma = None
     try:
         chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length)
         chroma_mean = chroma.mean(axis=1)
@@ -348,6 +667,13 @@ def librosa_summarize(audio_path: Path, *, time_signature: str | None = None) ->
 
     # --- Simple onset + energy segmentation into rough sections ---------------
     rms_frames = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+
+    # Commit 119: compute spectral centroid curve for Solo/instrumental detection
+    spectral_centroid_curve: np.ndarray | None = None
+    try:
+        spectral_centroid_curve = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)[0]
+    except Exception:
+        pass
 
     def _norm(a: np.ndarray) -> np.ndarray:
         a = a.astype(float)
@@ -390,7 +716,6 @@ def librosa_summarize(audio_path: Path, *, time_signature: str | None = None) ->
                 break
 
     boundaries = [0.0] + boundary_times[:n_boundaries] + [duration]
-    labels = ["Intro", "Verse", "Chorus", "Solo", "Bridge", "Outro"]
     segments: list[dict[str, Any]] = []
     for i in range(len(boundaries) - 1):
         start_s = float(boundaries[i])
@@ -399,25 +724,34 @@ def librosa_summarize(audio_path: Path, *, time_signature: str | None = None) ->
             continue
         segments.append(
             {
-                "label": labels[i % len(labels)],
                 "start_s": start_s,
                 "end_s": end_s,
             }
         )
 
     if not segments:
-        segments = [{"label": "full", "start_s": 0.0, "end_s": duration}]
+        segments = [{"start_s": 0.0, "end_s": duration}]
 
-    # --- Bar timestamps (derive beats_per_bar from time signature) -----------------------
-    # beat_grid in schema is "quarter-note" timestamps; bar_timestamps are every N beats.
-    # For compound meters (e.g. 6/8), beats_per_bar = numerator * 4 / denominator
-    # because beat_list contains quarter-note timestamps, not pulse timestamps.
-    from app.beat_grid import parse_time_signature
-    try:
-        ts_numerator, ts_denominator = parse_time_signature(time_signature)
-        beats_per_bar = ts_numerator * 4 // ts_denominator
-    except Exception:
-        beats_per_bar = 4  # fallback to 4/4
+    # Commit 117: compute frame times for raw curves (used by section refinement)
+    frame_times = librosa.frames_to_time(
+        np.arange(len(onset_env)), sr=sr, hop_length=hop_length
+    )
+
+    # Commit 119: classify segments using audio features (replaces cyclic labels)
+    chord_events: list[tuple[float, str]] = []
+    segments = compute_section_features(
+        segments=segments,
+        song_duration=duration,
+        rms_curve=rms_frames,
+        times=frame_times,
+        spectral_centroid_curve=spectral_centroid_curve,
+        chroma=chroma,
+        chord_events=chord_events,
+    )
+
+    # --- Bar timestamps (assume 4/4; derive from beat grid) -----------------------
+    # beat_grid in schema is "quarter-note" timestamps; bar_timestamps are every 4 beats.
+    beats_per_bar = 4
     bar_from_beats = [beat_list[i] for i in range(0, len(beat_list), beats_per_bar)]
     bar_from_beats = [float(t) for t in bar_from_beats if t >= 0.0]
     bar_from_beats.sort()
@@ -455,6 +789,11 @@ def librosa_summarize(audio_path: Path, *, time_signature: str | None = None) ->
         bar_timestamps_s=bar_timestamps_s,
         key_confidence=key_confidence,
         tempo_confidence=tempo_confidence,
+        onset_novelty=novelty,
+        rms_curve=rms_frames,
+        times=frame_times,
+        chroma=chroma,
+        spectral_centroid=spectral_centroid_curve,
     )
 
 
@@ -468,17 +807,30 @@ class NoteEvent:
     amplitude: float = 0.0
 
 
+_BASIC_PITCH_CACHE: dict[str, list[NoteEvent]] = {}
+
+
 def basic_pitch_predict_events(
     audio_path: Path,
     *,
+    model_path: Path | None = None,
     midi_tempo: float | None = None,
 ) -> list[NoteEvent]:
     """
     Run Spotify Basic Pitch on an audio file; return typed note events.
 
+    Results are cached by audio path so repeated calls (e.g. solo inference
+    + tab generation) reuse the same model output.
+
     Requires ``pip install -e ".[basicpitch]"`` (see ``pyproject.toml``). On some
     platforms Python/TensorFlow wheels are not available — the notebook documents this.
     """
+    cache_key = f"{audio_path}::{midi_tempo}::{model_path}"
+    cached = _BASIC_PITCH_CACHE.get(cache_key)
+    if cached is not None:
+        logger.info("Reusing cached Basic Pitch result for %s", audio_path)
+        return cached
+
     try:
         from basic_pitch.inference import predict as basic_pitch_predict
     except ImportError as e:
@@ -491,6 +843,8 @@ def basic_pitch_predict_events(
     kwargs: dict[str, Any] = {}
     if midi_tempo is not None:
         kwargs["midi_tempo"] = float(midi_tempo)
+    if model_path is not None:
+        kwargs["model_or_model_path"] = str(model_path)
     try:
         _, _, raw_events = basic_pitch_predict(str(audio_path), **kwargs)
     except Exception as default_err:
@@ -499,6 +853,7 @@ def basic_pitch_predict_events(
         tflite_path = Path(basic_pitch_pkg.__file__).resolve().parent / "saved_models" / "icassp_2022" / "nmp.tflite"
         if not tflite_path.exists():
             raise
+        kwargs.pop("model_or_model_path", None)
         _, _, raw_events = basic_pitch_predict(str(audio_path), model_or_model_path=tflite_path, **kwargs)
     out: list[NoteEvent] = []
     for row in raw_events:
@@ -508,6 +863,7 @@ def basic_pitch_predict_events(
         pitch = int(round(float(row[2])))
         amp = float(row[3])
         out.append(NoteEvent(start_s=start_s, end_s=end_s, pitch_midi=pitch, amplitude=amp))
+    _BASIC_PITCH_CACHE[cache_key] = out
     return out
 
 

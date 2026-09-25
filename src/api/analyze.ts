@@ -15,7 +15,13 @@ import type {
   PracticePlanPayload,
   QuizAnswersPayload,
   ScoreResult,
+  SpotifyAvailableGenreSeeds,
   SpotifyPlaybackStatePayload,
+  SpotifyPlaylistDetail,
+  SpotifyPlaylistItems,
+  SpotifyPlaylistList,
+  SpotifyRecommendationsResult,
+  SpotifySearchResult,
   SpotifyTasteProfile,
   TasteProfilePayload,
 } from '@/src/types'
@@ -115,6 +121,132 @@ export async function submitExportJob(payload: {
     blob,
     mimeType: res.headers.get('Content-Type') ?? 'application/octet-stream',
     contentDisposition: res.headers.get('Content-Disposition'),
+  }
+}
+
+/**
+ * WebSocket-based job status listener with polling fallback.
+ *
+ * Tries WebSocket first. If WS fails (connection refused, timeout, or
+ * the server lacks WS support), falls back to HTTP polling transparently.
+ *
+ * The `onStatus` callback receives the same `AnalyzeJob` shape as
+ * `pollAnalyzeJobCancelable`, so both transports are interchangeable.
+ */
+export function connectAnalyzeWebSocket(
+  jobId: string,
+  onStatus: (job: import('@/src/types').AnalyzeJob) => void,
+): { promise: Promise<import('@/src/types').LessonJSON>; cancel: () => void } {
+  let settled = false
+  let rejectRef: ((reason?: unknown) => void) | null = null
+  let wsRef: WebSocket | null = null
+  let pollingCancel: (() => void) | null = null
+
+  const apiBase = (() => {
+    const raw = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000'
+    return raw.replace(/^http/, 'ws')
+  })()
+
+  const promise = new Promise<import('@/src/types').LessonJSON>((resolve, reject) => {
+    rejectRef = reject
+
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined
+
+    const startPollingFallback = () => {
+      const poll = pollAnalyzeJobCancelable(jobId, onStatus, 3000)
+      pollingCancel = poll.cancel
+      poll.promise.then(resolve, reject)
+    }
+
+    // Try WebSocket
+    try {
+      const wsUrl = `${apiBase}/ws/analyze/${encodeURIComponent(jobId)}`
+      const ws = new WebSocket(wsUrl)
+      wsRef = ws
+
+      // If we don't connect within 3 seconds, fall back to polling
+      const connectTimeout = setTimeout(() => {
+        if (!settled && ws.readyState !== WebSocket.OPEN) {
+          ws.close()
+          startPollingFallback()
+        }
+      }, 3000)
+
+      ws.onopen = () => {
+        clearTimeout(connectTimeout)
+      }
+
+      ws.onmessage = (event) => {
+        if (settled) return
+        try {
+          const msg = JSON.parse(event.data) as Record<string, unknown>
+
+          if (msg.type === 'status' || msg.type === 'progress') {
+            // Map WS message shape to AnalyzeJob
+            const job: import('@/src/types').AnalyzeJob = {
+              status: (msg.status as import('@/src/types').AnalyzeJobStatus) ?? 'processing',
+              progress: typeof msg.progress === 'number' ? msg.progress : null,
+              stage_label: typeof msg.stage_label === 'string' ? msg.stage_label : null,
+              analysis_stage: typeof msg.analysis_stage === 'string' ? msg.analysis_stage : null,
+              result: null,
+              error: null,
+              error_code: null,
+              processing_started_at: null,
+            }
+            onStatus(job)
+          } else if (msg.type === 'complete') {
+            settled = true
+            ws.close()
+            const result = msg.result as Record<string, unknown> | undefined
+            if (result) {
+              resolve(result as unknown as import('@/src/types').LessonJSON)
+            } else {
+              reject(new ApiError(500, 'Analysis complete but no result'))
+            }
+          } else if (msg.type === 'failed') {
+            settled = true
+            ws.close()
+            reject(
+              new ApiError(
+                500,
+                (msg.error as string) ?? 'Analysis failed',
+                msg.error_code as string | undefined,
+              ),
+            )
+          }
+        } catch {
+          // Ignore malformed messages
+        }
+      }
+
+      ws.onerror = () => {
+        clearTimeout(connectTimeout)
+        if (!settled) {
+          startPollingFallback()
+        }
+      }
+
+      ws.onclose = () => {
+        clearTimeout(connectTimeout)
+        if (!settled) {
+          startPollingFallback()
+        }
+      }
+    } catch {
+      // WebSocket constructor threw (unlikely but possible in some environments)
+      startPollingFallback()
+    }
+  })
+
+  return {
+    promise,
+    cancel: () => {
+      if (settled) return
+      settled = true
+      wsRef?.close()
+      pollingCancel?.()
+      rejectRef?.(new AnalyzePollCancelledError())
+    },
   }
 }
 
@@ -526,6 +658,8 @@ export async function submitScore(payload: {
   section: unknown
   skill_nodes: string[]
   musical_tolerance_mode?: 'expressive' | 'technique'
+  stem_confidence?: number | null
+  instrument_confusion?: number | null
 }): Promise<ScoreResult> {
   return request<ScoreResult>('/score', {
     method: 'POST',
@@ -542,6 +676,7 @@ export async function submitJamScore(payload: {
   pitch_class_weight_map?: Record<string, number>
   position_weight_map?: Record<string, number>
   inferred_scale_label?: string | null
+  inferred_mode?: string | null
   inference_confidence?: 'low' | 'medium' | 'high' | null
   track_id?: string | null
   track_label?: string | null
@@ -559,6 +694,7 @@ export async function submitJamScore(payload: {
       pitch_class_weight_map: pitchMap,
       position_weight_map: payload.position_weight_map ?? {},
       inferred_scale_label: payload.inferred_scale_label ?? null,
+      inferred_mode: payload.inferred_mode ?? null,
       inference_confidence: payload.inference_confidence ?? null,
       track_id: payload.track_id ?? null,
       track_label: payload.track_label ?? null,
@@ -719,6 +855,175 @@ export async function disconnectSpotifyServer(clientSession: string): Promise<vo
   }
 }
 
+// ---- Spotify Search ----
+
+/** GET /spotify/search — search the Spotify catalog. */
+export async function spotifySearch(
+  clientSession: string,
+  query: string,
+  options?: { type?: string; limit?: number; offset?: number },
+): Promise<SpotifySearchResult> {
+  const params = new URLSearchParams({ client_session: clientSession, q: query })
+  if (options?.type) params.set('type', options.type)
+  if (options?.limit != null) params.set('limit', String(options.limit))
+  if (options?.offset != null) params.set('offset', String(options.offset))
+  return request<SpotifySearchResult>(`/spotify/search?${params.toString()}`)
+}
+
+// ---- Spotify Recommendations ----
+
+/** GET /spotify/recommendations — get track recommendations. */
+export async function spotifyRecommendations(
+  clientSession: string,
+  options?: {
+    seed_artists?: string
+    seed_genres?: string
+    seed_tracks?: string
+    limit?: number
+    market?: string
+  },
+): Promise<SpotifyRecommendationsResult> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (options?.seed_artists) params.set('seed_artists', options.seed_artists)
+  if (options?.seed_genres) params.set('seed_genres', options.seed_genres)
+  if (options?.seed_tracks) params.set('seed_tracks', options.seed_tracks)
+  if (options?.limit != null) params.set('limit', String(options.limit))
+  if (options?.market) params.set('market', options.market)
+  return request<SpotifyRecommendationsResult>(`/spotify/recommendations?${params.toString()}`)
+}
+
+/** GET /spotify/recommendations/available-genre-seeds — get available genre seeds. */
+export async function spotifyAvailableGenreSeeds(
+  clientSession: string,
+): Promise<SpotifyAvailableGenreSeeds> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  return request<SpotifyAvailableGenreSeeds>(`/spotify/recommendations/available-genre-seeds?${params.toString()}`)
+}
+
+// ---- Spotify Playlists ----
+
+/** GET /spotify/playlists — get current user's playlists. */
+export async function spotifyGetPlaylists(
+  clientSession: string,
+  options?: { limit?: number; offset?: number },
+): Promise<SpotifyPlaylistList> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (options?.limit != null) params.set('limit', String(options.limit))
+  if (options?.offset != null) params.set('offset', String(options.offset))
+  return request<SpotifyPlaylistList>(`/spotify/playlists?${params.toString()}`)
+}
+
+/** GET /spotify/playlists/{playlist_id} — get a playlist by ID. */
+export async function spotifyGetPlaylist(
+  clientSession: string,
+  playlistId: string,
+  options?: { market?: string; fields?: string },
+): Promise<SpotifyPlaylistDetail> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (options?.market) params.set('market', options.market)
+  if (options?.fields) params.set('fields', options.fields)
+  return request<SpotifyPlaylistDetail>(
+    `/spotify/playlists/${encodeURIComponent(playlistId)}?${params.toString()}`,
+  )
+}
+
+/** GET /spotify/playlists/{playlist_id}/items — get items in a playlist. */
+export async function spotifyGetPlaylistItems(
+  clientSession: string,
+  playlistId: string,
+  options?: { limit?: number; offset?: number; market?: string; fields?: string },
+): Promise<SpotifyPlaylistItems> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (options?.limit != null) params.set('limit', String(options.limit))
+  if (options?.offset != null) params.set('offset', String(options.offset))
+  if (options?.market) params.set('market', options.market)
+  if (options?.fields) params.set('fields', options.fields)
+  return request<SpotifyPlaylistItems>(
+    `/spotify/playlists/${encodeURIComponent(playlistId)}/items?${params.toString()}`,
+  )
+}
+
+// ---- Spotify Player Controls ----
+
+/** PUT /spotify/player/play — start/resume playback. */
+export async function spotifyPlayerPlay(
+  clientSession: string,
+  options?: {
+    device_id?: string
+    context_uri?: string
+    uris?: string
+    position_ms?: number
+  },
+): Promise<void> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (options?.device_id) params.set('device_id', options.device_id)
+  if (options?.context_uri) params.set('context_uri', options.context_uri)
+  if (options?.uris) params.set('uris', options.uris)
+  if (options?.position_ms != null) params.set('position_ms', String(options.position_ms))
+  const res = await fetch(`${API_BASE_URL}/spotify/player/play?${params.toString()}`, { method: 'PUT' })
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+}
+
+/** PUT /spotify/player/pause — pause playback. */
+export async function spotifyPlayerPause(
+  clientSession: string,
+  deviceId?: string,
+): Promise<void> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (deviceId) params.set('device_id', deviceId)
+  const res = await fetch(`${API_BASE_URL}/spotify/player/pause?${params.toString()}`, { method: 'PUT' })
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+}
+
+/** POST /spotify/player/next — skip to next track. */
+export async function spotifyPlayerNext(
+  clientSession: string,
+  deviceId?: string,
+): Promise<void> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (deviceId) params.set('device_id', deviceId)
+  const res = await fetch(`${API_BASE_URL}/spotify/player/next?${params.toString()}`, { method: 'POST' })
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+}
+
+/** POST /spotify/player/previous — skip to previous track. */
+export async function spotifyPlayerPrevious(
+  clientSession: string,
+  deviceId?: string,
+): Promise<void> {
+  const params = new URLSearchParams({ client_session: clientSession })
+  if (deviceId) params.set('device_id', deviceId)
+  const res = await fetch(`${API_BASE_URL}/spotify/player/previous?${params.toString()}`, { method: 'POST' })
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+}
+
+/** PUT /spotify/player/seek — seek to position in current track. */
+export async function spotifyPlayerSeek(
+  clientSession: string,
+  positionMs: number,
+  deviceId?: string,
+): Promise<void> {
+  const params = new URLSearchParams({ client_session: clientSession, position_ms: String(positionMs) })
+  if (deviceId) params.set('device_id', deviceId)
+  const res = await fetch(`${API_BASE_URL}/spotify/player/seek?${params.toString()}`, { method: 'PUT' })
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+}
+
 /** Commit 85: plain-language theory rationale for a chord in a key context. */
 export async function fetchTheoryAnnotation(payload: {
   key: string
@@ -732,47 +1037,50 @@ export async function fetchTheoryAnnotation(payload: {
   })
 }
 
-// ---------------------------------------------------------------------------
-// Commit 108: Beat Grid Recompute API
-// ---------------------------------------------------------------------------
+// ---- Commit 109: Beat grid recompute API ----------------------------------
 
-export interface BeatGridRecomputeRequest {
-  time_signature?: string | null
-  bpm_override?: number | null
-  reset_to_auto?: boolean
-}
-
-export interface BeatGridRecomputeResponse {
-  job_id: string
-  beat_grid: {
-    bpm: number
-    pulse_bpm: number
-    beats: number[]
-    downbeats: number[]
-    time_signature: { numerator: number; denominator: number }
-    tick_value: number
-  }
-  chord_timeline: { events: Array<{ timestamp: number; chord: string; confidence: number }> }
-  solo_notes: { notes: Array<{ start_time: number; duration: number; pitch: number; velocity: number }> }
-  musicxml: string
-  recompute_stage: string
-  invalidated_artifacts: string[]
-}
-
-export async function recomputeBeatGrid(
+/** Trigger async beat grid recompute. Poll with `pollBeatGridRecomputeStatus()`. */
+export async function triggerBeatGridRecompute(
   jobId: string,
-  payload: BeatGridRecomputeRequest,
-): Promise<BeatGridRecomputeResponse> {
-  return request<BeatGridRecomputeResponse>(`/analyze/${jobId}/beat-grid/recompute`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+  params: { time_signature?: string; bpm_override?: number },
+): Promise<{ job_id: string; status: string }> {
+  return request<{ job_id: string; status: string }>(
+    `/analyze/${encodeURIComponent(jobId)}/beat-grid/recompute`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    },
+  )
 }
 
-// ---------------------------------------------------------------------------
-// Commit 109: Analysis Correction APIs
-// ---------------------------------------------------------------------------
+/** Poll beat grid recompute status until terminal state. */
+export async function getBeatGridRecomputeStatus(
+  jobId: string,
+): Promise<import('@/src/types').BeatGridRecomputeResponse> {
+  return request<import('@/src/types').BeatGridRecomputeResponse>(
+    `/analyze/${encodeURIComponent(jobId)}/beat-grid/recompute`,
+  )
+}
+
+/** Poll recompute status with callbacks until complete/failed. Returns final status. */
+export async function pollBeatGridRecompute(
+  jobId: string,
+  onStatus: (resp: import('@/src/types').BeatGridRecomputeResponse) => void,
+  intervalMs: number = 1500,
+): Promise<import('@/src/types').BeatGridRecomputeResponse> {
+  const terminal = new Set<string>(['complete', 'failed'])
+  let last: import('@/src/types').BeatGridRecomputeResponse | null = null
+  while (true) {
+    const resp = await getBeatGridRecomputeStatus(jobId)
+    last = resp
+    onStatus(resp)
+    if (terminal.has(resp.status)) return resp
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}
+
+// ---- Commit 109: Analysis Correction APIs ----------------------------------
 
 import type { CorrectionHistory, CorrectionRecord } from '@/src/types'
 
@@ -846,4 +1154,23 @@ export async function exportCorrections(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
+}
+
+// ---- Commit 116: Chord enrichment status API ----------------------------------
+
+/** Chord enrichment status response from GET /analyze/{job_id}/chord-enrichment. */
+export interface ChordEnrichmentStatus {
+  status: 'pending' | 'processing' | 'complete' | 'skipped'
+  total_events: number
+  corrected_events: number
+  llm_latency_p50: number | null
+  llm_latency_p95: number | null
+  fallback_reason: string | null
+}
+
+/** Poll chord enrichment status for a completed analysis job. */
+export async function fetchChordEnrichmentStatus(jobId: string): Promise<ChordEnrichmentStatus> {
+  return request<ChordEnrichmentStatus>(
+    `/analyze/${encodeURIComponent(jobId)}/chord-enrichment`,
+  )
 }

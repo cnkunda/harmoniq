@@ -1,9 +1,9 @@
-"""Gemini/Lyria music generation + local fallback for Jam practice beds."""
+"""MRT2 (Magenta RealTime 2) music generation + bundled fallback for Jam practice beds."""
 
 from __future__ import annotations
 
-import base64
 import io
+import logging
 import math
 import os
 import shutil
@@ -14,19 +14,16 @@ from pathlib import Path
 from typing import Any
 import wave
 
-import httpx
+import numpy as np
 
-DEFAULT_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_LYRIA_MODEL = "lyria-realtime-exp"
-DEFAULT_OUTPUT_SAMPLE_RATE = 44100
+logger = logging.getLogger("harmoniq.jam_backing")
+logger.setLevel(logging.INFO)
+
+BACKING_DURATION_SECS = 16
 
 
-class LyriaProviderError(RuntimeError):
-    """Provider-level failure with coarse error classification."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
+class Mrt2BackingError(RuntimeError):
+    """MRT2 generation failure."""
 
 
 @dataclass(frozen=True)
@@ -72,137 +69,103 @@ _BUNDLED_TRACKS: tuple[BundledBackingTrack, ...] = (
 _WAV_CACHE: dict[str, tuple[bytes, int]] = {}
 
 
-def build_instrumental_prompt(
-    musical_key: str,
-    bpm: int | None,
-    weak_areas: list[str],
-    style_hint: str | None,
-) -> str:
-    """Deterministic Lyria prompt with strongly instrumental constraints."""
+# ---- MRT2 Backing Generator (singleton) ----
+
+
+class Mrt2BackingGenerator:
+    """MRT2-based backing track generator. Singleton, lazy-loaded on first use."""
+
+    _instance: Mrt2BackingGenerator | None = None
+
+    def __new__(cls) -> Mrt2BackingGenerator:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def _lazy_init(self) -> None:
+        if self._initialized:
+            return
+        self._initialized = True
+        self.available = False
+        self.model_type: str | None = None
+        self._system: Any = None
+        try:
+            self._system = self._try_load()
+            self.available = True
+        except Exception as exc:
+            logger.warning("Mrt2BackingGenerator unavailable: %s", exc)
+
+    def _try_load(self) -> Any:
+        import magenta_rt
+        from magenta_rt import MagentaRT2Jax
+
+        system = MagentaRT2Jax(size="mrt2_small", temperature=1.3, top_k=40, cfg_musiccoca=3.0)
+        self.model_type = "mrt2_small"
+        return system
+
+    def generate(
+        self,
+        *,
+        prompt: str,
+        duration_secs: int = BACKING_DURATION_SECS,
+    ) -> tuple[bytes, int] | None:
+        """Generate a backing track from a text prompt.
+
+        Returns (wav_bytes, duration_ms) or None if unavailable.
+        """
+        self._lazy_init()
+        if not self.available or self._system is None:
+            return None
+
+        try:
+            style = self._system.embed_style(prompt)
+            num_frames = duration_secs * 25
+            wav, _state = self._system.generate(style=style, frames=num_frames)
+
+            buf = io.BytesIO()
+            _write_wav(buf, wav.samples, wav.sample_rate)
+            wav_bytes = buf.getvalue()
+            duration_ms = duration_secs * 1000
+            return wav_bytes, duration_ms
+        except Exception as exc:
+            logger.warning("MRT2 generation failed: %s", exc)
+            return None
+
+
+def _write_wav(buf: io.BytesIO, samples: np.ndarray, sample_rate: int) -> None:
+    """Write float32 numpy samples to a WAV file in BytesIO."""
+    if samples.ndim == 1:
+        samples = samples[:, None]
+    num_channels = samples.shape[1]
+    int_samples = np.clip(samples * 32767, -32768, 32767).astype("<i2")
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(num_channels)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(int_samples.tobytes())
+
+
+# ---- Prompt building ----
+
+
+def build_mrt2_prompt(style_hint: str, musical_key: str, bpm: int | None) -> str:
+    """Build a text prompt for MRT2 from the user's practice preferences."""
     parts: list[str] = [
-        "Create a cohesive instrumental guitar practice backing track with no vocals or spoken words.",
-        "Rhythm section only: drums, bass, comping guitar, optional light keys — steady loop-friendly groove.",
-        f"Musical key: {musical_key}.",
+        style_hint.strip() if style_hint else "Instrumental guitar practice backing track",
+        f"Key: {musical_key}",
     ]
     if bpm is not None:
-        parts.append(f"Approximately {bpm} BPM, consistent tempo.")
-    if weak_areas:
-        joined = ", ".join(weak_areas)
-        parts.append(f"Player focus areas: {joined}.")
-        lowered = {a.lower() for a in weak_areas}
-        if "timing" in lowered:
-            parts.append("Emphasize clear downbeats and a locked drum kit for timing practice.")
-        if "pitch" in lowered or "bending" in lowered:
-            parts.append("Consonant harmony, simple changes, easy to hear intonation.")
-        if "phrasing" in lowered:
-            parts.append("Spacious comping with breathing room between chord stabs.")
-        if "vibrato" in lowered:
-            parts.append("Warm pads and smooth harmonic rhythm suitable for sustained notes.")
-    parts.append("Production: clean mix, moderate dynamics, no clipping, smooth transitions.")
-    if style_hint and style_hint.strip():
-        parts.append(style_hint.strip())
-    text = " ".join(parts).strip()
-    return text[:2000]
+        parts.append(f"Tempo: approximately {bpm} BPM, consistent tempo")
+    parts.extend([
+        "Rhythm section: drums, bass, comping guitar, optional light keys",
+        "Steady loop-friendly groove, no vocals",
+        "Clean mix, moderate dynamics",
+    ])
+    return ", ".join(parts)
 
 
-def _decode_b64_audio(encoded: str) -> bytes:
-    try:
-        return base64.b64decode(encoded, validate=True)
-    except (ValueError, TypeError) as exc:
-        raise LyriaProviderError("invalid_response", "Gemini response audio bytes were invalid base64.") from exc
-
-
-def _parse_lyria_audio(body: dict[str, Any]) -> tuple[bytes, int | None]:
-    """Parse common Gemini/Lyria response shapes into raw audio bytes."""
-    generated = body.get("generatedMusic")
-    if isinstance(generated, dict):
-        encoded = generated.get("audioBytes")
-        if isinstance(encoded, str) and encoded.strip():
-            raw = _decode_b64_audio(encoded.strip())
-            duration_ms = generated.get("durationMs")
-            return raw, duration_ms if isinstance(duration_ms, int) else None
-
-    candidates = body.get("candidates")
-    if isinstance(candidates, list):
-        for cand in candidates:
-            if not isinstance(cand, dict):
-                continue
-            content = cand.get("content") or {}
-            parts = content.get("parts") or []
-            if not isinstance(parts, list):
-                continue
-            for part in parts:
-                if not isinstance(part, dict):
-                    continue
-                inline = part.get("inlineData")
-                if not isinstance(inline, dict):
-                    continue
-                encoded = inline.get("data")
-                if isinstance(encoded, str) and encoded.strip():
-                    raw = _decode_b64_audio(encoded.strip())
-                    return raw, None
-
-    raise LyriaProviderError("invalid_response", "Gemini/Lyria response did not include audio data.")
-
-
-def _classify_provider_status(status_code: int) -> str:
-    if status_code in (401, 403):
-        return "auth"
-    if status_code == 429:
-        return "rate_limit"
-    if status_code in (402,):
-        return "quota"
-    return "unavailable"
-
-
-async def call_gemini_lyria_instrumental(
-    *,
-    prompt: str,
-    api_key: str,
-    base_url: str,
-    model: str,
-) -> tuple[bytes, int | None]:
-    """Call Gemini/Lyria and return raw audio bytes."""
-    clean_model = model.strip().strip("/")
-    url = f"{base_url.rstrip('/')}/models/{clean_model}:generateContent?key={api_key}"
-    payload: dict[str, Any] = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "temperature": 0.8,
-            "topP": 0.9,
-            "audioTimestamp": True,
-            "speechConfig": {
-                "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": "none"}},
-            },
-        },
-    }
-    headers = {
-        "Content-Type": "application/json",
-    }
-    timeout = httpx.Timeout(120.0, connect=15.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(url, json=payload, headers=headers)
-
-    if resp.status_code >= 400:
-        text = (resp.text or "").strip()[:500]
-        code = _classify_provider_status(resp.status_code)
-        raise LyriaProviderError(code, f"Gemini/Lyria HTTP {resp.status_code}: {text}")
-
-    try:
-        body = resp.json()
-    except ValueError as exc:
-        raise LyriaProviderError("invalid_response", "Gemini/Lyria returned a non-JSON response.") from exc
-
-    return _parse_lyria_audio(body)
-
-
-def gemini_lyria_config() -> tuple[str | None, str, str]:
-    """API key, base URL, model name."""
-    key = os.getenv("GEMINI_API_KEY", "").strip()
-    base = os.getenv("GEMINI_API_BASE", DEFAULT_GEMINI_BASE).strip() or DEFAULT_GEMINI_BASE
-    model = os.getenv("LYRIA_MODEL", DEFAULT_LYRIA_MODEL).strip() or DEFAULT_LYRIA_MODEL
-    return (key or None), base, model
+# ---- Bundled fallback ----
 
 
 def _backing_tracks_root() -> Path:
@@ -227,7 +190,7 @@ def select_bundled_track(musical_key: str, bpm: int | None, style_hint: str | No
 
 def _wav_duration_ms(raw_wav: bytes) -> int:
     with wave.open(io.BytesIO(raw_wav), "rb") as wf:
-        frame_rate = wf.getframerate() or DEFAULT_OUTPUT_SAMPLE_RATE
+        frame_rate = wf.getframerate() or 44100
         frames = wf.getnframes()
     return int(round((frames / float(frame_rate)) * 1000))
 
@@ -246,7 +209,7 @@ def _ffmpeg_mp3_to_wav_bytes(path: Path) -> bytes:
             "-f",
             "wav",
             "-ar",
-            str(DEFAULT_OUTPUT_SAMPLE_RATE),
+            "44100",
             "-ac",
             "2",
             "pipe:1",
@@ -261,7 +224,7 @@ def _ffmpeg_mp3_to_wav_bytes(path: Path) -> bytes:
 
 
 def _synthetic_wav_fallback(duration_sec: float = 16.0) -> bytes:
-    sr = DEFAULT_OUTPUT_SAMPLE_RATE
+    sr = 44100
     total = int(duration_sec * sr)
     out = io.BytesIO()
     with wave.open(out, "wb") as wf:
@@ -270,7 +233,6 @@ def _synthetic_wav_fallback(duration_sec: float = 16.0) -> bytes:
         wf.setframerate(sr)
         for i in range(total):
             t = i / float(sr)
-            # Soft triad-like blend for emergency fallback only.
             sample = (
                 0.35 * math.sin(2 * math.pi * 110.0 * t)
                 + 0.18 * math.sin(2 * math.pi * 138.59 * t)

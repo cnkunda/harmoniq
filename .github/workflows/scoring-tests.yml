@@ -1,0 +1,39 @@
+name: Scoring Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  frontend:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+
+  backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py tests/test_boundary_tie.py tests/test_chord_vocab.py tests/test_guitarset_pipeline.py tests/test_e2e_data_pipeline.py

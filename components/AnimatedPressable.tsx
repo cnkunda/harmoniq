@@ -1,15 +1,19 @@
 import * as Haptics from 'expo-haptics'
-import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
+import { Pressable, type PressableProps } from 'react-native'
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated'
 
 import { spring } from '@/src/constants/animations'
 
 type HapticStrength = 'light' | 'medium' | 'heavy' | 'none'
 
-export interface AnimatedPressableProps extends Omit<PressableProps, 'style'> {
+export interface AnimatedPressableProps extends PressableProps {
   haptic?: HapticStrength
   className?: string
-  style?: StyleProp<ViewStyle>
 }
 
 const HAPTIC_STYLE: Record<Exclude<HapticStrength, 'none'>, Haptics.ImpactFeedbackStyle> = {
@@ -30,6 +34,7 @@ export function AnimatedPressable({
   ...props
 }: AnimatedPressableProps) {
   const scale = useSharedValue(1)
+  const reducedMotion = useReducedMotion()
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -38,23 +43,31 @@ export function AnimatedPressable({
   const handlePressIn: NonNullable<PressableProps['onPressIn']> = (e) => {
     onPressIn?.(e)
     if (disabled) return
-    scale.value = withSpring(0.97, spring.snappy)
+    if (reducedMotion) {
+      scale.value = 1
+    } else {
+      scale.value = withSpring(0.97, spring.snappy)
+    }
   }
 
   const handlePressOut: NonNullable<PressableProps['onPressOut']> = (e) => {
     onPressOut?.(e)
-    scale.value = withSpring(1, { damping: 15, stiffness: 300 })
+    if (reducedMotion) {
+      scale.value = 1
+    } else {
+      scale.value = withSpring(1, spring.gentle)
+    }
   }
 
   const handlePress: PressableProps['onPress'] = (e) => {
-    if (!disabled && haptic !== 'none') {
+    if (!disabled && haptic !== 'none' && !reducedMotion) {
       void Haptics.impactAsync(HAPTIC_STYLE[haptic])
     }
     onPress?.(e)
   }
 
   return (
-    <Animated.View style={[animStyle, style]}>
+    <Animated.View pointerEvents="box-none" style={[animStyle, style as any]}>
       <Pressable
         {...props}
         className={className}

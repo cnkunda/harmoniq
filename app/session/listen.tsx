@@ -5,27 +5,60 @@ import { Modal, ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { ChordCorrectionModal } from '@/components/ChordCorrectionModal'
+import { ChordStrip } from '@/components/ChordStrip'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
+import { EmptyState } from '@/components/EmptyState'
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
-import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
-import { useMusicTimelineData } from '@/src/session/useMusicTimelineData'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
-import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import { useCorrectionStore } from '@/src/stores/correctionStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
+import { applyCorrectionsToChordTimeline } from '@/src/utils/applyCorrections'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import colors from '@/src/constants/colors'
-import { Film, Pause, Play, X } from 'lucide-react-native'
+import { Film, Headphones, Pause, Play, X } from 'lucide-react-native'
 
 export default function ListenScreen() {
-  const { chordEvents, soloNotesArr, barTimestamps } = useMusicTimelineData()
+  const lesson = useLessonStore((s) => s.lesson)
+  const lessonJobId = lesson?.job_id ?? ''
+  const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
+
+  // Extract timeline data for MusicProvider
+  const rawChordEvents = getLessonWideChordEvents(lesson)
+  const jobId = lesson?.job_id ?? ''
+  const corrections = useCorrectionStore((s) => s.corrections[jobId])
+  // Commit 110: apply chord corrections for display (normalize confidence to required number)
+  const chordEvents: Array<{ timestamp: number; chord: string; confidence: number }> | null = (() => {
+    if (!rawChordEvents?.length) return null
+    const normalized: Array<{ timestamp: number; chord: string; confidence: number }> = rawChordEvents.map((e) => ({
+      timestamp: e.timestamp,
+      chord: e.chord,
+      confidence: e.confidence ?? 0,
+    }))
+    if (!jobId || !corrections?.chordCorrections?.length) return normalized
+    const patched = applyCorrectionsToChordTimeline(
+      { events: normalized, metadata: null },
+      corrections.chordCorrections,
+    )
+    return patched?.events ?? normalized
+  })()
+  const soloNotesArr = lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
 
   return (
-    <MusicProvider chordEvents={chordEvents} soloNotes={soloNotesArr} barTimestamps={barTimestamps}>
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
+    >
       <ListenScreenInner />
     </MusicProvider>
   )
@@ -35,27 +68,15 @@ function ListenScreenInner() {
   useStepCoachNarration()
   const isDemo = useIsDemoLesson()
   const router = useRouter()
+  const musicActions = useMusicActions()
   const params = useLocalSearchParams<{ section?: string }>()
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const lesson = useLessonStore((s) => s.lesson)
   const lessonJobId = lesson?.job_id ?? ''
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const stemTabRef = useRef<ListenStemPanelHandle>(null)
-  const musicActions = useMusicActions()
 
-  const handlePlaybackTick = useCallback(
-    (ctx: PlaybackTickContext) => {
-      musicActions.setPosition(ctx.positionSec * 1000)
-      musicActions.setPlaying(ctx.playing)
-    },
-    [musicActions],
-  )
-
-  useEffect(() => {
-    musicActions.setPosition(0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
+  // Commit 110: chord correction state — declare early so chordEvents can use them
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
   const [orientAnnotation, setOrientAnnotation] = useState<string | null>(null)
   const [orientIsPlaying, setOrientIsPlaying] = useState(false)
@@ -63,6 +84,32 @@ function ListenScreenInner() {
   const [orientIsLoading, setOrientIsLoading] = useState(false)
   const [orientError, setOrientError] = useState<string | null>(null)
   const orientSoundRef = useRef<Audio.Sound | null>(null)
+
+  // Commit 110: chord correction state
+  const [chordModalVisible, setChordModalVisible] = useState(false)
+  const [chordModalIndex, setChordModalIndex] = useState(0)
+  const [chordModalChord, setChordModalChord] = useState('N')
+  const jobId = lesson?.job_id ?? ''
+  const corrections = useCorrectionStore((s) => s.corrections[jobId])
+  const applyChordCorrection = useCorrectionStore((s) => s.applyChordCorrection)
+
+  const rawChordEvents = getLessonWideChordEvents(lesson)
+  const chordEvents: Array<{ timestamp: number; chord: string; confidence: number }> | null = (() => {
+    if (!rawChordEvents?.length) return null
+    const normalized: Array<{ timestamp: number; chord: string; confidence: number }> = rawChordEvents.map((e) => ({
+      timestamp: e.timestamp,
+      chord: e.chord,
+      confidence: e.confidence ?? 0,
+    }))
+    if (!jobId || !corrections?.chordCorrections?.length) return normalized
+    const patched = applyCorrectionsToChordTimeline(
+      { events: normalized, metadata: null },
+      corrections.chordCorrections,
+    )
+    return patched?.events ?? normalized
+  })()
+  const soloNotesArr = lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
 
   useEffect(() => {
     const raw = params.section
@@ -173,9 +220,22 @@ function ListenScreenInner() {
     else router.replace('/(tabs)')
   }
 
+  // Drive MusicProvider position from stem playback ticks
+  const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
+    musicActions.setPosition(ctx.positionSec * 1000)
+    musicActions.setPlaying(ctx.playing)
+  }, [musicActions])
+
+  // Seed initial chord/notes on mount so fretboard isn't blank before playback starts
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
-    <SessionStepScreen
+      <SessionStepScreen
       title="Listen"
+      phaseEyebrow="Orient phase"
       subtitle={
         isDemo ? DEMO_TOUR_SUBTITLE.listen : 'Familiarize yourself with the piece before playing'
       }
@@ -188,17 +248,60 @@ function ListenScreenInner() {
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.listen}</DemoTourCallout> : null}
 
-      <ListenStemPanel
-        ref={stemTabRef}
-        autoPlayOnReady={lesson?.job_id === DEMO_LESSON_JOB_ID}
-        onPlaybackTick={handlePlaybackTick}
+      {!lesson ? (
+        <EmptyState
+          Icon={Headphones}
+          heading="No song loaded for the Listen step"
+          subtext="Start from the Home tab to add and analyze a song."
+        />
+      ) : (
+        <ListenStemPanel
+          ref={stemTabRef}
+          autoPlayOnReady={lesson?.job_id === DEMO_LESSON_JOB_ID}
+          onPlaybackTick={handleStemPlaybackTick}
+        />
+      )}
+
+      {/* Commit 110: Chord strip for chord correction */}
+      {chordEvents && chordEvents.length > 0 && (
+        <ChordStrip
+          chordEvents={chordEvents}
+          barTimestamps={barTimestamps ?? []}
+          onChordTap={(idx, chord) => {
+            setChordModalIndex(idx)
+            setChordModalChord(chord)
+            setChordModalVisible(true)
+          }}
+        />
+      )}
+
+      <ChordCorrectionModal
+        visible={chordModalVisible}
+        currentChord={chordModalChord}
+        songKey={lesson?.key ?? null}
+        eventIndex={chordModalIndex}
+        onSelect={async (idx, newChord) => {
+          const original = chordEvents?.[idx]?.chord ?? 'N'
+          await applyChordCorrection(jobId, idx, original, newChord)
+          // Re-apply to lesson for immediate display
+          if (lesson && jobId) {
+            const updatedCorrections = useCorrectionStore.getState().getCorrections(jobId)
+            const patched = applyCorrectionsToChordTimeline(
+              { events: chordEvents ?? [], metadata: null },
+              updatedCorrections.chordCorrections,
+            )
+            const updatedLesson = { ...lesson, chord_timeline: patched }
+            useLessonStore.getState().saveLesson(updatedLesson)
+          }
+        }}
+        onClose={() => setChordModalVisible(false)}
       />
 
       <View className="mt-6">
         <AnimatedPressable haptic="light"
           onPress={openOrientModal}
           disabled={orientIsLoading}
-          className="min-h-[80px] items-center justify-center gap-3 rounded-xl border border-wood-600/30 bg-wood-900 py-4 shadow-sm active:bg-wood-800 disabled:opacity-50"
+          className="min-h-[80px] items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/35 py-4 active:bg-wood-700/50 disabled:opacity-50"
           accessibilityRole="button"
           accessibilityLabel={
             orientIsLoading
@@ -253,8 +356,8 @@ function ListenScreenInner() {
                   </AnimatedPressable>
                 ) : (
                   <View className="items-center gap-3 px-6">
-                    <Film color={colors.muted.light} size={40} strokeWidth={1.5} />
-                    <Text className="text-center font-sans text-sm text-muted-light">
+                    <Film color={colors.muted.brown} size={40} strokeWidth={1.5} />
+                    <Text className="text-center font-sans text-sm text-muted-brown">
                       {orientIsLoading
                         ? 'Loading performance guide…'
                         : orientError
@@ -266,7 +369,7 @@ function ListenScreenInner() {
               </View>
 
               <Text className="mt-6 font-serif text-2xl text-cream">Performance Guide</Text>
-              <Text className="mt-1 font-sans text-sm text-muted-light">
+              <Text className="mt-1 font-sans text-sm text-muted-brown">
                 Watch and listen to how this section is played.
               </Text>
 

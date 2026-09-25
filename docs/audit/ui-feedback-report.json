@@ -1,0 +1,601 @@
+{
+  "generatedAt": "2026-07-19T07:45:46.011Z",
+  "routesAnalyzed": 24,
+  "totalUiGapsFound": 14,
+  "note": "Cosmetic-only fixes. Never change functionality or business logic.",
+  "summary": {
+    "error": 1,
+    "warning": 6,
+    "info": 2
+  },
+  "allGapsByRoute": [
+    {
+      "route": "/jam",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        },
+        {
+          "severity": "warning",
+          "issue": "Typography",
+          "keywords": [
+            "font",
+            "typography",
+            "typeface"
+          ]
+        },
+        {
+          "severity": "info",
+          "issue": "Spacing inconsistency",
+          "keywords": [
+            "spacing"
+          ]
+        },
+        {
+          "severity": "info",
+          "issue": "Responsive layout",
+          "keywords": [
+            "responsive",
+            "mobile",
+            "narrow"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/library",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Contrast / readability",
+          "keywords": [
+            "contrast",
+            "readability",
+            "hard to read"
+          ]
+        },
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/onboarding",
+      "gaps": [
+        {
+          "severity": "error",
+          "issue": "Layout overflow / clipping",
+          "keywords": [
+            "overlap",
+            "overflow",
+            "clipped",
+            "cut off"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/onboarding/mic",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/onboarding/results",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Contrast / readability",
+          "keywords": [
+            "contrast",
+            "readability",
+            "hard to read"
+          ]
+        },
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        },
+        {
+          "severity": "warning",
+          "issue": "Typography",
+          "keywords": [
+            "font",
+            "typography",
+            "typeface"
+          ]
+        },
+        {
+          "severity": "info",
+          "issue": "Responsive layout",
+          "keywords": [
+            "responsive",
+            "mobile",
+            "narrow"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/onboarding/taste-quiz",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/scale-explorer",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "route": "/",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/root/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (HTTP 503)\nAll vision backends failed. Last error: HTTP 503"
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThis is an image that shows the text \"www=$_d=1, path=/, expires=Sun 20-Apr-2014 00:00:00 GMT, secure; httponly\" on the gray backdrop. All the alphabets are in black in all lowercase order."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:32:31.557Z",
+      "gaps": []
+    },
+    {
+      "route": "/add-song",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__add-song/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (Backend timed out after 12s)\nAll vision backends failed. Last error: Backend timed out after 12s"
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThe image appears to be a completely blank or solid gray visual with no distinguishable elements, text, or features. The grayness is uniform, and there is no indication of interactive elements or text. Without further context."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:33:35.463Z",
+      "gaps": []
+    },
+    {
+      "route": "/discover",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__discover/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (Backend timed out after 12s)\nAll vision backends failed. Last error: Backend timed out after 12s"
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__discover/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: OK"
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:35:35.494Z",
+      "gaps": []
+    },
+    {
+      "route": "/jam",
+      "viewport": {
+        "description": "[viewport.png]\nThis is a screenshot of a music practice or guitar learning application, specifically showing the \"Jam Mode\" interface.\n\n### **Visual Style and Color Palette**\nThe app uses a very warm, dark-themed aesthetic. The background is a deep, dark chocolate brown, while the text and UI elements use off-white, tan, and subtle orange accents. The overall look is clean, minimalist, and modern, clearly designed for easy reading during a practice session.\n\n### **Layout and Arrangement**\nThe screen is organized into a vertical stack of sections, moving from general settings at the top to specific choices in the middle, anchored by a navigation bar at the bottom.\n\n*   **Header Section:** At the very top left, the title \"Jam Mode\" is displayed in a large, serif font. Beneath it, the app shows the current selection: \"E minor — two-chord vamp\" along with technical details like the tempo (90 BPM) and the fact that it's an offline bundled loop. There is also a helpful \"Focus\" line suggesting techniques to practice, such as bending, phrasing, and vibrato.\n*   **Backing Source:** This section offers two main ways to get backing music. The first option, \"Offline loop (bundled MP3),\" is currently selected, indicated by a thin, light-colored border around the box. Below it is an option for an \"AI instrumental\" which generates music based on a selected key and tempo.\n*   **Loop Style:** This is the primary list on the screen. It features several rows of different musical \"loops\" or backings you can jam along with. Each row contains the musical key and description on the left (e.g., \"A minor — slow blues shuffle,\" \"G major — slow ballad\") and the tempo or style (e.g., \"70 BPM,\" \"ambient\") on the right. Thin horizontal lines separate these options for clarity. The \"E minor — two-chord vamp\" row appears slightly highlighted, matching the info in the header.\n*   **Navigation Bar:** At the bottom is a standard app navigation menu with six distinct icons:\n    *   **Home** (house icon)\n    *   **Library** (slanted lines/books icon)\n    *   **Progress** (bar chart icon)\n    *   **Jam** (music notes icon) — This icon and label are highlighted in a muted orange, indicating the user is currently in this section.\n    *   **Discover** (compass/target icon)\n    *   **Settings** (gear icon)\n\nThe spacing is generous throughout, making the interface feel uncluttered and easy to navigate with a thumb on a mobile device."
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThis image captures an empty view of the Spring 2024 timetable. The overall layout is structured in a grid-like manner characteristic of timetable interfaces. Noticeably, the view is populated with rows and columns, each dedicated to presenting different timetable details such as times, room numbers, and course information. However, all cells in this grid are blank, indicating no scheduled classes or events at this time."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:35:55.014Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        },
+        {
+          "severity": "warning",
+          "issue": "Typography",
+          "keywords": [
+            "font",
+            "typography",
+            "typeface"
+          ]
+        },
+        {
+          "severity": "info",
+          "issue": "Spacing inconsistency",
+          "keywords": [
+            "spacing"
+          ]
+        },
+        {
+          "severity": "info",
+          "issue": "Responsive layout",
+          "keywords": [
+            "responsive",
+            "mobile",
+            "narrow"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/library",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__library/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (Backend timed out after 12s)\nAll vision backends failed. Last error: Backend timed out after 12s"
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThe image depicts an empty gray square, uniformly colored without any variation or detail. It is set against a solid white background, creating a stark contrast between the two tones. The square is positioned centrally and occupies the entire visible area with no other elements present in the composition."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:36:28.870Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Contrast / readability",
+          "keywords": [
+            "contrast",
+            "readability",
+            "hard to read"
+          ]
+        },
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/listening",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__listening/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (HTTP 503)\nAll vision backends failed. Last error: HTTP 503"
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThis image is a solid, uniform white rectangle. There are no visible subjects, text, or patterns; it's a completely blank, empty space with a clean and minimalist aesthetic."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:37:02.781Z",
+      "gaps": []
+    },
+    {
+      "route": "/onboarding",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__onboarding/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (HTTP 503)\nAll vision backends failed. Last error: HTTP 503"
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThe image depicts a white land mass that has the magnified look to it and appears to be fitted with a bridge with few spots visible toward middle and lower sections, possibly some textured floor can be seen on the right side. The land mass has different shades of grey on the left hand side and it’s irregularly cut off from the top edge, and it stands on a uniform white background. A raised bridge with a dark appearance, positioned centrally, connects the two land forms and has some cross lines on to let go some texture details. The bridge is dotted with small, dark spots, while concentrated textures toward middle and lower edge right under the bridge are visible. The background is a seamless uniform white with darker rounded corners on the top part of the image."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:37:16.063Z",
+      "gaps": [
+        {
+          "severity": "error",
+          "issue": "Layout overflow / clipping",
+          "keywords": [
+            "overlap",
+            "overflow",
+            "clipped",
+            "cut off"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/onboarding/mic",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__onboarding__mic/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (Backend timed out after 12s)\nAll vision backends failed. Last error: Backend timed out after 12s"
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThis is a blank gray color full page image."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:37:47.847Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/onboarding/phrase/0",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__onboarding__phrase__0/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (Backend timed out after 12s)\nAll vision backends failed. Last error: Backend timed out after 12s"
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__onboarding__phrase__0/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (HTTP 503)\nAll vision backends failed. Last error: HTTP 503"
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:39:47.892Z",
+      "gaps": []
+    },
+    {
+      "route": "/onboarding/results",
+      "viewport": {
+        "description": "[viewport.png]\nThis image shows a clean, minimalist UI screen, likely from a mobile app or web interface designed for skill assessment, possibly in music or language.\n\nThe layout is very simple and focused, with all the content centered vertically and horizontally against a solid, deep chocolate-brown background. There is a significant amount of negative space, which draws the eye directly to the information in the middle.\n\nThe elements are arranged in a vertical stack:\n\n*   **Headline:** At the top of the central cluster, it says \"Your baseline will appear here\" in a light cream-colored serif font, giving it a sophisticated and elegant look.\n*   **Subtext:** Below the headline is a smaller block of explanatory text in a light tan sans-serif font. It reads: \"Complete the three placement phrases to see your skill baseline, coach note, and song recommendations on this screen.\"\n*   **Button:** At the bottom is a prominent, rounded-corner button. The button is a warm, light apricot or tan color with the text \"Start placement phrases\" written inside in the same dark brown as the background.\n\nThe overall visual style is modern and professional, using high contrast and clear hierarchy to guide the user toward the \"Start\" action. The warm color palette feels inviting and premium."
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__onboarding__results/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (Backend timed out after 12s)\nAll vision backends failed. Last error: Backend timed out after 12s"
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:41:01.366Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Contrast / readability",
+          "keywords": [
+            "contrast",
+            "readability",
+            "hard to read"
+          ]
+        },
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        },
+        {
+          "severity": "warning",
+          "issue": "Typography",
+          "keywords": [
+            "font",
+            "typography",
+            "typeface"
+          ]
+        },
+        {
+          "severity": "info",
+          "issue": "Responsive layout",
+          "keywords": [
+            "responsive",
+            "mobile",
+            "narrow"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/onboarding/taste-quiz",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__onboarding__taste-quiz/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (HTTP 503)\nAll vision backends failed. Last error: HTTP 503"
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThe image provided is a blank, solid white rectangle. It doesn't contain any visible subjects, text, graphics, or UI elements. It is completely uniform in color and texture throughout."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:41:25.778Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/progress",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__progress/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (HTTP 503)\nAll vision backends failed. Last error: HTTP 503"
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThis image is simply a gray rectangular shape, with the length being longer than the height, and a size ratio of 4:3. There are no other objects or identifiable properties in the image."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:42:29.884Z",
+      "gaps": []
+    },
+    {
+      "route": "/review-archive/demo-session",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__review-archive__demo-session/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: OK"
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThe image is completely black."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:43:35.386Z",
+      "gaps": []
+    },
+    {
+      "route": "/scale-explorer",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__scale-explorer/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 404)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (Backend timed out after 12s)\nAll vision backends failed. Last error: Backend timed out after 12s"
+      },
+      "fullPage": {
+        "description": "[full-page.png]\nThe image is a solid, uniform white rectangle. It is completely blank and contains no text, subjects, or colors other than pure white. It has a very simple, minimalist appearance, essentially serving as a clean, empty canvas or a solid background."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:44:10.659Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/session/listen",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__listen/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 4 backends in 24h limit cooldown\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ☆ Gemini 3 Pro Preview: retry in ~23h\nKEYS: 3 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (Backend timed out after 4s)\n  ☆ Gemini 2.5 Flash: FAILED (HTTP 429)\nFALLBACK: 1 backends in parallel\n  ☆ Gemini 3 Flash Preview: FAILED (HTTP 429)\nAll vision backends failed. Last error: HTTP 429"
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__listen/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 6 backends in 24h limit cooldown\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ☆ Gemini 2.5 Pro: retry in ~23h\n  ... 1 more\nKEYS: 1 backends available\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: FAILED (HTTP 429)\nAll vision backends failed. Last error: HTTP 429"
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:45:12.502Z",
+      "gaps": []
+    },
+    {
+      "route": "/session/mood-check",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__mood-check/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__mood-check/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:45:16.071Z",
+      "gaps": []
+    },
+    {
+      "route": "/session/musical-tolerance",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__musical-tolerance/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__musical-tolerance/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:45:19.949Z",
+      "gaps": []
+    },
+    {
+      "route": "/session/play",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__play/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__play/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:45:23.706Z",
+      "gaps": []
+    },
+    {
+      "route": "/session/review",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__review/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__review/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:45:26.983Z",
+      "gaps": []
+    },
+    {
+      "route": "/session/slow",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__slow/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__slow/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:45:30.350Z",
+      "gaps": []
+    },
+    {
+      "route": "/session/study",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__study/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__study/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:45:33.738Z",
+      "gaps": []
+    },
+    {
+      "route": "/session/tune",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__tune/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__tune/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:45:37.245Z",
+      "gaps": []
+    },
+    {
+      "route": "/session/warmup",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__warmup/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__warmup/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:45:42.363Z",
+      "gaps": []
+    },
+    {
+      "route": "/settings",
+      "viewport": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__settings/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "fullPage": {
+        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__settings/full-page.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✗  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 23/30 backends (missing API key)\nMEMORY: Skipped 7 backends in 24h limit cooldown\n  ★ Openrouter: openrouter/nvidia/nemotron-nano-12b-v2-vl:free: retry in ~24h\n  ☆ Gemini 2.5 Flash: retry in ~24h\n  ☆ Gemini 3 Flash Preview: retry in ~24h\n  ☆ Gemini 2.0 Flash: retry in ~23h\n  ☆ Gemini 2.0 Flash Lite: retry in ~23h\n  ... 2 more\nKEYS: 0 backends available\nAll configured vision backends are in 24h limit cooldown. Next retry in ~23h."
+      },
+      "states": {},
+      "analyzedAt": "2026-07-19T07:45:46.010Z",
+      "gaps": []
+    }
+  ],
+  "designSystem": {
+    "colors": "src/constants/colors.ts — wood/amber/cream tokens",
+    "typography": "Playfair Display (headings), DM Sans (body), JetBrains Mono (mono)",
+    "components": "AnimatedPressable, NoiseOverlay, WoodGradient, lucide-react-native",
+    "animation": "react-native-reanimated, spring/timing presets in src/constants/animations.ts"
+  }
+}

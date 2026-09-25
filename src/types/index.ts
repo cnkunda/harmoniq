@@ -101,6 +101,64 @@ export interface SpotifyPlaybackStatePayload {
   artists: string[]
 }
 
+/** GET /spotify/search — pass-through from Spotify. */
+export interface SpotifySearchResult {
+  tracks?: { items?: Array<Record<string, unknown>>; total?: number } | null
+  artists?: { items?: Array<Record<string, unknown>>; total?: number } | null
+  albums?: { items?: Array<Record<string, unknown>>; total?: number } | null
+  playlists?: { items?: Array<Record<string, unknown>>; total?: number } | null
+}
+
+/** GET /spotify/recommendations — pass-through from Spotify. */
+export interface SpotifyRecommendationsResult {
+  tracks: Array<Record<string, unknown>>
+  seeds: Array<Record<string, unknown>>
+}
+
+/** GET /spotify/recommendations/available-genre-seeds. */
+export interface SpotifyAvailableGenreSeeds {
+  genres: string[]
+}
+
+/** GET /spotify/playlists — pass-through from Spotify. */
+export interface SpotifyPlaylistList {
+  href: string
+  limit: number
+  next?: string | null
+  offset: number
+  previous?: string | null
+  total: number
+  items: Array<Record<string, unknown>>
+}
+
+/** GET /spotify/playlists/{playlist_id} — pass-through from Spotify. */
+export interface SpotifyPlaylistDetail {
+  id: string
+  name: string
+  description?: string | null
+  public?: boolean | null
+  collaborative: boolean
+  owner: Record<string, unknown>
+  tracks: Record<string, unknown>
+  images: Array<Record<string, unknown>>
+  uri: string
+  external_urls: Record<string, string>
+  snapshot_id: string
+  type: string
+  href: string
+}
+
+/** GET /spotify/playlists/{playlist_id}/items — pass-through from Spotify. */
+export interface SpotifyPlaylistItems {
+  href: string
+  limit: number
+  next?: string | null
+  offset: number
+  previous?: string | null
+  total: number
+  items: Array<Record<string, unknown>>
+}
+
 /** POST /taste/derive response — commit 68. */
 export interface TasteProfilePayload {
   style_label: string
@@ -142,10 +200,53 @@ export interface ChordEvent {
   timestamp: number
   chord: string
   confidence: number
+  /** Commit 116: Roman numeral functional label (e.g., 'I', 'ii7', 'V7') */
+  roman_numeral?: string
+  /** Commit 116: LLM-corrected chord symbol when confidence delta exceeds threshold */
+  llm_corrected?: string
+  /** Commit 116: Whether an LLM correction was applied */
+  correction_applied?: boolean
+  /** Commit 116: Confidence delta between original and LLM-corrected chord */
+  correction_delta?: number
+  /** Commit B8: Detected bass note root (e.g., 'E', 'G#'). Undefined when bass = root or unknown. */
+  bass?: string
+  /** Commit B8: Inversion: undefined=root, 1=first, 2=second, 3=third. */
+  inversion?: number
+  /** Commit B9: Detected CAGED voicing shape ('E', 'A', 'C', 'D', 'G') or undefined. */
+  voicing_shape?: string
+  /** Commit B9: Fret position of the voicing (0=open, 1-12=barre). */
+  voicing_position?: number
+}
+
+export interface ChordTimelineMetadata {
+  flicker_rate: number
+  beat_alignment_pct: number
+  downbeat_alignment_pct: number
+  chord_change_histogram: {
+    bins: string[]
+    counts: number[]
+    total_changes: number
+    flicker_pct: number
+    median_duration_beats: number
+  }
+  duration_filtering: {
+    sub_beat_count: number
+    total_chord_events: number
+    sub_beat_ratio: number
+    sub_beat_events: Array<{
+      chord: string
+      duration_beats: number
+      confidence: number
+      timestamp: number
+    }>
+  }
+  total_events: number
+  unique_chords: number
 }
 
 export interface ChordTimeline {
   events: ChordEvent[]
+  metadata?: ChordTimelineMetadata | null
 }
 
 export interface SoloNote {
@@ -171,12 +272,38 @@ export interface LessonSection {
   beat_grid?: BeatGrid | null
   chord_timeline?: ChordTimeline | null
   solo_notes?: SoloNotes | null
+  /** @deprecated Export-only (GP5→MIDI conversion). Use `musicxml` for rendering. */
   tab_full_gp5_base64?: string | null
+  /** @deprecated Export-only (GP5→MIDI conversion). Use `musicxml` for rendering. */
   tab_skeleton_gp5_base64?: string | null
+  /** @deprecated Export-only (GP5→MIDI conversion). Use `musicxml` for rendering. */
   tab_alt_position_gp5_base64?: string | null
   coach_note?: string | null
   coach_explanation?: string | null
+  /** Commit 108: MusicXML score for this section (canonical render format). */
+  musicxml?: string | null
+  /** Commit 118: groups instances of the same musical section (0-based). */
+  repeat_group_id?: number | null
+  /** Commit 118: true if this section appears more than once in the song. */
+  is_repeated?: boolean | null
+  /** Commit 118: total number of instances in this repeat group (e.g. 3). */
+  repeat_count?: number | null
+  /** Commit 118: 1-based position within the repeat group (e.g. 2 = second of three). */
+  repeat_index?: number | null
+  /** Commit 119: confidence in the semantic section label (0-1). <0.6 triggers "Section N" fallback. */
+  label_confidence?: number | null
   [key: string]: unknown
+}
+
+export interface InstrumentConfusionPerSection {
+  section_index: number
+  label: string
+  start_time: number | null
+  end_time: number | null
+  instrument_confusion: number
+  is_high_confusion: boolean
+  beat_count: number
+  disagreement_count: number
 }
 
 export interface LessonJSON {
@@ -194,7 +321,7 @@ export interface LessonJSON {
   beat_align_offset_sec?: number | null
   bar_timestamps?: number[]
   /** Chord timeline from transcription analysis - may be at lesson level or section level. */
-  chord_timeline?: { events: Array<{ timestamp: number; chord: string; confidence: number }> } | null
+  chord_timeline?: { events: Array<{ timestamp: number; chord: string; confidence: number }>; metadata?: ChordTimelineMetadata | null } | null
   /** Solo notes from transcription analysis - may be at lesson level or section level. String/fret are tab positions when available from score. */
   solo_notes?: { notes: Array<{ start_time: number; duration: number; pitch: number; velocity?: number; string?: number; fret?: number }> } | null
   stems?: Record<string, string>
@@ -222,7 +349,67 @@ export interface LessonJSON {
   } | null
   /** MusicXML lead sheet with chord symbols (<harmony>) and tab notes (<technical> string/fret). */
   musicxml?: string | null
+  /** Commit 108: Structured BeatGrid at top level (flat beat_grid preserved for backward compat). */
+  beat_grid_structured?: BeatGrid | null
+  /** Commit 110: Correction metrics. */
+  correction_count?: number | null
+  correction_coverage?: number | null
+  /** Commit 121: Dual-path instrument confusion metric (0-1). */
+  instrument_confusion?: number | null
+  /** Commit 112: Continuous stem quality confidence (0-1). */
+  stem_confidence?: number | null
+  /** Commit 121: Per-section instrument confusion scores. */
+  instrument_confusion_per_section?: InstrumentConfusionPerSection[]
+  /** Phase 2: Which pipeline tier produced this transcription: 'mt3', 'crnn', 'chroma', or null. */
+  transcription_source?: string | null
 }
+
+// ---- Commit 110: Correction types ----
+
+export interface ChordCorrection {
+  id: string
+  /** Index into chord_timeline.events at the time of correction. */
+  eventIndex: number
+  originalChord: string
+  correctedChord: string
+  /** Epoch ms when correction was made. */
+  timestamp: number
+}
+
+export interface NoteCorrection {
+  id: string
+  /** Index into solo_notes.notes at the time of correction. */
+  noteIndex: number
+  originalPitch: number
+  originalDuration: number
+  originalStartTime: number
+  correctedPitch?: number
+  correctedDuration?: number
+  correctedStartTime?: number
+  correctedString?: number
+  correctedFret?: number
+  timestamp: number
+}
+
+export interface VoicingOverride {
+  id: string
+  /** Matches ChordEvent.timestamp to identify the chord. */
+  chordTimestamp: number
+  originalShape: string
+  correctedShape: string
+  /** Commit B9: Position override value. */
+  voicing_position?: number
+  /** Epoch ms when override was made. */
+  timestamp: number
+}
+
+export interface CorrectionSet {
+  chordCorrections: ChordCorrection[]
+  noteCorrections: NoteCorrection[]
+  voicingOverrides: VoicingOverride[]
+}
+
+// ---- End Commit 110 ----
 
 export interface AnalyzeJob {
   status: AnalyzeJobStatus
@@ -235,6 +422,32 @@ export interface AnalyzeJob {
   stage_label?: string | null
   /** Unix seconds when processing began (server); optional for older backends. */
   processing_started_at?: number | null
+  /** Commit 109: Machine-readable analysis stage for progressive rendering. */
+  analysis_stage?: string | null
+}
+
+/** Commit 109: Beat grid recompute status from GET /analyze/{id}/beat-grid/recompute */
+export type BeatGridRecomputeStatus =
+  | 'pending'
+  | 'recomputing_beats'
+  | 'recomputing_chords'
+  | 'recomputing_solo'
+  | 'rebuilding_musicxml'
+  | 'complete'
+  | 'failed'
+
+/** Commit 109: Beat grid recompute response */
+export interface BeatGridRecomputeResponse {
+  job_id: string
+  status: BeatGridRecomputeStatus
+  beat_grid?: BeatGrid | null
+  chord_timeline?: ChordTimeline | null
+  solo_notes?: SoloNotes | null
+  musicxml?: string | null
+  bar_timestamps?: number[]
+  error?: string | null
+  progress?: number | null
+  stage_label?: string | null
 }
 
 /** POST /score response — see README.md */
@@ -264,6 +477,8 @@ export interface ScoreResult {
     confidence: 'low' | 'medium' | 'high'
     signal_quality: number
     reliability_flags: string[]
+    stem_confidence?: number | null
+    instrument_confusion?: number | null
   }
 }
 
@@ -275,6 +490,7 @@ export interface JamResult {
   pitch_class_weight_map: Record<string, number>
   position_weight_map: Record<string, number>
   inferred_scale_label?: string | null
+  inferred_mode?: string | null
   inference_confidence?: 'low' | 'medium' | 'high' | null
   focus_pitch_class_key?: string | null
   focus_pitch_class_weight?: number | null
@@ -303,11 +519,24 @@ export interface SkillNode {
   next_review_date: string
 }
 
+export interface Annotation {
+  bar: number
+  text: string
+}
+
 export interface Lick {
   id: string
   song_title: string
   artist: string
   key: string
+  scale: string
+  position: string
+  tab_gp5_base64: string
+  audio_segment_path?: string
+  coach_oneliner: string
+  technique_tags: string[]
+  user_annotations: Annotation[]
+  date_saved: string
 }
 
 /** Discovery agent suggestions (commit 91). */

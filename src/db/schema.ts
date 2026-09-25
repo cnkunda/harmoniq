@@ -89,6 +89,9 @@ export const PREF_PREFER_FULL_TABS = 'prefer_full_tabs'
  *  new default).  Read as a fallback when `PREF_PREFER_FULL_TABS` is unset:
  *  a stored `"0"` meant "always full tab" and maps to `PREF_PREFER_FULL_TABS = "1"`. */
 export const PREF_PREFER_SIMPLER_TABS_LEGACY = 'prefer_simpler_tabs'
+/** Pre-flip key ("1" = prefer simpler tabs). Kept for the pre-ML-fallback
+ *  Study screen which still reads this key directly. */
+export const PREF_PREFER_SIMPLER_TABS = 'prefer_simpler_tabs'
 /** A4 reference in Hz (future tuner / playback). */
 export const PREF_STANDARD_TUNING_HZ = 'standard_tuning_hz'
 /** Short free-text style focus for coach context later. */
@@ -133,6 +136,9 @@ export const PREF_TAB_VARIANT = 'tab_variant'
 export const PREF_SHOW_LYRICS = 'show_lyrics'
 /** Commit 72: speech rate 0.7–1.2 (stored as string float, default 1). */
 export const PREF_VOICE_COACH_RATE = 'voice_coach_rate'
+
+/** B7: daily lick dismissal — base key, suffix with YYYY-MM-DD. */
+export const PREF_DAILY_LICK_DISMISSED = 'daily_lick_dismissed_'
 /** Commit 72: `default` | `female` | `male` — OS voice selection hint. */
 export const PREF_VOICE_COACH_GENDER = 'voice_coach_gender'
 
@@ -268,6 +274,12 @@ export const ROLLBACK_V15_JAM_SNAPSHOT_SUMMARY = [
   'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS summary_bundle_json',
   'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS phrases_json',
 ] as const
+
+/** v16: inferred_mode column on jam_snapshots for Milestone B Commit B3. */
+export const MIGRATION_V16_JAM_SNAPSHOT_INFERRED_MODE = 'ALTER TABLE jam_snapshots ADD COLUMN inferred_mode TEXT'
+
+/** Rollback for v16: remove inferred_mode column. */
+export const ROLLBACK_V16_JAM_SNAPSHOT_INFERRED_MODE = 'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS inferred_mode'
 
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },

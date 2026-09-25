@@ -6,17 +6,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# Phase 2: Analysis pipeline stages for progressive progress reporting
-AnalysisStage = Literal[
-    "initializing",
-    "ingesting",
-    "stems_separating",
-    "chords_inferring",
-    "solo_inferring",
-    "building_musicxml",
-    "complete",
-]
-
 
 class SkillNode(BaseModel):
     """One skill row snapshot for personalized coach context (analyze)."""
@@ -110,7 +99,7 @@ class FretboardGuideCell(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     string: int = Field(..., ge=1, le=6)
-    fret: int = Field(..., ge=0, le=12)
+    fret: int = Field(..., ge=0, le=24)
     variant: FretboardGuideVariant = "primary"
     finger: int | None = Field(default=None, ge=1, le=4, description="Finger to use (1=index, 2=middle, 3=ring, 4=pinky)")
 
@@ -136,6 +125,7 @@ class WarmupExercise(BaseModel):
     technique_tag: str = Field(..., min_length=1, max_length=80)
     bpm: int = Field(..., ge=40, le=240)
     fretboard_guide: FretboardGuide | None = None
+    difficulty: int = Field(default=2, ge=1, le=3)
 
 
 class WarmupPlan(BaseModel):
@@ -253,22 +243,31 @@ class BeatGrid(BaseModel):
     
 
 class StemRoutingHints(BaseModel):
-    """Stem selection hints handed off to chord/solo inference (commit 79 hook, commit 110 routing)."""
+    """Stem selection hints and resolved paths for chord/solo inference (Commit 111).
+
+    Pre-routing fields (``chord_mix_stems``, ``melodic_preference_order``,
+    ``selected_melodic_stem``) come from ``build_stem_routing_hints``.
+    Post-routing fields (``resolved_chord_path``, ``resolved_solo_path``,
+    ``resolved_chord_mix_keys``, ``fallback_reason``) are populated by the
+    analysis pipeline after the hint-aware chord/solo routing block runs.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
+    # Pre-routing hints from build_stem_routing_hints
     chord_mix_stems: list[str] = Field(default_factory=lambda: ["bass", "other"])
     melodic_preference_order: list[str] = Field(default_factory=list)
     selected_melodic_stem: str = "guitar"
-    # Commit 110: resolved paths after routing (observability, not just hints)
-    chord_mix_path: str | None = Field(default=None, description="Backend-relative path of bass+other mixed WAV used for chord inference")
-    melodic_stem_path: str | None = Field(default=None, description="Backend-relative path of stem used for solo inference")
-    chord_source: str | None = Field(default=None, description="How chord path was resolved: 'bass_other_mix' | 'full_mix' | 'guitar_fallback'")
-    solo_source: str | None = Field(default=None, description="How solo path was resolved: 'selected' | 'guitar' | 'vocals' | 'fallback'")
+
+    # Commit 111 — populated after routing is resolved
+    resolved_chord_path: str | None = None
+    resolved_solo_path: str | None = None
+    resolved_chord_mix_keys: list[str] = Field(default_factory=list)
+    fallback_reason: str | None = None
 
 
 class TranscriptionPrepareResponse(BaseModel):
-    """`POST /transcription/prepare` payload (commit 78, extended 113)."""
+    """`POST /transcription/prepare` payload (commit 78)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -277,11 +276,48 @@ class TranscriptionPrepareResponse(BaseModel):
     beat_grid: BeatGrid
     stem_routing: StemRoutingHints
     audio_chunk_paths: list[str] = Field(default_factory=list)
-    audio_chunk_offsets: list[dict] = Field(
-        default_factory=list,
-        description="Per-chunk offset metadata: {chunk_index, start_seconds, end_seconds} (Commit 113)",
-    )
     invalidated_artifacts: list[str] = Field(default_factory=list)
+
+
+# Commit 109: Beat grid recompute schemas
+class BeatGridRecomputeRequest(BaseModel):
+    """Request body for POST /analyze/{job_id}/beat-grid/recompute."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    time_signature: str | None = Field(
+        default=None,
+        description="New time signature, e.g. '4/4', '6/8', '3/4'. Omit to keep current.",
+    )
+    bpm_override: float | None = Field(
+        default=None,
+        description="New BPM override. Omit to keep current (librosa-estimated).",
+    )
+
+
+class BeatGridRecomputeResponse(BaseModel):
+    """Response from POST /analyze/{job_id}/beat-grid/recompute — job-like status for async recompute."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    job_id: str
+    status: Literal["pending", "recomputing_beats", "recomputing_chords", "recomputing_solo", "rebuilding_musicxml", "complete", "failed"] = "pending"
+    beat_grid: BeatGrid | None = None
+    chord_timeline: ChordTimeline | None = None
+    solo_notes: SoloNotes | None = None
+    musicxml: str | None = None
+    bar_timestamps: list[float] = Field(default_factory=list)
+    error: str | None = None
+    progress: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Approximate progress 0–1 while recomputing.",
+    )
+    stage_label: str | None = Field(
+        default=None,
+        description="Short stage label while recomputing.",
+    )
 
 
 class AnalyzeRequest(BaseModel):
@@ -346,6 +382,21 @@ class AlphaTabPrerenderHints(BaseModel):
     artifact_rel: str | None = None
 
 
+class SectionConfusionScore(BaseModel):
+    """Commit 121: Per-section instrument confusion metric from dual-path divergence."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    section_index: int
+    label: str = ""
+    start_time: float | None = None
+    end_time: float | None = None
+    instrument_confusion: float = Field(ge=0.0, le=1.0, default=0.0)
+    is_high_confusion: bool = False
+    beat_count: int = 0
+    disagreement_count: int = 0
+
+
 class LessonSectionStub(BaseModel):
     """One teachable slice of the song — expand per README LessonJSON.sections."""
 
@@ -355,8 +406,19 @@ class LessonSectionStub(BaseModel):
     confidence: float | None = None
     # Start time in seconds for Listen step section chips (librosa segments).
     start_time_seconds: float | None = None
+    # Commit 117: end time for section boundaries (computed from next section start)
+    end_time_seconds: float | None = None
+    # Commit 117: confidence in the label assignment (0-1)
+    label_confidence: float | None = None
+    # Commit 118: repetition-aware section grouping
+    repeat_group_id: int | None = None
+    is_repeated: bool | None = None
+    repeat_count: int | None = None
+    repeat_index: int | None = None
     # Transcription validation metadata (commit #82)
     transcription_metadata: dict[str, Any] | None = None
+    # Commit 108: MusicXML score for this section (canonical render format)
+    musicxml: str | None = None
 
 
 class LessonJSON(BaseModel):
@@ -373,9 +435,7 @@ class LessonJSON(BaseModel):
     tempo: float | None = None
     tempo_confidence: float | None = None
     transcription_confidence: float | None = None
-    # Legacy beat-timestamp list (metronome clicks); full BeatGrid objects live
-    # per-section and may also be hoisted here (Commit 107).
-    beat_grid: BeatGrid | list[float] | None = Field(default_factory=list)
+    beat_grid: list[float] = Field(default_factory=list)
     bar_timestamps: list[float] = Field(default_factory=list)
     stems: dict[str, str] = Field(default_factory=dict)
     lyrics_aligned: list[dict[str, Any]] = Field(default_factory=list)
@@ -389,13 +449,27 @@ class LessonJSON(BaseModel):
     tabs_unavailable_reason: str | None = None
     # Commit 82: Low SNR warning for pre-emptive transcription quality warning
     low_snr_warning: bool | None = None
-    # Commit 107: MusicXML primary render format (text XML string from analysis pipeline)
-    musicxml: str | None = None
-    # Commit 107: full analysis artifacts exposed at lesson top level so
-    # clients (AlphaTab harness, study fretboard, exporter) do not have to
-    # reconstruct them from sections.
+    # Full chord timeline for bar chip rendering (section-scoped timelines are for section views)
     chord_timeline: ChordTimeline | None = None
+    # Commit 108: MusicXML lead sheet string (canonical render format)
+    musicxml: str | None = None
+    # Commit 108: Structured solo notes at top level
     solo_notes: SoloNotes | None = None
+    # Commit 108: Structured BeatGrid at top level (flat beat_grid preserved for backward compat)
+    beat_grid_structured: BeatGrid | None = None
+    # Commit 111: Embedded stem routing telemetry (which stems fed chord/solo inference)
+    stem_routing: StemRoutingHints | None = None
+    # Commit 112: Continuous stem quality confidence (0-1) and instrument confusion metric
+    stem_confidence: float | None = None
+    instrument_confusion: float | None = None
+    # Commit 123: Solo harmony enrichment
+    harmonized_solo: HarmonizedSoloNotes | None = None
+    per_bar_analysis: list[BarScope] | None = None
+    # Phase 2 Milestone A: MT3 transcription source indicator
+    transcription_source: str | None = Field(
+        default=None,
+        description="Which pipeline tier produced this transcription: 'mt3', 'crnn', 'chroma', or None",
+    )
 
 
 class JobStatus(BaseModel):
@@ -418,13 +492,14 @@ class JobStatus(BaseModel):
         default=None,
         description="Short stage label while processing.",
     )
-    analysis_stage: AnalysisStage | None = Field(
-        default=None,
-        description="Structured pipeline stage for frontend stage-aware UI.",
-    )
     processing_started_at: float | None = Field(
         default=None,
         description="Unix timestamp when processing began (server clock).",
+    )
+    # Commit 109: Progressive analysis stage for frontend partial rendering
+    analysis_stage: str | None = Field(
+        default=None,
+        description="Machine-readable analysis stage: initializing, stems_separating, mt3_inferring, chords_inferring, solo_inferring, building_musicxml, complete.",
     )
 
 
@@ -442,6 +517,17 @@ class CoachHydrationStatus(BaseModel):
     fallback_reason: str | None = None
 
 
+class ChordEnrichmentStatus(BaseModel):
+    """GET /analyze/{job_id}/chord-enrichment status payload (commit 116)."""
+
+    status: Literal["pending", "processing", "complete", "skipped"] = "pending"
+    total_events: int = 0
+    corrected_events: int = 0
+    llm_latency_p50: float | None = None
+    llm_latency_p95: float | None = None
+    fallback_reason: str | None = None
+
+
 class ScoreRequest(BaseModel):
     """POST /score request payload."""
 
@@ -455,6 +541,14 @@ class ScoreRequest(BaseModel):
     musical_tolerance_mode: MusicalToleranceMode = Field(
         default="technique",
         description="Musical tolerance mode for scoring: 'expressive' (lenient) or 'technique' (strict) (commit 92)",
+    )
+    stem_confidence: float | None = Field(
+        default=None,
+        description="Continuous stem quality confidence (0-1) from Commit 112 dual-path fusion.",
+    )
+    instrument_confusion: float | None = Field(
+        default=None,
+        description="Commit 121: Global instrument confusion (0-1) from dual-path divergence.",
     )
 
 
@@ -477,6 +571,14 @@ class ReliabilityEnvelope(BaseModel):
     confidence: Literal["low", "medium", "high"] = "low"
     signal_quality: float = Field(ge=0.0, le=1.0, default=0.0)
     reliability_flags: list[str] = Field(default_factory=list)
+    stem_confidence: float | None = Field(
+        default=None,
+        description="Continuous stem quality confidence (0-1) from Commit 112.",
+    )
+    instrument_confusion: float | None = Field(
+        default=None,
+        description="Commit 121: Global instrument confusion (0-1) from dual-path divergence.",
+    )
 
 
 class ScoreResult(BaseModel):
@@ -612,32 +714,153 @@ class ChordEvent(BaseModel):
     timestamp: float = Field(..., description="Start time of the chord in seconds")
     chord: str = Field(..., description="Chord symbol (e.g., 'C:maj', 'N')")
     confidence: float = Field(..., ge=0.0, le=1.0)
+    # Commit B8: bass note & inversion detection
+    bass: str | None = Field(
+        default=None,
+        description="Detected bass note root (e.g., 'E', 'G#'). None when bass = chord root or unknown.",
+    )
+    inversion: int | None = Field(
+        default=None,
+        description="Inversion: None=root, 1=first, 2=second, 3=third. None when unknown or root position.",
+    )
+    # Commit B9: voicing shape & fret position detection
+    voicing_shape: str | None = Field(
+        default=None,
+        description="Detected CAGED voicing shape: 'E', 'A', 'C', 'D', 'G', or None if unknown",
+    )
+    voicing_position: int | None = Field(
+        default=None,
+        ge=0, le=24,
+        description="Fret position of the voicing (0 = open, 1-12 = barre position). None when unknown.",
+    )
+    # Commit 116: LLM enrichment fields
     roman_numeral: str | None = Field(
         default=None,
-        description="Roman numeral analysis (e.g., 'I', 'ii', 'V7') when key is known",
+        description="Roman numeral functional label (e.g., 'I', 'ii7', 'V7')",
     )
     llm_corrected_chord: str | None = Field(
         default=None,
-        description="LLM-corrected chord symbol when confidence delta > threshold",
+        description="LLM-corrected chord symbol when confidence delta exceeds threshold",
     )
-    correction_delta: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="How much better the corrected chord fits vs original (0 = no correction)",
+    correction_applied: bool = Field(
+        default=False,
+        description="Whether an LLM correction was applied to this event",
+    )
+    correction_delta: float | None = Field(
+        default=None,
+        description="Confidence delta between original and LLM-corrected chord",
     )
 
 class ChordTimeline(BaseModel):
     events: list[ChordEvent]
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        description="Commit 99: Viterbi decoding metrics (flicker rate, beat alignment, etc.)",
+    )
 
 class SoloNote(BaseModel):
     start_time: float = Field(..., description="Quantized start time in seconds")
     duration: float = Field(..., description="Quantized duration in seconds", ge=0)
     pitch: int = Field(..., description="MIDI pitch number (e.g., 60 for Middle C)")
     velocity: int = Field(..., ge=0, le=127)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Combined model + coherence confidence")
+    technique: list[str] = Field(default_factory=list, description="Technique tags: 'bend', 'vibrato', 'grace_note'")
+    is_tied: bool = Field(default=False, description="True if this note is tied from a previous segment")
 
 class SoloNotes(BaseModel):
     notes: list[SoloNote]
+
+
+# Commit 123 Schemas — Solo Harmony Enrichment
+
+class ChordToneAnalysis(BaseModel):
+    """Per-note harmonic analysis: what role does this pitch play in the current chord?"""
+
+    scale_degree: int | None = Field(
+        default=None,
+        description="Diatonic scale degree (1-7) for chord tones/tensions; None for chromatic passing tones",
+    )
+    scale_degree_name: str = Field(
+        ...,
+        description='Human-readable label: "R", "b3", "3", "4", "b5", "5", "b7", "7", "#4", etc.',
+    )
+    chord_tone_type: Literal["chord_tone", "tension", "chromatic", "pedal"] = Field(
+        ...,
+        description="Harmonic role of this note in the current chord",
+    )
+    semitone_distance: int = Field(
+        ...,
+        ge=0,
+        le=11,
+        description="Absolute distance from chord root in semitones (0-11)",
+    )
+
+
+class HarmonizedSoloNote(BaseModel):
+    """Solo note enriched with harmonic context from the active chord."""
+
+    start_time: float = Field(..., description="Quantized start time in seconds")
+    duration: float = Field(..., description="Quantized duration in seconds", ge=0)
+    pitch: int = Field(..., description="MIDI pitch number")
+    velocity: int = Field(..., ge=0, le=127)
+    chord: str | None = Field(
+        default=None,
+        description="Active chord symbol at note onset (e.g., 'C:maj7'); None if no chord",
+    )
+    chord_analysis: ChordToneAnalysis | None = Field(
+        default=None,
+        description="Harmonic analysis of this note; None when chord is unavailable or 'N'",
+    )
+
+
+class HarmonizedSoloNotes(BaseModel):
+    """Enriched solo note list with per-note chord context and aggregate percentages."""
+
+    notes: list[HarmonizedSoloNote] = Field(default_factory=list)
+    note_count: int = Field(default=0, description="Total solo notes (including those over 'N' chords)")
+    chord_tone_pct: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of harmonically analyzed notes that are chord tones",
+    )
+    tension_note_pct: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of harmonically analyzed notes that are tensions",
+    )
+    chromatic_pct: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of harmonically analyzed notes that are chromatic",
+    )
+
+
+class BarScope(BaseModel):
+    """Per-bar analysis: dominant chord, suggested scales, CAGED position, and note indices."""
+
+    bar_index: int = Field(..., description="Zero-based bar index")
+    start_time: float = Field(..., description="Bar start time in seconds")
+    end_time: float = Field(..., description="Bar end time in seconds")
+    chord: str | None = Field(
+        default=None,
+        description="Dominant chord in this bar; None if no chord events fall in this bar",
+    )
+    suggested_scales: list[str] = Field(
+        default_factory=list,
+        description="Suggested scale names for improvisation over this bar",
+    )
+    primary_position: str | None = Field(
+        default=None,
+        description='Inferred CAGED position (e.g., "position 2 (CAGED: E-form)")',
+    )
+    notes: list[int] = Field(
+        default_factory=list,
+        description="Indices into HarmonizedSoloNotes.notes for notes in this bar",
+    )
+
 
 # Commit 82 Schemas
 
@@ -737,54 +960,7 @@ class DiscoveryResponse(BaseModel):
     suggestions: list[DiscoverySuggestionItem] = Field(default_factory=list)
 
 
-# Commit 108 Schemas — Beat Grid Editor + Progressive Analysis
-
-class BeatGridRecomputeRequest(BaseModel):
-    """POST /analyze/{job_id}/beat-grid/recompute — override time signature / BPM and re-derive dependent artifacts."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    time_signature: str | None = Field(
-        default=None,
-        description="Time signature override (e.g. '4/4', '6/8'). Null = keep current.",
-    )
-    bpm_override: float | None = Field(
-        default=None,
-        ge=20.0,
-        le=300.0,
-        description="BPM override. Null = keep current.",
-    )
-    reset_to_auto: bool = Field(
-        default=False,
-        description="If true, ignore time_signature/bpm_override and re-estimate from audio.",
-    )
-
-
-class BeatGridRecomputeResponse(BaseModel):
-    """Response from POST /analyze/{job_id}/beat-grid/recompute."""
-
-    job_id: str
-    beat_grid: BeatGrid
-    chord_timeline: ChordTimeline
-    solo_notes: SoloNotes
-    musicxml: str = ""
-    recompute_stage: str = "complete"
-    invalidated_artifacts: list[str] = Field(default_factory=list)
-
-
-class BeatGridRecomputeStatus(BaseModel):
-    """Polling response for beat grid recompute progress."""
-
-    status: Literal["pending", "recomputing_chords", "recomputing_solo", "rebuilding_musicxml", "complete", "failed"] = "pending"
-    beat_grid: BeatGrid | None = None
-    chord_timeline: ChordTimeline | None = None
-    solo_notes: SoloNotes | None = None
-    musicxml: str | None = None
-    error: str | None = None
-    progress: float | None = Field(default=None, ge=0.0, le=1.0)
-
-
-# Commit 109 Schemas — Analysis Persistence & Correction Editor
+# Commit 110 Schemas — Correction endpoints (server-side correction API)
 
 class ChordCorrectionRequest(BaseModel):
     """PATCH /analyze/{job_id}/chord/{beat_index} — correct a chord symbol."""
@@ -983,3 +1159,105 @@ class JamSummaryResponse(BaseModel):
 
     bundle: JamSummaryBundle
     coach_summary: str = Field(default="", description="Legacy alias for bundle.coach_summary")
+
+
+class ContributeRequest(BaseModel):
+    """POST /analyze/{job_id}/contribute — contribute corrected audio to training."""
+
+    contributor_id: str = Field(
+        ...,
+        description="Anonymous contributor identifier (client-generated UUID)",
+        min_length=1,
+        max_length=128,
+    )
+    license: str = Field(
+        default="cc-by-4.0",
+        description="License for the contributed recording",
+    )
+
+
+class ContributeResponse(BaseModel):
+    """POST /analyze/{job_id}/contribute — contribution accepted."""
+
+    status: str = Field(default="accepted")
+    windows: int = Field(..., description="Number of CQT windows extracted")
+    track_id: str = Field(..., description="Stored track identifier")
+
+
+class SpotifySearchResult(BaseModel):
+    """Raw GET /search response — pass-through from Spotify (no PII)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    tracks: dict[str, Any] | None = None
+    artists: dict[str, Any] | None = None
+    albums: dict[str, Any] | None = None
+    playlists: dict[str, Any] | None = None
+    shows: dict[str, Any] | None = None
+    episodes: dict[str, Any] | None = None
+    audiobooks: dict[str, Any] | None = None
+
+
+class SpotifyRecommendationsResult(BaseModel):
+    """Raw GET /recommendations response — pass-through from Spotify."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    tracks: list[dict[str, Any]] = Field(default_factory=list)
+    seeds: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SpotifyAvailableGenreSeeds(BaseModel):
+    """GET /recommendations/available-genre-seeds response."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    genres: list[str] = Field(default_factory=list)
+
+
+class SpotifyPlaylistList(BaseModel):
+    """GET /me/playlists response — pass-through from Spotify."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    href: str = ""
+    limit: int = 0
+    next: str | None = None
+    offset: int = 0
+    previous: str | None = None
+    total: int = 0
+    items: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SpotifyPlaylistDetail(BaseModel):
+    """GET /playlists/{playlist_id} response — pass-through from Spotify."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    collaborative: bool = False
+    description: str | None = None
+    external_urls: dict[str, str] = Field(default_factory=dict)
+    href: str = ""
+    id: str = ""
+    images: list[dict[str, Any]] = Field(default_factory=list)
+    name: str = ""
+    owner: dict[str, Any] = Field(default_factory=dict)
+    public: bool | None = None
+    snapshot_id: str = ""
+    tracks: dict[str, Any] = Field(default_factory=dict)
+    type: str = "playlist"
+    uri: str = ""
+
+
+class SpotifyPlaylistItems(BaseModel):
+    """GET /playlists/{playlist_id}/items response — pass-through from Spotify."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    href: str = ""
+    limit: int = 0
+    next: str | None = None
+    offset: int = 0
+    previous: str | None = None
+    total: int = 0
+    items: list[dict[str, Any]] = Field(default_factory=list)

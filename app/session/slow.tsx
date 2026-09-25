@@ -1,15 +1,18 @@
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Text, View } from 'react-native'
+import { Sliders } from 'lucide-react-native'
 
 import { DemoTourCallout } from '@/components/DemoTourCallout'
+import { ChordDiagram } from '@/components/ChordDiagram'
+import { ChordPositionSelector } from '@/components/ChordPositionSelector'
+import { EmptyState } from '@/components/EmptyState'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { LoopRegionControl } from '@/components/LoopRegionControl'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { sessionHref } from '@/src/constants/sessionFlow'
-import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { barRangeToSeconds } from '@/src/music/barLoopBounds'
@@ -17,18 +20,31 @@ import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { deriveSlowLoopRegion } from '@/src/session/slowLoopRegion'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
-import { useMusicTimelineData } from '@/src/session/useMusicTimelineData'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
-import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
 export default function SlowScreen() {
-  const { chordEvents, soloNotesArr, barTimestamps } = useMusicTimelineData()
+  const lesson = useLessonStore((s) => s.lesson)
+  const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
+
+  const sections = (lesson?.sections ?? []) as Array<Record<string, unknown>>
+  const section = sections[lessonSectionIndex]
+  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
+  const chordEvents = getLessonWideChordEvents(lesson)
+  const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? []
 
   return (
-    <MusicProvider chordEvents={chordEvents} soloNotes={soloNotesArr} barTimestamps={barTimestamps}>
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
+    >
       <SlowScreenInner />
     </MusicProvider>
   )
@@ -38,19 +54,23 @@ function SlowScreenInner() {
   useStepCoachNarration()
   const isDemo = useIsDemoLesson()
   const router = useRouter()
+  const musicActions = useMusicActions()
   const initialMetronomeOn = useMetronomeDefaultOn()
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
 
   const sections = (lesson?.sections ?? []) as Array<Record<string, unknown>>
   const section = sections[lessonSectionIndex]
+  const chordEvents = getLessonWideChordEvents(lesson)
+  const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? []
+
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()
   const positionLabel =
     section && typeof section.primary_position === 'string'
       ? section.primary_position
       : 'Tap a note to infer position'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
-  const barTimestamps = lesson?.bar_timestamps ?? []
   const beatSec = lesson?.tempo && lesson.tempo > 0 ? 60 / lesson.tempo : 0.5
 
   const derived = useMemo(
@@ -62,22 +82,13 @@ function SlowScreenInner() {
   const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
-  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
+  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote, null, null), [keyLabel, selectedNote])
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
-  const musicActions = useMusicActions()
-
-  const handlePlaybackTick = useCallback(
-    (ctx: PlaybackTickContext) => {
-      musicActions.setPosition(ctx.positionSec * 1000)
-      musicActions.setPlaying(ctx.playing)
-    },
-    [musicActions],
-  )
-
+  const musicState = useMusicState()
+  const [chordPosIndex, setChordPosIndex] = useState(0)
   useEffect(() => {
-    musicActions.setPosition(0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    setChordPosIndex(0)
+  }, [musicState?.currentChord])
 
   useEffect(() => {
     if (!derived) {
@@ -118,9 +129,22 @@ function SlowScreenInner() {
     void toggleTuner().catch(() => {})
   }
 
+  // Drive MusicProvider position from stem playback ticks
+  const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
+    musicActions.setPosition(ctx.positionSec * 1000)
+    musicActions.setPlaying(ctx.playing)
+  }, [musicActions])
+
+  // Seed initial chord/notes on mount so fretboard isn't blank before playback starts
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <SessionStepScreen
       title="Slow"
+      phaseEyebrow="Refine phase"
       subtitle={
         isDemo
           ? DEMO_TOUR_SUBTITLE.slow
@@ -133,13 +157,20 @@ function SlowScreenInner() {
       onNext={() => router.push(sessionHref('play'))}
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.slow}</DemoTourCallout> : null}
+      {!lesson ? (
+        <EmptyState
+          Icon={Sliders}
+          heading="No song loaded for the Slow step"
+          subtext="Start from the Home tab to add and analyze a song."
+        />
+      ) : null}
       {playbackLoop ? (
-        <View className="rounded-lg border border-wood-600/20 bg-cream px-3 py-2 shadow-sm">
-          <Text className="font-sans text-xs text-wood-900">
+        <View className="rounded-lg border border-wood-600/45 bg-wood-800/40 px-3 py-2">
+          <Text className="font-sans text-xs text-cream">
             Slow loop: {playbackLoop.label} ({playbackLoop.startSec.toFixed(2)}s – {playbackLoop.endSec.toFixed(2)}s)
           </Text>
           {__DEV__ && derived ? (
-            <Text className="mt-1 font-mono text-[10px] text-wood-600">Source: {derived.source}</Text>
+            <Text className="mt-1 font-mono text-[10px] text-muted-brown">Source: {derived.source}</Text>
           ) : null}
         </View>
       ) : null}
@@ -158,28 +189,47 @@ function SlowScreenInner() {
         initialMetronomeOn={initialMetronomeOn}
         autoLoopRegion={playbackLoop}
         loopHighlight={loopHighlight}
+        onPlaybackTick={handleStemPlaybackTick}
         tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
-        onPlaybackTick={handlePlaybackTick}
         insertBetweenStemAndTab={
-          <FretboardDiagram
-            keyLabel={keyLabel}
-            positionLabel={positionLabel}
-            capoText={capoText}
-            selectedNote={selectedNote}
-            pulseKey={fretPulseKey}
-            enableKeyboardInput
-            showTuneControl
-            tuneActive={tunerState.active}
-            tuneCalibrating={tunerState.calibrating}
-            onToggleTune={toggleFretboardTuner}
-            onCalibrateTune={startCalibration}
-            tunerState={tunerState}
-            onSelectNote={(note) => {
-              setSelectedNote(note)
-              setFretPulseKey((k) => k + 1)
-              setNoteModalOpen(true)
-            }}
-          />
+          <View>
+            {musicState?.currentChord && musicState.currentChord !== 'N' && (
+              <View className="flex-row items-center gap-2 px-2 py-1">
+                <ChordDiagram
+                  name={musicState.currentChord}
+                  size="sm"
+                  positionIndex={chordPosIndex}
+                />
+                <Text className="font-mono text-sm text-cream">
+                  {musicState.currentChordRoman ?? musicState.currentChord}
+                </Text>
+                <ChordPositionSelector
+                  chordSymbol={musicState.currentChord}
+                  currentIndex={chordPosIndex}
+                  onPositionChange={setChordPosIndex}
+                />
+              </View>
+            )}
+            <FretboardDiagram
+              keyLabel={keyLabel}
+              positionLabel={positionLabel}
+              capoText={capoText}
+              selectedNote={selectedNote}
+              pulseKey={fretPulseKey}
+              enableKeyboardInput
+              showTuneControl
+              tuneActive={tunerState.active}
+              tuneCalibrating={tunerState.calibrating}
+              onToggleTune={toggleFretboardTuner}
+              onCalibrateTune={startCalibration}
+              tunerState={tunerState}
+              onSelectNote={(note) => {
+                setSelectedNote(note)
+                setFretPulseKey((k) => k + 1)
+                setNoteModalOpen(true)
+              }}
+            />
+          </View>
         }
         onNoteEvent={(evt: NoteEventMessage) => {
           setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })

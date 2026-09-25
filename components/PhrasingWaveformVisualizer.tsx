@@ -5,7 +5,7 @@ import Svg, { Polyline } from 'react-native-svg'
 import { peaksFromAudioUint8 } from '@/src/audio/peaksFromAudio'
 import colors from '@/src/constants/colors'
 import type { GhostReferenceRow } from '@/src/db/types'
-import type { ScoreResult } from '@/src/types'
+import type { BeatGrid, ScoreResult } from '@/src/types'
 
 const BINS = 96
 
@@ -36,7 +36,7 @@ function buildPolylinePoints(peaks: number[] | null, width: number, height: numb
 export type PhrasingWaveformVisualizerProps = {
   score: ScoreResult | null
   ghostRow: GhostReferenceRow | null
-  beatGrid?: number[] // Beat timestamps in seconds for grid lines
+  beatGrid?: BeatGrid // Structured beat grid for grid lines
   playbackProgress?: number // 0-1 playback progress for scrolling sync
 }
 
@@ -126,15 +126,17 @@ export function PhrasingWaveformVisualizer({ score, ghostRow, beatGrid, playback
   const hasAny = Boolean(refPts || userPts || ghostPts)
 
   // Build beat grid lines (vertical lines at beat positions)
-  const beatGridLines = beatGrid && beatGrid.length > 0
-    ? beatGrid.map((beatTime, i) => {
+  const beatsPerBar = beatGrid?.time_signature?.numerator ?? 4
+  const beatTimestamps = beatGrid?.beats ?? []
+  const beatGridLines = beatTimestamps.length > 0
+    ? beatTimestamps.map((beatTime, i) => {
         // Normalize beat time to 0-1 range (assuming first beat is start, last beat is end)
-        const firstBeat = beatGrid[0]
-        const lastBeat = beatGrid[beatGrid.length - 1]
+        const firstBeat = beatTimestamps[0]
+        const lastBeat = beatTimestamps[beatTimestamps.length - 1]
         const duration = lastBeat - firstBeat || 1
         const normalizedPos = duration > 0 ? (beatTime - firstBeat) / duration : 0
         const x = normalizedPos * w
-        return { x, isDownbeat: i % 4 === 0 } // Assume 4/4 time, downbeat every 4 beats
+        return { x, isDownbeat: i % beatsPerBar === 0 }
       })
     : []
 

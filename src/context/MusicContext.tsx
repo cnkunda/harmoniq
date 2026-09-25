@@ -39,23 +39,28 @@ export type ChordEvent = {
   timestamp: number
   chord: string
   confidence?: number
+  /** Commit 116: Roman numeral functional label (e.g., 'I', 'ii7', 'V7') */
+  roman_numeral?: string
+  /** Commit B8: Detected bass note root (e.g., 'E', 'G#'). Undefined when root position. */
+  bass?: string
 }
 
-/** A solo note event (start time/duration in seconds, MIDI pitch). String/fret are tab positions when available from score. */
+/** A solo note event (start time/duration in seconds, MIDI pitch). */
 export type SoloNoteEvent = {
   start_time: number
   duration: number
   pitch: number
   velocity?: number
-  /** Tab string 1-6 (1 = high E) when score provides fretboard position. */
+  /** Optional pre-resolved string/fret positions from tab data */
   string?: number
-  /** Fret number when score provides fretboard position. */
   fret?: number
 }
 
 export type MusicState = {
   /** Current chord symbol at playhead, e.g. "Am", "Dm". Null when in "no chord" region. */
   currentChord: string | null
+  /** Commit 116: Roman numeral for current chord (e.g., 'I', 'ii7'). Null when no chord. */
+  currentChordRoman: string | null
   /** Currently sounding notes (string/fret positions). */
   activeNotes: ActiveNote[]
   /** 0-indexed bar position at playhead. */
@@ -66,15 +71,19 @@ export type MusicState = {
   isPlaying: boolean
   /** True after AlphaTab finishes loading its soundfont. */
   playerReady: boolean
+  /** Commit B2: Scale pitch classes derived from the lesson key (e.g., [0,2,4,5,7,9,11] for C major). */
+  scalePitchClasses: number[]
 }
 
 export const INITIAL_MUSIC_STATE: MusicState = {
   currentChord: null,
+  currentChordRoman: null,
   activeNotes: [],
   currentBar: 0,
   positionMs: 0,
   isPlaying: false,
   playerReady: false,
+  scalePitchClasses: [],
 }
 
 export type MusicAction =
@@ -85,9 +94,11 @@ export type MusicAction =
       type: 'SET_POSITION'
       positionMs: number
       currentChord: string | null
+      currentChordRoman: string | null
       activeNotes: ActiveNote[]
       currentBar: number
     }
+  | { type: 'SET_SCALE_PITCH_CLASSES'; classes: number[] }
 
 export function musicReducer(state: MusicState, action: MusicAction): MusicState {
   switch (action.type) {
@@ -105,9 +116,12 @@ export function musicReducer(state: MusicState, action: MusicAction): MusicState
         ...state,
         positionMs: action.positionMs,
         currentChord: action.currentChord,
+        currentChordRoman: action.currentChordRoman,
         activeNotes: action.activeNotes,
         currentBar: action.currentBar,
       }
+    case 'SET_SCALE_PITCH_CLASSES':
+      return { ...state, scalePitchClasses: action.classes }
     default:
       return state
   }
@@ -127,6 +141,8 @@ type MusicActions = {
   setPlayerReady: (ready: boolean) => void
   /** Set current bar (typically from AlphaTab beat events). */
   setBeat: (bar: number) => void
+  /** Commit B2: Set the scale pitch classes for harmonic context overlay. */
+  setScalePitchClasses: (classes: number[]) => void
 }
 
 type MusicContextValue = {
@@ -157,6 +173,13 @@ function findCurrentChord(events: ChordEvent[] | null | undefined, timeSec: numb
     const e = events[i]!
     if (e.timestamp <= timeSec) {
       if (!e.chord || e.chord === 'N') return null
+      // Embed bass in the chord string when present and different from root
+      if (e.bass) {
+        const root = e.chord.split(':')[0]!
+        if (e.bass !== root) {
+          return `${e.chord}/${e.bass}`
+        }
+      }
       return e.chord
     }
   }
@@ -164,8 +187,23 @@ function findCurrentChord(events: ChordEvent[] | null | undefined, timeSec: numb
 }
 
 /**
+ * Commit 116: Find the Roman numeral for the chord active at the given time.
+ */
+function findCurrentChordRoman(events: ChordEvent[] | null | undefined, timeSec: number): string | null {
+  if (!events || events.length === 0) return null
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!
+    if (e.timestamp <= timeSec) {
+      if (!e.chord || e.chord === 'N') return null
+      return e.roman_numeral ?? null
+    }
+  }
+  return null
+}
+
+/**
  * Find all notes sounding at the given time.
- * Prefers tab string/fret positions when available on the note; falls back to MIDI resolution.
+ * Uses pre-resolved string/fret positions when available, falls back to MIDI calculation.
  */
 export function findActiveNotes(
   notes: SoloNoteEvent[] | null | undefined,
@@ -221,12 +259,14 @@ export function MusicProvider({
     (positionMs: number) => {
       const timeSec = positionMs / 1000
       const currentChord = findCurrentChord(chordEvents, timeSec)
+      const currentChordRoman = findCurrentChordRoman(chordEvents, timeSec)
       const activeNotes = findActiveNotes(soloNotes, timeSec)
       const currentBar = findCurrentBar(barTimestamps, timeSec)
       dispatch({
         type: 'SET_POSITION',
         positionMs,
         currentChord,
+        currentChordRoman,
         activeNotes,
         currentBar,
       })
@@ -246,9 +286,13 @@ export function MusicProvider({
     dispatch({ type: 'SET_BEAT', bar })
   }, [])
 
+  const setScalePitchClasses = useCallback((classes: number[]) => {
+    dispatch({ type: 'SET_SCALE_PITCH_CLASSES', classes })
+  }, [])
+
   const actions = useMemo<MusicActions>(
-    () => ({ setPosition, setPlaying, setPlayerReady, setBeat }),
-    [setPosition, setPlaying, setPlayerReady, setBeat],
+    () => ({ setPosition, setPlaying, setPlayerReady, setBeat, setScalePitchClasses }),
+    [setPosition, setPlaying, setPlayerReady, setBeat, setScalePitchClasses],
   )
 
   const value = useMemo<MusicContextValue>(() => ({ state, dispatch, actions }), [state, actions])

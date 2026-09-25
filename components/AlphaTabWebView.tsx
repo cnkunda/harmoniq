@@ -32,7 +32,7 @@ const HARNESS_HTML = require('../assets/alphatab-harness/index.html') as number
 
 export type AlphaTabWebViewProps = {
   gp5Base64?: string | null
-  /** MusicXML is primary (Commit 107); GP5 falls back when absent. */
+  /** Commit 108: MusicXML score string (canonical render format, preferred over gp5Base64). */
   musicXml?: string | null
   /** Native harness does not consume server prerender JSON yet — prop exists for API parity with web. */
   prerenderArtifactUrl?: string | null
@@ -242,27 +242,20 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
       })
       postInbound({ type: 'setRenderPreset', presetName: renderPreset })
       postInbound({ type: 'setTranspose', semitones: Math.max(-12, Math.min(12, Math.round(transposeSemitones))) })
+      // Commit 108: Prefer MusicXML over GP5 for score loading
       const xml = musicXml?.trim()
+      const raw = gp5Base64?.trim()
       if (xml) {
         postInbound({ type: 'setMusicXml', musicXml: xml })
-        const stemSrc = audioSrc?.trim()
-        if (stemSrc) {
-          setTimeout(() => {
-            postInbound({ type: 'setAudioSrc', audioSrc: stemSrc })
-          }, 0)
-        }
-        return
-      }
-      const raw = gp5Base64?.trim()
-      if (raw) {
+      } else if (raw) {
         postInbound({ type: 'setScore', gp5Base64: raw })
-        const stemSrc = audioSrc?.trim()
-        if (stemSrc) {
-          // Score first, then wire external media source for cursor sync.
-          setTimeout(() => {
-            postInbound({ type: 'setAudioSrc', audioSrc: stemSrc })
-          }, 0)
-        }
+      }
+      // Wire external media source for cursor sync (applies to both MusicXML and GP5)
+      const stemSrc = audioSrc?.trim()
+      if (stemSrc) {
+        setTimeout(() => {
+          postInbound({ type: 'setAudioSrc', audioSrc: stemSrc })
+        }, 0)
       }
     }, [audioSrc, harnessReady, gp5Base64, musicXml, postInbound, transposeSemitones, renderPreset, soundFontProfile])
 
@@ -387,7 +380,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           className="items-center justify-center rounded-xl border border-wood-600/45 bg-cream-dark/40 p-4"
           style={style}
         >
-          <Text className="text-center font-sans text-sm text-muted-light">
+          <Text className="text-center font-sans text-sm text-muted-brown">
             AlphaTab runs in WebView on iOS/Android only. Web uses the DOM path (PRIORITIES §22).
           </Text>
         </View>
@@ -463,9 +456,9 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
-            <Text className="text-center font-sans text-[11px] text-muted-light">
+            <Text className="text-center font-sans text-[11px] text-muted-brown">
               {
-                "Tab preview isn't available for this song yet. Try analyzing a song or another tab variant."
+                "Score isn't available for this song yet. Try analyzing a song or another tab variant."
               }
             </Text>
           </View>

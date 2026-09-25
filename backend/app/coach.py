@@ -18,7 +18,7 @@ from app.schemas import CoachFocusArea, LessonSectionStub, MoodState, PlayerProf
 logger = logging.getLogger("harmoniq.coach")
 logger.setLevel(logging.INFO)
 
-MODEL_ID = os.getenv("HARMONIQ_MODEL_ID", "claude-haiku-4-5")
+MODEL_ID = os.getenv("HARMONIQ_MODEL_ID", "claude-haiku-4-5-20251001")
 COACH_TIMEOUT_SECONDS = max(0.5, float(os.getenv("HARMONIQ_COACH_TIMEOUT_MS", "8000")) / 1000.0)
 PRACTICE_PLAN_INTRO_TIMEOUT_SECONDS = min(8.0, COACH_TIMEOUT_SECONDS)
 QUICK_FEEDBACK_TIMEOUT_SECONDS = 5.0

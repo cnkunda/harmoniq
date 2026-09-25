@@ -8,7 +8,10 @@ import { Platform, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { CorrectionHistoryPanel } from '@/components/CorrectionHistoryPanel'
+import { ChordDiagram } from '@/components/ChordDiagram'
+import { ChordPositionSelector } from '@/components/ChordPositionSelector'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
+import { InstrumentConfusionBadge, PerSectionConfusionBars } from '@/components/InstrumentConfusionIndicator'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { PhrasingWaveformVisualizer } from '@/components/PhrasingWaveformVisualizer'
 import { ScoreSummaryCard } from '@/components/ReviewSessionPanel'
@@ -52,9 +55,10 @@ import { useSkillStore } from '@/src/stores/skillStore'
 import { useAppStore } from '@/src/stores/useAppStore'
 import type { MusicalToleranceMode, ScoreResult } from '@/src/types'
 import { bytesToBase64 } from '@/src/utils/bytesToBase64'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import { shareExportedBlob } from '@/src/utils/exportShare'
 import { firstLessonStemRelPath, serializeLessonStemsJson } from '@/src/utils/lessonAudio'
-import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
+import { readSectionMusicXml, readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import { BPM_DRIFT_NOTE_MINIMUM } from '@/src/utils/practiceConfig'
 
 function midiVarLen(value: number): number[] {
@@ -151,6 +155,20 @@ export default function ReviewScreen() {
     if (currentPlan && hasNextSlot && !planLessonConflict) return 'Continue'
     return 'Done'
   }, [hasMoreSectionsInLesson, currentPlan, currentSlotIndex, lesson?.job_id])
+  const uniqueChords = useMemo(() => {
+    const events = getLessonWideChordEvents(lesson)
+    if (!events || events.length === 0) return []
+    const seen = new Set<string>()
+    const result: string[] = []
+    for (const ev of events) {
+      if (ev.chord && ev.chord !== 'N' && !seen.has(ev.chord)) {
+        seen.add(ev.chord)
+        result.push(ev.chord)
+      }
+    }
+    return result
+  }, [lesson])
+  const [reviewChordPosIndex, setReviewChordPosIndex] = useState<Record<string, number>>({})
   const gp5ForExport = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
   const songTitleBase =
     typeof lesson?.song_title === 'string' && lesson.song_title.trim()
@@ -220,6 +238,8 @@ export default function ReviewScreen() {
         },
         skill_nodes: ['pitch_accuracy', 'phrasing', 'timing'],
         musical_tolerance_mode: toleranceMode ?? 'technique',
+        stem_confidence: lesson?.stem_confidence ?? null,
+        instrument_confusion: lesson?.instrument_confusion ?? null,
       })
       setScore(result)
       const targeted = ['pitch_accuracy', 'phrasing', 'timing']
@@ -382,8 +402,29 @@ export default function ReviewScreen() {
   }, [gp5ForExport, midiBase64, sectionIndex, songTitleBase])
 
   const exportMusicXml = useCallback(async () => {
+    // Commit 108: Prefer section-level MusicXML over GP5→MusicXML conversion
+    const sectionXml = readSectionMusicXml(section)
+    if (sectionXml) {
+      try {
+        setExportState('Exporting MusicXML…')
+        const blob = new Blob([sectionXml], { type: 'application/vnd.recordare.musicxml+xml' })
+        await shareExportedBlob({
+          blob,
+          mimeType: 'application/vnd.recordare.musicxml+xml',
+          contentDisposition: `attachment; filename="${songTitleBase}.musicxml"`,
+          fallbackBase: songTitleBase,
+          dialogTitle: 'Export MusicXML',
+        })
+        setExportState('MusicXML exported.')
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        setExportState(`Export failed: ${msg}`)
+      }
+      return
+    }
+    // Fallback: GP5→MusicXML conversion via server
     if (!gp5ForExport) {
-      setExportState('No GP5 tab payload for MusicXML export.')
+      setExportState('No score available for MusicXML export.')
       return
     }
     try {
@@ -405,7 +446,7 @@ export default function ReviewScreen() {
       const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
       setExportState(`Export failed: ${msg}`)
     }
-  }, [gp5ForExport, songTitleBase])
+  }, [gp5ForExport, section, songTitleBase])
 
   const finish = useCallback(async () => {
     clearLatestTake()
@@ -532,6 +573,7 @@ export default function ReviewScreen() {
   return (
     <SessionStepScreen
       title="Review"
+      phaseEyebrow="Reflect phase"
       subtitle={
         isDemo
           ? DEMO_TOUR_SUBTITLE.review
@@ -545,6 +587,44 @@ export default function ReviewScreen() {
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.review}</DemoTourCallout> : null}
       <PhrasingWaveformVisualizer score={score} ghostRow={ghostRowForViz} />
+
+      {uniqueChords.length > 0 && (
+        <View className="mt-3 rounded-xl border border-wood-600/35 bg-wood-800/40 px-3 py-2">
+          <Text className="font-sans-medium text-[10px] uppercase tracking-[0.12em] text-muted-brown mb-2">
+            Chords in this section
+          </Text>
+          <View className="flex-row flex-wrap gap-2">
+            {uniqueChords.map((chord) => (
+              <View key={chord} className="items-center">
+                <ChordDiagram
+                  name={chord}
+                  size="sm"
+                  positionIndex={reviewChordPosIndex[chord] ?? 0}
+                />
+                <ChordPositionSelector
+                  chordSymbol={chord}
+                  currentIndex={reviewChordPosIndex[chord] ?? 0}
+                  onPositionChange={(idx) =>
+                    setReviewChordPosIndex((prev) => ({ ...prev, [chord]: idx }))
+                  }
+                />
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {lesson?.instrument_confusion !== null && lesson?.instrument_confusion !== undefined ? (
+        <View className="mt-3">
+          <InstrumentConfusionBadge confusion={lesson.instrument_confusion} />
+          <View className="mt-2">
+            <PerSectionConfusionBars
+              sections={lesson.instrument_confusion_per_section}
+              currentSectionIndex={sectionIndex}
+            />
+          </View>
+        </View>
+      ) : null}
 
       {currentSession && currentSession.noteContours.length > 0 ? (
         <View className="mt-3">
@@ -572,39 +652,39 @@ export default function ReviewScreen() {
         <AnimatedPressable haptic="light"
           onPress={() => void runScore()}
           disabled={busy}
-          className="rounded-lg bg-amber-accent px-4 py-2.5 shadow-sm disabled:opacity-40"
+          className="rounded-xl bg-amber-accent/90 px-5 py-2.5 disabled:opacity-50"
           accessibilityRole="button"
         >
           <Text className="font-sans-medium text-wood-900">{busy ? 'Scoring…' : 'Run score'}</Text>
         </AnimatedPressable>
         <AnimatedPressable
           onPress={() => void exportMidi()}
-          className="rounded-lg border border-wood-600/25 bg-white px-3.5 py-2"
+          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5"
           accessibilityRole="button"
         >
-          <Text className="font-sans text-wood-600 text-sm">Export MIDI</Text>
+          <Text className="font-sans-medium text-cream">Export MIDI</Text>
         </AnimatedPressable>
         <AnimatedPressable
           onPress={() => void exportMusicXml()}
-          className="rounded-lg border border-wood-600/25 bg-white px-3.5 py-2"
+          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5"
           accessibilityRole="button"
         >
-          <Text className="font-sans text-wood-600 text-sm">Export MusicXML</Text>
+          <Text className="font-sans-medium text-cream">Export MusicXML</Text>
         </AnimatedPressable>
         <AnimatedPressable haptic="light"
           onPress={() => void saveLick()}
           disabled={savingLick}
-          className="rounded-lg border border-wood-600/25 bg-white px-3.5 py-2 disabled:opacity-40"
+          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5 disabled:opacity-50"
           accessibilityRole="button"
         >
-          <Text className="font-sans text-wood-600 text-sm">{savingLick ? 'Saving…' : 'Save to Library'}</Text>
+          <Text className="font-sans-medium text-cream">{savingLick ? 'Saving…' : 'Save to Library'}</Text>
         </AnimatedPressable>
         <AnimatedPressable haptic="light"
           onPress={() => router.push('/library')}
-          className="rounded-lg border border-wood-600/25 bg-white px-3.5 py-2"
+          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5"
           accessibilityRole="button"
         >
-          <Text className="font-sans text-wood-600 text-sm">Open Library</Text>
+          <Text className="font-sans-medium text-cream">Open Library</Text>
         </AnimatedPressable>
       </View>
 
@@ -663,12 +743,16 @@ export default function ReviewScreen() {
         </Text>
       ) : null}
 
-      <Text className="mt-3 font-sans text-[11px] text-wood-600">
-        Recording buffer: {latestTake ? `${(latestTake.durationMs / 1000).toFixed(1)}s / ${latestTake.audioBytes.length} bytes` : 'none'}
-      </Text>
-      <Text className="mt-1 font-sans text-[11px] text-wood-600">
-        Persisted sessions (local DB): {sessionCount ?? '...'}
-      </Text>
+      {__DEV__ ? (
+        <>
+          <Text className="mt-3 font-sans text-[11px] text-muted-brown">
+            Recording buffer: {latestTake ? `${(latestTake.durationMs / 1000).toFixed(1)}s / ${latestTake.audioBytes.length} bytes` : 'none'}
+          </Text>
+          <Text className="mt-1 font-sans text-[11px] text-muted-brown">
+            Persisted sessions: {sessionCount ?? '...'}
+          </Text>
+        </>
+      ) : null}
     </SessionStepScreen>
   )
 }

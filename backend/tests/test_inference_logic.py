@@ -2,13 +2,48 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
 from app.chord_inference import _get_segment_db, infer_chords
 from app.solo_inference import infer_solo, _snap_to_grid
 from app.schemas import BeatGrid
+
+
+@pytest.fixture(autouse=True)
+def _mock_basic_pitch_import():
+    """Prevent basic-pitch from hanging on model download during import.
+
+    Also clears the Basic Pitch result cache to ensure no stale data
+    leaks between tests (same dummy.wav + midi_tempo + model_path
+    across multiple solo tests would otherwise collide).
+    """
+    from app.pipeline_proof import _BASIC_PITCH_CACHE
+    _BASIC_PITCH_CACHE.clear()
+
+    if "basic_pitch" not in sys.modules:
+        mock_model_path = MagicMock(spec=Path)
+        mock_model_path.is_dir.return_value = True
+        mock_model_path.suffix = ""
+        mock_model_path.exists.return_value = True
+        mock_model_path.with_name.return_value = mock_model_path
+        mock_model_path.name = "nmp"
+
+        mock_bp = MagicMock()
+        mock_bp.ICASSP_2022_MODEL_PATH = mock_model_path
+        mock_inference = MagicMock()
+        mock_bp.inference = mock_inference
+        sys.modules["basic_pitch"] = mock_bp
+        sys.modules["basic_pitch.inference"] = mock_inference
+        yield
+        del sys.modules["basic_pitch"]
+        del sys.modules["basic_pitch.inference"]
+    else:
+        yield
 
 # --- FIXTURES ---
 
@@ -22,6 +57,19 @@ def mock_beat_grid():
         time_signature={"numerator": 4, "denominator": 4},
         tick_value=0.25
     )
+
+
+@pytest.fixture
+def fine_beat_grid():
+    """120 BPM 4/4 grid with tick-level resolution (0.25s spacing) for micro-note tests."""
+    return BeatGrid(
+        bpm=120.0,
+        beats=[0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0],
+        downbeats=[0.0],
+        time_signature={"numerator": 4, "denominator": 4},
+        tick_value=0.25
+    )
+
 
 # --- UNIT TESTS ---
 
@@ -48,77 +96,97 @@ def test_snap_to_grid_logic():
 def test_chord_inference_silence_threshold(monkeypatch, tmp_path, mock_beat_grid):
     """Ensure loud audio gets a chord, but silent audio gets 'N'."""
 
+    from app.chord_inference import _get_interpreter
+    _get_interpreter.cache_clear()
+
     class _MockInterp:
         def get_input_details(self): return [{"index": 0}]
         def get_output_details(self): return [{"index": 1}]
         def set_tensor(self, *a): pass
         def invoke(self): pass
-        def get_tensor(self, i): return np.zeros((1, 278), dtype=np.float32)
+        def get_tensor(self, i): return np.zeros((1, 25), dtype=np.float32)
         def allocate_tensors(self): pass
 
     monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
 
+    def _no_keras(y, sr):
+        raise RuntimeError("Keras mocked out")
+
+    monkeypatch.setattr("app.chord_inference._run_keras_raw", _no_keras)
+
     def mock_load(path, sr=None, mono=True):
-        # Create 2 seconds of audio: 
-        # First second is LOUD (0.5 amplitude), second second is SILENT (0.0)
         audio = np.concatenate([
-            np.full(44100, 0.5), # Beat 0.0 and 0.5
-            np.zeros(44100)      # Beat 1.0 and 1.5
+            np.full(44100, 0.5),
+            np.zeros(44100)
         ])
         return audio, 44100
 
+    def _make_frame(time_sec, chord, confidence):
+        probs = np.full(25, 1e-6, dtype=np.float32)
+        probs[0] = confidence
+        probs /= probs.sum()
+        return {"time": time_sec, "chord": chord, "confidence": confidence, "probs": probs}
+
     def mock_tflite_raw(y, sr):
-        # Model always wants to predict 'C:maj'
         return [
-            {"time": 0.1, "chord": "C:maj", "confidence": 0.9},
-            {"time": 0.6, "chord": "C:maj", "confidence": 0.9},
-            {"time": 1.1, "chord": "C:maj", "confidence": 0.9},
-            {"time": 1.6, "chord": "C:maj", "confidence": 0.9},
+            _make_frame(0.1, "C:maj", 0.9),
+            _make_frame(0.6, "C:maj", 0.9),
+            _make_frame(1.1, "C:maj", 0.9),
+            _make_frame(1.6, "C:maj", 0.9),
         ]
 
     monkeypatch.setattr("librosa.load", mock_load)
     monkeypatch.setattr("app.chord_inference._run_tflite_raw", mock_tflite_raw)
 
-    timeline, _metrics = infer_chords(tmp_path / "dummy.wav", mock_beat_grid)
+    timeline = infer_chords(tmp_path / "dummy.wav", mock_beat_grid)
 
-    # First two beats (loud) should be 'C:maj'
     assert timeline.events[0].chord == "C:maj"
     assert timeline.events[1].chord == "C:maj"
-    
-    # Last two beats (silent) should be 'N' despite the ML model wanting to say 'C:maj'
     assert timeline.events[2].chord == "N"
     assert timeline.events[3].chord == "N"
 
 def test_chord_majority_vote_pooling(monkeypatch, tmp_path, mock_beat_grid):
     """Ensure flickering ML predictions are smoothed by the BeatGrid."""
 
+    from app.chord_inference import _get_interpreter
+    _get_interpreter.cache_clear()
+
     class _MockInterp:
         def get_input_details(self): return [{"index": 0}]
         def get_output_details(self): return [{"index": 1}]
         def set_tensor(self, *a): pass
         def invoke(self): pass
-        def get_tensor(self, i): return np.zeros((1, 278), dtype=np.float32)
+        def get_tensor(self, i): return np.zeros((1, 25), dtype=np.float32)
         def allocate_tensors(self): pass
 
     monkeypatch.setattr("app.chord_inference._get_interpreter", lambda: _MockInterp())
 
+    def _no_keras(y, sr):
+        raise RuntimeError("Keras mocked out")
+
+    monkeypatch.setattr("app.chord_inference._run_keras_raw", _no_keras)
+
     monkeypatch.setattr("librosa.load", lambda *a, **k: (np.full(44100, 0.5), 44100))
-    
+
+    def _make_frame(time_sec, chord, confidence):
+        probs = np.full(25, 1e-6, dtype=np.float32)
+        idx = 0 if chord == "C:maj" else 1
+        probs[idx] = confidence
+        probs /= probs.sum()
+        return {"time": time_sec, "chord": chord, "confidence": confidence, "probs": probs}
+
     def mock_flickering_tflite(y, sr):
-        # In the first beat window (0.0 to 0.5), model flickers: C:maj, G:maj, C:maj
         return [
-            {"time": 0.1, "chord": "C:maj", "confidence": 0.8},
-            {"time": 0.2, "chord": "G:maj", "confidence": 0.9}, # The outlier
-            {"time": 0.3, "chord": "C:maj", "confidence": 0.8},
+            _make_frame(0.1, "C:maj", 0.8),
+            _make_frame(0.2, "C#:min", 0.9),
+            _make_frame(0.3, "C:maj", 0.8),
         ]
-    
+
     monkeypatch.setattr("app.chord_inference._run_tflite_raw", mock_flickering_tflite)
 
-    timeline, _metrics = infer_chords(tmp_path / "dummy.wav", mock_beat_grid)
+    timeline = infer_chords(tmp_path / "dummy.wav", mock_beat_grid)
 
-    # The 'G:maj' should be outvoted by the 'C:maj's for that beat window
-    # After Viterbi, the dominant chord should be preserved
-    assert timeline.events[0].chord in ("C:maj", "G:maj")  # Viterbi picks the best path
+    assert timeline.events[0].chord == "C:maj"
 
 def test_solo_monophonic_truncation(monkeypatch, mock_beat_grid):
     """Verify that a solo line cannot have overlapping notes, with legato overlap."""
@@ -144,58 +212,20 @@ def test_solo_monophonic_truncation(monkeypatch, mock_beat_grid):
     assert solo.notes[1].start_time == 0.5 # 0.6 snapped to 0.5
     assert solo.notes[1].duration == 0.5   # 1.2 snapped to 1.0, 1.0-0.5 = 0.5
 
-def test_solo_per_slot_selection_on_polyphony(monkeypatch, mock_beat_grid):
-    """Commit 106: simultaneous notes collapse to the strongest per beat slot."""
-
-    # Two notes jamming into the same beat slot (both snap to Beat 0):
-    # the louder, higher one wins; polyphony is monophonicized.
-    mock_notes = [
-        (0.1, 0.3, 60, 0.5, None),   # quiet C4
-        (0.12, 0.35, 64, 0.9, None), # louder E4
-    ]
-
-    monkeypatch.setattr("basic_pitch.inference.predict", lambda *a, **kw: (None, None, mock_notes))
-
-    solo = infer_solo(Path("dummy.wav"), mock_beat_grid)
-
-    assert len(solo.notes) == 1
-    assert solo.notes[0].pitch == 64
-    assert solo.notes[0].duration == 0.5
-    # 0.9 is the max input velocity → maps to MAX_MIDI_VELOCITY (120)
-    assert solo.notes[0].velocity == 120
-
-
-def test_solo_per_slot_selection_tie_breaks_by_pitch(monkeypatch, mock_beat_grid):
-    """Commit 106: equal-velocity slot collisions fall back to higher pitch."""
-
-    mock_notes = [
-        (0.1, 0.3, 60, 0.9, None),
-        (0.12, 0.35, 64, 0.9, None),
-    ]
-
-    monkeypatch.setattr("basic_pitch.inference.predict", lambda *a, **kw: (None, None, mock_notes))
-
-    solo = infer_solo(Path("dummy.wav"), mock_beat_grid)
-
-    assert len(solo.notes) == 1
-    assert solo.notes[0].pitch == 64
-
-
-def test_solo_lone_micro_note_preserved_with_min_duration(monkeypatch, mock_beat_grid):
-    """Ensure micro-notes that pass the duration filter survive in their own slot."""
-
-    # One real note in slot 0; a grace note whose start+end both snap to
-    # slot 1's grid point.  Different slots → no collapse; it keeps the
-    # minimum tick duration instead of vanishing.
+def test_solo_micro_note_filtering(monkeypatch, fine_beat_grid):
+    """Ensure micro-notes that pass duration filter are preserved with minimum tick duration."""
+    
+    # One real note, one grace note that gets crushed by quantization
+    # The grace note (0.26s-0.24s played backward, or 0.24s-0.26s very short)
+    # Both start and end snap to the same grid point (0.25), but it's preserved with min duration
     mock_notes = [
         (0.0, 0.5, 60, 0.8, None),
-        (0.55, 0.64, 64, 0.8, None),  # ≥ min_duration (62.5ms), start+end snap to slot 1's grid point
+        (0.24, 0.26, 64, 0.8, None) # Very short note that snaps to same grid point
     ]
-
+    
     monkeypatch.setattr("basic_pitch.inference.predict", lambda *a, **kw: (None, None, mock_notes))
 
-    solo = infer_solo(Path("dummy.wav"), mock_beat_grid)
-
+    solo = infer_solo(Path("dummy.wav"), fine_beat_grid)
     assert len(solo.notes) == 2
     assert solo.notes[0].pitch == 60
     assert solo.notes[1].pitch == 64

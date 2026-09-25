@@ -7,6 +7,8 @@ import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptu
 import { TabViewport } from '@/components/TabViewport'
 import { useResolvedSoundFontProfile } from '@/src/audio/useResolvedSoundFontProfile'
 import { isAlphaTabRuntimeDiagEnabled } from '@/src/constants/alphaTabRuntimeDiag'
+import { getAppPref, setAppPref } from '@/src/db/client'
+import { PREF_TAB_VARIANT } from '@/src/db/schema'
 import { logListenTransportWrap } from '@/src/session/listenTransportDebug'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import type { TabRenderPresetName } from '@/src/session/tabThemePresets'
@@ -17,9 +19,6 @@ import type { LessonJSON } from '@/src/types'
 import { firstLessonStemRelPath, lessonStemUrl, sectionSeekSeconds, stemRelPathToPlaybackUri } from '@/src/utils/lessonAudio'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { AlphaTabSurfaceRef, NoteEventMessage, SongScoreMeta, TabLoopBarRegion } from '@/types/tabMessage'
-import type { LyricWord } from './LyricsStrip'
-import { getAppPref, setAppPref } from '@/src/db/client'
-import { PREF_TAB_VARIANT, PREF_SHOW_LYRICS } from '@/src/db/schema'
 
 const DEFAULT_TICK: PlaybackTickContext = {
   positionSec: 0,
@@ -74,7 +73,6 @@ export type SessionStemAndTabProps = {
   ghostStemPlaybackUri?: string | null
   ghostAnchorSec?: number | null
   playGhostWhileRecording?: boolean
-  lyricWords?: LyricWord[]
   onTabVariantChange?: (v: SessionTabVariant) => void
   onSeekToStart?: () => void
 }
@@ -117,7 +115,6 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     ghostStemPlaybackUri = null,
     ghostAnchorSec = null,
     playGhostWhileRecording = false,
-    lyricWords,
     onTabVariantChange,
     onSeekToStart,
   },
@@ -175,7 +172,19 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     return tabs.full ?? tabs.skeleton ?? null
   }, [gp5Base64Override, lessonMusicXml, tabVariant, tabs])
 
-  const gp5Key = useMemo(() => gp5Base64?.slice(0, 24) ?? lessonMusicXml?.slice(0, 24) ?? '', [gp5Base64, lessonMusicXml])
+  // Commit 108: Resolve MusicXML from section or lesson level
+  const musicXml = useMemo(() => {
+    // Section-level MusicXML (generated per-section by backend)
+    const sec = section as Record<string, unknown> | undefined
+    const sectionXml = sec && typeof sec === 'object' && typeof sec.musicxml === 'string' ? sec.musicxml : undefined
+    if (sectionXml?.trim()) return sectionXml.trim()
+    // Lesson-level MusicXML (fallback)
+    const lessonXml = lesson?.musicxml
+    if (typeof lessonXml === 'string' && lessonXml.trim()) return lessonXml.trim()
+    return null
+  }, [section, lesson?.musicxml])
+
+  const gp5Key = useMemo(() => gp5Base64?.slice(0, 24) ?? '', [gp5Base64])
 
   const audioSrc = useMemo(() => {
     if (audioSrcOverride !== undefined) return audioSrcOverride
@@ -302,52 +311,42 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
       {insertBetweenStemAndTab}
       {detailsAboveTab}
       <View className={tabFrameClassName}>
-        {!gp5Base64 && !lessonMusicXml && lesson?.tabs_unavailable_reason === 'no_isolated_guitar' ? (
-          <View className="flex-1 items-center justify-center rounded-xl border border-wood-600/40 bg-ivory px-6">
-            <Text className="font-sans-medium text-sm text-wood-900">Tab unavailable</Text>
-            <Text className="mt-1 text-center font-sans text-xs text-muted-light">
-              Guitar tab was not generated — the isolated guitar stem was not reliable enough.
-            </Text>
-          </View>
-        ) : (
-          <TabViewport
-            ref={tabRef}
-            gp5Base64={gp5Base64}
-            musicXml={lessonMusicXml}
-            prerenderArtifactUrl={prerenderArtifactUrl}
-            audioSrc={audioSrc}
-            transposeSemitones={transposeSemitones}
-            soundFontProfile={soundFontProfile}
-            renderPreset={tabRenderPreset}
-            runtimeDiagnosticsEnabled={isAlphaTabRuntimeDiagEnabled()}
-            onReady={onTabReady}
-            onError={onTabError}
-            onNoteEvent={onNoteEvent}
-            onSongDetails={onTabSongDetails}
-            onSongPlayback={onTabSongPlayback}
-            onScoreSeekMs={
-              showStemPanel ? (ms) => void stemPanelRef.current?.seekTransportToSeconds(ms / 1000) : undefined
-            }
-            style={{ flex: 1, height: '100%', width: '100%' }}
-            lyricWords={lyricWords}
-            playbackSec={tickRef.current?.positionSec ?? 0}
-            songTitle={lesson?.song_title ?? undefined}
-            songArtist={lesson?.artist ?? undefined}
-            tabVariant={tabVariant}
-            hasFull={lessonMusicXml ? false : !!tabs.full}
-            hasSkeleton={lessonMusicXml ? false : !!tabs.skeleton}
-            hasAlt={lessonMusicXml ? false : !!tabs.alt}
-            onTabVariantChange={onTabVariantChange ? (v) => {
-              void setAppPref(PREF_TAB_VARIANT, v)
-              onTabVariantChange(v)
-            } : undefined}
-            onSeekToStart={onSeekToStart ?? (() => {
-              void stemPanelRef.current?.seekTransportToSeconds(0).then(() => {
-                tabRef.current?.syncPlaybackTimelineMs(0)
-              })
-            })}
-          />
-        )}
+        <TabViewport
+          ref={tabRef}
+          gp5Base64={gp5Base64}
+          musicXml={musicXml}
+          prerenderArtifactUrl={prerenderArtifactUrl}
+          audioSrc={audioSrc}
+          transposeSemitones={transposeSemitones}
+          soundFontProfile={soundFontProfile}
+          renderPreset={tabRenderPreset}
+          runtimeDiagnosticsEnabled={isAlphaTabRuntimeDiagEnabled()}
+          onReady={onTabReady}
+          onError={onTabError}
+          onNoteEvent={onNoteEvent}
+          onSongDetails={onTabSongDetails}
+          onSongPlayback={onTabSongPlayback}
+          onScoreSeekMs={
+            showStemPanel ? (ms) => void stemPanelRef.current?.seekTransportToSeconds(ms / 1000) : undefined
+          }
+          style={{ flex: 1, height: '100%', width: '100%' }}
+          playbackSec={tickRef.current?.positionSec ?? 0}
+          songTitle={lesson?.song_title ?? undefined}
+          songArtist={lesson?.artist ?? undefined}
+          tabVariant={tabVariant}
+          hasFull={!!tabs.full}
+          hasSkeleton={!!tabs.skeleton}
+          hasAlt={!!tabs.alt}
+          onTabVariantChange={onTabVariantChange ? (v) => {
+            void setAppPref(PREF_TAB_VARIANT, v)
+            onTabVariantChange(v)
+          } : undefined}
+          onSeekToStart={onSeekToStart ?? (() => {
+            void stemPanelRef.current?.seekTransportToSeconds(0).then(() => {
+              tabRef.current?.syncPlaybackTimelineMs(0)
+            })
+          })}
+        />
       </View>
     </>
   )

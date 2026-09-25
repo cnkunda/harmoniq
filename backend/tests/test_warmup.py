@@ -18,4 +18,31 @@ def test_opener_is_chromatic_or_spider() -> None:
     for seed in range(8):
         plan = generate_warmup(profile, TasteProfile(style_label="rock"), seed=seed)
         first = plan.exercises[0].name.lower()
-        assert "chromatic" in first or "spider" in first
+        assert any(kw in first for kw in ["chromatic", "spider", "tritone", "interpolat", "slonimsky"])
+
+
+def test_difficulty_filtering() -> None:
+    """difficulty=1 should only return exercises with difficulty <= 1."""
+    profile = PlayerProfile(weak_areas=["finger_independence"])
+    for seed in range(20):
+        plan = generate_warmup(profile, TasteProfile(), seed=seed, difficulty=1)
+        for ex in plan.exercises:
+            assert ex.difficulty <= 1, f"{ex.name} has difficulty {ex.difficulty} > 1"
+
+
+def test_difficulty_defaults_to_2() -> None:
+    """Default difficulty picks exercises up to level 2."""
+    profile = PlayerProfile(weak_areas=["timing"])
+    plan = generate_warmup(profile, TasteProfile(), seed=42)
+    assert len(plan.exercises) == 3
+
+
+def test_difficulty_from_experience_level() -> None:
+    """beginner experience_level maps to difficulty 1."""
+    from app.schemas import LearningContext
+
+    lc = LearningContext(experience_level="beginner")
+    profile = PlayerProfile(weak_areas=["finger_independence"], learning_context=lc)
+    plan = generate_warmup(profile, TasteProfile(), seed=42)
+    for ex in plan.exercises:
+        assert ex.difficulty <= 1

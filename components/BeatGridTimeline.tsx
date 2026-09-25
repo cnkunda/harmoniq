@@ -1,132 +1,93 @@
-import React, { useMemo } from 'react'
-import { View, Text } from 'react-native'
-import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg'
+/** Commit 109: Beat grid timeline visualization with beat/downbeat markers and bar lines. */
+
+import { useMemo } from 'react'
+import { View } from 'react-native'
+import Svg, { Line, Polyline } from 'react-native-svg'
+
 import colors from '@/src/constants/colors'
+import type { BeatGrid } from '@/src/types'
 
 export interface BeatGridTimelineProps {
-  beats: number[]
-  downbeats: number[]
-  timeSignature: { numerator: number; denominator: number }
-  durationSeconds: number
-  width?: number
+  beatGrid: BeatGrid
+  durationSec: number
+  playbackPositionSec?: number
   height?: number
-  currentTime?: number
-  chordEvents?: Array<{ timestamp: number; chord: string }>
-  style?: object
+  width?: number
 }
 
-const BEAT_HEIGHT = 6
-const DOWNBEAT_HEIGHT = 14
-const BAR_LINE_HEIGHT = 22
-const CHORD_ROW_HEIGHT = 20
-const PADDING_LEFT = 8
-const PADDING_RIGHT = 8
-
+/**
+ * Horizontal timeline showing beat markers, downbeat highlights, and bar lines.
+ * Downbeats are detected from `beatGrid.time_signature.numerator` (not hardcoded 4/4).
+ */
 export function BeatGridTimeline({
-  beats,
-  downbeats,
-  timeSignature,
-  durationSeconds,
-  width = 340,
-  height = 80,
-  currentTime,
-  chordEvents,
-  style,
+  beatGrid,
+  durationSec,
+  playbackPositionSec = 0,
+  height = 40,
+  width = 300,
 }: BeatGridTimelineProps) {
-  const chartWidth = width - PADDING_LEFT - PADDING_RIGHT
-  const downbeatSet = useMemo(() => new Set(downbeats.map((d) => Math.round(d * 1000))), [downbeats])
+  const { beats, downbeats, time_signature } = beatGrid
+  const beatsPerBar = time_signature?.numerator ?? 4
 
-  const timeToX = (t: number) => {
-    if (durationSeconds <= 0) return PADDING_LEFT
-    return PADDING_LEFT + (t / durationSeconds) * chartWidth
-  }
-
+  // Map beat timestamps to x positions (0..width)
   const beatLines = useMemo(() => {
-    return beats.map((t) => ({
-      x: timeToX(t),
-      isDownbeat: downbeatSet.has(Math.round(t * 1000)),
-    }))
-  }, [beats, downbeatSet, durationSeconds])
+    if (!beats || beats.length === 0 || durationSec <= 0) return []
+    const downbeatSet = new Set(downbeats?.map((d) => d.toFixed(4)))
+    return beats.map((t) => {
+      const x = (t / durationSec) * width
+      const isDownbeat = downbeatSet.has(t.toFixed(4))
+      return { x, isDownbeat }
+    })
+  }, [beats, downbeats, durationSec, width])
 
+  // Map bar lines (downbeats)
   const barLines = useMemo(() => {
-    return downbeats.map((t) => timeToX(t))
-  }, [downbeats, durationSeconds])
+    if (!downbeats || downbeats.length === 0 || durationSec <= 0) return []
+    return downbeats.map((t) => (t / durationSec) * width)
+  }, [downbeats, durationSec, width])
 
-  const chords = useMemo(() => {
-    if (!chordEvents?.length) return []
-    return chordEvents.map((e) => ({
-      x: timeToX(e.timestamp),
-      label: e.chord,
-    }))
-  }, [chordEvents, durationSeconds])
-
-  const playheadX = currentTime != null ? timeToX(currentTime) : null
-
-  const totalHeight = chordEvents?.length ? height + CHORD_ROW_HEIGHT : height
+  // Playback playhead position
+  const playheadX = durationSec > 0 ? (playbackPositionSec / durationSec) * width : 0
 
   return (
-    <View style={[{ width, height: totalHeight }, style]}>
-      <Svg width={width} height={totalHeight}>
-        {/* Bar lines */}
+    <View className="rounded-md border border-wood-600/45 bg-ivory">
+      <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        {/* Bar lines (vertical lines at downbeat positions) */}
         {barLines.map((x, i) => (
           <Line
             key={`bar-${i}`}
             x1={x}
             y1={0}
             x2={x}
-            y2={totalHeight}
-            stroke={colors.wood[600]}
-            strokeWidth={1.5}
-            strokeDasharray="4,2"
+            y2={height}
+            stroke={colors.muted.brown}
+            strokeOpacity={0.4}
+            strokeWidth={1.0}
           />
         ))}
 
-        {/* Beat ticks */}
+        {/* Beat ticks (smaller marks at beat positions) */}
         {beatLines.map(({ x, isDownbeat }, i) => (
           <Line
             key={`beat-${i}`}
             x1={x}
-            y1={totalHeight - (isDownbeat ? DOWNBEAT_HEIGHT : BEAT_HEIGHT)}
+            y1={isDownbeat ? 0 : height * 0.3}
             x2={x}
-            y2={totalHeight}
-            stroke={isDownbeat ? colors.amber.accent : colors.muted.light}
-            strokeWidth={isDownbeat ? 2 : 1}
+            y2={height}
+            stroke={isDownbeat ? colors.amber.accent : colors.muted.brown}
+            strokeOpacity={isDownbeat ? 0.8 : 0.3}
+            strokeWidth={isDownbeat ? 1.2 : 0.5}
           />
         ))}
 
-        {/* Chord labels row */}
-        {chords.map((c, i) => (
-          <React.Fragment key={`chord-${i}`}>
-            <Rect
-              x={c.x - 2}
-              y={0}
-              width={Math.max(20, (chartWidth / Math.max(chords.length, 1)) * 0.8)}
-              height={CHORD_ROW_HEIGHT - 2}
-              rx={3}
-              fill={colors.wood[700]}
-              opacity={0.8}
-            />
-            <SvgText
-              x={c.x + 2}
-              y={CHORD_ROW_HEIGHT - 6}
-              fontSize={9}
-              fill={colors.cream}
-              fontFamily="monospace"
-            >
-              {c.label}
-            </SvgText>
-          </React.Fragment>
-        ))}
-
-        {/* Playhead */}
-        {playheadX != null && (
-          <Line
-            x1={playheadX}
-            y1={0}
-            x2={playheadX}
-            y2={totalHeight}
+        {/* Playback playhead */}
+        {playbackPositionSec > 0 && playbackPositionSec < durationSec && (
+          <Polyline
+            points={`${playheadX},0 ${playheadX},${height}`}
+            fill="none"
             stroke={colors.amber.accent}
-            strokeWidth={2}
+            strokeOpacity={0.9}
+            strokeWidth={1.5}
           />
         )}
       </Svg>

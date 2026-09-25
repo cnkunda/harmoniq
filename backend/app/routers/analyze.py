@@ -27,7 +27,10 @@ from app.jobs import (
     ANALYSIS_FAILED_USER_MESSAGE,
     ANALYZE_ERROR_ANALYSIS_FAILED,
     enqueue_analyze_job,
+    enqueue_beat_grid_recompute,
+    get_chord_enrichment,
     get_coach_hydration,
+    get_recompute_job,
     jobs,
 )
 from app.schemas import (
@@ -37,9 +40,12 @@ from app.schemas import (
     BeatGridRecomputeRequest,
     BeatGridRecomputeResponse,
     ChordCorrectionRequest,
+    ChordEnrichmentStatus,
     ChordEvent,
     ChordTimeline,
     CoachHydrationStatus,
+    ContributeRequest,
+    ContributeResponse,
     CorrectionExportRequest,
     CorrectionHistory,
     CorrectionRecord,
@@ -456,173 +462,78 @@ async def verify_transcription(req: TranscriptionVerifyRequest):
 
 
 # ---------------------------------------------------------------------------
-# Commit 108: Beat Grid Recompute Endpoint
+# Commit 109: Beat grid recompute endpoints (async)
 # ---------------------------------------------------------------------------
-
-def _run_beat_grid_recompute(
-    job_id: str,
-    *,
-    time_signature: str | None,
-    bpm_override: float | None,
-    reset_to_auto: bool,
-) -> BeatGridRecomputeResponse:
-    """Recompute beat grid and re-derive dependent artifacts (chords, solo, MusicXML)."""
-    from app.musicxml_builder import build_musicxml
-
-    job_dir = get_job_dir(job_id)
-    wav_path = _find_job_wav(job_dir)
-    if wav_path is None:
-        raise BeatGridComputationError(f"No WAV file found for job {job_id}")
-
-    # Determine overrides
-    ts_override = None
-    bpm_val = None
-    if not reset_to_auto:
-        ts_override = time_signature
-        bpm_val = bpm_override
-
-    # Re-estimate beat grid
-    beat_grid_dict = estimate_beat_grid(wav_path, time_signature=ts_override, bpm_override=bpm_val)
-    beat_grid = BeatGrid.model_validate(beat_grid_dict)
-
-    # Load existing chord/solo data for re-pooling
-    stems_dir = job_dir / "stems"
-    guitar_stem = stems_dir / "guitar.wav"
-    other_stem = stems_dir / "other.wav"
-    bass_stem = stems_dir / "bass.wav"
-
-    chord_mix_path = other_stem if other_stem.exists() else (bass_stem if bass_stem.exists() else guitar_stem)
-    melodic_stem_path = guitar_stem if guitar_stem.exists() else other_stem
-
-    chord_timeline = ChordTimeline(events=[])
-    solo_notes = SoloNotes(notes=[])
-
-    # Re-run chord inference on updated beat grid
-    if chord_mix_path.exists():
-        try:
-            chord_timeline, _ = infer_chords(chord_mix_path, beat_grid)
-        except Exception:
-            logger.exception("recompute chord inference failed job_id=%s", job_id)
-
-    # Re-run solo inference on updated beat grid
-    if melodic_stem_path.exists():
-        try:
-            solo_notes = infer_solo(melodic_stem_path, beat_grid)
-        except Exception:
-            logger.exception("recompute solo inference failed job_id=%s", job_id)
-
-    # Rebuild MusicXML
-    musicxml_str = ""
-    try:
-        if chord_timeline.events and solo_notes.notes:
-            musicxml_str = build_musicxml(
-                beat_grid=beat_grid,
-                chord_timeline=chord_timeline,
-                solo_notes=solo_notes,
-                title="Harmoniq Score",
-                artist="Harmoniq AI",
-            )
-    except Exception:
-        logger.exception("recompute MusicXML failed job_id=%s", job_id)
-
-    # Persist recomputed artifacts to disk
-    _persist_artifacts_to_disk(job_dir, beat_grid=beat_grid, chord_timeline=chord_timeline, solo_notes=solo_notes, musicxml=musicxml_str)
-
-    # Update lesson.json in job dir if it exists
-    lesson_path = job_dir / "lesson.json"
-    if lesson_path.exists():
-        try:
-            with open(lesson_path) as f:
-                lesson_data = json.load(f)
-            lesson_data["beat_grid"] = beat_grid.beats
-            lesson_data["bar_timestamps"] = beat_grid.downbeats
-            if "metadata" not in lesson_data:
-                lesson_data["metadata"] = {}
-            lesson_data["metadata"]["last_beat_grid_recompute"] = datetime.datetime.now().isoformat()
-            with open(lesson_path, "w") as f:
-                json.dump(lesson_data, f, indent=2)
-        except Exception:
-            logger.exception("failed to update lesson.json for recompute job_id=%s", job_id)
-
-    invalidated = dependent_artifacts_for_grid_override() if (ts_override is not None or bpm_val is not None) else []
-
-    return BeatGridRecomputeResponse(
-        job_id=job_id,
-        beat_grid=beat_grid,
-        chord_timeline=chord_timeline,
-        solo_notes=solo_notes,
-        musicxml=musicxml_str,
-        recompute_stage="complete",
-        invalidated_artifacts=invalidated,
-    )
-
-
-def _find_job_wav(job_dir: Path) -> Path | None:
-    """Find the normalized WAV file in a job directory."""
-    candidates = [
-        job_dir / "normalized.wav",
-        job_dir / "input.wav",
-    ]
-    for p in candidates:
-        if p.is_file():
-            return p
-    # Fallback: find any .wav in the job dir
-    for p in job_dir.glob("*.wav"):
-        if p.is_file():
-            return p
-    return None
-
-
-def _persist_artifacts_to_disk(
-    job_dir: Path,
-    *,
-    beat_grid: BeatGrid | None = None,
-    chord_timeline: ChordTimeline | None = None,
-    solo_notes: SoloNotes | None = None,
-    musicxml: str | None = None,
-) -> None:
-    """Persist intermediate analysis artifacts to disk for restart survival."""
-    job_dir.mkdir(parents=True, exist_ok=True)
-    if beat_grid is not None:
-        with open(job_dir / "BeatGrid.json", "w") as f:
-            f.write(beat_grid.model_dump_json(indent=2))
-    if chord_timeline is not None:
-        with open(job_dir / "chordTimeline.json", "w") as f:
-            f.write(chord_timeline.model_dump_json(indent=2))
-    if solo_notes is not None:
-        with open(job_dir / "SoloNotes.json", "w") as f:
-            f.write(solo_notes.model_dump_json(indent=2))
-    if musicxml is not None:
-        with open(job_dir / "score.musicxml", "w") as f:
-            f.write(musicxml)
-
 
 @router.post(
     "/analyze/{job_id}/beat-grid/recompute",
     response_model=BeatGridRecomputeResponse,
-    summary="POST /analyze/{job_id}/beat-grid/recompute — re-derive chords/solo/MusicXML after beat grid override",
+    summary="POST /analyze/{job_id}/beat-grid/recompute — async recompute with overrides",
 )
-async def beat_grid_recompute(
-    job_id: str,
-    req: BeatGridRecomputeRequest,
-) -> BeatGridRecomputeResponse:
-    """Recompute beat grid with optional time signature / BPM override and re-derive all dependent artifacts."""
+async def beat_grid_recompute(job_id: str, req: BeatGridRecomputeRequest) -> BeatGridRecomputeResponse:
+    """Trigger asynchronous recomputation of beat grid and all dependent artifacts.
+
+    Poll GET /analyze/{job_id}/beat-grid/recompute for status updates.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
+    enqueue_beat_grid_recompute(
+        job_id,
+        time_signature=req.time_signature,
+        bpm_override=req.bpm_override,
+    )
+    return BeatGridRecomputeResponse(
+        job_id=job_id,
+        status="pending",
+        progress=0.0,
+        stage_label="Queued…",
+    )
+
+
+@router.get(
+    "/analyze/{job_id}/beat-grid/recompute",
+    response_model=BeatGridRecomputeResponse,
+    summary="GET /analyze/{job_id}/beat-grid/recompute — poll recompute status",
+)
+async def beat_grid_recompute_status(job_id: str) -> BeatGridRecomputeResponse:
+    """Poll recompute job status. Returns 404 if no recompute has been triggered."""
+    status = get_recompute_job(job_id)
+    if status is None:
+        try:
+            from app.repository import get_recompute_job_status as _repo_recompute
+            db_status = _repo_recompute(job_id)
+            if db_status is not None:
+                from app.schemas import BeatGridRecomputeResponse as _BGR
+                return _BGR(**db_status)
+        except Exception:
+            logger.exception("GET /analyze/%s/beat-grid/recompute — DB fallback failed", job_id)
+        raise HTTPException(status_code=404, detail=f"No recompute job for {job_id}.")
+    return status
+
+
+@router.get(
+    "/analyze/{job_id}/chord-enrichment",
+    response_model=ChordEnrichmentStatus,
+    summary="GET /analyze/{job_id}/chord-enrichment — chord enrichment status (commit 116)",
+)
+async def analyze_chord_enrichment_status(job_id: str) -> ChordEnrichmentStatus:
     job = jobs.get(job_id)
     if job is None:
+        logger.warning("GET /analyze/%s/chord-enrichment — unknown job_id (404)", job_id)
         raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
-    try:
-        return await asyncio.to_thread(
-            _run_beat_grid_recompute,
-            job_id,
-            time_signature=req.time_signature,
-            bpm_override=req.bpm_override,
-            reset_to_auto=req.reset_to_auto,
-        )
-    except BeatGridComputationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception:
-        logger.exception("beat-grid recompute failed job_id=%s", job_id)
-        raise HTTPException(status_code=500, detail="Beat grid recompute failed.") from None
+    status = get_chord_enrichment(job_id)
+    if status is None:
+        try:
+            from app.repository import get_chord_enrichment_status as _repo_enrich
+            db_status = _repo_enrich(job_id)
+            if db_status is not None:
+                return db_status
+        except Exception:
+            logger.exception("GET /analyze/%s/chord-enrichment — DB fallback failed", job_id)
+        return ChordEnrichmentStatus(status="pending")
+    return status
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -909,3 +820,35 @@ async def export_corrections(job_id: str, req: CorrectionExportRequest) -> dict:
         return {"format": "csv", "data": buf.getvalue(), "count": len(filtered)}
 
     return {"format": "json", "data": filtered, "count": len(filtered)}
+
+
+@router.post(
+    "/analyze/{job_id}/contribute",
+    response_model=ContributeResponse,
+    summary="POST /analyze/{job_id}/contribute — contribute corrected audio to training",
+)
+async def contribute_to_training(job_id: str, req: ContributeRequest) -> ContributeResponse:
+    """Contribute the current (corrected) chord timeline to training data."""
+    from app.contribute import ContributionError, contribute_audio
+
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
+    if job.result is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} has no result yet.")
+    lesson = job.result
+
+    if not lesson.chord_timeline or not lesson.chord_timeline.events:
+        raise HTTPException(status_code=400, detail="No chord timeline available to contribute.")
+
+    try:
+        result = contribute_audio(
+            job_id=job_id,
+            timeline=lesson.chord_timeline,
+            contributor_id=req.contributor_id,
+            license=req.license,
+        )
+    except ContributionError as e:
+        raise HTTPException(status_code=400, detail={"error": e.args[0], "message": e.args[1]})
+
+    return ContributeResponse(**result)

@@ -1,6 +1,6 @@
 import { TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
 
-/** GP5 payloads on `LessonJSON.sections[]` items (backend tabgen). */
+/** GP5 payloads on `LessonJSON.sections[]` items (backend tabgen). @deprecated Export-only — use `musicxml` for rendering. */
 export type SectionTabPayloads = {
   full?: string
   skeleton?: string
@@ -18,7 +18,7 @@ export function readSectionTabPayloads(section: unknown): SectionTabPayloads {
   }
 }
 
-/** First GP5 blob on any section (full → skeleton → alt), for server export from a saved lesson. */
+/** First GP5 blob on any section (full → skeleton → alt), for server export from a saved lesson. @deprecated Export-only (GP5→MIDI conversion). */
 export function firstGp5Base64FromLessonSections(sections: unknown): string | null {
   if (!Array.isArray(sections)) return null
   for (const sec of sections) {
@@ -51,4 +51,24 @@ export function pickTabVariant(
     return tabs.full ? 'full' : 'skeleton'
   }
   return tabs.full ? 'full' : tabs.skeleton ? 'skeleton' : tabs.alt ? 'alt' : 'full'
+}
+
+// Commit 108: MusicXML reader utilities
+
+/** Read MusicXML string from a section object. */
+export function readSectionMusicXml(section: unknown): string | null {
+  if (!section || typeof section !== 'object') return null
+  const o = section as Record<string, unknown>
+  if (typeof o.musicxml === 'string' && o.musicxml.trim()) return o.musicxml.trim()
+  return null
+}
+
+/** First MusicXML string on any section, for fallback rendering. */
+export function firstMusicXmlFromLessonSections(sections: unknown): string | null {
+  if (!Array.isArray(sections)) return null
+  for (const sec of sections) {
+    const xml = readSectionMusicXml(sec)
+    if (xml) return xml
+  }
+  return null
 }

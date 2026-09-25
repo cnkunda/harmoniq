@@ -1,60 +1,33 @@
-"""Tests for 36-bin CQT feature extraction (Commit 98b) + CRNN architecture (Commit 98c)."""
+"""Tests for 144-bin CQT feature extraction + CRNN architecture."""
 import numpy as np
 import pytest
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+
+from app.chord_vocab import CHORD_INTERVALS, ROOT_NOTES
 
 import os
 os.environ["KERAS_BACKEND"] = "tensorflow"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-BINS_PER_OCTAVE = 12
-NUM_OCTAVES = 3
-CHROMA_BINS = BINS_PER_OCTAVE * NUM_OCTAVES  # 36
-BASS_BINS = 4
-FEATURE_DIM = CHROMA_BINS + BASS_BINS         # 40
+BINS_PER_OCTAVE = 24
+NUM_OCTAVES = 6
+CHROMA_BINS = BINS_PER_OCTAVE * NUM_OCTAVES  # 144
+BASS_BINS = 0
+FEATURE_DIM = CHROMA_BINS                    # 144
 WINDOW = 128
-
-ROOT_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
-CHORD_INTERVALS = {
-    "maj":  [0, 4, 7],
-    "min":  [0, 3, 7],
-    "7":    [0, 4, 7, 10],
-    "maj7": [0, 4, 7, 11],
-    "min7": [0, 3, 7, 10],
-    "9":    [0, 4, 7, 10, 14],
-    "min9": [0, 3, 7, 10, 14],
-    "maj9": [0, 4, 7, 11, 14],
-    "11":   [0, 4, 7, 10, 14, 17],
-    "13":   [0, 4, 7, 10, 14, 17, 21],
-    "7#9":  [0, 4, 7, 10, 15],
-    "7b9":  [0, 4, 7, 10, 13],
-    "7#5":  [0, 4, 8, 10],
-    "7b5":  [0, 4, 6, 10],
-    "alt7": [0, 4, 6, 8, 10, 13, 15],
-    "sus2":  [0, 2, 7],
-    "sus4":  [0, 5, 7],
-    "7sus4": [0, 5, 7, 10],
-    "dim":   [0, 3, 6],
-    "dim7":  [0, 3, 6, 9],
-    "aug":   [0, 4, 8],
-    "6":     [0, 4, 7, 9],
-    "min6":  [0, 3, 7, 9],
-}
 
 
 def make_cqt_template(root: int, quality: str, bass_octave: int = 1) -> np.ndarray:
-    """Generate 36-bin CQT template with octave-aware chord tones."""
+    """Generate 144-bin CQT template with octave-aware chord tones."""
     cqt = np.zeros(CHROMA_BINS, dtype=np.float32)
 
     if quality == "N":
-        cqt = np.full(CHROMA_BINS, 1.0 / CHROMA_BINS, dtype=np.float32)
-        bass = np.full(BASS_BINS, 1.0 / BASS_BINS, dtype=np.float32)
-        return np.concatenate([cqt, bass])
+        return np.full(CHROMA_BINS, 1.0 / CHROMA_BINS, dtype=np.float32)
 
     intervals = CHORD_INTERVALS[quality]
 
@@ -75,15 +48,14 @@ def make_cqt_template(root: int, quality: str, bass_octave: int = 1) -> np.ndarr
         cqt[(bin_idx + 7) % CHROMA_BINS] += 0.5
         cqt[bin_idx] += 0.3
 
-    # Place root note in octave 1 (bass register) for root-position presence
+    # Place root note in octave 1 (low register)
     cqt[root] += 0.5
 
     total = cqt.sum()
     if total > 0:
         cqt = cqt / total
 
-    bass = cqt[:BASS_BINS].copy()
-    return np.concatenate([cqt, bass]).astype(np.float32)
+    return cqt.astype(np.float32)
 
 
 def apply_inversion(template: np.ndarray, root: int, quality: str, inversion: int = 0) -> np.ndarray:
@@ -106,22 +78,14 @@ def apply_inversion(template: np.ndarray, root: int, quality: str, inversion: in
     if total > 0:
         cqt = cqt / total
 
-    bass = cqt[:BASS_BINS].copy()
-
-    return np.concatenate([cqt, bass]).astype(np.float32)
+    return cqt.astype(np.float32)
 
 
 def apply_pitch_shift(window: np.ndarray, shift_semitones: int = 0) -> np.ndarray:
     if shift_semitones == 0:
         return window
 
-    cqt = window[:, :CHROMA_BINS]
-    bass = window[:, CHROMA_BINS:]
-
-    cqt_shifted = np.roll(cqt, shift_semitones, axis=-1)
-    bass_shifted = np.roll(bass, shift_semitones, axis=-1)
-
-    return np.concatenate([cqt_shifted, bass_shifted], axis=-1)
+    return np.roll(window, shift_semitones, axis=-1)
 
 
 def generate_pink_noise(shape: tuple, noise_std: float = 0.12) -> np.ndarray:
@@ -165,24 +129,18 @@ def make_window_augmented(center_chroma: np.ndarray, noise_std: float = 0.12,
 
 
 class TestCQTTemplate:
-    def test_40_bin_output(self):
+    def test_144_bin_output(self):
         template = make_cqt_template(0, "maj")
         assert template.shape == (FEATURE_DIM,)
 
     def test_octave_distribution(self):
         template = make_cqt_template(0, "maj")
         cqt = template[:CHROMA_BINS]
-        assert cqt[12] > 0
-
-    def test_bass_channel(self):
-        template = make_cqt_template(0, "maj")
-        bass = template[CHROMA_BINS:]
-        assert bass.shape == (BASS_BINS,)
+        assert cqt[24] > 0  # octave 2, note C (root)
 
     def test_no_chord_uniform(self):
         template = make_cqt_template(-1, "N")
-        assert np.allclose(template[:CHROMA_BINS], 1/CHROMA_BINS)
-        assert np.allclose(template[CHROMA_BINS:], 1/BASS_BINS)
+        assert np.allclose(template, 1/CHROMA_BINS)
 
     def test_extended_chord_octave3(self):
         template = make_cqt_template(0, "9")
@@ -202,7 +160,7 @@ class TestCQTInversion:
         inv1 = apply_inversion(template, 0, "maj", 1)
         assert not np.allclose(inv1, template)
 
-    def test_preserves_40_bins(self):
+    def test_preserves_144_bins(self):
         template = make_cqt_template(0, "maj")
         inv1 = apply_inversion(template, 0, "maj", 1)
         assert inv1.shape == (FEATURE_DIM,)
@@ -242,17 +200,15 @@ class TestCQTFeatureExtraction:
     def test_cqt_extraction_shape(self):
         import librosa
         y = np.random.randn(22050)
-        cqt = librosa.cqt(y=y, sr=22050, n_bins=36, bins_per_octave=12)
-        assert cqt.shape[0] == 36
+        cqt = librosa.cqt(y=y, sr=22050, n_bins=CHROMA_BINS, bins_per_octave=BINS_PER_OCTAVE)
+        assert cqt.shape[0] == CHROMA_BINS
 
-    def test_feature_concatenation(self):
-        cqt = np.random.rand(100, 36).astype(np.float32)
-        bass = cqt[:, :4]
-        features = np.concatenate([cqt, bass], axis=1)
-        assert features.shape == (100, 40)
+    def test_no_bass_concat_144_dim(self):
+        cqt = np.random.rand(100, CHROMA_BINS).astype(np.float32)
+        assert cqt.shape == (100, CHROMA_BINS)
 
     def test_normalization(self):
-        cqt = np.random.rand(10, 36).astype(np.float32)
+        cqt = np.random.rand(10, CHROMA_BINS).astype(np.float32)
         norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
         normalized = cqt / norms
         row_sums = normalized.sum(axis=1)
@@ -267,23 +223,23 @@ class TestCRNNBuild:
 
     def _import_model(self):
         """Lazy-import build_model to avoid TF import at module level."""
-        from build_chord_tflite import build_model, CHROMA_BINS, BASS_BINS
+        from build_chord_tflite import build_model
+        from app.cqt_constants import CHROMA_BINS, BASS_BINS
         return build_model, CHROMA_BINS, BASS_BINS
 
     def test_model_accepts_128_frame_window(self):
         build_model, *_ = self._import_model()
         model = build_model(window=128)
         assert model.input_shape == (None, 128, FEATURE_DIM)
-        assert model.output_shape == (None, 277)  # NUM_CLASSES
+        assert model.output_shape == (None, 25)  # NUM_CLASSES
 
     def test_cnn_frontend_reduces_temporal_resolution(self):
         build_model, *_ = self._import_model()
         model = build_model(window=128)
 
         # After 2× MaxPool(pool_size=2): 128 → 64 → 32
-        # The first BiLSTM (layer index 9, after CNN + MHA + LayerNorm) receives 32 timesteps
-        bilstm = model.layers[9]
-        assert bilstm.name.startswith("bilstm")
+        # Find first BiLSTM by name (layer ordering may vary with architecture changes)
+        bilstm = next(l for l in model.layers if l.name.startswith("bilstm"))
         # The first LSTM has return_sequences=True, so output is (None, 32, 256)
         tsteps = bilstm.output.shape[1]
         assert tsteps == 32, \
@@ -293,14 +249,14 @@ class TestCRNNBuild:
         build_model, *_ = self._import_model()
         model = build_model(window=128)
 
-        assert model.output_shape == (None, 277)
+        assert model.output_shape == (None, 25)
 
     def test_model_builds_with_various_window_sizes(self):
         build_model, *_ = self._import_model()
         for w in [64, 128, 256]:
             model = build_model(window=w)
             assert model.input_shape == (None, w, FEATURE_DIM)
-            assert model.output_shape == (None, 277)
+            assert model.output_shape == (None, 25)
 
     def test_dummy_forward_pass(self):
         """Build model with tiny window and run a dummy forward pass."""
@@ -308,7 +264,7 @@ class TestCRNNBuild:
         model = build_model(window=16)
         dummy = np.random.randn(4, 16, FEATURE_DIM).astype(np.float32)
         out = model.predict(dummy, verbose=0)
-        assert out.shape == (4, 277)
+        assert out.shape == (4, 25)
         row_sums = out.sum(axis=1)
         assert np.allclose(row_sums, 1.0, atol=1e-4)
 
@@ -357,7 +313,7 @@ class TestCRNNBuild:
             interp.set_tensor(inp["index"], dummy)
             interp.invoke()
             out = interp.get_tensor(outp["index"])
-            assert out.shape == (2, 277)
+            assert out.shape == (2, 25)
             assert np.allclose(out.sum(axis=1), 1.0, atol=1e-4)
         except RuntimeError as e:
             # Flex ops require tflite-runtime with Flex or Android deployment
@@ -379,8 +335,9 @@ class TestAttentionBuild:
         """Lazy-import to avoid TF import at module level."""
         from build_chord_tflite import (
             build_model, build_attention_vis_model, compute_grouped_accuracy,
-            CHROMA_BINS, BASS_BINS, CHORD_CLASS_MAP,
+            CHORD_CLASS_MAP,
         )
+        from app.cqt_constants import CHROMA_BINS, BASS_BINS
         return build_model, build_attention_vis_model, compute_grouped_accuracy, CHROMA_BINS, BASS_BINS, CHORD_CLASS_MAP
 
     def test_mha_layer_present(self):
@@ -425,11 +382,11 @@ class TestAttentionBuild:
             f"Expected (None, 32, 128), got {mha.output.shape}"
 
     def test_model_output_shape_unchanged(self):
-        """Output shape still (None, 277) despite new attention layers."""
+        """Output shape still (None, 25) despite new attention layers."""
         build_model, *_ = self._import_model()
         model = build_model(window=128)
-        assert model.output_shape == (None, 277), \
-            f"Expected (None, 277), got {model.output_shape}"
+        assert model.output_shape == (None, 25), \
+            f"Expected (None, 25), got {model.output_shape}"
 
     def test_dummy_forward_pass(self):
         """Build with tiny window, run dummy forward pass, verify softmax."""
@@ -437,7 +394,7 @@ class TestAttentionBuild:
         model = build_model(window=16)
         dummy = np.random.randn(4, 16, FEATURE_DIM).astype(np.float32)
         out = model.predict(dummy, verbose=0)
-        assert out.shape == (4, 277)
+        assert out.shape == (4, 25)
         row_sums = out.sum(axis=1)
         assert np.allclose(row_sums, 1.0, atol=1e-4)
 
@@ -473,7 +430,7 @@ class TestAttentionBuild:
         assert isinstance(out, list) and len(out) == 2, \
             f"Expected [chord_probs, attn_weights], got {type(out)}"
         probs, attn = out
-        assert probs.shape == (2, 277), f"probs shape: {probs.shape}"
+        assert probs.shape == (2, 25), f"probs shape: {probs.shape}"
         # After 2× MaxPool(pool_size=2): 16 → 4 temporal positions
         expected_t = max(1, 16 // 4)
         assert attn.shape == (2, 4, expected_t, expected_t), \
@@ -536,7 +493,7 @@ class TestAttentionBuild:
             interp.set_tensor(inp["index"], dummy)
             interp.invoke()
             result = interp.get_tensor(outp["index"])
-            assert result.shape == (2, 277), f"Output shape: {result.shape}"
+            assert result.shape == (2, 25), f"Output shape: {result.shape}"
             assert np.allclose(result.sum(axis=1), 1.0, atol=1e-4)
         except RuntimeError as e:
             if "Flex" in str(e) or "SELECT_TF_OPS" in str(e):
@@ -575,23 +532,21 @@ class TestAttentionBuild:
 
     def test_compute_grouped_accuracy(self):
         """Verify compute_grouped_accuracy returns correct per-group metrics."""
-        build_model, _, compute_acc, _, _, class_map = self._import_model()
-        n = len(class_map)
+        build_model, _, compute_acc, _, _, _ = self._import_model()
+        n = 25  # MIREX 25-class vocabulary (12 maj + 12 min + N)
         # y_true = all classes in order, y_pred = perfect prediction
         y_true = np.arange(n, dtype=np.int32)
         y_pred = np.arange(n, dtype=np.int32)
         result = compute_acc(y_true, y_pred)
         assert result["overall"] == 1.0
         assert result["triad"] == 1.0
-        assert result["extended"] == 1.0
-        assert result["altered"] == 1.0
-        assert result["suspended_other"] == 1.0
+        assert result["no_chord"] == 1.0
 
         # Test with all wrong predictions
         y_pred_wrong = np.ones(n, dtype=np.int32) * (n - 1)
         result_wrong = compute_acc(y_true, y_pred_wrong)
         assert result_wrong["overall"] < 1.0
 
-        # Verify all expected keys present
-        expected_keys = {"overall", "triad", "extended", "altered", "suspended_other", "no_chord"}
+        # MIREX 25-class only has triad (maj/min) and no_chord groups
+        expected_keys = {"overall", "triad", "no_chord"}
         assert set(result.keys()) == expected_keys

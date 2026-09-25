@@ -2,11 +2,15 @@ import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
+import { Mic } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { CoachFeedbackPrompt } from '@/components/CoachFeedbackPrompt'
 import { CoachNote } from '@/components/CoachNote'
+import { ChordDiagram } from '@/components/ChordDiagram'
+import { ChordPositionSelector } from '@/components/ChordPositionSelector'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
+import { EmptyState } from '@/components/EmptyState'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { GhostPlayerControl } from '@/components/GhostPlayerControl'
@@ -29,23 +33,35 @@ import { ghostReferenceToPlaybackUri } from '@/src/session/persistGhostTake'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { usePlayCapture } from '@/src/session/usePlayCapture'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
-import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
-import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
-import { useMusicTimelineData } from '@/src/session/useMusicTimelineData'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useAppStore } from '@/src/stores/useAppStore'
+import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import * as FileSystem from 'expo-file-system/legacy'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 
 export default function PlayScreen() {
-  const { chordEvents, soloNotesArr, barTimestamps } = useMusicTimelineData()
+  const lesson = useLessonStore((s) => s.lesson)
+  const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
+  const section = lesson?.sections?.[sectionIndex] as Record<string, unknown> | undefined
+
+  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
+  // Use helper so UI consumers follow playback across sections without needing per-section logic.
+  const chordEvents = getLessonWideChordEvents(lesson)
+  const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
 
   return (
-    <MusicProvider chordEvents={chordEvents} soloNotes={soloNotesArr} barTimestamps={barTimestamps}>
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
+    >
       <PlayScreenInner />
     </MusicProvider>
   )
@@ -54,11 +70,22 @@ export default function PlayScreen() {
 function PlayScreenInner() {
   const isDemo = useIsDemoLesson()
   const router = useRouter()
+  const musicActions = useMusicActions()
+  const musicState = useMusicState()
+  const [chordPosIndex, setChordPosIndex] = useState(0)
+  useEffect(() => {
+    setChordPosIndex(0)
+  }, [musicState?.currentChord])
   const recordingRef = useRef(false)
   const initialMetronomeOn = useMetronomeDefaultOn()
   const lesson = useLessonStore((s) => s.lesson)
   const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const section = lesson?.sections?.[sectionIndex] as Record<string, unknown> | undefined
+
+  const chordEvents = getLessonWideChordEvents(lesson)
+  const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
+
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()
   const positionLabel =
     section && typeof section.primary_position === 'string'
@@ -112,21 +139,6 @@ function PlayScreenInner() {
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner({ disableWhen: recording })
-  const musicActions = useMusicActions()
-
-  const handlePlaybackTick = useCallback(
-    (ctx: PlaybackTickContext) => {
-      playbackTick(ctx)
-      musicActions.setPosition(ctx.positionSec * 1000)
-      musicActions.setPlaying(ctx.playing)
-    },
-    [playbackTick, musicActions],
-  )
-
-  useEffect(() => {
-    musicActions.setPosition(0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const activeMicProfile = useSessionPrefsStore((s) => s.activeMicProfile)
   const micNoiseGateRms = useSessionPrefsStore((s) => {
@@ -135,7 +147,7 @@ function PlayScreenInner() {
     return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
   })
 
-  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
+  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote, null, null), [keyLabel, selectedNote])
 
   const pendingGhostReference = useSessionPlayStore((s) => s.pendingGhostReference)
   const setPendingGhostReference = useSessionPlayStore((s) => s.setPendingGhostReference)
@@ -229,109 +241,148 @@ function PlayScreenInner() {
     })
   }
 
+  // Drive MusicProvider position from stem playback ticks
+  // Combine existing playbackTick (ref update) with music actions
+  const combinedPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
+    playbackTick(ctx)
+    musicActions.setPosition(ctx.positionSec * 1000)
+    musicActions.setPlaying(ctx.playing)
+  }, [playbackTick, musicActions])
+
+  // Seed initial chord/notes on mount so fretboard isn't blank before playback starts
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
-    <SessionStepScreen
-      title="Play"
-      subtitle={
-        isDemo
-          ? DEMO_TOUR_SUBTITLE.play
-          : 'Mute the guitar stem, follow the tab, and capture your take — scoring tracks pitch against each tab note and beat.'
-      }
-      showBack
-      onBack={() => router.back()}
-      showNext
-      nextLabel="Next: Review"
-      onNext={() => {
-        void commitPendingGhostTakeIfNeeded({ lesson, sectionIndex }).finally(() =>
-          router.push(sessionHref('review')),
-        )
-      }}
-    >
-      <View className="gap-5">
-        {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
-        {typeof __DEV__ !== 'undefined' && __DEV__ ? (
-          <Text className="rounded-lg border border-dashed border-wood-600/25 bg-cream px-3 py-2 font-mono text-xs text-wood-600">
-            noiseGateThresholdRms ({activeMicProfile}):{' '}
-            {micNoiseGateRms != null ? micNoiseGateRms.toFixed(4) : '—'} (Commit 62 calibration)
-          </Text>
+      <SessionStepScreen
+        title="Play"
+        phaseEyebrow="Apply phase"
+        subtitle={
+          isDemo
+            ? DEMO_TOUR_SUBTITLE.play
+            : 'Mute the guitar stem, follow the tab, and capture your take — scoring tracks pitch against each tab note and beat.'
+        }
+        showBack
+        onBack={() => router.back()}
+        showNext
+        nextLabel="Next: Review"
+        onNext={() => {
+          void commitPendingGhostTakeIfNeeded({ lesson, sectionIndex }).finally(() =>
+            router.push(sessionHref('review')),
+          )
+        }}
+      >
+        {!lesson ? (
+          <EmptyState
+            Icon={Mic}
+            heading="No song loaded for the Play step"
+            subtext="Start from the Home tab to add and analyze a song."
+          />
         ) : null}
-        <SessionStemAndTab
-          ref={stemTabRef}
-          tabRenderPreset="light"
-          lessonPlaybackCardVariant="play"
-          captureRecording={recording}
-          playCaptureSlot={(ctx) => (
-            <PlayCaptureCard
-              {...ctx}
-              recording={recording}
-              status={status}
-              take={take}
-              autostopTriggered={autostopTriggered}
-              onToggleCapture={handleToggleCapture}
-              recordingWallClockStartedAtMs={recordingWallClockStartedAtMs}
-            />
-          )}
-          stemsColumnReplacement={
-            <PlayStemRowScoringCard
-              currentStreak={currentStreak}
-              adaptedCentsTolerance={adaptedCentsTolerance}
-              innerToleranceCents={innerTol}
-              queue={tabNoteQueue}
-              beats={accuracyBeats}
-              noteLabels={beatNoteLabels}
-              recording={recording}
-              centsFromTarget={centsFromTarget}
-              targetMidi={targetMidi}
-              nextPreviewMidi={nextPreviewMidi}
-              windowResult={lastWindowResult}
-              windowFlashToken={windowFlashToken}
-            />
-          }
-          initialMetronomeOn={initialMetronomeOn}
-          initialStemMuteById={{ guitar: true, bass: false, drums: false, vocals: true, piano: true, other: true }}
-          ghostStemPlaybackUri={ghostPlaybackUri}
-          ghostAnchorSec={ghostAnchorSecForMix}
-          playGhostWhileRecording={Boolean(playWithGhost && ghostPlaybackUri)}
-          tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
-          insertBetweenStemAndTab={
-            <View className="gap-5">
-              <View className="w-full min-w-0">
-                <FretboardDiagram
-                  keyLabel={keyLabel}
-                  positionLabel={positionLabel}
-                  capoText={capoText}
-                  selectedNote={selectedNote}
-                  pulseKey={fretPulseKey}
-                  lastCellResult={lastFretResult}
-                  enableKeyboardInput
-                  showTuneControl
-                  tuneActive={tunerState.active}
-                  tuneDisabled={recording}
-                  tuneCalibrating={tunerState.calibrating}
-                  onToggleTune={toggleFretboardTuner}
-                  onCalibrateTune={startCalibration}
-                  tunerState={tunerState}
-                  onSelectNote={(note) => {
-                    setSelectedNote(note)
-                    setFretPulseKey((k) => k + 1)
-                    setNoteModalOpen(true)
-                  }}
-                />
-              </View>
-              {quickCoachText ? (
-                <Animated.View entering={FadeIn.duration(320)}>
-                  <CoachNote text={quickCoachText} />
-                  <CoachFeedbackPrompt
-                    focusArea={(section?.coach_note ? section.focus_area as string | null : null) ?? null}
-                    onFeedbackSubmitted={(rating: 'helpful' | 'repetitive' | 'neutral' | 'skipped') => {
-                      console.log('Coach feedback submitted:', rating)
+        <View className="gap-5">
+          {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
+          {typeof __DEV__ !== 'undefined' && __DEV__ ? (
+            <Text className="rounded-lg border border-dashed border-wood-600/35 bg-wood-800/40 px-3 py-2 font-mono text-xs text-muted-brown">
+              noiseGateThresholdRms ({activeMicProfile}):{' '}
+              {micNoiseGateRms != null ? micNoiseGateRms.toFixed(4) : '—'}
+            </Text>
+          ) : null}
+          <SessionStemAndTab
+            ref={stemTabRef}
+            tabRenderPreset="light"
+            lessonPlaybackCardVariant="play"
+            captureRecording={recording}
+            playCaptureSlot={(ctx) => (
+              <PlayCaptureCard
+                {...ctx}
+                recording={recording}
+                status={status}
+                take={take}
+                autostopTriggered={autostopTriggered}
+                onToggleCapture={handleToggleCapture}
+                recordingWallClockStartedAtMs={recordingWallClockStartedAtMs}
+              />
+            )}
+            stemsColumnReplacement={
+              <PlayStemRowScoringCard
+                currentStreak={currentStreak}
+                adaptedCentsTolerance={adaptedCentsTolerance}
+                innerToleranceCents={innerTol}
+                queue={tabNoteQueue}
+                beats={accuracyBeats}
+                noteLabels={beatNoteLabels}
+                recording={recording}
+                centsFromTarget={centsFromTarget}
+                targetMidi={targetMidi}
+                nextPreviewMidi={nextPreviewMidi}
+                windowResult={lastWindowResult}
+                windowFlashToken={windowFlashToken}
+              />
+            }
+            initialMetronomeOn={initialMetronomeOn}
+            initialStemMuteById={{ guitar: true, bass: false, drums: false, vocals: true, piano: true, other: true }}
+            ghostStemPlaybackUri={ghostPlaybackUri}
+            ghostAnchorSec={ghostAnchorSecForMix}
+            playGhostWhileRecording={Boolean(playWithGhost && ghostPlaybackUri)}
+            tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
+            insertBetweenStemAndTab={
+              <View className="gap-5">
+                {musicState?.currentChord && musicState.currentChord !== 'N' && (
+                  <View className="flex-row items-center gap-2 px-2 py-1">
+                    <ChordDiagram
+                      name={musicState.currentChord}
+                      size="sm"
+                      positionIndex={chordPosIndex}
+                    />
+                    <Text className="font-mono text-sm text-cream">
+                      {musicState.currentChord}
+                    </Text>
+                    <ChordPositionSelector
+                      chordSymbol={musicState.currentChord}
+                      currentIndex={chordPosIndex}
+                      onPositionChange={setChordPosIndex}
+                    />
+                  </View>
+                )}
+                <View className="w-full min-w-0">
+                  <FretboardDiagram
+                    keyLabel={keyLabel}
+                    positionLabel={positionLabel}
+                    capoText={capoText}
+                    selectedNote={selectedNote}
+                    pulseKey={fretPulseKey}
+                    lastCellResult={lastFretResult}
+                    enableKeyboardInput
+                    showTuneControl
+                    tuneActive={tunerState.active}
+                    tuneDisabled={recording}
+                    tuneCalibrating={tunerState.calibrating}
+                    onToggleTune={toggleFretboardTuner}
+                    onCalibrateTune={startCalibration}
+                    tunerState={tunerState}
+                    onSelectNote={(note) => {
+                      setSelectedNote(note)
+                      setFretPulseKey((k) => k + 1)
+                      setNoteModalOpen(true)
                     }}
                   />
+                </View>
+                {quickCoachText ? (
+                  <Animated.View entering={FadeIn.duration(320)}>
+                    <CoachNote text={quickCoachText} />
+                    <CoachFeedbackPrompt
+                      focusArea={(section?.coach_note ? section.focus_area as string | null : null) ?? null}
+                      onFeedbackSubmitted={(rating: 'helpful' | 'repetitive' | 'neutral' | 'skipped') => {
+                        console.log('Coach feedback submitted:', rating)
+                      }}
+                    />
                 </Animated.View>
               ) : null}
             </View>
           }
-          onPlaybackTick={handlePlaybackTick}
+          onPlaybackTick={combinedPlaybackTick}
           onNoteEvent={(evt: NoteEventMessage) => {
             hookOnNoteEvent(evt)
             setSelectedNote({ string: evt.string, fret: evt.fret, midi: Math.round(evt.midi) })
@@ -341,31 +392,29 @@ function PlayScreenInner() {
             }
           }}
         />
-
         <GhostPlayerControl
           playWithGhost={playWithGhost}
           onTogglePlayWithGhost={setPlayWithGhost}
           ghostRecordedAtLabel={ghostRecordedLabel}
           hasGhost={Boolean(ghostPlaybackUri)}
         />
-
         {take && take.audioBytes.length > 0 ? (
-          <View className="rounded-xl border border-wood-600/20 bg-cream px-3 py-2 shadow-sm">
-            <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-wood-600">
+          <View className="rounded-xl border border-wood-600/35 bg-wood-800/40 px-3 py-2">
+            <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-muted-brown">
               Ghost reference take
             </Text>
             <View className="flex-row items-center justify-between gap-2">
-              <Text className="min-w-0 flex-1 font-sans text-xs text-wood-900">
+              <Text className="min-w-0 flex-1 font-sans text-xs text-cream">
                 Flag this capture as your ghost reference for this section (saved when you open Review).
               </Text>
               <AnimatedPressable
                 accessibilityRole="switch"
                 accessibilityState={{ checked: pendingGhostReference }}
                 onPress={() => setPendingGhostReference(!pendingGhostReference)}
-                className={`rounded-full px-3 py-1.5 ${pendingGhostReference ? 'bg-amber-accent' : 'border border-wood-600/25 bg-white'}`}
+                className={`rounded-full px-3 py-1.5 ${pendingGhostReference ? 'bg-amber-accent/90' : 'border border-wood-600/50 bg-wood-700/40'}`}
               >
                 <Text
-                  className={`font-sans-medium text-xs ${pendingGhostReference ? 'text-wood-900' : 'text-wood-600'}`}
+                  className={`font-sans-medium text-xs ${pendingGhostReference ? 'text-wood-900' : 'text-muted-brown'}`}
                 >
                   {pendingGhostReference ? 'On' : 'Off'}
                 </Text>
@@ -373,7 +422,6 @@ function PlayScreenInner() {
             </View>
           </View>
         ) : null}
-
         {micError ? (
           <ErrorBanner
             dismissible={false}
@@ -394,7 +442,7 @@ function PlayScreenInner() {
           onClose={() => setNoteModalOpen(false)}
         />
         {section ? (
-          <Text className="font-mono text-[10px] text-wood-600">
+          <Text className="font-mono text-[10px] text-muted-brown">
             Section: {String(section.label ?? 'Section')} {lesson?.key ? `| Key: ${lesson.key}` : ''}
           </Text>
         ) : null}

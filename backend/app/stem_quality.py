@@ -35,6 +35,7 @@ MAX_GUITAR_PIANO_ENVELOPE_CORR = 0.88
 _ENVELOPE_FRAME_SAMPLES = 2048
 _ENVELOPE_MIN_SAMPLES = 32
 _ENVELOPE_STD_FLOOR = 1e-12
+_MAX_CHROMA_SECONDS = 30  # Truncate audio for chroma computation (speed optimization)
 
 AnalysisAudioRole = Literal["guitar_stem", "full_mix", "piano_stem"]
 
@@ -105,6 +106,7 @@ class StemClassification:
     analysis_audio_role: AnalysisAudioRole
     flags: tuple[str, ...]
     user_warning: str | None
+    stem_confidence: float = 1.0
 
 
 def stem_isolation_flags_from_metrics(r_g: float, r_p: float, corr_abs: float) -> list[str]:
@@ -163,6 +165,59 @@ def _pick_analysis_role(flags: list[str], *, r_p: float) -> AnalysisAudioRole:
     return "guitar_stem"
 
 
+def _compute_stem_confidence(
+    r_m: float,
+    r_g: float,
+    r_p: float,
+    corr_abs: float,
+    flags: list[str],
+    spectral_overlap: float = 1.0,
+) -> float:
+    """Compute continuous stem confidence (0-1) from RMS ratios, spectral overlap, and flags.
+
+    Starts at 1.0 (perfect isolation) and penalizes for each degradation:
+    - Near-silent guitar: hard floor at 0.0
+    - Buried guitar: penalty scales with how far below the ratio threshold
+    - Piano dominance: penalty scales with piano/guitar RMS ratio
+    - Envelope collision: penalty scales with correlation proximity to threshold
+    - Low spectral overlap: penalty when stem and mix have dissimilar harmonic content
+    """
+    if "guitar_near_silent" in flags:
+        return 0.0
+
+    confidence = 1.0
+
+    # Buried guitar penalty: how far below MIN_RATIO_GUITAR_TO_MIX
+    if r_m > RMS_MIX_FLOOR:
+        ratio = r_g / r_m
+        if ratio < MIN_RATIO_GUITAR_TO_MIX:
+            burial_penalty = 1.0 - (ratio / MIN_RATIO_GUITAR_TO_MIX)
+            confidence -= 0.5 * burial_penalty
+
+    # Piano dominance penalty
+    if r_g > MIN_STEM_RMS:
+        piano_ratio = r_p / r_g
+        if piano_ratio > PIANO_DOMINATES_RATIO:
+            excess = (piano_ratio - PIANO_DOMINATES_RATIO) / PIANO_DOMINATES_RATIO
+            confidence -= 0.4 * min(excess, 1.0)
+
+    # Envelope collision penalty
+    if corr_abs >= MAX_GUITAR_PIANO_ENVELOPE_CORR:
+        corr_excess = (corr_abs - MAX_GUITAR_PIANO_ENVELOPE_CORR) / (
+            1.0 - MAX_GUITAR_PIANO_ENVELOPE_CORR
+        )
+        confidence -= 0.3 * corr_excess
+
+    # Spectral overlap penalty: when stem and mix have dissimilar harmonic content,
+    # the stem is likely degraded (bleed, artifacts, Demucs errors).
+    # Overlap < 0.5 means the stem's chroma is very different from the mix.
+    if spectral_overlap < 0.8:
+        spectral_penalty = (0.8 - spectral_overlap) / 0.8
+        confidence -= 0.3 * spectral_penalty
+
+    return max(0.0, min(1.0, confidence))
+
+
 def classify_stems_for_lesson(mix_wav: Path, stem_paths: dict[str, Path]) -> StemClassification:
     """
     Full classification for analyze pipeline.
@@ -198,6 +253,29 @@ def classify_stems_for_lesson(mix_wav: Path, stem_paths: dict[str, Path]) -> Ste
         return StemClassification(True, "guitar_stem", (), None)
 
     corr = abs(_envelope_pearson(guitar, piano)) if piano is not None else 0.0
+
+    # Spectral overlap: cosine similarity between stem and mix chroma vectors.
+    # Low overlap means the stem has dissimilar harmonic content (bleed, artifacts).
+    spectral_overlap = 1.0
+    if mix is not None and librosa is not None:
+        try:
+            # Truncate to first 30s for speed (only mean chroma vector is used)
+            max_samples = int(TARGET_SR * _MAX_CHROMA_SECONDS)
+            guitar_trunc = guitar[:max_samples]
+            mix_trunc = mix[:max_samples]
+            hop = int(TARGET_SR * 0.05)  # 50ms hop for lightweight chroma
+            chroma_g = librosa.feature.chroma_cqt(y=guitar_trunc, sr=TARGET_SR, hop_length=hop)
+            chroma_m = librosa.feature.chroma_cqt(y=mix_trunc, sr=TARGET_SR, hop_length=hop)
+            # Mean chroma vectors over time → 12-dim spectral fingerprint
+            fg = chroma_g.mean(axis=1)
+            fm = chroma_m.mean(axis=1)
+            norm_g = float(np.linalg.norm(fg))
+            norm_m = float(np.linalg.norm(fm))
+            if norm_g > 1e-8 and norm_m > 1e-8:
+                spectral_overlap = float(np.clip(np.dot(fg, fm) / (norm_g * norm_m), 0.0, 1.0))
+        except Exception:
+            pass  # Fall back to default 1.0 if chroma computation fails
+
     flags = collect_stem_quality_flags(r_m, r_g, r_p, corr)
 
     unusable = any(
@@ -211,12 +289,14 @@ def classify_stems_for_lesson(mix_wav: Path, stem_paths: dict[str, Path]) -> Ste
     )
     role = _pick_analysis_role(flags, r_p=r_p) if unusable else "guitar_stem"
     warning = _pick_user_warning(flags) if unusable else None
+    confidence = _compute_stem_confidence(r_m, r_g, r_p, corr, flags, spectral_overlap)
 
     return StemClassification(
         guitar_stem_usable=not unusable,
         analysis_audio_role=role,
         flags=tuple(flags),
         user_warning=warning,
+        stem_confidence=round(confidence, 4),
     )
 
 

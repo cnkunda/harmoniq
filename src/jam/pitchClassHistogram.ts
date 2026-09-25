@@ -1,25 +1,5 @@
+import { matchScaleToPitchClasses, SCALE_DB } from '@/src/music/scales'
 import type { PitchReading } from '@/src/pitch/pitchTypes'
-
-type PentatonicTemplate = {
-  readonly label: string
-  /** Pitch classes 0=C … 11=B present in this scale. */
-  readonly pcs: readonly number[]
-  /** Root pitch class for `highlightScaleDegrees` (same as tonal center). */
-  readonly rootMidi: number
-  /** Semitone offsets from root (includes 0). */
-  readonly intervals: readonly number[]
-}
-
-/** Named pentatonic templates as pitch-class sets (0=C … 11=B). */
-const PENTATONIC_TEMPLATES: readonly PentatonicTemplate[] = [
-  { label: 'A minor pentatonic', pcs: [9, 0, 2, 4, 7], rootMidi: 9, intervals: [0, 3, 5, 7, 10] },
-  { label: 'A blues', pcs: [9, 0, 2, 3, 4, 7], rootMidi: 9, intervals: [0, 3, 5, 6, 7, 10] },
-  /** Same pitch-class set as E minor pentatonic — listed first so relative-major label wins ties (commit 54). */
-  { label: 'G major pentatonic', pcs: [7, 9, 11, 2, 4], rootMidi: 7, intervals: [0, 2, 4, 7, 9] },
-  { label: 'E minor pentatonic', pcs: [4, 7, 9, 11, 2], rootMidi: 4, intervals: [0, 3, 5, 7, 10] },
-  { label: 'C major pentatonic', pcs: [0, 2, 4, 7, 9], rootMidi: 0, intervals: [0, 2, 4, 7, 9] },
-  { label: 'D minor pentatonic', pcs: [2, 5, 7, 9, 11], rootMidi: 2, intervals: [0, 3, 5, 7, 10] },
-]
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const
 
@@ -27,13 +7,6 @@ function sumBins(bins: ArrayLike<number>): number {
   let s = 0
   for (let i = 0; i < bins.length; i += 1) s += Number(bins[i])
   return s
-}
-
-/** Score how well normalized bins match a pitch-class set (higher = better). */
-function templateScore(normalized: number[], pcs: readonly number[]): number {
-  let t = 0
-  for (const p of pcs) t += normalized[p] ?? 0
-  return t
 }
 
 export type BestScaleMatch = {
@@ -44,38 +17,112 @@ export type BestScaleMatch = {
   intervals: readonly number[]
   /** Pitch classes in the scale (0–11). */
   pitchClasses: readonly number[]
-  /** Normalized template overlap score (0–1 scale). */
+  /** Normalized overlap score (0–1 scale). */
   matchScore: number
+  /** SCALE_DB key for the matched mode, e.g. 'ionian', 'aeolian', 'major_pentatonic'. */
+  inferred_mode?: string | null
 }
 
 const MATCH_THRESHOLD = 0.28
 
-/**
- * Deterministic best pentatonic / blues match for the current histogram.
- * Returns `null` when energy is too low or no template clears the confidence threshold.
- */
-export function getBestScale(bins: ArrayLike<number>): BestScaleMatch | null {
-  if (bins.length !== 12) return null
-  const total = sumBins(bins)
-  if (total <= 0) return null
-  const norm = Array.from({ length: 12 }, (_, i) => Number(bins[i]) / total)
-  let best: { t: PentatonicTemplate; score: number } | null = null
-  for (const t of PENTATONIC_TEMPLATES) {
-    const sc = templateScore(norm, t.pcs)
-    if (!best || sc > best.score) best = { t, score: sc }
+function modalPitchClass(bins: ArrayLike<number>): number {
+  let maxI = 0
+  let maxV = -1
+  for (let i = 0; i < 12; i += 1) {
+    const v = Number(bins[i])
+    if (v > maxV) { maxV = v; maxI = i }
   }
-  if (!best || best.score < MATCH_THRESHOLD) return null
+  return maxI
+}
+
+function observedPCsFromBins(bins: ArrayLike<number>): number[] {
+  const pcs: number[] = []
+  for (let i = 0; i < 12; i += 1) {
+    if (Number(bins[i]) > 0) pcs.push(i)
+  }
+  return pcs
+}
+
+function scaleLabelFromKey(scaleKey: string, rootPitchClass: number): string {
+  const entry = SCALE_DB[scaleKey]
+  if (!entry) return `${NOTE_NAMES[rootPitchClass]} ${scaleKey}`
+  const rootName = NOTE_NAMES[rootPitchClass % 12]
+  const displayName = entry.aliases[0] ?? entry.name
+  return `${rootName} ${displayName}`
+}
+
+function buildMatchFromResult(
+  result: { name: string; score: number },
+  rootPitchClass: number,
+): BestScaleMatch | null {
+  const entry = SCALE_DB[result.name]
+  if (!entry) return null
+  const transposedPCs = entry.intervals.map((i) => (rootPitchClass + i) % 12)
   return {
-    label: best.t.label,
-    rootMidi: best.t.rootMidi,
-    intervals: best.t.intervals,
-    pitchClasses: best.t.pcs,
-    matchScore: best.score,
+    label: scaleLabelFromKey(result.name, rootPitchClass),
+    rootMidi: rootPitchClass,
+    intervals: entry.intervals as readonly number[],
+    pitchClasses: transposedPCs as readonly number[],
+    matchScore: result.score,
+    inferred_mode: result.name,
   }
 }
 
 /**
- * Best-matching pentatonic label, or dominant pitch-class name if no template clears threshold.
+ * Deterministic best scale match for the current histogram using the full SCALE_DB.
+ * Returns `null` when energy is too low or no scale clears the confidence threshold.
+ */
+export function getBestScale(bins: ArrayLike<number>): BestScaleMatch | null {
+  const results = getBestScales(bins, 1)
+  return results.length > 0 ? results[0]! : null
+}
+
+/**
+ * Returns top N candidate scale matches from the full SCALE_DB.
+ * Uses root alignment via the modal pitch class from the histogram bins.
+ * Falls back to exhaustive root search when no result clears the threshold.
+ */
+export function getBestScales(bins: ArrayLike<number>, count: number = 3): BestScaleMatch[] {
+  if (bins.length !== 12) return []
+  const total = sumBins(bins)
+  if (total <= 0) return []
+  const observedPCs = observedPCsFromBins(bins)
+  if (observedPCs.length === 0) return []
+
+  const tryRoot = (root: number): BestScaleMatch[] => {
+    const results = matchScaleToPitchClasses(observedPCs, root)
+    const out: BestScaleMatch[] = []
+    for (const r of results) {
+      if (r.score < MATCH_THRESHOLD) break
+      const match = buildMatchFromResult(r, root)
+      if (match) out.push(match)
+      if (out.length >= count) break
+    }
+    return out
+  }
+
+  // Try modal root first (common case)
+  const modalRoot = modalPitchClass(bins)
+  const modalResults = tryRoot(modalRoot)
+  if (modalResults.length > 0 && modalResults[0]!.matchScore >= MATCH_THRESHOLD) {
+    return modalResults
+  }
+
+  // Fallback: try all 12 roots and pick the combination with the best top score
+  let bestResults: BestScaleMatch[] = []
+  let bestTopScore = 0
+  for (let root = 0; root < 12; root += 1) {
+    const r = tryRoot(root)
+    if (r.length > 0 && r[0]!.matchScore > bestTopScore) {
+      bestTopScore = r[0]!.matchScore
+      bestResults = r
+    }
+  }
+  return bestResults
+}
+
+/**
+ * Best-matching scale label, or dominant pitch-class name if no scale clears threshold.
  */
 export function bestScaleLabelFromBins(bins: ArrayLike<number>): string {
   const match = getBestScale(bins)
@@ -83,16 +130,8 @@ export function bestScaleLabelFromBins(bins: ArrayLike<number>): string {
   if (bins.length !== 12) return '—'
   const total = sumBins(bins)
   if (total <= 0) return '—'
-  let maxI = 0
-  let maxV = -1
-  for (let i = 0; i < 12; i += 1) {
-    const v = Number(bins[i])
-    if (v > maxV) {
-      maxV = v
-      maxI = i
-    }
-  }
-  if (maxV <= 0) return '—'
+  const maxI = modalPitchClass(bins)
+  if (Number(bins[maxI]) <= 0) return '—'
   return `${NOTE_NAMES[maxI]} (exploring)`
 }
 
@@ -102,6 +141,8 @@ export type PitchClassHistogram = {
   getBins(): number[]
   getBestLabel(): string
   getBestScale(): BestScaleMatch | null
+  /** Commit B3: Top N candidate scale matches from the full scale library. */
+  getBestScales(count?: number): BestScaleMatch[]
   /** Pitch-class hits used for gating `toScalePositionMap`. */
   getTotalHits(): number
   /**
@@ -137,6 +178,10 @@ export function createPitchClassHistogram(): PitchClassHistogram {
 
     getBestScale() {
       return getBestScale(bins)
+    },
+
+    getBestScales(count?: number) {
+      return getBestScales(bins, count)
     },
 
     getTotalHits() {

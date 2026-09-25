@@ -24,8 +24,11 @@ const DEFAULT_NODES: GraphNode[] = [
 
 export function SkillGraph({ nodes = DEFAULT_NODES, size = 240 }: SkillGraphProps) {
   const safeNodes = nodes.length >= 3 ? nodes : DEFAULT_NODES
-  const center = size / 2
-  const radius = Math.min(90, size * 0.35)
+  const labelPadding = 40
+  const canvasSize = size + labelPadding * 2
+  const center = canvasSize / 2
+  const radius = size * 0.32
+  const labelBuffer = 18
   const levels = 4
   const total = safeNodes.length
 
@@ -56,7 +59,7 @@ export function SkillGraph({ nodes = DEFAULT_NODES, size = 240 }: SkillGraphProp
 
   return (
     <View className="w-full items-center rounded-2xl border border-wood-700/50 bg-wood-800/40 p-4">
-      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <Svg width={canvasSize} height={canvasSize} viewBox={`0 0 ${canvasSize} ${canvasSize}`}>
         {gridPolygons.map((points, index) => (
           <Polygon key={`ring-${index}`} points={points} fill="none" stroke={colors.wood[600]} strokeWidth={1} />
         ))}
@@ -64,7 +67,10 @@ export function SkillGraph({ nodes = DEFAULT_NODES, size = 240 }: SkillGraphProp
         {safeNodes.map((node, index) => {
           const angle = angleOf(index)
           const axisEnd = pointAt(angle, radius)
-          const labelPoint = pointAt(angle, radius + 18)
+          const labelPoint = pointAt(angle, radius + labelBuffer)
+          const cos = Math.cos(angle)
+          const textAnchor: 'start' | 'middle' | 'end' =
+            cos < -0.1 ? 'end' : cos > 0.1 ? 'start' : 'middle'
           return (
             <G key={node.id}>
               <Line x1={center} y1={center} x2={axisEnd.x} y2={axisEnd.y} stroke={colors.wood[600]} strokeWidth={1} />
@@ -73,7 +79,7 @@ export function SkillGraph({ nodes = DEFAULT_NODES, size = 240 }: SkillGraphProp
                 y={labelPoint.y + 4}
                 fill={colors.muted.light}
                 fontSize={10}
-                textAnchor="middle"
+                textAnchor={textAnchor}
                 fontFamily="DMSans-Regular"
               >
                 {node.label}

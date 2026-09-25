@@ -4,11 +4,16 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { WoodGradient } from '@/components/WoodGradient'
+import {
+  ONBOARDING_STEP_WITHOUT_QUIZ,
+  ONBOARDING_WITHOUT_QUIZ_TOTAL,
+  ONBOARDING_WITH_QUIZ_TOTAL,
+} from '@/src/constants/onboardingSteps'
 
 import { OnboardingProgress } from './OnboardingProgress'
 
-/** Pre-results flow: welcome, mic, three phrase screens */
-export const ONBOARDING_PLACEMENT_STEP_COUNT = 5
+/** Pre-results flow: welcome, mic, three phrase screens (without quiz) */
+export const ONBOARDING_PLACEMENT_STEP_COUNT = ONBOARDING_WITHOUT_QUIZ_TOTAL
 
 export type OnboardingScreenShellProps = {
   currentStep: number

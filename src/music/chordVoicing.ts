@@ -4,6 +4,7 @@
  */
 
 import { allCellsForMidi, OPEN_MIDI_BY_ROW } from "./fretboardCell";
+import { getChordPositionAtIndex, type ChordDbPosition } from './chordDbAdapter';
 
 /** Interval semitones from root for common chord qualities */
 const CHORD_QUALITY_INTERVALS: Record<string, number[]> = {
@@ -22,16 +23,24 @@ const CHORD_QUALITY_INTERVALS: Record<string, number[]> = {
   "9": [0, 4, 7, 10, 14], // Dominant 9th (rootless voicings often used)
   maj9: [0, 4, 7, 11, 14], // Major 9th
   min9: [0, 3, 7, 10, 14], // Minor 9th
+  "7b9": [0, 4, 7, 10, 13], // Dominant 7th flat 9
+  "7#9": [0, 4, 7, 10, 15], // Dominant 7th sharp 9
+  dim7: [0, 3, 6, 9], // Diminished 7th (fully diminished)
+  "11": [0, 4, 7, 10, 14, 17], // Dominant 11th
+  "13": [0, 4, 7, 10, 14, 17, 21], // Dominant 13th
 };
 
-/** Common guitar chord voicing templates (string set + fret pattern) */
-const FULL_VOICING_TEMPLATES: Array<{
+type VoicingTemplate = {
   name: string;
   strings: number[]; // 1-6 (1 = high E)
   pattern: number[]; // Frets relative to root position, -1 = muted
   bassString: number;
   intervalMap: number[]; // Musical intervals for each string in the pattern
-}> = [
+  shiftable: boolean; // true = can be shifted up/down like a barre; false = position-specific (open strings)
+};
+
+/** Common guitar chord voicing templates (string set + fret pattern) */
+const FULL_VOICING_TEMPLATES: VoicingTemplate[] = [
   // E-shape barre (root on string 6, E open = root) - plays: R, 5, M3, R, 5, R
   {
     name: "E-shape",
@@ -39,6 +48,7 @@ const FULL_VOICING_TEMPLATES: Array<{
     pattern: [0, 0, 1, 2, 2, 0],
     bassString: 6,
     intervalMap: [0, 7, 4, 0, 7, 0],
+    shiftable: true,
   },
   // A-shape barre (root on string 5, A open = root) - plays: 5, M3, R, 5, R
   {
@@ -47,6 +57,7 @@ const FULL_VOICING_TEMPLATES: Array<{
     pattern: [0, 2, 2, 2, 0],
     bassString: 5,
     intervalMap: [7, 4, 0, 7, 0],
+    shiftable: true,
   },
   // C-shape (root on string 5) - plays: M3, R, 5, M3, R
   {
@@ -55,6 +66,7 @@ const FULL_VOICING_TEMPLATES: Array<{
     pattern: [0, 1, 0, 2, 3],
     bassString: 5,
     intervalMap: [4, 0, 7, 4, 0],
+    shiftable: false,
   },
   // D-shape (root on string 4, higher voicing) - plays: M3, R, 5, R
   {
@@ -63,6 +75,7 @@ const FULL_VOICING_TEMPLATES: Array<{
     pattern: [2, 3, 2, 0],
     bassString: 4,
     intervalMap: [4, 0, 7, 0],
+    shiftable: false,
   },
   // G-shape (root on string 6) - plays: R, 5, R, 5, M3, R
   {
@@ -71,17 +84,12 @@ const FULL_VOICING_TEMPLATES: Array<{
     pattern: [3, 3, 0, 0, 2, 3],
     bassString: 6,
     intervalMap: [0, 7, 0, 7, 4, 0],
+    shiftable: false,
   },
 ];
 
 /** Templates for minor chords (m3 instead of M3) */
-const MINOR_VOICING_TEMPLATES: Array<{
-  name: string;
-  strings: number[];
-  pattern: number[];
-  bassString: number;
-  intervalMap: number[];
-}> = [
+const MINOR_VOICING_TEMPLATES: VoicingTemplate[] = [
   // E-minor shape (root on string 6, E open = root) - plays: R, 5, m3, R, 5, R
   {
     name: "Em-shape",
@@ -89,6 +97,7 @@ const MINOR_VOICING_TEMPLATES: Array<{
     pattern: [0, 0, 0, 2, 2, 0],
     bassString: 6,
     intervalMap: [0, 7, 3, 0, 7, 0],
+    shiftable: true,
   },
   // A-minor shape (root on string 5, A open = root) - plays: 5, m3, R, 5, R
   {
@@ -97,17 +106,12 @@ const MINOR_VOICING_TEMPLATES: Array<{
     pattern: [0, 1, 2, 2, 0],
     bassString: 5,
     intervalMap: [7, 3, 0, 7, 0],
+    shiftable: true,
   },
 ];
 
 /** Templates for minor 7th chords (R, m3, 5, m7) */
-const MINOR7_VOICING_TEMPLATES: Array<{
-  name: string;
-  strings: number[];
-  pattern: number[];
-  bassString: number;
-  intervalMap: number[];
-}> = [
+const MINOR7_VOICING_TEMPLATES: VoicingTemplate[] = [
   // Dm7 shape (root on string 4, D open = root) - plays: m3, m7, 5, R
   {
     name: "Dm7-shape",
@@ -115,6 +119,7 @@ const MINOR7_VOICING_TEMPLATES: Array<{
     pattern: [1, 1, 2, 0],
     bassString: 4,
     intervalMap: [3, 10, 7, 0],
+    shiftable: false,
   },
   // Em7 shape (root on string 6, E open = root) - plays: R, 5, m3, m7, 5, R
   {
@@ -123,6 +128,7 @@ const MINOR7_VOICING_TEMPLATES: Array<{
     pattern: [0, 0, 0, 0, 2, 0],
     bassString: 6,
     intervalMap: [0, 7, 3, 10, 7, 0],
+    shiftable: true,
   },
   // Am7 shape (root on string 5, A open = root) - plays: 5, m3, m7, 5, R
   {
@@ -131,6 +137,7 @@ const MINOR7_VOICING_TEMPLATES: Array<{
     pattern: [0, 1, 0, 2, 0],
     bassString: 5,
     intervalMap: [7, 3, 10, 7, 0],
+    shiftable: true,
   },
 ];
 
@@ -145,12 +152,12 @@ export interface FretboardCell {
 }
 
 /**
- * Parse a chord symbol into root note and quality
- * Handles formats like "C:maj", "F#:min7", "Bb:7", "N" (no chord)
+ * Parse a chord symbol into root note, quality, and optional bass note.
+ * Handles formats like "C:maj", "F#:min7", "Bb:7", "C:maj/E", "C/E", "N".
  */
 export function parseChordSymbol(
   chordSymbol: string,
-): { root: string; quality: string } | null {
+): { root: string; quality: string; bass?: string } | null {
   if (!chordSymbol || chordSymbol === "N") return null;
 
   // Extract root (1-2 chars: letter + optional # or b)
@@ -162,25 +169,49 @@ export function parseChordSymbol(
   const afterRoot = chordSymbol.slice(rootMatch[0].length);
 
   // Extract quality (everything after optional colon, or the remainder if no colon)
+  // and optional bass note suffix (after /)
   let quality = "maj"; // default
+  let bass: string | undefined
 
   if (afterRoot.startsWith(":")) {
-    // Format: C:maj, C:min7, etc.
-    quality = afterRoot.slice(1).trim();
+    // Format: C:maj, C:min7, C:maj/E, etc.
+    let rest = afterRoot.slice(1).trim()
+    // Check for slash notation: C:maj/E
+    const slashIdx = rest.indexOf('/')
+    if (slashIdx !== -1) {
+      bass = rest.slice(slashIdx + 1).trim()
+      rest = rest.slice(0, slashIdx).trim()
+    }
+    quality = rest.length > 0 ? rest : 'maj'
   } else if (afterRoot.length > 0) {
-    // Format: Cmaj, Cm, C7, etc. (no colon)
-    quality = afterRoot.trim();
+    // Format: Cmaj, Cm, C7, C/E, etc. (no colon)
+    let rest = afterRoot.trim()
+    // Check for slash notation: C/E
+    const slashIdx = rest.indexOf('/')
+    if (slashIdx !== -1) {
+      bass = rest.slice(slashIdx + 1).trim()
+      rest = rest.slice(0, slashIdx).trim()
+    }
+    quality = rest.length > 0 ? rest : 'maj'
   }
 
   // Normalize quality names - be careful with order of checks
   const q = quality.toLowerCase();
 
-  // Check for specific patterns first (longer matches before shorter)
-  if (q.includes("maj9")) quality = "maj9";
-  else if (q.includes("min9") || q === "m9") quality = "min9";
-  else if (q.includes("9")) quality = "9";
+  // Check for specific patterns first (longer/exact matches before shorter)
+  if (q === "7b9" || q === "7♭9") quality = "7b9";
+  else if (q === "7#9" || q === "7♯9") quality = "7#9";
+  else if (q === "7b5" || q === "7♭5") quality = "7b5";
+  else if (q === "7#5" || q === "7♯5") quality = "7#5";
+  else if (q === "alt7") quality = "alt7";
+  else if (q === "dim7" || q === "°7" || q === "o7") quality = "dim7";
+  else if (q === "11") quality = "11";
+  else if (q === "13") quality = "13";
+  else if (q.includes("maj9")) quality = "maj9";
   else if (q.includes("maj7") || q === "M7") quality = "maj7";
+  else if (q.includes("min9") || q === "m9") quality = "min9";
   else if (q.includes("min7") || q === "m7") quality = "min7";
+  else if (q.includes("9")) quality = "9";
   else if (q.includes("7sus4")) quality = "7sus4";
   else if (q.includes("sus4")) quality = "sus4";
   else if (q.includes("sus2")) quality = "sus2";
@@ -193,7 +224,7 @@ export function parseChordSymbol(
     quality = "maj";
   else if (q === "7") quality = "7";
 
-  return { root, quality };
+  return { root, quality, bass };
 }
 
 /**
@@ -235,6 +266,7 @@ function buildCompactVoicing(
 
   // Find lowest fret position that can play all notes
   const cells: FretboardCell[] = [];
+  const usedRows = new Set<number>(); // Track which string rows are already occupied
 
   for (const interval of usedIntervals) {
     const targetMidi = rootMidi + interval;
@@ -242,22 +274,32 @@ function buildCompactVoicing(
 
     if (possibleCells.length === 0) continue;
 
-    // Pick cell based on position preference
-    let selectedCell = possibleCells[0];
+    // Pick cell based on position preference, avoiding already-used strings
+    let selectedCell: { row: number; fret: number } | null = null;
+
     if (position === "open") {
-      // Prefer open strings (fret 0)
+      // Prefer open strings (fret 0) on unused strings
       selectedCell =
-        possibleCells.find((c) => c.fret === 0) ?? possibleCells[0];
+        possibleCells.find((c) => c.fret === 0 && !usedRows.has(c.row)) ??
+        possibleCells.find((c) => !usedRows.has(c.row)) ??
+        possibleCells[0];
     } else if (position === "low") {
-      // Already sorted by lowest fret
-      selectedCell = possibleCells[0];
-    } else if (position === "mid") {
-      // Prefer position around fret 5
+      // Already sorted by lowest fret; prefer unused strings
       selectedCell =
+        possibleCells.find((c) => !usedRows.has(c.row)) ??
+        possibleCells[0];
+    } else if (position === "mid") {
+      // Prefer position around fret 5 on unused strings
+      selectedCell =
+        possibleCells.find((c) => c.fret >= 3 && c.fret <= 7 && !usedRows.has(c.row)) ??
+        possibleCells.find((c) => !usedRows.has(c.row)) ??
         possibleCells.find((c) => c.fret >= 3 && c.fret <= 7) ??
         possibleCells[Math.floor(possibleCells.length / 2)];
     }
 
+    if (!selectedCell) continue;
+
+    usedRows.add(selectedCell.row);
     cells.push({
       string: selectedCell.row + 1, // Convert 0-indexed row to 1-indexed string
       fret: selectedCell.fret,
@@ -270,19 +312,14 @@ function buildCompactVoicing(
   if (cells.length < 3) {
     // Fall back: add root on different string if needed
     const rootCells = allCellsForMidi(rootMidi);
-    if (
-      rootCells.length > 1 &&
-      !cells.some((c) => c.interval === 0 && c.string !== cells[0]?.string)
-    ) {
-      const extraRoot = rootCells.find((c) => c.row + 1 !== cells[0]?.string);
-      if (extraRoot) {
-        cells.push({
-          string: extraRoot.row + 1,
-          fret: extraRoot.fret,
-          midi: rootMidi,
-          interval: 0,
-        });
-      }
+    const extraRoot = rootCells.find((c) => !usedRows.has(c.row));
+    if (extraRoot) {
+      cells.push({
+        string: extraRoot.row + 1,
+        fret: extraRoot.fret,
+        midi: rootMidi,
+        interval: 0,
+      });
     }
   }
 
@@ -299,60 +336,102 @@ function buildFullVoicing(
 ): FretboardCell[] {
   const rootPc = rootMidi % 12;
 
-  // Determine base fret from root and desired position
-  let baseFret = 0;
-  if (position === "low") {
-    // Find lowest position where root can be played on E or A string
-    const eStringRoot = rootPc >= 4 ? rootPc - 4 : rootPc + 8; // E string = MIDI 40, 52, 64...
-    const aStringRoot = rootPc >= 9 ? rootPc - 9 : rootPc + 3; // A string = MIDI 45, 57, 69...
-    baseFret = Math.min(eStringRoot, aStringRoot);
-  } else if (position === "mid") {
-    baseFret = 5;
-  } else if (position === "open") {
-    baseFret = 0;
-  }
-
   // Select template based on chord quality
   const isMinor = intervals.includes(3) && !intervals.includes(4);
   const isMinor7 = isMinor && intervals.includes(10);
-  const isDominant7 = intervals.includes(4) && intervals.includes(10);
 
-  let templates = FULL_VOICING_TEMPLATES;
+  let allTemplates = FULL_VOICING_TEMPLATES;
   if (isMinor7) {
-    templates = MINOR7_VOICING_TEMPLATES;
+    allTemplates = MINOR7_VOICING_TEMPLATES;
   } else if (isMinor) {
-    templates = MINOR_VOICING_TEMPLATES;
+    allTemplates = MINOR_VOICING_TEMPLATES;
   }
-  // For dominant 7 and major 7, we need extended templates - for now use full with fallback
 
-  // Select the best template by finding which string naturally has the root
-  // A template's bassString indicates which string the root is designed to sit on
-  // For open position, prefer templates where the root string is open (fret 0)
-  let template = templates[0];
+  const getStringPc = (stringIndex: number): number => {
+    // String indices: 1=high E(4), 2=B(11), 3=G(7), 4=D(2), 5=A(9), 6=low E(4)
+    return [4, 11, 7, 2, 9, 4][stringIndex - 1] ?? 4;
+  };
 
-  if (position === "open" && templates.length > 1) {
-    // For open position, find a template whose bassString naturally has the root
-    // in a low fret position (preferably 0)
-    const rootOnString = (stringIndex: number): number => {
-      // String indices: 1=high E(4), 2=B(11), 3=G(7), 4=D(2), 5=A(9), 6=low E(4)
-      const stringPc = [4, 11, 7, 2, 9, 4][stringIndex - 1] ?? 4;
-      const semitones = (rootPc - stringPc + 12) % 12;
-      return semitones;
-    };
+  // Calculate baseFret per template: semitones from open bass string to root
+  const baseFretForTemplate = (t: VoicingTemplate): number =>
+    (rootPc - getStringPc(t.bassString) + 12) % 12;
 
-    // Find template with bassString closest to 0 frets from root
-    let bestTemplate = templates[0];
-    let bestDistance = Math.abs(rootOnString(templates[0].bassString));
+  // Check if a non-shiftable template's fixed pattern produces the correct root
+  const templateMatchesRoot = (t: VoicingTemplate): boolean => {
+    const bassIdx = t.strings.indexOf(t.bassString);
+    if (bassIdx < 0) return false;
+    const patternFret = t.pattern[bassIdx];
+    if (patternFret < 0) return false;
+    const stringRow = t.bassString - 1;
+    const notePc = (OPEN_MIDI_BY_ROW[stringRow] + patternFret) % 12;
+    return notePc === rootPc;
+  };
 
-    for (let i = 1; i < templates.length; i++) {
-      const dist = Math.abs(rootOnString(templates[i].bassString));
-      if (dist < bestDistance) {
-        bestDistance = dist;
-        bestTemplate = templates[i];
-      }
+  // Select template: prefer non-shiftable (position-specific) first when they match,
+  // otherwise fall back to shiftable (barre-able) templates
+  const nonShiftableMatch = allTemplates.find(
+    (t) => !t.shiftable && templateMatchesRoot(t),
+  );
+
+  let template: VoicingTemplate;
+  let baseFret: number;
+
+  if (nonShiftableMatch) {
+    // Non-shiftable templates encode absolute fret positions in their pattern
+    template = nonShiftableMatch;
+    baseFret = 0;
+  } else {
+    // Use only shiftable (barre-able) templates for the position-based selection
+    const shiftableTemplates = allTemplates.filter((t) => t.shiftable);
+    if (shiftableTemplates.length === 0) {
+      return buildCompactVoicing(rootMidi, intervals, position);
     }
 
-    template = bestTemplate;
+    template = shiftableTemplates[0];
+    baseFret = baseFretForTemplate(template);
+
+    if (shiftableTemplates.length > 1) {
+      if (position === "low") {
+        // Find template with the lowest base fret (closest to nut)
+        let bestBf = baseFret;
+        let bestT = template;
+        for (let i = 1; i < shiftableTemplates.length; i++) {
+          const bf = baseFretForTemplate(shiftableTemplates[i]);
+          if (bf < bestBf) { bestBf = bf; bestT = shiftableTemplates[i]; }
+        }
+        template = bestT;
+        baseFret = bestBf;
+      } else if (position === "open") {
+        // For open position, find a template whose bassString naturally has the root
+        // in a low fret position (preferably 0)
+        let bestT = shiftableTemplates[0];
+        const bf0 = baseFretForTemplate(shiftableTemplates[0]);
+        let bestDist = Math.min(bf0, 12 - bf0); // circular distance
+        for (let i = 1; i < shiftableTemplates.length; i++) {
+          const bf = baseFretForTemplate(shiftableTemplates[i]);
+          const dist = Math.min(bf, 12 - bf);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestT = shiftableTemplates[i];
+          }
+        }
+        template = bestT;
+        baseFret = baseFretForTemplate(template);
+      } else if (position === "mid") {
+        // Find template with base fret in the 5-8 range, or lowest above 5
+        let bestT = template;
+        let bestBf = baseFret;
+        for (let i = 1; i < shiftableTemplates.length; i++) {
+          const bf = baseFretForTemplate(shiftableTemplates[i]);
+          const adj = bf < 5 ? bf + 12 : bf;
+          const bestAdj = bestBf < 5 ? bestBf + 12 : bestBf;
+          if (adj < bestAdj) { bestBf = bf; bestT = shiftableTemplates[i]; }
+        }
+        template = bestT;
+        baseFret = baseFretForTemplate(template);
+        if (baseFret < 5) baseFret += 12;
+      }
+    }
   }
 
   // Build voicing from template using the intervalMap
@@ -369,9 +448,6 @@ function buildFullVoicing(
 
     // Use the interval from the template's intervalMap
     const interval = template.intervalMap[i];
-
-    // Include all strings - guitar voicings often include passing tones beyond core chord tones
-    // The intervalMap accurately describes what each string plays
 
     cells.push({
       string: stringNum,
@@ -390,7 +466,41 @@ function buildFullVoicing(
 }
 
 /**
+ * Convert a chords-db position to FretboardCell[] for use by FretboardDiagram.
+ * Only includes strings that are played (not muted).
+ */
+function chordDbPosToFretCells(
+  position: ChordDbPosition,
+  chordSymbol: string,
+): FretboardCell[] {
+  const parsed = parseChordSymbol(chordSymbol);
+  if (!parsed) return [];
+  const { root } = parsed;
+  const rootPc = noteToPitchClass(root);
+  const rootMidi = rootPc + 4 * 12; // MIDI 48 = C3 reference
+
+  const cells: FretboardCell[] = [];
+
+  for (let i = 0; i < position.frets.length; i++) {
+    const fret = position.frets[i]!;
+    const midi = position.midi[i]!;
+
+    if (fret === -1 || midi == null || midi < 0) continue;
+
+    const string = i + 1;
+    const interval = (midi - rootMidi + 12) % 12;
+
+    cells.push({ string, fret, midi, interval });
+  }
+
+  return cells;
+}
+
+/**
  * Convert a chord symbol to fretboard positions
+ *
+ * Tries chords-db first for authentic positions, falls back to algorithmic
+ * CAGED-based generation when not found in the database.
  *
  * @param chordSymbol - Chord symbol like "C:maj", "F#:min7", "N"
  * @param mode - 'full' for authentic guitar voicings, 'compact' for simplified triads
@@ -405,19 +515,25 @@ export function chordToFretboardCells(
   const parsed = parseChordSymbol(chordSymbol);
   if (!parsed) return [];
 
+  // Try chords-db first for authentic positions (only in compact mode;
+  // full mode uses algorithmic CAGED templates for consistent guitar shapes)
+  if (mode === "compact") {
+    const dbPos = getChordPositionAtIndex(chordSymbol, 0);
+    if (dbPos) {
+      const dbCells = chordDbPosToFretCells(dbPos, chordSymbol);
+      if (dbCells.length >= 3) return dbCells;
+    }
+  }
+
   const { root, quality } = parsed;
   const rootPc = noteToPitchClass(root);
 
-  // Determine octave - use octave 3 (MIDI 48-59) as base for E-string chords
-  // This puts chords in playable range
   const baseOctave = 3;
-  const rootMidi = rootPc + (baseOctave + 1) * 12; // MIDI 60 = C4 as reference
+  const rootMidi = rootPc + (baseOctave + 1) * 12;
 
-  // Get intervals for this quality
   const intervals =
     CHORD_QUALITY_INTERVALS[quality] ?? CHORD_QUALITY_INTERVALS.maj;
 
-  // Build voicing based on mode
   if (mode === "compact") {
     return buildCompactVoicing(rootMidi, intervals, position);
   } else {
@@ -433,6 +549,7 @@ export function getChordQualityDisplay(quality: string): string {
     maj: "",
     min: "m",
     dim: "°",
+    dim7: "°7",
     aug: "+",
     "7": "7",
     maj7: "maj7",
@@ -445,19 +562,30 @@ export function getChordQualityDisplay(quality: string): string {
     "9": "9",
     maj9: "maj9",
     min9: "m9",
+    "7b9": "7♭9",
+    "7#9": "7♯9",
+    "7b5": "7♭5",
+    "7#5": "7♯5",
+    alt7: "alt7",
+    "11": "11",
+    "13": "13",
   };
   return DISPLAY_NAMES[quality] ?? quality;
 }
 
 /**
  * Format chord symbol for display (compact notation)
- * "C:maj" → "C", "F#:min7" → "F#m7", "Bb:maj7" → "Bbmaj7"
+ * "C:maj" → "C", "F#:min7" → "F#m7", "C:maj/E" → "C/E", "Bb:maj7" → "Bbmaj7"
+ *
+ * Accepts an optional `bass` override parameter. When provided, it takes
+ * precedence over any bass note parsed from the chord symbol string.
  */
-export function formatChordDisplay(chordSymbol: string): string {
+export function formatChordDisplay(chordSymbol: string, bass?: string): string {
   const parsed = parseChordSymbol(chordSymbol);
   if (!parsed) return chordSymbol === "N" ? "—" : chordSymbol;
 
-  const { root, quality } = parsed;
+  const { root, quality, bass: parsedBass } = parsed;
   const qualityDisplay = getChordQualityDisplay(quality);
-  return `${root}${qualityDisplay}`;
+  const actualBass = bass ?? parsedBass;
+  return `${root}${qualityDisplay}${actualBass ? '/' + actualBass : ''}`;
 }

@@ -7,6 +7,8 @@ import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, useWindowDimensions, View } from 'react-native'
 
+import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
+
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { PitchIndicator } from '@/components/PitchIndicator'
@@ -19,12 +21,11 @@ import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
-import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
-import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
-import { useMusicTimelineData } from '@/src/session/useMusicTimelineData'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
 import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
+import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
+import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import colors from '@/src/constants/colors'
 
@@ -44,10 +45,10 @@ function Pill({ children, emphasis }: { children: string; emphasis?: boolean }) 
   return (
     <View
       className={`rounded-full border px-2.5 py-1 ${
-        emphasis ? 'border-amber-accent/45 bg-amber-accent/20' : 'border-wood-600/25 bg-cream-dark/50'
+        emphasis ? 'border-amber-accent/45 bg-amber-accent/20' : 'border-wood-600/25 bg-wood-700/40'
       }`}
     >
-      <Text className={`font-sans text-xs ${emphasis ? 'font-sans-medium text-wood-900' : 'text-wood-800'}`}>
+      <Text className={`font-sans text-xs ${emphasis ? 'font-sans-medium text-cream' : 'text-muted-brown'}`}>
         {children}
       </Text>
     </View>
@@ -55,10 +56,19 @@ function Pill({ children, emphasis }: { children: string; emphasis?: boolean }) 
 }
 
 export default function WarmupScreen() {
-  const { chordEvents, soloNotesArr, barTimestamps } = useMusicTimelineData()
+  const lesson = useLessonStore((s) => s.lesson)
+
+  // Extract timeline data for MusicProvider (prefer lesson-wide timeline; merge sections if needed)
+  const chordEvents = getLessonWideChordEvents(lesson)
+  const soloNotesArr = lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
 
   return (
-    <MusicProvider chordEvents={chordEvents} soloNotes={soloNotesArr} barTimestamps={barTimestamps}>
+    <MusicProvider
+      chordEvents={chordEvents}
+      soloNotes={soloNotesArr}
+      barTimestamps={barTimestamps}
+    >
       <WarmupScreenInner />
     </MusicProvider>
   )
@@ -66,6 +76,7 @@ export default function WarmupScreen() {
 
 function WarmupScreenInner() {
   const router = useRouter()
+  const musicActions = useMusicActions()
   const { width } = useWindowDimensions()
   const twoColumn = width >= WIDE_BREAKPOINT
   const tabRef = useRef<SessionStemAndTabHandle>(null)
@@ -74,6 +85,10 @@ function WarmupScreenInner() {
   const lesson = useLessonStore((s) => s.lesson)
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
+
+  const chordEvents = getLessonWideChordEvents(lesson)
+  const soloNotesArr = lesson?.solo_notes?.notes ?? null
+  const barTimestamps = lesson?.bar_timestamps ?? null
 
   const slot = plan?.slots[idx]
   const wp = slot?.warmup_plan
@@ -93,23 +108,9 @@ function WarmupScreenInner() {
   const keyLabel = (lesson?.key ?? 'E minor').toString()
   const positionLabel = 'Tap the tab or fretboard to explore'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
-  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote), [keyLabel, selectedNote])
+  const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote, null, null), [keyLabel, selectedNote])
 
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
-  const musicActions = useMusicActions()
-
-  const handlePlaybackTick = useCallback(
-    (ctx: PlaybackTickContext) => {
-      musicActions.setPosition(ctx.positionSec * 1000)
-      musicActions.setPlaying(ctx.playing)
-    },
-    [musicActions],
-  )
-
-  useEffect(() => {
-    musicActions.setPosition(0)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     setPitchDemoFlashToken(1)
@@ -242,6 +243,18 @@ function WarmupScreenInner() {
     return null
   }
 
+  // Drive MusicProvider position from stem playback ticks
+  const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
+    musicActions.setPosition(ctx.positionSec * 1000)
+    musicActions.setPlaying(ctx.playing)
+  }, [musicActions])
+
+  // Seed initial chord/notes on mount so fretboard isn't blank before playback starts
+  useEffect(() => {
+    musicActions.setPosition(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const gp5 = ex?.tab_snippet_gp5_base64?.trim() || null
   const nextEx = !completed && exerciseIndex < exercises.length - 1 ? exercises[exerciseIndex + 1] : null
 
@@ -260,13 +273,13 @@ function WarmupScreenInner() {
        showNext={completed}
         nextLabel="Next section"
        onNext={goNextSection}
-       footerContainerClassName="flex-row gap-3 border-t border-wood-600/20 bg-ivory px-6 pb-8 pt-4"
-       backButtonClassName="flex-1 rounded-2xl border border-wood-600/45 bg-cream py-3.5"
-       nextButtonClassName="flex-1 rounded-2xl border border-amber-accent/55 bg-amber-accent/35 py-3.5 whitespace-nowrap"
+       footerContainerClassName="flex-row gap-3 border-t border-wood-600/30 bg-wood-800/60 px-6 pb-8 pt-4"
+       backButtonClassName="flex-1 rounded-xl border border-wood-600/45 bg-wood-700/40 py-3"
+       nextButtonClassName="flex-1 rounded-xl border border-amber-accent/55 bg-amber-accent/35 py-3 whitespace-nowrap"
     >
       <View className={`mt-1 ${colClass}`}>
         <View className={leftColClass}>
-          <Text className="font-sans-medium text-xs uppercase tracking-wider text-wood-600">SESSION WARM-UP</Text>
+          <Text className="font-sans-medium text-xs uppercase tracking-wider text-amber-accent">SESSION WARM-UP</Text>
 
           <View className="mt-4 items-center">
             <WarmupTimerRing
@@ -299,7 +312,7 @@ function WarmupScreenInner() {
           {!completed && !warmupStarted ? (
             <AnimatedPressable haptic="light"
               onPress={() => setWarmupStarted(true)}
-              className="mt-6 w-full rounded-2xl bg-amber-accent/90 py-3.5"
+              className="mt-6 w-full rounded-xl bg-amber-accent/90 py-3"
               accessibilityRole="button"
               accessibilityLabel="Start warm-up exercise timer"
             >
@@ -309,34 +322,34 @@ function WarmupScreenInner() {
           {!completed && warmupStarted ? (
             <AnimatedPressable haptic="light"
               onPress={stopExercise}
-              className="mt-6 w-full rounded-2xl border-2 border-wood-600/45 bg-cream-dark/50 py-3.5"
+              className="mt-6 w-full rounded-xl border-2 border-wood-600/45 bg-wood-700/40 py-3"
               accessibilityRole="button"
               accessibilityLabel="Stop warm-up exercise timer"
             >
-              <Text className="text-center font-sans-medium text-wood-900">Stop exercise</Text>
+              <Text className="text-center font-sans-medium text-cream">Stop exercise</Text>
             </AnimatedPressable>
           ) : null}
         </View>
 
         <View className={rightColClass}>
-          <View className="rounded-2xl border border-wood-600/20 bg-white px-4 pb-4 pt-3.5 shadow-sm">
+          <View className="rounded-2xl border border-wood-600/20 bg-wood-800/40 px-4 pb-4 pt-3.5">
             <View className="flex-row items-center justify-between">
-              <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">
+              <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
                 Exercise {completed ? exercises.length : exerciseIndex + 1} of {exercises.length}
               </Text>
               {!completed ? (
                 <View className="flex-row items-center gap-1.5 rounded-full border border-amber-accent/40 bg-amber-accent/10 px-2.5 py-1">
                   <View className="h-1.5 w-1.5 rounded-full bg-amber-accent" />
-                  <Text className="font-sans-medium text-xs text-wood-800">
+                  <Text className="font-sans-medium text-xs text-cream">
                     {warmupStarted ? 'Active' : 'Ready'}
                   </Text>
                 </View>
               ) : (
-                <Text className="font-sans-medium text-xs text-wood-600">Done</Text>
+                <Text className="font-sans-medium text-xs text-muted-brown">Done</Text>
               )}
             </View>
 
-            <Text className="mt-3 font-serif text-2xl text-wood-900">{ex?.name ?? '—'}</Text>
+            <Text className="mt-3 font-serif text-2xl text-cream">{ex?.name ?? '—'}</Text>
 
             <View className="mt-3 flex-row flex-wrap gap-2">
               <Pill emphasis>{`${formatClock(ex?.duration_seconds ?? 0)} duration`}</Pill>
@@ -344,12 +357,12 @@ function WarmupScreenInner() {
               <Pill>{ex ? formatTechniqueTag(ex.technique_tag) : '—'}</Pill>
             </View>
 
-            <Text className="mt-3 font-sans text-sm leading-relaxed text-wood-800">{ex?.description}</Text>
+            <Text className="mt-3 font-sans text-sm leading-relaxed text-muted-brown">{ex?.description}</Text>
 
             <View className="mt-4">
               <View className="mb-1.5 flex-row items-center justify-between">
-                <Text className="font-sans-medium text-xs text-wood-800">Playback tempo</Text>
-                <Text className="font-sans-medium text-xs text-wood-900">{displayBpm} BPM</Text>
+                <Text className="font-sans-medium text-xs text-muted-brown">Playback tempo</Text>
+                <Text className="font-sans-medium text-xs text-amber-accent">{displayBpm} BPM</Text>
               </View>
               <Slider
                 minimumValue={0.55}
@@ -358,22 +371,22 @@ function WarmupScreenInner() {
                 value={tempoMul}
                 onValueChange={setTempoMul}
                 minimumTrackTintColor={colors.amber.light}
-                maximumTrackTintColor={colors.muted.light}
+                maximumTrackTintColor={colors.muted.brown}
                 thumbTintColor={colors.wood[700]}
               />
-              <Text className="mt-1 font-sans text-xs text-wood-600">
+              <Text className="mt-1 font-sans text-xs text-muted-brown">
                 Adjusts preview only — plan stays the same.
               </Text>
             </View>
 
             {nextEx ? (
-              <View className="mt-5 rounded-xl border border-wood-600/15 bg-cream px-3 py-2.5">
-                <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-wood-600">Up next</Text>
+              <View className="mt-5 rounded-xl border border-wood-600/15 bg-wood-700/30 px-3 py-2.5">
+                <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-muted-brown">Up next</Text>
                 <View className="mt-1 flex-row items-center justify-between gap-2">
-                  <Text className="flex-1 font-sans text-sm text-wood-900" numberOfLines={2}>
+                  <Text className="flex-1 font-sans text-sm text-cream" numberOfLines={2}>
                     {nextEx.name}
                   </Text>
-                  <Text className="font-sans-medium text-sm text-wood-600">
+                  <Text className="font-sans-medium text-sm text-muted-brown">
                     {formatClock(nextEx.duration_seconds)}
                   </Text>
                 </View>
@@ -384,19 +397,19 @@ function WarmupScreenInner() {
               <View className="mt-5 flex-row flex-wrap gap-2">
                 <AnimatedPressable haptic="light"
                   onPress={skipExercise}
-                  className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-ivory py-3"
+                  className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-wood-700/40 py-3"
                   accessibilityRole="button"
                   accessibilityLabel="Skip to next warm-up exercise"
                 >
-                  <Text className="text-center font-sans-medium text-sm text-wood-900">Skip exercise</Text>
+                  <Text className="text-center font-sans-medium text-sm text-cream">Skip exercise</Text>
                 </AnimatedPressable>
                 <AnimatedPressable haptic="light"
                   onPress={goNextSection}
-                  className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-ivory py-3"
+                  className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-wood-700/40 py-3"
                   accessibilityRole="button"
                   accessibilityLabel="Skip entire warm-up"
                 >
-                  <Text className="text-center font-sans-medium text-sm text-wood-900">Skip warm-up</Text>
+                  <Text className="text-center font-sans-medium text-sm text-cream">Skip warm-up</Text>
                 </AnimatedPressable>
               </View>
             ) : null}
@@ -449,8 +462,8 @@ function WarmupScreenInner() {
             showStemPanel={false}
             gp5Base64Override={gp5}
             initialMetronomeOn={false}
+            onPlaybackTick={handleStemPlaybackTick}
             tabFrameClassName="mt-2 h-[280px] w-full px-1"
-            onPlaybackTick={handlePlaybackTick}
             onTabReady={() => tabRef.current?.getTabSurface()?.setPlaybackRate(tempoMul)}
             onNoteEvent={(evt: NoteEventMessage) => {
               setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
@@ -473,12 +486,12 @@ function WarmupScreenInner() {
       ) : null}
 
       {completed ? (
-        <Text className="mt-4 font-sans text-sm text-wood-600">
+        <Text className="mt-4 font-sans text-sm text-muted-brown">
           Nice — you&apos;re warmed up. Tap Next section to continue your plan.
         </Text>
       ) : null}
 
       <SessionNoteDetailModal detail={selectionDetail} visible={noteModalOpen} onClose={() => setNoteModalOpen(false)} />
-    </SessionStepScreen>
+      </SessionStepScreen>
   )
 }

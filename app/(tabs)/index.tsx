@@ -3,17 +3,20 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter, type Href } from 'expo-router'
 import {
   ChevronRight,
-  ClipboardList,
   Clock,
+  Headphones,
   Library as LibraryIcon,
   Link2,
+  ListMusic,
   Music,
   Play,
-  Plus
+  Plus,
+  X
 } from 'lucide-react-native'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import Svg, { Circle as SvgCircle, Line as SvgLine, Polygon as SvgPolygon } from 'react-native-svg'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { RecentProgress } from '@/components/RecentProgress'
@@ -41,6 +44,13 @@ import {
 import { PREF_MOOD_CHECK_LAST_MOOD, PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { HomeSuggestion, LessonListRow, PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
 import { startDemoSession } from '@/src/demo/startDemoSession'
+import {
+  dismissDailyLick,
+  getDailyLick,
+  isDailyLickDismissed,
+  persistDailyLick,
+  type DailyLick,
+} from '@/src/home/dailyLick'
 import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
 import { startPracticePlanFromHome } from '@/src/session/practicePlanNavigation'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
@@ -91,6 +101,127 @@ function relativeDateLabel(input: unknown): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+const STRING_YS = [15, 37, 59, 81, 103, 125]
+
+interface FretCell {
+  string: number
+  fret: number
+  variant: 'primary' | 'secondary'
+}
+
+function DailyLickFretboard({ cells, caption: captionProp }: { cells: readonly FretCell[]; caption?: string | null }) {
+  const sorted = useMemo(() => [...cells].sort((a, b) => a.fret - b.fret || a.string - b.string), [cells])
+
+  const minFret = useMemo(() => Math.min(...cells.map((c) => c.fret), 0), [cells])
+  const maxFret = useMemo(() => Math.max(...cells.map((c) => c.fret), 4), [cells])
+  const fretSpan = useMemo(() => Math.max(maxFret - minFret, 3), [maxFret, minFret])
+
+  function fretToX(fret: number): number {
+    return 40 + ((fret - minFret) / fretSpan) * 480
+  }
+
+  function dotX(fret: number): number {
+    if (fret <= 0) return fretToX(-0.5)
+    return (fretToX(fret - 1) + fretToX(fret)) / 2
+  }
+
+  function stringToY(string: number): number {
+    return STRING_YS[6 - string]
+  }
+
+  const groups = useMemo(() => {
+    if (!sorted.length) return [] as FretCell[][]
+    const result: FretCell[][] = [[sorted[0]]]
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].fret - sorted[i - 1].fret > 3) {
+        result.push([sorted[i]])
+      } else {
+        result[result.length - 1].push(sorted[i])
+      }
+    }
+    return result
+  }, [sorted])
+
+  const GROUP_COLORS = [colors.amber.accent, colors.ember, '#e8bd7e', '#5a3f2d']
+
+  const connectors = useMemo(() => {
+    const result: { fromX: number; toX: number; y: number }[] = []
+    for (let i = 0; i < groups.length - 1; i++) {
+      const g1maxX = Math.max(...groups[i].map((c) => dotX(c.fret)))
+      const g2minX = Math.min(...groups[i + 1].map((c) => dotX(c.fret)))
+      const midY1 = groups[i].reduce((sum, c) => sum + stringToY(c.string), 0) / groups[i].length
+      const midY2 = groups[i + 1].reduce((sum, c) => sum + stringToY(c.string), 0) / groups[i + 1].length
+      result.push({ fromX: g1maxX + 10, toX: g2minX - 10, y: (midY1 + midY2) / 2 })
+    }
+    return result
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, minFret, maxFret, fretSpan])
+
+  if (!cells.length) return null
+
+  const displayCaption = captionProp ?? 'Position shifts left to right'
+
+  return (
+    <View className="mb-3 w-full">
+      <Svg width="100%" height={130} viewBox="0 0 560 130" preserveAspectRatio="xMidYMid meet">
+        {/* Nut line at left edge */}
+        <SvgLine x1={20} y1={15} x2={20} y2={125} stroke={colors.cream} opacity={0.3} strokeWidth={2} />
+
+        {/* Fret lines at each integer fret boundary */}
+        {Array.from({ length: fretSpan + 1 }).map((_, fi) => {
+          const x = fretToX(minFret + fi)
+          return (
+            <SvgLine key={`f${fi}`} x1={x} y1={15} x2={x} y2={125} stroke={colors.hairline} opacity={0.35} strokeWidth={0.6} />
+          )
+        })}
+
+        {/* Six string lines */}
+        {STRING_YS.map((y, si) => (
+          <SvgLine key={`s${si}`} x1={20} y1={y} x2={540} y2={y} stroke={colors.hairline} strokeWidth={si === 0 || si === 5 ? 0.6 : 0.4} />
+        ))}
+
+        {/* Dots per group, each group gets a distinct color */}
+        {groups.map((group, gi) => (
+          <React.Fragment key={`g${gi}`}>
+            {group.map((cell, di) => (
+              <SvgCircle
+                key={`d${gi}-${di}`}
+                cx={dotX(cell.fret)}
+                cy={stringToY(cell.string)}
+                r={5}
+                fill={GROUP_COLORS[gi % GROUP_COLORS.length]}
+                opacity={cell.variant === 'primary' ? 0.95 : 0.55}
+              />
+            ))}
+          </React.Fragment>
+        ))}
+
+        {/* Arrows between groups */}
+        {connectors.map((c, i) => (
+          <React.Fragment key={`a${i}`}>
+            <SvgLine x1={c.fromX} y1={c.y} x2={c.toX} y2={c.y} stroke={colors.ember} strokeWidth={2} />
+            <SvgPolygon points={`${c.toX},${c.y - 5} ${c.toX + 8},${c.y} ${c.toX},${c.y + 5}`} fill={colors.ember} />
+          </React.Fragment>
+        ))}
+      </Svg>
+      <Text className="mt-1 text-center font-mono text-[10px] text-muted2">{displayCaption}</Text>
+    </View>
+  )
+}
+
+function DifficultyDots({ level }: { level: number }) {
+  return (
+    <View className="flex-row items-center gap-1">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <View
+          key={i}
+          className={`h-1.5 w-1.5 rounded-full ${i < level ? 'bg-amber-accent' : 'bg-hairline'}`}
+        />
+      ))}
+    </View>
+  )
+}
+
 export default function HomeScreen() {
   const router = useRouter()
   const displayName = 'Nkunda' // TODO(auth): Replace with signed-in profile name.
@@ -103,6 +234,9 @@ export default function HomeScreen() {
   const [latestPlanCompletion, setLatestPlanCompletion] = useState<PracticePlanCompletionRow | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [drillLatestError, setDrillLatestError] = useState<string | null>(null)
+  const [dailyLick, setDailyLick] = useState<DailyLick | null>(null)
+  const [dailyLickDismissed, setDailyLickDismissed] = useState(false)
+  const [lickDateOffset, setLickDateOffset] = useState(0)
   const [practicePlan, setPracticePlan] = useState<PracticePlanPayload | null>(null)
   const [practicePlanLoading, setPracticePlanLoading] = useState(false)
   const [practicePlanStartError, setPracticePlanStartError] = useState<string | null>(null)
@@ -119,13 +253,13 @@ export default function HomeScreen() {
   const currentPlan = usePlanStore((s) => s.currentPlan)
   const planSlotIndex = usePlanStore((s) => s.currentSlotIndex)
 
-  const planProgressFraction = useMemo(() => {
+  const validPlanSlotIndex = useMemo(() => {
     if (!practicePlan?.slots?.length || !currentPlan?.slots?.length) return 0
     if (currentPlan.slots.length !== practicePlan.slots.length) return 0
     const a = currentPlan.slots[0]?.lesson_ref ?? currentPlan.slots[0]?.title ?? ''
     const b = practicePlan.slots[0]?.lesson_ref ?? practicePlan.slots[0]?.title ?? ''
     if (a !== b) return 0
-    return Math.min(1, planSlotIndex / Math.max(1, currentPlan.slots.length))
+    return Math.min(planSlotIndex, currentPlan.slots.length - 1)
   }, [practicePlan, currentPlan, planSlotIndex])
 
   const refresh = useCallback(() => {
@@ -151,6 +285,22 @@ export default function HomeScreen() {
         setSpotifyLinked(spotifyTasteLooksPresent(spotifyRaw))
 
         await useSkillStore.getState().loadFromDb()
+
+        // B7: daily lick — deterministic Slonimsky pattern
+        try {
+          const lickDate = new Date()
+          lickDate.setDate(lickDate.getDate() + lickDateOffset)
+          const lick = getDailyLick(lickDate)
+          const dismissed = await isDailyLickDismissed(lickDate)
+          setDailyLick(lick)
+          setDailyLickDismissed(dismissed)
+          if (!dismissed) {
+            void persistDailyLick(lickDate)
+          }
+        } catch {
+          setDailyLick(null)
+          setDailyLickDismissed(true)
+        }
 
         if (homeSuggestion?.kind === 'cold_start') {
           setPracticePlan(null)
@@ -211,7 +361,7 @@ export default function HomeScreen() {
         setPracticePlanLoading(false)
         setSpotifyLinked(false)
       })
-  }, [])
+  }, [lickDateOffset])
 
   useFocusEffect(
     useCallback(() => {
@@ -300,6 +450,52 @@ export default function HomeScreen() {
     return out
   }, [lessons, router, saveLesson, setLessonSectionIndex])
 
+  const startDailyLick = useCallback(async () => {
+    if (!dailyLick) return
+    try {
+      const plan: PracticePlanPayload = {
+        slots: [
+          {
+            slot_type: 'warmup',
+            duration_seconds: dailyLick.pattern.defaultDurationSeconds,
+            title: dailyLick.name,
+            coach_intro: dailyLick.description,
+            warmup_plan: {
+              exercises: [
+                {
+                  name: dailyLick.name,
+                  description: dailyLick.description,
+                  duration_seconds: dailyLick.pattern.defaultDurationSeconds,
+                  technique_tag: dailyLick.pattern.techniqueTags[0] ?? 'finger_independence',
+                  bpm: 80,
+                  fretboard_guide: {
+                    cells: dailyLick.pattern.fretboardCells,
+                    caption: dailyLick.pattern.caption ?? null,
+                  },
+                },
+              ],
+              total_duration_seconds: dailyLick.pattern.defaultDurationSeconds,
+            },
+          },
+        ],
+        total_duration_seconds: dailyLick.pattern.defaultDurationSeconds,
+      }
+      usePlanStore.getState().setPlan(plan)
+      router.push('/session/warmup')
+    } catch {
+      toast.error('Could not start daily lick.')
+    }
+  }, [dailyLick, router])
+
+  const onDismissDailyLick = useCallback(async () => {
+    try {
+      await dismissDailyLick()
+      setDailyLickDismissed(true)
+    } catch {
+      console.log('[DailyLick] dismiss failed')
+    }
+  }, [])
+
   const drillLatestSavedLick = useCallback(async () => {
     if (suggestion?.kind !== 'library_saved') return
     setDrillLatestError(null)
@@ -326,8 +522,8 @@ export default function HomeScreen() {
 
   const durationBadge = (
     <View className="flex-row items-center gap-1 rounded-lg border border-wood-700 bg-wood-800/50 px-3 py-1.5">
-      <Clock color={colors.muted.light} size={16} strokeWidth={2} />
-      <Text className="font-sans text-sm text-muted-light">~{recommendedMinutes} min</Text>
+      <Clock color={colors.muted.brown} size={16} strokeWidth={2} />
+      <Text className="font-sans text-sm text-muted-brown">~{recommendedMinutes} min</Text>
     </View>
   )
 
@@ -354,10 +550,10 @@ export default function HomeScreen() {
         <View className="w-full max-w-4xl self-center px-6 pb-8 pt-4">
           <View className="mb-10 mt-2">
             <Text className="mb-1 font-serif text-3xl text-cream">{getGreeting(displayName)}</Text>
-            <Text className="font-sans text-base text-muted-light">Ready to play?</Text>
+            <Text className="font-sans text-base text-muted-brown">Ready to play?</Text>
           </View>
 
-          <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-light">Your practice path</Text>
+          {/* <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Your practice path</Text> */}
 
           <LinearGradient
             colors={['rgba(74, 55, 40, 0.98)', 'rgba(44, 24, 16, 0.99)']}
@@ -370,17 +566,17 @@ export default function HomeScreen() {
             <View className="relative z-10 p-6">
               {suggestion == null ? (
                 loadError ? (
-                  <View>
-                    <Text className="font-sans text-sm text-cream">Could not load your suggestion.</Text>
-                    <Pressable
-                      onPress={refresh}
-                      className="mt-4 rounded-xl border border-amber-accent/60 bg-wood-900/50 px-4 py-3"
-                      accessibilityRole="button"
-                      accessibilityLabel="Retry loading suggestion"
-                    >
-                      <Text className="text-center font-sans-medium text-amber-light">Retry</Text>
-                    </Pressable>
-                  </View>
+                   <View>
+                     <Text className="font-sans text-sm text-cream">Could not load your suggestion.</Text>
+                     <AnimatedPressable
+                       onPress={refresh}
+                       className="mt-4 rounded-xl border border-amber-accent/60 bg-wood-900/50 px-4 py-3"
+                       accessibilityRole="button"
+                       accessibilityLabel="Retry loading suggestion"
+                     >
+                       <Text className="text-center font-sans-medium text-amber-light">Retry</Text>
+                     </AnimatedPressable>
+                   </View>
                 ) : (
                   <Text className="font-sans text-sm text-cream">Loading suggestion…</Text>
                 )
@@ -392,41 +588,13 @@ export default function HomeScreen() {
                       <Music color={colors.amber.accent} size={28} strokeWidth={1.5} />
                     </View>
                     <Text className="mt-6 text-center font-serif text-2xl text-cream">Kick off your practice</Text>
-                    <Text className="mt-4 max-w-sm text-center font-sans text-base leading-7 text-muted-light">
-                      Let's get your playing faster. Take a quick style quiz, try a demo session, add a song, or connect Spotify—whatever gets you playing first.
+                    <Text className="mt-4 max-w-sm text-center font-sans text-base leading-7 text-muted-brown">
+                      Take a style quiz, try a demo session, add a song, or connect to your Spotify.
                     </Text>
                   </View>
 
-                  {/* {tasteSongHints.length > 0 ? (
-                    <View className="mt-6 w-full">
-                      <Text className="mb-2 font-sans-medium text-[11px] uppercase tracking-wider text-muted-light">
-                        Ideas for your style (add as lessons)
-                      </Text>
-                      <View className="gap-2">
-                        {tasteSongHints.map((hint) => (
-                          <Pressable
-                            key={hint}
-                            onPress={() =>
-                              void Linking.openURL(
-                                `https://www.youtube.com/results?search_query=${encodeURIComponent(hint)}`,
-                              )
-                            }
-                            className="rounded-lg border border-wood-600/40 bg-wood-800/25 px-3 py-2.5 active:opacity-90"
-                            accessibilityRole="button"
-                            accessibilityLabel={`Search YouTube for ${hint}`}
-                          >
-                            <Text className="font-sans text-sm text-cream">{hint}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                      <Text className="mt-2 font-sans text-xs leading-5 text-muted-light">
-                        Pick a result, copy the link, then use Add song to turn it into tabs in Harmoniq.
-                      </Text>
-                    </View>
-                  ) : null} */}
-
                   <View className="mt-8 w-full">
-                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-light">
+                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
                       Get started
                     </Text>
                     <View className="gap-3">
@@ -437,7 +605,7 @@ export default function HomeScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Open style quiz"
                       >
-                        <ClipboardList color={colors.wood[900]} size={20} strokeWidth={2} />
+                        <ListMusic color={colors.wood[900]} size={20} strokeWidth={2} />
                         <Text className="font-sans-medium text-base text-wood-900">Style quiz</Text>
                       </AnimatedPressable>
                       <AnimatedPressable
@@ -457,43 +625,43 @@ export default function HomeScreen() {
                   </View>
 
                   <View className="mt-7 w-full border-t border-wood-600/45 pt-5">
-                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-light">
+                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
                       More ways to begin
                     </Text>
-                    <View className="gap-2">
-                      <Pressable
-                        onPress={goAnalyze}
-                        className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
-                        accessibilityRole="button"
-                        accessibilityLabel="Add a song"
-                      >
-                        <Plus color={colors.amber.light} size={20} strokeWidth={2} />
-                        <Text className="flex-1 font-sans-medium text-sm text-cream">Add a song</Text>
-                      </Pressable>
-                      {spotifyLinked ? (
-                        <Pressable
-                          onPress={() => router.push('/(tabs)/settings')}
-                          className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
-                          accessibilityRole="button"
-                          accessibilityLabel="Spotify connected, open Settings"
-                        >
-                          <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
-                          <Text className="flex-1 font-sans-medium text-sm text-cream">Spotify · Connected</Text>
-                          <ChevronRight color={colors.amber.light} size={20} strokeWidth={2} />
-                        </Pressable>
-                      ) : (
-                        <Pressable
-                          onPress={onConnectSpotify}
-                          disabled={spotifyBusy}
-                          className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90 disabled:opacity-50"
-                          accessibilityRole="button"
-                          accessibilityLabel="Connect to Spotify"
-                        >
-                          <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
-                          <Text className="flex-1 font-sans-medium text-sm text-cream">
-                            {spotifyBusy ? 'Connecting…' : 'Connect to Spotify'}
-                          </Text>
-                        </Pressable>
+                     <View className="gap-2">
+                       <AnimatedPressable
+                         onPress={goAnalyze}
+                         className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
+                         accessibilityRole="button"
+                         accessibilityLabel="Add a song"
+                       >
+                         <Plus color={colors.amber.light} size={20} strokeWidth={2} />
+                         <Text className="flex-1 font-sans-medium text-sm text-cream">Add a song</Text>
+                       </AnimatedPressable>
+                       {spotifyLinked ? (
+                         <AnimatedPressable
+                           onPress={() => router.push('/(tabs)/settings')}
+                           className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90"
+                           accessibilityRole="button"
+                           accessibilityLabel="Spotify connected, open Settings"
+                         >
+                           <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
+                           <Text className="flex-1 font-sans-medium text-sm text-cream">Spotify · Connected</Text>
+                           <ChevronRight color={colors.amber.light} size={20} strokeWidth={2} />
+                         </AnimatedPressable>
+                       ) : (
+                         <AnimatedPressable
+                           onPress={onConnectSpotify}
+                           disabled={spotifyBusy}
+                           className="flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-800/35 px-4 py-3.5 active:opacity-90 disabled:opacity-50"
+                           accessibilityRole="button"
+                           accessibilityLabel="Connect to Spotify"
+                         >
+                           <Link2 color={colors.amber.light} size={20} strokeWidth={2} />
+                           <Text className="flex-1 font-sans-medium text-sm text-cream">
+                             {spotifyBusy ? 'Connecting…' : 'Connect to Spotify'}
+                           </Text>
+                         </AnimatedPressable>
                       )}
                     </View>
                   </View>
@@ -504,7 +672,7 @@ export default function HomeScreen() {
                 <TodaysPlanCard
                   plan={practicePlan}
                   sessionMinutes={recommendedMinutes}
-                  progressFraction={planProgressFraction}
+                  currentSlotIndex={validPlanSlotIndex}
                   onStart={() => void onStartPracticePlan()}
                   busy={planStartBusy}
                   errorText={practicePlanStartError}
@@ -518,7 +686,7 @@ export default function HomeScreen() {
                         <Text className="font-sans text-sm text-amber-light/80">{suggestion.song.artist}</Text>
                       ) : null}
                       {suggestion.song.section_label ? (
-                        <Text className="mt-1 font-sans text-xs text-muted-light">
+                        <Text className="mt-1 font-sans text-xs text-muted-brown">
                           Section: {suggestion.song.section_label}
                         </Text>
                       ) : null}
@@ -531,7 +699,7 @@ export default function HomeScreen() {
                       warmed up.&rdquo;
                     </Text>
                   </View>
-                  <Text className="mb-4 font-sans text-xs leading-5 text-muted-light">
+                  <Text className="mb-4 font-sans text-xs leading-5 text-muted-brown">
                     Full loop: Listen → Study → Slow → Play → Review (with stems). Use Library tab for saved licks only.
                   </Text>
                   <AnimatedPressable
@@ -597,7 +765,7 @@ export default function HomeScreen() {
                         <Text className="font-sans text-sm text-amber-light/80">{suggestion.song.artist}</Text>
                       ) : null}
                       {suggestion.song.section_label ? (
-                        <Text className="mt-1 font-sans text-xs text-muted-light">
+                        <Text className="mt-1 font-sans text-xs text-muted-brown">
                           Last section: {suggestion.song.section_label}
                         </Text>
                       ) : null}
@@ -611,7 +779,7 @@ export default function HomeScreen() {
                       {suggestion.node.interval_days != null ? ` · every ${suggestion.node.interval_days}d` : ''}.&rdquo;
                     </Text>
                   </View>
-                  <Text className="mb-4 font-sans text-xs leading-5 text-muted-light">
+                  <Text className="mb-4 font-sans text-xs leading-5 text-muted-brown">
                     Full loop: Listen → Study → Slow → Play → Review (with stems). Use Library tab for saved licks only.
                   </Text>
                   <AnimatedPressable
@@ -629,6 +797,63 @@ export default function HomeScreen() {
             </View>
           </LinearGradient>
 
+          {dailyLick && !dailyLickDismissed && suggestion && suggestion.kind !== 'cold_start' ? (
+            <View className="relative mb-6 overflow-hidden rounded-2xl border border-hairline bg-wood-800/40">
+              <AnimatedPressable
+                onPress={() => void startDailyLick()}
+                haptic="light"
+                accessibilityRole="button"
+                accessibilityLabel="Start daily lick"
+              >
+                <View className="p-5">
+                  <Text className="mb-1 font-sans-medium text-[11px] uppercase tracking-wider text-amber-accent/80">
+                    Daily Lick
+                  </Text>
+                  <Text className="mb-2 font-serif text-xl text-cream">{dailyLick.name}</Text>
+                  <Text className="mb-3 font-sans text-sm italic leading-relaxed text-cream/80">
+                    &ldquo;{dailyLick.description}&rdquo;
+                  </Text>
+                  <DailyLickFretboard cells={dailyLick.pattern.fretboardCells} caption={dailyLick.pattern.caption} />
+                  <View className="flex-row flex-wrap items-center gap-2">
+                    <View className="flex-row items-center gap-2 rounded-full border border-hairline bg-wood-800/55 px-2.5 py-1">
+                      <DifficultyDots level={dailyLick.pattern.difficulty} />
+                    </View>
+                    {dailyLick.pattern.techniqueTags.map((tag) => (
+                      <View
+                        key={tag}
+                        className="rounded-full border border-hairline bg-wood-700/40 px-2.5 py-1"
+                      >
+                        <Text className="font-sans text-xs text-muted-brown">
+                          {tag.replace(/_/g, ' ')}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </AnimatedPressable>
+              <View className="absolute right-3 top-3 z-10 flex-row items-center gap-1.5">
+                <View className="h-7 w-7 items-center justify-center rounded-full bg-wood-900/70">
+                  <Pressable
+                    onPress={() => setLickDateOffset((p) => p + 1)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Next lick"
+                  >
+                    <ChevronRight color={colors.amber.accent} size={14} strokeWidth={2.5} />
+                  </Pressable>
+                </View>
+                <View className="h-7 w-7 items-center justify-center rounded-full bg-wood-900/70">
+                  <Pressable
+                    onPress={() => void onDismissDailyLick()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dismiss daily lick"
+                  >
+                    <X color={colors.amber.accent} size={14} strokeWidth={2.5} />
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
           {suggestion && suggestion.kind !== 'cold_start' && weakPulseNode ? <WeakAreaPulse node={weakPulseNode} /> : null}
           <View className="mb-8">
             <RecentProgress sessions={sessionsLog.slice(0, 5)} lastPlanCompletion={latestPlanCompletion} />
@@ -636,67 +861,78 @@ export default function HomeScreen() {
 
           <View className="flex-col gap-8">
             <View>
-              <Text className="mb-3 font-sans-medium text-sm uppercase tracking-wider text-muted-light">Recently added</Text>
+              <Text className="mb-3 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Recently uploaded</Text>
               <View className="gap-2">
                 {recentItems.length === 0 ? (
-                  <Text className="font-sans text-sm text-muted-light">No songs added yet.</Text>
-                ) : (
-                  recentItems.map((item) => (
-                    <Pressable
-                      key={item.id}
-                      onPress={item.open}
-                      className="flex-row items-center justify-between rounded-xl border border-wood-700/50 bg-wood-800/40 px-3 py-2.5 active:bg-wood-800/60"
-                      accessibilityRole="button"
-                      accessibilityLabel={`Open session ${item.title}`}
-                    >
-                      <View className="flex-1 pr-2">
-                        <Text className="font-sans-medium text-[15px] text-cream">{item.title}</Text>
-                        <Text className="mt-0.5 font-sans text-[11px] text-muted-light">{item.focus}</Text>
-                      </View>
-                      <Text className="font-sans text-[11px] text-muted-light">{item.dateLabel}</Text>
-                    </Pressable>
+                  <Text className="font-sans text-sm text-muted-brown">Add a song or finish a session and it&apos;ll show up here.</Text>
+                 ) : (
+                   recentItems.map((item) => (
+                     <AnimatedPressable
+                       key={item.id}
+                       onPress={item.open}
+                       className="flex-row items-center justify-between rounded-xl border border-wood-700/50 bg-wood-800/40 px-3 py-2.5 active:bg-wood-800/60"
+                       accessibilityRole="button"
+                       accessibilityLabel={`Open session ${item.title}`}
+                     >
+                       <View className="flex-1 pr-2">
+                         <Text className="font-sans-medium text-[15px] text-cream">{item.title}</Text>
+                         <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{item.focus}</Text>
+                       </View>
+                       <Text className="font-sans text-[11px] text-muted-brown">{item.dateLabel}</Text>
+                     </AnimatedPressable>
                   ))
                 )}
               </View>
             </View>
 
             <View>
-              <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-light">Quick actions</Text>
-              <View className="flex-row gap-3">
-                <Pressable
-                  onPress={goAnalyze}
-                  className="min-h-[128px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 py-4 active:bg-wood-700/50"
-                  accessibilityRole="button"
-                  accessibilityLabel="Add a song"
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
-                    <Plus color={colors.amber.light} size={20} strokeWidth={2} />
-                  </View>
-                  <Text className="text-center font-sans-medium text-sm text-cream">Add Song</Text>
-                </Pressable>
-                <Pressable
-                  onPress={goLibrary}
-                  className="min-h-[128px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 py-4 active:bg-wood-700/50"
-                  accessibilityRole="button"
-                  accessibilityLabel="Open library"
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
-                    <LibraryIcon color={colors.amber.light} size={20} strokeWidth={2} />
-                  </View>
-                  <Text className="text-center font-sans-medium text-sm text-cream">Open Library</Text>
-                </Pressable>
-              </View>
-              {/* <Pressable
-                onPress={goListening}
-                className="mt-3 min-h-[80px] items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/35 py-4 active:bg-wood-700/50"
-                accessibilityRole="button"
-                accessibilityLabel="Open listening mode"
-              >
-                <View className="h-10 w-10 items-center justify-center rounded-full bg-wood-700">
-                  <Headphones color={colors.amber.light} size={20} strokeWidth={2} />
+              <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Quick actions</Text>
+               <View className="flex-row flex-wrap gap-3">
+                  <AnimatedPressable
+                    onPress={goAnalyze}
+                    className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Add a song"
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                      <Plus color={colors.amber.light} size={22} strokeWidth={2} />
+                    </View>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Add Song</Text>
+                  </AnimatedPressable>
+                  <AnimatedPressable
+                    onPress={goLibrary}
+                    className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Open library"
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                      <LibraryIcon color={colors.amber.light} size={22} strokeWidth={2} />
+                    </View>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Open Library</Text>
+                  </AnimatedPressable>
+                  <AnimatedPressable
+                    onPress={goListening}
+                    className="min-h-[128px] min-w-[148px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Open mic"
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                      <Headphones color={colors.amber.light} size={22} strokeWidth={2} />
+                    </View>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Open Mic</Text>
+                  </AnimatedPressable>
+                  <AnimatedPressable
+                    onPress={() => router.push('/scale-explorer' as any)}
+                    className="min-h-[128px] min-w-[148px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Scale Explorer"
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                      <Music color={colors.amber.light} size={22} strokeWidth={2} />
+                    </View>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Scales</Text>
+                  </AnimatedPressable>
                 </View>
-                <Text className="text-center font-sans-medium text-sm text-cream">Listening Mode</Text>
-              </Pressable> */}
             </View>
           </View>
         </View>

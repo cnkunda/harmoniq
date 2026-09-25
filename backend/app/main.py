@@ -22,21 +22,22 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import FastAPI, HTTPException, Path as FastPath, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
 from app.coach import generate_jam_coach_summary, generate_onboarding_placement_summary, generate_quick_feedback, generate_orient_annotation, generate_theory_annotation
-from app.jam_backing import LyriaProviderError, build_instrumental_prompt, call_gemini_lyria_instrumental, gemini_lyria_config, load_bundled_track_wav, select_bundled_track
+from app.jam_backing import Mrt2BackingGenerator, build_mrt2_prompt, load_bundled_track_wav, select_bundled_track
 from app.lyria_clip import generate_orient_clip
 from app.routers.analyze import router as analyze_router
 from app.routers.export import router as export_router
 from app.routers.discovery import router as discovery_router
 from app.routers.taste import router as taste_router
 from app.routers.curriculum import router as curriculum_router
+from app.routers.mt3 import router as mt3_router
+from app.routers.ws import router as ws_router
 from app.schemas import (
     JamBackingRequest,
     JamBackingResponse,
@@ -50,7 +51,13 @@ from app.schemas import (
     QuickFeedbackResponse,
     ScoreRequest,
     ScoreResult,
+    SpotifyAvailableGenreSeeds,
     SpotifyPlaybackState,
+    SpotifyPlaylistDetail,
+    SpotifyPlaylistItems,
+    SpotifyPlaylistList,
+    SpotifyRecommendationsResult,
+    SpotifySearchResult,
     TheoryAnnotationRequest,
     TheoryAnnotationResponse,
 )
@@ -93,6 +100,50 @@ async def _run_startup_cleanup():
 async def lifespan(application: FastAPI):
     """Run startup cleanup and yield."""
     asyncio.create_task(_run_startup_cleanup())
+
+    # Initialize database connection
+    try:
+        from app.db import init_db as _init_db
+        await asyncio.to_thread(_init_db)
+        logger.info("Database initialized")
+    except Exception:
+        logger.warning("Database not available — running without persistence")
+
+    # Load existing jobs from database (survives restarts)
+    try:
+        from app.repository import get_job as _repo_get_job
+        from app.jobs import jobs, load_jobs_from_db
+        loaded = load_jobs_from_db()
+        if loaded > 0:
+            logger.info("Loaded %d jobs from database", loaded)
+    except Exception:
+        logger.exception("Failed to load jobs from database on startup")
+
+    # Commit 110: reload completed/failed jobs from disk (fallback for legacy)
+    try:
+        from app.jobs import load_jobs_from_disk as _load_from_disk
+        disk_loaded = _load_from_disk()
+        if disk_loaded > 0:
+            logger.info("Loaded %d legacy jobs from disk", disk_loaded)
+    except Exception:
+        logger.exception("Failed to load jobs from disk on startup")
+
+    # Commit A1.1: warm-start MT3 model server on boot (non-blocking if unavailable)
+    try:
+        from app.mt3.model_server import Mt3ModelServer
+
+        mt3_server = Mt3ModelServer()
+        mt3_loaded = await asyncio.to_thread(mt3_server.warm_start)
+        if mt3_loaded:
+            logger.info("MT3 model warm-started successfully")
+        else:
+            load_err = mt3_server.load_error()
+            logger.info(
+                "MT3 model not loaded at startup%s — will use CRNN fallback",
+                f" ({load_err})" if load_err else "",
+            )
+    except Exception:
+        logger.exception("Failed to warm-start MT3 model — will use CRNN fallback")
     yield
 
 
@@ -171,6 +222,8 @@ app.include_router(export_router)
 app.include_router(discovery_router)
 app.include_router(taste_router)
 app.include_router(curriculum_router)
+app.include_router(mt3_router)
+app.include_router(ws_router)
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +404,323 @@ async def spotify_playback(client_session: str = Query(..., min_length=1, max_le
         raise HTTPException(status_code=503, detail="Spotify playback-follow disabled (HARMONIQ_SKIP_SPOTIFY_PLAYBACK=1).")
     try:
         return await spotify_api.get_playback_state(client_session)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+# ---------------------------------------------------------------------------
+# Spotify Search
+# ---------------------------------------------------------------------------
+
+@app.get(
+    "/spotify/search",
+    response_model=SpotifySearchResult,
+    tags=["Spotify"],
+    summary="Search the Spotify catalog",
+)
+async def spotify_search(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    q: str = Query(..., min_length=1, description="Search query"),
+    type: str = Query("track,artist,album", description="Comma-separated item types: track,artist,album,playlist,show,episode,audiobook"),
+    limit: int = Query(10, ge=1, le=50),
+    offset: int = Query(0, ge=0, le=1000),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    try:
+        result = await spotify_api.search(client_session, q, type_filter=type, limit=limit, offset=offset)
+        return result
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
     except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+# ---------------------------------------------------------------------------
+# Spotify Recommendations
+# ---------------------------------------------------------------------------
+
+@app.get(
+    "/spotify/recommendations",
+    response_model=SpotifyRecommendationsResult,
+    tags=["Spotify"],
+    summary="Get track recommendations based on seeds",
+)
+async def spotify_recommendations(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    seed_artists: str = Query("", description="Comma-separated seed artist IDs"),
+    seed_genres: str = Query("", description="Comma-separated seed genre names"),
+    seed_tracks: str = Query("", description="Comma-separated seed track IDs"),
+    limit: int = Query(20, ge=1, le=100),
+    market: str = Query("", description="Market code (e.g. US)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    artists = seed_artists.strip() or None
+    genres = seed_genres.strip() or None
+    tracks = seed_tracks.strip() or None
+    if not artists and not genres and not tracks:
+        raise HTTPException(status_code=400, detail="At least one of seed_artists, seed_genres, or seed_tracks must be provided.")
+    m = market.strip() or None
+    try:
+        result = await spotify_api.get_recommendations(
+            client_session,
+            seed_artists=artists,
+            seed_genres=genres,
+            seed_tracks=tracks,
+            limit=limit,
+            market=m,
+        )
+        return result
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get(
+    "/spotify/recommendations/available-genre-seeds",
+    response_model=SpotifyAvailableGenreSeeds,
+    tags=["Spotify"],
+    summary="Get available genre seeds for recommendations",
+)
+async def spotify_available_genre_seeds(
+    client_session: str = Query(..., min_length=1, max_length=256),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    try:
+        result = await spotify_api.get_available_genre_seeds(client_session)
+        return result
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+# ---------------------------------------------------------------------------
+# Spotify Playlists
+# ---------------------------------------------------------------------------
+
+@app.get(
+    "/spotify/playlists",
+    response_model=SpotifyPlaylistList,
+    tags=["Spotify"],
+    summary="Get current user's playlists",
+)
+async def spotify_playlists(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    limit: int = Query(20, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    try:
+        return await spotify_api.get_current_user_playlists(client_session, limit=limit, offset=offset)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get(
+    "/spotify/playlists/{playlist_id}",
+    response_model=SpotifyPlaylistDetail,
+    tags=["Spotify"],
+    summary="Get a playlist by ID",
+)
+async def spotify_playlist_detail(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    playlist_id: str = FastPath(..., min_length=1, description="Spotify playlist ID"),
+    market: str = Query("", description="Market code (e.g. US)"),
+    fields: str = Query("", description="Fields filter (e.g. name,owner,tracks.total)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    m = market.strip() or None
+    f = fields.strip() or None
+    try:
+        return await spotify_api.get_playlist(client_session, playlist_id, market=m, fields=f)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@app.get(
+    "/spotify/playlists/{playlist_id}/items",
+    response_model=SpotifyPlaylistItems,
+    tags=["Spotify"],
+    summary="Get items in a playlist",
+)
+async def spotify_playlist_items(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    playlist_id: str = FastPath(..., min_length=1, description="Spotify playlist ID"),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    market: str = Query("", description="Market code (e.g. US)"),
+    fields: str = Query("", description="Fields filter"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    m = market.strip() or None
+    f = fields.strip() or None
+    try:
+        return await spotify_api.get_playlist_items(client_session, playlist_id, limit=limit, offset=offset, market=m, fields=f)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+# ---------------------------------------------------------------------------
+# Spotify Player Controls
+# ---------------------------------------------------------------------------
+
+@app.put(
+    "/spotify/player/play",
+    status_code=204,
+    tags=["Spotify"],
+    summary="Start/Resume playback (Premium required)",
+)
+async def spotify_player_play(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    device_id: str = Query("", description="Target device ID (optional)"),
+    context_uri: str = Query("", description="Context URI (album/artist/playlist)"),
+    uris: str = Query("", description="Comma-separated track URIs to play"),
+    position_ms: int = Query(0, ge=0, description="Start position in ms"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    did = device_id.strip() or None
+    cu = context_uri.strip() or None
+    uris_list = [u.strip() for u in uris.split(",") if u.strip()] if uris.strip() else None
+    pos = position_ms if position_ms > 0 else None
+    try:
+        await spotify_api.start_playback(
+            client_session,
+            device_id=did,
+            context_uri=cu,
+            uris=uris_list,
+            position_ms=pos,
+        )
+        return Response(status_code=204)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@app.put(
+    "/spotify/player/pause",
+    status_code=204,
+    tags=["Spotify"],
+    summary="Pause playback (Premium required)",
+)
+async def spotify_player_pause(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    device_id: str = Query("", description="Target device ID (optional)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    did = device_id.strip() or None
+    try:
+        await spotify_api.pause_playback(client_session, device_id=did)
+        return Response(status_code=204)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@app.post(
+    "/spotify/player/next",
+    status_code=204,
+    tags=["Spotify"],
+    summary="Skip to next track (Premium required)",
+)
+async def spotify_player_next(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    device_id: str = Query("", description="Target device ID (optional)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    did = device_id.strip() or None
+    try:
+        await spotify_api.skip_to_next(client_session, device_id=did)
+        return Response(status_code=204)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@app.post(
+    "/spotify/player/previous",
+    status_code=204,
+    tags=["Spotify"],
+    summary="Skip to previous track (Premium required)",
+)
+async def spotify_player_previous(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    device_id: str = Query("", description="Target device ID (optional)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    did = device_id.strip() or None
+    try:
+        await spotify_api.skip_to_previous(client_session, device_id=did)
+        return Response(status_code=204)
+    except spotify_api.SpotifySessionExpired as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@app.put(
+    "/spotify/player/seek",
+    status_code=204,
+    tags=["Spotify"],
+    summary="Seek to position in current track (Premium required)",
+)
+async def spotify_player_seek(
+    client_session: str = Query(..., min_length=1, max_length=256),
+    position_ms: int = Query(..., ge=0, description="Position in milliseconds"),
+    device_id: str = Query("", description="Target device ID (optional)"),
+):
+    if spotify_api.spotify_feature_disabled():
+        raise HTTPException(status_code=503, detail="Spotify integration disabled (HARMONIQ_SKIP_SPOTIFY=1).")
+    did = device_id.strip() or None
+    try:
+        await spotify_api.seek_to_position(client_session, position_ms, device_id=did)
+        return Response(status_code=204)
+    except spotify_api.SpotifySessionExpired as e:
         raise HTTPException(status_code=401, detail=str(e)) from e
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e)) from e
@@ -449,27 +818,24 @@ async def quick_feedback(payload: QuickFeedbackRequest) -> QuickFeedbackResponse
     "/jam/backing",
     response_model=JamBackingResponse,
     tags=["Jam"],
-    summary="POST /jam/backing — instrumental practice bed (Gemini Lyria + local fallback)",
+    summary="POST /jam/backing — instrumental practice bed (MRT2 + bundled fallback)",
 )
 async def jam_backing(payload: JamBackingRequest) -> JamBackingResponse:
-    api_key, base_url, default_model = gemini_lyria_config()
-    model = (payload.model or default_model).strip() or default_model
-    prompt = build_instrumental_prompt(
-        musical_key=payload.musical_key.strip(), bpm=payload.bpm,
-        weak_areas=[str(x).strip() for x in payload.weak_areas if str(x).strip()],
-        style_hint=payload.style_hint,
+    prompt = build_mrt2_prompt(
+        style_hint=payload.style_hint or "",
+        musical_key=payload.musical_key.strip(),
+        bpm=payload.bpm,
     )
     raw: bytes | None = None
     duration_ms: int | None = None
     prompt_used = prompt
-    if api_key:
-        try:
-            raw, duration_ms = await call_gemini_lyria_instrumental(prompt=prompt, api_key=api_key, base_url=base_url, model=model)
-        except (LyriaProviderError, httpx.HTTPError) as exc:
-            logger.warning("jam_backing provider error: %s", exc)
-    else:
-        logger.info("jam_backing no GEMINI_API_KEY; using bundled fallback")
+    generator = Mrt2BackingGenerator()
+    result = await asyncio.to_thread(generator.generate, prompt=prompt)
+    if result is not None:
+        raw, duration_ms = result
+        logger.info("jam_backing generated with MRT2")
     if raw is None:
+        logger.info("jam_backing MRT2 unavailable; using bundled fallback")
         fallback = select_bundled_track(musical_key=payload.musical_key.strip(), bpm=payload.bpm, style_hint=payload.style_hint)
         raw, duration_ms = load_bundled_track_wav(fallback)
         prompt_used = f"{prompt} [fallback_track={fallback.filename}]"

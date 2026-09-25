@@ -1,9 +1,9 @@
 """
-Lyria 3 Clip integration for commit #84 / Commit 97.
+Orient clip generation for commit #84 / Commit 97.
 
-Generates 30-second audio examples demonstrating the session's target technique
-in context using the Gemini API's lyria-3-pro-preview model. Falls back to
-silent placeholder with contextual annotation when API is unavailable.
+Generates 30-second audio examples demonstrating the session's target technique.
+Currently returns a silent placeholder with a context-aware textual annotation.
+Future: could use MRT2 to generate short technique-demonstration audio clips.
 """
 
 from __future__ import annotations

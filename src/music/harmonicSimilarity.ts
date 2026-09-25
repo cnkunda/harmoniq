@@ -30,38 +30,30 @@ function parseKeyLabel(keyLabel: string | null): { root: string | null; mode: 'm
 function keySimilarity(key1: string | null, key2: string | null): number {
   if (!key1 || !key2) return 0.0
   if (key1 === key2) return 1.0
-  
+
   const parsed1 = parseKeyLabel(key1)
   const parsed2 = parseKeyLabel(key2)
-  
+
   if (!parsed1.root || !parsed2.root) return 0.0
-  
-  // Identical root and mode
-  if (parsed1.root === parsed2.root && parsed1.mode === parsed2.mode) return 1.0
-  
-  // Relative major/minor relationship (e.g., C major ↔ A minor)
-  if (parsed1.root === parsed2.root && parsed1.mode !== parsed2.mode) return 0.8
-  
-  // Parallel major/minor (same root, different mode) - already handled above
-  
-  // Perfect fourth/fifth relationships (strong harmonic connection)
+
   const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
   const idx1 = NOTE_NAMES.indexOf(parsed1.root)
   const idx2 = NOTE_NAMES.indexOf(parsed2.root)
-  
+
   if (idx1 === -1 || idx2 === -1) return 0.0
-  
+
   const interval = Math.abs(idx2 - idx1)
-  
-  // Perfect fifth (7 semitones) or perfect fourth (5 semitones)
-  if (interval === 7 || interval === 5) return 0.7
-  
-  // Third relationships (3 or 4 semitones)
-  if (interval === 3 || interval === 4) return 0.5
-  
-  // Second relationships (1 or 2 semitones)
-  if (interval === 1 || interval === 2) return 0.3
-  
+  const ci = Math.min(interval, 12 - interval)
+
+  if (parsed1.root === parsed2.root && parsed1.mode === parsed2.mode) return 1.0
+  if (ci === 3 && parsed1.mode !== parsed2.mode) return 0.85
+  if (parsed1.root === parsed2.root && parsed1.mode !== parsed2.mode) return 0.6
+  if (ci === 5) return 0.7
+  if (ci === 4) return 0.5
+  if (ci === 3) return 0.4
+  if (ci === 2) return 0.45
+  if (ci === 1) return 0.3
+
   return 0.2
 }
 
@@ -129,12 +121,20 @@ export function calculateHarmonicSimilarity(
   song1: SongHarmonicProfile,
   song2: SongHarmonicProfile
 ): number {
+  if (!song1.key && !song2.key) return 0.0
+
   const keyScore = keySimilarity(song1.key, song2.key)
   const styleScore = styleSimilarity(song1.style, song2.style)
   const tempoScore = tempoSimilarity(song1.tempo, song2.tempo)
-  
-  // Weighted average: key is most important for harmonic similarity
-  return keyScore * 0.5 + styleScore * 0.3 + tempoScore * 0.2
+
+  let score = keyScore * 0.5 + styleScore * 0.3 + tempoScore * 0.2
+
+  const hasAllData = song1.key && song2.key && song1.style && song2.style && song1.tempo && song2.tempo
+  if (!hasAllData) {
+    score *= 0.9
+  }
+
+  return score
 }
 
 /**

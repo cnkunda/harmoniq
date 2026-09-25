@@ -1,4 +1,6 @@
+import { Upload } from 'lucide-react-native'
 import { useCallback, useState, type DragEvent } from 'react'
+import { View } from 'react-native'
 
 import colors from '@/src/constants/colors'
 
@@ -37,9 +39,10 @@ export function AudioDropzone({
     input.click()
   }
 
-  const border = isDragging ? colors.amber.accent : colors.amber.accent + '55'
-  const bg = isDragging ? colors.amber.accent + '14' : colors.wood[800] + 'AA'
+  const border = isDragging ? colors.amber.accent : colors.wood[600]
+  const bg = isDragging ? colors.amber.accent + '20' : colors.wood[800] + '80'
   const fg = isDragging ? colors.amber.light : colors.cream
+  const iconColor = isDragging ? colors.amber.light : colors.amber.accent
 
   return (
     <div
@@ -59,23 +62,31 @@ export function AudioDropzone({
       onDrop={handleDrop}
       onClick={handleClick}
       style={{
-        border: `2px dashed ${border}`,
+        border: `2px ${isDragging ? 'solid' : 'dashed'} ${border}`,
         borderRadius: 16,
-        padding: '40px 28px',
+        padding: '36px 28px',
         minHeight: 132,
         textAlign: 'center',
         cursor: 'pointer',
         background: bg,
-        transition: 'all 0.2s ease',
+        transition: 'border 0.25s ease, background 0.25s ease, box-shadow 0.25s ease',
         color: fg,
         fontFamily: 'DMSans-Regular',
         fontSize: 14,
         lineHeight: 1.5,
+        boxShadow: isDragging
+          ? `0 0 0 3px ${colors.amber.accent}30, inset 0 0 20px ${colors.amber.accent}10`
+          : 'none',
       }}
     >
-      {isDragging
-        ? 'Drop to upload'
-        : 'Drag an audio file here, or click to browse (MP3, WAV, M4A)'}
+      <View className="items-center gap-3">
+        <Upload size={32} color={iconColor} strokeWidth={1.5} />
+        <span>
+          {isDragging
+            ? 'Drop to upload'
+            : 'Drag an audio file here, or click to browse (MP3, WAV, M4A)'}
+        </span>
+      </View>
     </div>
   )
 }

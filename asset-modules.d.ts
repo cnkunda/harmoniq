@@ -8,7 +8,12 @@ declare module '*.sf2' {
   export default assetModuleId
 }
 
-declare module '*.musicxml' {
+declare module '*.tflite' {
+  const assetModuleId: number
+  export default assetModuleId
+}
+
+declare module '*.onnx' {
   const assetModuleId: number
   export default assetModuleId
 }

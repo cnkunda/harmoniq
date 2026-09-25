@@ -658,16 +658,6 @@ export default function SettingsScreen() {
             <Text className="font-sans-medium text-danger">Clear all practice data…</Text>
           </AnimatedPressable>
         </SettingsSection>
-
-        {/* Back Button */}
-        <AnimatedPressable
-          onPress={() => router.back()}
-          haptic="light"
-          className="mt-8 rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-3"
-          accessibilityRole="button"
-        >
-          <Text className="text-center font-sans-medium text-wood-900">Back</Text>
-        </AnimatedPressable>
       </ScrollView>
     </SafeAreaView>
   )

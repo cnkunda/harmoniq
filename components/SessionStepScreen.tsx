@@ -1,9 +1,13 @@
 import type { ReactNode } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { ScrollView, Text, View } from 'react-native'
+
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 export interface SessionStepScreenProps {
   title: string
   subtitle?: string
+  /** Small uppercase eyebrow text shown above the title (e.g. "ORIENT PHASE"). */
+  phaseEyebrow?: string | null
   /** Hide the scroll header block (warm-up uses inline section labels). */
   hideTitle?: boolean
   /** Hide the fixed bottom bar (e.g. tune step uses in-flow actions). */
@@ -24,6 +28,7 @@ export interface SessionStepScreenProps {
 export function SessionStepScreen({
   title,
   subtitle,
+  phaseEyebrow,
   hideTitle = false,
   hideFooter = false,
   children,
@@ -37,10 +42,9 @@ export function SessionStepScreen({
   backButtonClassName,
   nextButtonClassName,
 }: SessionStepScreenProps) {
-  const footerRow =
-    footerContainerClassName ?? 'flex-row gap-3 border-t border-wood-600/30 bg-wood-900 px-6 pb-8 pt-4 shadow-soft-wood'
-  const backClass = backButtonClassName ?? 'flex-1 rounded-xl border border-wood-600 bg-wood-800 py-3.5'
-  const nextClass = nextButtonClassName ?? 'flex-1 rounded-xl bg-amber-accent py-3.5 shadow-soft-wood'
+  const footerRow = footerContainerClassName ?? 'flex-row gap-3 border-t border-wood-600/30 bg-wood-800/60 px-6 pb-8 pt-4'
+  const backClass = backButtonClassName ?? 'flex-1 rounded-xl border border-wood-600/55 bg-wood-700/40 px-6 py-3'
+  const nextClass = nextButtonClassName ?? 'flex-1 rounded-xl bg-amber-accent/90 px-6 py-3'
 
   return (
     <View className="flex-1">
@@ -49,8 +53,8 @@ export function SessionStepScreen({
         contentContainerStyle={{
           flexGrow: 1,
           paddingHorizontal: 24,
-          paddingTop: 16,
-          paddingBottom: hideFooter ? 24 : 96,
+          paddingTop: 8,
+          paddingBottom: 16,
         }}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled
@@ -58,9 +62,14 @@ export function SessionStepScreen({
       >
         {!hideTitle ? (
           <>
-            <Text className="font-serif text-2xl text-wood-900">{title}</Text>
+            {phaseEyebrow ? (
+              <Text className="font-sans-medium text-[10px] uppercase tracking-[0.18em] text-amber-accent">
+                {phaseEyebrow}
+              </Text>
+            ) : null}
+            <Text className={`text-3xl font-serif text-cream ${phaseEyebrow ? 'mt-1' : ''}`}>{title}</Text>
             {subtitle ? (
-              <Text className="mt-1.5 font-sans text-sm leading-6 text-wood-600">{subtitle}</Text>
+              <Text className="mt-2 font-sans text-sm leading-relaxed text-muted-brown">{subtitle}</Text>
             ) : null}
           </>
         ) : null}
@@ -70,26 +79,26 @@ export function SessionStepScreen({
 
       {hideFooter ? null : (
         <View className={footerRow}>
-          {showBack ? (
-            <Pressable
-              onPress={onBack}
-              className={`${backClass} items-center justify-center`}
-              accessibilityRole="button"
-            >
-              <Text className="text-center font-sans-medium text-cream">{backLabel}</Text>
-            </Pressable>
+           {showBack ? (
+             <AnimatedPressable
+               onPress={onBack}
+               className={backClass}
+               accessibilityRole="button"
+             >
+               <Text className="text-center font-sans-medium text-cream">{backLabel}</Text>
+             </AnimatedPressable>
           ) : (
             <View className="flex-1" />
           )}
             {showNext ? (
-              <Pressable
+              <AnimatedPressable
                 onPress={onNext}
-                className={`${nextClass} flex-nowrap items-center justify-center`}
+                className={`${nextClass} flex-nowrap items-center`}
                 accessibilityRole="button"
               >
                  <Text className="text-center font-sans-medium text-wood-900 whitespace-nowrap">{nextLabel}</Text>
-              </Pressable>
-            ) : null}
+              </AnimatedPressable>
+           ) : null}
         </View>
       )}
     </View>

@@ -1,109 +1,102 @@
-import React, { useCallback } from 'react'
-import { View, Text, TextInput } from 'react-native'
-import { AnimatedPressable } from '@/components/AnimatedPressable'
+/** Commit 109: BPM editor — numeric display with fine/coarse adjustment and reset. */
+
+import { Pressable, Text, View } from 'react-native'
+
 import colors from '@/src/constants/colors'
 
 export interface BpmEditorProps {
-  value: number
+  bpm: number
+  autoBpm: number | null
   onChange: (bpm: number) => void
-  min?: number
-  max?: number
-  step?: number
-  fineStep?: number
-  style?: object
+  onReset: () => void
+  disabled?: boolean
 }
 
-export function BpmEditor({
-  value,
-  onChange,
-  min = 20,
-  max = 300,
-  step = 5,
-  fineStep = 1,
-  style,
-}: BpmEditorProps) {
-  const clamp = useCallback((v: number) => Math.round(Math.max(min, Math.min(max, v)) * 10) / 10, [min, max])
+const COARSE_STEP = 5
+const FINE_STEP = 0.5
+const MIN_BPM = 30
+const MAX_BPM = 240
 
-  const increment = useCallback(() => onChange(clamp(value + step)), [value, step, clamp, onChange])
-  const decrement = useCallback(() => onChange(clamp(value - step)), [value, step, clamp, onChange])
-  const fineIncrement = useCallback(() => onChange(clamp(value + fineStep)), [value, fineStep, clamp, onChange])
-  const fineDecrement = useCallback(() => onChange(clamp(value - fineStep)), [value, fineStep, clamp, onChange])
-
-  const handleTextChange = useCallback(
-    (text: string) => {
-      const num = parseFloat(text)
-      if (!isNaN(num)) {
-        onChange(clamp(num))
-      }
-    },
-    [clamp, onChange],
+function AdjustButton({
+  label,
+  onPress,
+  disabled,
+}: {
+  label: string
+  onPress: () => void
+  disabled?: boolean
+}) {
+  return (
+    <Pressable
+      onPress={() => {
+        if (!disabled) onPress()
+      }}
+      className="h-9 w-9 items-center justify-center rounded-lg"
+      style={{
+        backgroundColor: colors.wood[700],
+        opacity: disabled ? 0.4 : 1,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: 16,
+          fontWeight: '600',
+          color: colors.cream,
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
   )
+}
+
+/**
+ * BPM editor with coarse (±5) and fine (±0.5) adjustment buttons,
+ * current BPM display, and "Reset to Auto" button.
+ */
+export function BpmEditor({ bpm, autoBpm, onChange, onReset, disabled = false }: BpmEditorProps) {
+  const canDecrease = bpm > MIN_BPM
+  const canIncrease = bpm < MAX_BPM
+  const hasAuto = autoBpm !== null && autoBpm > 0
+  const isOverridden = hasAuto && Math.abs(bpm - autoBpm!) > 0.1
 
   return (
-    <View style={[{ gap: 6 }, style]}>
-      <Text className="text-xs font-sans text-muted-light">BPM</Text>
+    <View className="items-center gap-2">
+      <Text className="font-sans-medium text-xs uppercase tracking-wide text-muted-brown">
+        BPM
+      </Text>
+
+      {/* BPM display + fine adjust */}
       <View className="flex-row items-center gap-2">
-        <AnimatedPressable
-          onPress={decrement}
-          haptic="light"
-          className="rounded-lg px-3 py-2"
-          style={{ backgroundColor: colors.wood[700] }}
-        >
-          <Text className="text-lg font-mono" style={{ color: colors.cream }}>
-            -{step}
-          </Text>
-        </AnimatedPressable>
+        <AdjustButton label="−" onPress={() => onChange(Math.max(MIN_BPM, bpm - FINE_STEP))} disabled={disabled || !canDecrease} />
+        <AdjustButton label="−+" onPress={() => onChange(Math.max(MIN_BPM, bpm - COARSE_STEP))} disabled={disabled || !canDecrease} />
 
-        <AnimatedPressable
-          onPress={fineDecrement}
-          haptic="light"
-          className="rounded-lg px-2 py-2"
-          style={{ backgroundColor: colors.wood[700] }}
-        >
-          <Text className="text-sm font-mono" style={{ color: colors.muted.light }}>
-            -{fineStep}
+        <View className="min-w-[64px] items-center rounded-lg border border-wood-600/45 bg-wood-800 px-3 py-1.5">
+          <Text className="font-mono text-lg" style={{ color: colors.amber.accent }}>
+            {bpm.toFixed(1)}
           </Text>
-        </AnimatedPressable>
+        </View>
 
-        <TextInput
-          value={String(Math.round(value))}
-          onChangeText={handleTextChange}
-          keyboardType="numeric"
-          className="text-center font-mono text-lg"
-          style={{
-            color: colors.cream,
-            backgroundColor: colors.wood[800],
-            borderWidth: 1,
-            borderColor: colors.wood[600],
-            borderRadius: 8,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            minWidth: 60,
-          }}
-        />
-
-        <AnimatedPressable
-          onPress={fineIncrement}
-          haptic="light"
-          className="rounded-lg px-2 py-2"
-          style={{ backgroundColor: colors.wood[700] }}
-        >
-          <Text className="text-sm font-mono" style={{ color: colors.muted.light }}>
-            +{fineStep}
-          </Text>
-        </AnimatedPressable>
-
-        <AnimatedPressable
-          onPress={increment}
-          haptic="light"
-          className="rounded-lg px-3 py-2"
-          style={{ backgroundColor: colors.wood[700] }}
-        >
-          <Text className="text-lg font-mono" style={{ color: colors.cream }}>
-            +{step}
-          </Text>
-        </AnimatedPressable>
+        <AdjustButton label="+" onPress={() => onChange(Math.min(MAX_BPM, bpm + COARSE_STEP))} disabled={disabled || !canIncrease} />
+        <AdjustButton label="++" onPress={() => onChange(Math.min(MAX_BPM, bpm + FINE_STEP))} disabled={disabled || !canIncrease} />
       </View>
+
+      {/* Reset to auto */}
+      {isOverridden && (
+        <Pressable
+          onPress={() => {
+            if (!disabled && hasAuto) {
+              onChange(autoBpm!)
+              onReset()
+            }
+          }}
+          className="rounded-full border border-wood-600/45 bg-wood-800 px-3 py-1"
+        >
+          <Text className="font-sans text-xs" style={{ color: colors.amber.light }}>
+            Reset to Auto ({autoBpm!.toFixed(0)})
+          </Text>
+        </Pressable>
+      )}
     </View>
   )
 }

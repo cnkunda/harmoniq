@@ -1,6 +1,6 @@
 # Harmoniq backend (FastAPI)
 
-Local Python API for the Harmoniq analysis pipeline (YouTube / upload → stems → transcription → lesson JSON). **§3 (current):** `POST /analyze` and `GET /analyze/{job_id}` return an in-memory stub `LessonJSON` (no real pipeline). Earlier roadmap commit **0.2** added the runnable app shell.
+Local Python API for the Harmoniq analysis pipeline (YouTube / upload → stems → MT3 transcription → chord timeline + solo notes → lesson JSON). **§3 (current):** `POST /analyze` and `GET /analyze/{job_id}` run the full pipeline (ingest → Demucs → MT3 → chord decoder → solo decoder → MusicXML → LessonJSON) with a confidence-gated fallback chain down to CRNN TFLite / chroma matching. Earlier roadmap commit **0.2** added the runnable app shell.
 
 ## Requirements
 
@@ -44,9 +44,50 @@ jupyter lab research/pipeline_proof.ipynb
 
 Set **`LOCAL_AUDIO`** or **`YOUTUBE_URL`** in the first code cell. Outputs go under `data/research_notebook/` (gitignored via `data/`).
 
-## Planned lead-sheet outputs (PRIORITIES 78–80)
+## Transcription architecture — two-branch
 
-The roadmap adds a **MusicXML** builder (`musicxml_builder.py`) as the canonical chart: **`BeatGrid.json`**, **`chordTimeline.json`**, and **`SoloNotes.json`** assembled into **`Score.musicxml`** with `<harmony>` + solo `<note>` for alphaTab’s MusicXML importer. Until those commits land, production analysis may still expose **LessonJSON** with **GP5** from the existing Basic Pitch → pyguitarpro path; see repo-root [PRIORITIES.md](../PRIORITIES.md) and [README.md](../README.md) § Lead sheet roadmap.
+The primary transcription engine uses a two-branch architecture to decouple chord extraction from solo note extraction, avoiding the single-pass guitar-stem bottleneck:
+
+**Branch A — Chords (instrument-agnostic):**
+- Input: full mix or harmonic-bed submix (bass + piano + other + guitar, drums removed) — never the guitar stem alone.
+- Model: MT3 at "Flat" granularity (or a dedicated chroma extractor) collapses all pitched content into an aggregate pitch/chroma representation.
+- Decoder: chroma/pitch-class aggregation → template matching against `CHORD_INTERVALS`. Confidence reflects chroma clarity + template match quality, independent of guitar-stem quality.
+
+**Branch B — Solo (leakage-hardened, guitar-specific):**
+- Input: guitar stem (Demucs `htdemucs_6s`) as a soft prior + full mix as a secondary parallel feature.
+- Model: MT3-style token decoder conditioned on a fixed guitar-program embedding — structural leakage prevention via program-scoped vocabulary.
+- Leakage mitigation (MR-MT3, arXiv:2403.10024): memory retention across segment boundaries, prior token sampling during training, token shuffling augmentation.
+- Post-hoc safety net: hard-filter any token outside the guitar program range.
+
+```
+Demucs 6-stem ─┬→ full mix / harmonic bed ─→ Branch A ─→ Chord Timeline
+                │                             (aggregate pitch/chroma → template match)
+                │
+                └→ guitar stem + full mix ──→ Branch B ─→ Solo Notes
+                                                (program-conditioned MT3
+                                                 + MR-MT3 memory retention
+                                                 + program token filter)
+```
+
+**Fallback chain** (per-branch, confidence-gated):
+- Branch A: MT3 (GPU) → CRNN TFLite on full mix (`chord_inference.py`, CPU) → Chroma template matching (librosa, 25-class MIREX)
+- Branch B: MT3 (GPU) → Basic Pitch on guitar stem (`solo_inference.py`, CPU/on-device)
+
+The orchestrator logs which tier produced each branch's result in `transcription_metadata` (`chord_tier` + `solo_tier`).
+
+### MT3 setup
+
+MT3 requires JAX or TensorFlow depending on the checkpoint variant. The model weights download on first use to `data/models/mt3/`. See `app/mt3/` for the inference wrapper.
+
+```
+pip install -e ".[mt3]"   # installs JAX + mt3-essentials
+```
+
+CPU inference works but is slow (~5 min/song); GPU cuts this to <60s. Fallback to CRNN TFLite is automatic when MT3 is unavailable.
+
+## Lead-sheet outputs
+
+The **MusicXML** builder (`musicxml_builder.py`) produces the canonical chart: **`BeatGrid.json`**, **`ChordTimeline.json`**, and **`SoloNotes.json`** assembled into **`Score.musicxml`** with `<harmony>` + solo `<note>` for alphaTab’s MusicXML importer. Until those commits land, production analysis may still expose **LessonJSON** with **GP5** from the existing Basic Pitch → pyguitarpro path; see repo-root [PRIORITIES.md](../PRIORITIES.md) and [README.md](../README.md) § Lead sheet roadmap.
 
 **Tests**
 

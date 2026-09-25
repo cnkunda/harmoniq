@@ -1,4 +1,5 @@
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
+import colors from '@/src/constants/colors'
 import type { TabThemeColors } from '@/types/tabMessage'
 
 /**
@@ -23,11 +24,11 @@ const BASE: TabThemeColors = { ...TAB_HARNESS_THEME }
 
 /** Light theme: cream parchment background with dark wood glyphs for high contrast. */
 const LIGHT_THEME: TabThemeColors = {
-  mainGlyphColor: '#2C1810',
-  secondaryGlyphColor: '#5C4535',
-  barSeparatorColor: '#9B8D7B',
+  mainGlyphColor: colors.wood[900],
+  secondaryGlyphColor: colors.wood[500],
+  barSeparatorColor: colors.muted.brown,
   scoreInfoColor: '#6B5D4B',
-  staffLineColor: '#8B7D6B',
+  staffLineColor: colors.muted.brown,
   barNumberColor: '#6B5D4B',
 }
 
