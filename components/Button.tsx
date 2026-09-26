@@ -1,7 +1,7 @@
 import { ActivityIndicator, Text, type TextProps } from 'react-native'
 
 import { AnimatedPressable, type AnimatedPressableProps } from '@/components/AnimatedPressable'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 type ButtonSize = 'sm' | 'md' | 'lg'

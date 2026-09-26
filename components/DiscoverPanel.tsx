@@ -3,7 +3,7 @@ import { Music } from 'lucide-react-native'
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 /** A single row in a populated panel. */
 export interface DiscoverPanelItem {

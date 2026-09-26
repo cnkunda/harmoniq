@@ -3,10 +3,10 @@ import { useMemo } from 'react'
 import { Text, View } from 'react-native'
 import { Circle, Line, Svg } from 'react-native-svg'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { chordToFretboardCells, formatChordDisplay } from '@/src/music/chordVoicing'
 import type { LessonJSON } from '@/src/types'
-import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
+import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
 
 const FRET_COUNT = 5
 const STRING_COUNT = 6

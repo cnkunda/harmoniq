@@ -39,7 +39,7 @@ import { toast } from '@/components/ToastConfig'
 import { disconnectSpotifyServer, fetchSpotifyTasteProfile, parseTasteProfileJson } from '@/src/api/analyze'
 import { hydrateVoiceCoachPrefs } from '@/src/audio/hydrateVoiceCoachPrefs'
 import { stop as stopVoiceCoach } from '@/src/audio/voiceCoach'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import {
   buildJournalExportText,
   clearAllPracticeData,

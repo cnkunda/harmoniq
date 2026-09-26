@@ -1,4 +1,4 @@
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 /**
  * Player overlay styles — https://alphatab.net/docs/guides/styling-player

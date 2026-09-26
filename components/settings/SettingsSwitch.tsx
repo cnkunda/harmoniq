@@ -1,6 +1,6 @@
 import { Switch, Text, View } from 'react-native'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 interface SettingsSwitchProps {
   label: string

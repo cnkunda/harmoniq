@@ -23,7 +23,7 @@ import {
   type SpotifyPlaybackBridgeError,
 } from '@/src/audio/spotifyPlaybackBridge'
 import { ActiveListenerCard } from '@/src/chord/ActiveListenerCard'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { getAppPref, getLessonByJobId, listLessonsJournal, listSessionsJournal } from '@/src/db/client'
 import { PREF_SPOTIFY_CLIENT_SESSION } from '@/src/db/schema'
 import type { LessonListRow } from '@/src/db/types'

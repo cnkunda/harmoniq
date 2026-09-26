@@ -3,7 +3,7 @@ import { Text, View } from 'react-native'
 import Svg, { Circle, G } from 'react-native-svg'
 import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle)
 

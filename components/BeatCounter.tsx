@@ -7,7 +7,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 interface BeatCounterProps {
   bpm: number

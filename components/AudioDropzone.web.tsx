@@ -2,7 +2,7 @@ import { Upload } from 'lucide-react-native'
 import { useCallback, useState, type DragEvent } from 'react'
 import { View } from 'react-native'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 export interface AudioDropzoneProps {
   onFile: (file: Blob) => void

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import getLessonWideChordEvents from './lessonChordTimeline'
+import { getLessonWideChordEvents } from './lessonChordTimeline'
 
 const mkLesson = (sections: any[] = [], lessonEvents: any[] | null = null) => {
   const l: any = {}

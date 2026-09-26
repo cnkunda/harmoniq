@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Text, View } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { getSessionCount, recordCoachFeedback, type CoachFeedbackRating } from '@/src/session'
 
 export interface CoachFeedbackPromptProps {

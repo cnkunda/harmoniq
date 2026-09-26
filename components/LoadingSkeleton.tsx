@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { ViewStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { timing } from '@/src/constants/animations'
 
 export interface LoadingSkeletonProps {

@@ -13,7 +13,7 @@ import { ChordDiagram } from './ChordDiagram'
 import { ChordPositionSelector } from './ChordPositionSelector'
 import { SectionNavigator } from './SectionNavigator'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { spring, timing } from '@/src/constants/animations'
 import type { ProgressionLabel } from '@/src/music/progressionAnalysis'
 

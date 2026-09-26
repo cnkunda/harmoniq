@@ -2,7 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { type LucideIcon } from 'lucide-react-native'
 import { Text, View } from 'react-native'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 interface SettingsCardProps {
   title: string

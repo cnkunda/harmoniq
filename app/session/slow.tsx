@@ -25,7 +25,7 @@ import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
-import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
+import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
 import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
 export default function SlowScreen() {

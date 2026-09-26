@@ -3,7 +3,7 @@ import { Text, View } from 'react-native'
 import { Drum, Guitar, Mic, Music2 } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 type StemKey = 'guitar' | 'bass' | 'drums' | 'vocals'
 

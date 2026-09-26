@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import type { SkillNodeRow } from '@/src/db/types'
 
 function displayName(node: SkillNodeRow): string {

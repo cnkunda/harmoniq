@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { TabViewport } from '@/components/TabViewport'
 import { WoodGradient } from '@/components/WoodGradient'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { CORPUS_NAMES, isCorpusName, loadCorpusMusicXml, type CorpusName } from '@/src/lib/corpusAssets'
 
 const LABELS: Record<CorpusName, string> = {

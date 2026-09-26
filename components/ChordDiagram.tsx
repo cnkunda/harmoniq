@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Text, View } from 'react-native'
 import { Circle, Line, Svg, Text as SvgText } from 'react-native-svg'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import {
   type ChordDbPosition,
   getChordPositionAtIndex,

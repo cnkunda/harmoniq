@@ -26,7 +26,7 @@ import { API_BASE_URL } from '@/src/config'
 import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
 import type { PitchReading } from '@/src/pitch/pitchTypes'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 const WOOD_SWATCHES = [
   { label: 'wood-900', className: 'bg-wood-900' },

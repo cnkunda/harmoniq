@@ -1,7 +1,7 @@
 import { MessageSquare } from 'lucide-react-native'
 import { Text, View } from 'react-native'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 export interface CoachNoteProps {
   text?: string

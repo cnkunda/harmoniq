@@ -25,9 +25,9 @@ import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
 import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
 import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
-import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
+import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
 import type { NoteEventMessage } from '@/types/tabMessage'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 const WIDE_BREAKPOINT = 900
 

@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native'
 import Svg, { Line, Polyline } from 'react-native-svg'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import type { NoteResultLabel } from '@/src/session/noteAccuracyBeats'
 import type { NoteContourSample } from '@/src/stores/useAppStore'
 

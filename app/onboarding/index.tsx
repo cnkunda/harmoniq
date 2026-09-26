@@ -5,7 +5,7 @@ import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { shouldOfferTasteQuizOnboarding } from '@/src/taste/tasteQuizGate'
 import { useOnboardingPlacementStore } from '@/src/stores/onboardingPlacementStore'
 

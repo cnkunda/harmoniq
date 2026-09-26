@@ -6,7 +6,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 export interface ConfidenceMeterProps {
   /** Confidence value 0–1. */

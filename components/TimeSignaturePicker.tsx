@@ -2,7 +2,7 @@
 
 import { Pressable, Text, View } from 'react-native'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 const NUMERATOR_OPTIONS = [2, 3, 4, 6, 9, 12] as const
 const DENOMINATOR_OPTIONS = [4, 8] as const

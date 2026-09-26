@@ -3,7 +3,7 @@ import { ArrowRight, X } from 'lucide-react-native'
 import { Alert, Text, View } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { SESSION_STEPS, sessionStepIndexFromPathname } from '@/src/constants/sessionFlow'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'

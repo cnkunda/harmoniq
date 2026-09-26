@@ -48,7 +48,7 @@ import {
 } from '@/src/utils/fretboardShareState'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { NoteEventMessage } from '@/types/tabMessage'
-import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
+import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
 
 // Transcription types (matching backend schemas)
 interface ChordEvent {

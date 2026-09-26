@@ -1,5 +1,5 @@
 import { TAB_HARNESS_THEME } from '@/src/constants/tabHarnessTheme'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import type { TabThemeColors } from '@/types/tabMessage'
 
 /**

@@ -9,7 +9,7 @@ import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenS
 import { toast } from '@/components/ToastConfig'
 import { fetchOnboardingPlacementCoach, parseTasteProfileJson } from '@/src/api/analyze'
 import { ONBOARDING_STEP_WITHOUT_QUIZ, ONBOARDING_WITHOUT_QUIZ_TOTAL, ONBOARDING_WITH_QUIZ_TOTAL } from '@/src/constants/onboardingSteps'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { getAppPref, commitPlacementOnboarding } from '@/src/db/client'
 import { DEFAULT_SKILL_NODES, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'

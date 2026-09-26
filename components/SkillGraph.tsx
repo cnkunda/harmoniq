@@ -1,7 +1,7 @@
 import { View } from 'react-native'
 import Svg, { Circle, G, Line, Polygon, Text as SvgText } from 'react-native-svg'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 type GraphNode = {
   id: string

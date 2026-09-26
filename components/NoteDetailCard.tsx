@@ -5,7 +5,7 @@ import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanima
 
 import { AnimatedPressable } from './AnimatedPressable'
 import type { ChordToneStatus } from '@/src/music/noteSelectionDetail'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 export type NoteDetailCardProps = {
   noteName: string

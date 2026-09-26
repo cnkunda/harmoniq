@@ -13,7 +13,7 @@ import { ChordHistoryStream } from '@/src/chord/ChordHistoryStream'
 import { useChordDetector } from '@/src/chord/useChordDetector'
 import { isNoChord } from '@/src/chord/chordVocab'
 import { formatChordDisplay } from '@/src/music/chordVoicing'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 /** Map internal error codes/messages to user-friendly copy. */
 function friendlyError(error: string): string {

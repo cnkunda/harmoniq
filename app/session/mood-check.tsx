@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { getAppPref, setAppPref } from '@/src/db/client'
 import { sessionEntryHref } from '@/src/constants/sessionFlow'
 import {

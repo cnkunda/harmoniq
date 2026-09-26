@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { View } from 'react-native'
 import Svg, { Line, Polyline } from 'react-native-svg'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import type { BeatGrid } from '@/src/types'
 
 export interface BeatGridTimelineProps {

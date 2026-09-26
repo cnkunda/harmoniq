@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated'
 
 import { midiToScientificPitchName, PITCH_WINDOW_FLASH_BG } from '@/components/PitchIndicator'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { hitInnerThresholdCents, type NoteResultLabel } from '@/src/session/noteAccuracyBeats'
 
 type PlayPitchLadderVerticalProps = {

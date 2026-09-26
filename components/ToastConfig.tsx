@@ -3,7 +3,7 @@ import { Text, View } from 'react-native'
 import Toast, { type BaseToastProps } from 'react-native-toast-message'
 import { AlertTriangle, Check, Info } from 'lucide-react-native'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 function WoodToast({
   text1,

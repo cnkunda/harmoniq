@@ -2,7 +2,7 @@ import { Text, View } from 'react-native'
 import type { LucideIcon } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 export interface EmptyStateProps {
   Icon: LucideIcon

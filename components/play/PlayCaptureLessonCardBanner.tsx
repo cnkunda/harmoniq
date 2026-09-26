@@ -1,6 +1,6 @@
 import { Text, View } from 'react-native'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { AudioWaveform, Mic } from 'lucide-react-native'
 
 export type PlayCaptureLessonCardBannerProps = {

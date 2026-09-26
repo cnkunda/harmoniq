@@ -6,7 +6,7 @@ import Animated, { FadeIn } from 'react-native-reanimated'
 import Svg, { Polyline } from 'react-native-svg'
 
 import { toast } from '@/components/ToastConfig'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { getLessonByJobId } from '@/src/db/client'
 import type { PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
 import { sessionOverallAccuracy } from '@/src/home/sessionAccuracy'

@@ -50,7 +50,7 @@ import {
     type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 const SCALE_UI_INTERVAL_MS = 2000
 const AI_INSTRUMENTAL_TRACK_ID = 'ai-instrumental'

@@ -9,7 +9,7 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { EmptyState } from '@/components/EmptyState'
 import { WoodGradient } from '@/components/WoodGradient'
 import { ApiError, submitExportJob } from '@/src/api/analyze'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import {
     clearAllPracticeData,

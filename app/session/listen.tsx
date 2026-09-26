@@ -23,8 +23,8 @@ import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
 import { applyCorrectionsToChordTimeline } from '@/src/utils/applyCorrections'
 import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
-import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
-import colors from '@/src/constants/colors'
+import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
+import { colors } from '@/src/constants/colors'
 import { Film, Headphones, Pause, Play, X } from 'lucide-react-native'
 
 export default function ListenScreen() {

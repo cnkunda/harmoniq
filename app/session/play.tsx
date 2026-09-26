@@ -43,7 +43,7 @@ import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import * as FileSystem from 'expo-file-system/legacy'
-import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
+import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
 
 export default function PlayScreen() {
   const lesson = useLessonStore((s) => s.lesson)

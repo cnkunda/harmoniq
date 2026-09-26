@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient'
 import type { LinearGradientProps } from 'expo-linear-gradient'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 export interface WoodGradientProps extends Omit<LinearGradientProps, 'colors'> {
   variant?: 'background' | 'card'

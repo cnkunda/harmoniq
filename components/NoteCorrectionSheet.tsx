@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react'
 import { View, Text, TextInput } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 export interface NoteCorrectionSheetProps {
   noteIndex: number

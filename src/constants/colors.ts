@@ -43,4 +43,4 @@ const colors = {
   ember: '#c1653a',
 } as const
 
-export default colors
+export { colors }

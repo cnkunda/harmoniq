@@ -5,7 +5,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSeq
 import Svg, { Polygon, Circle as SvgCircle } from 'react-native-svg'
 
 import { EmptyState } from '@/components/EmptyState'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { DNA_MIN_SESSIONS, type PlayerDNA } from '@/src/music/dnaComputer'
 
 const PC_LABELS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const

@@ -1,7 +1,7 @@
 import { Text, View } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { Check } from 'lucide-react-native'
 
 export type FormCheckboxProps = {

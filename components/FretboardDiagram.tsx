@@ -31,7 +31,7 @@ import {
 } from 'react-native-svg'
 
 import { spring } from '@/src/constants/animations'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { SECTION_EYEBROW_CLASS } from '@/src/constants/uiTokens'
 import {
   NUM_FRETS,

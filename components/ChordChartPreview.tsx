@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { View, Text } from 'react-native'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 export interface ChordChartPreviewProps {
   chordEvents: Array<{ timestamp: number; chord: string; confidence: number }>

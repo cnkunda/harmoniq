@@ -11,7 +11,7 @@ import Animated, {
 import Svg, { Path } from 'react-native-svg'
 
 import type { MetronomeSubdivision } from '@/src/audio/metronomeShared'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 /** Larger stage; all lengths scale from original 96px reference. */
 const SCALE = 152 / 96

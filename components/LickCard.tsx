@@ -2,7 +2,7 @@ import { Text, View } from 'react-native'
 import { Play, Tag } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import type { Lick } from '@/src/types'
 
 export interface LickCardProps {

@@ -10,7 +10,7 @@ import {
     Settings
 } from 'lucide-react-native'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 /** Slightly larger than React Navigation default (~24) for clearer tab targets. */
 const TAB_BAR_ICON_SIZE = 26

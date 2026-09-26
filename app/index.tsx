@@ -7,7 +7,7 @@ import { getLicks, getOnboardingComplete, initDb, listLessonsJournal } from '@/s
 import { fetchPersistAndDeriveSpotifyTaste } from '@/src/spotify/fetchPersistAndDeriveSpotify'
 import { formatSpotifySetupError } from '@/src/spotify/spotifyConnectErrors'
 import { hasCommittedTasteOrSpotifyRaw } from '@/src/taste/tasteQuizGate'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 /** Enter main app if placement finished, library content exists, or taste/Spotify prefs are present. */
 async function shouldEnterMainApp(): Promise<boolean> {

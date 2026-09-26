@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { toast } from '@/components/ToastConfig'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import {
   CHOICE_CHIP_BASE,
   CHOICE_CHIP_OFF,

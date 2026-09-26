@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated'
 
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 
 export type BeatFlashPulseProps = {
   /** Increment on each metronome pulse (downbeat uses stronger ring). */

@@ -26,7 +26,7 @@ import {
 } from '@/src/api/analyze'
 import { searchTabs, type TabSearchHit } from '@/src/api/tabs'
 import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import { getAppPref } from '@/src/db/client'
 import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'

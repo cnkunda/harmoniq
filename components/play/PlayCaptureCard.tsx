@@ -3,7 +3,7 @@ import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import type { RecordedTake } from '@/src/audio/recordSession.types'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import type { PlayLessonCaptureContext } from './playLessonCaptureTypes'
 import { AudioWaveform, Circle, Mic, Play, Square } from 'lucide-react-native'
 

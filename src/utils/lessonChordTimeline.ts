@@ -76,5 +76,3 @@ export function getLessonWideChordEvents(lesson: LessonJSON | null | undefined)
 
   return out
 }
-
-export default getLessonWideChordEvents

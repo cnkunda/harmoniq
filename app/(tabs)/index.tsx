@@ -29,7 +29,7 @@ import {
   loadLearningContextFromPrefs,
   parseTasteProfileJson,
 } from '@/src/api/analyze'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import {
   getAllSkillNodes,

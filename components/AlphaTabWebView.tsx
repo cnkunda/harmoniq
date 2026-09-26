@@ -11,7 +11,7 @@ import {
     isSoundFontProfileId,
     type SoundFontProfileId,
 } from '@/src/audio/soundfontProfiles'
-import colors from '@/src/constants/colors'
+import { colors } from '@/src/constants/colors'
 import type { TabRenderPresetName } from '@/src/session/tabThemePresets'
 import { DEFAULT_TAB_RENDER_PRESET } from '@/src/session/tabThemePresets'
 import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagStore'
