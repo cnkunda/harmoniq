@@ -139,3 +139,38 @@ def test_score_low_signal_sets_reliability_flags() -> None:
     )
     res = score_recording(req)
     assert "signal_low" in res.reliability.reliability_flags or "signal_near_silence" in res.reliability.reliability_flags
+
+
+def test_score_instrument_confusion_flags_and_hedges() -> None:
+    sr = 22050
+    t = np.linspace(0.0, 1.5, int(sr * 1.5), endpoint=False)
+    tone = (0.4 * np.sin(2 * np.pi * 220.0 * t)).astype(np.float32)
+    base = {
+        "tempo": 90.0,
+        "key": "A minor",
+        "mode": "minor",
+        "beat_grid": [0.0, 0.6667, 1.3333],
+    }
+
+    confused_req = ScoreRequest(
+        recording_wav_base64=_wav_b64_from_signal(tone, sr),
+        recording_mime_type="audio/wav",
+        section=base,
+        skill_nodes=["pitch_accuracy", "phrasing", "timing"],
+        instrument_confusion=0.8,
+    )
+    res = score_recording(confused_req)
+    assert "high_instrument_confusion" in res.reliability.reliability_flags
+    assert "high_instrument_confusion" in res.diagnostics.reliability_flags
+    assert "other instruments may be interfering" in res.coach_paragraph
+    assert res.reliability.confidence == "low"
+
+    clean_req = ScoreRequest(
+        recording_wav_base64=_wav_b64_from_signal(tone, sr),
+        recording_mime_type="audio/wav",
+        section=base,
+        skill_nodes=["pitch_accuracy", "phrasing", "timing"],
+        instrument_confusion=0.0,
+    )
+    clean_res = score_recording(clean_req)
+    assert "high_instrument_confusion" not in clean_res.reliability.reliability_flags

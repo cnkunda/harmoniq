@@ -217,13 +217,23 @@ def _song_style_block(style_label: str | None, technique_hints: list[str] | None
     return "\n".join(lines) + "\n\n"
 
 
-def _section_context_block(section_label: str | None, key: str | None) -> str:
+def _section_context_block(
+    section_label: str | None, key: str | None, instrument_confusion: float | None = None
+) -> str:
     section = (section_label or "Section").strip() or "Section"
     key_label = (key or "Unknown key").strip() or "Unknown key"
+    confusion_line = ""
+    if isinstance(instrument_confusion, (int, float)) and float(instrument_confusion) >= 0.3:
+        confusion_line = (
+            "Transcription caution: the reference transcription for this section may be "
+            "unreliable because another instrument (e.g. piano) may be interfering with the "
+            "guitar. Hedge any note- or chord-specific advice accordingly.\n"
+        )
     return (
         "<section_context>\n"
         f"Section label: {section}\n"
         f"Musical key: {key_label}\n"
+        f"{confusion_line}"
         "Write one concrete playing adjustment specific to this section's phrase shape.\n"
         "</section_context>\n\n"
     )
@@ -339,6 +349,7 @@ def build_coach_user_prompt(
     style_label: str | None = None,
     technique_hints: list[str] | None = None,
     focus_area: CoachFocusArea | None = None,
+    instrument_confusion: float | None = None,
 ) -> str:
     """Assemble the user message: optional context blocks + fixed JSON contract."""
     # Dump profile once to avoid redundant serialization in helpers
@@ -349,7 +360,7 @@ def build_coach_user_prompt(
     prefix = (
         _player_context_block(profile_data)
         + _song_style_block(style_label, technique_hints)
-        + _section_context_block(section_label, key)
+        + _section_context_block(section_label, key, instrument_confusion)
     )
     profile_priority = _profile_priority_directive(profile_data)
     focus_directive = _focus_area_directive(focus_area)
@@ -586,6 +597,7 @@ def generate_coach_fields_for_section(
     style_label: str | None = None,
     technique_hints: list[str] | None = None,
     focus_area: CoachFocusArea | None = None,
+    instrument_confusion: float | None = None,
 ) -> tuple[str, str]:
     result = generate_coach_fields_for_section_with_status(
         section_label=section_label,
@@ -596,6 +608,7 @@ def generate_coach_fields_for_section(
         style_label=style_label,
         technique_hints=technique_hints,
         focus_area=focus_area,
+        instrument_confusion=instrument_confusion,
     )
     return result.note, result.explanation
 
@@ -610,6 +623,7 @@ def generate_coach_fields_for_section_with_status(
     style_label: str | None = None,
     technique_hints: list[str] | None = None,
     focus_area: CoachFocusArea | None = None,
+    instrument_confusion: float | None = None,
 ) -> CoachCallResult:
     """Return coach_note + coach_explanation, with timeout and dev fallback."""
     # Keep test runs deterministic and fully offline even when a real key is present.
@@ -633,6 +647,7 @@ def generate_coach_fields_for_section_with_status(
         style_label=style_label,
         technique_hints=technique_hints,
         focus_area=focus_area,
+        instrument_confusion=instrument_confusion,
     )
     focus_terms = _profile_focus_terms(player_profile)
     attempts = 1 + COACH_PROFILE_MAX_RETRIES if focus_terms else 1
@@ -1018,6 +1033,7 @@ def hydrate_coach_copy_into_sections(
             style_label=style_label,
             technique_hints=technique_hints,
             focus_area=focus_area,
+            instrument_confusion=getattr(sec, "instrument_confusion", None),
         )
         futures_to_idx[future] = idx
 
