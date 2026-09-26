@@ -176,14 +176,14 @@ def analyze_job_task(
         try:
             hints_raw = build_stem_routing_hints(stem_abs_paths, stem_classification=stem_classification)
             routing_hints = StemRoutingHints(**hints_raw)
-        except DemucsEngineError:
-            pass
+        except DemucsEngineError as exc:
+            logger.info("stem routing hints unavailable job_id=%s: %s", job_id, exc)
         try:
             (job_dir / "stem_routing.json").write_text(
                 routing_hints.model_dump_json(indent=2), encoding="utf-8"
             )
         except Exception:
-            pass
+            logger.debug("failed to persist stem_routing.json job_id=%s", job_id, exc_info=True)
 
         guitar_rel_path = stems.get("guitar")
         vocals_rel_path = stems.get("vocals")
@@ -277,7 +277,7 @@ def hydrate_coach_task(
         from app.db import init_db as _init_db
         _init_db()
     except Exception:
-        pass
+        logger.warning("init_db failed job_id=%s", job_id, exc_info=True)
     from app.jobs import _hydrate_coach_copy_job
     from app.schemas import CoachFocusArea, PlayerProfile
     pp = PlayerProfile(**player_profile) if player_profile else None
@@ -293,7 +293,7 @@ def enrich_chord_timeline_task(self, job_id: str) -> None:
         from app.db import init_db as _init_db
         _init_db()
     except Exception:
-        pass
+        logger.warning("init_db failed job_id=%s", job_id, exc_info=True)
     from app.jobs import _enrich_chord_timeline_job
     _enrich_chord_timeline_job(job_id, api_key=os.getenv("ANTHROPIC_API_KEY", ""))
 
@@ -311,6 +311,6 @@ def beat_grid_recompute_task(
         from app.db import init_db as _init_db
         _init_db()
     except Exception:
-        pass
+        logger.warning("init_db failed job_id=%s", job_id, exc_info=True)
     from app.jobs import _process_beat_grid_recompute
     _process_beat_grid_recompute(job_id, time_signature=time_signature, bpm_override=bpm_override)

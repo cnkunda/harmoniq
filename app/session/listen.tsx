@@ -11,6 +11,7 @@ import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { EmptyState } from '@/components/EmptyState'
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { API_BASE_URL } from '@/src/config'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
@@ -134,7 +135,7 @@ function ListenScreenInner() {
       setOrientIsLoading(true)
       setOrientError(null)
       try {
-        const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/session/orient-clip`, {
+        const response = await fetch(`${API_BASE_URL}/session/orient-clip`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

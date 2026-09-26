@@ -1,7 +1,7 @@
 import { AudioManager, AudioRecorder } from 'react-native-audio-api'
 
+import { globalAudioManager } from '@/src/audio/GlobalAudioManager'
 import type { PitchReading, PitchStream } from '@/src/pitch/pitchTypes'
-import { globalAudioManager } from '../audio/GlobalAudioManager'
 
 export type { PitchReading, PitchStream }
 

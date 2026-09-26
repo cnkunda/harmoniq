@@ -3,14 +3,13 @@
  */
 
 import type { DiscoveryRequest, DiscoveryResponse } from '@/src/types'
-
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:8000'
+import { API_BASE_URL } from '@/src/config'
 
 /**
  * Get discovery recommendations based on user's mastered songs and skill progress.
  */
 export async function getDiscoveryRecommendations(request: DiscoveryRequest): Promise<DiscoveryResponse> {
-  const response = await fetch(`${API_BASE}/discovery/recommendations`, {
+  const response = await fetch(`${API_BASE_URL}/discovery/recommendations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

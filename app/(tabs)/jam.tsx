@@ -460,8 +460,8 @@ export default function JamScreen() {
         snd.setOnPlaybackStatusUpdate(null)
         await snd.stopAsync()
         await snd.unloadAsync()
-      } catch {
-        /* ignore */
+      } catch (e) {
+        console.warn('[Jam] stem stop failed:', e)
       }
     }
     jamLastStemPlayingRef.current = false

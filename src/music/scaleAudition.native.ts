@@ -149,14 +149,16 @@ export async function playScale(
   try {
     const cache = cacheDir()
     if (cache.exists) cache.delete()
-  } catch {}
+  } catch (e) {
+    console.warn('[scaleAudition] cache delete failed:', e)
+  }
 }
 
 export function stopPlayback(): void {
   stopFlag = true
   if (activeSound) {
-    void activeSound.stopAsync().catch(() => {})
-    void activeSound.unloadAsync().catch(() => {})
+    void activeSound.stopAsync().catch((e) => console.warn('[scaleAudition] stop failed:', e))
+    void activeSound.unloadAsync().catch((e) => console.warn('[scaleAudition] unload failed:', e))
     activeSound = null
   }
 }

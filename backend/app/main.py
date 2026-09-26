@@ -268,7 +268,7 @@ async def metrics():
         from app.job_store import ping
         redis_gauge.set(1 if ping() else 0)
     except Exception:
-        pass
+        logger.debug("redis health gauge update failed", exc_info=True)
 
     # Include circuit breaker metrics
     body = metrics_response()

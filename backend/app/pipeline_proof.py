@@ -673,7 +673,7 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
     try:
         spectral_centroid_curve = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)[0]
     except Exception:
-        pass
+        logger.debug("spectral centroid computation failed", exc_info=True)
 
     def _norm(a: np.ndarray) -> np.ndarray:
         a = a.astype(float)

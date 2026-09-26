@@ -375,7 +375,7 @@ function PlayScreenInner() {
                     <CoachFeedbackPrompt
                       focusArea={(section?.coach_note ? section.focus_area as string | null : null) ?? null}
                       onFeedbackSubmitted={(rating: 'helpful' | 'repetitive' | 'neutral' | 'skipped') => {
-                        console.log('Coach feedback submitted:', rating)
+                        console.log('[Coach] feedback submitted:', rating)
                       }}
                     />
                 </Animated.View>

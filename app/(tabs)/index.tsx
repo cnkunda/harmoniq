@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react-native'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import Svg, { Circle as SvgCircle, Line as SvgLine, Polygon as SvgPolygon } from 'react-native-svg'
 
@@ -833,22 +833,22 @@ export default function HomeScreen() {
               </AnimatedPressable>
               <View className="absolute right-3 top-3 z-10 flex-row items-center gap-1.5">
                 <View className="h-7 w-7 items-center justify-center rounded-full bg-wood-900/70">
-                  <Pressable
+                  <AnimatedPressable
                     onPress={() => setLickDateOffset((p) => p + 1)}
                     accessibilityRole="button"
                     accessibilityLabel="Next lick"
                   >
                     <ChevronRight color={colors.amber.accent} size={14} strokeWidth={2.5} />
-                  </Pressable>
+                  </AnimatedPressable>
                 </View>
                 <View className="h-7 w-7 items-center justify-center rounded-full bg-wood-900/70">
-                  <Pressable
+                  <AnimatedPressable
                     onPress={() => void onDismissDailyLick()}
                     accessibilityRole="button"
                     accessibilityLabel="Dismiss daily lick"
                   >
                     <X color={colors.amber.accent} size={14} strokeWidth={2.5} />
-                  </Pressable>
+                  </AnimatedPressable>
                 </View>
               </View>
             </View>

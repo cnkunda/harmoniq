@@ -142,10 +142,7 @@ export function connectAnalyzeWebSocket(
   let wsRef: WebSocket | null = null
   let pollingCancel: (() => void) | null = null
 
-  const apiBase = (() => {
-    const raw = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000'
-    return raw.replace(/^http/, 'ws')
-  })()
+  const apiBase = API_BASE_URL.replace(/^http/, 'ws')
 
   const promise = new Promise<import('@/src/types').LessonJSON>((resolve, reject) => {
     rejectRef = reject

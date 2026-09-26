@@ -98,6 +98,15 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <FlaskConical color={color} size={TAB_BAR_ICON_SIZE} strokeWidth={2} />,
         }}
       />
+      {/* Hidden from tab bar; open via router.push('/(tabs)/musicxml-render-test') or /musicxml-render-test on web. */}
+      <Tabs.Screen
+        name="musicxml-render-test"
+        options={{
+          title: 'MusicXML Test',
+          href: null,
+          tabBarIcon: ({ color }) => <Music color={color} size={TAB_BAR_ICON_SIZE} strokeWidth={2} />,
+        }}
+      />
     </Tabs>
   )
 }

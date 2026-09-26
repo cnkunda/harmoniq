@@ -46,7 +46,7 @@ async def _redis_listener(
         try:
             await pubsub.unsubscribe(f"job:{job_id}:progress")
         except Exception:
-            pass
+            logger.debug("pubsub unsubscribe failed job_id=%s", job_id, exc_info=True)
 
 
 async def _poll_fallback(
@@ -142,7 +142,7 @@ async def ws_analyze_status(websocket: WebSocket, job_id: str):
                 await websocket.close()
                 return
     except Exception:
-        pass
+        logger.warning("WS initial status send failed job_id=%s", job_id, exc_info=True)
 
     try:
         import redis.asyncio as aioredis
@@ -169,10 +169,10 @@ async def ws_analyze_status(websocket: WebSocket, job_id: str):
         try:
             await websocket.close()
         except Exception:
-            pass
+            logger.debug("websocket close failed job_id=%s", job_id, exc_info=True)
         if redis_ok:
             try:
                 await pubsub.unsubscribe(f"job:{job_id}:progress")
                 await r.close()
             except Exception:
-                pass
+                logger.debug("pubsub cleanup failed job_id=%s", job_id, exc_info=True)

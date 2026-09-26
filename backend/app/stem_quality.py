@@ -9,6 +9,7 @@ Thresholds aligned with scripts/smoke_stems.py (smoke tests, not model tuning).
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -21,6 +22,8 @@ except ImportError:
     librosa = None  # pragma: no cover
 
 from app.pipeline_proof import TARGET_SR
+
+logger = logging.getLogger("harmoniq.stem_quality")
 
 # --- Floors (scripts/smoke_stems.py) -------------------------------------------------
 MIN_STEM_RMS = 5e-5
@@ -274,7 +277,7 @@ def classify_stems_for_lesson(mix_wav: Path, stem_paths: dict[str, Path]) -> Ste
             if norm_g > 1e-8 and norm_m > 1e-8:
                 spectral_overlap = float(np.clip(np.dot(fg, fm) / (norm_g * norm_m), 0.0, 1.0))
         except Exception:
-            pass  # Fall back to default 1.0 if chroma computation fails
+            logger.debug("spectral overlap chroma computation failed", exc_info=True)  # Fall back to default 1.0
 
     flags = collect_stem_quality_flags(r_m, r_g, r_p, corr)
 

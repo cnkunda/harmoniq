@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { IN_TUNE_CENTS } from '@/src/constants/tuner'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
 
 const DEFAULT_NOISE_FLOOR = 0.012
-const IN_TUNE_CENTS = 12
 
 export type FretboardTunerState = {
   active: boolean

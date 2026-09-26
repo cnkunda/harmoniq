@@ -11,6 +11,7 @@ import { noiseGateThresholdFromAmbientSamples } from '@/src/audio/noiseGate'
 import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
 import colors from '@/src/constants/colors'
 import { SESSION_PLAYBACK_CARD_CLASS } from '@/src/constants/sessionPlaybackCard'
+import { IN_TUNE_CENTS } from '@/src/constants/tuner'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
@@ -21,7 +22,6 @@ import {
 } from '@/src/stores/sessionPrefsStore'
 
 const E2_TARGET_MIDI = 40
-const IN_TUNE_CENTS = 15
 const CALIBRATION_MS = 3000
 const TUNER_RING_R = 82
 const TUNER_RING_STROKE = 7

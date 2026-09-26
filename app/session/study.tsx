@@ -20,6 +20,7 @@ import { TheoryCard } from '@/components/TheoryCard'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
 import { fetchTheoryAnnotation } from '@/src/api/analyze'
+import { API_BASE_URL } from '@/src/config'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
 import { getAppPref } from '@/src/db/client'
@@ -267,7 +268,7 @@ function StudyScreenInner() {
       setOrientError(null)
 
       try {
-        const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/session/orient-clip`, {
+        const response = await fetch(`${API_BASE_URL}/session/orient-clip`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -664,7 +665,7 @@ function StudyScreenInner() {
                       }`}
                     onPress={() => {
                       setStemRoutingOverride(stemName)
-                      console.log('Stem routing override:', stemName)
+                      console.log('[Study] stem routing override:', stemName)
                     }}
                   >
                     <Text
