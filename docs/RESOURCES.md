@@ -34,7 +34,3 @@ This document lists key external resources used in the Harmoniq platform.
 - **GitHub**: https://github.com/jayg996/BTC-ISMIR19
 - **Description**: Bidirectional Transformer model for automatic chord recognition, presented at ISMIR 2019. Uses pseudo-labeling and knowledge distillation to improve chord recognition accuracy over traditional CNN-LSTM approaches.
 - **Utilization**: Candidate model for chord recognition benchmarking against Harmoniq's CRNN (Commit 98 series). The BTC architecture with pseudo-labeling may offer improved accuracy on extended chord types (7ths, 9ths, altered dominants).
-
-
-
-

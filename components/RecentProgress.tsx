@@ -67,6 +67,7 @@ export function RecentProgress({
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
 
+  // Sessions with accuracy scores for the chart
   const points = useMemo(() => {
     const chronological = [...sessions].slice(0, 3).reverse()
     return chronological
@@ -74,6 +75,7 @@ export function RecentProgress({
       .filter((v): v is number => v != null && Number.isFinite(v))
   }, [sessions])
 
+  // Total session count for progress messaging (includes plan completions without accuracy)
   const totalSessions = sessions.length
 
   const polyline = useMemo(() => {
@@ -122,6 +124,10 @@ export function RecentProgress({
 
   const showChart = points.length >= 2
 
+  const completedCountMessage = totalSessions > 0
+    ? `You've completed ${totalSessions} session${totalSessions === 1 ? '' : 's'}.`
+    : null
+
   return (
     <View className="mb-2">
       <Text className="mb-2 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">
@@ -148,7 +154,16 @@ export function RecentProgress({
             ))}
           </View>
         </Animated.View>
-      ) : null}
+      ) : (
+        <View>
+          {completedCountMessage ? (
+            <Text className="font-sans text-sm text-muted-brown mb-1">{completedCountMessage}</Text>
+          ) : null}
+          <Text className="font-sans text-sm text-muted-brown">
+            Finish at least two sessions with review scores to see your accuracy trend here.
+          </Text>
+        </View>
+      )}
 
       {totalSessions > 0 ? (
         <View className="gap-2">

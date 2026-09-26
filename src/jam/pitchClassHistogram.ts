@@ -87,7 +87,8 @@ export function getBestScales(bins: ArrayLike<number>, count: number = 3): BestS
   const total = sumBins(bins)
   if (total <= 0) return []
   const observedPCs = observedPCsFromBins(bins)
-  if (observedPCs.length === 0) return []
+  // A scale match needs at least two distinct pitch classes — a single note matches too many scales to be meaningful.
+  if (observedPCs.length < 2) return []
 
   const tryRoot = (root: number): BestScaleMatch[] => {
     const results = matchScaleToPitchClasses(observedPCs, root)

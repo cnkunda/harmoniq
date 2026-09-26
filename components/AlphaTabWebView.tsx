@@ -94,6 +94,9 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
     } | null>(null)
     // Optimistically track playback state for playPause toggle
     const isPlayingRef = useRef(false)
+    /** Drift correction: rolling average of recent sync deltas (0.7 old + 0.3 new). */
+    const driftCorrectedMsRef = useRef<number | null>(null)
+    const lastDriftSampleTimeRef = useRef<number>(0)
 
     const [reloadKey, setReloadKey] = useState(0)
     const [harnessUri, setHarnessUri] = useState<string | null>(null)
@@ -119,13 +122,55 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
           postInbound({ type: 'setPlaybackRate', playbackRate: Number.isFinite(playbackRate) ? playbackRate : 1 })
         },
         seekTo: (positionMs: number) => {
+          // Reset drift correction on explicit seek
+          driftCorrectedMsRef.current = null
+          lastDriftSampleTimeRef.current = Date.now()
           postInbound({ type: 'seekTo', positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs) : 0 })
         },
         syncPlaybackTimelineMs: (positionMs: number) => {
-          postInbound({
-            type: 'syncTimelineMs',
-            positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs + 50) : 0,
-          })
+          const now = Date.now()
+          const timeSinceLastDriftSample = now - lastDriftSampleTimeRef.current
+          
+          // Drift correction: apply exponential smoothing every 500ms to prevent
+          // cursor lag accumulation on long songs. Query harness for position feedback.
+          if (timeSinceLastDriftSample >= 500) {
+            lastDriftSampleTimeRef.current = now
+            // Capture current position for drift calculation
+            const resolver = (harnessMs: number | null) => {
+              if (typeof harnessMs === 'number' && Number.isFinite(harnessMs)) {
+                const smoothedMs = driftCorrectedMsRef.current !== null
+                  ? 0.7 * driftCorrectedMsRef.current + 0.3 * positionMs
+                  : positionMs
+                driftCorrectedMsRef.current = smoothedMs
+                postInbound({
+                  type: 'syncTimelineMs',
+                  positionMs: Number.isFinite(smoothedMs) ? Math.max(0, smoothedMs + 50) : 0,
+                })
+              } else {
+                postInbound({
+                  type: 'syncTimelineMs',
+                  positionMs: Number.isFinite(positionMs) ? Math.max(0, positionMs + 50) : 0,
+                })
+                driftCorrectedMsRef.current = positionMs
+              }
+            }
+            getPositionResolverRef.current = resolver
+            postInbound({ type: 'getPosition' })
+            // Timeout if harness doesn't respond
+            setTimeout(() => {
+              if (getPositionResolverRef.current === resolver) {
+                getPositionResolverRef.current = null
+                driftCorrectedMsRef.current = positionMs
+              }
+            }, 100)
+          } else {
+            // Use smoothed position if available, otherwise use raw sync
+            const targetMs = driftCorrectedMsRef.current !== null ? driftCorrectedMsRef.current : positionMs
+            postInbound({
+              type: 'syncTimelineMs',
+              positionMs: Number.isFinite(targetMs) ? Math.max(0, targetMs + 50) : 0,
+            })
+          }
         },
       setStemPlaybackActive: (active: boolean) => {
         isPlayingRef.current = Boolean(active)

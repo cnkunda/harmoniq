@@ -411,6 +411,7 @@ Full 6-phase process in `docs/CODER.md` (read before implementing a commit):
 | `docs/E2E_DEMO.md` | End-to-end walkthrough with checkpoints |
 | `docs/MIGRATIONS.md` | Database migration strategy and version history |
 | `README.md` | Product spec, backend pipeline, DB schema, 5-step loop |
+| `.github/copilot-instructions.md` | Legacy copilot context (partially stale) |
 | `src/config.ts` | API URL resolution and feature flags |
 | `src/constants/sessionFlow.ts` | Session step ordering and entry logic |
 | `src/constants/sessionPhases.ts` | 4-phase pedagogical model |
@@ -531,3 +532,4 @@ Both datasets derive chord labels from MIDI note data rather than explicit chord
 - **MT3 / JAX**: MT3 requires JAX for GPU inference. The CRNN TFLite fallback activates automatically when JAX/TPU is unavailable. basic-pitch / TensorFlow is no longer a primary pipeline dependency (was the solo inference engine before MT3).
 - **CSS grid**: Not available in React Native. Use `flex-row flex-wrap` instead.
 - **WSL networking**: Use LAN IP (`192.168.x.x`) in both `EXPO_PUBLIC_API_URL` and `HARMONIQ_CORS_ORIGINS` so physical devices can reach the backend.
+- **Starter song**: "Gravity" by John Mayer (G major pentatonic) — the default if no song is added.

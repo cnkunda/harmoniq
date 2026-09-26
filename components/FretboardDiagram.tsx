@@ -91,8 +91,11 @@ type FretboardDiagramProps = {
   orientAnnotation?: string | null
   orientIsPlaying?: boolean
   onToggleOrientPlayback?: () => void
+  /** Warm-up / curriculum: highlight fixed cells (amber vs success rings). Finger 1-4 optional for color coding. */
   fretGuideCells?: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary'; finger?: 1 | 2 | 3 | 4 }> | null
+  /** Active sequence index for animated warmup exercise highlighting */
   activeGuideIndex?: number | null
+  /** Chord shape cells to highlight on the fretboard (for intelligent display). */
   chordCells?: ReadonlyArray<{ string: number; fret: number; interval?: number }> | null
   fretGuideFooterHint?: string | null
   pitchLadderSlot?: ReactNode
@@ -107,6 +110,8 @@ type FretboardDiagramProps = {
   onHarmonicContextModeChange?: (mode: 'key_context' | 'chord_only' | 'off') => void
   /** Commit B9: Voicing label text (e.g., 'E-shape', 'A-shape barre VII'). */
   voicingLabel?: string
+  /** Real-time playback cursor position (string index 0-5). Shows subtle highlight during playback. */
+  playbackCursorStringIndex?: number | null
 }
 
 const FINGER_COLORS: Record<number, { fill: string; border: string }> = {
