@@ -49,8 +49,8 @@ def score_sha256_from_gp5_base64(gp5_base64: str) -> str:
 
 
 def score_sha256_from_musicxml(musicxml: str) -> str:
-    """Compute SHA256 of MusicXML content for cache key."""
-    return hashlib.sha256(musicxml.encode("utf-8")).hexdigest()
+    """Commit 107: MusicXML is the primary prerender input — hash the raw XML."""
+    return hashlib.sha256(musicxml.strip().encode("utf-8")).hexdigest()
 
 
 def prerender_cache_key(score_sha256: str) -> str:

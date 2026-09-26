@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from app.schemas import JobStatus, CoachHydrationStatus, CoachHydrationSection
+from app.schemas import JobStatus
 
 
 # ---------------------------------------------------------------------------
@@ -21,67 +21,68 @@ from app.schemas import JobStatus, CoachHydrationStatus, CoachHydrationSection
 # ---------------------------------------------------------------------------
 
 class TestJobStoreInMemory:
-    """Test job_store operations using the in-memory fallback (no Redis)."""
+    """Test jobs-module operations using the in-memory job dict (no Redis)."""
 
     def test_set_job_processing_progress(self):
         """Verify _set_job_processing_progress updates progress correctly."""
         from app import jobs as jobs_mod
 
-        # Ensure in-memory mode
-        with patch.object(jobs_mod, "_use_redis", return_value=False):
-            jobs_mod._jobs_memory.clear()
-
-            job_id = "test-progress-1"
-            jobs_mod._set_job(
-                job_id,
-                JobStatus(status="processing", progress=0.0),
-            )
-
-            jobs_mod._set_job_processing_progress(job_id, 0.5, "Halfway", "stems_separating")
-
-            job = jobs_mod._get_job(job_id)
+        job_id = "test-progress-1"
+        jobs_mod.jobs[job_id] = JobStatus(
+            status="processing",
+            progress=0.0,
+            stage_label="Starting",
+            analysis_stage="initializing",
+        )
+        try:
+            jobs_mod._set_job_processing_progress(job_id, 0.5, "Halfway")
+            job = jobs_mod.jobs.get(job_id)
             assert job is not None
             assert job.progress == 0.5
             assert job.stage_label == "Halfway"
 
+            jobs_mod._set_job_analysis_stage(job_id, "stems_separating", 0.6, "Separating stems")
+            job = jobs_mod.jobs.get(job_id)
+            assert job is not None
+            assert job.analysis_stage == "stems_separating"
+            assert job.progress == 0.6
+            assert job.stage_label == "Separating stems"
+        finally:
+            jobs_mod.jobs.pop(job_id, None)
+
     def test_enqueue_falls_back_to_thread(self):
-        """Verify enqueue_analyze_job falls back to thread when Redis is unavailable."""
+        """Verify enqueue_analyze_job dispatches without a live Celery broker."""
         from app import jobs as jobs_mod
 
-        with patch.object(jobs_mod, "_use_redis", return_value=False):
-            jobs_mod._jobs_memory.clear()
-
-            job_id = "test-enqueue-1"
+        job_id = "test-enqueue-1"
+        try:
             jobs_mod.enqueue_analyze_job(
                 job_id,
                 youtube_url="https://example.com",
                 upload_path=None,
             )
-
-            # Job should be in memory
-            job = jobs_mod._get_job(job_id)
+            job = jobs_mod.jobs.get(job_id)
             assert job is not None
             assert job.status == "processing"
+            assert job_id in jobs_mod.coach_hydration
+        finally:
+            jobs_mod.jobs.pop(job_id, None)
+            jobs_mod.coach_hydration.pop(job_id, None)
 
     def test_coach_hydration_in_memory(self):
-        """Verify coach hydration works in in-memory mode."""
+        """Verify coach hydration scaffolds pending sections in memory."""
         from app import jobs as jobs_mod
-        from app.schemas import CoachHydrationStatus
 
-        with patch.object(jobs_mod, "_use_redis", return_value=False):
-            jobs_mod._coach_memory.clear()
-
-            job_id = "test-coach-1"
-            status = CoachHydrationStatus(
-                status="complete",
-                sections=[CoachHydrationSection(index=0, coach_note="test", coach_explanation="test")],
-            )
-            jobs_mod._set_coach(job_id, status)
-
-            result = jobs_mod._get_coach(job_id)
-            assert result is not None
-            assert result.status == "complete"
-            assert len(result.sections) == 1
+        job_id = "test-coach-1"
+        try:
+            jobs_mod._set_coach_pending(job_id, section_count=1)
+            status = jobs_mod.get_coach_hydration(job_id)
+            assert status is not None
+            assert status.status == "pending"
+            assert len(status.sections) == 1
+            assert status.sections[0].index == 0
+        finally:
+            jobs_mod.coach_hydration.pop(job_id, None)
 
 
 # ---------------------------------------------------------------------------

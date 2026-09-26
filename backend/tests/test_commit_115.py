@@ -426,10 +426,10 @@ class TestDurationChecks:
         from app.ingest import MIN_ANALYZE_DURATION_SECONDS
         assert MIN_ANALYZE_DURATION_SECONDS == 30.0
 
-    def test_max_300s_duration_preserved(self):
-        """Verify the 300-second maximum duration check is still in jobs."""
+    def test_max_600s_duration_preserved(self):
+        """Verify the 600-second maximum duration check is still in jobs."""
         from app.jobs import MAX_ANALYZE_DURATION_SECONDS
-        assert MAX_ANALYZE_DURATION_SECONDS == 300
+        assert MAX_ANALYZE_DURATION_SECONDS == 600
 
 
 # ---- 8. Chunk offset metadata integration test -----------------------------

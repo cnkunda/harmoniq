@@ -219,7 +219,7 @@ class TestChordDecoder:
 
     def test_build_active_note_grid(self, cmaj_events):
         """Active note grid at time 0 should contain C, E, G pitch classes."""
-        grid = _build_active_note_grid(cmaj_events, audio_end=2.0)
+        grid, _bass_notes = _build_active_note_grid(cmaj_events, audio_end=2.0)
         assert 0.0 in grid
         pcs_at_zero = set(grid[0.0].keys())
         assert 0 in pcs_at_zero  # C
@@ -254,7 +254,7 @@ class TestChordDecoderInstrumentFiltering:
             Mt3Event(time=1.0, pitch=67, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
             Mt3Event(time=1.0, pitch=36, velocity=0, program=128, is_onset=False, is_offset=True, confidence=0.9),
         ]
-        grid = _build_active_note_grid(events, audio_end=1.5)
+        grid, _bass_notes = _build_active_note_grid(events, audio_end=1.5)
         pcs_at_zero = set(grid[0.0].keys())
         # Percussion pitch 36 % 12 = 0 (C), but it should be excluded
         # Only guitar events for C(0), E(4), G(7) should remain
@@ -283,7 +283,7 @@ class TestChordDecoderInstrumentFiltering:
             Mt3Event(time=1.0, pitch=64, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
             Mt3Event(time=1.0, pitch=67, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
         ]
-        grid = _build_active_note_grid(events, audio_end=1.5, prefer_guitar=True)
+        grid, _bass_notes = _build_active_note_grid(events, audio_end=1.5, prefer_guitar=True)
         # At time 0, pc=0 should have only the guitar event (pitch 60), not piano (pitch 72)
         events_at_pc0 = grid[0.0].get(0, [])
         programs_at_pc0 = {e.program for e in events_at_pc0}
@@ -302,7 +302,7 @@ class TestChordDecoderInstrumentFiltering:
             Mt3Event(time=1.0, pitch=64, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
             Mt3Event(time=1.0, pitch=67, velocity=0, program=24, is_onset=False, is_offset=True, confidence=0.9),
         ]
-        grid = _build_active_note_grid(events, audio_end=1.5, prefer_guitar=False)
+        grid, _bass_notes = _build_active_note_grid(events, audio_end=1.5, prefer_guitar=False)
         events_at_pc0 = grid[0.0].get(0, [])
         programs_at_pc0 = {e.program for e in events_at_pc0}
         assert 24 in programs_at_pc0

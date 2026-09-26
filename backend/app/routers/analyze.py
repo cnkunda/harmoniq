@@ -197,17 +197,12 @@ def _run_transcription_prepare_pipeline(
         except ValueError:
             return str(p.resolve().as_posix())
     audio_chunk_paths = [_rel_or_abs(p) for p in prepared.chunk_paths]
-    # Persist offsets for observability; also log per job
-    audio_chunk_offsets = [dict(o) for o in (prepared.chunk_offsets or ())]
-    if audio_chunk_offsets:
-        logger.info("chunk_offsets job_id=%s offsets=%s", job_id, audio_chunk_offsets)
     return TranscriptionPrepareResponse(
         job_id=job_id,
         stems=stems,
         beat_grid=BeatGrid.model_validate(beat_grid_payload),
         stem_routing=stem_routing,
         audio_chunk_paths=audio_chunk_paths,
-        audio_chunk_offsets=audio_chunk_offsets,
         invalidated_artifacts=invalidated,
     )
 

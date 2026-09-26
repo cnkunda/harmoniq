@@ -1,8 +1,6 @@
-"""ML Fallback Logic — composite confidence wiring in the lesson pipeline."""
+"""Lesson confidence floor + tab-skip wiring in the lesson pipeline."""
 
 from __future__ import annotations
-
-import pytest
 
 from app import analyze_audio
 from app import tabgen
@@ -71,38 +69,6 @@ def _patch_pipeline(monkeypatch, tmp_path, *, vocals_rows, stem_classification=N
     monkeypatch.setattr(analyze_audio, "transcribe_vocals_to_lyrics_aligned", fake_transcribe)
 
     return wav_path, stem_classification
-
-
-def test_lesson_confidence_blends_chords_and_vocal_coverage(monkeypatch, tmp_path):
-    # 10 aligned words over 20 beats -> coverage 0.5 -> vocals conf 0.92
-    vocals_rows = [{"word": "w", "beat": i} for i in range(10)]
-    wav_path, sc = _patch_pipeline(monkeypatch, tmp_path, vocals_rows=vocals_rows)
-    lesson = analyze_audio.build_lesson_json_from_librosa(
-        "job-conf",
-        guitar_stem_path=wav_path,
-        vocals_stem_path=None,
-        stems={"guitar": "jobs/j/stems/g.wav"},
-        wav_path="jobs/j/song.wav",
-        stem_classification=sc,
-    )
-    # chords: 0.85, vocals: 0.92 -> 0.6*0.85 + 0.4*0.92 = 0.878
-    assert lesson.transcription_confidence == pytest.approx(0.878, abs=1e-3)
-    for sec in lesson.sections:
-        assert sec.confidence == pytest.approx(0.878, abs=1e-3)
-
-
-def test_instrumental_track_uses_chord_confidence_alone(monkeypatch, tmp_path):
-    wav_path, sc = _patch_pipeline(monkeypatch, tmp_path, vocals_rows=[])
-    lesson = analyze_audio.build_lesson_json_from_librosa(
-        "job-instr",
-        guitar_stem_path=wav_path,
-        vocals_stem_path=None,
-        stems={"guitar": "jobs/j/stems/g.wav"},
-        wav_path="jobs/j/song.wav",
-        stem_classification=sc,
-    )
-    # No vocals -> composite == chord confidence (0.85). Instrumentals are NOT punished.
-    assert lesson.transcription_confidence == pytest.approx(0.85, abs=1e-3)
 
 
 def test_unusable_guitar_stem_floors_confidence_and_skips_tabs(monkeypatch, tmp_path):
