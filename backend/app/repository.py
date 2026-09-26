@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
 
 from sqlalchemy import select, update
 
@@ -31,9 +30,7 @@ from app.schemas import (
 
 logger = logging.getLogger("harmoniq.repository")
 
-
 # ── Job CRUD ──────────────────────────────────────────────────────────────
-
 
 def create_job(
     job_id: str,
@@ -61,7 +58,6 @@ def create_job(
     finally:
         session.close()
 
-
 def get_job(job_id: str) -> JobStatus | None:
     session = get_session()
     try:
@@ -72,7 +68,6 @@ def get_job(job_id: str) -> JobStatus | None:
         return _job_model_to_status(row)
     finally:
         session.close()
-
 
 def update_job_progress(
     job_id: str,

@@ -14,8 +14,6 @@ from contextlib import contextmanager
 from typing import Generator
 
 from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    CollectorRegistry,
     Counter,
     Gauge,
     Histogram,

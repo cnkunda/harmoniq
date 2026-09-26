@@ -25,7 +25,6 @@ from app.scoring_constants import (
     HIGH_CONFIDENCE_VOICED_RATIO,
     LOW_SIGNAL_RMS,
     LOW_SIGNAL_VOICED_RATIO,
-    MAX_ABS_NOTE_DELTA_SECONDS,
     MAX_BEND_ERROR_CENTS,
     MIN_VALID_RMS,
     MUSICAL_TOLERANCE_MODES,
@@ -34,12 +33,10 @@ from app.scoring_constants import (
     clamp01,
 )
 
-
 TARGET_SR = 22050
 logger = logging.getLogger("harmoniq.score")
 
 _ONSET_DEDUP_MIN_GAP_MS = 50
-
 
 def _deduplicate_onsets(onsets: np.ndarray, min_gap_ms: float = _ONSET_DEDUP_MIN_GAP_MS) -> np.ndarray:
     """Remove phantom duplicate onsets within min_gap_ms of each other.
@@ -62,7 +59,6 @@ def _deduplicate_onsets(onsets: np.ndarray, min_gap_ms: float = _ONSET_DEDUP_MIN
 
     mask = np.concatenate([[True], np.diff(sorted_onsets) >= min_gap_s])
     return sorted_onsets[mask]
-
 
 def _decode_recording(request: ScoreRequest) -> tuple[np.ndarray, int]:
     try:

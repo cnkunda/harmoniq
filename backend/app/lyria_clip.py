@@ -19,7 +19,6 @@ from app.ingest import get_data_dir
 logger = logging.getLogger("harmoniq.lyria_clip")
 logger.setLevel(logging.INFO)
 
-
 def generate_orient_clip(
     style_label: str | None,
     technique: str | None,
@@ -48,7 +47,6 @@ def generate_orient_clip(
     logger.info("Lyria clip returning contextual placeholder for job %s", job_id)
     return _generate_placeholder_clip(job_id, style_label, technique, key, bpm,
                                       reason="Gemini API integration not yet implemented")
-
 
 def _generate_placeholder_clip(
     job_id: str,
@@ -89,7 +87,6 @@ def _generate_placeholder_clip(
 
 def _create_silent_wav(path: Path, duration_seconds: float, sample_rate: int = 44100) -> None:
     """Create a minimal silent WAV file (placeholder audio)."""
-    import struct
     import wave
 
     num_samples = int(duration_seconds * sample_rate)

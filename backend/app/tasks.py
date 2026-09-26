@@ -15,7 +15,6 @@ from app.celery_app import app
 
 logger = logging.getLogger("harmoniq.tasks")
 
-
 def _publish_progress(job_id: str, status: str, **payload) -> None:
     """Publish job progress to Redis pub/sub for WebSocket relay."""
     try:
@@ -28,7 +27,6 @@ def _publish_progress(job_id: str, status: str, **payload) -> None:
         r.close()
     except Exception:
         logger.debug("Failed to publish progress for job_id=%s (non-fatal)", job_id)
-
 
 @app.task(bind=True, max_retries=3, default_retry_delay=60, acks_late=True)
 def analyze_job_task(
@@ -65,7 +63,6 @@ def analyze_job_task(
             reuse_cached_artifacts_into_job,
             save_cached_lesson_for_wav,
         )
-        from app.coach import hydrate_coach_copy_into_sections
         from app.demucs_engine import DemucsEngineError, build_stem_routing_hints
         from app.ingest import (
             AUDIO_TOO_SHORT_USER_MESSAGE,
@@ -74,7 +71,6 @@ def analyze_job_task(
             YouTubeUrlInvalidError,
             get_data_dir,
             get_job_dir,
-            resolve_lesson_titles,
         )
         from app.jobs import (
             ANALYSIS_FAILED_USER_MESSAGE,
@@ -99,10 +95,6 @@ def analyze_job_task(
             update_job_progress as _repo_progress,
         )
         from app.schemas import (
-            CoachFocusArea,
-            JobStatus,
-            LessonJSON,
-            LessonSectionStub,
             PlayerProfile,
             StemRoutingHints,
         )
@@ -279,7 +271,7 @@ def hydrate_coach_task(
     except Exception:
         logger.warning("init_db failed job_id=%s", job_id, exc_info=True)
     from app.jobs import _hydrate_coach_copy_job
-    from app.schemas import CoachFocusArea, PlayerProfile
+    from app.schemas import PlayerProfile
     pp = PlayerProfile(**player_profile) if player_profile else None
     fa = focus_area
     _hydrate_coach_copy_job(job_id, player_profile=pp, focus_area=fa)

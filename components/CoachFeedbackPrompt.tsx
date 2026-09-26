@@ -16,7 +16,7 @@ export interface CoachFeedbackPromptProps {
  * Feedback prompt for coach redundancy perception (commit 90).
  * Asks users whether coach feedback felt repetitive after each session.
  */
-export function CoachFeedbackPrompt({ focusArea, onFeedbackSubmitted, onDismissed }: CoachFeedbackPromptProps) {
+export function CoachFeedbackPrompt({ focusArea, onFeedbackSubmitted }: CoachFeedbackPromptProps) {
   const [submitted, setSubmitted] = useState(false)
 
   const handleFeedback = async (rating: CoachFeedbackRating) => {

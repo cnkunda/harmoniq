@@ -34,7 +34,6 @@ export function PhaseIndicator({ currentPhase: propPhase, showLabels = true }: P
       {SESSION_PHASES.map((phase, index) => {
         const isCurrent = index === currentIndex
         const isCompleted = index < currentIndex
-        const isPending = index > currentIndex
         
         const phaseLabel = phase.charAt(0).toUpperCase() + phase.slice(1)
         

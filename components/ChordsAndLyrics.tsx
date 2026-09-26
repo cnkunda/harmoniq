@@ -87,7 +87,7 @@ export function ChordsAndLyrics({
   progressionLabels,
   onProgressionTap,
 }: ChordsAndLyricsProps) {
-  const [isPlaying, setIsPlaying] = useState(false)
+  const [isPlaying] = useState(false)
   const [internalBar, setInternalBar] = useState(0)
   const [transpose, setTranspose] = useState(0)
   const [showShapes, setShowShapes] = useState(true)

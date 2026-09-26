@@ -82,7 +82,7 @@ function styleSimilarity(style1: string | null, style2: string | null): number {
     country: ['country', 'country rock'],
   }
   
-  for (const [base, variants] of Object.entries(styleGroups)) {
+  for (const [, variants] of Object.entries(styleGroups)) {
     if (variants.some(v => s1.includes(v)) && variants.some(v => s2.includes(v))) {
       return 0.6
     }

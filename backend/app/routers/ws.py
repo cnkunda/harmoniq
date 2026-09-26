@@ -10,7 +10,6 @@ import asyncio
 import json
 import logging
 import os
-from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -19,7 +18,6 @@ logger = logging.getLogger("harmoniq.api.ws")
 router = APIRouter(tags=["WebSocket"])
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-
 
 async def _redis_listener(
     websocket: WebSocket,
@@ -47,7 +45,6 @@ async def _redis_listener(
             await pubsub.unsubscribe(f"job:{job_id}:progress")
         except Exception:
             logger.debug("pubsub unsubscribe failed job_id=%s", job_id, exc_info=True)
-
 
 async def _poll_fallback(
     websocket: WebSocket,

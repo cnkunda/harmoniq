@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -71,7 +70,6 @@ _MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10]
 
 _transition_cache_path: Path | None = None
 _transition_matrix: np.ndarray | None = None
-
 
 def _default_transition_matrix() -> np.ndarray:
     """Uniform transition matrix (all transitions equally likely).

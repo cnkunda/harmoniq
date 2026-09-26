@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import logging
 import math
-import os
 import shutil
 import struct
 import subprocess
@@ -21,10 +20,8 @@ logger.setLevel(logging.INFO)
 
 BACKING_DURATION_SECS = 16
 
-
 class Mrt2BackingError(RuntimeError):
     """MRT2 generation failure."""
-
 
 @dataclass(frozen=True)
 class BundledBackingTrack:
@@ -32,7 +29,6 @@ class BundledBackingTrack:
     key_label: str
     bpm: int | None
     tags: tuple[str, ...]
-
 
 _BUNDLED_TRACKS: tuple[BundledBackingTrack, ...] = (
     BundledBackingTrack(
@@ -68,9 +64,7 @@ _BUNDLED_TRACKS: tuple[BundledBackingTrack, ...] = (
 )
 _WAV_CACHE: dict[str, tuple[bytes, int]] = {}
 
-
 # ---- MRT2 Backing Generator (singleton) ----
-
 
 class Mrt2BackingGenerator:
     """MRT2-based backing track generator. Singleton, lazy-loaded on first use."""
@@ -97,7 +91,6 @@ class Mrt2BackingGenerator:
             logger.warning("Mrt2BackingGenerator unavailable: %s", exc)
 
     def _try_load(self) -> Any:
-        import magenta_rt
         from magenta_rt import MagentaRT2Jax
 
         system = MagentaRT2Jax(size="mrt2_small", temperature=1.3, top_k=40, cfg_musiccoca=3.0)

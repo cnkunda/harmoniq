@@ -69,17 +69,6 @@ function getGreeting(name?: string | null): string {
   return trimmed ? `${base}, ${trimmed}` : base
 }
 
-function focusLabelFromNodes(nodes: readonly string[]): string {
-  if (!nodes.length) return 'Practice'
-  return (nodes[0] ?? 'practice').replace(/_/g, ' ')
-}
-
-function toTitleCase(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/\b([a-z])/g, (m) => m.toUpperCase())
-}
-
 function relativeDateLabel(input: unknown): string {
   const d =
     input instanceof Date
@@ -227,7 +216,6 @@ export default function HomeScreen() {
   const displayName = 'Nkunda' // TODO(auth): Replace with signed-in profile name.
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
-  const lesson = useLessonStore((s) => s.lesson)
   const [suggestion, setSuggestion] = useState<HomeSuggestion | null>(null)
   const [sessionsLog, setSessionsLog] = useState<SessionJournalRow[]>([])
   const [lessons, setLessons] = useState<LessonListRow[]>([])
@@ -243,7 +231,7 @@ export default function HomeScreen() {
   const [planStartBusy, setPlanStartBusy] = useState(false)
   const [demoBusy, setDemoBusy] = useState(false)
   const [spotifyBusy, setSpotifyBusy] = useState(false)
-  const [tasteSongHints, setTasteSongHints] = useState<string[]>([])
+  const [, setTasteSongHints] = useState<string[]>([])
   const [spotifyLinked, setSpotifyLinked] = useState(false)
 
   const skillNodes = useSkillStore((s) => s.nodes)
@@ -553,8 +541,6 @@ export default function HomeScreen() {
             <Text className="font-sans text-base text-muted-brown">Ready to play?</Text>
           </View>
 
-          {/* <Text className="mb-4 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">Your practice path</Text> */}
-
           <LinearGradient
             colors={['rgba(74, 55, 40, 0.98)', 'rgba(44, 24, 16, 0.99)']}
             start={{ x: 0, y: 0 }}
@@ -747,14 +733,6 @@ export default function HomeScreen() {
                     <Play color={colors.wood[900]} size={20} fill={colors.wood[900]} strokeWidth={0} />
                     <Text className="font-sans-medium text-base text-wood-900">Start Session</Text>
                   </AnimatedPressable>
-                  {/* <Pressable
-                    onPress={goAnalyze}
-                    className="self-stretch rounded-xl border border-wood-600/50 bg-cream-dark/15 px-4 py-3 sm:self-start"
-                    accessibilityRole="button"
-                    accessibilityLabel="Add a full song"
-                  >
-                    <Text className="text-center font-sans-medium text-cream">Add full song</Text>
-                  </Pressable> */}
                 </>
               ) : (
                 <>

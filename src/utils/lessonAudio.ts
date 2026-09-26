@@ -107,7 +107,6 @@ export function sectionSeekSeconds(lesson: LessonJSON, index: number): number {
   }
 
   const beats = lesson.beat_grid ?? []
-  const n = sections.length || 1
   if (beats.length > 0) {
     const bi = Math.min(Math.max(0, index), beats.length - 1)
     return Math.max(0, beats[bi] ?? 0)

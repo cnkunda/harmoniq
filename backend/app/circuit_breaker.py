@@ -7,7 +7,6 @@ protection to prevent cascading failures when upstream services are down.
 from __future__ import annotations
 
 import logging
-import os
 import time
 from enum import Enum
 from typing import Any, Callable
@@ -18,21 +17,17 @@ logger = logging.getLogger("harmoniq.circuit_breaker")
 # Circuit breaker states
 # ---------------------------------------------------------------------------
 
-
 class CircuitState(str, Enum):
     CLOSED = "closed"  # Normal operation
     OPEN = "open"  # Failing, reject calls
     HALF_OPEN = "half_open"  # Testing recovery
 
-
 class CircuitBreakerError(Exception):
     """Raised when the circuit is open and calls are being rejected."""
-
 
 # ---------------------------------------------------------------------------
 # Circuit breaker implementation
 # ---------------------------------------------------------------------------
-
 
 class CircuitBreaker:
     """Simple circuit breaker with configurable thresholds.

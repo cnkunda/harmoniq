@@ -12,7 +12,6 @@ export interface ChordChartPreviewProps {
 
 export function ChordChartPreview({
   chordEvents,
-  totalDuration,
   timeSignature,
   isPartial = false,
   style,

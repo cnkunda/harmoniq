@@ -82,10 +82,6 @@ function PlayScreenInner() {
   const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const section = lesson?.sections?.[sectionIndex] as Record<string, unknown> | undefined
 
-  const chordEvents = getLessonWideChordEvents(lesson)
-  const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
-  const barTimestamps = lesson?.bar_timestamps ?? null
-
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()
   const positionLabel =
     section && typeof section.primary_position === 'string'

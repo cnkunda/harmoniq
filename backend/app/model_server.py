@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 import os
 import time
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -31,7 +30,6 @@ app = FastAPI(
 
 _model = None
 _model_metadata: dict = {}
-
 
 def _load_model():
     """Load the TFLite chord model (lazy, singleton)."""
@@ -70,12 +68,10 @@ def _load_model():
         _model_metadata = {"mock": True, "model_path": model_path}
         return None, _model_metadata
 
-
 @app.on_event("startup")
 async def startup_load_model():
     """Load model on server startup."""
     _load_model()
-
 
 # ---------------------------------------------------------------------------
 # Request/Response schemas
@@ -129,7 +125,6 @@ async def infer_chords(req: ChordInferenceRequest) -> ChordInferenceResponse:
     Accepts flattened audio samples and returns per-frame chord probabilities.
     """
     from app.circuit_breaker import model_server_breaker
-    from app.metrics import pipeline_stage_duration_seconds
 
     if not model_server_breaker.allow_request():
         raise HTTPException(status_code=503, detail="Model server circuit breaker is OPEN")

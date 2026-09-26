@@ -54,7 +54,7 @@ function emptySession(baseBest: number): CurrentSessionState {
   }
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set) => ({
   currentSession: null,
 
   resetCurrentSession: () => set({ currentSession: null }),

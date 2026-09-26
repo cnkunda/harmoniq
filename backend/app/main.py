@@ -24,7 +24,6 @@ from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Path as FastPath, Query, Request, Response
-from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
@@ -111,7 +110,6 @@ async def lifespan(application: FastAPI):
 
     # Load existing jobs from database (survives restarts)
     try:
-        from app.repository import get_job as _repo_get_job
         from app.jobs import jobs, load_jobs_from_db
         loaded = load_jobs_from_db()
         if loaded > 0:
@@ -260,7 +258,6 @@ async def health() -> dict[str, str]:
 )
 async def metrics():
     from app.metrics import metrics_response
-    from app.circuit_breaker import get_all_breakers
 
     # Update Redis health gauge
     try:
@@ -935,7 +932,6 @@ from app.schemas import (
     JamSummaryBundle,
     JamSummaryRequest,
     JamSummaryResponse,
-    JamVocabularyPattern,
 )
 from app.coach import (
     JAM_SUMMARY_PERSONAS,

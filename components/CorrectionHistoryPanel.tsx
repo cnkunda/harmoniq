@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React from 'react'
 import { View, Text, FlatList } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import colors from '@/src/constants/colors'

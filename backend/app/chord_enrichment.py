@@ -18,11 +18,11 @@ import logging
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from app.chord_vocab import CHORD_INTERVALS, ROOT_NOTES
-from app.schemas import ChordEvent, ChordTimeline
+from app.chord_vocab import ROOT_NOTES
+from app.schemas import ChordEvent
 
 logger = logging.getLogger("harmoniq.chord_enrichment")
 logger.setLevel(logging.INFO)
@@ -45,7 +45,6 @@ _Anthropic: type | None = None
 
 # In-memory cache: SHA256(key + chord_timeline_json) → enriched timeline dict
 _cache: dict[str, dict[str, Any]] = {}
-
 
 # ---------------------------------------------------------------------------
 # Deterministic Roman numeral assignment

@@ -31,7 +31,6 @@ const S_MIGRATIONS = 'schema_migrations'
 
 type PrefRow = { key: string; value: string }
 type LessonCacheRow = { id: 'latest'; lesson: LessonJSON; savedAt: string }
-type MigrationRow = { version: number; applied_at: string }
 
 function idbAvailable(): boolean {
   return typeof indexedDB !== 'undefined'

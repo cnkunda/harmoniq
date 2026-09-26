@@ -25,7 +25,6 @@ export function SessionDesktopRail({ activeStep }: SessionDesktopRailProps) {
       {SESSION_STEPS.map((step, i) => {
         const isActive = step === activeStep
         const isPast = i < activeIndex
-        const isFuture = i > activeIndex
         return (
           <View key={step} className="flex-row gap-3">
             <View className="items-center">

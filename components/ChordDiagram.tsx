@@ -145,7 +145,6 @@ function buildDotsFromChordsDb(
 function buildDotsFromAlgorithmic(
   name: string,
   cfg: ReturnType<typeof getSizeConfig>,
-  rootPc: number,
 ): { dots: Dot[]; barres: BarreInfo[] } {
   const cells = chordToFretboardCells(name, 'compact', 'open')
   const dots: Dot[] = []
@@ -235,7 +234,7 @@ export function ChordDiagram({
       return { ...buildDotsFromChordsDb(pos, cfg, rootPc), baseFret: pos.baseFret }
     }
 
-    return { ...buildDotsFromAlgorithmic(name, cfg, rootPc), baseFret: 1 }
+    return { ...buildDotsFromAlgorithmic(name, cfg), baseFret: 1 }
   }, [name, positionIndex, cfg, rootPc])
 
   const displayName = formatChordDisplay(name)

@@ -86,10 +86,6 @@ function WarmupScreenInner() {
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
 
-  const chordEvents = getLessonWideChordEvents(lesson)
-  const soloNotesArr = lesson?.solo_notes?.notes ?? null
-  const barTimestamps = lesson?.bar_timestamps ?? null
-
   const slot = plan?.slots[idx]
   const wp = slot?.warmup_plan
   const exercises = wp?.exercises ?? []

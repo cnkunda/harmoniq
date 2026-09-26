@@ -51,15 +51,6 @@ import type { NoteEventMessage } from '@/types/tabMessage'
 import getLessonWideChordEvents from '@/src/utils/lessonChordTimeline'
 
 // Transcription types (matching backend schemas)
-interface BeatGrid {
-  bpm: number
-  pulse_bpm: number
-  beats: number[]
-  downbeats: number[]
-  time_signature: { numerator: number; denominator: number }
-  tick_value: number
-}
-
 interface ChordEvent {
   timestamp: number
   chord: string
@@ -232,32 +223,10 @@ function StudyScreenInner() {
   // Orient clip states (moved from separate orient.tsx screen)
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
   const [orientAnnotation, setOrientAnnotation] = useState<string | null>(null)
-  const [orientIsLoading, setOrientIsLoading] = useState(false)
+  const [, setOrientIsLoading] = useState(false)
   const [orientError, setOrientError] = useState<string | null>(null)
   const [orientIsPlaying, setOrientIsPlaying] = useState(false)
   const orientSoundRef = useRef<any>(null)
-  const orientSoundInstanceId = useRef(`study-orient-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`)
-
-  // Debug: log lesson-wide chord timeline when lesson metadata changes
-  useEffect(() => {
-    const events = getLessonWideChordEvents(lesson)
-    if (!events || events.length === 0) {
-      console.log('[ChordDebug] No chord timeline for lesson')
-      return
-    }
-
-    console.log('[ChordDebug] === Chord Timeline Metadata ===')
-    console.log('[ChordDebug] Section index (store):', lessonSectionIndex)
-    console.log('[ChordDebug] Total events:', events.length)
-    console.log('[ChordDebug] Unique chords:', new Set(events.filter((e) => e.chord !== 'N').map((e) => e.chord)).size)
-
-    // Log first 10 events
-    console.log('[ChordDebug] First 10 events:')
-    events.slice(0, 10).forEach((e) => {
-      console.log(`  ${e.timestamp.toFixed(2)}s: ${e.chord} (conf: ${typeof e.confidence === 'number' ? e.confidence.toFixed(3) : 'n/a'})`)
-    })
-    console.log('[ChordDebug] === End Chord Debug ===')
-  }, [lesson?.job_id, lesson?.sections])
 
   // Fetch orient clip when lesson changes
   useEffect(() => {
@@ -778,7 +747,7 @@ function StudyScreenInner() {
                 setFretPulseKey((k) => k + 1)
                 setNoteModalOpen(true)
               }}
-              onNoteTap={(noteIndex, note) => {
+              onNoteTap={(_noteIndex, note) => {
                 // Find the original solo note by matching MIDI pitch
                 const soloNotes = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? []
                 const matchIdx = soloNotes.findIndex((n) => n.pitch === note.midi)

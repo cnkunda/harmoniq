@@ -20,17 +20,23 @@ import time
 
 from app.analyze_audio import build_lesson_json_from_librosa
 from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
-from app.audio_processing import AudioPreparationError, prepare_audio_input
+from app.audio_processing import prepare_audio_input
 from app.cache import (invalidate_cache_for_wav, load_cached_lesson_for_wav,
                        reuse_cached_artifacts_into_job,
                        save_cached_lesson_for_wav)
 from app.chord_enrichment import enrich_chord_timeline
 from app.coach import hydrate_coach_copy_into_sections
 from app.demucs_engine import DemucsEngineError, build_stem_routing_hints
-from app.ingest import (AUDIO_TOO_SHORT_USER_MESSAGE, AudioTooShortError,
-                        IngestError, SourceMetadata, YouTubeUrlInvalidError,
-                        get_data_dir, get_job_dir, resolve_lesson_titles,
-                        wav_file_duration_seconds)
+from app.ingest import (
+    AUDIO_TOO_SHORT_USER_MESSAGE,
+    AudioTooShortError,
+    IngestError,
+    SourceMetadata,
+    YouTubeUrlInvalidError,
+    get_data_dir,
+    get_job_dir,
+    resolve_lesson_titles,
+)
 from app.schemas import (BeatGrid, BeatGridRecomputeResponse,
                          ChordEnrichmentStatus, CoachFocusArea,
                          CoachHydrationSection, CoachHydrationStatus,
@@ -42,15 +48,8 @@ from app.stem_quality import classify_stems_for_lesson
 try:
     from app.repository import (
         complete_job as _repo_complete_job,
-        create_job as _repo_create_job,
         fail_job as _repo_fail_job,
-        get_job as _repo_get_job,
-        get_chord_enrichment_status as _repo_get_chord_enrichment,
-        get_coach_hydration_status as _repo_get_coach_hydration,
-        get_recompute_job_status as _repo_get_recompute,
         update_job_progress as _repo_update_progress,
-        upsert_chord_enrichment as _repo_upsert_chord_enrichment,
-        upsert_coach_hydration as _repo_upsert_coach_hydration,
         upsert_recompute_job as _repo_upsert_recompute,
     )
     _HAS_DB = True
@@ -72,7 +71,6 @@ ANALYZE_ERROR_ANALYSIS_FAILED = "analysis_failed"
 jobs: dict[str, JobStatus] = {}
 coach_hydration: dict[str, CoachHydrationStatus] = {}
 chord_enrichment: dict[str, ChordEnrichmentStatus] = {}
-
 
 # ---- Commit 110: Disk persistence for completed/failed jobs ----
 
@@ -1080,7 +1078,6 @@ def _process_beat_grid_recompute(
 
         # Persist recompute artifacts to disk so they survive server restarts
         try:
-            from pathlib import Path as _Path
             job_dir = get_job_dir(job_id)
             (job_dir / "BeatGrid.json").write_text(
                 beat_grid.model_dump_json(indent=2), encoding="utf-8"

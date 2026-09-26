@@ -5,12 +5,9 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import time
 import wave
 from pathlib import Path
 from typing import Sequence
-
-import soundfile as sf
 
 from app.audio_mix import wav_rms as _wav_rms
 from app.pipeline_proof import (
@@ -26,22 +23,17 @@ STEM_KEYS: tuple[str, ...] = ("guitar", "bass", "drums", "vocals", "piano", "oth
 logger = logging.getLogger("harmoniq.demucs_engine")
 logger.setLevel(logging.INFO)
 
-
 class DemucsEngineError(RuntimeError):
     """Raised when Demucs fails or required stems are missing."""
-
 
 def _backend_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
-
 def _rel_to_backend(path: Path) -> str:
     return path.resolve().relative_to(_backend_root().resolve()).as_posix()
 
-
 def _should_skip_demucs() -> bool:
     return os.getenv("HARMONIQ_SKIP_DEMUCS", "").strip() == "1" or bool(os.getenv("PYTEST_CURRENT_TEST"))
-
 
 def _find_stem_file(stems_track_dir: Path, stem_name: str) -> Path:
     matches = list(stems_track_dir.glob(f"**/{stem_name}.wav"))
@@ -49,7 +41,6 @@ def _find_stem_file(stems_track_dir: Path, stem_name: str) -> Path:
         raise DemucsEngineError(f"Missing stem {stem_name}.wav in Demucs output.")
     matches.sort(key=lambda p: len(p.parts))
     return matches[0]
-
 
 def _write_placeholder_stems(song_wav_path: Path, stems_dir: Path) -> dict[str, str]:
     stems_dir.mkdir(parents=True, exist_ok=True)
@@ -59,7 +50,6 @@ def _write_placeholder_stems(song_wav_path: Path, stems_dir: Path) -> dict[str, 
         shutil.copyfile(song_wav_path, out)
         mapping[stem] = _rel_to_backend(out)
     return mapping
-
 
 def _is_readable_nonempty_wav(path: Path) -> bool:
     """Return True if `path` is a non-empty readable WAV file."""
@@ -71,7 +61,6 @@ def _is_readable_nonempty_wav(path: Path) -> bool:
             return True
     except (wave.Error, OSError):
         return False
-
 
 def _separate_chunked_demucs(
     chunk_paths: Sequence[Path],

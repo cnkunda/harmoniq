@@ -5,9 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { WoodGradient } from '@/components/WoodGradient'
 import {
-  ONBOARDING_STEP_WITHOUT_QUIZ,
   ONBOARDING_WITHOUT_QUIZ_TOTAL,
-  ONBOARDING_WITH_QUIZ_TOTAL,
 } from '@/src/constants/onboardingSteps'
 
 import { OnboardingProgress } from './OnboardingProgress'

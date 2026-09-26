@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
 export type LyricWord = {
   word: string
@@ -22,7 +22,6 @@ function activeIndexForTime(words: LyricWord[], t: number): number {
 
 export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProps) {
   const activeIndex = useMemo(() => activeIndexForTime(words, playbackSec), [words, playbackSec])
-  const scrollViewRef = useRef<ScrollView>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [wordLayouts, setWordLayouts] = useState<{ [key: number]: { x: number; width: number } }>({})
 

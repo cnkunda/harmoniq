@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Modal, View, Text } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import { ChordDiagram } from '@/components/ChordDiagram'
 import {
   CHOICE_CHIP_BASE,
   CHOICE_CHIP_OFF,
@@ -11,8 +10,6 @@ import {
   CHOICE_LABEL_SANS_ON,
   SECTION_EYEBROW_CLASS,
 } from '@/src/constants/uiTokens'
-import { formatChordDisplay } from '@/src/music/chordVoicing'
-import { CHROMATIC_NOTE_NAMES } from '@/src/music/noteNames'
 import { allCellsForMidi } from '@/src/music/fretboardCell'
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -42,7 +39,6 @@ export function NoteCorrectionPanel({
   noteIndex,
   originalPitch,
   originalDuration,
-  originalStartTime,
   currentString,
   currentFret,
   onSelect,

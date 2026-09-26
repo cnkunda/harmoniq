@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Text, View } from 'react-native'
+import { View } from 'react-native'
 
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'

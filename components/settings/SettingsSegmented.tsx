@@ -1,8 +1,6 @@
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { Text, View } from 'react-native'
 
-import colors from '@/src/constants/colors'
-
 interface SettingsSegmentedProps {
   label: string
   description?: string

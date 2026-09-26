@@ -69,8 +69,6 @@ export function BeatGridEditorPanel({
   const [expanded, setExpanded] = useState(false)
 
   const {
-    history,
-    currentIndex,
     isRecomputing,
     recomputeResult,
     pushOverride,

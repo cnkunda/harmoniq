@@ -21,7 +21,6 @@ import hashlib
 import logging
 import os
 import shutil
-import tempfile
 import time
 import wave
 from pathlib import Path
@@ -44,22 +43,18 @@ STEM_KEYS: tuple[str, ...] = ("guitar", "bass", "drums", "vocals", "piano", "oth
 # Maximum cache size in bytes (default: 5GB)
 MAX_STEM_CACHE_BYTES = 5 * 1024 * 1024 * 1024
 
-
 class SeparationError(RuntimeError):
     """Raised when demucs separation fails or outputs are missing/unusable."""
-
 
 def _backend_root() -> Path:
     # backend/app/separate.py -> backend/
     return Path(__file__).resolve().parents[1]
-
 
 def _rel_to_backend_root(path: Path) -> str:
     """Return `data/...`-style paths (forward slashes) for JSON payloads."""
     p = path.resolve()
     rel = p.relative_to(_backend_root().resolve())
     return rel.as_posix()
-
 
 def _should_skip_demucs() -> bool:
     # Explicit override for devs / CI.
@@ -75,7 +70,6 @@ def _should_skip_demucs() -> bool:
         return True
 
     return False
-
 
 def _get_demucs_model() -> str:
     """Return faster model for dev, full model for production.

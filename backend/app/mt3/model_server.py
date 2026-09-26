@@ -22,7 +22,6 @@ import os as _os
 _os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 _os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
-import functools
 import logging
 import time
 from pathlib import Path
@@ -36,7 +35,6 @@ logger = logging.getLogger("harmoniq.mt3.model_server")
 _MODEL_CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "models" / "mt3"
 _MT3_SAMPLE_RATE = 16000
 _PERCUSSION_PROGRAM = 128
-
 
 class Mt3ModelServer:
     """Singleton MT3 inference server.

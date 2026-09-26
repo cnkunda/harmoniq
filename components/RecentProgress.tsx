@@ -9,7 +9,6 @@ import { toast } from '@/components/ToastConfig'
 import colors from '@/src/constants/colors'
 import { getLessonByJobId } from '@/src/db/client'
 import type { PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
-import { summaryFromPlanCompletionRow } from '@/src/home/planCompletionSummary'
 import { sessionOverallAccuracy } from '@/src/home/sessionAccuracy'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
@@ -58,7 +57,6 @@ function sessionCardSubtitle(s: SessionJournalRow): string {
 
 export function RecentProgress({
   sessions,
-  lastPlanCompletion,
 }: {
   sessions: readonly SessionJournalRow[]
   lastPlanCompletion?: PracticePlanCompletionRow | null
@@ -93,14 +91,6 @@ export function RecentProgress({
     })
     return coords.join(' ')
   }, [points])
-
-  const planNote = (() => {
-    if (!lastPlanCompletion) return null
-    const { stepCount, firstTitle } = summaryFromPlanCompletionRow(lastPlanCompletion)
-    if (stepCount <= 0) return null
-    const head = firstTitle ? `${firstTitle} · ` : ''
-    return `${head}${stepCount}-section plan finished`
-  })()
 
   const openSession = useCallback(
     async (s: SessionJournalRow) => {

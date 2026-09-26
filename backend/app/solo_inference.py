@@ -17,13 +17,12 @@ from __future__ import annotations
 import bisect
 import logging
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.schemas import BeatGrid, SoloNote, SoloNotes
 
 logger = logging.getLogger("harmoniq.inference.solo")
-
 
 @dataclass
 class ActiveNote:
@@ -32,7 +31,6 @@ class ActiveNote:
     pitch: int
     velocity: float
     end_time: float
-
 
 class TieRegistry:
     """Tracks active notes across segment boundaries and resolves ties.
@@ -209,7 +207,6 @@ def _try_inference(audio_path: Path, model_path: Path | None, beat_grid: BeatGri
 def infer_solo(melodic_stem_path: Path, beat_grid: BeatGrid) -> SoloNotes:
     try:
         from basic_pitch import ICASSP_2022_MODEL_PATH
-        from basic_pitch.inference import predict
     except ImportError:
         logger.warning("basic-pitch not installed. Returning empty solo notes.")
         return SoloNotes(notes=[])

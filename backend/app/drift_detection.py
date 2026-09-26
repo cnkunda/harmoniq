@@ -7,7 +7,6 @@ to detect model drift. Uses KL divergence and chi-squared tests.
 from __future__ import annotations
 
 import logging
-import math
 import os
 from pathlib import Path
 from typing import Any
@@ -22,7 +21,6 @@ logger = logging.getLogger("harmoniq.drift_detection")
 
 _baseline_distribution: np.ndarray | None = None
 _baseline_path: str | None = None
-
 
 def load_baseline(path: str | None = None) -> bool:
     """Load the deployment baseline distribution.
@@ -50,7 +48,6 @@ def load_baseline(path: str | None = None) -> bool:
     except Exception as exc:
         logger.warning("drift_baseline_load_failed path=%s exception=%s", path, exc)
         return False
-
 
 def save_baseline(distribution: np.ndarray, path: str | None = None) -> bool:
     """Save a baseline distribution for future drift detection.

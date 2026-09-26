@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router'
 import { Headphones, Library, Music } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ActivityIndicator,
   Platform,
   ScrollView,
   Switch,
@@ -28,7 +27,6 @@ import colors from '@/src/constants/colors'
 import { getAppPref, getLessonByJobId, listLessonsJournal, listSessionsJournal } from '@/src/db/client'
 import { PREF_SPOTIFY_CLIENT_SESSION } from '@/src/db/schema'
 import type { LessonListRow } from '@/src/db/types'
-import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 import type { DiscoverySuggestion, LessonJSON, SpotifyPlaybackStatePayload } from '@/src/types'
 import type { AlphaTabSurfaceRef } from '@/types/tabMessage'
@@ -53,7 +51,6 @@ export default function DiscoverScreen() {
   const tabRef = useRef<AlphaTabSurfaceRef>(null)
   const loadSkills = useSkillStore((s) => s.loadFromDb)
   const nodes = useSkillStore((s) => s.nodes)
-  const lesson = useLessonStore((s) => s.lesson)
 
   // Recommendations state
   const [suggestions, setSuggestions] = useState<DiscoverySuggestion[]>([])
@@ -404,21 +401,6 @@ export default function DiscoverScreen() {
           ) : null}
         </View>
 
-        {/* Tab Viewport */}
-        {/* <View className="mt-4 h-[340px] w-full">
-          <TabViewport
-            ref={tabRef}
-            gp5Base64={gp5Base64}
-            musicXml={musicXml}
-            audioSrc={audioSrc}
-            renderPreset="listen"
-            runtimeDiagnosticsEnabled={false}
-            readOnlyFollowMode
-            onReady={() => setTabReady(true)}
-            onError={(message) => setLibraryLoadError(message)}
-            style={{ flex: 1, height: '100%', width: '100%' }}
-          />
-        </View> */}
       </ScrollView>
     </SafeAreaView>
   )

@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from app.ingest import (
-    AudioTooShortError,
     IngestError,
     SourceMetadata,
     YouTubeUrlInvalidError,
@@ -26,10 +25,8 @@ from app.pipeline_proof import TARGET_SR
 LONG_TRACK_CHUNK_TRIGGER_SECONDS = 15 * 60
 LONG_TRACK_CHUNK_SECONDS = 5 * 60
 
-
 class AudioPreparationError(RuntimeError):
     """Raised when audio ingest/normalization/chunking fails."""
-
 
 @dataclass(frozen=True)
 class AudioPreparationResult:
@@ -47,7 +44,6 @@ class AudioPreparationResult:
     duration_seconds: float
     chunk_paths: tuple[Path, ...] = ()
     chunk_metadata: tuple[dict[str, Any], ...] = ()
-
 
 def _chunk_wav_for_long_track(
     wav_path: Path,

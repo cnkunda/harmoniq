@@ -1,7 +1,6 @@
 import { View, Text } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import { ChordDiagram } from '@/components/ChordDiagram'
 import {
   CHOICE_CHIP_BASE,
   CHOICE_CHIP_OFF,

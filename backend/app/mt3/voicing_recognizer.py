@@ -7,7 +7,7 @@ position. Uses MIDI pitch matching against expected voicing patterns.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from app.caged_shapes import CAGED_SHAPES
 from app.mt3.schemas import Mt3Event
@@ -20,14 +20,12 @@ _OPEN_STRING_MIDI: dict[int, int] = {
     1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 40,
 }
 
-
 @dataclass
 class VoicingResult:
     """Result of voicing detection for a chord time window."""
     shape: str | None       # 'E', 'A', 'C', 'D', 'G' or None
     position: int | None    # 0-12 fret position
     confidence: float       # 0.0-1.0
-
 
 def _midi_pitches_from_active_notes(
     active_notes: dict[int, list[Mt3Event]],
@@ -38,7 +36,6 @@ def _midi_pitches_from_active_notes(
         for e in events:
             pitches.add(e.pitch)
     return pitches
-
 
 def _compute_expected_pitches(
     shape_name: str,
@@ -54,7 +51,6 @@ def _compute_expected_pitches(
             pitches.add(midi)
     return pitches
 
-
 def _compute_voicing_label(shape: str, position: int | None) -> str:
     """Build a human-readable voicing label like 'E-shape' or 'A-shape barre VII'."""
     if shape is None:
@@ -64,7 +60,6 @@ def _compute_voicing_label(shape: str, position: int | None) -> str:
         roman = roman_numerals[position] if position < len(roman_numerals) else str(position)
         return f"{shape}-shape barre {roman}"
     return f"{shape}-shape (open)"
-
 
 def recognize_voicing(
     active_notes: dict[int, list[Mt3Event]],

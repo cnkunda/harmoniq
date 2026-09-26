@@ -9,16 +9,12 @@ Adds heuristic section label inference (Intro/Verse/Chorus/Bridge/Outro).
 from __future__ import annotations
 
 import logging
-import math
 from typing import Any
 
 import numpy as np
 
 from app.pipeline_proof import (
     SectionFeatures,
-    _PRECHORUS_MAX_DURATION,
-    _PRECHORUS_ENERGY_RISE_THRESHOLD,
-    classify_section,
     compute_section_features,
 )
 
@@ -40,9 +36,7 @@ MOVEMENT_TOLERANCE_SEC: float = 3.0
 CHORD_NGRAM_SIZE: int = 3
 _INSTRUMENTAL_VOCAL_GAP_THRESHOLD: float = 0.7  # vocal gap curve max below this = instrumental
 
-
 # ---- Signal computation ------------------------------------------------------
-
 
 def _compute_chord_density_curve(
     chord_events: list[tuple[float, str]],

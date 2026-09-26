@@ -11,7 +11,7 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Request, UploadFile
 
 from app.audio_processing import AudioPreparationError, prepare_audio_input
 from app.beat_grid import (
@@ -61,7 +61,6 @@ from app.schemas import (
 )
 from app.solo_inference import infer_solo
 from app.sse import sse_response
-import app.ingest as ingest
 
 logger = logging.getLogger("harmoniq.api.analyze")
 

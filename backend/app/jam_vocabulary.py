@@ -7,7 +7,6 @@ without LLM — the Claude call consumes these results.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from collections import Counter
 from typing import Any
@@ -24,7 +23,6 @@ MAX_PITCH_CLASSES_IN_PATTERN = 6
 SIMILARITY_THRESHOLD = 0.75  # Cosine similarity for pattern matching
 DIVERSITY_BIN_COUNT = 12  # Pitch class bins
 
-
 def _pitch_class_to_index(pc: str) -> int:
     """Convert pitch class string to 0-11 index."""
     mapping = {
@@ -34,12 +32,10 @@ def _pitch_class_to_index(pc: str) -> int:
     }
     return mapping.get(pc.strip(), -1)
 
-
 def _normalize_pitch_class(pc: str) -> str:
     """Normalize pitch class to sharps (C#, D#, F#, G#, A#)."""
     flat_to_sharp = {"Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"}
     return flat_to_sharp.get(pc.strip(), pc.strip())
-
 
 def _pattern_fingerprint(pitch_classes: list[str]) -> str:
     """Create a canonical fingerprint for a pitch class pattern.
@@ -59,7 +55,6 @@ def _pattern_fingerprint(pitch_classes: list[str]) -> str:
     intervals.append((indices[0] - indices[-1] + 12) % 12)
 
     return "i".join(str(iv) for iv in intervals)
-
 
 def _compute_contour(phrases: list[JamPhraseMetrics]) -> str:
     """Compute dominant melodic contour across all phrases."""

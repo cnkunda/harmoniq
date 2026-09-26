@@ -41,8 +41,9 @@ _ROOTS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 # MIREX 25-class vocabulary (Commit A: vocab reduction 277→25)
 from app.chord_vocab import (
-    MIREX_VOCAB, NUM_CLASSES_MIREX, MIREX_TO_IDX, MIREX_QUALITY_MAP,
-    ROOT_NOTES as _ROOT_NOTES,
+    MIREX_VOCAB,
+    NUM_CLASSES_MIREX,
+    MIREX_TO_IDX,
 )
 
 CHORD_VOCAB = MIREX_VOCAB
@@ -64,10 +65,14 @@ _NUM_CHROMA = len(CHROMA_VOCAB)  # 61
 
 _TFLITE_PATH = Path(__file__).parent / "chord_model.tflite"
 _KERAS_PATH = Path(__file__).parent / "chord_model.keras"
-from app.cqt_constants import (WINDOW as _WINDOW, HOP_FRAMES as _HOP_FRAMES,
-                                HOP_SEC as _HOP_SEC, BINS_PER_OCTAVE as _BINS_PER_OCTAVE,
-                                NUM_OCTAVES as _NUM_OCTAVES, CHROMA_BINS as _CHROMA_BINS,
-                                BASS_BINS as _BASS_BINS, FEATURE_DIM as _FEATURE_DIM)
+from app.cqt_constants import (
+    WINDOW as _WINDOW,
+    HOP_FRAMES as _HOP_FRAMES,
+    HOP_SEC as _HOP_SEC,
+    BINS_PER_OCTAVE as _BINS_PER_OCTAVE,
+    CHROMA_BINS as _CHROMA_BINS,
+    FEATURE_DIM as _FEATURE_DIM,
+)
 _BATCH_CHUNK = 512
 
 # Track which inference tier the last _run_inference call used.

@@ -4,10 +4,8 @@ Suggests next songs based on mastered content to keep users engaged.
 """
 
 from dataclasses import dataclass
-from typing import Iterable
 
 from app.schemas import LessonJSON, SkillNode
-
 
 @dataclass(frozen=True)
 class SongHarmonicProfile:
@@ -15,7 +13,6 @@ class SongHarmonicProfile:
     key: str | None
     style: str | None
     tempo: float | None
-
 
 def _parse_key_label(key_label: str | None) -> tuple[str | None, str | None]:
     """Extract root note and mode from key label."""
@@ -34,7 +31,6 @@ def _parse_key_label(key_label: str | None) -> tuple[str | None, str | None]:
         mode = "major"
     
     return (root, mode)
-
 
 def _key_similarity(key1: str | None, key2: str | None) -> float:
     """Calculate harmonic similarity between two keys (0.0 to 1.0)."""

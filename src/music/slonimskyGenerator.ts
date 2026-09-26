@@ -108,7 +108,6 @@ function _interpCells(
   seed: number,
   order: number[],
   diff: number,
-  label: string,
 ): { cells: SlonimskyFretboardCell[]; caption: string } {
   const s = _pickString(seed)
   const start = _pickFret(_rng(seed + 1), diff <= 1 ? 8 : 6)
@@ -182,7 +181,7 @@ const PATTERN_DESCRIPTORS: PatternDescriptor[] = [
     difficulty: 1,
     isOpener: true,
     defaultDurationSeconds: 60,
-    generate: (seed) => _interpCells(seed, [0, 2, 1, 3], 1, '1-3-2-4'),
+    generate: (seed) => _interpCells(seed, [0, 2, 1, 3], 1),
   },
   {
     id: 'slonimsky_interp_1423',
@@ -193,7 +192,7 @@ const PATTERN_DESCRIPTORS: PatternDescriptor[] = [
     difficulty: 2,
     isOpener: true,
     defaultDurationSeconds: 60,
-    generate: (seed) => _interpCells(seed, [0, 3, 1, 2], 2, '1-4-2-3'),
+    generate: (seed) => _interpCells(seed, [0, 3, 1, 2], 2),
   },
   {
     id: 'slonimsky_interp_1342',
@@ -204,7 +203,7 @@ const PATTERN_DESCRIPTORS: PatternDescriptor[] = [
     difficulty: 1,
     isOpener: true,
     defaultDurationSeconds: 58,
-    generate: (seed) => _interpCells(seed, [0, 2, 3, 1], 1, '1-3-4-2'),
+    generate: (seed) => _interpCells(seed, [0, 2, 3, 1], 1),
   },
   {
     id: 'slonimsky_interp_2413',
@@ -215,7 +214,7 @@ const PATTERN_DESCRIPTORS: PatternDescriptor[] = [
     difficulty: 2,
     isOpener: false,
     defaultDurationSeconds: 62,
-    generate: (seed) => _interpCells(seed, [1, 3, 0, 2], 2, '2-4-1-3'),
+    generate: (seed) => _interpCells(seed, [1, 3, 0, 2], 2),
   },
   {
     id: 'slonimsky_interp_1243',
@@ -226,7 +225,7 @@ const PATTERN_DESCRIPTORS: PatternDescriptor[] = [
     difficulty: 1,
     isOpener: true,
     defaultDurationSeconds: 56,
-    generate: (seed) => _interpCells(seed, [0, 1, 3, 2], 1, '1-2-4-3'),
+    generate: (seed) => _interpCells(seed, [0, 1, 3, 2], 1),
   },
 
   // ---- Infrapolation (5) ----

@@ -20,12 +20,10 @@ from app.transcribe import transcribe_vocals_to_lyrics_aligned
 from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
 from app.schemas import (
     BeatGrid,
-    ChordEvent,
     ChordTimeline,
     LessonJSON,
     LessonSectionStub,
     PlayerProfile,
-    SoloNote,
     SoloNotes,
     StemRoutingHints,
 )
@@ -38,7 +36,7 @@ from app.beat_grid import estimate_beat_grid
 from app.chord_enrichment import assign_roman_numerals
 from app.chord_inference import infer_chords, infer_chords_dual_path
 from app.instrument_confusion import compute_per_section_confusion
-from app.mt3 import transcribe_with_fallback, get_transcription_source_label
+from app.mt3 import transcribe_with_fallback
 from app.solo_inference import infer_solo
 from app.solo_harmony_analyzer import SoloHarmonizer
 from app.section_refinement import refine_section_boundaries
@@ -47,7 +45,6 @@ logger = logging.getLogger("harmoniq.analyze_audio")
 logger.setLevel(logging.INFO)
 
 TABS_UNAVAILABLE_NO_GUITAR = "no_isolated_guitar"
-
 
 def _filter_chord_timeline_by_section(
     chord_timeline: ChordTimeline,
@@ -67,7 +64,6 @@ def _filter_chord_timeline_by_section(
         filtered_events.append(event)
     
     return ChordTimeline(events=filtered_events)
-
 
 def _filter_solo_notes_by_section(
     solo_notes: SoloNotes,

@@ -17,9 +17,7 @@ Commit 108: Added comprehensive MusicXML notation elements for AlphaTab renderin
 
 from __future__ import annotations
 
-import math
 import re
-from collections import defaultdict
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import TYPE_CHECKING
@@ -30,7 +28,7 @@ if TYPE_CHECKING:
     import music21
 
 import logging
-from app.schemas import BeatGrid, ChordTimeline, SoloNotes, TimeSignature, ChordEvent, SoloNote
+from app.schemas import BeatGrid, ChordTimeline, SoloNotes
 from app.guitar_position import midi_to_guitar_position, midi_to_all_guitar_positions
 
 logger = logging.getLogger("harmoniq.musicxml_builder")

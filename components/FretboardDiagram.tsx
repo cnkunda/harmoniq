@@ -1,6 +1,5 @@
-import { LinearGradient } from 'expo-linear-gradient'
 import { Lightbulb, Link, Music } from 'lucide-react-native'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Platform,
   Pressable,
@@ -24,7 +23,6 @@ import {
   G,
   Line,
   LinearGradient as SvgLinearGradient,
-  Path,
   RadialGradient as SvgRadialGradient,
   Rect as SvgRect,
   Stop,
@@ -127,7 +125,6 @@ const CHORD_CIRCLE_OPACITY_ENHANCED = 0.3
 
 const SOLO_NOTE_ACTIVE_RED = '#E53935'
 const SOLO_NOTE_CORE_TERRACOTTA = '#C17B5F'
-const SOLO_NOTE_GLOW_AMBER = '#E8B86D'
 
 const SCALE_DEGREE_LABELS: Record<number, string> = {
   0: '1', 1: 'b2', 2: '2', 3: 'b3', 4: '3', 5: '4',
@@ -192,10 +189,6 @@ function scaleHighlightActive(
   const midi = OPEN_MIDI_BY_ROW[stringIdx]! + fret
   const pc = ((midi % 12) + 12) % 12
   return scalePitchClasses.includes(pc)
-}
-
-function cellMatchesDiagramCol(cellFret: number, col: number): boolean {
-  return cellFret <= NUM_FRETS ? cellFret === col : col === NUM_FRETS
 }
 
 function overlayLabelForCell(
@@ -346,7 +339,6 @@ function GuideMarker({
 
 export function FretboardDiagram({
   keyLabel,
-  positionLabel,
   capoText,
   selectedNote,
   pulseKey = 0,
@@ -369,7 +361,6 @@ export function FretboardDiagram({
   onCalibrateTune,
   tunerState = null,
   showOrientControl = false,
-  orientActive = false,
   onToggleOrient,
   orientClipUrl = null,
   orientAnnotation = null,
@@ -533,8 +524,6 @@ export function FretboardDiagram({
   }, [chordCells])
 
   // Chord circle opacity based on mode
-  const chordOpacity = isEnhancedView ? CHORD_CIRCLE_OPACITY_ENHANCED : CHORD_CIRCLE_OPACITY_DEFAULT
-
   const onSvgLayout = useCallback((e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width
     setSvgSize({ w, h: w * SVG_H / SVG_W })

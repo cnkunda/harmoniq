@@ -10,7 +10,6 @@ import asyncio
 import base64
 import hashlib
 import logging
-import math
 import os
 import random
 import secrets
@@ -38,10 +37,8 @@ _pending: dict[str, tuple[str, str, Literal["native", "web"]]] = {}
 _tokens: dict[str, _TokenBundle] = {}
 """client_session -> tokens."""
 
-
 class SpotifySessionExpired(Exception):
     """Raised when the refresh token cannot be refreshed — client must re-authorize."""
-
 
 @dataclass
 class _TokenBundle:
@@ -49,15 +46,12 @@ class _TokenBundle:
     refresh_token: str | None
     expires_at: float
 
-
 def spotify_feature_disabled() -> bool:
     return os.getenv("HARMONIQ_SKIP_SPOTIFY", "").strip() == "1"
-
 
 def spotify_client_id() -> str | None:
     raw = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
     return raw or None
-
 
 def spotify_redirect_uri() -> str:
     """Must match a redirect URI configured for the Spotify app."""
@@ -66,15 +60,12 @@ def spotify_redirect_uri() -> str:
         or "http://127.0.0.1:8000/auth/spotify/callback"
     )
 
-
 def spotify_web_post_login_url() -> str:
     """Browser users return here after OAuth (Expo web dev server)."""
     return os.getenv("HARMONIQ_SPOTIFY_WEB_RETURN", "").strip() or "http://127.0.0.1:8081"
 
-
 def native_oauth_redirect_scheme() -> str:
     return os.getenv("HARMONIQ_SPOTIFY_APP_SCHEME", "").strip() or "harmoniq"
-
 
 def _pkce_verifier() -> str:
     v = secrets.token_urlsafe(48)

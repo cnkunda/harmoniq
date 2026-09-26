@@ -19,8 +19,12 @@ from collections import Counter, defaultdict
 
 import numpy as np
 
-from app.chord_vocab import (CHORD_INTERVALS, MIREX_QUALITY_MAP, MIREX_TO_IDX,
-                             MIREX_VOCAB, NUM_CLASSES_MIREX, ROOT_NOTES)
+from app.chord_vocab import (
+    CHORD_INTERVALS,
+    MIREX_QUALITY_MAP,
+    MIREX_TO_IDX,
+    ROOT_NOTES,
+)
 from app.mt3.schemas import Mt3Event, Mt3EventStream
 from app.schemas import BeatGrid, ChordEvent, ChordTimeline
 
@@ -45,7 +49,6 @@ _GUITAR_PROGRAMS = set(range(24, 32))
 
 # Percussion program (GM Channel 10)
 _PERCUSSION_PROGRAM = 128
-
 
 def decode_events_to_chord_timeline(
     event_stream: Mt3EventStream,

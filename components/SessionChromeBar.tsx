@@ -1,6 +1,6 @@
 import { usePathname, useRouter } from 'expo-router'
 import { ArrowRight, X } from 'lucide-react-native'
-import { Alert, Text, View, useWindowDimensions } from 'react-native'
+import { Alert, Text, View } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 
 import colors from '@/src/constants/colors'
@@ -20,7 +20,6 @@ const ACTION_MIN = 80
 export function SessionChromeBar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { width } = useWindowDimensions()
   const plan = usePlanStore((s) => s.currentPlan)
   const idx = usePlanStore((s) => s.currentSlotIndex)
   const clearPlan = usePlanStore((s) => s.clearPlan)
@@ -28,9 +27,6 @@ export function SessionChromeBar() {
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const lessonJobId = useLessonStore((s) => s.lesson?.job_id)
   const isDemoLesson = lessonJobId === DEMO_LESSON_JOB_ID
-
-  const compact = width < 420
-  const gapClass = compact ? 'gap-1' : 'gap-2'
 
   if (!pathname.includes('/session/')) return null
 

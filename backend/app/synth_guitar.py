@@ -19,7 +19,6 @@ Usage:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -40,11 +39,9 @@ BODY_RESONANCE = {
     "high_rolloff": -6.0,  # dB/octave
 }
 
-
 def _midi_to_freq(midi_note: int) -> float:
     """Convert MIDI note number to frequency in Hz."""
     return 440.0 * (2.0 ** ((midi_note - 69) / 12.0))
-
 
 def _note_to_string(midi_note: int) -> tuple[int, int]:
     """Find best string and fret for a MIDI note on a standard-tuned guitar.
@@ -62,7 +59,6 @@ def _note_to_string(midi_note: int) -> tuple[int, int]:
             best_string = string_idx
 
     return best_string, best_fret
-
 
 def _generate_note(
     freq: float,

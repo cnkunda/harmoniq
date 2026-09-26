@@ -4,20 +4,17 @@ from __future__ import annotations
 
 import io
 import xml.sax.saxutils as xs
-from typing import Any
 
 import guitarpro as gp
 
 GP_TICKS_PER_QUARTER = gp.Duration.quarterTime
 DEFAULT_DIVISIONS = 480  # MusicXML divisions per quarter note
 
-
 def _gp_ticks_to_divisions(gp_ticks: int, divisions: int = DEFAULT_DIVISIONS) -> int:
     """Map Guitar Pro duration units to MusicXML divisions."""
     if gp_ticks <= 0:
         return max(1, divisions // 16)
     return max(1, round(gp_ticks * divisions / GP_TICKS_PER_QUARTER))
-
 
 def _midi_pitch_to_musicxml_step(pitch: int) -> tuple[str, int, str]:
     """Convert MIDI pitch to MusicXML pitch info (step, octave, alter)."""
@@ -26,7 +23,6 @@ def _midi_pitch_to_musicxml_step(pitch: int) -> tuple[str, int, str]:
     step = note_names[pitch % 12]
     alter = 0
     return step, octave, alter
-
 
 def _format_duration(divisions: int, divisions_per_quarter: int) -> tuple[int, int, int, int]:
     """Convert duration in divisions to MusicXML duration tuple (duration, dots, type, tuplet)."""
@@ -59,7 +55,6 @@ def _format_duration(divisions: int, divisions_per_quarter: int) -> tuple[int, i
         return divisions, 0, note_type, 1
 
     return base_duration, 0, note_type, 1
-
 
 def song_to_musicxml_bytes(song: gp.Song) -> bytes:
     """Convert a Guitar Pro song to a MusicXML 3.1 document."""

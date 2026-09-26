@@ -16,7 +16,7 @@ export interface ChordCorrectionDropdownProps {
 const CHORD_QUALITIES = ['maj', 'min', '7', 'maj7', 'min7', '9', 'min9', 'sus4', 'dim', 'aug', '6', 'min6']
 const ROOT_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
-function generateChordSuggestions(keySignature?: string): string[] {
+function generateChordSuggestions(): string[] {
   const chords: string[] = ['N']
   for (const root of ROOT_NOTES) {
     for (const quality of CHORD_QUALITIES) {
@@ -29,13 +29,12 @@ function generateChordSuggestions(keySignature?: string): string[] {
 export function ChordCorrectionDropdown({
   currentChord,
   beatIndex,
-  keySignature,
   onSelect,
   onCancel,
   style,
 }: ChordCorrectionDropdownProps) {
   const [query, setQuery] = useState(currentChord)
-  const allChords = generateChordSuggestions(keySignature)
+  const allChords = generateChordSuggestions()
 
   const filtered = query.trim()
     ? allChords.filter((c) => c.toLowerCase().includes(query.toLowerCase()))

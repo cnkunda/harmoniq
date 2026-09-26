@@ -147,8 +147,6 @@ export function connectAnalyzeWebSocket(
   const promise = new Promise<import('@/src/types').LessonJSON>((resolve, reject) => {
     rejectRef = reject
 
-    let fallbackTimer: ReturnType<typeof setTimeout> | undefined
-
     const startPollingFallback = () => {
       const poll = pollAnalyzeJobCancelable(jobId, onStatus, 3000)
       pollingCancel = poll.cancel
@@ -1067,10 +1065,8 @@ export async function pollBeatGridRecompute(
   intervalMs: number = 1500,
 ): Promise<import('@/src/types').BeatGridRecomputeResponse> {
   const terminal = new Set<string>(['complete', 'failed'])
-  let last: import('@/src/types').BeatGridRecomputeResponse | null = null
   while (true) {
     const resp = await getBeatGridRecomputeStatus(jobId)
-    last = resp
     onStatus(resp)
     if (terminal.has(resp.status)) return resp
     await new Promise((r) => setTimeout(r, intervalMs))

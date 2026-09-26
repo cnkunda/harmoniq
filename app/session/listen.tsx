@@ -29,8 +29,6 @@ import { Film, Headphones, Pause, Play, X } from 'lucide-react-native'
 
 export default function ListenScreen() {
   const lesson = useLessonStore((s) => s.lesson)
-  const lessonJobId = lesson?.job_id ?? ''
-  const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
 
   // Extract timeline data for MusicProvider
   const rawChordEvents = getLessonWideChordEvents(lesson)
@@ -109,7 +107,6 @@ function ListenScreenInner() {
     )
     return patched?.events ?? normalized
   })()
-  const soloNotesArr = lesson?.solo_notes?.notes ?? null
   const barTimestamps = lesson?.bar_timestamps ?? null
 
   useEffect(() => {

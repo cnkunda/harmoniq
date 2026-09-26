@@ -7,8 +7,6 @@ from pathlib import Path
 
 import numpy as np
 
-from app.pipeline_proof import TARGET_SR
-
 try:
     import librosa
 except ImportError:

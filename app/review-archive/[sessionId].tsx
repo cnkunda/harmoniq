@@ -4,7 +4,6 @@ import { ScrollView, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import { PrimaryButton } from '@/components/Button'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { PhrasingVisualizerStub, ScoreSummaryCard } from '@/components/ReviewSessionPanel'
 import { WaveformPlaybackActions } from '@/components/WaveformPlaybackActions'

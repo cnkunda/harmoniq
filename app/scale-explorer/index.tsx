@@ -24,7 +24,6 @@ import { playNote, playScale, stopPlayback } from '@/src/music/scaleAudition'
 import {
   addFavorite,
   getFavorites,
-  isFavorite,
   removeFavorite,
   type ScaleFavorite,
 } from '@/src/music/scaleFavorites'

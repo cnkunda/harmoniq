@@ -19,7 +19,6 @@ from pathlib import Path
 
 import numpy as np
 
-from app.beat_grid import estimate_beat_grid
 from app.chord_inference import get_last_inference_tier, infer_chords
 from app.mt3.chord_decoder import decode_events_to_chord_timeline
 from app.mt3.model_server import Mt3ModelServer, mt3_infer
@@ -34,7 +33,6 @@ _MT3_CONFIDENCE_THRESHOLD = 0.7
 
 # Minimum chord event count to consider MT3 output valid
 _MIN_CHORD_EVENTS = 3
-
 
 @dataclass
 class TranscriptionResult:
@@ -53,7 +51,6 @@ class TranscriptionResult:
     # Commit A2.1: structured metadata tracing the full fallback chain
     transcription_metadata: dict | None = None
 
-
 def get_transcription_source_label(source: TranscriptionSource) -> str:
     """Get a human-readable label for the transcription source tier."""
     labels = {
@@ -63,7 +60,6 @@ def get_transcription_source_label(source: TranscriptionSource) -> str:
         "none": "No transcription available",
     }
     return labels.get(source, "Unknown transcription source")
-
 
 def transcribe_with_fallback(
     audio_path: Path | str,

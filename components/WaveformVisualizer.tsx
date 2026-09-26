@@ -1,8 +1,6 @@
 import { useMemo } from 'react'
 import { View } from 'react-native'
 
-import colors from '@/src/constants/colors'
-
 export interface WaveformVisualizerProps {
   isPlaying?: boolean
   progress?: number

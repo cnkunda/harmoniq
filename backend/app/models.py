@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text, text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import DateTime, Float, Integer, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB
 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-
 class Base(DeclarativeBase):
     pass
-
 
 class JobModel(Base):
     __tablename__ = "jobs"
@@ -31,7 +29,6 @@ class JobModel(Base):
         DateTime(timezone=True), server_default=text("now()"), onupdate=text("now()")
     )
 
-
 class CoachHydrationModel(Base):
     __tablename__ = "coach_hydration"
 
@@ -46,7 +43,6 @@ class CoachHydrationModel(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), onupdate=text("now()")
     )
-
 
 class ChordEnrichmentModel(Base):
     __tablename__ = "chord_enrichment"
@@ -65,7 +61,6 @@ class ChordEnrichmentModel(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"), onupdate=text("now()")
     )
-
 
 class RecomputeJobModel(Base):
     __tablename__ = "recompute_jobs"

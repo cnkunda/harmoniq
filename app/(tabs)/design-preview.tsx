@@ -13,7 +13,6 @@ import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { PitchIndicator } from '@/components/PitchIndicator'
 
 import { SkillGraph } from '@/components/SkillGraph'
-import type { Lick } from '@/src/types'
 import { StemMixer } from '@/components/StemMixer'
 import { TabView } from '@/components/TabView'
 import { toast } from '@/components/ToastConfig'

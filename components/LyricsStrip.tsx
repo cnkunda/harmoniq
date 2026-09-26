@@ -28,7 +28,7 @@ export function LyricsStrip({ words, playbackSec, hideHeading }: LyricsStripProp
   // Scroll to keep active word visible
   useEffect(() => {
     if (scrollViewRef.current && activeIndex >= 0 && wordLayouts[activeIndex]) {
-      const { x, width } = wordLayouts[activeIndex]
+      const { x } = wordLayouts[activeIndex]
       // Scroll to center the active word (with offset for padding)
       const scrollX = x - 60 // 60 is approximate center offset
       scrollViewRef.current.scrollTo({ x: Math.max(0, scrollX), animated: true })

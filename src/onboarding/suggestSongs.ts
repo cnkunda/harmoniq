@@ -7,7 +7,7 @@
  */
 
 import { getAppPref } from '@/src/db/client'
-import { PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
+import { PREF_SPOTIFY_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { TasteProfilePayload } from '@/src/types'
 import { parseTasteProfileJson } from '@/src/api/analyze'
 

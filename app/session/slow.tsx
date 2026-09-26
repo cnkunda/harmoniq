@@ -61,8 +61,6 @@ function SlowScreenInner() {
 
   const sections = (lesson?.sections ?? []) as Array<Record<string, unknown>>
   const section = sections[lessonSectionIndex]
-  const chordEvents = getLessonWideChordEvents(lesson)
-  const soloNotesArr = (section as any)?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? null
   const barTimestamps = lesson?.bar_timestamps ?? []
 
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()

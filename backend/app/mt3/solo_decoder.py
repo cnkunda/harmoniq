@@ -20,8 +20,6 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-import numpy as np
-
 from app.mt3.schemas import Mt3Event, Mt3EventStream
 from app.schemas import BeatGrid, SoloNote, SoloNotes
 
@@ -43,7 +41,6 @@ _GRACE_NOTE_DURATION_S = 0.08
 # MIDI pitch range for guitar
 _GUITAR_MIDI_MIN = 40  # Low E
 _GUITAR_MIDI_MAX = 84  # High E (24th fret)
-
 
 def decode_events_to_solo_notes(
     event_stream: Mt3EventStream,

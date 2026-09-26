@@ -26,8 +26,7 @@ export function BeatGridTimeline({
   height = 40,
   width = 300,
 }: BeatGridTimelineProps) {
-  const { beats, downbeats, time_signature } = beatGrid
-  const beatsPerBar = time_signature?.numerator ?? 4
+  const { beats, downbeats } = beatGrid
 
   // Map beat timestamps to x positions (0..width)
   const beatLines = useMemo(() => {
