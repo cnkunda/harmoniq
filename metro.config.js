@@ -12,6 +12,9 @@ if (!config.resolver.assetExts.includes('sf2')) {
 if (!config.resolver.assetExts.includes('sf3')) {
   config.resolver.assetExts.push('sf3')
 }
+if (!config.resolver.assetExts.includes('musicxml')) {
+  config.resolver.assetExts.push('musicxml')
+}
 if (!config.resolver.assetExts.includes('tflite')) {
   config.resolver.assetExts.push('tflite')
 }

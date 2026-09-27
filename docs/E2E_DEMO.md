@@ -22,15 +22,15 @@ End-to-end walkthrough for validating the core user flow: analyze a song, go thr
 3. Tap **Analyze**
 4. Wait for analysis to complete (typically 1–4 minutes)
 
-#### Checkpoint: Analyze polling sanity check (BUG-01)
+#### Checkpoint: Analyze progress stream sanity check (BUG-01)
 
-After submitting a YouTube URL for analysis:
-- Open browser DevTools Network tab
-- Confirm GET /analyze/{id} fires at most every 2–5 seconds (backoff)
-- Confirm polling stops **immediately** when status shows "complete" — zero additional requests after terminal status
-- Confirm `analysis_stage` field is present in poll responses and transitions through: `initializing` → `stems_separating` → `chord_branch_inferring` → `solo_branch_inferring` → `building_musicxml` → `complete`
-- FAIL if you see more than 10 requests before the ML pipeline starts (resampy/TF load is visible in the terminal)
-- FAIL if any `/analyze/{id}` request fires after status transitions to `complete` or `failed` (verifies `seenCompletedOrFailed` guard — see `src/api/analyze.ts:381`)
+After submitting a song for analysis:
+- Open browser DevTools Network tab, filter by `/analyze/`
+- Expect exactly one `POST /analyze` and one `GET /analyze/{id}/stream` (EventStream) — no plain `GET /analyze/{id}` polling
+- The stream stays open across the whole job; stage labels update live from pushed `status` events: `initializing` → `stems_separating` → `chords_inferring` → `mt3_inferring` → `building_musicxml` → `complete`
+- On terminal status the client receives `complete` (or `failed`) and closes the stream — zero reconnects, zero further `/analyze` requests
+- FAIL if more than 10 requests appear before the ML pipeline starts (resampy/TF load is visible in the terminal)
+- FAIL if any plain `/analyze/{id}` request fires before or after terminal status, if the EventSource reconnects after terminal, or if the WebSocket fallback (`/analyze/{id}/ws`) opens while SSE is healthy
 
 ---
 

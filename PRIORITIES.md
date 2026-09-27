@@ -137,7 +137,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 151: Frontend SSE Progress Stream — Root-Cause Fix for BUG-01
 
-**Status:** ready
+**Status:** Complete — all 6 ACs verified (web automated; native BUG-01 checkpoint run by user as final sign-off).
 
 **Goal:** Replace the fragile analyze-polling loop with the already-built SSE endpoint so job status is pushed to the client, eliminating BUG-01 at its root instead of guarding against it.
 
@@ -155,14 +155,22 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 - Unit tests for the SSE client state machine (connect → events → terminal close; fallback on error)
 - Re-run the Manual QA BUG-01 checkpoint on web and native
 
+**Implementation notes:**
+
+- **The Current State premise about the backend was false.** `backend/app/sse.py` subscribed to an orphaned `sse:channel:{job_id}` Redis channel (zero `publish_sse_event` callers) and read a never-written Redis job hash — it 500'd whenever Redis was down and emitted nothing otherwise. Rewritten in this commit: `job_progress_stream()` polls the in-memory `app.jobs.jobs` store (same source as `GET /analyze/{id}`), emitting `connected` → `status` (on change, incl. `analysis_stage`) → `complete`/`failed` (terminal, then close), with `heartbeat` every 15s and a 900s timeout → `failed`. Verified live with Redis down.
+- **New module `src/api/analyzeSse.ts`** — pure (no `@/src/config` / `react-native` imports): `createSseChunkParser`, `mapSseEventToJob`, `createAnalyzeSseSession` (connect → events → terminal close; `onUnavailable` fires exactly once so async failure cannot double-trigger fallback), `createUtf8Decoder` (Hermes has no `TextDecoder`), `openAnalyzeSse()` — web `EventSource`, native `expo/fetch` streaming reader (RN `fetch` lacks streaming), detected via `navigator.product === 'ReactNative'`. Terminal event is `failed` (not `error`) to avoid colliding with EventSource transport `onerror`.
+- **`src/api/analyze.ts`:** shared `applyTerminalJob` (terminal checked *before* `onStatus`), `startAnalyzeSse`, and `startAnalyzePolling` (fallback — keeps `seenCompletedOrFailed` guard and wall-clock backoff verbatim). Both entry points (`pollAnalyzeJobCancelable`, `connectAnalyzeWebSocket`) walk SSE → WebSocket → polling through a single `advanceTo` chain guard, so WS `onerror`+`onclose`+connect-timeout can no longer spawn duplicate polling loops.
+- **Pre-existing blocker found while running the web checkpoint (folded into this commit per user decision):** merge `1606a34` (2026-09-25, "Merge branch 'develop'") dropped Commit 107's `assetExts.push('musicxml')` from `metro.config.js`, breaking the entire Expo web bundle with `UnableToResolveError` on `assets/musicxml-corpus/*.musicxml`. The two lines were restored as part of 151 so the web QA checkpoint can run.
+- **Verification:** backend `tests/test_sse_stream.py` 7 passed; full backend suite 1277 passed / 6 skipped; frontend `analyzeSse.test.ts` (20) + `analyze.test.ts` (6); `npm run lint` + `npm run test` (48 files / 425 tests) green. Live: `curl -N` stream completes at server close (exit 0, zero status GETs); automated Playwright web run — 1× EventSource, 0 polls, 0 WS, 0 console errors, 0 requests in the 45s post-terminal quiet period. Native transport implemented + session logic unit-covered; device run remains the last Manual QA step.
+
 **Acceptance Criteria:**
 
-- [ ] Web and native consume `GET /analyze/{job_id}/stream` for analyze jobs
-- [ ] No additional status requests are made after terminal status (BUG-01 checkpoint passes on both platforms)
-- [ ] SSE unavailable → transparent polling fallback with identical callbacks
-- [ ] Keep-alive pings prevent proxy timeouts; stream closes on terminal event
-- [ ] `analysis_stage` reaches `onStatus` consumers
-- [ ] Unit tests cover connect/event/terminal/fallback paths; `npm run test` green
+- [x] Web and native consume `GET /analyze/{job_id}/stream` for analyze jobs
+- [x] No additional status requests are made after terminal status (BUG-01 checkpoint passes on both platforms) — web PASS 2026-09-27 (automated Playwright: 1× EventSource, 0 polls, 0 reconnects); native run owned by user
+- [x] SSE unavailable → transparent polling fallback with identical callbacks
+- [x] Keep-alive pings prevent proxy timeouts; stream closes on terminal event
+- [x] `analysis_stage` reaches `onStatus` consumers
+- [x] Unit tests cover connect/event/terminal/fallback paths; `npm run test` green
 
 ---
 

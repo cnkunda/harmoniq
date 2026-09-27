@@ -1,3 +1,4 @@
+import { openAnalyzeSse } from '@/src/api/analyzeSse'
 import { API_BASE_URL } from '@/src/config'
 import { getAppPref } from '@/src/db/client'
 import { PREF_EXPERIENCE_LEVEL, PREF_STYLE_FOCUS } from '@/src/db/schema'
@@ -125,13 +126,12 @@ export async function submitExportJob(payload: {
 }
 
 /**
- * WebSocket-based job status listener with polling fallback.
+ * SSE → WebSocket → polling job status listener (Commit 151).
  *
- * Tries WebSocket first. If WS fails (connection refused, timeout, or
- * the server lacks WS support), falls back to HTTP polling transparently.
- *
- * The `onStatus` callback receives the same `AnalyzeJob` shape as
- * `pollAnalyzeJobCancelable`, so both transports are interchangeable.
+ * Tries the SSE stream (`GET /analyze/{id}/stream`) first, then WebSocket, and
+ * falls back to HTTP polling transparently — each transport failing moves the
+ * chain forward exactly once. Every transport delivers the same `AnalyzeJob`
+ * shape to `onStatus`, so consumers are transport-agnostic.
  */
 export function connectAnalyzeWebSocket(
   jobId: string,
@@ -139,98 +139,124 @@ export function connectAnalyzeWebSocket(
 ): { promise: Promise<import('@/src/types').LessonJSON>; cancel: () => void } {
   let settled = false
   let rejectRef: ((reason?: unknown) => void) | null = null
-  let wsRef: WebSocket | null = null
-  let pollingCancel: (() => void) | null = null
-
-  const apiBase = API_BASE_URL.replace(/^http/, 'ws')
+  let activeCancelRef: (() => void) | null = null
 
   const promise = new Promise<import('@/src/types').LessonJSON>((resolve, reject) => {
     rejectRef = reject
-
-    const startPollingFallback = () => {
-      const poll = pollAnalyzeJobCancelable(jobId, onStatus, 3000)
-      pollingCancel = poll.cancel
-      poll.promise.then(resolve, reject)
+    const hooks: TerminalHooks = {
+      resolve,
+      reject,
+      onSettled: () => {
+        settled = true
+        activeCancelRef?.()
+      },
     }
 
-    // Try WebSocket
-    try {
-      const wsUrl = `${apiBase}/ws/analyze/${encodeURIComponent(jobId)}`
-      const ws = new WebSocket(wsUrl)
-      wsRef = ws
+    // Chain positions: 0 = SSE, 1 = WebSocket, 2 = polling. A WebSocket
+    // failure fires onerror + onclose + connect-timeout — advanceTo keeps
+    // that from starting three polling loops (duplicate status requests).
+    let chainPos = 0
+    const advanceTo = (pos: number, next: () => void): void => {
+      if (settled || chainPos >= pos) return
+      chainPos = pos
+      next()
+    }
 
-      // If we don't connect within 3 seconds, fall back to polling
-      const connectTimeout = setTimeout(() => {
-        if (!settled && ws.readyState !== WebSocket.OPEN) {
-          ws.close()
-          startPollingFallback()
-        }
-      }, 3000)
+    const startPollingFallback = (): void =>
+      advanceTo(2, () => {
+        const link = startAnalyzePolling(jobId, onStatus, 3000, undefined, hooks)
+        activeCancelRef = link.cancel
+      })
 
-      ws.onopen = () => {
-        clearTimeout(connectTimeout)
-      }
-
-      ws.onmessage = (event) => {
-        if (settled) return
+    const startWebSocket = (): void =>
+      advanceTo(1, () => {
+        const apiBase = API_BASE_URL.replace(/^http/, 'ws')
         try {
-          const msg = JSON.parse(event.data) as Record<string, unknown>
+          const wsUrl = `${apiBase}/ws/analyze/${encodeURIComponent(jobId)}`
+          const ws = new WebSocket(wsUrl)
+          activeCancelRef = () => ws.close()
 
-          if (msg.type === 'status' || msg.type === 'progress') {
-            // Map WS message shape to AnalyzeJob
-            const job: import('@/src/types').AnalyzeJob = {
-              status: (msg.status as import('@/src/types').AnalyzeJobStatus) ?? 'processing',
-              progress: typeof msg.progress === 'number' ? msg.progress : null,
-              stage_label: typeof msg.stage_label === 'string' ? msg.stage_label : null,
-              analysis_stage: typeof msg.analysis_stage === 'string' ? msg.analysis_stage : null,
-              result: null,
-              error: null,
-              error_code: null,
-              processing_started_at: null,
+          // If we don't connect within 3 seconds, fall back to polling
+          const connectTimeout = setTimeout(() => {
+            if (!settled && ws.readyState !== WebSocket.OPEN) {
+              ws.close()
+              startPollingFallback()
             }
-            onStatus(job)
-          } else if (msg.type === 'complete') {
-            settled = true
-            ws.close()
-            const result = msg.result as Record<string, unknown> | undefined
-            if (result) {
-              resolve(result as unknown as import('@/src/types').LessonJSON)
-            } else {
-              reject(new ApiError(500, 'Analysis complete but no result'))
-            }
-          } else if (msg.type === 'failed') {
-            settled = true
-            ws.close()
-            reject(
-              new ApiError(
-                500,
-                (msg.error as string) ?? 'Analysis failed',
-                msg.error_code as string | undefined,
-              ),
-            )
+          }, 3000)
+
+          ws.onopen = () => {
+            clearTimeout(connectTimeout)
           }
-        } catch {
-          // Ignore malformed messages
-        }
-      }
 
-      ws.onerror = () => {
-        clearTimeout(connectTimeout)
-        if (!settled) {
+          ws.onmessage = (event) => {
+            if (settled) return
+            try {
+              const msg = JSON.parse(event.data) as Record<string, unknown>
+
+              if (msg.type === 'status' || msg.type === 'progress') {
+                // Map WS message shape to AnalyzeJob
+                const job: import('@/src/types').AnalyzeJob = {
+                  status: (msg.status as import('@/src/types').AnalyzeJobStatus) ?? 'processing',
+                  progress: typeof msg.progress === 'number' ? msg.progress : null,
+                  stage_label: typeof msg.stage_label === 'string' ? msg.stage_label : null,
+                  analysis_stage: typeof msg.analysis_stage === 'string' ? msg.analysis_stage : null,
+                  result: null,
+                  error: null,
+                  error_code: null,
+                  processing_started_at: null,
+                }
+                onStatus(job)
+              } else if (msg.type === 'complete') {
+                hooks.onSettled()
+                const result = msg.result as Record<string, unknown> | undefined
+                if (result) {
+                  resolve(result as unknown as import('@/src/types').LessonJSON)
+                } else {
+                  reject(new ApiError(500, 'Analysis complete but no result'))
+                }
+              } else if (msg.type === 'failed') {
+                hooks.onSettled()
+                reject(
+                  new ApiError(
+                    500,
+                    (msg.error as string) ?? 'Analysis failed',
+                    msg.error_code as string | undefined,
+                  ),
+                )
+              }
+            } catch {
+              // Ignore malformed messages
+            }
+          }
+
+          ws.onerror = () => {
+            clearTimeout(connectTimeout)
+            startPollingFallback()
+          }
+
+          ws.onclose = () => {
+            clearTimeout(connectTimeout)
+            startPollingFallback()
+          }
+        } catch (e) {
+          console.log('[analyze] WebSocket open failed:', e instanceof Error ? e.message : String(e))
           startPollingFallback()
         }
-      }
+      })
 
-      ws.onclose = () => {
-        clearTimeout(connectTimeout)
-        if (!settled) {
-          startPollingFallback()
-        }
-      }
-    } catch {
-      // WebSocket constructor threw (unlikely but possible in some environments)
-      startPollingFallback()
-    }
+    const cancelSse = startAnalyzeSse(
+      jobId,
+      onStatus,
+      undefined,
+      hooks,
+      (err: unknown) => {
+        if (settled) return
+        console.log('[analyze] SSE unavailable, falling back to WebSocket:', err instanceof Error ? err.message : String(err))
+        startWebSocket()
+      },
+    )
+    if (cancelSse == null) startWebSocket()
+    else activeCancelRef = cancelSse
   })
 
   return {
@@ -238,8 +264,7 @@ export function connectAnalyzeWebSocket(
     cancel: () => {
       if (settled) return
       settled = true
-      wsRef?.close()
-      pollingCancel?.()
+      activeCancelRef?.()
       rejectRef?.(new AnalyzePollCancelledError())
     },
   }
@@ -485,101 +510,235 @@ export function pollAnalyzeJob(
   return pollAnalyzeJobCancelable(jobId, onStatus, intervalMs).promise
 }
 
+/** Settlement bookkeeping shared by the polling tick and the SSE path (Commit 151). */
+interface TerminalHooks {
+  resolve: (lesson: LessonJSON) => void
+  reject: (err: unknown) => void
+  /** Called exactly once when the job reaches a terminal state — stops the active transport. */
+  onSettled: () => void
+}
+
+/**
+ * Resolve/reject from a terminal `AnalyzeJob`, or return false when still processing.
+ * Terminal status is checked BEFORE `onStatus`, so a throw from the consumer
+ * callback can't bypass the settled flag and trigger post-terminal requests (BUG-01).
+ */
+function applyTerminalJob(job: AnalyzeJob, hooks: TerminalHooks): boolean {
+  if (job.status === 'complete') {
+    hooks.onSettled()
+    if (job.result) hooks.resolve(job.result)
+    else hooks.reject(new ApiError(500, 'Analysis complete but no result'))
+    return true
+  }
+  if (job.status === 'failed') {
+    hooks.onSettled()
+    const code = typeof job.error_code === 'string' && job.error_code.length > 0 ? job.error_code : undefined
+    hooks.reject(new ApiError(500, job.error ?? 'Analysis failed', code))
+    return true
+  }
+  return false
+}
+
+/**
+ * HTTP polling transport (Commit 151: fallback branch — SSE is primary).
+ *
+ * Polling strategy for long-running analyze jobs:
+ * - Initial interval: 3000ms (reduced server load for expensive operations)
+ * - Backoff: 1.3x per poll (less aggressive than 1.5x)
+ * - Max backoff: 8000ms (cap to avoid excessive delays)
+ * - Max exponent: 3 (reaches max backoff faster)
+ *
+ * This reduces unnecessary polling for Demucs stem separation which can take
+ * minutes on CPU, while still providing responsive updates for fast jobs.
+ */
+function startAnalyzePolling(
+  jobId: string,
+  onStatus: (job: AnalyzeJob) => void,
+  intervalMs: number,
+  options: PollAnalyzeOptions | undefined,
+  hooks: TerminalHooks,
+): { cancel: () => void } {
+  let done = false
+  let seenCompletedOrFailed = false // BUG-01 guard: never re-poll after terminal status
+  let pollCount = 0
+  let pollNetworkFailures = 0
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const stop = () => {
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      timer = undefined
+    }
+  }
+
+  const schedule = (delayMs: number) => {
+    stop()
+    timer = setTimeout(() => void tick(), delayMs)
+  }
+
+  const linkSettled = () => {
+    done = true
+    seenCompletedOrFailed = true
+    stop()
+    hooks.onSettled()
+  }
+
+  const tick = async () => {
+    if (done || seenCompletedOrFailed) return // BUG-01: never re-poll after terminal status
+    try {
+      const job = await getJobStatus(jobId)
+      pollNetworkFailures = 0
+      pollCount += 1
+
+      if (applyTerminalJob(job, { ...hooks, onSettled: linkSettled })) return
+
+      onStatus(job)
+      const wallStart = options?.wallClockStartedAtMs
+      const maxWall = options?.maxProcessingWallMs
+      if (
+        wallStart != null &&
+        maxWall != null &&
+        maxWall > 0 &&
+        job.status === 'processing' &&
+        Date.now() - wallStart > maxWall
+      ) {
+        options?.onLongRunning?.()
+      }
+      const backoffMs = Math.min(8000, intervalMs * Math.pow(1.3, Math.min(pollCount - 1, 3)))
+      schedule(backoffMs)
+    } catch (e) {
+      if (done) return
+      if (
+        isRecoverableAnalyzePollError(e) &&
+        pollNetworkFailures < MAX_POLL_NETWORK_RETRIES
+      ) {
+        pollNetworkFailures += 1
+        const delayMs = pollBackoffDelayMs(pollNetworkFailures)
+        options?.onRecoverablePollError?.({ attempt: pollNetworkFailures, delayMs })
+        schedule(delayMs)
+        return
+      }
+      stop()
+      done = true
+      hooks.onSettled()
+      hooks.reject(e)
+    }
+  }
+
+  void tick()
+  return {
+    cancel: () => {
+      done = true
+      stop()
+    },
+  }
+}
+
+/**
+ * SSE transport (Commit 151). Returns its cancel function, or `null` when the
+ * environment has no SSE support — the caller then starts the next transport.
+ */
+function startAnalyzeSse(
+  jobId: string,
+  onStatus: (job: AnalyzeJob) => void,
+  options: PollAnalyzeOptions | undefined,
+  hooks: TerminalHooks,
+  onUnavailable: (err: unknown) => void,
+): (() => void) | null {
+  let closed = false
+  let wallTimer: ReturnType<typeof setTimeout> | undefined
+  const stopWallTimer = () => {
+    if (wallTimer !== undefined) {
+      clearTimeout(wallTimer)
+      wallTimer = undefined
+    }
+  }
+
+  const handle = openAnalyzeSse(API_BASE_URL, jobId, {
+    onJob: (job) => {
+      if (closed) return
+      const terminal = applyTerminalJob(job, {
+        resolve: hooks.resolve,
+        reject: hooks.reject,
+        onSettled: () => {
+          closed = true
+          stopWallTimer()
+          hooks.onSettled()
+        },
+      })
+      if (terminal) return
+      onStatus(job)
+    },
+    onUnavailable: (err) => {
+      if (closed) return
+      closed = true
+      stopWallTimer()
+      onUnavailable(err)
+    },
+  })
+  if (handle == null) return null
+
+  const wallStart = options?.wallClockStartedAtMs
+  const maxWall = options?.maxProcessingWallMs
+  if (options?.onLongRunning != null && wallStart != null && maxWall != null && maxWall > 0) {
+    wallTimer = setTimeout(() => {
+      if (closed) return
+      options.onLongRunning?.()
+    }, Math.max(0, wallStart + maxWall - Date.now()))
+  }
+
+  return () => {
+    closed = true
+    stopWallTimer()
+    handle.close()
+  }
+}
+
+/**
+ * SSE → HTTP polling job status listener (Commit 151 — BUG-01 root fix).
+ *
+ * The SSE stream pushes status until a terminal event closes it, so no status
+ * requests are made after `complete`/`failed`. When SSE is unsupported or the
+ * stream dies first, the existing polling loop takes over transparently —
+ * with identical `onStatus`/rejection behavior and the `seenCompletedOrFailed`
+ * guard intact as the safety net.
+ */
 export function pollAnalyzeJobCancelable(
   jobId: string,
   onStatus: (job: AnalyzeJob) => void,
   intervalMs = 3000,
   options?: PollAnalyzeOptions,
 ): { promise: Promise<LessonJSON>; cancel: () => void } {
-  /**
-   * Polling strategy for long-running analyze jobs:
-   * - Initial interval: 3000ms (reduced server load for expensive operations)
-   * - Backoff: 1.3x per poll (less aggressive than 1.5x)
-   * - Max backoff: 8000ms (cap to avoid excessive delays)
-   * - Max exponent: 3 (reaches max backoff faster)
-   * 
-   * This reduces unnecessary polling for Demucs stem separation which can take
-   * minutes on CPU, while still providing responsive updates for fast jobs.
-   */
   let settled = false
   let rejectRef: ((reason?: unknown) => void) | null = null
-  let stopRef: (() => void) | null = null
-  let pollCount = 0
-  let seenCompletedOrFailed = false  // BUG-01 guard: never re-poll after terminal status
+  let activeCancelRef: (() => void) | null = null
 
   const promise = new Promise<LessonJSON>((resolve, reject) => {
     rejectRef = reject
-    let timer: ReturnType<typeof setTimeout> | undefined
-    let pollNetworkFailures = 0
-
-    const stop = () => {
-      if (timer !== undefined) {
-        clearTimeout(timer)
-        timer = undefined
-      }
-    }
-    stopRef = stop
-
-    const schedule = (delayMs: number) => {
-      stop()
-      timer = setTimeout(() => void tick(), delayMs)
-    }
-
-    const tick = async () => {
-      if (settled || seenCompletedOrFailed) return  // BUG-01: never re-poll after terminal status
-      try {
-        const job = await getJobStatus(jobId)
-        pollNetworkFailures = 0
-        pollCount += 1
-
-        // BUG-01: check terminal status BEFORE calling onStatus, so a throw from
-        // the callback doesn't bypass the settled flag and trigger re-polling.
-        if (job.status === 'complete') {
-          stop(); settled = true; seenCompletedOrFailed = true
-          if (job.result) resolve(job.result)
-          else reject(new ApiError(500, 'Analysis complete but no result'))
-          return
-        }
-        if (job.status === 'failed') {
-          stop(); settled = true; seenCompletedOrFailed = true
-          const code = typeof job.error_code === 'string' && job.error_code.length > 0 ? job.error_code : undefined
-          reject(new ApiError(500, job.error ?? 'Analysis failed', code))
-          return
-        }
-
-        onStatus(job)
-        const wallStart = options?.wallClockStartedAtMs
-        const maxWall = options?.maxProcessingWallMs
-        if (
-          wallStart != null &&
-          maxWall != null &&
-          maxWall > 0 &&
-          job.status === 'processing' &&
-          Date.now() - wallStart > maxWall
-        ) {
-          options?.onLongRunning?.()
-        }
-        const backoffMs = Math.min(8000, intervalMs * Math.pow(1.3, Math.min(pollCount - 1, 3)))
-        schedule(backoffMs)
-      } catch (e) {
-        if (settled) return
-        if (
-          isRecoverableAnalyzePollError(e) &&
-          pollNetworkFailures < MAX_POLL_NETWORK_RETRIES
-        ) {
-          pollNetworkFailures += 1
-          const delayMs = pollBackoffDelayMs(pollNetworkFailures)
-          options?.onRecoverablePollError?.({ attempt: pollNetworkFailures, delayMs })
-          schedule(delayMs)
-          return
-        }
-        stop()
+    const hooks: TerminalHooks = {
+      resolve,
+      reject,
+      onSettled: () => {
         settled = true
-        reject(e)
-      }
+        activeCancelRef?.()
+      },
     }
 
-    void tick()
+    let fallbackStarted = false
+    const startPollingFallback = () => {
+      if (fallbackStarted || settled) return
+      fallbackStarted = true
+      const link = startAnalyzePolling(jobId, onStatus, intervalMs, options, hooks)
+      activeCancelRef = link.cancel
+    }
+
+    const cancelSse = startAnalyzeSse(jobId, onStatus, options, hooks, (err) => {
+      if (settled) return
+      console.log('[analyze] SSE unavailable, falling back to polling:', err instanceof Error ? err.message : String(err))
+      startPollingFallback()
+    })
+    if (cancelSse == null) startPollingFallback()
+    else activeCancelRef = cancelSse
   })
 
   return {
@@ -587,7 +746,7 @@ export function pollAnalyzeJobCancelable(
     cancel: () => {
       if (settled) return
       settled = true
-      stopRef?.()
+      activeCancelRef?.()
       rejectRef?.(new AnalyzePollCancelledError())
     },
   }

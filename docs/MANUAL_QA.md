@@ -16,17 +16,19 @@ The following gated issues were identified during Phase 1 and resolved or waived
 
 ### BUG-01: Analyze polling infinite loop
 
-**What it was:** Frontend kept polling `GET /analyze/{id}` after the backend returned `complete`, causing unnecessary network traffic and potential edge-case re-analysis triggers.
+**What it was:** Frontend kept polling `GET /analyze/{id}` after the backend returned `complete`, causing unnecessary network traffic and potential edge-case re-analysis triggers. Root cause addressed in Commit 151: analyze progress is now *pushed* over SSE (`GET /analyze/{id}/stream`) with WebSocket → polling fallback, so there is no steady-state polling loop left to leak.
 
-**Resolution:** `seenCompletedOrFailed` guard added at `src/api/analyze.ts:381` — tick function returns immediately if terminal status has been observed. Terminal status is checked *before* the `onStatus` callback to prevent callback exceptions from bypassing the guard.
+**Resolution (Commit 151):** SSE is the primary transport. `openAnalyzeSse()` (`src/api/analyzeSse.ts`) opens an `EventSource` (web) / streaming fetch (native); `createAnalyzeSseSession()` maps `status`/`complete`/`failed` events onto the same `onStatus`/terminal callbacks as the old poller and closes the stream on terminal events. Both entry points (`pollAnalyzeJobCancelable`, `connectAnalyzeWebSocket` in `src/api/analyze.ts`) walk one transport chain — SSE → WebSocket → polling — entering each link exactly once (chain guard), so a failed SSE cannot also start a duplicate polling loop. The `seenCompletedOrFailed` guard stays in the polling fallback (`src/api/analyze.ts:562`), with the terminal check running *before* the `onStatus` callback.
 
 **Verification steps:**
-1. Submit a YouTube URL for analysis
+1. Submit a song for analysis (YouTube URL or upload)
 2. Open DevTools Network tab, filter by `/analyze/`
-3. Wait for analysis to complete
-4. Confirm **zero** additional `/analyze/{id}` requests fire after the response with `"status": "complete"`
-5. Force a failure (e.g., invalid URL) and confirm polling stops immediately on `"status": "failed"`
-6. FAIL if any request fires after terminal status
+3. Expect exactly: one `POST /analyze` + one `GET /analyze/{id}/stream` (EventStream). The stream stays open for the whole job; stage labels update live from pushed `status` events (`stems_separating` → `chords_inferring` → `mt3_inferring` → `building_musicxml` → `complete`)
+4. On completion the client receives `complete` and closes the stream — expect **zero** reconnects and zero `GET /analyze/{id}` requests, before or after terminal status
+5. Force a failure (e.g., invalid URL) and confirm the `failed` event closes the stream with no further requests
+6. FAIL if any plain `GET /analyze/{id}` poll fires, if the EventSource reconnects after terminal status, or if the WebSocket fallback opens while SSE is healthy
+
+**Last verified (web):** 2026-09-27 — automated Playwright run: 1× EventSource, 0 polling, 0 WebSocket, 0 console errors, 0 requests in the 45s post-terminal quiet period. Native device run: with the user as final sign-off.
 
 ---
 
@@ -118,7 +120,7 @@ Manual QA sign-off for commits 86–97 acceptance criteria. Fill on Phase 1 clos
 | 10 | ML inference diagnostics (95) | Backend logs are free of model loading warnings; cold-start inference completes | | |
 | 11 | Unified Player UX parity (96) | Navigate Listen → Slow → Study → Play: consistent header/controls/lyrics positioning; no layout shift on toggle | | |
 | 12 | Orient-as-hint / AsyncStorage / seek sync (97) | Orient annotation is technique-aware; tab variant + lyrics prefs survive restart; seek-to-start syncs within 50ms | | |
-| 13 | BUG-01 — Analyze polling fix | Polling stops on `complete`/`failed` — zero additional requests | | |
+| 13 | BUG-01 — SSE progress stream (root fix) | One `GET /analyze/{id}/stream` per job; client closes on `complete`/`failed` — zero polls, zero reconnects | | |
 | 14 | BUG-02 — Jam Mode AlphaTab crash | Jam Mode renders tabs without "Invalid typed array length" error | | |
 
 ---

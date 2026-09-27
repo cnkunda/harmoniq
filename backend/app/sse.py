@@ -1,20 +1,44 @@
 """Server-Sent Events (SSE) utilities for Harmoniq.
 
-Provides an EventSourceResponse wrapper and helper to stream
-job progress updates to connected clients.
+Provides an SSE response wrapper and the job progress stream behind
+`GET /analyze/{job_id}/stream`.
+
+Commit 151 (BUG-01 root-cause fix): the stream watches the same in-memory
+job store `GET /analyze/{job_id}` reads and emits an event on every state
+change, instead of subscribing to Redis pub/sub. The previous
+`sse:channel:{job_id}` subscription never received anything — no producer
+ever published to that channel — and it required a running Redis even
+though the analyze pipeline (thread worker and Celery alike) already keeps
+job state readable in-process.
+
+Event contract:
+    connected  {"job_id", "message"}        first frame
+    status     JobStatus JSON               on connect + on every change
+    complete   JobStatus JSON (with result) terminal — stream closes
+    failed     JobStatus JSON               terminal — stream closes
+    heartbeat  {"ts"}                       every HEARTBEAT_SECONDS while idle
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-import os
 import time
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from starlette.responses import StreamingResponse
 
+from app.schemas import JobStatus
+
 logger = logging.getLogger("harmoniq.sse")
+
+# How often the job store is checked for changes (seconds).
+POLL_INTERVAL_SECONDS = 1.0
+# Keep-alive frames so proxies don't time out a silent stream.
+HEARTBEAT_SECONDS = 15.0
+# Hard cap on a single stream connection.
+TIMEOUT_SECONDS = 900.0
 
 
 def format_sse_event(event: str, data: dict | str) -> str:
@@ -23,69 +47,73 @@ def format_sse_event(event: str, data: dict | str) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
+def _status_snapshot(job: JobStatus) -> tuple[Any, ...]:
+    """Fields whose change should emit a `status` event (result arrives only at terminal)."""
+    return (
+        job.status,
+        job.progress,
+        job.stage_label,
+        job.processing_started_at,
+        job.analysis_stage,
+        job.error,
+        job.error_code,
+    )
+
+
 async def job_progress_stream(job_id: str) -> AsyncIterator[str]:
-    """Yield SSE events for a job by polling Redis pub/sub.
+    """Yield SSE events for a job by watching the in-memory job store.
 
-    Subscribes to `sse:channel:{job_id}` and yields events until
-    the job reaches a terminal state (complete/failed).
+    Mirrors `GET /analyze/{job_id}` semantics (unknown id → queued), emits
+    `status` only when the snapshot actually changes, and ends the stream on
+    the first terminal status — no frames are produced after `complete`/`failed`.
     """
-    import redis.asyncio as aioredis
+    from app.jobs import jobs  # heavy module — import lazily, like this router already does
 
-    from app.job_store import get_job
+    def current_job() -> JobStatus:
+        job = jobs.get(job_id)
+        if job is None:
+            return JobStatus(status="queued", result=None, error=None, error_code=None)
+        return job
 
-    url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    r = aioredis.from_url(url, decode_responses=True)
-    pubsub = r.pubsub()
-    channel = f"sse:channel:{job_id}"
-    await pubsub.subscribe(channel)
+    connection_start = time.monotonic()
+    last_heartbeat = connection_start
+    last_snapshot: tuple[Any, ...] | None = None
 
     try:
-        # Send initial heartbeat
         yield format_sse_event("connected", {"job_id": job_id, "message": "SSE connected"})
 
-        # Check if job is already complete
-        job = get_job(job_id)
-        if job is not None:
-            if job.status == "complete":
-                yield format_sse_event("complete", job.model_dump(mode="json"))
-                return
-            elif job.status == "failed":
-                yield format_sse_event("error", {"error": job.error, "error_code": job.error_code})
-                return
-
-        connection_start = time.time()
-        last_heartbeat = connection_start
-        timeout_seconds = 900  # 15 minutes max SSE connection
-
         while True:
-            now = time.time()
+            job = current_job()
 
-            # Timeout safety — compare against connection start, not last heartbeat
-            if now - connection_start > timeout_seconds:
-                yield format_sse_event("error", {"error": "SSE connection timed out"})
+            if job.status in ("complete", "failed"):
+                event = "complete" if job.status == "complete" else "failed"
+                yield format_sse_event(event, job.model_dump(mode="json"))
                 return
 
-            message = await pubsub.get_message(timeout=1.0)
-            if message is not None and message["type"] == "message":
-                payload = json.loads(message["data"])
-                event_type = payload.get("event", "progress")
-                event_data = payload.get("data", {})
+            snapshot = _status_snapshot(job)
+            if snapshot != last_snapshot:
+                last_snapshot = snapshot
+                yield format_sse_event("status", job.model_dump(mode="json"))
 
-                yield format_sse_event(event_type, event_data)
-
-                # Terminal events close the stream
-                if event_type in ("complete", "error"):
-                    return
-
-            # Heartbeat every 15s to keep connection alive
-            now = time.time()
-            if now - last_heartbeat > 15:
-                yield format_sse_event("heartbeat", {"ts": now})
+            now = time.monotonic()
+            if now - connection_start > TIMEOUT_SECONDS:
+                yield format_sse_event(
+                    "failed",
+                    JobStatus(
+                        status="failed",
+                        result=None,
+                        error="SSE connection timed out",
+                        error_code=None,
+                    ).model_dump(mode="json"),
+                )
+                return
+            if now - last_heartbeat > HEARTBEAT_SECONDS:
                 last_heartbeat = now
+                yield format_sse_event("heartbeat", {"ts": time.time()})
 
+            await asyncio.sleep(POLL_INTERVAL_SECONDS)
     finally:
-        await pubsub.unsubscribe(channel)
-        await r.aclose()
+        logger.debug("SSE stream closed job_id=%s", job_id)
 
 
 def sse_response(job_id: str) -> StreamingResponse:
