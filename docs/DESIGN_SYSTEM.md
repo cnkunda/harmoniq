@@ -3,7 +3,7 @@
 > **React Native + Expo Edition**
 > All components target **Expo SDK 51+, React Native, NativeWind v4, Expo Router v3**.
 > The original Vite + react-router-dom web prototype is superseded by this file.
-> See `PRIORITIES.md → Technology Resolution Notes` for the full migration rationale.
+> See `priorities-archive.md → Technology Resolution Notes` for the full migration rationale.
 
 ---
 
@@ -1754,7 +1754,7 @@ export default function TabLayout() {
 - **Panel tokens (align with `SessionStepScreen` / Listen):** `rounded-xl border border-wood-600/40 bg-cream-dark/50` for cards; section titles `font-sans-medium text-xs uppercase tracking-wide text-amber-accent`; body `text-wood-900` / secondary `text-muted-brown` — **not** separate dark-wood “dashboard” panels so Play reads as the same session chrome as Listen/Study.
 - **B2 (targets):** The highlighted chip is always the **latest tab note** (`noteEvent`); the queue shows history so testers see targets advancing **note-by-note**, while beat scoring stays **per beat** against whatever target was in effect.
 - **Chips:** Reuse the ListenStemPanel inactive/active chip pattern (`border-wood-600/40 bg-wood-900/10` vs `border-amber-accent bg-amber-accent`) for the horizontal target strip.
-- **Motion:** `react-native-reanimated` only (see `PRIORITIES.md` — no `framer-motion`). Beat-close feedback on the fretboard uses a brief ring tint (success / amber / danger).
+- **Motion:** `react-native-reanimated` only (see `priorities-archive.md` → Technology Resolution Notes — no `framer-motion`). Beat-close feedback on the fretboard uses a brief ring tint (success / amber / danger).
 - **QA cross-links:** Play targets and pitch ladder checks live under Phase 5 / platform notes in [`docs/MANUAL_QA.md`](./MANUAL_QA.md).
 
 ```app/(tabs)/index.tsx

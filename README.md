@@ -430,7 +430,7 @@ Target experience: **beat-aligned chord symbols**, a **clean monophonic solo lin
 * **On-device real-time inference:** The CRNN TFLite model powers Live Mic Mode (<120ms latency) for chord detection during practice. Long-term, a framewise piano-roll student model (non-autoregressive, distilled from Branch A's output) will replace the CRNN for chords, and a guitar-only-vocabulary token student model (autoregressive, distilled from Branch B's output) will handle on-device solo transcription.
 * **Custom model future:** The CRNN training pipeline is preserved as a distillation target. Two student models, not one: (1) a **framewise chord student** — non-autoregressive piano-roll model distilled from Branch A's Flat-granularity pitch output, fast and real-time-capable; (2) a **guitar-vocabulary token solo student** — autoregressive token model distilled from Branch B's program-conditioned output, smaller than MT3 because its vocabulary is limited to guitar programs only and structurally incapable of leaking non-guitar notes. Both are fine-tuned on real guitar audio (GuitarSet, isolated stems from catalog), not only Slakh2100.
 * **Machine-readable analysis:** `BeatGrid`, `ChordTimeline`, and `SoloNotes` JSON alongside the score for edits and recomputation.
-* **Engineering roadmap:** [PRIORITIES.md](PRIORITIES.md) Phase 2 Milestone A (Demucs → MT3 → chord+solo decoders → MusicXML → alphaTab + fretboard).
+* **Engineering roadmap:** [PRIORITIES.md](PRIORITIES.md) (active commits) — MT3-primary pipeline shipped per archived [Milestone A](priorities-archive.md) (Demucs → MT3 → chord+solo decoders → MusicXML → alphaTab + fretboard).
 
 ---
 

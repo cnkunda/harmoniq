@@ -2,6 +2,8 @@
 
 Completed commits moved from `PRIORITIES.md`.
 
+> **Roadmap restructure note:** the follow-up work listed under Commit 123 ("Not in scope") was promoted to [`PRIORITIES.md`](../PRIORITIES.md) commit 157 (Harmonized Solo UI + Coach Chord-Tone Integration) — frontend display of `harmonized_solo` / `per_bar_analysis` and coach prompts referencing chord-tone data. Position-inference refinement beyond CAGED remains Phase 3.
+
 ---
 
 ## Commit 123: Solo Harmony Enrichment — Chord-Tone Classification & Position Inference
@@ -68,10 +70,10 @@ Completed commits moved from `PRIORITIES.md`.
   - Edge: "N" (no-chord) beats → skip analysis
   - Edge: empty chord_timeline or solo_notes → graceful None return
 
-**Not in scope (follow-up commits):**
+**Not in scope (follow-up commits):** → **promoted to PRIORITIES.md commit 157**
 - Frontend display of enriched data (Study fretboard overlay, Review feedback) — Commit 126 already covers theory overlay
 - Claude coaching prompt changes to reference chord-tone data — belongs in coach prompt tuning
-- Position inference refinement (beyond CAGED) — can be iterated later
+- Position inference refinement (beyond CAGED) — can be iterated later (Phase 3)
 
 **Acceptance Criteria:**
 
@@ -89,5 +91,5 @@ Completed commits moved from `PRIORITIES.md`.
 - `backend/app/solo_harmony_analyzer.py` — ChordToneClassifier, PositionInferenceEngine, SoloHarmonizer
 - `backend/app/schemas.py` — ChordToneAnalysis, HarmonizedSoloNote, HarmonizedSoloNotes, BarScope
 - `backend/app/analyze_audio.py` — pipeline integration
-- `src/types/soloHarmony.ts` — frontend type mirrors
+- `src/types/soloHarmony.ts` — frontend type mirrors *(deleted as orphan in commit `5505726`; to be recreated by PRIORITIES.md commit 157)*
 - `backend/tests/test_solo_harmony_analyzer.py` — 50 tests, all passing

@@ -3,12 +3,14 @@
 Research project + demo app for Automatic Music Transcription (AMT), focused on guitar. Start here for the plan; see [`README.md`](README.md) for the build spec.
 
 **Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**.  
-**Phase 2 commits 98–121** — archived. **Phase 2 commits 122–148** — archived.  
+**Phase 2 commits 98–148** — archived.  
 **Milestone A (MT3-Primary Pipeline)** — archived, complete.  
 **Milestone B (Fretboard Dual-Mode)** — archived, complete.  
-**Milestone C (Engagement & Retention)** — deferred to archive (not scoped for MVP).  
-**Current Phase 2** — Pipeline maintenance, evaluation, and publication.  
-**Phase 3** — Planned (requires GPU resources).
+**Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167).  
+**Milestone D (Infrastructure)** — partially implemented; remaining gaps at commits 151, 169–172.  
+**Current Phase 2** — Pipeline validation & publication close-out (commits 149–150).  
+**Active backlog** — numbered commits **149–180** below (one commit = one spec).  
+**Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 177–180).
 
 ---
 
@@ -16,31 +18,31 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2: Pipeline Validation & Publication.** Phase 3: Planned (blocked on GPU). |
+| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 151–180.** Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
 | **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
 | **Manual QA** | [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) |
 | **Blog** | [`docs/blog/why-harmoniq-part-2.md`](docs/blog/why-harmoniq-part-2.md) |
-| **Archive** | [`priorities-archive.md`](priorities-archive.md) (all completed + deferred commits) |
+| **Archive** | [`priorities-archive.md`](priorities-archive.md) (completed work only; deferred work was promoted here in Sep 2026) |
 
 ---
 
-## PHASE 2: Pipeline Validation & Publication
+## PHASE 2: Pipeline Validation & Publication — Commits 149–150
 
-**Status:** In Progress
+**Status:** In Progress — closing out
 
 **What this phase is:**
-- Validate the MT3-primary + CRNN-fallback pipeline on a real song set
-- Document known failure modes and evaluation results
-- Publish Part 2 and Part 3 blog posts
-- Make the project easy to clone, configure, and run for new contributors
+- Validate the MT3-primary + CRNN-fallback pipeline on a real song set (done — see [`docs/EVALUATION.md`](docs/EVALUATION.md))
+- Document known failure modes and evaluation results (done — see [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md))
+- Publish Part 2 and Part 3 blog posts (Part 2 published; Part 3 = commit 150)
+- Verify everything works from a clean clone and sync the roadmap to reality (commit 149)
 
 **What this phase is not:**
-- New feature development (Milestone C is deferred)
+- New feature development (engagement features start at commit 159)
 - Custom model training (requires GPU — see Phase 3)
-- On-device optimization (the existing ONNX active listener beta is separate)
+- On-device optimization (the existing on-device active listener beta is separate)
 
 ### Strategic Context
 
@@ -63,86 +65,817 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 **Why the CRNN is kept:** It serves as a confidence-aware fallback. At 34.7% real-world accuracy, it correctly identifies out-of-distribution audio (>80% N predictions) and defers to chroma matching. This is not a bug — it is correct behavior for a well-designed fallback. The quality gate (`_neural_model_too_noisy()` in `chord_inference.py`) prevents the system from presenting garbage output.
 
-**What we'd do with a GPU:** Retrain the CRNN on MT3-generated pseudo-labels to close the synthetic-to-real gap. This is the obvious next experiment but requires GPU resources currently unavailable.
+**What we'd do with a GPU:** Retrain the CRNN on MT3-generated pseudo-labels to close the synthetic-to-real gap (commit 174).
 
 ---
 
-### R1: Pipeline Validation
+### Commit 149: Phase 2 Release-Gate Verification & Roadmap Sync
+
+**Status:** ready
+
+**Goal:** Verify the Phase 2 release gate from a clean clone, tick the acceptance criteria that pass, close stale criteria, and leave the roadmap matching reality.
+
+**Current State:** R1 (Pipeline Validation) is complete in substance: `docs/EVALUATION.md` records the full 5-song test set (3 pass / 1 warn / 1 fail) with per-branch tiers and confidences; `docs/KNOWN_FAILURES.md` documents failure modes; the fallback chain is exercised with real examples. R2 (Documentation & Publication) is complete: Part 2 published to harmoniq.ai/blog, README has the Research Abstract, `scripts/download_mt3_checkpoint.py` automates MT3 setup, AGENTS.md covers research workflows. R3 (Open-Source Hardening) is complete in substance: CI green (vitest 399/399, backend pytest 1270 passed), `scripts/quick_smoke_test.py` exists — but a clean-clone verification has not been run. One archived AC is stale: Commit 98c "[ ] Inference latency <100ms on target mobile device" was superseded by the Milestone A on-device benchmark (`tests/benchmarks/chordModelLatency.ts`).
 
 **Scope:**
-- Run the full pipeline on a 5-song test set (3 studio + 1 live + 1 self-recorded)
-- Document results in [`docs/EVALUATION.md`](docs/EVALUATION.md)
-- Document known failure modes in [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md)
-- Verify the fallback chain fires correctly for each failure mode
+
+- Run clean-clone verification end-to-end:
+  - Fresh clone → `npm install` → `npm run lint` → `npm run test`
+  - Fresh venv → `pip install -e ".[dev]"` → `python -m pytest -q`
+  - `python scripts/quick_smoke_test.py` on the bundled reference audio
+- Fix or file issues: any failure found becomes a new backlog commit (do not silently drop ACs)
+- Tick every R1–R3 acceptance criterion that the verification proves
+- Close the stale 98c AC in [`priorities-archive.md`](priorities-archive.md) as *superseded by the Milestone A on-device benchmark*
+- Tick R2's publication AC (Part 2 is published)
+- Fold this section's ACs into the release-gate list below and tick them
+- Sync "At a glance" / phase headers so no stale "deferred" claims remain (Milestone C/D status notes are already updated — verify)
 
 **Acceptance Criteria:**
-- [ ] All 5 songs produce a complete LessonJSON (no crashes)
-- [ ] Fallback chain documented with real examples
-- [ ] CI test suite passes (`npm run lint`, `npm run test`, `pytest` on core files)
+
+- [ ] Clean clone passes `npm run lint` and `npm run test`
+- [ ] Clean clone passes the backend core pytest set
+- [ ] `python scripts/quick_smoke_test.py` runs green on bundled reference audio
+- [ ] All former R1–R3 ACs ticked, or explicitly converted to backlog commits
+- [ ] Stale 98c mobile-latency AC closed as superseded (documented in archive)
+- [ ] Part 2 publication AC ticked
+- [ ] Roadmap status sections match codebase reality (this file + archive pointers)
 
 ---
 
-### R2: Documentation & Publication
+### Commit 150: Part 3 Blog Post — The Meta-Layer (was R4)
+
+**Status:** ready
+
+**Goal:** Write and publish Part 3 of the Harmoniq blog series: building an AI product with AI assistance — the recursive loop of planning, implementing, reviewing, and deciding when to push through a plateau versus change approach.
+
+**Current State:** Part 2 is published (`docs/blog/why-harmoniq-part-2.md`) and promises Part 3 at its conclusion: *"Part 3 will be about the meta-layer of this project: building an AI product with AI assistance, and what that recursive loop taught me about learning, building, and when to push through a plateau versus when to find a different path."* No Part 3 draft exists.
 
 **Scope:**
-- Write and publish Part 2 blog post: honest engineering walkthrough of the pipeline
-- Add research abstract + quick-start to README.md
-- Create MT3 checkpoint download script for new developers
-- Ensure AGENTS.md covers research workflows
+
+- Draft `docs/blog/why-harmoniq-part-3.md` covering: the agent-driven development workflow (roadmap → spec → commit → review), what the merge/code-review passes surfaced (dead code, stale roadmaps), honest lessons on process vs. velocity
+- Include concrete examples from this repo (evaluation results, fallback architecture honesty)
+- Publish to harmoniq.ai/blog
+- Link Part 3 from Part 2's closing paragraph, README, and [`docs/blog/`](docs/blog/) index
 
 **Acceptance Criteria:**
-- [ ] Part 2 published to harmoniq.ai/blog
-- [ ] README has research abstract at the top
-- [ ] `python scripts/download_mt3_checkpoint.py` automates MT3 setup
-- [ ] `docs/KNOWN_FAILURES.md` and `docs/EVALUATION.md` exist and are accurate
 
----
-
-### R3: Open-Source Hardening
-
-**Scope:**
-- Verify all CI paths work on a clean clone
-- Fix any broken tests or lint errors
-- Archive Milestone C to priorities-archive.md
-- Add quick-smoke-test script for new developers
-
-**Acceptance Criteria:**
-- [ ] `npm run lint` passes (0 errors)
-- [ ] `npm run test` passes on core test files
-- [ ] Backend CI test set (`pytest` on 12 core files) passes
-- [ ] Quick-smoke-test script runs without errors on a reference audio file
-
----
-
-### R4: Part 3 Blog Post
-
-**Scope:**
-- Write and publish Part 3: the meta-layer (building an AI product with AI assistance)
-
-**Acceptance Criteria:**
 - [ ] Part 3 published to harmoniq.ai/blog
+- [ ] Part 2, README, and docs cross-link to Part 3
+- [ ] Post includes real metrics/results from the repo (no placeholder claims)
 
 ---
 
-### Deferred: Milestone C — Engagement & Retention Features
+## Active Backlog — Commits 151–180
 
-Milestone C (commits C1–C9) covered: user feedback overrides, jam summary agent, play analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output, and multi-instrument support. These are not scoped for the current MVP. Full specs are archived in [`priorities-archive.md`](priorities-archive.md).
+Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
 
 ---
 
-## PHASE 3: Custom Model Distillation (Planned)
+**Group: Carry-over fixes (151–155)**
 
-**Status:** Planned — blocked on GPU access
+---
 
-The pipeline currently relies on MT3 (JAX, CPU, ~5 min per song) as the primary transcriber. With GPU access, the next phase would:
+### Commit 151: Frontend SSE Progress Stream — Root-Cause Fix for BUG-01
 
-1. **Retrain CRNN on MT3 pseudo-labels** — use MT3 to label thousands of real guitar recordings, then train the CRNN on this expanded dataset. This could close the 34.7% → 70%+ gap that limited the original CRNN.
+**Status:** ready
 
-2. **Two-head student distillation** — train a shared-encoder model with chord classification and solo token decoding heads, distilled from MT3's full output. This would replace the current separate CRNN + chroma fallback with a single model.
+**Goal:** Replace the fragile analyze-polling loop with the already-built SSE endpoint so job status is pushed to the client, eliminating BUG-01 at its root instead of guarding against it.
 
-3. **Explore HT-MT3** — Headed and Tailed MT3 adds per-instrument decoder heads that reduce instrument confusion. If available as a teacher, it would produce higher-quality pseudo-labels.
+**Current State:** Backend is done: `GET /analyze/{job_id}/stream` exists (`backend/app/routers/analyze.py:370` → `app/sse.py`) and emits `JobStatus` JSON (including `analysis_stage`) on state changes. Frontend never uses it: `pollAnalyzeJobCancelable()` in `src/api/analyze.ts` still polls every 2–8s and relies on the `seenCompletedOrFailed` band-aid guard (`src/api/analyze.ts:508`) — the documented BUG-01 root cause (see [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) BUG-01). No `EventSource` or streaming client exists anywhere in `src/`.
 
-**Target student architecture** (if GPU becomes available):
+**Scope:**
+
+- Add an SSE code path to `pollAnalyzeJobCancelable()` in `src/api/analyze.ts`:
+  - Web: `EventSource` against `/analyze/{job_id}/stream`
+  - Native: `fetch` streaming reader with the same event parsing
+  - Detect SSE support; fall back to existing polling transparently when unavailable (identical `onStatus`/`onError` callbacks for consumer compatibility)
+  - Consume keep-alive pings; stream ends on terminal status (`complete`/`failed`) — no post-terminal requests
+- Keep the polling path as fallback only; the `seenCompletedOrFailed` guard stays in the fallback branch (never remove the safety net entirely)
+- Forward `analysis_stage` through `onStatus` so commit 152 can render progressive states
+- Unit tests for the SSE client state machine (connect → events → terminal close; fallback on error)
+- Re-run the Manual QA BUG-01 checkpoint on web and native
+
+**Acceptance Criteria:**
+
+- [ ] Web and native consume `GET /analyze/{job_id}/stream` for analyze jobs
+- [ ] No additional status requests are made after terminal status (BUG-01 checkpoint passes on both platforms)
+- [ ] SSE unavailable → transparent polling fallback with identical callbacks
+- [ ] Keep-alive pings prevent proxy timeouts; stream closes on terminal event
+- [ ] `analysis_stage` reaches `onStatus` consumers
+- [ ] Unit tests cover connect/event/terminal/fallback paths; `npm run test` green
+
+---
+
+### Commit 152: Progressive Analysis Reveal — Wire ChordChartPreview (was 109 remaining work)
+
+**Status:** ready
+
+**Goal:** Replace the monolithic add-song loading spinner with a progressive reveal: chord chart appears as soon as chord inference finishes, then refines to the full score.
+
+**Current State:** `components/ChordChartPreview.tsx` exists but is imported by no screen (dead until wired). `analysis_stage` is already parsed (`src/api/analyze.ts:185`) and typed (`src/types/index.ts:426`) but never rendered. Backend `JobStatus.analysis_stage` reports `initializing → stems_separating → chords_inferring → solo_inferring → building_musicxml → complete` (archive Commit 109). The add-song flow shows one monolithic spinner for the entire ~5-minute pipeline.
+
+**Scope:**
+
+- Wire `ChordChartPreview` into the add-song/loading flow: render it when `analysis_stage >= "chords_inferring"`
+- Show a smaller progress banner during later stages ("Refining solo notation…") instead of blocking the full-screen spinner
+- Complete stage list driven by `analysis_stage` from commit 151's `onStatus` (or polling fallback)
+- Keep coach hydration on its separate async track (no regression)
+- Replace the monolithic spinner only after the preview is live (staged rollout: preview first, spinner removal second)
+- Component test for stage → UI state mapping; Playwright structural test for the add-song flow
+
+**Acceptance Criteria:**
+
+- [ ] Chord chart preview renders as soon as `analysis_stage >= "chords_inferring"`
+- [ ] Later stages show a compact "refining" banner, not a blank spinner
+- [ ] Full score replaces the preview on `complete` without layout shift
+- [ ] Monolithic add-song spinner removed once preview path is verified
+- [ ] Coach hydration unchanged and non-regressed
+- [ ] Tests green (`npm run test`, `npm run test:ui`)
+
+---
+
+### Commit 153: MusicXML Re-Fetch After Corrections (was 110 remaining work)
+
+**Status:** ready
+
+**Goal:** Make corrected data visible in the score immediately — the rendered MusicXML must never stay stale after a chord, note, or voicing correction.
+
+**Current State:** Backend correction endpoints (`PATCH /analyze/{job_id}/chord/{beat_index}`, `.../solo-note/{note_index}`, `.../voicing`) rebuild MusicXML server-side, but the frontend keeps the score it fetched at load time until an explicit refresh (archive Commit 110 follow-up: "MusicXML re-fetch from frontend after correction (stale until explicit refresh)").
+
+**Scope:**
+
+- On successful correction mutation, invalidate the cached score and re-fetch MusicXML (and dependent artifacts) for the current job
+- Show a lightweight "Updating score…" indicator during refetch; keep fretboard/chord-timeline interaction enabled
+- Debounce rapid successive corrections (batch refetches, e.g. 300ms window)
+- Cover all three correction types: chord, note, voicing
+- Regression: existing correction history/revert flows trigger the same refetch
+- Integration test: PATCH chord → refetched MusicXML contains the corrected `<harmony>`; component test for debounce
+
+**Acceptance Criteria:**
+
+- [ ] Corrected chord/note/voicing appears in the rendered score without manual refresh
+- [ ] Refetch is debounced under rapid corrections (no request storm)
+- [ ] Loading indicator shown during refetch; no blank/flash
+- [ ] Revert from correction history also refreshes the score
+- [ ] Backend + frontend tests green
+
+---
+
+### Commit 154: Design-Token & Convention Conformance
+
+**Status:** ready
+
+**Goal:** Eliminate the design-system deviations flagged in the Sep 2026 code review so `src/constants/colors.ts` is the single source of color truth and styling follows AGENTS.md conventions.
+
+**Current State:** Code review found: 32 hardcoded hex literals outside `src/constants/colors.ts`; direct `expo-linear-gradient` imports in `app/(tabs)/index.tsx`, `app/_layout.tsx`, `components/MetronomeArcReadout.tsx`, `components/settings/SettingsCard.tsx` instead of the `WoodGradient` wrapper; `StyleSheet.create` in `app/+not-found.tsx` (NativeWind `className` is the convention); orphan ambient file `src/chord/mlModuleTypes.d.ts` with zero references.
+
+**Scope:**
+
+- Map every hardcoded hex to a token: existing palette values → existing tokens; genuinely artwork-specific colors (SVG strokes/fills in diagrams, metronome arc) → add named tokens to `src/constants/colors.ts` first, then reference them
+- Replace direct `expo-linear-gradient` usages with `WoodGradient` (`expo-linear-gradient` remains only inside `components/WoodGradient.tsx`); if a screen needs a non-standard gradient, extend `WoodGradient`'s props instead of bypassing it
+- Convert `app/+not-found.tsx` from `StyleSheet.create` to NativeWind `className`
+- Delete `src/chord/mlModuleTypes.d.ts` (verify zero references first — confirmed Sep 2026)
+- Sweep test: add a lint check (grep-based vitest or script) that fails on new hex literals outside `colors.ts` and on new `StyleSheet.create` / direct `expo-linear-gradient` imports outside the allowed files
+
+**Acceptance Criteria:**
+
+- [ ] Zero hex color literals outside `src/constants/colors.ts`
+- [ ] `expo-linear-gradient` imported only by `components/WoodGradient.tsx`
+- [ ] No `StyleSheet.create` outside allowed legacy files (zero, ideally)
+- [ ] `src/chord/mlModuleTypes.d.ts` deleted; nothing breaks
+- [ ] Regression guard (lint/script) prevents reintroduction
+- [ ] `npm run lint` + `npm run test` + visual snapshot check green
+
+---
+
+### Commit 155: ChordDiagram Native Rendering Verification (was 120 unchecked AC)
+
+**Status:** ready
+
+**Goal:** Verify traditional chord-box diagrams render correctly on native (iOS/Android) or activate the algorithmic fallback, closing the last unchecked AC of the chords-db integration (archive Commit 120).
+
+**Current State:** `@tombatossals/react-chords` renders SVG; web is verified. The native path is unverified — `ChordDiagram.tsx` already contains an algorithmic fallback for chords missing from the database, but no one has confirmed the primary path on device (archive AC: "[ ] Web rendering verified; native rendering verified or fallback active").
+
+**Scope:**
+
+- Run the design-preview and session screens (study/slow/play) on iOS simulator and Android emulator; capture ChordDiagram renderings across: open chords, barre chords, rare qualities (fallback path), flat-name chords (Bb → A#)
+- Fix rendering issues found (SVG sizing, font metrics, touch targets) or, if `react-chords` is fundamentally incompatible, activate the algorithmic fallback as the native default
+- Document findings in [`docs/ALPHATAB_LIMITATIONS.md`](docs/ALPHATAB_LIMITATIONS.md) or a short verification note
+- Tick the archived AC in [`priorities-archive.md`](priorities-archive.md)
+- Detox smoke: ChordDiagram visible and correctly sized on the study screen
+
+**Acceptance Criteria:**
+
+- [ ] ChordDiagram verified on iOS and Android (screenshots in PR) **or** algorithmic fallback made the native default
+- [ ] Barre/finger/barre markers legible at session-screen sizes on both platforms
+- [ ] Archived AC ticked with verification note
+- [ ] Detox smoke test green
+
+---
+
+**Group: Research plumbing & UX (156–158)**
+
+---
+
+### Commit 156: Research Module Wiring — transcription_confidence & instrument_confusion
+
+**Status:** ready
+
+**Goal:** Stop shipping dead research plumbing: either expose the confidence metrics and instrument-confusion hedging end-to-end, or explicitly document them as evaluation-only — no half-wired modules.
+
+**Current State:**
+- `backend/app/transcription_confidence.py` exports `composite_transcription_confidence()` and `chord_section_confidence()` — covered by tests (`tests/test_transcription_confidence.py`, `test_analyze_confidence.py`, `test_tabgen.py`) but never called by the production pipeline or API responses.
+- `instrument_confusion` is computed per song (`analyze_audio.py:406`, threshold warning at `:439`) and `coach.py` accepts an `instrument_confusion` parameter (`coach.py:221`, hedged copy at ≥0.3, section hydration at `:1036` via `getattr`) — but `jobs.py` coach hydration never passes section-level confusion values, so the hedged-feedback behavior from archived Commit 121 is effectively dead.
+
+**Scope:**
+
+- instrument_confusion → coach:
+  - Verify how per-section confusion reaches hydrated sections (`schemas.py:549/578` fields); pass them through `jobs.py` coach hydration into `build_section_prompt(..., instrument_confusion=...)`
+  - Unit test: section with confusion ≥0.3 produces hedged coach copy; section without → unchanged copy
+- transcription_confidence exposure:
+  - Add `composite_transcription_confidence` (and per-section chord confidence) to the analysis metadata returned in `LessonJSON` metadata / job result — or, if product-inappropriate, move the module under an evaluation-only namespace and document it in [`docs/EVALUATION.md`](docs/EVALUATION.md) as such
+  - No dead exports: every public function either has a production caller or an explicit "evaluation-only" docstring + doc reference
+- Update the archive Commit 121 ACs to reflect the real wiring state
+
+**Acceptance Criteria:**
+
+- [ ] Coach hedging fires for high-confusion sections (unit-tested end-to-end from stored section → prompt)
+- [ ] `composite_transcription_confidence` either appears in analysis metadata or is documented/renamed as evaluation-only
+- [ ] Zero unwired public functions in `transcription_confidence.py`
+- [ ] Archived Commit 121 status corrected
+- [ ] `python -m pytest -q` green
+
+---
+
+### Commit 157: Harmonized Solo UI + Coach Chord-Tone Integration (was 123 follow-up)
+
+**Status:** ready
+
+**Goal:** Surface the backend's harmonized solo analysis to users and coaches — chord-tone status, scale degrees, and per-bar position data are computed on every analysis but displayed nowhere.
+
+**Current State:** `backend/app/solo_harmony_analyzer.py` runs after chord+solo inference and populates `harmonized_solo` + `per_bar_analysis` in `LessonJSON` (`analyze_audio.py:453-468, 777`) — per-note `ChordToneAnalysis` (R, b3, 5, tension, chromatic), chord-tone percentages, per-bar CAGED position and suggested scales. Zero frontend consumer: `src/types/soloHarmony.ts` was removed as an orphan in commit `5505726`. Coach prompts never reference chord-tone data (explicit follow-up in [`docs/priorities-archive.md`](docs/priorities-archive.md), Commit 123).
+
+**Scope:**
+
+- Recreate typed frontend models (`src/types/soloHarmony.ts`): `ChordToneAnalysis`, `BarScope`, `HarmonizedSoloNotes` mirroring backend schemas
+- Study screen note detail (extends `SessionNoteDetailModal` / Milestone B1 note detail):
+  - Chord-tone status badge: chord tone (sage) / tension (amber) / chromatic (terracotta) using existing palette tokens
+  - Scale degree label (`R`, `b3`, `5`, `b7`…) from `chord_analysis.scale_degree_name`
+  - Bar position hint (`primary_position`) + suggested scales from `per_bar_analysis`
+- Review screen: surface aggregate `chord_tone_pct` / `tension_note_pct` / `chromatic_pct` in the session summary
+- Coach integration: pass chord-tone aggregates into coach prompt context (e.g., "38% of solo notes were chord tones — coach on tension-note targeting") when `harmonized_solo` is present
+- Graceful absence: all consumers handle `harmonized_solo = None` (older jobs, missing chords/solo) with no UI breakage
+- Unit tests for type parsing + fallback paths; component test for note-detail rendering
+
+**Acceptance Criteria:**
+
+- [ ] Tapped solo note shows chord-tone status + scale degree from `harmonized_solo`
+- [ ] Per-bar position/scale hints visible in Study when available
+- [ ] Chord-tone percentages shown in Review summary
+- [ ] Coach prompt includes chord-tone stats when present; unchanged when absent
+- [ ] Jobs without `harmonized_solo` render everything else normally
+- [ ] `npm run lint` + `npm run test` + backend pytest green
+
+---
+
+### Commit 158: UX Audit Loop Re-Run & Gap Fixes
+
+**Status:** ready
+
+**Goal:** Re-run the automated UX gap-detection loop and clear every error/warning gap so the live UI matches the design system.
+
+**Current State:** `docs/audit/ui-feedback-report.json` was generated 2026-07-19 — stale relative to the palette refresh, merge, and code-review passes since. The `npm run ux:improve` workflow (Playwright capture → vision-tool analysis → gap report) and `npm run ux:verify` re-analysis exist and are documented in AGENTS.md.
+
+**Scope:**
+
+- Start Expo web (`npm run web` or `PLAYWRIGHT_USE_WEBSERVER=1 npm run ux:improve`)
+- Run `npm run ux:improve`; read `allGapsByRoute` from the fresh report
+- Fix every `error`-severity gap and as many `warning` gaps as feasible by editing the route's source file (follow `.opencode/instructions/UX_IMPROVE_LOOP.md`)
+- Re-run `npm run ux:verify` to confirm; loop up to 5 iterations until `isComplete: true`
+- Commit code fixes together with the refreshed report
+
+**Acceptance Criteria:**
+
+- [ ] Fresh `ui-feedback-report.json` with `isComplete: true`
+- [ ] Zero error-severity gaps remaining
+- [ ] All warning gaps fixed or explicitly waived with rationale in the report
+- [ ] `npm run lint` + `npm run test` green after fixes
+
+---
+
+**Group: Engagement features — promoted from Milestone C (159–167), then left-handed parity (168)**
+
+---
+
+### Commit 159: User Feedback & Manual Overrides (was C1)
+
+**Status:** deferred
+
+**Goal:** Turn ad-hoc corrections into first-class structured feedback — a one-tap "report incorrect" path that persists to a `user_feedback` table and feeds the Branch A/B distillation datasets.
+
+**Current State:** Correction plumbing already exists from archive Commit 110: `useCorrectionStore` with chord/note/voicing overrides, `PATCH /analyze/{job_id}/chord/{beat_index}` + `/solo-note` + `/voicing` endpoints, `correction_count`/`correction_coverage` metrics on `LessonJSON`, and `GET /analyze/{job_id}/corrections/export`. What's missing: no single `POST /analyze/{job_id}/feedback` endpoint, no `user_feedback` table, no chord-vs-solo split exports (`chord_feedback.json` / `solo_feedback.json`), no Review-screen summary, and no Settings feedback dashboard.
+
+**Scope:**
+- Extend existing `useCorrectionStore` with a "report incorrect" action on any chord/note in the fretboard or chord timeline
+- Add `POST /analyze/{job_id}/feedback` backend endpoint accepting structured feedback:
+  - `{ type: "chord_correction" | "note_correction" | "wrong_chord", event_index, original, corrected, reason? }`
+- Persist feedback to `user_feedback` SQLite table with `job_id`, `song_id`, `user_id`, `timestamp`, `feedback_type`, `original_value`, `corrected_value`
+- Route corrections to two distillation sets:
+  - Chord corrections → Branch A chord student's training set (exportable as `chord_feedback.json`)
+  - Note/solo corrections → Branch B solo student's training set (exportable as `solo_feedback.json`)
+- Add feedback summary in Review screen: "You corrected 3 chords and 2 notes in this session"
+- Add cumulative feedback stats to player profile: total corrections, most-corrected chord types
+- Feedback dashboard in Settings: list of all corrections with revert capability
+
+**Acceptance Criteria:**
+
+- [ ] "Report incorrect" action available on any chord/note and persists structured feedback
+- [ ] `user_feedback` table written on both SQLite (mobile) and IndexedDB (web)
+- [ ] Chord and solo feedback exportable as `chord_feedback.json` / `solo_feedback.json`
+- [ ] Review shows per-session correction summary
+- [ ] Settings dashboard lists corrections with revert
+- [ ] Migration added per [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md); tests green
+
+---
+
+### Commit 160: Jam Mode Summary Agent (was C2)
+
+**Status:** deferred
+
+**Goal:** Post-jam, Claude-powered phrase-level analysis with a persona toggle — grade, strengths/weaknesses, and a one-tap "practice this phrase" loop launcher.
+
+**Current State:** `POST /jam-score` (`main.py:844`) already returns a coach paragraph via `generate_jam_coach_summary()` (deterministic focus-key + reliability tags from duration/pitch maps), and `app/(tabs)/jam.tsx` has the full save flow. Missing: per-phrase structured analysis (`phrase_index`, `intonation_cents`, `timing_ms`, `transition_gap_ms`, `suggestion`), persona switching, grade + strengths modal, `summary_json` persistence, and a jam history screen (no `app/(tabs)/jam/` directory exists).
+
+**Scope:**
+- Add `POST /jam/summary` backend endpoint triggered on jam save
+- Claude Haiku-powered post-jam analysis:
+  - Input: jam snapshot (scale, confidence, phrase features, backing track, duration)
+  - Output: structured summary with per-phrase feedback
+- Persona-switching via system prompt: "Encouraging coach" vs "Technical analyst" (user toggle in Jam settings)
+- Output schema: `{ phrase_index, chord, clarity, intonation_cents, timing_ms, transition_from, transition_gap_ms, suggestion }`
+- Display jam summary in a post-jam modal:
+  - Overall grade (A-F) from weighted phrase scores
+  - Top 3 strengths and top 3 areas for improvement
+  - "Practice this phrase" button → launches slow loop on weakest phrase
+- Persist summary to `jam_snapshots.summary_json` column
+- Add jam history list screen: `app/(tabs)/jam/history.tsx` showing past jams with summary previews
+
+**Acceptance Criteria:**
+
+- [ ] Saving a jam triggers summary generation without blocking the save
+- [ ] Post-jam modal shows grade, strengths, improvements, and per-phrase suggestions
+- [ ] "Practice this phrase" launches slow loop on the weakest phrase
+- [ ] Summaries persist and appear in jam history
+- [ ] Both personas toggle correctly
+- [ ] Backend tests green; LLM failure degrades gracefully (jam saves without summary)
+
+---
+
+### Commit 161: Play Engagement Analytics (was C3)
+
+**Status:** deferred
+
+**Goal:** A lightweight, opt-out client event bus that records practice behavior so engagement metrics (completion rate, session frequency, most-practiced songs) can be measured and exported.
+
+**Current State:** No analytics infrastructure exists. The only telemetry is `src/analytics/firstAudioPlay.ts` — a dev-only one-shot console logger, not an event bus. No `AnalyticsEvent` union, no `analytics_events` table, no metric queries, no opt-out preference, no CSV export.
+
+**Scope:**
+- Create `src/analytics/eventBus.ts`: lightweight custom event bus (no third-party SDK)
+  - `emit(event: AnalyticsEvent)` and `subscribe(handler)` pattern
+  - Events batched in memory, flushed to SQLite every 30 seconds or on app background
+- Define `AnalyticsEvent` type union:
+  - `session_start`, `session_complete`, `session_step_progress`, `session_abandon`
+  - `play_along_start`, `play_along_complete`, `play_along_discard`
+  - `feature_usage`, `correction_made`, `jam_complete`
+- Add `analytics_events` SQLite table: `id, user_id, event_type, payload_json, timestamp`
+- Track per-user per-song engagement metrics:
+  - Total play-along duration, average session length, completion rate
+  - Most-practiced songs, most-corrected chord types
+  - Session frequency (sessions per day/week)
+- Add opt-out toggle in Settings: "Share practice data" (default: on)
+- Add privacy notice in onboarding: "We track practice patterns to improve your experience. Opt out anytime."
+- Export analytics as CSV in Settings > Privacy > Export my data
+
+**Acceptance Criteria:**
+
+- [ ] Events emitted at documented points and flushed to SQLite (batch + background)
+- [ ] Opt-out stops emission; default-on with onboarding notice
+- [ ] CSV export produces parseable file
+- [ ] Metrics queries power a basic engagement view
+- [ ] Migration + tests green on mobile and web
+
+---
+
+### Commit 162: Dynamic Session Engine (was C4)
+
+**Status:** deferred
+
+**Goal:** Make practice plans self-adjusting — re-evaluate remaining slots after each one completes, insert remediation or skip ahead, and survive app restarts.
+
+**Current State:** `backend/app/sequencer.py` builds deterministic slot plans (`generate_practice_plan()`, mood-aware since commit 76) and the frontend drives them via `src/stores/planStore.ts` + `src/session/practicePlanNavigation.ts`. Missing: no `POST /session/plan/adapt` endpoint, no mid-session re-evaluation, no `practice_plans` persistence columns (`current_slot_index`, `slot_results_json`, `adaptation_log`) — plans are ephemeral, no resume-after-restart, no plan history or regenerate UI. SM-2 (`src/spaced/sm2.ts`) computes skill scores but they do not feed slot selection.
+
+**Scope:**
+- Extend `PracticePlanPayload` to support mid-session adaptation:
+  - After each slot completes, re-evaluate remaining slots based on actual performance
+  - If a slot scored <50%, insert a remediation slot before the next planned slot
+  - If a slot scored >90%, skip the next easier slot and advance
+- Add `POST /session/plan/adapt` backend endpoint:
+  - Input: current plan state, last slot performance (accuracy, timing, completion)
+  - Output: updated remaining slots with possible insertions/removals
+- Wire SM-2 spaced repetition into plan sequencing:
+  - `skill_mutator.ts` already computes per-skill scores — feed these into slot selection
+  - Weak skills get more frequent practice slots; strong skills get review-only slots
+- Add plan progress persistence to `practice_plans` table:
+  - `current_slot_index`, `slot_results_json`, `adaptation_log`
+  - Resume plan after app restart from last completed slot
+- Add plan history UI: list of completed plans with per-slot scores
+- Add "Regenerate plan" button that re-runs `generate_practice_plan()` with updated profile
+
+**Acceptance Criteria:**
+
+- [ ] Low-scoring slot triggers remediation insertion; high-scoring slot skips forward
+- [ ] SM-2 skill scores influence next-slot selection
+- [ ] Plan resumes after app restart from last completed slot
+- [ ] Plan history lists completed plans with per-slot scores
+- [ ] Regenerate button produces an updated plan
+- [ ] Backend endpoint + frontend flow tested
+
+---
+
+### Commit 163: Orient-as-Hint (was C5)
+
+**Status:** deferred
+
+**Goal:** Demote Orient from a mandatory session step to an on-demand amber overlay in Study and Play — orient content without a screen the learner must pass through.
+
+**Current State:** `SESSION_STEPS` in `src/constants/sessionFlow.ts:5` still mandates `'listen'` between `musical-tolerance` and `study`; orient content only exists on that standalone screen. Backend `POST /session/orient-clip` (`main.py:1064`) and `generate_orient_clip()` already work — only frontend routing changes. No `?` overlay, no "Skip to Study" shortcut.
+
+**Scope:**
+- Remove Orient (`listen` step) as a mandatory linear step in the session flow
+- Integrate orient content as a non-intrusive amber overlay in Study and Play screens:
+  - Small `?` toggle button in the toolbar (amber when active)
+  - Toggling shows/hides the orient audio clip + annotation text as a slide-down panel
+  - Panel includes play/pause for the orient WAV and the text annotation
+- Update `SESSION_STEPS` in `sessionFlow.ts`: remove `listen` from the mandatory sequence
+- Add orient data to `MusicContext` so it's available in Study/Play without a separate screen
+- Preserve the orient backend endpoint (`POST /session/orient-clip`) — only the frontend routing changes
+- Add "Skip to Study" shortcut that bypasses orient entirely
+- Keep `listen.tsx` as a standalone screen accessible from session settings for users who want the full orient experience
+
+**Acceptance Criteria:**
+
+- [ ] Default session flow no longer mandates `listen`; Study reachable directly
+- [ ] Orient `?` overlay plays clip + shows annotation inside Study and Play
+- [ ] Backend orient-clip endpoint unchanged (non-regressed)
+- [ ] Full listen screen still reachable from session settings
+- [ ] Session flow tests + `npm run test` green
+
+---
+
+### Commit 164: Mastery & Integrity (was C6)
+
+**Status:** deferred
+
+**Goal:** Make dynamic-session state crash-safe (atomic transactions, resume-on-restart) and add an explicit single-song vs follow-a-plan mode toggle.
+
+**Current State:** Skill mutations (`skill_mutator.ts`) and plan-completion writes are not wrapped in transactions; no `session_state` table exists (repo-wide search finds no `session_state`); the app is single-file mode only with no Home-screen mode toggle and no resume flow for interrupted sessions.
+
+**Scope:**
+- Atomic SQLite transactions for all dynamic session state updates:
+  - Wrap `skill_mutator.ts` mutations in a single transaction
+  - Wrap `practice_plans` slot completion + adaptation in a single transaction
+  - Prevent partial writes on crash (dual-entry state integrity)
+- Add `session_state` SQLite table:
+  - `session_id, plan_id, current_step, slot_results_json, started_at, updated_at`
+  - Enables crash recovery: on app restart, check for incomplete sessions and offer to resume
+- Single-file mode vs dynamic session mode:
+  - Single-file: current behavior (one song, linear 7-step flow)
+  - Dynamic: plan-driven multi-slot flow (warmup → song → jam → review)
+- Add mode toggle on Home screen: "Practice a song" (single) vs "Follow a plan" (dynamic)
+- Ensure skill node updates are idempotent (same session shouldn't double-count)
+
+**Acceptance Criteria:**
+
+- [ ] Skill + plan mutations are transactional (kill-mid-write leaves consistent state)
+- [ ] Incomplete session detected on restart with resume offer
+- [ ] Home toggle switches single vs dynamic modes
+- [ ] Replaying the same session result does not double-count mastery
+- [ ] Migration + tests green on both platforms
+
+---
+
+### Commit 165: Chord Pulse Dashboard (was C7)
+
+**Status:** deferred
+
+**Goal:** A beat-synced "pulse" practice visualizer — falling-note chord tones, downbeat ring, accuracy trend, and a chord mastery heatmap — as the Progress tab's engagement centerpiece.
+
+**Current State:** The Progress tab has no pulse screen (no `app/(tabs)/progress/pulse.tsx`). Adjacent pieces exist: `components/WeakAreaPulse.tsx` and `components/BeatFlashPulse.tsx` (small indicators, not a visualizer), `ChordsAndLyrics` rendering to reuse for the chord timeline, and correction/scoring history that could populate the heatmap. No accuracy-trend chart exists.
+
+**Scope:**
+- New screen: `app/(tabs)/progress/pulse.tsx` — scrolling chord timeline with falling notes visualizer
+- Chord timeline: horizontal scrollable bar showing chord changes over time (reuse `ChordsAndLyrics` rendering)
+- Falling notes: vertical piano-roll-style display below chord bar, notes fall toward a hit line (like Guitar Hero)
+  - Chord tones highlighted in amber, non-chord tones in gray
+  - Beat grid lines visible as horizontal guides
+- Beat-synced Pulse ring animation:
+  - Circular ring at center of screen that pulses on downbeats
+  - Ring color intensity maps to current chord confidence
+  - Ring size pulses with `pulse_bpm` from BeatGrid
+- Session-over-session chord accuracy trend: line chart showing accuracy % over last 10 sessions
+- Chord mastery heatmap: 12xN grid (one column per chord type) showing hit rate per chord
+- Accessible from Home screen "Pulse" card or Progress tab
+
+**Acceptance Criteria:**
+
+- [ ] Pulse screen renders chord timeline + falling-notes visualizer from real session data
+- [ ] Ring pulses on downbeats with confidence-mapped intensity
+- [ ] Accuracy trend chart shows last 10 sessions
+- [ ] Chord mastery heatmap populated from correction/scoring history
+- [ ] Reachable from Home and Progress tab
+- [ ] Animation performance holds 60fps on mid-tier device (reanimated, no JS-thread jank)
+
+---
+
+### Commit 166: Three-Tier Output Strategy (was C8)
+
+**Status:** deferred
+
+**Goal:** Three render personas (Learner / Intermediate / Transcriber) derived from the same LessonJSON so notation complexity matches the user instead of one fixed view.
+
+**Current State:** A single rendering path ships today — MusicXML viewer, full theory, and tab always on. No `output_tier` preference exists anywhere (`app_prefs` has no such column; repo-wide search for `output_tier` is empty), no tier selector in Settings, no experience-level auto-detect wiring. LessonJSON already carries everything all three tiers need (chord timeline, solo notes, MusicXML, theory) — this is pure presentation gating.
+
+**Scope:**
+- Define three output personas from shared LessonJSON:
+  - **Learner**: simplified view — scrolling chord chart + single-line solo melody + fretboard sync. No MusicXML, no complex notation. Large chord symbols, color-coded difficulty.
+  - **Intermediate**: standard view — slash chords + beat grid + tab notation. Current default behavior.
+  - **Transcriber**: full view — printable MusicXML, complete notation, all metadata. Export-focused.
+- Add `output_tier` preference to `app_prefs` table: `'learner' | 'intermediate' | 'transcriber'`
+- Backend generates all three tiers from the same LessonJSON — no separate analysis needed
+- Frontend conditionally renders based on `output_tier`:
+  - Learner: hide MusicXML viewer, show simplified chord chart, hide complex theory
+  - Intermediate: current behavior (default)
+  - Transcriber: show full notation, add "Print" and "Export" buttons
+- Add tier selector in Settings > Display > "notation_complexity"
+- Auto-detect tier from `experience_level` on first launch (beginner → learner, intermediate → intermediate, advanced → transcriber)
+
+**Acceptance Criteria:**
+
+- [ ] All three tiers render from one analysis (no re-analysis)
+- [ ] Settings selector persists and switches views live
+- [ ] First-launch auto-detect from experience level works
+- [ ] Learner tier hides notation/theory; Transcriber tier exposes export/print
+- [ ] Default remains Intermediate (non-regression)
+
+---
+
+### Commit 167: Multi-Instrument Diagram Support (was C9)
+
+**Status:** deferred
+
+**Goal:** Extend chord/fretboard diagrams beyond standard-tuning guitar — piano and ukulele layouts plus alternate/custom guitar tunings.
+
+**Current State:** `FretboardDiagram` and `ChordDiagram` are guitar-only with standard EADGBE baked in; `chordToFretboardCells()` / `fretboardCell.ts` assume a fixed tuning array; no instrument toggle, no `guitar_tuning` preference (repo-wide search empty), no piano/ukulele rendering anywhere.
+
+**Scope:**
+- Extend `FretboardDiagram` to support multiple instrument types:
+  - Guitar (6-string, standard tuning) — existing
+  - Piano (keyboard layout with 2-octave range)
+  - Ukulele (4-string, GCEA tuning)
+- Add instrument selector toggle in session toolbar (guitar / piano / ukulele)
+- Alternate tuning support for guitar:
+  - Preset tunings: Standard (EADGBE), Drop D (DADGBE), Open G (DGDGBD), DADGAD, Half-step down (EbAbDbGbBbEb)
+  - Custom tuning: user inputs per-string notes
+  - Tuning stored in `app_prefs` as `guitar_tuning: string[]`
+- Update `chordToFretboardCells()` and `fretboardCell.ts` to accept tuning array
+- Update chord diagram rendering (`ChordDiagram.tsx`) to show correct string/fret for ukulele
+- Piano mode: render 2-octave keyboard with highlighted notes for current chord/scale
+- Transposition engine: when tuning changes, recompute all fretboard positions
+
+**Acceptance Criteria:**
+
+- [ ] Instrument toggle switches guitar/piano/ukulele diagrams in session screens
+- [ ] All preset tunings recompute correct string/fret positions
+- [ ] Custom tuning input persists and applies
+- [ ] Ukulele chord diagrams correct for GCEA
+- [ ] Piano keyboard highlights current chord/scale
+- [ ] Music theory outputs (chords, scales) unchanged — only rendering/tuning-aware mapping
+
+---
+
+### Commit 168: Left-Handed Mode Fretboard Parity (was Phase 1 commit 64, skipped)
+
+**Status:** ready
+
+**Goal:** Full left-handed parity for fretboard and diagram rendering — the one Phase 1 feature explicitly skipped with zero code in the repo.
+
+**Current State:** Commit 64 was marked *skipped* in Phase 1. Repo-wide search finds no left-handed handling: `FretboardDiagram` renders strings high-E-at-top/right-handed only, `ChordDiagram` chord boxes assume right-handed orientation, and no `guitar_hand` preference exists.
+
+**Scope:**
+
+- Add `guitar_hand: 'right' | 'left'` preference (default `right`) in `app_prefs` + Settings UI (Display section)
+- Mirror `FretboardDiagram` under left mode: string row order reversed, fret numbering mirrored, scale-degree/label overlays re-anchored; cell mapping helper unit-tested both orientations
+- Mirror `ChordDiagram` chord-box rendering (vertical string order flipped, base-fret indicator side swapped)
+- Mirror fretboard tap→note mapping (`onNoteTap`, `allCellsForMidi` resolution) so taps land on the visually mirrored cell
+- Check `ScaleExplorer`, `Jam`, and warmup fretboard surfaces for the same mirror requirement
+- Visual regression snapshots for left-handed mode (Playwright + Detox)
+
+**Acceptance Criteria:**
+
+- [ ] Left-handed pref mirrors fretboard + chord diagram on study/slow/play/warmup/scale-explorer/jam
+- [ ] Tap targets match mirrored visuals (correct note on tap)
+- [ ] Preference persists across restarts; right-handed default unchanged (visual snapshots non-regressed)
+- [ ] Unit tests for mirrored cell mapping; visual snapshots for both orientations
+- [ ] `npm run lint` + `npm run test` + `npm run test:visual` green
+
+---
+
+**Group: Infrastructure gaps — remainder of Milestone D, reality-checked (169–172)**
+
+*Already implemented and therefore not planned: Redis-backed job store (`job_store.py`), Celery dispatch (`tasks.py`/`celery_app.py`), SSE endpoint (backend half → commit 151), Prometheus `/metrics` (`metrics.py`), circuit breaker (used by `model_server.py`), model server (serves MT3).*
+
+---
+
+### Commit 169: Variable-Tempo Beat Grid (was Milestone D commit 140)
+
+**Status:** deferred
+
+**Goal:** Support songs with tempo ramps, accelerandos, and live performances with variable BPM.
+
+**Current State:** Static BPM only. `_uniform_beat_grid()` uses a constant `step = 60.0 / bpm`; `bpm_override` (`beat_grid.py:93-120`) replaces the value but still generates a uniform grid — no tempo mapping. Evidence: `beat_grid.py:46-57` (`_uniform_beat_grid`), `beat_grid.py:125`.
+
+**Scope:**
+
+- Replace `_uniform_beat_grid()` with a function that accepts an array of `(time, bpm)` pairs or tempo curve
+- Use `librosa.beat.beat_track()` with estimated tempo as a reference, not an override
+- Store tempo change events in the returned schema alongside `beats` and `downbeats`
+- Support gradual tempo changes (rubato) and sudden tempo shifts
+- Maintain backward compatibility with static BPM interface (`bpm_override` keeps working)
+
+**Acceptance Criteria:**
+
+- [ ] Beat grid handles variable BPM songs with tempo ramps
+- [ ] Tempo curve can be provided as `(time, bpm)` array
+- [ ] Grid subdivisions respect local tempo at each point
+- [ ] Downbeats calculated correctly through tempo transitions
+- [ ] Static BPM interface (`bpm_override`) continues to work unchanged
+- [ ] Performance: variable BPM grid generation <100ms for 5-minute track
+- [ ] Backend tests green (`tests/` beat-grid suites)
+
+**Implementation Notes:**
+
+- Consider tempo segment interpolation (linear vs exponential ramps)
+- Store base pulse tempo vs instantaneous tempo separately
+- UI consideration: visual indicator when tempo changes detected
+- May require updating `_subdivide_beats()` to handle non-uniform pulse spacing
+
+---
+
+### Commit 170: Job-Queue Hardening — GPU Scheduling for Demucs + DLQ Wiring (was Milestone D commits 143 + 145)
+
+**Status:** deferred
+
+**Goal:** Give the job queue real priority/GPU handling and make the dead-letter queue actually run — today DLQ code exists in two places and is never called.
+
+**Current State:** Demucs runs synchronously per job (`separate.py`) blocking the request thread for minutes; no GPU/priority/queue-depth handling exists (`queue.py` has no CUDA or priority logic). Celery dispatch exists (`jobs.py:759`) but without priority tiers. The DLQ is implemented **twice** — `app/dead_letter.py` (`push_to_dlq`/`pop_from_dlq`/`inspect_dlq`) and `job_store.py:206-235` (`dlq:{job_id}` Redis helpers) — and **neither is called from the failure path**: `jobs.py` failure handling (`_repo_fail_job`, `status="failed"`) never pushes to a DLQ, and no inspection endpoint exists.
+
+**Scope:**
+
+- **DLQ wiring (first — small, high value):**
+  - Consolidate to a single implementation (prefer `job_store.py`'s Redis helpers; delete or re-export from `dead_letter.py` — no duplicates)
+  - On terminal job failure, push `{job_id, error, error_code, retry_count}` to the DLQ from the actual fail path in `jobs.py`
+  - Add `GET /jobs/dlq` inspection endpoint (limit, auth-guarded/localhost) + re-queue action
+  - Tests: failed job lands in DLQ; re-queue re-dispatches
+- **GPU queue for Demucs:**
+  - Integrate Demucs separation with the Celery queue with priority levels (urgent, normal, low) on the job schema
+  - Queue-depth monitoring to prevent overload; GPU utilization tracking (nvidia-smi integration when CUDA present)
+  - Batch processing for multiple audio files
+  - Operator visibility: queue depth + DLQ length via existing `/metrics`
+
+**Acceptance Criteria:**
+
+- [ ] Failed analysis jobs land in exactly one DLQ implementation (duplicate removed)
+- [ ] `GET /jobs/dlq` lists failures with error codes; re-queue re-dispatches successfully
+- [ ] Demucs jobs queue through Celery with priority levels honored
+- [ ] Queue depth + DLQ length exposed as Prometheus metrics
+- [ ] GPU utilization tracked when CUDA available (graceful skip on CPU)
+- [ ] Batch path processes multiple files without serial blocking
+- [ ] Backend tests green
+
+---
+
+### Commit 171: Audio Fingerprinting & Quality Scoring (was Milestone D commit 146)
+
+**Status:** deferred
+
+**Goal:** Detect duplicate/near-duplicate uploads across encodings and reject low-quality audio upfront, reducing wasted compute.
+
+**Current State:** Content-addressed caching with SHA256 (`cache.py`) catches byte-identical re-uploads only — a re-encoded or trimmed copy of the same song re-runs the full ~5-minute pipeline. No quality gate on input audio beyond duration checks (30–300s).
+
+**Scope:**
+
+- Integrate audio fingerprinting (e.g., dejavu-style chromaprint/dejavu) for duplicate detection across encodings
+- Implement quality scoring (SNR, clipping detection, silence ratio)
+- Fingerprint-based cache key alongside SHA256; similarity search for near-duplicates (same song, different encode)
+- Quality gate: reject or warn on low-quality audio early (before Demucs/MT3) with actionable message
+- Track cache hit-rate improvement
+
+**Acceptance Criteria:**
+
+- [ ] Same song in two encodings detected as duplicate → served from cache (no re-analysis)
+- [ ] Quality score computed on ingest; below-threshold uploads rejected/warned with clear message
+- [ ] Fingerprint cache key improves hit rate (metric logged)
+- [ ] Byte-identical SHA256 path unchanged (non-regression)
+- [ ] Backend tests green
+
+---
+
+### Commit 172: Stem Export from StemMixer (was Milestone D "Real-Time Stem Mixer & Export")
+
+**Status:** deferred
+
+**Goal:** Let users export the separated stems they're already mixing — the mixer shipped, the export never did.
+
+**Current State:** `components/StemMixer.tsx` provides mute/solo/defaults across the 6 Demucs stems in session screens; stems exist on disk per job (`data/jobs/{job_id}/stems/`). No export path exists (no stems download endpoint, no UI export action).
+
+**Scope:**
+
+- Backend: `GET /jobs/{job_id}/stems` returning a ZIP of stem WAVs (or per-stem `?stem=guitar` single-file response); 404 when stems absent; stream (don't buffer whole ZIP in memory)
+- Frontend: "Export stems" action in StemMixer (long-press or overflow menu) → download/save via existing download flows (web: blob download; native: share/save to file)
+- Optional format choice (WAV default; MP3/transcode only if trivially available via ffmpeg)
+- Respect job retention: stems older than cleanup retention → clear error, not crash
+- Integration test for endpoint (zip contains expected WAVs, 404 path); component test for export action
+
+**Acceptance Criteria:**
+
+- [ ] ZIP download contains all non-muted stems (or single stem when selected)
+- [ ] Works on web and native save/share flows
+- [ ] Missing/evicted stems produce a clear user-facing error
+- [ ] Large songs stream without OOM
+- [ ] Tests green
+
+---
+
+**Group: Blocked / aspirational (173–180)**
+
+---
+
+### Commit 173: RWC Music Database Pipeline (was 101 Phase 2)
+
+**Status:** blocked — requires free AIST Japan registration (credentials not configured)
+
+**Goal:** Add the RWC Music Database (~100 professionally annotated songs) as a conditional training-data source to widen chord-class coverage beyond GuitarSet's 33/277 classes.
+
+**Current State:** No RWC-specific code exists — only a mention in `backend/scripts/analyze_label_noise.py:247`. The archive (Commit 101 Phase 2) marked this deferred: free AIST Japan registration required, credentials never configured. The GuitarSet/EGSet12 download→parse→extract pattern (`download_guitarset.py` → `parse_guitarset.py` → `extract_guitarset_cqt.py`) is the reusable template; no downloader has been written.
+
+**Scope:**
+
+- Add RWC Music Database (~100 songs) as optional/conditional pipeline step
+- Script skips gracefully when credentials are not configured
+- Same CQT extraction + chord alignment pipeline as GuitarSet
+- Register conditional CI/manual step in the dataset pipeline docs
+
+**Acceptance Criteria:**
+
+- [ ] RWC pipeline runs conditionally when registration credentials are configured
+- [ ] Clean skip (no errors) when credentials absent
+- [ ] RWC windows merge into training data with per-source loss weighting
+
+---
+
+### Commit 174: Phase 3.1 — Retrain CRNN on MT3 Pseudo-Labels (blocked: GPU)
+
+**Status:** blocked — GPU access
+
+**Goal:** Close the 34.7% → 70%+ synthetic-to-real gap by training the CRNN student on MT3-generated pseudo-labels for real guitar recordings.
+
+**Current State:** CRNN real-world accuracy is 34.7% (v1.0.5); MT3 scores >80% (MIREX-25) as teacher. The pseudo-label tooling already exists: `python scripts/pseudo_label_generate.py --audio-dir <dir>` (`data/pseudo_label` ready, 1 file), and the full training pipeline (`build_chord_tflite.py`, temperature sampling, QAT) is preserved. What's missing is GPU time for thousands of labels + training runs.
+
+**Scope:**
+
+- Generate MT3 pseudo-labels at scale for real guitar audio (target ≥1,000 tracks; use available licensed audio + user-feedback exports from commit 159 when available)
+- Train CRNN on pseudo-labeled real data mixed with synthetic (domain-gap mixing via `cqt_stats.npz` pattern)
+- Evaluate on GuitarSet held-out test; promote via `scripts/promote_model.py` gatekeeper (only if metrics beat active)
+- Document results in [`docs/RESEARCH.md`](docs/RESEARCH.md) + training log
+
+**Acceptance Criteria:**
+
+- [ ] ≥1,000 real tracks pseudo-labeled by MT3
+- [ ] Retrained CRNN ≥70% GuitarSet root accuracy (or documented ceiling + analysis)
+- [ ] Promotion gated by `promote_model.py` (no force)
+- [ ] Inference latency unchanged (<100ms/frame on-device benchmark still passes)
+
+---
+
+### Commit 175: Phase 3.2 — Two-Head Student Distillation (blocked: GPU)
+
+**Status:** blocked — GPU access
+
+**Goal:** Replace the separate CRNN + chroma fallback with a single shared-encoder model distilled from MT3: one chord head, one guitar-vocabulary solo head.
+
+**Current State:** The fallback chain is still two separate engines (CRNN TFLite chords → chroma; Basic Pitch/CRNN solo) with no shared encoder. MT3 teacher outputs are already produced by the primary pipeline (Branch A/B outputs in `LessonJSON`), and the training tooling (`build_chord_tflite.py`, temperature sampling, QAT) is preserved — but no two-head student exists and no distillation dataset has been assembled. Blocked on GPU.
+
+**Target architecture:**
 
 ```
 Shared encoder (CQT → Conv → BiLSTM, ~200K params)
@@ -150,26 +883,155 @@ Shared encoder (CQT → Conv → BiLSTM, ~200K params)
     └── Solo head (autoregressive token decoder, guitar vocabulary)
 ```
 
-**Other Phase 3 milestones** (aspirational, further out):
-- Lead sheet agent (MIDI + lyrics → MusicXML)
-- Zero-latency pitch detection (C++/JSI bridge)
-- Dynamic backing track generation (MRT2 or similar)
-- Virtual mentor agent (long-term skill trajectory analysis)
+**Scope:**
+
+- Distill from MT3 teacher outputs (chord sequences + filtered solo token streams from Branch A/B)
+- Guitar-vocabulary solo head structurally incapable of emitting non-guitar notes
+- Evaluate against current fallback chain on the 5-song set + GuitarSet
+- Swap into the fallback orchestrator behind a feature flag; keep chroma as last resort
+
+**Acceptance Criteria:**
+
+- [ ] Single model produces both chord frames and solo tokens
+- [ ] Accuracy ≥ current MT3→CRNN chain on the 5-song eval (no regression)
+- [ ] Model size + latency suitable for server-side serving (and path to on-device noted)
+- [ ] Feature-flagged rollout with instant fallback to existing chain
 
 ---
 
-## Acceptance Criteria (Phase 2 release gate)
+### Commit 176: Phase 3.3 — HT-MT3 Exploration (blocked: GPU)
 
-- [ ] MT3-powered pipeline produces chord-solo LessonJSON for a defined 5-song test set
-- [ ] Fallback chain documented with real examples (see [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md))
-- [ ] 5-song smoke test documented with pass/warn/fail per song (see [`docs/EVALUATION.md`](docs/EVALUATION.md))
-- [ ] `npm run lint`, `npm run test`, core `pytest` files pass
-- [ ] Part 2 blog post published
-- [ ] MT3 checkpoint download is automated
-- [ ] Quick-smoke-test script works from a clean clone
+**Status:** blocked — GPU access; upstream model availability
+
+**Goal:** Evaluate Headed and Tailed MT3 (per-instrument decoder heads) as a higher-quality teacher for pseudo-labels and distillation.
+
+**Current State:** Only standard MT3 (T5-small checkpoint via `scripts/download_mt3_checkpoint.py`) is integrated; no HT-MT3 code, weights, or upstream wiring exists. The instrument-confusion metric that the comparison needs is computed but not yet surfaced (`instrument_confusion` at `analyze_audio.py:406`, unwired to coach — commit 156). Blocked on GPU + upstream availability.
+
+**Scope:**
+
+- Acquire/build HT-MT3 teacher (check upstream availability)
+- Run side-by-side pseudo-label quality vs standard MT3 on a 50-track sample (measure instrument-confusion rate — infrastructure from commit 156 supplies the metric)
+- If better: regenerate pseudo-labels with HT-MT3 and retrain student (feeds 174/175)
+- Document decision + results in [`docs/RESEARCH.md`](docs/RESEARCH.md)
+
+**Acceptance Criteria:**
+
+- [ ] Side-by-side teacher comparison documented with numbers
+- [ ] Go/no-go decision recorded (with instrument-confusion deltas)
+- [ ] If go: student retrained on HT-MT3 labels with measured improvement
 
 ---
 
-## Milestone D: Infrastructure & Scale (Deferred)
+### Commit 177: Lead Sheet Agent (MIDI + Lyrics → MusicXML)
 
-Infrastructure improvements (Redis/Celery job queue, GPU job scheduling, error resilience, monitoring, audio fingerprinting, smart capo, predictive beat recovery) are defined in [`priorities-archive.md`](priorities-archive.md) and deferred until Phase 2 validation is complete and Phase 3 becomes active.
+**Status:** aspirational
+
+**Goal:** Generate a lead sheet (melody + chord symbols + lyrics) in MusicXML from a MIDI file plus raw lyrics text.
+
+**Current State:** `musicxml_builder.py` builds full scores from analysis output (chords + solo + beat grid); `LessonJSON` carries `lyrics_aligned` (schema line 441) and Whisper transcription exists from commit 8 — but there is no lead-sheet layout, no MIDI+lyrics ingestion path, and no syllable-to-note alignment routine. Aspirational, not started.
+
+**Scope:**
+
+- Align MIDI melody events to lyric syllables (timing-based)
+- Merge with chord symbols (from analysis or manual input)
+- Emit MusicXML lead-sheet layout via the existing `musicxml_builder.py` primitives
+- Tests: known MIDI + lyrics fixture → valid MusicXML (DTD check already in CI)
+
+**Acceptance Criteria:**
+
+- [ ] Fixture MIDI + lyrics → valid MusicXML with aligned lyric underlay
+- [ ] Renders in AlphaTab web + native
+- [ ] DTD validation passes
+
+---
+
+### Commit 178: Zero-Latency Pitch Detection (C++/JSI Bridge)
+
+**Status:** aspirational
+
+**Goal:** Sub-frame pitch detection on native via a C++ JSI module for real-time tuner/tracking without JS-thread latency.
+
+**Current State:** Native pitch goes through `usePitchStream`'s JS-side processing (react-native-audio-api path); no C++/JSI module, CMake config, or autocorrelation/YIN implementation exists in the repo. Web path already uses `getUserMedia` + AudioWorklet. Aspirational, not started.
+
+**Scope:**
+
+- C++ autocorrelation/YIN implementation compiled via CMake into the dev build
+- JSI bridge exposing `start()/getPitchHz()/stop()` with no async hop
+- Replace `usePitchStream` native path behind a flag; benchmark vs current
+- Web path unchanged (getUserMedia + AudioWorklet)
+
+**Acceptance Criteria:**
+
+- [ ] Native pitch round-trip <30ms (vs current baseline, measured)
+- [ ] Existing tuner/play flows work with the flag on
+- [ ] Dev-build instructions in AGENTS.md
+
+---
+
+### Commit 179: Virtual Mentor Agent (Long-Term Skill Trajectory)
+
+**Status:** aspirational
+
+**Goal:** A mentor persona that reasons over months of skill-node history, journal, and corrections to propose long-term direction (repertoire choices, plateau diagnosis, next milestones).
+
+**Current State:** The raw material exists — skill nodes mutated from session accuracy (commit 63), Riff DNA playing fingerprint (commit 74), correction history (`useCorrectionStore`), and practice-plan history — but nothing aggregates them into a long-term trajectory, and no mentor UI or Claude trajectory prompt exists. Aspirational, not started.
+
+**Scope:**
+
+- Data layer: query skill nodes + session journal + DNA into a compact trajectory summary
+- Claude-powered mentor with monthly cadence (on-demand too); output stored as mentor notes
+- UI: "Mentor" section in Progress with trajectory chart + proposed next month
+- Guardrails: never edits plans automatically — proposals only
+
+**Acceptance Criteria:**
+
+- [ ] Mentor summary generated from real ≥30-day history (or synthetic fixture)
+- [ ] Proposals rendered with trajectory context; no auto-mutation of plans
+- [ ] Failure/absence degrades to empty state, no crashes
+
+---
+
+### Commit 180: Evaluation Set Expansion
+
+**Status:** ready
+
+**Goal:** Broaden the evaluation set per [`docs/EVALUATION.md`](docs/EVALUATION.md) "Next Steps" so conclusions generalize beyond blues/pop studio guitar.
+
+**Current State:** [`docs/EVALUATION.md`](docs/EVALUATION.md) documents exactly 5 songs (3 pass / 1 warn / 1 fail — the improv-blues self-recording fails on gain staging/reverb), and [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) records failure modes for those 5. No out-of-distribution, jazz-harmony, or fair live-recording cases are covered yet; GPU timing has not been captured.
+
+**Scope:**
+
+- Re-record test #4 (improv blues) with proper gain staging and minimal room reverb — replaces the current ❌ Fail with a fair signal
+- Add a clean kora/mbira recording to test out-of-distribution behavior (expected: quality gate → chroma; documents graceful degradation)
+- Add a song with extended jazz harmony to stress-test the 277-class vocabulary
+- Capture pipeline timing with GPU (when available — coordinate with 174) to document speedup factor
+- Update [`docs/EVALUATION.md`](docs/EVALUATION.md) with the expanded table + revised pass/warn/fail summary
+
+**Acceptance Criteria:**
+
+- [ ] Test set ≥7 songs covering studio / live / self-recorded / OOD / jazz-harmony
+- [ ] All new songs produce complete LessonJSON (no crashes) — pass/warn/fail recorded
+- [ ] EVALUATION.md summary table updated with revised verdict counts
+- [ ] Failure modes for new categories documented in KNOWN_FAILURES.md
+
+---
+
+## PHASE 3: Custom Model Distillation (Planned — Commits 174–176)
+
+**Status:** Blocked on GPU access — see commits 174 (retrain on pseudo-labels), 175 (two-head distillation), 176 (HT-MT3 teacher).
+
+The pipeline currently relies on MT3 (JAX, CPU, ~5 min per song) as the primary transcriber. With GPU access, Phase 3 executes commits 174–176 in order.
+
+**Aspirational (further out):** lead sheet agent (commit 177), zero-latency pitch detection (commit 178), virtual mentor agent (commit 179), evaluation set expansion (commit 180). Dynamic backing track generation (MRT2) already shipped — see `backend/app/jam_backing.py`.
+
+---
+
+## Acceptance Criteria (Phase 2 release gate → Commit 149)
+
+- [ ] MT3-powered pipeline produces chord-solo LessonJSON for a defined 5-song test set — **done, see [`docs/EVALUATION.md`](docs/EVALUATION.md)**
+- [ ] Fallback chain documented with real examples — **done, see [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md)**
+- [ ] 5-song smoke test documented with pass/warn/fail per song — **done: 3 pass / 1 warn / 1 fail**
+- [ ] `npm run lint`, `npm run test`, core `pytest` files pass — **verified on main; clean-clone run pending (commit 149)**
+- [ ] Part 2 blog post published — **done**
+- [ ] MT3 checkpoint download is automated — **done: `scripts/download_mt3_checkpoint.py`**
+- [ ] Quick-smoke-test script works from a clean clone — **pending clean-clone verification (commit 149)**

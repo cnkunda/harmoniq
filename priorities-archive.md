@@ -2,6 +2,8 @@
 
 This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commits 149–180). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, ChordChartPreview/progressive reveal → 152, MusicXML re-fetch → 153, ChordDiagram native verification → 155, Milestone C1–C9 → 159–167, Milestone D gaps → 169–172.
+
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
 **Phase 2 (Lick Library) Archive Date:** May 26, 2026
@@ -18,7 +20,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Phase 2 (Commits 122-148) Archive Date:** July 3, 2026 — Superseded by MT3-primary strategy. Custom model work archived as reference for Phase 3 distillation.
 **Milestone A (MT3-Primary AMT Pipeline) Archive Date:** July 5, 2026 — Complete. All 10 acceptance criteria verified.
 **Milestone B (Fretboard Dual-Mode Optimization) Archive Date:** July 17, 2026 — Complete. All 9 commits verified.
-**Milestone C (Engagement & Retention) Archive Date:** July 19, 2026 — Deferred. Not scoped for MVP. Full specs preserved below for when Phase 3 product work resumes.
+**Milestone C (Engagement & Retention) Archive Date:** July 19, 2026 — Deferred, then promoted to [`PRIORITIES.md`](PRIORITIES.md) commits 159–167 during the roadmap restructure (specs moved, pointer table below).
 
 ---
 
@@ -119,7 +121,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 | 61 | AlphaTab runtime telemetry kill switch | 5 |
 | 62 | Pre-session tuner + mic noise calibration | 6 |
 | 63 | Skill node mutation from session accuracy | 6 |
-| 64 | Left-handed mode fretboard parity *(skipped)* | 6 |
+| 64 | Left-handed mode fretboard parity *(skipped — promoted to PRIORITIES.md commit 168)* | 6 |
 | 65 | Adaptive curriculum routing (ZPD suggestion) | 6 |
 | 66 | Coach async streaming + retry architecture *(complete)* | 7 |
 | 67 | Spotify OAuth + listening history ingestion *(complete)* | 7 |
@@ -489,7 +491,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 - [x] CNN frontend reduces temporal resolution before LSTM
 - [x] Bidirectional LSTM layers capture forward and backward dependencies
 - [x] TFLite conversion succeeds with recurrent layers
-- [ ] Inference latency <100ms on target mobile device (requires mobile benchmarking)
+- [ ] Inference latency <100ms on target mobile device (requires mobile benchmarking) — *stale AC; superseded by the Milestone A on-device benchmark (`tests/benchmarks/chordModelLatency.ts`); closed by PRIORITIES.md commit 149*
 - [x] Validation accuracy: 82.9% @ 19 epochs (up from ~55% shallow CNN epoch 6 baseline). Improvement inline with +8% target.
 
 ---
@@ -602,12 +604,12 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 - [x] Align CQT windows with chord labels (majority vote for boundary windows)
 - [x] Train/val/test split by player ID (no artist overlap): players 00-03 train, 04 val, 05 test
 
-**Scope — Phase 2: RWC Music Database (optional, conditional on registration) ⏳**
+**Scope — Phase 2: RWC Music Database (optional, conditional on registration) ⏳ → promoted to PRIORITIES.md commit 173**
 
 - [ ] Add RWC Music Database (~100 songs) as optional/conditional pipeline step
 - [ ] Requires free AIST Japan registration — script skips if credentials not configured
 - [ ] Same CQT extraction + chord alignment pipeline as GuitarSet
-- _Deferred to future commit — no credentials configured. Pipeline scaffolding exists._
+- _Deferred to future commit — no credentials configured. Pipeline scaffolding exists. Full spec: PRIORITIES.md commit 173._
 
 **Scope — Phase 3: Isophonics + Billboard annotation datasets (progression statistics) ✅**
 
@@ -641,14 +643,14 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 - [x] JAMS annotations parsed and mapped to our 277-class Harte vocabulary
 - [x] Real CQT features extracted and aligned with chord labels
 - [x] Train/val/test split with no artist overlap (player-based)
-- [ ] RWC pipeline runs conditionally when registration credentials are configured
+- [ ] RWC pipeline runs conditionally when registration credentials are configured — *promoted to PRIORITIES.md commit 173*
 - [x] Isophonics dataset downloaded and annotation files parsed
 - [x] McGill Billboard dataset downloaded and annotation files parsed
 - [x] Empirical chord transition matrix built from real Isophonics/Billboard progressions
 - [x] Synthetic data generation uses real progression statistics (not random uniform)
 - [x] User-supplied audio pipeline accepts a directory + `.lab` files and produces aligned CQT features
 - [x] Real data comprises 70% of training batches
-- [~] Validation root accuracy >75% on GuitarSet held-out test set — **46.6% achieved.** Target unmet due to limited GuitarSet coverage (33/277 classes, 1620 windows). Expected to improve with RWC data augmentation or more epochs.
+- [~] Validation root accuracy >75% on GuitarSet held-out test set — **46.6% achieved.** Target unmet due to limited GuitarSet coverage (33/277 classes, 1620 windows). Expected to improve with RWC data augmentation or more epochs. — *related: PRIORITIES.md commits 173 (RWC) and 180 (eval set expansion)*
 - [x] **Note for debugging:** Extended chord bias addressed via extension weight reduction (0.7 → 0.4) and 30% extension dropout in synthetic data generation. Per-group accuracy shows extended chords at 50.0% (exceeding +3% target).
 
 ---
@@ -798,7 +800,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 
 **Archive Date:** June 2, 2026
 
-**Status:** Commits 104, 105, 107, 108, 113 fully complete. Commits 109, 110 partially complete (some ACs scoped down per user decision or marked as follow-up). Commits 106, 111, 112, 114-147 remain in [`PRIORITIES.md`](PRIORITIES.md) as planned or explicitly deferred work.
+**Status:** Commits 104, 105, 107, 108, 113 fully complete. Commits 109, 110 partially complete — their remaining follow-ups were promoted to [`PRIORITIES.md`](PRIORITIES.md) commits 152 and 153. Commits 106, 111, 112, 114-148 are archived below (superseded by MT3 or migrated).
 
 ---
 
@@ -1070,7 +1072,7 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 ### Commit 109: Beat Grid Editor (UI + Recomputation)
 
-**Status:** Partial — 2 ACs scoped down per user decision. Frontend ChordChartPreview component and progressive reveal loading remain as follow-up work.
+**Status:** Partial — 2 ACs scoped down per user decision. Frontend ChordChartPreview component and progressive reveal loading promoted to [`PRIORITIES.md`](PRIORITIES.md) commit 152.
 
 **Goal:** Add frontend UI for editing time signature and BPM per section, with a backend recomputation endpoint that re-derives dependent artifacts (chord timeline, solo notes, MusicXML).
 
@@ -1126,14 +1128,14 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 - [x] Overrides persist across page navigations in the same session
 - [x] "Reset to Auto" restores librosa-estimated grid
 - [x] Test: 4/4 → 6/8 time signature change correctly recomputes chord beat alignment
-- [x] Initial `POST /analyze` returns chord timeline as partial result before solo inference finishes — *scoped down: `analysis_stage` field added to poll response; partial result deferred to follow-up*
+- [x] Initial `POST /analyze` returns chord timeline as partial result before solo inference finishes — *scoped down: `analysis_stage` field added to poll response; partial result deferred to follow-up → PRIORITIES.md commit 152*
 - [x] `JobStatus.analysis_stage` enum reported in every poll response during processing
-- [ ] Frontend renders chord chart preview when `analysis_stage >= "chords_inferring"` (before full completion) — *scoped down per user decision; `analysis_stage` data is available for future use*
+- [ ] Frontend renders chord chart preview when `analysis_stage >= "chords_inferring"` (before full completion) — *scoped down per user decision; promoted to PRIORITIES.md commit 152*
 - [x] Intermediate artifacts survive server restart (persisted to disk) — *recompute worker persists BeatGrid.json, chordTimeline.json, SoloNotes.json, score.musicxml to job directory*
-- [ ] Monolithic loading spinner replaced with progressive reveal (chords first, then solo, then full score) — *scoped down per user decision; requires ChordChartPreview component*
+- [ ] Monolithic loading spinner replaced with progressive reveal (chords first, then solo, then full score) — *scoped down per user decision; promoted to PRIORITIES.md commit 152*
 - [x] Coach hydration remains separate and non-regressed
 
-**Remaining work (scoped down to follow-up):**
+**Remaining work (scoped down to follow-up):** → **promoted to PRIORITIES.md commit 152 (Progressive Analysis Reveal)**
 
 - [ ] Frontend `ChordChartPreview` component rendering partial results during chord/solo inference stages
 - [ ] Progressive loading reveal pattern (replaces monolithic add-song spinner)
@@ -1142,7 +1144,7 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 ### Commit 110: Analysis Persistence & Correction Editor
 
-**Status:** Partial — 1 AC marked as follow-up. MusicXML re-fetch integration on the frontend is pending.
+**Status:** Partial — 1 AC marked as follow-up (promoted to [`PRIORITIES.md`](PRIORITIES.md) commit 153).
 
 **Goal:** Persist machine-readable analysis outputs (chord timeline, solo notes, beat grid) to a database backend and add a frontend editor for correcting chord assignments, note parameters, and fret positions.
 
@@ -1185,12 +1187,12 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 - [x] Frontend chord correction dropdown filtered by key — `ChordCorrectionModal` + `getDiatonicChords()`
 - [x] Frontend note correction with real-time fretboard preview — `NoteCorrectionPanel` + `FretboardDiagram.onNoteTap`
 - [x] Correction history tracks original vs. corrected with revert capability — `CorrectionHistory` component + `useCorrectionStore`
-- [ ] MusicXML export uses corrected data — backend endpoints rebuild MusicXML; frontend stale until re-fetch (follow-up)
+- [ ] MusicXML export uses corrected data — backend endpoints rebuild MusicXML; frontend stale until re-fetch (follow-up → PRIORITIES.md commit 153)
 - [x] Fretboard sync reflects corrections immediately during playback — `MusicContext` re-derives from patched lesson
 - [x] Correction coverage metric (% of ML-predicted events that were corrected) available — `correction_count` + `correction_coverage` on `LessonJSON`
 - [x] Corrections exportable as training data for ML retraining — `GET /analyze/{job_id}/corrections/export`
 
-**Remaining work (follow-up):**
+**Remaining work (follow-up):** → **promoted to PRIORITIES.md commit 153 (MusicXML Re-Fetch After Corrections)**
 
 - [ ] MusicXML re-fetch from frontend after correction (stale until explicit refresh)
 
@@ -1661,7 +1663,7 @@ chord books. No multiple position alternatives are offered.
 - [x] Flat-to-sharp normalization works (Bb → A#, etc.)
 - [x] Finger numbers and barre indicators render correctly
 - [x] No regression: existing fretboard dot rendering unchanged
-- [ ] Web rendering verified; native rendering verified or fallback active
+- [ ] Web rendering verified; native rendering verified or fallback active — *promoted to PRIORITIES.md commit 155*
 
 **Implementation:**
 
@@ -1726,20 +1728,20 @@ chord books. No multiple position alternatives are offered.
 | **Commit 131** | Inversion & Slash Chord Logic | Migrated to Phase 2 Milestone B |
 | **Commit 132** | Voicing & Position Inference | Migrated to Phase 2 Milestone B |
 | **Commit 133** | Live Mic Mode | Migrated to Phase 2 Milestone A (A3 — On-Device CRNN TFLite) |
-| **Commit 134** | Dynamic Session Engine | Migrated to Phase 2 Milestone C |
-| **Commit 135** | Orient-as-Hint | Migrated to Phase 2 Milestone C |
-| **Commit 136** | Mastery & Integrity | Migrated to Phase 2 Milestone C |
-| **Commit 137** | Chord Pulse Dashboard | Migrated to Phase 2 Milestone C |
-| **Commit 138** | Multi-Instrument Diagram Support | Migrated to Phase 2 Milestone C |
+| **Commit 134** | Dynamic Session Engine | Promoted to PRIORITIES.md commit 162 |
+| **Commit 135** | Orient-as-Hint | Promoted to PRIORITIES.md commit 163 |
+| **Commit 136** | Mastery & Integrity | Promoted to PRIORITIES.md commit 164 |
+| **Commit 137** | Chord Pulse Dashboard | Promoted to PRIORITIES.md commit 165 |
+| **Commit 138** | Multi-Instrument Diagram Support | Promoted to PRIORITIES.md commit 167 |
 | **Commit 139** | 6-Stem High-Fidelity Demucs | **Complete** — already shipped |
-| **Commit 140** | Real-Time Stem Mixer & Export | Migrated to Phase 2 Milestone D |
-| **Commit 141** | Dynamic Tempo Support | Migrated to Phase 2 Milestone D |
-| **Commit 142** | Redis Job Queue + Celery Workers | Migrated to Phase 2 Milestone D |
-| **Commit 143** | Dedicated ML Model Server | **Superseded** — now serves MT3 instead of CRNN |
-| **Commit 144** | GPU Job Queue for Demucs | Migrated to Phase 2 Milestone D |
-| **Commit 145** | Error Resilience | Migrated to Phase 2 Milestone D |
-| **Commit 146** | Monitoring & Observability | Migrated to Phase 2 Milestone D |
-| **Commit 147** | Audio Fingerprinting & Quality Scoring | Migrated to Phase 2 Milestone D |
+| **Commit 140** | Real-Time Stem Mixer & Export | Promoted to PRIORITIES.md commit 172 (built as `StemMixer.tsx`; export missing) |
+| **Commit 141** | Dynamic Tempo Support | Promoted to PRIORITIES.md commit 169 (only static `bpm_override` exists) |
+| **Commit 142** | Redis Job Queue + Celery Workers | **Built** — `celery_app.py`, `queue.py`, `job_store.py` exist; frontend SSE gap → PRIORITIES.md commit 151 |
+| **Commit 143** | Dedicated ML Model Server | **Built** — `model_server.py` serves MT3 (not CRNN); GPU scheduling gap → commit 170 |
+| **Commit 144** | GPU Job Queue for Demucs | Promoted to PRIORITIES.md commit 170 |
+| **Commit 145** | Error Resilience | Promoted to PRIORITIES.md commit 170 (DLQ written in `dead_letter.py` + `job_store.py` but never wired into the failure path) |
+| **Commit 146** | Monitoring & Observability | **Built** — `metrics.py` + `/metrics` in `main.py`; nothing outstanding |
+| **Commit 147** | Audio Fingerprinting & Quality Scoring | Promoted to PRIORITIES.md commit 171 |
 | **Commit 148** | MT3 as Auxiliary Training Tool | **Replaced** — MT3 is now primary, not auxiliary |
 
 ---
@@ -1973,148 +1975,20 @@ chord books. No multiple position alternatives are offered.
 
 ---
 
-## Milestone C: Engagement & Retention Features (Deferred)
+## Milestone C: Engagement & Retention Features (Deferred → moved)
 
-**Archive Date:** July 19, 2026
-**Reason for deferral:** These are product engagement features (analytics, feedback, session adaptation) that are not required for the AMT research MVP. The current PRIORITIES.md Phase 2 focuses on pipeline validation, documentation, and publication instead.
+**Archive Date:** July 19, 2026 — deferred, then promoted to [`PRIORITIES.md`](PRIORITIES.md) during the roadmap restructure (Sep 2026).
 
-**Current state at archive:** Correction store (`useCorrectionStore`) fully implemented with chord/note/voicing overrides and DB persistence. Jam mode (`app/(tabs)/jam.tsx`) is a full single-tab experience with backing tracks, scale detection, phrase coaching, and save flow. SM-2 spaced repetition engine (`src/spaced/sm2.ts`) powers skill node mutations. Practice plan sequencer (`backend/app/sequencer.py`) generates slot-based plans. No analytics infrastructure, no three-tier output, no multi-instrument support, no chord pulse dashboard exist.
+| Former spec | New home |
+|-------------|----------|
+| Commit C1: User Feedback & Manual Overrides | PRIORITIES.md commit 159 |
+| Commit C2: Jam Mode Summary Agent | PRIORITIES.md commit 160 |
+| Commit C3: Play Engagement Analytics | PRIORITIES.md commit 161 |
+| Commit C4: Dynamic Session Engine | PRIORITIES.md commit 162 |
+| Commit C5: Orient-as-Hint | PRIORITIES.md commit 163 |
+| Commit C6: Mastery & Integrity | PRIORITIES.md commit 164 |
+| Commit C7: Chord Pulse Dashboard | PRIORITIES.md commit 165 |
+| Commit C8: Three-Tier Output Strategy | PRIORITIES.md commit 166 |
+| Commit C9: Multi-Instrument Diagram Support | PRIORITIES.md commit 167 |
 
-### Commit C1: User Feedback & Manual Overrides
-- **Scope:**
-  - Extend existing `useCorrectionStore` with a "report incorrect" action on any chord/note in the fretboard or chord timeline
-  - Add `POST /analyze/{job_id}/feedback` backend endpoint accepting structured feedback:
-    - `{ type: "chord_correction" | "note_correction" | "wrong_chord", event_index, original, corrected, reason? }`
-  - Persist feedback to `user_feedback` SQLite table with `job_id`, `song_id`, `user_id`, `timestamp`, `feedback_type`, `original_value`, `corrected_value`
-  - Route corrections to two distillation sets:
-    - Chord corrections → Branch A chord student's training set (exportable as `chord_feedback.json`)
-    - Note/solo corrections → Branch B solo student's training set (exportable as `solo_feedback.json`)
-  - Add feedback summary in Review screen: "You corrected 3 chords and 2 notes in this session"
-  - Add cumulative feedback stats to player profile: total corrections, most-corrected chord types
-  - Feedback dashboard in Settings: list of all corrections with revert capability
-
-### Commit C2: Jam Mode Summary Agent
-- **Scope:**
-  - Add `POST /jam/summary` backend endpoint triggered on jam save
-  - Claude Haiku-powered post-jam analysis:
-    - Input: jam snapshot (scale, confidence, phrase features, backing track, duration)
-    - Output: structured summary with per-phrase feedback
-  - Persona-switching via system prompt: "Encouraging coach" vs "Technical analyst" (user toggle in Jam settings)
-  - Output schema: `{ phrase_index, chord, clarity, intonation_cents, timing_ms, transition_from, transition_gap_ms, suggestion }`
-  - Display jam summary in a post-jam modal:
-    - Overall grade (A-F) from weighted phrase scores
-    - Top 3 strengths and top 3 areas for improvement
-    - "Practice this phrase" button → launches slow loop on weakest phrase
-  - Persist summary to `jam_snapshots.summary_json` column
-  - Add jam history list screen: `app/(tabs)/jam/history.tsx` showing past jams with summary previews
-
-### Commit C3: Play Engagement Analytics
-- **Scope:**
-  - Create `src/analytics/eventBus.ts`: lightweight custom event bus (no third-party SDK)
-    - `emit(event: AnalyticsEvent)` and `subscribe(handler)` pattern
-    - Events batched in memory, flushed to SQLite every 30 seconds or on app background
-  - Define `AnalyticsEvent` type union:
-    - `session_start`, `session_complete`, `session_step_progress`, `session_abandon`
-    - `play_along_start`, `play_along_complete`, `play_along_discard`
-    - `feature_usage`, `correction_made`, `jam_complete`
-  - Add `analytics_events` SQLite table: `id, user_id, event_type, payload_json, timestamp`
-  - Track per-user per-song engagement metrics:
-    - Total play-along duration, average session length, completion rate
-    - Most-practiced songs, most-corrected chord types
-    - Session frequency (sessions per day/week)
-  - Add opt-out toggle in Settings: "Share practice data" (default: on)
-  - Add privacy notice in onboarding: "We track practice patterns to improve your experience. Opt out anytime."
-  - Export analytics as CSV in Settings > Privacy > Export my data
-
-### Commit C4: Dynamic Session Engine
-- **Scope:**
-  - Extend `PracticePlanPayload` to support mid-session adaptation:
-    - After each slot completes, re-evaluate remaining slots based on actual performance
-    - If a slot scored <50%, insert a remediation slot before the next planned slot
-    - If a slot scored >90%, skip the next easier slot and advance
-  - Add `POST /session/plan/adapt` backend endpoint:
-    - Input: current plan state, last slot performance (accuracy, timing, completion)
-    - Output: updated remaining slots with possible insertions/removals
-  - Wire SM-2 spaced repetition into plan sequencing:
-    - `skill_mutator.ts` already computes per-skill scores — feed these into slot selection
-    - Weak skills get more frequent practice slots; strong skills get review-only slots
-  - Add plan progress persistence to `practice_plans` table:
-    - `current_slot_index`, `slot_results_json`, `adaptation_log`
-    - Resume plan after app restart from last completed slot
-  - Add plan history UI: list of completed plans with per-slot scores
-  - Add "Regenerate plan" button that re-runs `generate_practice_plan()` with updated profile
-
-### Commit C5: Orient-as-Hint
-- **Scope:**
-  - Remove Orient (`listen` step) as a mandatory linear step in the session flow
-  - Integrate orient content as a non-intrusive amber overlay in Study and Play screens:
-    - Small `?` toggle button in the toolbar (amber when active)
-    - Toggling shows/hides the orient audio clip + annotation text as a slide-down panel
-    - Panel includes play/pause for the orient WAV and the text annotation
-  - Update `SESSION_STEPS` in `sessionFlow.ts`: remove `listen` from the mandatory sequence
-  - Add orient data to `MusicContext` so it's available in Study/Play without a separate screen
-  - Preserve the orient backend endpoint (`POST /session/orient-clip`) — only the frontend routing changes
-  - Add "Skip to Study" shortcut that bypasses orient entirely
-  - Keep `listen.tsx` as a standalone screen accessible from session settings for users who want the full orient experience
-
-### Commit C6: Mastery & Integrity
-- **Scope:**
-  - Atomic SQLite transactions for all dynamic session state updates:
-    - Wrap `skill_mutator.ts` mutations in a single transaction
-    - Wrap `practice_plans` slot completion + adaptation in a single transaction
-    - Prevent partial writes on crash (dual-entry state integrity)
-  - Add `session_state` SQLite table:
-    - `session_id, plan_id, current_step, slot_results_json, started_at, updated_at`
-    - Enables crash recovery: on app restart, check for incomplete sessions and offer to resume
-  - Single-file mode vs dynamic session mode:
-    - Single-file: current behavior (one song, linear 7-step flow)
-    - Dynamic: plan-driven multi-slot flow (warmup → song → jam → review)
-  - Add mode toggle on Home screen: "Practice a song" (single) vs "Follow a plan" (dynamic)
-  - Ensure skill node updates are idempotent (same session shouldn't double-count)
-
-### Commit C7: Chord Pulse Dashboard
-- **Scope:**
-  - New screen: `app/(tabs)/progress/pulse.tsx` — scrolling chord timeline with falling notes visualizer
-  - Chord timeline: horizontal scrollable bar showing chord changes over time (reuse `ChordsAndLyrics` rendering)
-  - Falling notes: vertical piano-roll-style display below chord bar, notes fall toward a hit line (like Guitar Hero)
-    - Chord tones highlighted in amber, non-chord tones in gray
-    - Beat grid lines visible as horizontal guides
-  - Beat-synced Pulse ring animation:
-    - Circular ring at center of screen that pulses on downbeats
-    - Ring color intensity maps to current chord confidence
-    - Ring size pulses with `pulse_bpm` from BeatGrid
-  - Session-over-session chord accuracy trend: line chart showing accuracy % over last 10 sessions
-  - Chord mastery heatmap: 12xN grid (one column per chord type) showing hit rate per chord
-  - Accessible from Home screen "Pulse" card or Progress tab
-
-### Commit C8: Three-Tier Output Strategy
-- **Scope:**
-  - Define three output personas from shared LessonJSON:
-    - **Learner**: simplified view — scrolling chord chart + single-line solo melody + fretboard sync. No MusicXML, no complex notation. Large chord symbols, color-coded difficulty.
-    - **Intermediate**: standard view — slash chords + beat grid + tab notation. Current default behavior.
-    - **Transcriber**: full view — printable MusicXML, complete notation, all metadata. Export-focused.
-  - Add `output_tier` preference to `app_prefs` table: `'learner' | 'intermediate' | 'transcriber'`
-  - Backend generates all three tiers from the same LessonJSON — no separate analysis needed
-  - Frontend conditionally renders based on `output_tier`:
-    - Learner: hide MusicXML viewer, show simplified chord chart, hide complex theory
-    - Intermediate: current behavior (default)
-    - Transcriber: show full notation, add "Print" and "Export" buttons
-  - Add tier selector in Settings > Display > "notation_complexity"
-  - Auto-detect tier from `experience_level` on first launch (beginner → learner, intermediate → intermediate, advanced → transcriber)
-
-### Commit C9: Multi-Instrument Diagram Support
-- **Scope:**
-  - Extend `FretboardDiagram` to support multiple instrument types:
-    - Guitar (6-string, standard tuning) — existing
-    - Piano (keyboard layout with 2-octave range)
-    - Ukulele (4-string, GCEA tuning)
-  - Add instrument selector toggle in session toolbar: 🎸 / 🎹 / 🪕
-  - Alternate tuning support for guitar:
-    - Preset tunings: Standard (EADGBE), Drop D (DADGBE), Open G (DGDGBD), DADGAD, Half-step down (EbAbDbGbBbEb)
-    - Custom tuning: user inputs per-string notes
-    - Tuning stored in `app_prefs` as `guitar_tuning: string[]`
-  - Update `chordToFretboardCells()` and `fretboardCell.ts` to accept tuning array
-  - Update chord diagram rendering (`ChordDiagram.tsx`) to show correct string/fret for ukulele
-  - Piano mode: render 2-octave keyboard with highlighted notes for current chord/scale
-  - Transposition engine: when tuning changes, recompute all fretboard positions
-
+Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PRIORITIES.md`](PRIORITIES.md) Active Backlog. Current-state notes from the archive, for reference: correction store (`useCorrectionStore`) fully implemented with chord/note/voicing overrides and DB persistence; jam mode (`app/(tabs)/jam.tsx`) is a full single-tab experience with backing tracks, scale detection, phrase coaching, and save flow; SM-2 spaced repetition engine (`src/spaced/sm2.ts`) powers skill node mutations; practice plan sequencer (`backend/app/sequencer.py`) generates slot-based plans. No analytics infrastructure, no three-tier output, no multi-instrument support, no chord pulse dashboard exist.
