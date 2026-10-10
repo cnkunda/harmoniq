@@ -50,12 +50,17 @@ def main() -> None:
     # Use bundled test audio or provided path
     audio_path = args.path
     if audio_path is None:
-        bundled = HERE.parent / "data" / "test_audio" / "test_audio.wav"
-        if bundled.is_file():
-            audio_path = bundled
+        candidates = [
+            HERE.parent / "data" / "test_audio" / "test_audio.wav",
+            HERE.parents[1] / "assets" / "demo-lesson" / "reggae_clean_30s.wav",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                audio_path = candidate
+                break
         else:
             print("[FAIL] No --path provided and no bundled test audio found.")
-            print(f"      Place a test WAV at {bundled} or pass --path.")
+            print(f"      Place a test WAV at {candidates[0]} or pass --path.")
             sys.exit(1)
 
     if not audio_path.is_file():
