@@ -176,7 +176,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 152: Progressive Analysis Reveal — Wire ChordChartPreview (was 109 remaining work)
 
-**Status:** ready
+**Status:** Complete — all 6 ACs verified (vitest 439, Playwright 53, backend pytest green).
 
 **Goal:** Replace the monolithic add-song loading spinner with a progressive reveal: chord chart appears as soon as chord inference finishes, then refines to the full score.
 
@@ -193,12 +193,12 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] Chord chart preview renders as soon as `analysis_stage >= "chords_inferring"`
-- [ ] Later stages show a compact "refining" banner, not a blank spinner
-- [ ] Full score replaces the preview on `complete` without layout shift
-- [ ] Monolithic add-song spinner removed once preview path is verified
-- [ ] Coach hydration unchanged and non-regressed
-- [ ] Tests green (`npm run test`, `npm run test:ui`)
+- [x] Chord chart preview renders as soon as `analysis_stage >= "chords_inferring"`
+- [x] Later stages show a compact "refining" banner, not a blank spinner
+- [x] Full score replaces the preview on `complete` without layout shift
+- [x] Monolithic add-song spinner removed once preview path is verified
+- [x] Coach hydration unchanged and non-regressed
+- [x] Tests green (`npm run test`, `npm run test:ui`)
 
 ---
 

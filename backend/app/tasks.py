@@ -151,13 +151,13 @@ def analyze_job_task(
 
         # Stem separation
         _repo_progress(job_id, progress=0.4, stage_label="Separating stems\u2026", analysis_stage="stems_separating")
-        _publish_progress(job_id, "processing", progress=0.4, stage_label="Separating stems\u2026")
+        _publish_progress(job_id, "processing", progress=0.4, stage_label="Separating stems\u2026", analysis_stage="stems_separating")
         stem_start = time.time()
         stems = separate_song_to_stems(wav_path_obj, job_dir, chunk_paths=chunk_paths)
         stem_elapsed = time.time() - stem_start
 
         _repo_progress(job_id, progress=0.62, stage_label="Stems ready", analysis_stage="stems_separating")
-        _publish_progress(job_id, "processing", progress=0.62, stage_label="Stems ready")
+        _publish_progress(job_id, "processing", progress=0.62, stage_label="Stems ready", analysis_stage="stems_separating")
 
         backend_root = get_data_dir().parent
         stem_abs_paths = {k: backend_root / rel for k, rel in stems.items()}
@@ -192,7 +192,11 @@ def analyze_job_task(
 
             def on_stage(stage, prog, label):
                 _repo_progress(job_id, progress=prog, stage_label=label, analysis_stage=stage)
-                _publish_progress(job_id, "processing", progress=prog, stage_label=label)
+                _publish_progress(job_id, "processing", progress=prog, stage_label=label, analysis_stage=stage)
+
+            def on_chords_ready(partial):
+                # Commit 152: publish partial chord result over Redis/WS (no DB column).
+                _publish_progress(job_id, "processing", partial_result=partial.model_dump(mode="json"))
 
             result = build_lesson_json_from_librosa(
                 job_id,
@@ -207,6 +211,7 @@ def analyze_job_task(
                 mix_wav_path=wav_path_obj,
                 piano_stem_path=piano_stem_path,
                 on_stage=on_stage,
+                on_chords_ready=on_chords_ready,
                 routing_hints=routing_hints,
                 stem_abs_paths=stem_abs_paths,
             )

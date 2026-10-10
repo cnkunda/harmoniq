@@ -1,11 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-import { ApiError, AnalyzePollCancelledError, pollAnalyzeJobCancelable } from './analyze'
+import {
+  ApiError,
+  AnalyzePollCancelledError,
+  connectAnalyzeWebSocket,
+  pollAnalyzeJobCancelable,
+} from './analyze'
 import type { AnalyzeJob, LessonJSON } from '@/src/types'
 
 const { openAnalyzeSseMock } = vi.hoisted(() => ({ openAnalyzeSseMock: vi.fn() }))
 
-vi.mock('@/src/api/analyzeSse', () => ({ openAnalyzeSse: openAnalyzeSseMock }))
+vi.mock('@/src/api/analyzeSse', async (importOriginal) => ({
+  // Keep the real pure helpers (parsePartialResult) — only the transport is stubbed.
+  ...(await importOriginal<typeof import('./analyzeSse')>()),
+  openAnalyzeSse: openAnalyzeSseMock,
+}))
 vi.mock('@/src/config', () => ({ API_BASE_URL: 'http://sse-test' }))
 
 type SseHandlers = Parameters<typeof import('./analyzeSse').openAnalyzeSse>[2]
@@ -142,10 +151,15 @@ describe('pollAnalyzeJobCancelable (Commit 151 SSE chain)', () => {
 
   it('reports processing polls to onStatus and forwards analysis_stage', async () => {
     openAnalyzeSseMock.mockReturnValue(null)
+    const partialResult = {
+      chord_timeline: { events: [{ timestamp: 0, chord: 'G:maj', confidence: 0.9 }] },
+      bpm: 96.5,
+      total_duration: 183.2,
+    }
     const fetchMock = vi.fn(async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ ...processingJob }),
+      json: async () => ({ ...processingJob, partial_result: partialResult }),
     }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -154,8 +168,104 @@ describe('pollAnalyzeJobCancelable (Commit 151 SSE chain)', () => {
 
     await vi.waitFor(() => expect(onStatus).toHaveBeenCalledTimes(1))
     expect(onStatus.mock.calls[0][0].analysis_stage).toBe('chords_inferring')
+    // Commit 152: polling returns the whole JobStatus — partial_result flows through.
+    expect(onStatus.mock.calls[0][0].partial_result).toEqual(partialResult)
     cancel()
     await expect(promise).rejects.toBeInstanceOf(AnalyzePollCancelledError)
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ---- Commit 152: WebSocket status frames carry analysis_stage + partial_result ----
+
+describe('connectAnalyzeWebSocket WS status mapping (Commit 152)', () => {
+  class FakeWebSocket {
+    static readonly OPEN = 1
+    static instances: FakeWebSocket[] = []
+    url: string
+    readyState = 0
+    onopen: (() => void) | null = null
+    onmessage: ((event: { data: string }) => void) | null = null
+    onerror: (() => void) | null = null
+    onclose: (() => void) | null = null
+
+    constructor(url: string) {
+      this.url = url
+      FakeWebSocket.instances.push(this)
+      queueMicrotask(() => {
+        this.readyState = FakeWebSocket.OPEN
+        this.onopen?.()
+      })
+    }
+
+    close() {
+      this.readyState = 3
+      this.onclose?.()
+    }
+
+    emit(payload: unknown) {
+      this.onmessage?.({ data: JSON.stringify(payload) })
+    }
+  }
+
+  let consoleLogSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    openAnalyzeSseMock.mockReset()
+    openAnalyzeSseMock.mockReturnValue(null) // force the WS branch
+    FakeWebSocket.instances = []
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    consoleLogSpy.mockRestore()
+  })
+
+  it('forwards analysis_stage and partial_result from WS status frames, then resolves on complete', async () => {
+    const onStatus = vi.fn()
+    const { promise } = connectAnalyzeWebSocket('job-1', onStatus)
+
+    await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
+    const ws = FakeWebSocket.instances[0]
+    await vi.waitFor(() => expect(ws.readyState).toBe(FakeWebSocket.OPEN))
+
+    ws.emit({
+      type: 'status',
+      status: 'processing',
+      progress: 0.6,
+      stage_label: 'Transcribing with MT3…',
+      analysis_stage: 'mt3_inferring',
+      partial_result: {
+        chord_timeline: { events: [{ timestamp: 0, chord: 'G:maj', confidence: 0.9 }] },
+        bpm: 96.5,
+        total_duration: 183.2,
+      },
+    })
+
+    expect(onStatus).toHaveBeenCalledTimes(1)
+    const job = onStatus.mock.calls[0][0] as AnalyzeJob
+    expect(job.analysis_stage).toBe('mt3_inferring')
+    expect(job.partial_result?.bpm).toBe(96.5)
+    expect(job.partial_result?.chord_timeline.events).toHaveLength(1)
+
+    ws.emit({ type: 'complete', result: lesson })
+    await expect(promise).resolves.toEqual(lesson)
+  })
+
+  it('maps an absent partial_result to null on WS status frames', async () => {
+    const onStatus = vi.fn()
+    const { promise, cancel } = connectAnalyzeWebSocket('job-1', onStatus)
+
+    await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
+    const ws = FakeWebSocket.instances[0]
+    await vi.waitFor(() => expect(ws.readyState).toBe(FakeWebSocket.OPEN))
+
+    ws.emit({ type: 'status', status: 'processing', progress: 0.4, analysis_stage: 'stems_separating' })
+    expect((onStatus.mock.calls[0][0] as AnalyzeJob).partial_result).toBeNull()
+
+    cancel()
+    await expect(promise).rejects.toBeInstanceOf(AnalyzePollCancelledError)
   })
 })

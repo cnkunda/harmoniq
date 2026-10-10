@@ -23,6 +23,7 @@ from app.schemas import (
     ChordTimeline,
     LessonJSON,
     LessonSectionStub,
+    PartialAnalysisResult,
     PlayerProfile,
     SoloNotes,
     StemRoutingHints,
@@ -219,6 +220,7 @@ def build_lesson_json_from_librosa(
     mix_wav_path: Path | None = None,
     piano_stem_path: Path | None = None,
     on_stage: Callable[[str, float, str], None] | None = None,
+    on_chords_ready: Callable[[PartialAnalysisResult], None] | None = None,
     routing_hints: StemRoutingHints | None = None,
     stem_abs_paths: dict[str, Path] | None = None,
 ) -> LessonJSON:
@@ -416,6 +418,17 @@ def build_lesson_json_from_librosa(
             logger.exception("CRNN chord inference failed for job_id=%s", job_id)
             chord_timeline = ChordTimeline(events=[])
             transcription_source = "none"
+
+    # Commit 152: chord timeline is final here — publish it for the progressive
+    # preview before the (potentially slow) solo fallback runs.
+    if on_chords_ready is not None and chord_timeline is not None:
+        on_chords_ready(
+            PartialAnalysisResult(
+                chord_timeline=chord_timeline,
+                bpm=float(beat_grid.bpm) if beat_grid.bpm > 0 else None,
+                total_duration=float(summary.duration_s) if summary.duration_s > 0 else None,
+            )
+        )
 
     # If MT3 didn't produce solo notes, run Basic Pitch fallback
     if solo_notes is None or len(solo_notes.notes) == 0:

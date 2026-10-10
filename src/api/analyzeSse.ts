@@ -14,7 +14,7 @@
  * no callback can fire after settlement and no transport keeps reconnecting.
  */
 
-import type { AnalyzeJob, AnalyzeJobStatus, LessonJSON } from '@/src/types'
+import type { AnalyzeJob, AnalyzeJobStatus, LessonJSON, PartialAnalysisResult } from '@/src/types'
 
 // ---- Wire parsing -----------------------------------------------------------------------------
 
@@ -89,6 +89,20 @@ function isAnalyzeJobStatus(value: unknown): value is AnalyzeJobStatus {
   return value === 'queued' || value === 'processing' || value === 'complete' || value === 'failed'
 }
 
+/** Commit 152: validate `partial_result` on a JobStatus frame; null when absent/malformed. */
+export function parsePartialResult(value: unknown): PartialAnalysisResult | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const rec = value as Record<string, unknown>
+  const timeline = rec.chord_timeline
+  if (timeline === null || typeof timeline !== 'object' || Array.isArray(timeline)) return null
+  if (!Array.isArray((timeline as Record<string, unknown>).events)) return null
+  return {
+    chord_timeline: timeline as PartialAnalysisResult['chord_timeline'],
+    bpm: typeof rec.bpm === 'number' ? rec.bpm : null,
+    total_duration: typeof rec.total_duration === 'number' ? rec.total_duration : null,
+  }
+}
+
 /**
  * Map a server `status`/`complete`/`failed` frame onto `AnalyzeJob`.
  * Returns `null` for frames that carry no job update (`connected`, `heartbeat`,
@@ -120,6 +134,7 @@ export function mapSseEventToJob(ev: SseEvent): AnalyzeJob | null {
     stage_label: typeof rec.stage_label === 'string' ? rec.stage_label : null,
     processing_started_at: typeof rec.processing_started_at === 'number' ? rec.processing_started_at : null,
     analysis_stage: typeof rec.analysis_stage === 'string' ? rec.analysis_stage : null,
+    partial_result: parsePartialResult(rec.partial_result),
   }
 }
 

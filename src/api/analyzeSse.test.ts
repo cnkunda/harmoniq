@@ -114,6 +114,58 @@ describe('mapSseEventToJob', () => {
   })
 })
 
+// ---- Commit 152: partial_result mapping ----
+
+describe('mapSseEventToJob partial_result (Commit 152)', () => {
+  const partial = {
+    chord_timeline: {
+      events: [
+        { timestamp: 0.0, chord: 'G:maj', confidence: 0.9 },
+        { timestamp: 1.85, chord: 'C:maj', confidence: 0.8 },
+      ],
+    },
+    bpm: 96.5,
+    total_duration: 183.2,
+  }
+
+  it('forwards a valid partial_result from a status frame', () => {
+    const job = mapSseEventToJob({
+      event: 'status',
+      data: JSON.stringify({ status: 'processing', analysis_stage: 'mt3_inferring', partial_result: partial }),
+    })
+    expect(job?.partial_result).not.toBeNull()
+    expect(job?.partial_result?.bpm).toBe(96.5)
+    expect(job?.partial_result?.total_duration).toBe(183.2)
+    expect(job?.partial_result?.chord_timeline.events).toHaveLength(2)
+    expect(job?.partial_result?.chord_timeline.events[0].chord).toBe('G:maj')
+  })
+
+  it('maps an absent partial_result to null', () => {
+    const job = mapSseEventToJob({
+      event: 'status',
+      data: JSON.stringify({ status: 'processing', analysis_stage: 'stems_separating' }),
+    })
+    expect(job?.partial_result).toBeNull()
+  })
+
+  it('maps malformed partial payloads to null instead of crashing the stream', () => {
+    const cases: unknown[] = [
+      'not an object',
+      42,
+      { chord_timeline: null },
+      { chord_timeline: { events: 'nope' } },
+      { chord_timeline: {} },
+    ]
+    for (const malformed of cases) {
+      const job = mapSseEventToJob({
+        event: 'status',
+        data: JSON.stringify({ status: 'processing', partial_result: malformed }),
+      })
+      expect(job?.partial_result).toBeNull()
+    }
+  })
+})
+
 // ---- createAnalyzeSseSession ----
 
 function makeHandlers() {

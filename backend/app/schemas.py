@@ -472,6 +472,21 @@ class LessonJSON(BaseModel):
     )
 
 
+class PartialAnalysisResult(BaseModel):
+    """Commit 152: Mid-flight chord data published once chord inference finishes,
+    before solo inference and MusicXML build complete (archive Commit 109 AC)."""
+
+    chord_timeline: ChordTimeline = Field(..., description="Chord timeline as soon as chord inference is final")
+    bpm: float | None = Field(
+        default=None,
+        description="Detected tempo used for bar grouping in the progressive preview.",
+    )
+    total_duration: float | None = Field(
+        default=None,
+        description="Audio duration in seconds (for preview duration label).",
+    )
+
+
 class JobStatus(BaseModel):
     """Polling response for GET /analyze/{job_id}."""
 
@@ -500,6 +515,11 @@ class JobStatus(BaseModel):
     analysis_stage: str | None = Field(
         default=None,
         description="Machine-readable analysis stage: initializing, stems_separating, mt3_inferring, chords_inferring, solo_inferring, building_musicxml, complete.",
+    )
+    # Commit 152: Partial chord result for progressive preview (set once chord inference finishes)
+    partial_result: PartialAnalysisResult | None = Field(
+        default=None,
+        description="Partial analysis payload available while processing; null until chord inference completes and again once the terminal result replaces it.",
     )
 
 

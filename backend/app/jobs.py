@@ -41,7 +41,8 @@ from app.schemas import (BeatGrid, BeatGridRecomputeResponse,
                          ChordEnrichmentStatus, CoachFocusArea,
                          CoachHydrationSection, CoachHydrationStatus,
                          JobStatus, LessonJSON, LessonSectionStub,
-                         PlayerProfile, StemRoutingHints)
+                         PartialAnalysisResult, PlayerProfile,
+                         StemRoutingHints)
 from app.separate import SeparationError, separate_song_to_stems
 from app.stem_quality import classify_stems_for_lesson
 
@@ -190,6 +191,7 @@ def _set_job_processing_progress(job_id: str, progress: float, stage_label: str)
         stage_label=stage_label,
         processing_started_at=float(started),
         analysis_stage=current.analysis_stage,
+        partial_result=current.partial_result,
     )
     _persist_job_to_db(job_id)
 
@@ -217,7 +219,21 @@ def _set_job_analysis_stage(
         stage_label=stage_label,
         processing_started_at=float(started),
         analysis_stage=analysis_stage,
+        partial_result=current.partial_result,
     )
+    _persist_job_to_db(job_id)
+
+
+def _set_job_partial_result(job_id: str, partial: PartialAnalysisResult) -> None:
+    """Commit 152: attach the partial chord result to an in-flight job.
+
+    No-op if the job is missing or no longer processing; preserves every
+    other JobStatus field (progress, stage label, analysis_stage).
+    """
+    current = jobs.get(job_id)
+    if current is None or current.status != "processing":
+        return
+    jobs[job_id] = current.model_copy(update={"partial_result": partial})
     _persist_job_to_db(job_id)
 
 
@@ -628,6 +644,7 @@ def _process_analyze_job(
                 on_stage=lambda stage, prog, label: _set_job_analysis_stage(
                     job_id, stage, prog, label
                 ),
+                on_chords_ready=lambda partial: _set_job_partial_result(job_id, partial),
                 routing_hints=routing_hints,
                 stem_abs_paths=stem_abs_paths,
             )

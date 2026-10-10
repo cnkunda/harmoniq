@@ -1,4 +1,4 @@
-import { openAnalyzeSse } from '@/src/api/analyzeSse'
+import { openAnalyzeSse, parsePartialResult } from '@/src/api/analyzeSse'
 import { API_BASE_URL } from '@/src/config'
 import { getAppPref } from '@/src/db/client'
 import { PREF_EXPERIENCE_LEVEL, PREF_STYLE_FOCUS } from '@/src/db/schema'
@@ -200,6 +200,7 @@ export function connectAnalyzeWebSocket(
                   progress: typeof msg.progress === 'number' ? msg.progress : null,
                   stage_label: typeof msg.stage_label === 'string' ? msg.stage_label : null,
                   analysis_stage: typeof msg.analysis_stage === 'string' ? msg.analysis_stage : null,
+                  partial_result: parsePartialResult(msg.partial_result),
                   result: null,
                   error: null,
                   error_code: null,

@@ -411,6 +411,15 @@ export interface CorrectionSet {
 
 // ---- End Commit 110 ----
 
+/** Commit 152: Mid-flight chord payload published once chord inference finishes. */
+export interface PartialAnalysisResult {
+  chord_timeline: ChordTimeline
+  /** Detected tempo (BPM) for preview bar grouping; null when unknown. */
+  bpm?: number | null
+  /** Audio duration in seconds for the preview duration label; null when unknown. */
+  total_duration?: number | null
+}
+
 export interface AnalyzeJob {
   status: AnalyzeJobStatus
   result: LessonJSON | null
@@ -424,6 +433,8 @@ export interface AnalyzeJob {
   processing_started_at?: number | null
   /** Commit 109: Machine-readable analysis stage for progressive rendering. */
   analysis_stage?: string | null
+  /** Commit 152: Partial chord result available before the terminal result. */
+  partial_result?: PartialAnalysisResult | null
 }
 
 /** Commit 109: Beat grid recompute status from GET /analyze/{id}/beat-grid/recompute */

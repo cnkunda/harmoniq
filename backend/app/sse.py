@@ -57,6 +57,9 @@ def _status_snapshot(job: JobStatus) -> tuple[Any, ...]:
         job.analysis_stage,
         job.error,
         job.error_code,
+        # Commit 152: partial chord payload — equality on the pydantic model
+        # detects arrival so the preview renders as soon as chords are ready.
+        job.partial_result,
     )
 
 

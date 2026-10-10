@@ -13,7 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { AudioDropzone } from '@/components/AudioDropzone'
+import { ChordChartPreview } from '@/components/ChordChartPreview'
 import { ErrorBanner } from '@/components/ErrorBanner'
+import { TabViewport } from '@/components/TabViewport'
 import { toast } from '@/components/ToastConfig'
 import { WoodGradient } from '@/components/WoodGradient'
 import {
@@ -24,6 +26,7 @@ import {
     parseTasteProfileJson,
     submitAnalyzeJob,
 } from '@/src/api/analyze'
+import { getRevealPhase, shouldShowPreview, type RevealPhase } from '@/src/addSong/progressiveReveal'
 import { searchTabs, type TabSearchHit } from '@/src/api/tabs'
 import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
 import { colors } from '@/src/constants/colors'
@@ -37,12 +40,15 @@ import { getNextFocusArea } from '@/src/session'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useSkillStore } from '@/src/stores/skillStore'
-import type { AnalyzeJob, AnalyzeJobStatus } from '@/src/types'
+import type { AnalyzeJob, AnalyzeJobStatus, PartialAnalysisResult } from '@/src/types'
 import { useRouter, type Href } from 'expo-router'
 
 type AddSongState = 'idle' | 'analyzing' | 'done' | 'error'
 
 type ImportTab = 'upload' | 'youtube' | 'search'
+
+/** Commit 152: fixed height for the preview→score swap slot (no layout shift on complete). */
+const scoreSlotHeight = 340
 
 function formatElapsedClock(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds))
@@ -79,6 +85,9 @@ export default function AddSongScreen() {
   const processingStartedClockRef = useRef<number | null>(null)
   const [pendingUploadFile, setPendingUploadFile] = useState<Blob | null>(null)
   const [pendingUploadFilename, setPendingUploadFilename] = useState('')
+  /** Commit 152: progressive reveal — stage phase + last known partial chord payload. */
+  const [revealPhase, setRevealPhase] = useState<RevealPhase>('spinner')
+  const [partialResult, setPartialResult] = useState<PartialAnalysisResult | null>(null)
 
   const elapsedAnalyzingSeconds = useMemo(() => {
     if (uiState !== 'analyzing') return 0
@@ -170,6 +179,8 @@ export default function AddSongScreen() {
       setAnalyzeError(null)
       setUiState('analyzing')
       setStatusText('Submitting audio for analysis…')
+      setRevealPhase('spinner')
+      setPartialResult(null)
       progressWidth.value = 0
       setProgressPercent(null)
       processingStartedClockRef.current = null
@@ -230,6 +241,11 @@ export default function AddSongScreen() {
               failed: 'Analysis failed.',
             }
             setStatusText(stage ?? pretty[job.status] ?? `Status: ${job.status}`)
+            // Commit 152: progressive reveal — stage phase + partial chords.
+            setRevealPhase(getRevealPhase(job.analysis_stage))
+            // Keep the last non-null partial (the terminal frame drops it once
+            // the full result replaces it).
+            if (job.partial_result) setPartialResult(job.partial_result)
           },
         )
         cancelRef.current = transport.cancel
@@ -530,38 +546,101 @@ export default function AddSongScreen() {
               </View>
             </View>
 
-        {uiState === 'analyzing' ? (
-          <View className="mt-8 w-full gap-4 rounded-2xl border border-wood-700/40 bg-wood-800/30 p-6">
-            <View className="flex-row items-center justify-center gap-2">
-              <ActivityIndicator color={colors.amber.accent} />
-              <Text className="font-sans-medium text-sm text-cream">Analyzing…</Text>
-            </View>
-            <Text
-              className="text-center font-sans-medium text-sm leading-6 text-cream"
-              accessibilityLiveRegion="polite"
-            >
-              {statusText}
-            </Text>
-            <Text className="text-center font-mono text-xs text-amber-light/90">
-              Elapsed {formatElapsedClock(elapsedAnalyzingSeconds)}
-            </Text>
-            <View className="flex-row items-center gap-3">
-              <View className="h-2.5 flex-1 overflow-hidden rounded-full bg-wood-800">
-                <Animated.View style={progressBarStyle} />
+        {/* Commit 152: one fixed-height slot — spinner → chord preview → full score,
+            so the progressive reveal never shifts layout. */}
+        {uiState === 'analyzing' || (uiState === 'done' && lesson) ? (
+          <View
+            className="mt-8 w-full overflow-hidden rounded-2xl border border-wood-700/40 bg-wood-800/30"
+            style={{ height: scoreSlotHeight }}
+          >
+            {uiState === 'analyzing' ? (
+              shouldShowPreview(revealPhase, partialResult != null) ? (
+                <View className="flex-1" accessibilityLabel="chord chart preview">
+                  <ChordChartPreview
+                    chordEvents={partialResult?.chord_timeline.events ?? []}
+                    totalDuration={partialResult?.total_duration ?? undefined}
+                    bpm={partialResult?.bpm ?? undefined}
+                    isPartial
+                    loading={!partialResult}
+                    style={{ paddingBottom: 72 }}
+                  />
+                  <View
+                    className="absolute inset-x-0 bottom-0 gap-2 border-t border-wood-700/40 bg-wood-900/95 px-4 py-3"
+                    accessibilityLabel="analysis refining banner"
+                    accessibilityLiveRegion="polite"
+                  >
+                    <Text className="text-center font-sans-medium text-xs leading-4 text-cream" numberOfLines={2}>
+                      {statusText}
+                    </Text>
+                    <View className="flex-row items-center gap-3">
+                      <Text className="font-mono text-[10px] text-amber-light/90">
+                        Elapsed {formatElapsedClock(elapsedAnalyzingSeconds)}
+                      </Text>
+                      <View className="h-1.5 flex-1 overflow-hidden rounded-full bg-wood-800">
+                        <Animated.View style={progressBarStyle} />
+                      </View>
+                      <Text
+                        className="min-w-[44px] text-right font-sans-medium tabular-nums text-[10px] text-amber-light"
+                        accessibilityLabel={
+                          progressPercent != null ? `Progress ${progressPercent} percent` : 'Progress indeterminate'
+                        }
+                      >
+                        {progressPercent != null ? `${progressPercent}%` : '—'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <View className="flex-1 justify-center gap-4 px-6 py-6">
+                  <View className="flex-row items-center justify-center gap-2">
+                    <ActivityIndicator color={colors.amber.accent} />
+                    <Text className="font-sans-medium text-sm text-cream">Analyzing…</Text>
+                  </View>
+                  <Text
+                    className="text-center font-sans-medium text-sm leading-6 text-cream"
+                    accessibilityLiveRegion="polite"
+                  >
+                    {statusText}
+                  </Text>
+                  <Text className="text-center font-mono text-xs text-amber-light/90">
+                    Elapsed {formatElapsedClock(elapsedAnalyzingSeconds)}
+                  </Text>
+                  <View className="flex-row items-center gap-3">
+                    <View className="h-2.5 flex-1 overflow-hidden rounded-full bg-wood-800">
+                      <Animated.View style={progressBarStyle} />
+                    </View>
+                    <Text
+                      className="min-w-[52px] text-right font-sans-medium tabular-nums text-xs text-amber-light"
+                      accessibilityLabel={
+                        progressPercent != null ? `Progress ${progressPercent} percent` : 'Progress indeterminate'
+                      }
+                    >
+                      {progressPercent != null ? `${progressPercent}%` : '—'}
+                    </Text>
+                  </View>
+                  <Text className="text-center font-sans text-[11px] leading-4 text-muted-brown">
+                    Usually 1–4 minutes. The bar fills when the practice server reports real stages — long separation
+                    or transcription steps can take a few minutes without moving the percentage.
+                  </Text>
+                </View>
+              )
+            ) : lesson && lesson.musicxml ? (
+              <View className="flex-1" accessibilityLabel="full score">
+                <TabViewport
+                  musicXml={lesson.musicxml}
+                  songTitle={lesson.song_title || undefined}
+                  songArtist={typeof lesson.artist === 'string' ? lesson.artist : undefined}
+                  onError={(message) => toast.error('Score preview failed to render: ' + message)}
+                  style={{ flex: 1 }}
+                />
               </View>
-              <Text
-                className="min-w-[52px] text-right font-sans-medium tabular-nums text-xs text-amber-light"
-                accessibilityLabel={
-                  progressPercent != null ? `Progress ${progressPercent} percent` : 'Progress indeterminate'
-                }
-              >
-                {progressPercent != null ? `${progressPercent}%` : '—'}
-              </Text>
-            </View>
-            <Text className="text-center font-sans text-[11px] leading-4 text-muted-brown">
-              Usually 1–4 minutes. The bar fills when the practice server reports real stages — long separation or
-              transcription steps can take a few minutes without moving the percentage.
-            </Text>
+            ) : (
+              <View className="flex-1 items-center justify-center px-6">
+                <Text className="text-center font-sans text-sm text-muted-brown">
+                  Score unavailable for this track.
+                </Text>
+              </View>
+            )}
           </View>
         ) : null}
 

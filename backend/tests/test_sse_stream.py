@@ -13,8 +13,8 @@ from typing import Any
 
 import pytest
 
-from app.jobs import jobs
-from app.schemas import JobStatus, LessonJSON
+from app.jobs import _set_job_partial_result, jobs
+from app.schemas import ChordEvent, ChordTimeline, JobStatus, LessonJSON, PartialAnalysisResult
 from app.sse import job_progress_stream, sse_response
 
 _NEXT_FRAME_TIMEOUT = 5.0
@@ -194,3 +194,40 @@ def test_sse_response_headers() -> None:
     assert resp.media_type == "text/event-stream"
     assert resp.headers["cache-control"] == "no-cache"
     assert resp.headers["x-accel-buffering"] == "no"
+
+
+def test_partial_result_arrival_emits_status_frame() -> None:
+    """Commit 152: attaching the partial chord payload must emit a `status` event."""
+
+    async def scenario():
+        job_id = "sse-partial"
+        jobs[job_id] = JobStatus(
+            status="processing",
+            result=None,
+            progress=0.6,
+            stage_label="Transcribing with MT3…",
+            analysis_stage="mt3_inferring",
+        )
+        gen = job_progress_stream(job_id)
+        await _next_frame(gen)  # connected
+        await _next_frame(gen)  # initial status (partial_result is null)
+
+        partial = PartialAnalysisResult(
+            chord_timeline=ChordTimeline(
+                events=[ChordEvent(timestamp=0.0, chord="G:maj", confidence=0.9)]
+            ),
+            bpm=96.5,
+            total_duration=183.2,
+        )
+        _set_job_partial_result(job_id, partial)
+
+        event, data = await _next_frame(gen)
+        assert event == "status"
+        assert data is not None
+        assert data["analysis_stage"] == "mt3_inferring"
+        assert data["partial_result"] is not None
+        assert data["partial_result"]["bpm"] == 96.5
+        assert data["partial_result"]["chord_timeline"]["events"][0]["chord"] == "G:maj"
+        await gen.aclose()
+
+    asyncio.run(scenario())
