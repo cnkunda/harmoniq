@@ -46,6 +46,7 @@ basicpitch = [
 ]
 mt3 = [
     "mt3 @ git+https://github.com/magenta/mt3.git",
+    "tensorboard",  # t5x.checkpoints imports it; mt3's own setup does not declare it (Commit 149)
     # JAX 0.4.20+ required for Python 3.12 compatibility (PyObject_Vectorcall).
     # Install separately: pip install jax>=0.4.20 jaxlib>=0.4.20
     # Note: the MT3 extra resolves on Python 3.12 (current flax requires >=3.12);
