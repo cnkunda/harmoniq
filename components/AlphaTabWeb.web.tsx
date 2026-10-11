@@ -924,7 +924,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         return
       }
       const w = RUNTIME_DIAG_WINDOW_MS
-      webDiagIntervalRef.current = window.setInterval(() => {
+      webDiagIntervalRef.current = setInterval(() => {
         const sec = w / 1000
         const hz = webDiagNoteRef.current / sec
         const rps = webDiagRenderRef.current / sec
