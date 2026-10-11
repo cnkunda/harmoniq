@@ -2,7 +2,7 @@
 
 This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commits 149–180). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, ChordChartPreview/progressive reveal → 152, MusicXML re-fetch → 153, ChordDiagram native verification → 155, Milestone C1–C9 → 159–167, Milestone D gaps → 169–172.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commits 149–182). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, ChordChartPreview/progressive reveal → 152, MusicXML re-fetch → 153, ChordDiagram native verification → 155, Milestone C1–C9 → 159–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -491,7 +491,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 - [x] CNN frontend reduces temporal resolution before LSTM
 - [x] Bidirectional LSTM layers capture forward and backward dependencies
 - [x] TFLite conversion succeeds with recurrent layers
-- [ ] Inference latency <100ms on target mobile device (requires mobile benchmarking) — *stale AC; superseded by the Milestone A on-device benchmark (`tests/benchmarks/chordModelLatency.ts`); closed by PRIORITIES.md commit 149*
+- [x] ~~Inference latency <100ms on target mobile device (requires mobile benchmarking)~~ — *stale AC; superseded by the Milestone A on-device benchmark (`tests/benchmarks/chordModelLatency.ts`); closed by PRIORITIES.md commit 149*
 - [x] Validation accuracy: 82.9% @ 19 epochs (up from ~55% shallow CNN epoch 6 baseline). Improvement inline with +8% target.
 
 ---

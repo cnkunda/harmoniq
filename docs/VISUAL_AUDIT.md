@@ -551,7 +551,7 @@ Cross-referenced every `[x]` acceptance criterion in `PRIORITIES.md` against the
 | 109 | "Frontend renders chord chart preview when `analysis_stage >= "chords_inferring"`" | Scoped down — chord timeline is not progressively revealed |
 | 109 | "Monolithic loading spinner replaced with progressive reveal" | Scoped down — `add-song.tsx` still shows monolithic spinner |
 | 110 | "MusicXML export uses corrected data" | Deferred to follow-up |
-| 106 | All QAT items | Commit 106 is DEFERRED |
+| 106 | All QAT items | Commit 106 is done — archived with all ACs ticked ([`priorities-archive.md`](../priorities-archive.md)) |
 
 ### Likely intentional gaps
 

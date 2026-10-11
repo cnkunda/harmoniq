@@ -330,7 +330,7 @@ All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above
 - **Analysis timeout (>5 min)**: No push notification infrastructure. Jobs taking >5 min will timeout with a manual Retry button. Push notifications are deferred to post-Phase 1.
 - **Tab catalog**: `GET /tabs/{id}/gp5` returns 501 until a licensed provider is configured.
 - **Jam Mode AlphaTab**: May show "No tab available" if tab loading fails (expected until licensed provider).
-- **Chord model on-device**: TFLite model with SELECT_TF_OPS requires Flex delegate on Android for BiLSTM + attention layers (commit 98c).
+- **Chord model on-device**: TFLite model with SELECT_TF_OPS requires Flex delegate on Android for BiLSTM + attention layers (commit 106 — INT8 conversion uses `TFLITE_BUILTINS_INT8` + `SELECT_TF_OPS`; 98c is archived/superseded).
 - **Beat grid editor persistence**: ✅ Resolved (commit 110). Overrides persist via `app_prefs` key-value store.
 - **Beat grid editor scope**: Single-section editing only. Variable BPM per section is deferred to commit 140.
 - **Correction MusicXML sync**: Backend endpoints rebuild MusicXML after corrections, but frontend-applied corrections do not automatically trigger MusicXML re-export (follow-up).
