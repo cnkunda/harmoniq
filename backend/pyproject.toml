@@ -46,9 +46,11 @@ basicpitch = [
 ]
 mt3 = [
     "mt3 @ git+https://github.com/magenta/mt3.git",
-    "note-seq>=0.0.1",
     # JAX 0.4.20+ required for Python 3.12 compatibility (PyObject_Vectorcall).
     # Install separately: pip install jax>=0.4.20 jaxlib>=0.4.20
+    # Note: the MT3 extra resolves on Python 3.12 (current flax requires >=3.12);
+    # a redundant "note-seq>=0.0.1" pin was removed here — mt3 pins note-seq==0.0.5
+    # from git, and a PyPI-sourced pin made the extra unresolvable (Commit 149).
 ]
 mrt2 = [
     "magenta-rt>=2.0",
