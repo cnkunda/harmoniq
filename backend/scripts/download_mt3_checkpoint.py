@@ -77,6 +77,14 @@ def main() -> None:
                 f"({rate:.1f} MB/s)"
             )
 
+    # 4. Fetch gin configs — they are not stored in the GCS checkpoint bucket,
+    # but model_server.py requires model.gin + mt3.gin next to the tensors.
+    gin_base = "https://raw.githubusercontent.com/magenta/mt3/main/mt3/gin"
+    for gin_name in ("model.gin", "mt3.gin"):
+        req = Request(f"{gin_base}/{gin_name}", headers={"Accept-Encoding": "identity"})
+        (TARGET / gin_name).write_bytes(urlopen(req).read())
+        print(f"Fetched {gin_name} from magenta/mt3")
+
     elapsed = time.time() - t0
     final = sum(f.stat().st_size for f in TARGET.rglob("*") if f.is_file())
     print(f"\nDone in {elapsed:.0f}s — {final / 1_000_000:.1f} MB downloaded to {TARGET}")
