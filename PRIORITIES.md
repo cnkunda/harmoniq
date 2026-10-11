@@ -196,7 +196,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 153: MusicXML Re-Fetch After Corrections (was 110 remaining work)
 
-**Status:** ready
+**Status:** Complete — all 5 ACs verified (lint 0 errors, vitest 445 tests, backend pytest 1290 passed / 6 skipped).
 
 **Goal:** Make corrected data visible in the score immediately — the rendered MusicXML must never stay stale after a chord, note, or voicing correction.
 
@@ -213,11 +213,19 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] Corrected chord/note/voicing appears in the rendered score without manual refresh
-- [ ] Refetch is debounced under rapid corrections (no request storm)
-- [ ] Loading indicator shown during refetch; no blank/flash
-- [ ] Revert from correction history also refreshes the score
-- [ ] Backend + frontend tests green
+- [x] Corrected chord/note/voicing appears in the rendered score without manual refresh
+- [x] Refetch is debounced under rapid corrections (no request storm)
+- [x] Loading indicator shown during refetch; no blank/flash
+- [x] Revert from correction history also refreshes the score
+- [x] Backend + frontend tests green
+
+**Implementation notes:**
+
+- **Two premises in the spec were false (verified today).** (1) The backend PATCH endpoints did NOT rebuild MusicXML — they only rewrote `chordTimeline.json` / `SoloNotes.json` / `corrections.json`; `job.result.musicxml` (and `sections[].musicxml`, which `SessionStemAndTab` actually prefers) stayed stale. (2) The three PATCH clients (`correctChord` / `correctSoloNote` / `overrideVoicing`) were dead code — chord/note corrections in study/listen only wrote the local `correctionStore`. Both fixed here per user decision: server-side rebuild + wire the existing correction modals to the PATCH clients.
+- **Backend `_rebuild_score_for_job()`** (`routers/analyze.py`) runs at the end of all three PATCH handlers and revert: rebuilds lesson-level AND per-section MusicXML via `build_musicxml` (section filter helpers reused from `analyze_audio`), patches `jobs[job_id].result`, persists `score.musicxml`, and calls `save_job_to_disk` so a restart serves the corrected score. Mirrors the beat-grid recompute precedent (jobs.py). `override_voicing` now also writes `voicing_shape` onto the `ChordEvent` (schema + `_inject_chord_diagrams` already supported it) and records the true prior shape for revert; revert restores it.
+- **Frontend**: new `src/session/scoreRefetch.ts` — `createScoreRefetchScheduler` (300ms trailing debounce, single-flight with mid-flight queuing, `onStateChange` for UI). `lessonStore` owns a singleton scheduler wired to the existing `getJobStatus()` → `saveLesson(result)`, exposes `scoreUpdating` + `requestScoreRefetch(jobId)`; stale refetches landing after a lesson switch/clear are dropped by comparing the active lesson's `job_id`. Study + Listen chord/note modals call the PATCH client after the local store write (demo lessons skipped — no server job), then request the refetch; PATCH failure keeps the local correction and toasts loudly. Review revert requests the same refetch.
+- **"Updating score…" chip** in `SessionStemAndTab` above the tab viewport: absolutely positioned, `pointerEvents="none"`, mono font — fretboard/chord-timeline stay interactive, no layout flash.
+- **Verification**: backend `tests/test_corrections.py` 13 passed (5 new: chord PATCH → `<root-step>F</root-step>` in lesson + section MusicXML + `score.musicxml`; note PATCH pitch; voicing PATCH/revert; chord revert restores original harmony and empties history); full backend suite 1290 passed / 6 skipped; frontend `scoreRefetch.test.ts` 6 tests (coalescing, boundary, state emission, mid-flight queueing, error recovery, cancel); `npm run lint` 0 errors; `npm run test` 50 files / 445 tests green.
 
 ---
 

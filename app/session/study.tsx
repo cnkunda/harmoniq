@@ -19,7 +19,7 @@ import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/Se
 import { TheoryCard } from '@/components/TheoryCard'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
-import { fetchTheoryAnnotation } from '@/src/api/analyze'
+import { correctChord, correctSoloNote, fetchTheoryAnnotation } from '@/src/api/analyze'
 import { API_BASE_URL } from '@/src/config'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
@@ -845,6 +845,17 @@ function StudyScreenInner() {
             const updatedLesson = { ...lesson, chord_timeline: { events: patched ?? [], metadata: lesson.chord_timeline?.metadata ?? null } as import('@/src/types').ChordTimeline }
             useLessonStore.getState().saveLesson(updatedLesson)
           }
+          // Commit 153: sync to backend so the rebuilt MusicXML can be re-fetched.
+          if (jobId && !isDemo) {
+            void correctChord(jobId, idx, { chord: newChord })
+              .then(() => useLessonStore.getState().requestScoreRefetch(jobId))
+              .catch((e) => {
+                console.log('[Study] chord correction sync failed', e)
+                toast.error(
+                  `Chord saved locally, but the score could not refresh: ${e instanceof Error ? e.message : 'unknown error'}`,
+                )
+              })
+          }
         }}
         onClose={() => setChordModalVisible(false)}
       />
@@ -881,6 +892,17 @@ function StudyScreenInner() {
             })
             const updatedLesson = { ...lesson, solo_notes: { notes: patchedNotes } }
             useLessonStore.getState().saveLesson(updatedLesson)
+          }
+          // Commit 153: sync to backend so the rebuilt MusicXML can be re-fetched.
+          if (jobId && !isDemo) {
+            void correctSoloNote(jobId, idx, corrected)
+              .then(() => useLessonStore.getState().requestScoreRefetch(jobId))
+              .catch((e) => {
+                console.log('[Study] note correction sync failed', e)
+                toast.error(
+                  `Note saved locally, but the score could not refresh: ${e instanceof Error ? e.message : 'unknown error'}`,
+                )
+              })
           }
         }}
         onClose={() => setNoteModalVisible(false)}

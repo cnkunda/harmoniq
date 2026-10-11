@@ -4,18 +4,24 @@ from __future__ import annotations
 import json
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app.ingest import get_job_dir
 from app.jobs import jobs, save_job_to_disk, load_jobs_from_disk, coach_hydration
+from app.main import app
 from app.schemas import (
     BeatGrid,
     ChordEvent,
     ChordTimeline,
     JobStatus,
     LessonJSON,
+    LessonSectionStub,
     SoloNote,
     SoloNotes,
     TimeSignature,
 )
+
+client = TestClient(app)
 
 
 def _make_lesson(**overrides) -> LessonJSON:
@@ -152,3 +158,112 @@ class TestCorrectionMetrics:
         correction_count = 2
         coverage = correction_count / total_events
         assert abs(coverage - 0.4) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# Commit 153: MusicXML re-fetch after corrections
+# ---------------------------------------------------------------------------
+
+def _seed_job_for_rebuild(job_id: str, tmp_path, monkeypatch) -> None:
+    """Completed job with on-disk artifacts — the state corrections expect."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    lesson = _make_lesson(
+        job_id=job_id,
+        musicxml="<score-partwise><!-- lesson-level original --></score-partwise>",
+        sections=[
+            LessonSectionStub(
+                label="Verse",
+                confidence=0.9,
+                start_time_seconds=0.0,
+                end_time_seconds=10.0,
+                musicxml="<score-partwise><!-- section original --></score-partwise>",
+            )
+        ],
+    )
+    jobs[job_id] = JobStatus(status="complete", result=lesson)
+    job_dir = get_job_dir(job_id)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "BeatGrid.json").write_text(lesson.beat_grid_structured.model_dump_json(indent=2))
+    (job_dir / "chordTimeline.json").write_text(lesson.chord_timeline.model_dump_json(indent=2))
+    (job_dir / "SoloNotes.json").write_text(lesson.solo_notes.model_dump_json(indent=2))
+
+
+class TestCorrectionScoreRebuild:
+    """Commit 153: PATCH/revert must rebuild MusicXML so a re-fetch is fresh."""
+
+    def test_chord_patch_refetch_contains_corrected_harmony(self, tmp_path, monkeypatch):
+        job_id = "rebuild-chord-1"
+        _seed_job_for_rebuild(job_id, tmp_path, monkeypatch)
+
+        r = client.patch(f"/analyze/{job_id}/chord/0", json={"chord": "F:maj"})
+        assert r.status_code == 200, r.text
+
+        body = client.get(f"/analyze/{job_id}").json()
+        assert body["status"] == "complete"
+        musicxml = body["result"]["musicxml"]
+        assert "<root-step>F</root-step>" in musicxml
+        # Per-section score is what the renderer prefers — must be fresh too.
+        section_xml = body["result"]["sections"][0]["musicxml"]
+        assert "<root-step>F</root-step>" in section_xml
+        # Corrected timeline is served alongside the rebuilt score.
+        assert body["result"]["chord_timeline"]["events"][0]["chord"] == "F:maj"
+        # Standalone score file matches the served score.
+        assert (get_job_dir(job_id) / "score.musicxml").read_text(encoding="utf-8") == musicxml
+
+    def test_solo_note_patch_refetch_contains_corrected_pitch(self, tmp_path, monkeypatch):
+        job_id = "rebuild-note-1"
+        _seed_job_for_rebuild(job_id, tmp_path, monkeypatch)
+
+        # Note 0 is pitch 60 (C4) — raise to 62 (D4).
+        r = client.patch(f"/analyze/{job_id}/solo-note/0", json={"pitch": 62})
+        assert r.status_code == 200, r.text
+
+        body = client.get(f"/analyze/{job_id}").json()
+        assert body["result"]["solo_notes"]["notes"][0]["pitch"] == 62
+        musicxml = body["result"]["musicxml"]
+        assert "<step>D</step>" in musicxml
+        assert "<root-step>F</root-step>" not in musicxml  # chords untouched
+
+    def test_voicing_patch_records_shape_and_rebuilds(self, tmp_path, monkeypatch):
+        job_id = "rebuild-voicing-1"
+        _seed_job_for_rebuild(job_id, tmp_path, monkeypatch)
+
+        r = client.patch(f"/analyze/{job_id}/chord/0/voicing", json={"voicing_shape": "E-shape"})
+        assert r.status_code == 200, r.text
+        assert r.json()["correction_type"] == "voicing"
+
+        body = client.get(f"/analyze/{job_id}").json()
+        assert body["result"]["chord_timeline"]["events"][0]["voicing_shape"] == "E-shape"
+        # Rebuild ran — fresh score served and persisted.
+        assert body["result"]["musicxml"]
+        assert (get_job_dir(job_id) / "score.musicxml").exists()
+
+    def test_revert_restores_original_harmony_in_refetched_score(self, tmp_path, monkeypatch):
+        job_id = "rebuild-revert-1"
+        _seed_job_for_rebuild(job_id, tmp_path, monkeypatch)
+
+        assert client.patch(f"/analyze/{job_id}/chord/0", json={"chord": "F:maj"}).status_code == 200
+        r = client.post(f"/analyze/{job_id}/corrections/revert", json={"correction_index": 0})
+        assert r.status_code == 200, r.text
+
+        body = client.get(f"/analyze/{job_id}").json()
+        assert body["result"]["chord_timeline"]["events"][0]["chord"] == "C:maj"
+        musicxml = body["result"]["musicxml"]
+        assert "<root-step>C</root-step>" in musicxml
+        assert "<root-step>F</root-step>" not in musicxml
+        section_xml = body["result"]["sections"][0]["musicxml"]
+        assert "<root-step>F</root-step>" not in section_xml
+
+        history = client.get(f"/analyze/{job_id}/corrections").json()
+        assert history["correction_count"] == 0
+
+    def test_voicing_revert_clears_override(self, tmp_path, monkeypatch):
+        job_id = "rebuild-voicing-revert-1"
+        _seed_job_for_rebuild(job_id, tmp_path, monkeypatch)
+
+        assert client.patch(f"/analyze/{job_id}/chord/0/voicing", json={"voicing_shape": "E-shape"}).status_code == 200
+        r = client.post(f"/analyze/{job_id}/corrections/revert", json={"correction_index": 0})
+        assert r.status_code == 200, r.text
+
+        body = client.get(f"/analyze/{job_id}").json()
+        assert body["result"]["chord_timeline"]["events"][0]["voicing_shape"] is None

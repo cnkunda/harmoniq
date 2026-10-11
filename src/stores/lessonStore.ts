@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 
-import { ApiError, pollAnalyzeJob, pollCoachHydration, submitAnalyzeJob } from '@/src/api/analyze'
+import { ApiError, getJobStatus, pollAnalyzeJob, pollCoachHydration, submitAnalyzeJob } from '@/src/api/analyze'
 import { clearCachedLessonIfWeb, persistCachedLessonIfWeb } from '@/src/db/persistCachedLesson'
 import { getNextFocusArea } from '@/src/session'
-import type { AnalyzeJobStatus, LessonJSON } from '@/src/types'
+import { createScoreRefetchScheduler, type ScoreRefetchScheduler } from '@/src/session/scoreRefetch'
+import type { AnalyzeJob, AnalyzeJobStatus, LessonJSON } from '@/src/types'
 import { applyCorrectionsToLesson } from '@/src/utils/applyCorrections'
 import { useCorrectionStore } from '@/src/stores/correctionStore'
 
@@ -24,12 +25,57 @@ export interface LessonStoreState {
   analyzeFromFile: (file: Blob, filename?: string) => Promise<void>
   /** Persist a resolved lesson payload in store for downstream session screens. */
   saveLesson: (lesson: LessonJSON) => Promise<void>
+  /** Schedule a debounced MusicXML/lesson refetch after a correction mutation (Commit 153). */
+  requestScoreRefetch: (jobId: string) => void
+  /** True while a correction-triggered score refetch is pending or in flight. */
+  scoreUpdating: boolean
   clearError: () => void
   /** Clears in-memory lesson (e.g. after “clear all practice data”). */
   resetLesson: () => void
 }
 
 let pollGeneration = 0
+
+/**
+ * Commit 153: debounced score refetch after correction mutations.
+ * Singleton so rapid corrections across screens coalesce into one GET.
+ */
+let scoreRefetchScheduler: ScoreRefetchScheduler | null = null
+
+function getScoreRefetchScheduler(): ScoreRefetchScheduler {
+  if (!scoreRefetchScheduler) {
+    scoreRefetchScheduler = createScoreRefetchScheduler<AnalyzeJob>({
+      fetchJob: getJobStatus,
+      applyResult: async (job) => {
+        if (job.status !== 'complete' || !job.result) {
+          console.log('[LessonStore] score refetch skipped — job not complete', job.status)
+          return
+        }
+        // Drop stale refetches that land after the user switched or cleared the lesson.
+        const activeJobId = useLessonStore.getState().lesson?.job_id
+        if (!activeJobId || activeJobId !== job.result.job_id) {
+          console.log('[LessonStore] score refetch dropped — lesson changed', activeJobId, job.result.job_id)
+          return
+        }
+        await useLessonStore.getState().saveLesson(job.result)
+      },
+      onError: (jobId, error) => {
+        console.log('[LessonStore] score refetch failed', jobId, error)
+        void import('@/components/ToastConfig').then(({ toast }) => {
+          toast.error(
+            'Score refresh failed: ' + (error instanceof Error ? error.message : 'unknown error'),
+          )
+        })
+      },
+      onStateChange: (updating) => {
+        if (useLessonStore.getState().scoreUpdating !== updating) {
+          useLessonStore.setState({ scoreUpdating: updating })
+        }
+      },
+    })
+  }
+  return scoreRefetchScheduler
+}
 
 function formatAnalyzeError(e: unknown): string {
   if (e instanceof ApiError) {
@@ -49,14 +95,19 @@ export const useLessonStore = create<LessonStoreState>((set) => ({
   lesson: null,
   error: null,
   lessonSectionIndex: 0,
+  scoreUpdating: false,
 
   setLessonSectionIndex: (index: number) =>
     set({ lessonSectionIndex: Math.max(0, Math.floor(index)) }),
 
   clearError: () => set({ error: null }),
   resetLesson: () => {
-    set({ lesson: null, jobId: null, status: 'idle', error: null, lessonSectionIndex: 0 })
+    getScoreRefetchScheduler().cancel()
+    set({ lesson: null, jobId: null, status: 'idle', error: null, lessonSectionIndex: 0, scoreUpdating: false })
     void clearCachedLessonIfWeb().catch(() => {})
+  },
+  requestScoreRefetch: (jobId: string) => {
+    getScoreRefetchScheduler().request(jobId)
   },
   saveLesson: async (lesson: LessonJSON) => {
     // Commit 110: hydrate corrections from DB then apply before persisting

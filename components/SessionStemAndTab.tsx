@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { View } from 'react-native'
+import { Text, View } from 'react-native'
 
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
@@ -127,6 +127,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
   const lastTickPositionSecRef = useRef(0)
 
   const lesson = useLessonStore((s) => s.lesson)
+  const scoreUpdating = useLessonStore((s) => s.scoreUpdating)
 
   // Load persisted tabVariant on mount (Commit 97)
   const [variantInitialized, setVariantInitialized] = useState(false)
@@ -311,6 +312,15 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
       {insertBetweenStemAndTab}
       {detailsAboveTab}
       <View className={tabFrameClassName}>
+        {scoreUpdating ? (
+          <View
+            pointerEvents="none"
+            accessibilityLiveRegion="polite"
+            className="absolute left-3 top-3 z-10 rounded-full border border-wood-600/40 bg-wood-900/85 px-2.5 py-1"
+          >
+            <Text className="font-mono text-[10px] text-amber-accent">Updating score…</Text>
+          </View>
+        ) : null}
         <TabViewport
           ref={tabRef}
           gp5Base64={gp5Base64}

@@ -11,6 +11,8 @@ import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { EmptyState } from '@/components/EmptyState'
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { toast } from '@/components/ToastConfig'
+import { correctChord } from '@/src/api/analyze'
 import { API_BASE_URL } from '@/src/config'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
@@ -290,6 +292,17 @@ function ListenScreenInner() {
             )
             const updatedLesson = { ...lesson, chord_timeline: patched }
             useLessonStore.getState().saveLesson(updatedLesson)
+          }
+          // Commit 153: sync to backend so the rebuilt MusicXML can be re-fetched.
+          if (jobId && !isDemo) {
+            void correctChord(jobId, idx, { chord: newChord })
+              .then(() => useLessonStore.getState().requestScoreRefetch(jobId))
+              .catch((e) => {
+                console.log('[Listen] chord correction sync failed', e)
+                toast.error(
+                  `Chord saved locally, but the score could not refresh: ${e instanceof Error ? e.message : 'unknown error'}`,
+                )
+              })
           }
         }}
         onClose={() => setChordModalVisible(false)}

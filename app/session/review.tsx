@@ -194,6 +194,8 @@ export default function ReviewScreen() {
     try {
       await revertCorrection(jobId, correctionIndex)
       toast.success('Correction reverted')
+      // Commit 153: backend rebuilt the score on revert — refresh the cached lesson.
+      useLessonStore.getState().requestScoreRefetch(jobId)
       const updated = await getCorrectionHistory(jobId)
       setCorrectionHistory(updated)
     } catch (e) {

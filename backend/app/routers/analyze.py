@@ -32,6 +32,7 @@ from app.jobs import (
     get_coach_hydration,
     get_recompute_job,
     jobs,
+    save_job_to_disk,
 )
 from app.schemas import (
     AnalyzeJobCreated,
@@ -588,6 +589,88 @@ def _save_correction_history(job_id: str, corrections: list[dict]) -> None:
         json.dump(corrections, f, indent=2)
 
 
+def _rebuild_score_for_job(job_id: str) -> None:
+    """Rebuild lesson- and section-level MusicXML from the corrected artifacts (Commit 153).
+
+    Called at the end of every correction mutation (PATCH + revert) so that the
+    frontend's debounced re-fetch of GET /analyze/{job_id} serves a fresh score
+    instead of the load-time copy. Mirrors the beat-grid recompute rebuild in
+    jobs.py: artifacts are already saved when this runs.
+    """
+    from app.analyze_audio import _filter_chord_timeline_by_section, _filter_solo_notes_by_section
+    from app.musicxml_builder import build_musicxml
+
+    job = jobs.get(job_id)
+    if job is None or job.result is None:
+        logger.warning("score rebuild skipped job_id=%s: no job result", job_id)
+        return
+
+    beat_grid, chord_timeline, solo_notes = _load_job_artifacts(job_id)
+    if beat_grid is None or chord_timeline is None or solo_notes is None:
+        logger.warning("score rebuild skipped job_id=%s: artifacts missing", job_id)
+        return
+
+    lesson = job.result
+    title = lesson.song_title or "Harmoniq Score"
+    artist = lesson.artist or "Harmoniq AI"
+
+    musicxml_str = build_musicxml(
+        beat_grid=beat_grid,
+        chord_timeline=chord_timeline,
+        solo_notes=solo_notes,
+        title=title,
+        artist=artist,
+        key_signature=lesson.key,
+    )
+
+    # Per-section rebuild — SessionStemAndTab prefers section.musicxml over the
+    # lesson-level score, so a lesson-only rebuild would still render stale.
+    rebuilt_sections = []
+    for section in lesson.sections:
+        section_chords = _filter_chord_timeline_by_section(
+            chord_timeline, section.start_time_seconds, section.end_time_seconds
+        )
+        section_notes = _filter_solo_notes_by_section(
+            solo_notes, section.start_time_seconds, section.end_time_seconds
+        )
+        updates: dict = {}
+        if section_chords.events:
+            updates["chord_timeline"] = section_chords.model_dump()
+        if section_notes.notes:
+            updates["solo_notes"] = section_notes.model_dump()
+        if section.musicxml and section_chords.events and section_notes.notes:
+            updates["musicxml"] = build_musicxml(
+                beat_grid=beat_grid,
+                chord_timeline=section_chords,
+                solo_notes=section_notes,
+                title=title,
+                artist=artist,
+                key_signature=lesson.key,
+            )
+        rebuilt_sections.append(section.model_copy(update=updates) if updates else section)
+
+    jobs[job_id] = job.model_copy(
+        update={
+            "result": lesson.model_copy(
+                update={
+                    "chord_timeline": chord_timeline,
+                    "solo_notes": solo_notes,
+                    "musicxml": musicxml_str,
+                    "sections": rebuilt_sections,
+                }
+            )
+        }
+    )
+
+    try:
+        (get_job_dir(job_id) / "score.musicxml").write_text(musicxml_str, encoding="utf-8")
+    except OSError:
+        logger.exception("score.musicxml persist failed job_id=%s", job_id)
+
+    save_job_to_disk(job_id)
+    logger.info("score rebuilt after correction job_id=%s length=%d", job_id, len(musicxml_str))
+
+
 @router.patch(
     "/analyze/{job_id}/chord/{beat_index}",
     response_model=CorrectionRecord,
@@ -623,6 +706,7 @@ async def correct_chord(job_id: str, beat_index: int, req: ChordCorrectionReques
     history.append(record.model_dump())
     _save_correction_history(job_id, history)
 
+    _rebuild_score_for_job(job_id)
     return record
 
 
@@ -678,6 +762,7 @@ async def correct_solo_note(job_id: str, note_index: int, req: SoloNoteCorrectio
     history.append(record.model_dump())
     _save_correction_history(job_id, history)
 
+    _rebuild_score_for_job(job_id)
     return record
 
 
@@ -699,16 +784,26 @@ async def override_voicing(job_id: str, beat_index: int, req: VoicingOverrideReq
     record = CorrectionRecord(
         correction_type="voicing",
         index=beat_index,
-        original_value={"chord": original.chord, "voicing_shape": None},
+        original_value={"chord": original.chord, "voicing_shape": original.voicing_shape},
         corrected_value={"chord": original.chord, "voicing_shape": req.voicing_shape},
         reason=req.reason,
         applied_at=datetime.datetime.now().isoformat(),
     )
 
+    chord_timeline.events[beat_index] = ChordEvent(
+        timestamp=original.timestamp,
+        chord=original.chord,
+        confidence=original.confidence,
+        voicing_shape=req.voicing_shape,
+        voicing_position=original.voicing_position,
+    )
+    _save_job_artifacts(job_id, chord_timeline=chord_timeline)
+
     history = _load_correction_history(job_id)
     history.append(record.model_dump())
     _save_correction_history(job_id, history)
 
+    _rebuild_score_for_job(job_id)
     return record
 
 
@@ -780,10 +875,23 @@ async def revert_correction(job_id: str, req: CorrectionRevertRequest) -> Correc
                 velocity=original_value.get("velocity", 80),
             )
             _save_job_artifacts(job_id, solo_notes=solo_notes)
+    elif corr_type == "voicing":
+        _, chord_timeline, _ = _load_job_artifacts(job_id)
+        if chord_timeline and 0 <= index < len(chord_timeline.events):
+            event = chord_timeline.events[index]
+            chord_timeline.events[index] = ChordEvent(
+                timestamp=event.timestamp,
+                chord=event.chord,
+                confidence=event.confidence,
+                voicing_shape=original_value.get("voicing_shape"),
+                voicing_position=event.voicing_position,
+            )
+            _save_job_artifacts(job_id, chord_timeline=chord_timeline)
 
     history.pop(req.correction_index)
     _save_correction_history(job_id, history)
 
+    _rebuild_score_for_job(job_id)
     return CorrectionRecord(**correction)
 
 
