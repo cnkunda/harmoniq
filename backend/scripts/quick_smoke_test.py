@@ -26,6 +26,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_API = "http://localhost:8000"
+DEFAULT_TIMEOUT = 900  # 15 minutes — MT3 on CPU takes ~10 min for a 30s clip
 
 
 def main() -> None:
@@ -35,6 +36,12 @@ def main() -> None:
         "--path",
         type=Path,
         help="Path to test audio file (WAV/MP3). If omitted, uses bundled test audio.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_TIMEOUT,
+        help="Max seconds to wait for the pipeline (default: %(default)s)",
     )
     args = parser.parse_args()
 
@@ -99,7 +106,7 @@ def main() -> None:
     print(f"[PASS] Upload accepted. Job ID: {job_id}")
 
     # Poll for completion
-    max_wait = 600  # 10 minutes — MT3 on CPU can be slow
+    max_wait = args.timeout
     poll_interval = 5
     deadline = time.time() + max_wait
     lesson = None
