@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the completed carry-over fixes (commits 151–153). Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the completed carry-over fixes (commits 151–154). Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 149–182). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, ChordDiagram native verification → 155, Milestone C1–C9 → 159–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182. Later: commits 151–153 (SSE progress stream, progressive reveal, MusicXML re-fetch) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 149–182). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, ChordDiagram native verification → 155, Milestone C1–C9 → 159–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182. Later: commits 151–154 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -21,7 +21,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Milestone A (MT3-Primary AMT Pipeline) Archive Date:** July 5, 2026 — Complete. All 10 acceptance criteria verified.
 **Milestone B (Fretboard Dual-Mode Optimization) Archive Date:** July 17, 2026 — Complete. All 9 commits verified.
 **Milestone C (Engagement & Retention) Archive Date:** July 19, 2026 — Deferred, then promoted to [`PRIORITIES.md`](PRIORITIES.md) commits 159–167 during the roadmap restructure (specs moved, pointer table below).
-**Carry-over Fixes (Commits 151-153) Archive Date:** October 13, 2026 — Complete; all acceptance criteria verified. Moved back from [`PRIORITIES.md`](PRIORITIES.md).
+**Carry-over Fixes (Commits 151-154) Archive Date:** October 13, 2026 — Complete; all acceptance criteria verified. Moved back from [`PRIORITIES.md`](PRIORITIES.md).
 
 ---
 
@@ -1996,7 +1996,7 @@ Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PR
 
 ---
 
-## Carry-over Fixes — Commits 151-153 (Complete)
+## Carry-over Fixes — Commits 151-154 (Complete)
 
 **Archive Date:** October 13, 2026 — Complete; all acceptance criteria verified. Moved from [`PRIORITIES.md`](PRIORITIES.md).
 
@@ -2005,6 +2005,7 @@ Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PR
 | 151 | Frontend SSE Progress Stream — Root-Cause Fix for BUG-01 | 6/6 ACs — web automated; native BUG-01 checkpoint run by user as final sign-off |
 | 152 | Progressive Analysis Reveal — Wire ChordChartPreview (was 109 remaining work) | 6/6 ACs — vitest 439, Playwright 53, backend pytest green |
 | 153 | MusicXML Re-Fetch After Corrections (was 110 remaining work) | 5/5 ACs — lint 0 errors, vitest 445 tests, backend pytest 1290 passed / 6 skipped |
+| 154 | Design-Token & Convention Conformance | 6/6 ACs — lint 0 errors, vitest 449 tests, structural UI 53/53, affected route visuals green |
 
 Full specs archived verbatim below.
 
@@ -2111,3 +2112,37 @@ Full specs archived verbatim below.
 - **Verification**: backend `tests/test_corrections.py` 13 passed (5 new: chord PATCH → `<root-step>F</root-step>` in lesson + section MusicXML + `score.musicxml`; note PATCH pitch; voicing PATCH/revert; chord revert restores original harmony and empties history); full backend suite 1290 passed / 6 skipped; frontend `scoreRefetch.test.ts` 6 tests (coalescing, boundary, state emission, mid-flight queueing, error recovery, cancel); `npm run lint` 0 errors; `npm run test` 50 files / 445 tests green.
 
 ---
+
+### Commit 154: Design-Token & Convention Conformance
+
+**Status:** Complete — all 6 ACs verified (lint 0 errors, vitest 449 tests, structural UI 53/53, affected route visuals green).
+
+**Goal:** Eliminate the design-system deviations flagged in the Sep 2026 code review so `src/constants/colors.ts` is the single source of color truth and styling follows AGENTS.md conventions.
+
+**Current State:** Code review found: 32 hardcoded hex literals outside `src/constants/colors.ts`; direct `expo-linear-gradient` imports in `app/(tabs)/index.tsx`, `app/_layout.tsx`, `components/MetronomeArcReadout.tsx`, `components/settings/SettingsCard.tsx` instead of the `WoodGradient` wrapper; `StyleSheet.create` in `app/+not-found.tsx` (NativeWind `className` is the convention); orphan ambient file `src/chord/mlModuleTypes.d.ts` with zero references.
+
+**Scope:**
+
+- Map every hardcoded hex to a token: existing palette values → existing tokens; genuinely artwork-specific colors (SVG strokes/fills in diagrams, metronome arc) → add named tokens to `src/constants/colors.ts` first, then reference them
+- Replace direct `expo-linear-gradient` usages with `WoodGradient` (`expo-linear-gradient` remains only inside `components/WoodGradient.tsx`); if a screen needs a non-standard gradient, extend `WoodGradient`'s props instead of bypassing it
+- Convert `app/+not-found.tsx` from `StyleSheet.create` to NativeWind `className`
+- Delete `src/chord/mlModuleTypes.d.ts` (verify zero references first — confirmed Sep 2026)
+- Sweep test: add a lint check (grep-based vitest or script) that fails on new hex literals outside `colors.ts` and on new `StyleSheet.create` / direct `expo-linear-gradient` imports outside the allowed files
+
+**Acceptance Criteria:**
+
+- [x] Zero hex color literals outside `src/constants/colors.ts`
+- [x] `expo-linear-gradient` imported only by `components/WoodGradient.tsx` (plus `app/_layout.tsx` `cssInterop` registration — documented infrastructure exception, see notes)
+- [x] No `StyleSheet.create` outside allowed legacy files (zero, ideally)
+- [x] `src/chord/mlModuleTypes.d.ts` deleted; nothing breaks
+- [x] Regression guard (lint/script) prevents reintroduction
+- [x] `npm run lint` + `npm run test` + visual snapshot check green
+
+**Implementation notes:**
+
+- **Scope extensions per review (verified before commit).** (1) The 12 `rgba()` literals (WoodGradient translucent stops, AlphaTab scrollbar/cursor CSS, stem-mixer Switch tracks, loop-bracket overlay, harness divider, metronome ring) were tokenized too — 11 new exact-value tokens — since a hex-only guard left the single-source-of-truth claim hollow. (2) Dead Expo template `constants/Colors.ts` (zero importers, no `Themed` usages) was deleted so the zero-hex AC holds literally. (3) `app/_layout.tsx` keeps its raw `expo-linear-gradient` import for `cssInterop` registration; the AC/guards codify this as the sole exception.
+- **Four hex mappings are approximate, not exact** (stale palette values → current tokens): `#D4A574`/`#d4a853` → `amber.accent`, `#8B7D6B` → `muted.brown`, `#e8bd7e` → `amber.light`. All affected routes pass visual thresholds without snapshot regeneration.
+- **Deleting the ambient declarations exposed the real library API**: `react-native-fast-tflite` exports `TfliteModel` (not `TFLiteModel`) with `runSync()` (not sync `run()`). The `useChordDetector.ts` and `tests/benchmarks/chordModelLatency.ts` call-site updates are required consequences, verified against `Tflite.nitro.d.ts`.
+- **New `WoodGradient` variants are pixel-identical**: `translucentCard` and `accentVertical` carry the exact original color arrays and start/end vectors. `+not-found.tsx` rounds 15px margins to `mt-4`/`py-4` (16px) — negligible on a 404 screen.
+- **Verification:** `npm run lint` 0 errors; `npm run test` 51 files / 449 tests green (445 baseline + 4 new `designTokenConformance` tests covering hex, functional-notation colors, gradient imports, `StyleSheet.create`); structural UI 53/53; musicxml-visual 23/23; route visuals green on `/settings`, `/session/study|play|slow`, `/jam`, `/session/listen`, `/musicxml-render-test`. The `/` root-viewport failure is environmental (Windows font metrics) — it fails identically on clean HEAD without this commit's changes.
+- **Known follow-ups (separate commits, same day):** native-webview harness theme synced to tokens (`fix: sync AlphaTab harness theme with design tokens` — needs on-device confirmation); Playwright `webServer` starts on Windows shells (`fix: Playwright webServer starts on Windows shells` — config-driven run verified green).

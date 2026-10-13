@@ -9,7 +9,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167).  
 **Milestone D (Infrastructure)** — partially implemented; remaining gaps at commits 169–172 (151 SSE progress stream completed → archived).  
 **Current Phase 2** — Pipeline validation & publication close-out (commits 149–150).  
-**Active backlog** — numbered commits **149–182** below (one commit = one spec; 151–153 completed → archived).  
+**Active backlog** — numbered commits **149–182** below (one commit = one spec; 151–154 completed → archived).  
 **Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 177–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 154–182** (151–153 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 155–182** (151–154 completed → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -117,40 +117,13 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-## Active Backlog — Commits 154–182
+## Active Backlog — Commits 155–182
 
 Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
 
 ---
 
-**Group: Carry-over fixes (154–155)**
-
----
-
-### Commit 154: Design-Token & Convention Conformance
-
-**Status:** ready
-
-**Goal:** Eliminate the design-system deviations flagged in the Sep 2026 code review so `src/constants/colors.ts` is the single source of color truth and styling follows AGENTS.md conventions.
-
-**Current State:** Code review found: 32 hardcoded hex literals outside `src/constants/colors.ts`; direct `expo-linear-gradient` imports in `app/(tabs)/index.tsx`, `app/_layout.tsx`, `components/MetronomeArcReadout.tsx`, `components/settings/SettingsCard.tsx` instead of the `WoodGradient` wrapper; `StyleSheet.create` in `app/+not-found.tsx` (NativeWind `className` is the convention); orphan ambient file `src/chord/mlModuleTypes.d.ts` with zero references.
-
-**Scope:**
-
-- Map every hardcoded hex to a token: existing palette values → existing tokens; genuinely artwork-specific colors (SVG strokes/fills in diagrams, metronome arc) → add named tokens to `src/constants/colors.ts` first, then reference them
-- Replace direct `expo-linear-gradient` usages with `WoodGradient` (`expo-linear-gradient` remains only inside `components/WoodGradient.tsx`); if a screen needs a non-standard gradient, extend `WoodGradient`'s props instead of bypassing it
-- Convert `app/+not-found.tsx` from `StyleSheet.create` to NativeWind `className`
-- Delete `src/chord/mlModuleTypes.d.ts` (verify zero references first — confirmed Sep 2026)
-- Sweep test: add a lint check (grep-based vitest or script) that fails on new hex literals outside `colors.ts` and on new `StyleSheet.create` / direct `expo-linear-gradient` imports outside the allowed files
-
-**Acceptance Criteria:**
-
-- [ ] Zero hex color literals outside `src/constants/colors.ts`
-- [ ] `expo-linear-gradient` imported only by `components/WoodGradient.tsx`
-- [ ] No `StyleSheet.create` outside allowed legacy files (zero, ideally)
-- [ ] `src/chord/mlModuleTypes.d.ts` deleted; nothing breaks
-- [ ] Regression guard (lint/script) prevents reintroduction
-- [ ] `npm run lint` + `npm run test` + visual snapshot check green
+**Group: Carry-over fixes (155)**
 
 ---
 
