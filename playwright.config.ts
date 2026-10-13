@@ -33,12 +33,15 @@ export default defineConfig({
   },
   webServer: useWebServer
     ? {
-        command: `CI=1 EXPO_NO_DEV_TOOLS=1 npx expo start --web --port ${port}`,
+        command: `npx expo start --web --port ${port}`,
         url: baseURL,
         timeout: 180_000,
         reuseExistingServer: !process.env.CI,
         env: {
           ...process.env,
+          // Set here (not as a `VAR=` command prefix) so the server also
+          // starts from Windows shells, which do not understand that syntax.
+          CI: '1',
           EXPO_NO_DEV_TOOLS: '1',
         },
       }
