@@ -7,9 +7,9 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Milestone A (MT3-Primary Pipeline)** — archived, complete.  
 **Milestone B (Fretboard Dual-Mode)** — archived, complete.  
 **Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167).  
-**Milestone D (Infrastructure)** — partially implemented; remaining gaps at commits 169–172 (151 completed — SSE progress stream shipped).  
+**Milestone D (Infrastructure)** — partially implemented; remaining gaps at commits 169–172 (151 SSE progress stream completed → archived).  
 **Current Phase 2** — Pipeline validation & publication close-out (commits 149–150).  
-**Active backlog** — numbered commits **149–182** below (one commit = one spec).  
+**Active backlog** — numbered commits **149–182** below (one commit = one spec; 151–153 completed → archived).  
 **Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 177–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 151–182.** Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 154–182** (151–153 completed → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -117,115 +117,13 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-## Active Backlog — Commits 151–182
+## Active Backlog — Commits 154–182
 
 Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
 
 ---
 
-**Group: Carry-over fixes (151–155)**
-
----
-
-### Commit 151: Frontend SSE Progress Stream — Root-Cause Fix for BUG-01
-
-**Status:** Complete — all 6 ACs verified (web automated; native BUG-01 checkpoint run by user as final sign-off).
-
-**Goal:** Replace the fragile analyze-polling loop with the already-built SSE endpoint so job status is pushed to the client, eliminating BUG-01 at its root instead of guarding against it.
-
-**Current State:** Backend is done: `GET /analyze/{job_id}/stream` exists (`backend/app/routers/analyze.py:370` → `app/sse.py`) and emits `JobStatus` JSON (including `analysis_stage`) on state changes. Frontend never uses it: `pollAnalyzeJobCancelable()` in `src/api/analyze.ts` still polls every 2–8s and relies on the `seenCompletedOrFailed` band-aid guard (`src/api/analyze.ts:508`) — the documented BUG-01 root cause (see [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) BUG-01). No `EventSource` or streaming client exists anywhere in `src/`.
-
-**Scope:**
-
-- Add an SSE code path to `pollAnalyzeJobCancelable()` in `src/api/analyze.ts`:
-  - Web: `EventSource` against `/analyze/{job_id}/stream`
-  - Native: `fetch` streaming reader with the same event parsing
-  - Detect SSE support; fall back to existing polling transparently when unavailable (identical `onStatus`/`onError` callbacks for consumer compatibility)
-  - Consume keep-alive pings; stream ends on terminal status (`complete`/`failed`) — no post-terminal requests
-- Keep the polling path as fallback only; the `seenCompletedOrFailed` guard stays in the fallback branch (never remove the safety net entirely)
-- Forward `analysis_stage` through `onStatus` so commit 152 can render progressive states
-- Unit tests for the SSE client state machine (connect → events → terminal close; fallback on error)
-- Re-run the Manual QA BUG-01 checkpoint on web and native
-
-**Implementation notes:**
-
-- **The Current State premise about the backend was false.** `backend/app/sse.py` subscribed to an orphaned `sse:channel:{job_id}` Redis channel (zero `publish_sse_event` callers) and read a never-written Redis job hash — it 500'd whenever Redis was down and emitted nothing otherwise. Rewritten in this commit: `job_progress_stream()` polls the in-memory `app.jobs.jobs` store (same source as `GET /analyze/{id}`), emitting `connected` → `status` (on change, incl. `analysis_stage`) → `complete`/`failed` (terminal, then close), with `heartbeat` every 15s and a 900s timeout → `failed`. Verified live with Redis down.
-- **New module `src/api/analyzeSse.ts`** — pure (no `@/src/config` / `react-native` imports): `createSseChunkParser`, `mapSseEventToJob`, `createAnalyzeSseSession` (connect → events → terminal close; `onUnavailable` fires exactly once so async failure cannot double-trigger fallback), `createUtf8Decoder` (Hermes has no `TextDecoder`), `openAnalyzeSse()` — web `EventSource`, native `expo/fetch` streaming reader (RN `fetch` lacks streaming), detected via `navigator.product === 'ReactNative'`. Terminal event is `failed` (not `error`) to avoid colliding with EventSource transport `onerror`.
-- **`src/api/analyze.ts`:** shared `applyTerminalJob` (terminal checked *before* `onStatus`), `startAnalyzeSse`, and `startAnalyzePolling` (fallback — keeps `seenCompletedOrFailed` guard and wall-clock backoff verbatim). Both entry points (`pollAnalyzeJobCancelable`, `connectAnalyzeWebSocket`) walk SSE → WebSocket → polling through a single `advanceTo` chain guard, so WS `onerror`+`onclose`+connect-timeout can no longer spawn duplicate polling loops.
-- **Pre-existing blocker found while running the web checkpoint (folded into this commit per user decision):** merge `1606a34` (2026-09-25, "Merge branch 'develop'") dropped Commit 107's `assetExts.push('musicxml')` from `metro.config.js`, breaking the entire Expo web bundle with `UnableToResolveError` on `assets/musicxml-corpus/*.musicxml`. The two lines were restored as part of 151 so the web QA checkpoint can run.
-- **Verification:** backend `tests/test_sse_stream.py` 7 passed; full backend suite 1277 passed / 6 skipped; frontend `analyzeSse.test.ts` (20) + `analyze.test.ts` (6); `npm run lint` + `npm run test` (48 files / 425 tests) green. Live: `curl -N` stream completes at server close (exit 0, zero status GETs); automated Playwright web run — 1× EventSource, 0 polls, 0 WS, 0 console errors, 0 requests in the 45s post-terminal quiet period. Native transport implemented + session logic unit-covered; device run remains the last Manual QA step.
-
-**Acceptance Criteria:**
-
-- [x] Web and native consume `GET /analyze/{job_id}/stream` for analyze jobs
-- [x] No additional status requests are made after terminal status (BUG-01 checkpoint passes on both platforms) — web PASS 2026-09-27 (automated Playwright: 1× EventSource, 0 polls, 0 reconnects); native run owned by user
-- [x] SSE unavailable → transparent polling fallback with identical callbacks
-- [x] Keep-alive pings prevent proxy timeouts; stream closes on terminal event
-- [x] `analysis_stage` reaches `onStatus` consumers
-- [x] Unit tests cover connect/event/terminal/fallback paths; `npm run test` green
-
----
-
-### Commit 152: Progressive Analysis Reveal — Wire ChordChartPreview (was 109 remaining work)
-
-**Status:** Complete — all 6 ACs verified (vitest 439, Playwright 53, backend pytest green).
-
-**Goal:** Replace the monolithic add-song loading spinner with a progressive reveal: chord chart appears as soon as chord inference finishes, then refines to the full score.
-
-**Current State:** `components/ChordChartPreview.tsx` exists but is imported by no screen (dead until wired). `analysis_stage` is already parsed (`src/api/analyze.ts:185`) and typed (`src/types/index.ts:426`) but never rendered. Backend `JobStatus.analysis_stage` reports `initializing → stems_separating → chords_inferring → solo_inferring → building_musicxml → complete` (archive Commit 109). The add-song flow shows one monolithic spinner for the entire ~5-minute pipeline.
-
-**Scope:**
-
-- Wire `ChordChartPreview` into the add-song/loading flow: render it when `analysis_stage >= "chords_inferring"`
-- Show a smaller progress banner during later stages ("Refining solo notation…") instead of blocking the full-screen spinner
-- Complete stage list driven by `analysis_stage` from commit 151's `onStatus` (or polling fallback)
-- Keep coach hydration on its separate async track (no regression)
-- Replace the monolithic spinner only after the preview is live (staged rollout: preview first, spinner removal second)
-- Component test for stage → UI state mapping; Playwright structural test for the add-song flow
-
-**Acceptance Criteria:**
-
-- [x] Chord chart preview renders as soon as `analysis_stage >= "chords_inferring"`
-- [x] Later stages show a compact "refining" banner, not a blank spinner
-- [x] Full score replaces the preview on `complete` without layout shift
-- [x] Monolithic add-song spinner removed once preview path is verified
-- [x] Coach hydration unchanged and non-regressed
-- [x] Tests green (`npm run test`, `npm run test:ui`)
-
----
-
-### Commit 153: MusicXML Re-Fetch After Corrections (was 110 remaining work)
-
-**Status:** Complete — all 5 ACs verified (lint 0 errors, vitest 445 tests, backend pytest 1290 passed / 6 skipped).
-
-**Goal:** Make corrected data visible in the score immediately — the rendered MusicXML must never stay stale after a chord, note, or voicing correction.
-
-**Current State:** Backend correction endpoints (`PATCH /analyze/{job_id}/chord/{beat_index}`, `.../solo-note/{note_index}`, `.../voicing`) rebuild MusicXML server-side, but the frontend keeps the score it fetched at load time until an explicit refresh (archive Commit 110 follow-up: "MusicXML re-fetch from frontend after correction (stale until explicit refresh)").
-
-**Scope:**
-
-- On successful correction mutation, invalidate the cached score and re-fetch MusicXML (and dependent artifacts) for the current job
-- Show a lightweight "Updating score…" indicator during refetch; keep fretboard/chord-timeline interaction enabled
-- Debounce rapid successive corrections (batch refetches, e.g. 300ms window)
-- Cover all three correction types: chord, note, voicing
-- Regression: existing correction history/revert flows trigger the same refetch
-- Integration test: PATCH chord → refetched MusicXML contains the corrected `<harmony>`; component test for debounce
-
-**Acceptance Criteria:**
-
-- [x] Corrected chord/note/voicing appears in the rendered score without manual refresh
-- [x] Refetch is debounced under rapid corrections (no request storm)
-- [x] Loading indicator shown during refetch; no blank/flash
-- [x] Revert from correction history also refreshes the score
-- [x] Backend + frontend tests green
-
-**Implementation notes:**
-
-- **Two premises in the spec were false (verified today).** (1) The backend PATCH endpoints did NOT rebuild MusicXML — they only rewrote `chordTimeline.json` / `SoloNotes.json` / `corrections.json`; `job.result.musicxml` (and `sections[].musicxml`, which `SessionStemAndTab` actually prefers) stayed stale. (2) The three PATCH clients (`correctChord` / `correctSoloNote` / `overrideVoicing`) were dead code — chord/note corrections in study/listen only wrote the local `correctionStore`. Both fixed here per user decision: server-side rebuild + wire the existing correction modals to the PATCH clients.
-- **Backend `_rebuild_score_for_job()`** (`routers/analyze.py`) runs at the end of all three PATCH handlers and revert: rebuilds lesson-level AND per-section MusicXML via `build_musicxml` (section filter helpers reused from `analyze_audio`), patches `jobs[job_id].result`, persists `score.musicxml`, and calls `save_job_to_disk` so a restart serves the corrected score. Mirrors the beat-grid recompute precedent (jobs.py). `override_voicing` now also writes `voicing_shape` onto the `ChordEvent` (schema + `_inject_chord_diagrams` already supported it) and records the true prior shape for revert; revert restores it.
-- **Frontend**: new `src/session/scoreRefetch.ts` — `createScoreRefetchScheduler` (300ms trailing debounce, single-flight with mid-flight queuing, `onStateChange` for UI). `lessonStore` owns a singleton scheduler wired to the existing `getJobStatus()` → `saveLesson(result)`, exposes `scoreUpdating` + `requestScoreRefetch(jobId)`; stale refetches landing after a lesson switch/clear are dropped by comparing the active lesson's `job_id`. Study + Listen chord/note modals call the PATCH client after the local store write (demo lessons skipped — no server job), then request the refetch; PATCH failure keeps the local correction and toasts loudly. Review revert requests the same refetch.
-- **"Updating score…" chip** in `SessionStemAndTab` above the tab viewport: absolutely positioned, `pointerEvents="none"`, mono font — fretboard/chord-timeline stay interactive, no layout flash.
-- **Verification**: backend `tests/test_corrections.py` 13 passed (5 new: chord PATCH → `<root-step>F</root-step>` in lesson + section MusicXML + `score.musicxml`; note PATCH pitch; voicing PATCH/revert; chord revert restores original harmony and empties history); full backend suite 1290 passed / 6 skipped; frontend `scoreRefetch.test.ts` 6 tests (coalescing, boundary, state emission, mid-flight queueing, error recovery, cancel); `npm run lint` 0 errors; `npm run test` 50 files / 445 tests green.
+**Group: Carry-over fixes (154–155)**
 
 ---
 
@@ -700,7 +598,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Group: Infrastructure gaps — remainder of Milestone D, reality-checked (169–172)**
 
-*Already implemented and therefore not planned: Redis-backed job store (`job_store.py`), Celery dispatch (`tasks.py`/`celery_app.py`), SSE endpoint (backend half → commit 151), Prometheus `/metrics` (`metrics.py`), circuit breaker (used by `model_server.py`), model server (serves MT3).*
+*Already implemented and therefore not planned: Redis-backed job store (`job_store.py`), Celery dispatch (`tasks.py`/`celery_app.py`), SSE endpoint (full stack, completed as commit 151 → archived), Prometheus `/metrics` (`metrics.py`), circuit breaker (used by `model_server.py`), model server (serves MT3).*
 
 ---
 

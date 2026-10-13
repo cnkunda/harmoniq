@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the completed carry-over fixes (commits 151–153). Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commits 149–182). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, ChordChartPreview/progressive reveal → 152, MusicXML re-fetch → 153, ChordDiagram native verification → 155, Milestone C1–C9 → 159–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 149–182). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, ChordDiagram native verification → 155, Milestone C1–C9 → 159–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182. Later: commits 151–153 (SSE progress stream, progressive reveal, MusicXML re-fetch) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -21,6 +21,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Milestone A (MT3-Primary AMT Pipeline) Archive Date:** July 5, 2026 — Complete. All 10 acceptance criteria verified.
 **Milestone B (Fretboard Dual-Mode Optimization) Archive Date:** July 17, 2026 — Complete. All 9 commits verified.
 **Milestone C (Engagement & Retention) Archive Date:** July 19, 2026 — Deferred, then promoted to [`PRIORITIES.md`](PRIORITIES.md) commits 159–167 during the roadmap restructure (specs moved, pointer table below).
+**Carry-over Fixes (Commits 151-153) Archive Date:** October 13, 2026 — Complete; all acceptance criteria verified. Moved back from [`PRIORITIES.md`](PRIORITIES.md).
 
 ---
 
@@ -800,7 +801,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 
 **Archive Date:** June 2, 2026
 
-**Status:** Commits 104, 105, 107, 108, 113 fully complete. Commits 109, 110 partially complete — their remaining follow-ups were promoted to [`PRIORITIES.md`](PRIORITIES.md) commits 152 and 153. Commits 106, 111, 112, 114-148 are archived below (superseded by MT3 or migrated).
+**Status:** Commits 104, 105, 107, 108, 113 fully complete. Commits 109, 110 partially complete — their remaining follow-ups were promoted to commits 152 and 153 (archived below). Commits 106, 111, 112, 114-148 are archived below (superseded by MT3 or migrated).
 
 ---
 
@@ -1072,7 +1073,7 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 ### Commit 109: Beat Grid Editor (UI + Recomputation)
 
-**Status:** Partial — 2 ACs scoped down per user decision. Frontend ChordChartPreview component and progressive reveal loading promoted to [`PRIORITIES.md`](PRIORITIES.md) commit 152.
+**Status:** Partial — 2 ACs scoped down per user decision. Frontend ChordChartPreview component and progressive reveal loading promoted to commit 152 (archived below).
 
 **Goal:** Add frontend UI for editing time signature and BPM per section, with a backend recomputation endpoint that re-derives dependent artifacts (chord timeline, solo notes, MusicXML).
 
@@ -1128,14 +1129,14 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 - [x] Overrides persist across page navigations in the same session
 - [x] "Reset to Auto" restores librosa-estimated grid
 - [x] Test: 4/4 → 6/8 time signature change correctly recomputes chord beat alignment
-- [x] Initial `POST /analyze` returns chord timeline as partial result before solo inference finishes — *scoped down: `analysis_stage` field added to poll response; partial result deferred to follow-up → PRIORITIES.md commit 152*
+- [x] Initial `POST /analyze` returns chord timeline as partial result before solo inference finishes — *scoped down: `analysis_stage` field added to poll response; partial result deferred to follow-up → commit 152 (archived below)*
 - [x] `JobStatus.analysis_stage` enum reported in every poll response during processing
-- [ ] Frontend renders chord chart preview when `analysis_stage >= "chords_inferring"` (before full completion) — *scoped down per user decision; promoted to PRIORITIES.md commit 152*
+- [ ] Frontend renders chord chart preview when `analysis_stage >= "chords_inferring"` (before full completion) — *scoped down per user decision; promoted to commit 152 (archived below)*
 - [x] Intermediate artifacts survive server restart (persisted to disk) — *recompute worker persists BeatGrid.json, chordTimeline.json, SoloNotes.json, score.musicxml to job directory*
-- [ ] Monolithic loading spinner replaced with progressive reveal (chords first, then solo, then full score) — *scoped down per user decision; promoted to PRIORITIES.md commit 152*
+- [ ] Monolithic loading spinner replaced with progressive reveal (chords first, then solo, then full score) — *scoped down per user decision; promoted to commit 152 (archived below)*
 - [x] Coach hydration remains separate and non-regressed
 
-**Remaining work (scoped down to follow-up):** → **promoted to PRIORITIES.md commit 152 (Progressive Analysis Reveal)**
+**Remaining work (scoped down to follow-up):** → **promoted to commit 152 (Progressive Analysis Reveal, archived below)**
 
 - [ ] Frontend `ChordChartPreview` component rendering partial results during chord/solo inference stages
 - [ ] Progressive loading reveal pattern (replaces monolithic add-song spinner)
@@ -1144,7 +1145,7 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 
 ### Commit 110: Analysis Persistence & Correction Editor
 
-**Status:** Partial — 1 AC marked as follow-up (promoted to [`PRIORITIES.md`](PRIORITIES.md) commit 153).
+**Status:** Partial — 1 AC marked as follow-up (promoted to commit 153, archived below).
 
 **Goal:** Persist machine-readable analysis outputs (chord timeline, solo notes, beat grid) to a database backend and add a frontend editor for correcting chord assignments, note parameters, and fret positions.
 
@@ -1187,12 +1188,12 @@ GuitarSet covers only 33/277 chord classes. After executing Commit 105 data acqu
 - [x] Frontend chord correction dropdown filtered by key — `ChordCorrectionModal` + `getDiatonicChords()`
 - [x] Frontend note correction with real-time fretboard preview — `NoteCorrectionPanel` + `FretboardDiagram.onNoteTap`
 - [x] Correction history tracks original vs. corrected with revert capability — `CorrectionHistory` component + `useCorrectionStore`
-- [ ] MusicXML export uses corrected data — backend endpoints rebuild MusicXML; frontend stale until re-fetch (follow-up → PRIORITIES.md commit 153)
+- [ ] MusicXML export uses corrected data — backend endpoints rebuild MusicXML; frontend stale until re-fetch (follow-up → commit 153, archived below)
 - [x] Fretboard sync reflects corrections immediately during playback — `MusicContext` re-derives from patched lesson
 - [x] Correction coverage metric (% of ML-predicted events that were corrected) available — `correction_count` + `correction_coverage` on `LessonJSON`
 - [x] Corrections exportable as training data for ML retraining — `GET /analyze/{job_id}/corrections/export`
 
-**Remaining work (follow-up):** → **promoted to PRIORITIES.md commit 153 (MusicXML Re-Fetch After Corrections)**
+**Remaining work (follow-up):** → **promoted to commit 153 (MusicXML Re-Fetch After Corrections, archived below)**
 
 - [ ] MusicXML re-fetch from frontend after correction (stale until explicit refresh)
 
@@ -1736,7 +1737,7 @@ chord books. No multiple position alternatives are offered.
 | **Commit 139** | 6-Stem High-Fidelity Demucs | **Complete** — already shipped |
 | **Commit 140** | Real-Time Stem Mixer & Export | Promoted to PRIORITIES.md commit 172 (built as `StemMixer.tsx`; export missing) |
 | **Commit 141** | Dynamic Tempo Support | Promoted to PRIORITIES.md commit 169 (only static `bpm_override` exists) |
-| **Commit 142** | Redis Job Queue + Celery Workers | **Built** — `celery_app.py`, `queue.py`, `job_store.py` exist; frontend SSE gap → PRIORITIES.md commit 151 |
+| **Commit 142** | Redis Job Queue + Celery Workers | **Built** — `celery_app.py`, `queue.py`, `job_store.py` exist; frontend SSE gap → commit 151 (archived below) |
 | **Commit 143** | Dedicated ML Model Server | **Built** — `model_server.py` serves MT3 (not CRNN); GPU scheduling gap → commit 170 |
 | **Commit 144** | GPU Job Queue for Demucs | Promoted to PRIORITIES.md commit 170 |
 | **Commit 145** | Error Resilience | Promoted to PRIORITIES.md commit 170 (DLQ written in `dead_letter.py` + `job_store.py` but never wired into the failure path) |
@@ -1992,3 +1993,121 @@ chord books. No multiple position alternatives are offered.
 | Commit C9: Multi-Instrument Diagram Support | PRIORITIES.md commit 167 |
 
 Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PRIORITIES.md`](PRIORITIES.md) Active Backlog. Current-state notes from the archive, for reference: correction store (`useCorrectionStore`) fully implemented with chord/note/voicing overrides and DB persistence; jam mode (`app/(tabs)/jam.tsx`) is a full single-tab experience with backing tracks, scale detection, phrase coaching, and save flow; SM-2 spaced repetition engine (`src/spaced/sm2.ts`) powers skill node mutations; practice plan sequencer (`backend/app/sequencer.py`) generates slot-based plans. No analytics infrastructure, no three-tier output, no multi-instrument support, no chord pulse dashboard exist.
+
+---
+
+## Carry-over Fixes — Commits 151-153 (Complete)
+
+**Archive Date:** October 13, 2026 — Complete; all acceptance criteria verified. Moved from [`PRIORITIES.md`](PRIORITIES.md).
+
+| Commit | Summary | Evidence |
+|--------|---------|----------|
+| 151 | Frontend SSE Progress Stream — Root-Cause Fix for BUG-01 | 6/6 ACs — web automated; native BUG-01 checkpoint run by user as final sign-off |
+| 152 | Progressive Analysis Reveal — Wire ChordChartPreview (was 109 remaining work) | 6/6 ACs — vitest 439, Playwright 53, backend pytest green |
+| 153 | MusicXML Re-Fetch After Corrections (was 110 remaining work) | 5/5 ACs — lint 0 errors, vitest 445 tests, backend pytest 1290 passed / 6 skipped |
+
+Full specs archived verbatim below.
+
+---
+
+### Commit 151: Frontend SSE Progress Stream — Root-Cause Fix for BUG-01
+
+**Status:** Complete — all 6 ACs verified (web automated; native BUG-01 checkpoint run by user as final sign-off).
+
+**Goal:** Replace the fragile analyze-polling loop with the already-built SSE endpoint so job status is pushed to the client, eliminating BUG-01 at its root instead of guarding against it.
+
+**Current State:** Backend is done: `GET /analyze/{job_id}/stream` exists (`backend/app/routers/analyze.py:370` → `app/sse.py`) and emits `JobStatus` JSON (including `analysis_stage`) on state changes. Frontend never uses it: `pollAnalyzeJobCancelable()` in `src/api/analyze.ts` still polls every 2–8s and relies on the `seenCompletedOrFailed` band-aid guard (`src/api/analyze.ts:508`) — the documented BUG-01 root cause (see [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) BUG-01). No `EventSource` or streaming client exists anywhere in `src/`.
+
+**Scope:**
+
+- Add an SSE code path to `pollAnalyzeJobCancelable()` in `src/api/analyze.ts`:
+  - Web: `EventSource` against `/analyze/{job_id}/stream`
+  - Native: `fetch` streaming reader with the same event parsing
+  - Detect SSE support; fall back to existing polling transparently when unavailable (identical `onStatus`/`onError` callbacks for consumer compatibility)
+  - Consume keep-alive pings; stream ends on terminal status (`complete`/`failed`) — no post-terminal requests
+- Keep the polling path as fallback only; the `seenCompletedOrFailed` guard stays in the fallback branch (never remove the safety net entirely)
+- Forward `analysis_stage` through `onStatus` so commit 152 can render progressive states
+- Unit tests for the SSE client state machine (connect → events → terminal close; fallback on error)
+- Re-run the Manual QA BUG-01 checkpoint on web and native
+
+**Implementation notes:**
+
+- **The Current State premise about the backend was false.** `backend/app/sse.py` subscribed to an orphaned `sse:channel:{job_id}` Redis channel (zero `publish_sse_event` callers) and read a never-written Redis job hash — it 500'd whenever Redis was down and emitted nothing otherwise. Rewritten in this commit: `job_progress_stream()` polls the in-memory `app.jobs.jobs` store (same source as `GET /analyze/{id}`), emitting `connected` → `status` (on change, incl. `analysis_stage`) → `complete`/`failed` (terminal, then close), with `heartbeat` every 15s and a 900s timeout → `failed`. Verified live with Redis down.
+- **New module `src/api/analyzeSse.ts`** — pure (no `@/src/config` / `react-native` imports): `createSseChunkParser`, `mapSseEventToJob`, `createAnalyzeSseSession` (connect → events → terminal close; `onUnavailable` fires exactly once so async failure cannot double-trigger fallback), `createUtf8Decoder` (Hermes has no `TextDecoder`), `openAnalyzeSse()` — web `EventSource`, native `expo/fetch` streaming reader (RN `fetch` lacks streaming), detected via `navigator.product === 'ReactNative'`. Terminal event is `failed` (not `error`) to avoid colliding with EventSource transport `onerror`.
+- **`src/api/analyze.ts`:** shared `applyTerminalJob` (terminal checked *before* `onStatus`), `startAnalyzeSse`, and `startAnalyzePolling` (fallback — keeps `seenCompletedOrFailed` guard and wall-clock backoff verbatim). Both entry points (`pollAnalyzeJobCancelable`, `connectAnalyzeWebSocket`) walk SSE → WebSocket → polling through a single `advanceTo` chain guard, so WS `onerror`+`onclose`+connect-timeout can no longer spawn duplicate polling loops.
+- **Pre-existing blocker found while running the web checkpoint (folded into this commit per user decision):** merge `1606a34` (2026-09-25, "Merge branch 'develop'") dropped Commit 107's `assetExts.push('musicxml')` from `metro.config.js`, breaking the entire Expo web bundle with `UnableToResolveError` on `assets/musicxml-corpus/*.musicxml`. The two lines were restored as part of 151 so the web QA checkpoint can run.
+- **Verification:** backend `tests/test_sse_stream.py` 7 passed; full backend suite 1277 passed / 6 skipped; frontend `analyzeSse.test.ts` (20) + `analyze.test.ts` (6); `npm run lint` + `npm run test` (48 files / 425 tests) green. Live: `curl -N` stream completes at server close (exit 0, zero status GETs); automated Playwright web run — 1× EventSource, 0 polls, 0 WS, 0 console errors, 0 requests in the 45s post-terminal quiet period. Native transport implemented + session logic unit-covered; device run remains the last Manual QA step.
+
+**Acceptance Criteria:**
+
+- [x] Web and native consume `GET /analyze/{job_id}/stream` for analyze jobs
+- [x] No additional status requests are made after terminal status (BUG-01 checkpoint passes on both platforms) — web PASS 2026-09-27 (automated Playwright: 1× EventSource, 0 polls, 0 reconnects); native run owned by user
+- [x] SSE unavailable → transparent polling fallback with identical callbacks
+- [x] Keep-alive pings prevent proxy timeouts; stream closes on terminal event
+- [x] `analysis_stage` reaches `onStatus` consumers
+- [x] Unit tests cover connect/event/terminal/fallback paths; `npm run test` green
+
+---
+
+### Commit 152: Progressive Analysis Reveal — Wire ChordChartPreview (was 109 remaining work)
+
+**Status:** Complete — all 6 ACs verified (vitest 439, Playwright 53, backend pytest green).
+
+**Goal:** Replace the monolithic add-song loading spinner with a progressive reveal: chord chart appears as soon as chord inference finishes, then refines to the full score.
+
+**Current State:** `components/ChordChartPreview.tsx` exists but is imported by no screen (dead until wired). `analysis_stage` is already parsed (`src/api/analyze.ts:185`) and typed (`src/types/index.ts:426`) but never rendered. Backend `JobStatus.analysis_stage` reports `initializing → stems_separating → chords_inferring → solo_inferring → building_musicxml → complete` (archive Commit 109). The add-song flow shows one monolithic spinner for the entire ~5-minute pipeline.
+
+**Scope:**
+
+- Wire `ChordChartPreview` into the add-song/loading flow: render it when `analysis_stage >= "chords_inferring"`
+- Show a smaller progress banner during later stages ("Refining solo notation…") instead of blocking the full-screen spinner
+- Complete stage list driven by `analysis_stage` from commit 151's `onStatus` (or polling fallback)
+- Keep coach hydration on its separate async track (no regression)
+- Replace the monolithic spinner only after the preview is live (staged rollout: preview first, spinner removal second)
+- Component test for stage → UI state mapping; Playwright structural test for the add-song flow
+
+**Acceptance Criteria:**
+
+- [x] Chord chart preview renders as soon as `analysis_stage >= "chords_inferring"`
+- [x] Later stages show a compact "refining" banner, not a blank spinner
+- [x] Full score replaces the preview on `complete` without layout shift
+- [x] Monolithic add-song spinner removed once preview path is verified
+- [x] Coach hydration unchanged and non-regressed
+- [x] Tests green (`npm run test`, `npm run test:ui`)
+
+---
+
+### Commit 153: MusicXML Re-Fetch After Corrections (was 110 remaining work)
+
+**Status:** Complete — all 5 ACs verified (lint 0 errors, vitest 445 tests, backend pytest 1290 passed / 6 skipped).
+
+**Goal:** Make corrected data visible in the score immediately — the rendered MusicXML must never stay stale after a chord, note, or voicing correction.
+
+**Current State:** Backend correction endpoints (`PATCH /analyze/{job_id}/chord/{beat_index}`, `.../solo-note/{note_index}`, `.../voicing`) rebuild MusicXML server-side, but the frontend keeps the score it fetched at load time until an explicit refresh (archive Commit 110 follow-up: "MusicXML re-fetch from frontend after correction (stale until explicit refresh)").
+
+**Scope:**
+
+- On successful correction mutation, invalidate the cached score and re-fetch MusicXML (and dependent artifacts) for the current job
+- Show a lightweight "Updating score…" indicator during refetch; keep fretboard/chord-timeline interaction enabled
+- Debounce rapid successive corrections (batch refetches, e.g. 300ms window)
+- Cover all three correction types: chord, note, voicing
+- Regression: existing correction history/revert flows trigger the same refetch
+- Integration test: PATCH chord → refetched MusicXML contains the corrected `<harmony>`; component test for debounce
+
+**Acceptance Criteria:**
+
+- [x] Corrected chord/note/voicing appears in the rendered score without manual refresh
+- [x] Refetch is debounced under rapid corrections (no request storm)
+- [x] Loading indicator shown during refetch; no blank/flash
+- [x] Revert from correction history also refreshes the score
+- [x] Backend + frontend tests green
+
+**Implementation notes:**
+
+- **Two premises in the spec were false (verified today).** (1) The backend PATCH endpoints did NOT rebuild MusicXML — they only rewrote `chordTimeline.json` / `SoloNotes.json` / `corrections.json`; `job.result.musicxml` (and `sections[].musicxml`, which `SessionStemAndTab` actually prefers) stayed stale. (2) The three PATCH clients (`correctChord` / `correctSoloNote` / `overrideVoicing`) were dead code — chord/note corrections in study/listen only wrote the local `correctionStore`. Both fixed here per user decision: server-side rebuild + wire the existing correction modals to the PATCH clients.
+- **Backend `_rebuild_score_for_job()`** (`routers/analyze.py`) runs at the end of all three PATCH handlers and revert: rebuilds lesson-level AND per-section MusicXML via `build_musicxml` (section filter helpers reused from `analyze_audio`), patches `jobs[job_id].result`, persists `score.musicxml`, and calls `save_job_to_disk` so a restart serves the corrected score. Mirrors the beat-grid recompute precedent (jobs.py). `override_voicing` now also writes `voicing_shape` onto the `ChordEvent` (schema + `_inject_chord_diagrams` already supported it) and records the true prior shape for revert; revert restores it.
+- **Frontend**: new `src/session/scoreRefetch.ts` — `createScoreRefetchScheduler` (300ms trailing debounce, single-flight with mid-flight queuing, `onStateChange` for UI). `lessonStore` owns a singleton scheduler wired to the existing `getJobStatus()` → `saveLesson(result)`, exposes `scoreUpdating` + `requestScoreRefetch(jobId)`; stale refetches landing after a lesson switch/clear are dropped by comparing the active lesson's `job_id`. Study + Listen chord/note modals call the PATCH client after the local store write (demo lessons skipped — no server job), then request the refetch; PATCH failure keeps the local correction and toasts loudly. Review revert requests the same refetch.
+- **"Updating score…" chip** in `SessionStemAndTab` above the tab viewport: absolutely positioned, `pointerEvents="none"`, mono font — fretboard/chord-timeline stay interactive, no layout flash.
+- **Verification**: backend `tests/test_corrections.py` 13 passed (5 new: chord PATCH → `<root-step>F</root-step>` in lesson + section MusicXML + `score.musicxml`; note PATCH pitch; voicing PATCH/revert; chord revert restores original harmony and empties history); full backend suite 1290 passed / 6 skipped; frontend `scoreRefetch.test.ts` 6 tests (coalescing, boundary, state emission, mid-flight queueing, error recovery, cancel); `npm run lint` 0 errors; `npm run test` 50 files / 445 tests green.
+
+---
