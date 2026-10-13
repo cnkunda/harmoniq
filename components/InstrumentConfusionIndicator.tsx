@@ -1,11 +1,12 @@
 import { Text, View } from 'react-native'
 
+import { colors } from '@/src/constants/colors'
 import type { InstrumentConfusionPerSection } from '@/src/types'
 
 function confusionColor(confusion: number): string {
-  if (confusion <= 0.15) return '#7A9B6D'
-  if (confusion <= 0.30) return '#D4A574'
-  return '#C17B5F'
+  if (confusion <= 0.15) return colors.success
+  if (confusion <= 0.30) return colors.amber.accent
+  return colors.danger
 }
 
 function confusionLabel(confusion: number): string {

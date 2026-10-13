@@ -1,5 +1,4 @@
 import { useFocusEffect } from '@react-navigation/native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useRouter, type Href } from 'expo-router'
 import {
   ChevronRight,
@@ -19,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Svg, { Circle as SvgCircle, Line as SvgLine, Polygon as SvgPolygon } from 'react-native-svg'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { WoodGradient } from '@/components/WoodGradient'
 import { RecentProgress } from '@/components/RecentProgress'
 import { toast } from '@/components/ToastConfig'
 import { TodaysPlanCard, TodaysPlanCardLoading } from '@/components/TodaysPlanCard'
@@ -131,7 +131,7 @@ function DailyLickFretboard({ cells, caption: captionProp }: { cells: readonly F
     return result
   }, [sorted])
 
-  const GROUP_COLORS = [colors.amber.accent, colors.ember, '#e8bd7e', '#5a3f2d']
+  const GROUP_COLORS = [colors.amber.accent, colors.ember, colors.amber.light, colors.chartGroup]
 
   const connectors = useMemo(() => {
     const result: { fromX: number; toX: number; y: number }[] = []
@@ -541,10 +541,8 @@ export default function HomeScreen() {
             <Text className="font-sans text-base text-muted-brown">Ready to play?</Text>
           </View>
 
-          <LinearGradient
-            colors={['rgba(74, 55, 40, 0.98)', 'rgba(44, 24, 16, 0.99)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+          <WoodGradient
+            variant="translucentCard"
             className="relative mb-6 overflow-hidden rounded-2xl border border-wood-600/50 shadow-soft-wood"
             style={{ elevation: 8 }}
           >
@@ -773,7 +771,7 @@ export default function HomeScreen() {
                 </>
               )}
             </View>
-          </LinearGradient>
+          </WoodGradient>
 
           {dailyLick && !dailyLickDismissed && suggestion && suggestion.kind !== 'cold_start' ? (
             <View className="relative mb-6 overflow-hidden rounded-2xl border border-hairline bg-wood-800/40">

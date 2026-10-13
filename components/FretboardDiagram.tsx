@@ -113,18 +113,18 @@ type FretboardDiagramProps = {
 }
 
 const FINGER_COLORS: Record<number, { fill: string; border: string }> = {
-  1: { fill: '#60A5FA', border: '#3B82F6' },
-  2: { fill: '#34D399', border: '#10B981' },
-  3: { fill: '#FBBF24', border: '#F59E0B' },
-  4: { fill: '#F87171', border: '#EF4444' },
+  1: { ...colors.finger.one },
+  2: { ...colors.finger.two },
+  3: { ...colors.finger.three },
+  4: { ...colors.finger.four },
 }
 
 const CHORD_CIRCLE_OPACITY_DEFAULT = 0.85
 const CHORD_CIRCLE_OPACITY_NON_ROOT_DEFAULT = 0.55
 const CHORD_CIRCLE_OPACITY_ENHANCED = 0.3
 
-const SOLO_NOTE_ACTIVE_RED = '#E53935'
-const SOLO_NOTE_CORE_TERRACOTTA = '#C17B5F'
+const SOLO_NOTE_ACTIVE_RED = colors.soloActive
+const SOLO_NOTE_CORE_TERRACOTTA = colors.danger
 
 const SCALE_DEGREE_LABELS: Record<number, string> = {
   0: '1', 1: 'b2', 2: '2', 3: 'b3', 4: '3', 5: '4',
@@ -856,8 +856,8 @@ export function FretboardDiagram({
                 <Stop offset="100%" stopColor={SOLO_NOTE_ACTIVE_RED} stopOpacity="0" />
               </SvgRadialGradient>
               <SvgRadialGradient id="chordRootGlow" cx="50%" cy="50%" r="50%">
-                <Stop offset="0%" stopColor="#D4A574" stopOpacity="0.45" />
-                <Stop offset="100%" stopColor="#D4A574" stopOpacity="0" />
+                <Stop offset="0%" stopColor={colors.amber.accent} stopOpacity="0.45" />
+                <Stop offset="100%" stopColor={colors.amber.accent} stopOpacity="0" />
               </SvgRadialGradient>
             </Defs>
 
@@ -910,9 +910,9 @@ export function FretboardDiagram({
               y={BOARD_T}
               width={NUT_W}
               height={BOARD_H}
-              fill="#F5F0E8"
+              fill={colors.ivory}
               rx={1}
-              stroke="#D4A574"
+              stroke={colors.amber.accent}
               strokeWidth={0.5}
             />
 
@@ -944,7 +944,7 @@ export function FretboardDiagram({
                       cx={cx}
                       cy={cy}
                       r={4.5}
-                      fill="#8B7D6B"
+                      fill={colors.muted.brown}
                       opacity={0.55}
                     />
                   )
@@ -956,7 +956,7 @@ export function FretboardDiagram({
                       cx={cx}
                       cy={cy - 8}
                       r={3.5}
-                      fill="#8B7D6B"
+                      fill={colors.muted.brown}
                       opacity={0.55}
                     />
                   )
@@ -968,7 +968,7 @@ export function FretboardDiagram({
                       cx={cx}
                       cy={cy + 8}
                       r={3.5}
-                      fill="#8B7D6B"
+                      fill={colors.muted.brown}
                       opacity={0.55}
                     />
                   )
@@ -1169,7 +1169,7 @@ export function FretboardDiagram({
                       x={fretCenterX(col)}
                       y={stringY(si) + 3}
                       textAnchor="middle"
-                      fill="#8B7D6B"
+                      fill={colors.muted.brown}
                       fontSize={7}
                       fontFamily="JetBrainsMono-Regular"
                       opacity={0.8}

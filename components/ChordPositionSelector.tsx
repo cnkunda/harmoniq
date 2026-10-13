@@ -2,6 +2,7 @@ import { Text, View } from 'react-native'
 import { ChevronLeft, ChevronRight } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { colors } from '@/src/constants/colors'
 import { getChordPositionCount } from '@/src/music/chordDbAdapter'
 
 interface ChordPositionSelectorProps {
@@ -30,7 +31,7 @@ export function ChordPositionSelector({
         className={`rounded p-0.5 ${hasPrev ? 'opacity-100' : 'opacity-30'}`}
         accessibilityLabel="Previous voicing"
       >
-        <ChevronLeft size={12} color="#D4A574" />
+        <ChevronLeft size={12} color={colors.amber.accent} />
       </AnimatedPressable>
 
       <Text className="font-mono text-[10px] text-muted-brown">
@@ -43,7 +44,7 @@ export function ChordPositionSelector({
         className={`rounded p-0.5 ${hasNext ? 'opacity-100' : 'opacity-30'}`}
         accessibilityLabel="Next voicing"
       >
-        <ChevronRight size={12} color="#D4A574" />
+        <ChevronRight size={12} color={colors.amber.accent} />
       </AnimatedPressable>
     </View>
   )

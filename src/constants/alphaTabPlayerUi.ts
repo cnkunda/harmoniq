@@ -6,20 +6,22 @@ import { colors } from '@/src/constants/colors'
  *
  * Keep `assets/alphatab-harness/index.html` `<style>` player rules in sync with this file.
  */
-const AMBER_LIGHT = colors.amber.light // #E8B86D
+const AMBER_LIGHT = colors.amber.light
 /** Theme success — notehead, stem, flag, and tab digits during playback (Listen / stem sync). */
-const HIGHLIGHT = colors.success // #7A9B6D
+const HIGHLIGHT = colors.success
 /** Bar wash: amber accent @ ~22% on dark score */
-const BAR_WASH = 'rgba(212, 165, 116, 0.22)'
+const BAR_WASH = colors.barWash
+/** Cursor beat glow shadow color. */
+const BEAT_GLOW = colors.beatGlow
 
-const WOOD_TRACK = 'rgba(61, 35, 23, 0.92)'
+const WOOD_TRACK = colors.woodTrack
 const SCROLL_THUMB = colors.amber.accent
 const SCROLL_THUMB_HOVER = colors.amber.light
 
 /** Light theme scrollbar colors for cream parchment background. */
-const LIGHT_TRACK = 'rgba(200, 190, 175, 0.6)'
-const LIGHT_THUMB = '#b8956a'
-const LIGHT_THUMB_HOVER = '#a08055'
+const LIGHT_TRACK = colors.lightTrack
+const LIGHT_THUMB = colors.scrollThumbLight
+const LIGHT_THUMB_HOVER = colors.scrollThumbLightHover
 
 /**
  * Horizontal scrollbar for the tab strip — wood track + amber thumb (WebKit + Firefox).
@@ -69,7 +71,7 @@ export const ALPHATAB_PLAYER_CURSOR_CSS = `
 .at-cursor-beat {
   background: ${AMBER_LIGHT};
   width: 3px;
-  box-shadow: 0 0 2px rgba(44, 24, 16, 0.45);
+  box-shadow: 0 0 2px ${BEAT_GLOW};
 }
 /* Per-note playback tint — same color for heads, stems, flags, SMuFL <use>, etc. */
 path.at-highlight,

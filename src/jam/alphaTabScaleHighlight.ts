@@ -2,8 +2,9 @@
  * AlphaTab 1.6.x — tint tab numbers and standard note heads for pitch classes in the detected scale.
  * Used from `AlphaTabWeb.web.tsx` (DOM). Native uses the same logic in `assets/alphatab-harness/index.html`.
  */
+import { colors } from '@/src/constants/colors'
 
-const TINT_HEX = '#6EC88C'
+const TINT_HEX = colors.scaleHighlight
 
 type UnknownRecord = Record<string, unknown>
 

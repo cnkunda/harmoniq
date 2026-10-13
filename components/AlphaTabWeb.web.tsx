@@ -475,7 +475,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         bracket = document.createElement('div')
         bracket.setAttribute('aria-hidden', 'true')
         bracket.style.cssText =
-          'display:none;position:absolute;pointer-events:none;z-index:50;border:2px solid rgba(240,222,180,0.92);border-radius:6px;background:rgba(240,222,180,0.06);box-sizing:border-box;'
+          `display:none;position:absolute;pointer-events:none;z-index:50;border:2px solid ${colors.loopBracketBorder};border-radius:6px;background:${colors.loopBracketWash};box-sizing:border-box;`
         container.appendChild(bracket)
         loopBracketRef.current = bracket
       }

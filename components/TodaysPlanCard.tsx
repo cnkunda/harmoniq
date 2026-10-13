@@ -3,6 +3,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
+import { colors } from '@/src/constants/colors'
 import type { DrillSlotPayload, PracticePlanPayload } from '@/src/types'
 
 function stepLabel(slot: DrillSlotPayload): string {
@@ -140,7 +141,7 @@ export function TodaysPlanCard({
         accessibilityRole="button"
         accessibilityLabel="Start today's practice session"
       >
-        {busy ? <ActivityIndicator color="#1b120e" /> : null}
+        {busy ? <ActivityIndicator color={colors.wood[900]} /> : null}
         <Text className="font-sans-medium text-base text-wood-900">{busy ? 'Starting…' : 'Start session'}</Text>
       </AnimatedPressable>
     </Animated.View>

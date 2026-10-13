@@ -1,7 +1,7 @@
-import { LinearGradient } from 'expo-linear-gradient'
 import { type LucideIcon } from 'lucide-react-native'
 import { Text, View } from 'react-native'
 
+import { WoodGradient } from '@/components/WoodGradient'
 import { colors } from '@/src/constants/colors'
 
 interface SettingsCardProps {
@@ -21,11 +21,8 @@ export function SettingsCard({
 }: SettingsCardProps) {
   if (variant === 'gradient') {
     return (
-      <LinearGradient
-        // matches colors.wood[600] and colors.wood[900] with alpha
-        colors={['rgba(74, 55, 40, 0.98)', 'rgba(44, 24, 16, 0.99)']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+      <WoodGradient
+        variant="translucentCard"
         className="mb-6 overflow-hidden rounded-2xl border border-wood-600/50"
       >
         <View className="relative p-6">
@@ -50,7 +47,7 @@ export function SettingsCard({
 
           <View className="mt-4">{children}</View>
         </View>
-      </LinearGradient>
+      </WoodGradient>
     )
   }
 

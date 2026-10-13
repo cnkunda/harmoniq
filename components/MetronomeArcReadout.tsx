@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient'
 import { memo, useEffect, useRef } from 'react'
 import { View, Text } from 'react-native'
 import Animated, {
@@ -12,6 +11,7 @@ import Svg, { Path } from 'react-native-svg'
 
 import type { MetronomeSubdivision } from '@/src/audio/metronomeShared'
 import { colors } from '@/src/constants/colors'
+import { WoodGradient } from '@/components/WoodGradient'
 
 /** Larger stage; all lengths scale from original 96px reference. */
 const SCALE = 152 / 96
@@ -195,10 +195,8 @@ function MetronomeArcReadoutInner({
           pendulumStyle,
         ]}
       >
-        <LinearGradient
-          colors={[colors.amber.accent, colors.amber.light]}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
+        <WoodGradient
+          variant="accentVertical"
           style={{
             position: 'absolute',
             bottom: BOB - ARM_CAP_OVERLAP,
@@ -219,7 +217,7 @@ function MetronomeArcReadoutInner({
             borderRadius: BOB / 2,
             backgroundColor: colors.amber.accent,
             borderWidth: Math.max(2, Math.round(2 * SCALE)),
-            borderColor: 'rgba(232, 184, 109, 0.4)',
+            borderColor: colors.metronomeRing,
             opacity: metronomeActive ? 1 : 0.55,
           }}
         />

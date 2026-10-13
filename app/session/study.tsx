@@ -19,6 +19,7 @@ import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/Se
 import { TheoryCard } from '@/components/TheoryCard'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
+import { colors } from '@/src/constants/colors'
 import { correctChord, correctSoloNote, fetchTheoryAnnotation } from '@/src/api/analyze'
 import { API_BASE_URL } from '@/src/config'
 import { sessionHref } from '@/src/constants/sessionFlow'
@@ -609,7 +610,7 @@ function StudyScreenInner() {
               onPress={() => setTranscriptionWarningDismissed(true)}
               hitSlop={8}
             >
-              <X color="#d4a853" size={16} />
+              <X color={colors.amber.accent} size={16} />
             </AnimatedPressable>
           </View>
           <Text className="mb-3 font-sans text-sm text-cream">

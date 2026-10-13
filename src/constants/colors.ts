@@ -41,6 +41,46 @@ const colors = {
   chromatic: '#9B7DB5',
   /** ember — warm emphasis, distinct from danger (error/missed) */
   ember: '#c1653a',
+  /** Commit 154: solo-note active glow (artwork-specific, SVG radial gradient). */
+  soloActive: '#E53935',
+  /** Commit 154: AlphaTab scale-degree highlight tint for in-scale note heads. */
+  scaleHighlight: '#6EC88C',
+  /** Commit 154: light-theme score meta text (AlphaTab presets). */
+  tabScoreInfo: '#6B5D4B',
+  /** Commit 154: light-theme scrollbar thumb on cream parchment. */
+  scrollThumbLight: '#b8956a',
+  /** Commit 154: light-theme scrollbar thumb hover. */
+  scrollThumbLightHover: '#a08055',
+  /** Commit 154: alternate chart group color (fret-dot groups). */
+  chartGroup: '#5a3f2d',
+  /** Commit 154: finger-legend colors for fretboard diagram. */
+  finger: {
+    one: { fill: '#60A5FA', border: '#3B82F6' },
+    two: { fill: '#34D399', border: '#10B981' },
+    three: { fill: '#FBBF24', border: '#F59E0B' },
+    four: { fill: '#F87171', border: '#EF4444' },
+  },
+  /** Commit 154: translucent card gradient stops (WoodGradient translucentCard). */
+  translucentCardFrom: 'rgba(74, 55, 40, 0.98)',
+  translucentCardTo: 'rgba(44, 24, 16, 0.99)',
+  /** Commit 154: AlphaTab cursor bar wash (amber @ ~22% on dark score). */
+  barWash: 'rgba(212, 165, 116, 0.22)',
+  /** Commit 154: AlphaTab scrollbar track on dark score. */
+  woodTrack: 'rgba(61, 35, 23, 0.92)',
+  /** Commit 154: AlphaTab scrollbar track on cream parchment (light theme). */
+  lightTrack: 'rgba(200, 190, 175, 0.6)',
+  /** Commit 154: cursor beat glow shadow (AlphaTab player CSS). */
+  beatGlow: 'rgba(44, 24, 16, 0.45)',
+  /** Commit 154: Switch on-track tint (stem mixer toggles). */
+  switchTrackOn: 'rgba(212, 165, 116, 0.5)',
+  /** Commit 154: loop-bracket outline (AlphaTab loop selection overlay). */
+  loopBracketBorder: 'rgba(240,222,180,0.92)',
+  /** Commit 154: loop-bracket fill wash (AlphaTab loop selection overlay). */
+  loopBracketWash: 'rgba(240,222,180,0.06)',
+  /** Commit 154: harness screen divider (musicxml-render-test corpus header). */
+  harnessDivider: 'rgba(163,123,76,0.4)',
+  /** Commit 154: metronome bob glow ring. */
+  metronomeRing: 'rgba(232, 184, 109, 0.4)',
 } as const
 
 export { colors }

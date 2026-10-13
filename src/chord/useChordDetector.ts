@@ -128,7 +128,7 @@ export function useChordDetector() {
       modelRef.current = {
         runSync(input: Float32Array): Float32Array {
           const buf = input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength) as ArrayBuffer
-          const output = tfliteModel.run([buf])
+          const output = tfliteModel.runSync([buf])
           return new Float32Array(output[0]!)
         },
       }

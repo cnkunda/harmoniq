@@ -17,7 +17,7 @@
  *   6. Asserts p95 < 120ms
  */
 
-import type { TFLiteModel } from 'react-native-fast-tflite'
+import type { TfliteModel } from 'react-native-fast-tflite'
 
 const WINDOW = 128
 const FEATURE_DIM = 144
@@ -47,21 +47,21 @@ export async function runChordModelLatencyBenchmark(): Promise<{
   // 1. Load the model
   const { loadTensorflowModel } = await import('react-native-fast-tflite')
   const modelAsset: number = require('@/assets/models/chord_model.tflite')
-  const model: TFLiteModel = await loadTensorflowModel(modelAsset, [])
+  const model: TfliteModel = await loadTensorflowModel(modelAsset, [])
 
   const input = makeSyntheticInput()
   const inputBuf = input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength) as ArrayBuffer
 
   // 2. Warmup
   for (let i = 0; i < WARMUP_ITERATIONS; i++) {
-    model.run([inputBuf])
+    await model.run([inputBuf])
   }
 
   // 3. Benchmark
   const latencies: number[] = []
   for (let i = 0; i < BENCHMARK_ITERATIONS; i++) {
     const start = performance.now()
-    model.run([inputBuf])
+    await model.run([inputBuf])
     const elapsed = performance.now() - start
     latencies.push(elapsed)
   }

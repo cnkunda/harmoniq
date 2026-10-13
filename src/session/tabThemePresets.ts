@@ -27,9 +27,9 @@ const LIGHT_THEME: TabThemeColors = {
   mainGlyphColor: colors.wood[900],
   secondaryGlyphColor: colors.wood[500],
   barSeparatorColor: colors.muted.brown,
-  scoreInfoColor: '#6B5D4B',
+  scoreInfoColor: colors.tabScoreInfo,
   staffLineColor: colors.muted.brown,
-  barNumberColor: '#6B5D4B',
+  barNumberColor: colors.tabScoreInfo,
 }
 
 export const TAB_RENDER_PRESETS: Record<TabRenderPresetName, TabRenderPreset> = {

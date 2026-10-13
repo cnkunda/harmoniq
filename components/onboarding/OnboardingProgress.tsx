@@ -1,5 +1,7 @@
 import { View } from 'react-native'
 
+import { colors } from '@/src/constants/colors'
+
 export type OnboardingProgressProps = {
   totalSteps: number
   /** 1-based index of the active step */
@@ -28,7 +30,7 @@ export function OnboardingProgress({ totalSteps, currentStep }: OnboardingProgre
               className={`h-2 flex-1 rounded-full ${
                 isActive ? 'bg-amber-accent shadow-sm' : isPast ? 'bg-amber-accent/55' : 'bg-wood-600'
               }`}
-              style={isActive ? { shadowColor: '#D4A574', shadowOpacity: 0.4 } : undefined}
+              style={isActive ? { shadowColor: colors.amber.accent, shadowOpacity: 0.4 } : undefined}
             />
           )
         })}

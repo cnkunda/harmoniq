@@ -53,7 +53,7 @@ export default function MusicXmlRenderTestScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.wood[900] }} edges={['top']}>
       <WoodGradient />
       <View style={{ flex: 1 }}>
-        <View style={{ paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(163,123,76,0.4)' }}>
+        <View style={{ paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.harnessDivider }}>
           <Text
             style={{ color: colors.cream, fontFamily: 'monospace', fontSize: 12 }}
             accessibilityLabel={`corpus-title:${name}`}

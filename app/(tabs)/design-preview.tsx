@@ -249,7 +249,7 @@ function StemMixerDevSection() {
            value={guitarOn}
            onValueChange={setGuitarOn}
            disabled={!ready || busy}
-           trackColor={{ false: colors.wood[500], true: 'rgba(212, 165, 116, 0.5)' }}
+           trackColor={{ false: colors.wood[500], true: colors.switchTrackOn }}
            thumbColor={guitarOn ? colors.creamDark : colors.wood[600]}
          />
       </View>
@@ -259,7 +259,7 @@ function StemMixerDevSection() {
            value={drumsOn}
            onValueChange={setDrumsOn}
            disabled={!ready || busy}
-           trackColor={{ false: colors.wood[500], true: 'rgba(212, 165, 116, 0.5)' }}
+           trackColor={{ false: colors.wood[500], true: colors.switchTrackOn }}
            thumbColor={drumsOn ? colors.creamDark : colors.wood[600]}
          />
       </View>
