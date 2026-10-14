@@ -240,7 +240,12 @@ export function ChordDiagram({
   const displayName = formatChordDisplay(name)
 
   return (
-    <View className="items-center" accessibilityLabel={`Chord diagram: ${displayName}`} accessible>
+    <View
+      testID="chord-diagram"
+      className="items-center"
+      accessibilityLabel={`Chord diagram: ${displayName}`}
+      accessible
+    >
       <Svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
         {/* Strings (vertical lines) */}
         {Array.from({ length: STRING_COUNT }).map((_, si) => (

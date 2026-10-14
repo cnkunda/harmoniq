@@ -88,3 +88,51 @@ When a corpus file fails to render or produces visual discrepancies:
 | File | Issue | Status |
 |------|-------|--------|
 | (none currently) | — | All 23 files render without crash on web |
+
+---
+
+## Commit 155 — ChordDiagram Native Rendering Verification (2026-10-14)
+
+> Not an AlphaTab item — recorded here per the Commit 155 spec. `ChordDiagram`
+> (`components/ChordDiagram.tsx`) is a hand-rolled `react-native-svg` renderer,
+> unrelated to the AlphaTab WebView harness above.
+
+**Premise correction:** the spec's `react-chords` framing is stale. The component
+has no `@tombatossals/react-chords` import (the package remains in
+`package.json` but is unused); it renders via `react-native-svg` on all
+platforms. Path selection (`ChordDiagram.tsx`, `useMemo` on `name` /
+`positionIndex`, no platform check): `getChordPositionAtIndex()` non-null ⇒
+primary chords-db path (`buildDotsFromChordsDb`); null ⇒ algorithmic fallback
+(`buildDotsFromAlgorithmic` via `chordToFretboardCells`). No rendering fix was
+needed and no fallback-as-default switch was flipped.
+
+**Matrix verified on web** (Expo web + Chromium screenshot of the new
+`ChordDiagramMatrixSection` on design-preview, session sizes: `md` = study,
+`sm` = slow/play):
+
+| Case | Chord | Path | Result |
+|------|-------|------|--------|
+| Open | `G:maj` (`md` + `sm`) | DB primary, no barres | Renders, open-string O markers + muted X correct, label legible |
+| Barre | `F:maj` (`md` + `sm`), `B:min` (vitest) | DB primary, `barres: [1]` / `[2]` | Barre line + finger numbers legible at both session sizes |
+| Rare fallback | `C:add11` | DB miss (`getChordPositions` → null, proven in `src/music/chordDbAdapter.test.ts`) → algorithmic (major intervals) | Renders dots without finger numbers, as designed |
+| Flat name | `Bb:maj` (direct hit); `Db:maj` → enharmonic `C#` branch; `A#:maj` → `Bb` branch | `ENHARMONIC_MAP` in `chordDbAdapter.ts` | All resolve; `Bb` renders with barre |
+
+**Native status: environment-blocked, not component-blocked.**
+- iOS: impossible on this Windows machine (no Simulator) — unverified.
+- Android: emulator boots (`Pixel_7` AVD; note the Detox default
+  `Pixel_7_API_34` does not exist here, use `DETOX_ANDROID_AVD=Pixel_7`) and the
+  prebuilt dev APK installs, but **no Detox suite can boot the app**: Metro
+  cannot build the Android dev bundle because `onnxruntime-web/dist/
+  ort.bundle.min.mjs` uses a dynamic `import(/*…*/)` comment form that Metro's
+  parser rejects. Reproduced on clean `main` (changes stashed) — pre-existing,
+  unrelated to this commit; the one bundle that did download then failed Hermes
+  compilation on-device (`'}' expected at end of object literal`). The new
+  Detox assertion (`tests/mobile/smoke.e2e.js`, `by.id("chord-diagram")`
+  visible + sane non-zero dimensions) is therefore committed but **not yet
+  green**; same component is exercised deterministically via the design-preview
+  matrix instead of the study screen because study/slow/play only render a
+  diagram when a live theory annotation exists.
+- Ancillary environment notes: stale npm `.bin/.*` temp symlinks crash
+  Metro's `FallbackWatcher` with `EACCES` (deleted 18 repo-wide, safe — real
+  bins exist alongside); Expo CLI needs `--offline` here (version-check fetch
+  crashes startup).

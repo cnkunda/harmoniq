@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Music } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { ChordDiagram } from '@/components/ChordDiagram'
 import { CoachNote } from '@/components/CoachNote'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorBanner } from '@/components/ErrorBanner'
@@ -41,6 +42,30 @@ function Swatch({ label, className }: { label: string; className: string }) {
     <View className="mb-3 w-[48%]">
       <View className={`h-14 rounded-lg border border-wood-600 ${className}`} />
       <Text className="mt-1 font-mono text-[10px] text-cream/80">{label}</Text>
+    </View>
+  )
+}
+
+/** Commit 155 — deterministic ChordDiagram matrix (open / barre / fallback / flat). */
+function ChordDiagramMatrixSection() {
+  return (
+    <View className="mb-6 rounded-xl border border-wood-600/60 bg-wood-900/40 p-4">
+      <Text className="mb-1 font-sans-medium text-xs uppercase tracking-wider text-amber-light">
+        Chord diagrams (Commit 155)
+      </Text>
+      <Text className="mb-3 font-sans text-xs text-muted-light">
+        Session sizes: md on study, sm on slow/play. C:add11 misses the DB and takes the algorithmic fallback.
+      </Text>
+      <View className="flex-row flex-wrap gap-4">
+        <ChordDiagram name="G:maj" size="md" />
+        <ChordDiagram name="F:maj" size="md" />
+        <ChordDiagram name="C:add11" size="md" />
+        <ChordDiagram name="Bb:maj" size="md" />
+      </View>
+      <View className="mt-4 flex-row flex-wrap gap-4">
+        <ChordDiagram name="G:maj" size="sm" />
+        <ChordDiagram name="F:maj" size="sm" />
+      </View>
     </View>
   )
 }
@@ -494,6 +519,8 @@ export default function DesignPreviewScreen() {
             <PitchWorkletDevSection />
             <StemMixerDevSection />
             <BackingTrackDevSection />
+
+            <ChordDiagramMatrixSection />
 
             <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wider text-amber-light">
               Wood scale
