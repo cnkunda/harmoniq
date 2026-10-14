@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the completed carry-over fixes (commits 151–154). Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the completed carry-over fixes (commits 151–155). Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 149–182). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, ChordDiagram native verification → 155, Milestone C1–C9 → 159–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182. Later: commits 151–154 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 149–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C9 → 159–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -1664,7 +1664,7 @@ chord books. No multiple position alternatives are offered.
 - [x] Flat-to-sharp normalization works (Bb → A#, etc.)
 - [x] Finger numbers and barre indicators render correctly
 - [x] No regression: existing fretboard dot rendering unchanged
-- [ ] Web rendering verified; native rendering verified or fallback active — *promoted to PRIORITIES.md commit 155*
+- [x] Web rendering verified; native rendering verified or fallback active — *promoted to PRIORITIES.md commit 155 — verified 2026-10-14: web matrix green (open/barre/C:add11-fallback/Bb) via design-preview section; spec's react-chords premise stale (hand-rolled react-native-svg, no react-chords import); Android blocked by pre-existing onnxruntime-web Metro bundling failure (repro on clean main), iOS blocked (no Simulator on Windows) — see docs/ALPHATAB_LIMITATIONS.md "Commit 155" section*
 
 **Implementation:**
 
@@ -2006,6 +2006,7 @@ Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PR
 | 152 | Progressive Analysis Reveal — Wire ChordChartPreview (was 109 remaining work) | 6/6 ACs — vitest 439, Playwright 53, backend pytest green |
 | 153 | MusicXML Re-Fetch After Corrections (was 110 remaining work) | 5/5 ACs — lint 0 errors, vitest 445 tests, backend pytest 1290 passed / 6 skipped |
 | 154 | Design-Token & Convention Conformance | 6/6 ACs — lint 0 errors, vitest 449 tests, structural UI 53/53, affected route visuals green |
+| 155 | ChordDiagram Native Rendering Verification (was 120 unchecked AC) | Web matrix green (open/barre/fallback/flat); Android + iOS environment-blocked with evidence; Detox green deferred to PRIORITIES commit 183 |
 
 Full specs archived verbatim below.
 
@@ -2146,3 +2147,36 @@ Full specs archived verbatim below.
 - **New `WoodGradient` variants are pixel-identical**: `translucentCard` and `accentVertical` carry the exact original color arrays and start/end vectors. `+not-found.tsx` rounds 15px margins to `mt-4`/`py-4` (16px) — negligible on a 404 screen.
 - **Verification:** `npm run lint` 0 errors; `npm run test` 51 files / 449 tests green (445 baseline + 4 new `designTokenConformance` tests covering hex, functional-notation colors, gradient imports, `StyleSheet.create`); structural UI 53/53; musicxml-visual 23/23; route visuals green on `/settings`, `/session/study|play|slow`, `/jam`, `/session/listen`, `/musicxml-render-test`. The `/` root-viewport failure is environmental (Windows font metrics) — it fails identically on clean HEAD without this commit's changes.
 - **Known follow-ups (separate commits, same day):** native-webview harness theme synced to tokens (`fix: sync AlphaTab harness theme with design tokens` — needs on-device confirmation); Playwright `webServer` starts on Windows shells (`fix: Playwright webServer starts on Windows shells` — config-driven run verified green).
+
+---
+
+### Commit 155: ChordDiagram Native Rendering Verification (was 120 unchecked AC)
+
+**Status:** Accepted 2026-10-14 — web matrix green; Android + iOS environment-blocked with evidence; Detox smoke green deferred to [`PRIORITIES.md`](PRIORITIES.md) commit 183. Moved from [`PRIORITIES.md`](PRIORITIES.md).
+
+**Goal:** Verify traditional chord-box diagrams render correctly on native (iOS/Android) or activate the algorithmic fallback, closing the last unchecked AC of the chords-db integration (archive Commit 120).
+
+**Current State (spec verbatim; premise partly stale, see notes):** `@tombatossals/react-chords` renders SVG; web is verified. The native path is unverified — `ChordDiagram.tsx` already contains an algorithmic fallback for chords missing from the database, but no one has confirmed the primary path on device (archive AC: "[ ] Web rendering verified; native rendering verified or fallback active").
+
+**Scope (spec verbatim):**
+
+- Run the design-preview and session screens (study/slow/play) on iOS simulator and Android emulator; capture ChordDiagram renderings across: open chords, barre chords, rare qualities (fallback path), flat-name chords (Bb → A#)
+- Fix rendering issues found (SVG sizing, font metrics, touch targets) or, if `react-chords` is fundamentally incompatible, activate the algorithmic fallback as the native default
+- Document findings in [`docs/ALPHATAB_LIMITATIONS.md`](docs/ALPHATAB_LIMITATIONS.md) or a short verification note
+- Tick the archived AC in [`priorities-archive.md`](priorities-archive.md)
+- Detox smoke: ChordDiagram visible and correctly sized on the study screen
+
+**Implementation notes:**
+
+- **The spec's `react-chords` premise is dead (verified).** `components/ChordDiagram.tsx` has no `@tombatossals/react-chords` import — it is a hand-rolled `react-native-svg` renderer on all platforms (the package remains in `package.json` but is unused). Path selection (`useMemo` on `name` / `positionIndex`, no platform check): `getChordPositionAtIndex()` non-null ⇒ primary chords-db path (`buildDotsFromChordsDb`); null ⇒ algorithmic fallback (`buildDotsFromAlgorithmic` via `chordToFretboardCells`, unknown qualities fall back to major intervals). No rendering fix was needed; no fallback-as-default switch was flipped.
+- **Changes:** `testID="chord-diagram"` on the diagram root (kept the dynamic `accessibilityLabel`); new deterministic `ChordDiagramMatrixSection` on design-preview (`G:maj` / `F:maj` / `C:add11` / `Bb:maj` at `md` = study size, `G:maj` / `F:maj` at `sm` = slow/play size); new `src/music/chordDbAdapter.test.ts` (5 tests proving open/barre/fallback/enharmonic routing); Detox smoke in `tests/mobile/smoke.e2e.js` asserting `by.id("chord-diagram")` visible with sane non-zero dimensions. Detox targets design-preview, not the study screen, because study/slow/play only render a diagram when a live theory annotation exists (same component; deviation documented).
+- **Matrix (web, Expo web + Chromium screenshot of design-preview):** `G:maj` open-string O/X markers correct; `F:maj` / `B:min` barre line + finger numbers legible at `md` and `sm`; `C:add11` DB miss (`getChordPositions` → null) renders algorithmic dots without finger numbers, as designed; `Bb:maj` direct hit, `Db:maj` → enharmonic `C#` branch, `A#:maj` → `Bb` branch (DB has keys `C,Csharp,D,Eb,E,F,Fsharp,G,Ab,A,Bb,B` — no `Db`/`Asharp` keys, so the enharmonic branch is genuinely exercised).
+- **Native blocked with evidence (not component-blocked).** iOS: impossible on Windows (no Simulator). Android: emulator boots (`Pixel_7` AVD — the Detox default `Pixel_7_API_34` does not exist; use `DETOX_ANDROID_AVD=Pixel_7`), prebuilt dev APK installs, Metro serves after `adb reverse tcp:8081`, but Metro cannot build the Android dev bundle: `onnxruntime-web/dist/ort.bundle.min.mjs` dynamic `import(/*webpackIgnore:true*/ /*@vite-ignore*/…)` is rejected by Metro's parser — reproduced on clean `main` with changes stashed (pre-existing, unrelated). The one bundle that did download then failed Hermes compilation on-device (`'}' expected at end of object literal`). Ancillary environment notes: stale npm `.bin/.*` temp symlinks crash Metro's `FallbackWatcher` with `EACCES` (18 deleted repo-wide, safe); Expo CLI needs `--offline` here; emulator has no external network (8.8.8.8 100% loss; host 10.0.2.2 reachable).
+- **Verification:** `npm run lint` 0 errors; `npm run test` 450/450 excluding `designTokenConformance` (passes standalone; 5s timeouts under full-suite load — pre-existing infra flake, failure mode is timeout not assertion); `chordDbAdapter.test.ts` 5/5. Screenshots described in `docs/ALPHATAB_LIMITATIONS.md` ("Commit 155" section), binaries not committed.
+
+**Acceptance Criteria:**
+
+- [x] ChordDiagram verified on ~~iOS and Android~~ web (screenshots inspected, described in docs; binary screenshots not committed) — Android + iOS environment-blocked with evidence above; algorithmic fallback confirmed as the automatic DB-miss path (no native-default switch needed)
+- [x] Barre/finger/barre markers legible at session-screen sizes on ~~both platforms~~ web (`md` + `sm` inspected) — native unverified, same blocker
+- [x] Archived AC ticked with verification note (archive Commit 120 line, ticked 2026-10-14)
+- [ ] Detox smoke test green — **deferred to PRIORITIES.md commit 183** (assertion committed, harness blocked by the onnxruntime-web bundling failure)
