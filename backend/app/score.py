@@ -13,6 +13,7 @@ from typing import Any
 import librosa
 import numpy as np
 
+from app.confidence_thresholds import HEDGE_TRIGGER
 from app.schemas import (
     ReliabilityEnvelope,
     ScoreDiagnostics,
@@ -381,7 +382,7 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
 
     # Commit 121: incorporate instrument confusion into scoring reliability
     instrument_conf = payload.instrument_confusion
-    if instrument_conf is not None and instrument_conf > 0.3:
+    if instrument_conf is not None and instrument_conf >= HEDGE_TRIGGER:
         reliability_flags.append("high_instrument_confusion")
 
     confidence = _confidence_from_signal(signal_quality, voiced_ratio, harmonic_ratio)
@@ -392,6 +393,7 @@ def score_recording(payload: ScoreRequest) -> ScoreResult:
         confidence = "low"
     # Downgrade confidence when instrument confusion is very high — chord predictions
     # are unreliable, so scoring numbers should be treated as directional.
+    # (0.5 downgrade threshold is intentionally stricter than HEDGE_TRIGGER.)
     if instrument_conf is not None and instrument_conf > 0.5 and confidence != "low":
         confidence = "low"
     if reliability_flags:

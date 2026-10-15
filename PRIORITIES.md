@@ -129,7 +129,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 156: Research Module Wiring — transcription_confidence & instrument_confusion
 
-**Status:** ready
+**Status:** Complete — all 5 ACs verified (backend pytest green; deviated from spec in places, see archive).
 
 **Goal:** Stop shipping dead research plumbing: either expose the confidence metrics and instrument-confusion hedging end-to-end, or explicitly document them as evaluation-only — no half-wired modules.
 
@@ -149,11 +149,11 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] Coach hedging fires for high-confusion sections (unit-tested end-to-end from stored section → prompt)
-- [ ] `composite_transcription_confidence` either appears in analysis metadata or is documented/renamed as evaluation-only
-- [ ] Zero unwired public functions in `transcription_confidence.py`
-- [ ] Archived Commit 121 status corrected
-- [ ] `python -m pytest -q` green
+- [x] Coach hedging fires for high-confusion sections (unit-tested end-to-end from stored section → prompt)
+- [x] `composite_transcription_confidence` either appears in analysis metadata or is documented/renamed as evaluation-only
+- [x] Zero unwired public functions in `transcription_confidence.py`
+- [x] Archived Commit 121 status corrected
+- [x] `python -m pytest -q` green
 
 ---
 
@@ -940,6 +940,40 @@ Shared encoder (CQT → Conv → BiLSTM, ~200K params)
 - [ ] `npm run test:mobile` green on Android emulator (smoke incl. ChordDiagram visibility + dimensions; musicxml corpus suite)
 - [ ] Emulator prerequisites documented (AVD, env override, Metro flags)
 - [ ] No app-code behavior changed on web (web bundle still builds; `npm run test:ui` unaffected)
+
+---
+
+### Commit 184: Confidence-Band UI Display + ECE Calibration (Commit 156 follow-up)
+
+**Status:** ready
+
+**Goal:** Surface Commit 156's confidence outputs to the user in plain language, then measure whether the heuristic score is actually calibrated — without ever implying false precision.
+
+**Current State:** Commit 156 shipped the data; two of three consumers exist, but with gaps:
+- **Song/confusion display — exists but is gated dead on the primary path.** `components/InstrumentConfusionIndicator.tsx` (`InstrumentConfusionBadge` + `PerSectionConfusionBars`) is wired into `app/session/review.tsx`, but the render gate keys off the song-level `LessonJSON.instrument_confusion`, which only the CRNN dual-path branch sets — MT3-primary jobs (the primary path) leave it `null`, so the badge and per-section bars never render. Commit 156's per-section MT3 proxy data is therefore invisible until the gate also considers `instrument_confusion_per_section`. The badge also renders a raw percentage ("Instrument confusion: 42%"), which the heuristic score cannot support.
+- **`confidence_band` + per-section `chord_confidence` / `leakage_risk` — zero consumers.** Populated on every analysis job and typed in `src/types/index.ts` (optional fields), read by nothing under `src/` / `app/`. Verified by grep 2026-10-14.
+- **Coach-side hedging — done (Commit 156):** tiers ≥ 0.3 / ≥ 0.6 plus a deterministic appended-caveat backstop, unit-tested end-to-end. This commit only surfaces the equivalent learner-facing wording and the calibration measurement.
+
+**Scope:**
+
+- Confidence band display (plain-language wording, per [`docs/EVALUATION.md`](docs/EVALUATION.md) Commit 156 section):
+  - Review/summary surface: one chip or line ("Good match", "Some fuzziness", "Rough transcription") driven by `confidence_band`; `null` renders nothing (unknown ≠ low)
+  - Study/score surface: per-section cue when `sections[].chord_confidence` is low or `sections[].instrument_confusion` ≥ 0.3 (e.g. "check this part by ear" — same wording as the coach hedge, single source)
+  - Never render the raw 0–1 number, never a percentage, never the word "probability" — the score is a hand-tuned heuristic (ECE unmeasured). Applies to `InstrumentConfusionIndicator` too: replace its `"Instrument confusion: 42%"` percentage with Low/Moderate/High wording (thresholds in `backend/app/confidence_thresholds.py`, mirrored in TS)
+- Confusion display gate: extend `app/session/review.tsx` render condition so per-section data (Commit 156's MT3 proxy) shows even when the song-level `instrument_confusion` is `null`
+- Graceful absence: older jobs without `confidence_band` / per-section fields degrade silently (all new fields are optional)
+- Unit tests for band → wording mapping + null/absence paths; Playwright structural test for the chip on the review route
+- Calibration measurement (no model changes): assemble a small labeled chord set (GuitarSet annotations already parsed in `backend/data`), bin predicted confidence, plot predicted vs empirical chord accuracy, report Expected Calibration Error in [`docs/EVALUATION.md`](docs/EVALUATION.md)
+  - If ECE is poor: temperature/isotonic/Platt scaling behind `confidence_band` only (keep the raw field untouched), and only then consider numeric UI
+
+**Acceptance Criteria:**
+
+- [ ] `confidence_band` visible with plain-language wording on the review/summary surface; absent (`null`) renders nothing
+- [ ] Low-confidence / high-confusion sections show a "check by ear" cue in Study, consistent with the coach hedge wording
+- [ ] Confusion badge/bars render on MT3-primary jobs (render gate no longer keyed to the dual-path-only song-level value)
+- [ ] No raw score/percentage/probability language anywhere in the UI (incl. `InstrumentConfusionIndicator`)
+- [ ] Unit + structural tests green; `npm run lint` + `npm run test` green
+- [ ] ECE of the heuristic confidence measured on the labeled set and reported in `docs/EVALUATION.md`
 
 ---
 

@@ -13,6 +13,7 @@ from typing import Any
 
 from anthropic import Anthropic
 
+from app.confidence_thresholds import hedge_tier
 from app.schemas import CoachFocusArea, LessonSectionStub, MoodState, PlayerProfile
 
 logger = logging.getLogger("harmoniq.coach")
@@ -222,12 +223,22 @@ def _section_context_block(
 ) -> str:
     section = (section_label or "Section").strip() or "Section"
     key_label = (key or "Unknown key").strip() or "Unknown key"
+    tier = hedge_tier(instrument_confusion)
     confusion_line = ""
-    if isinstance(instrument_confusion, (int, float)) and float(instrument_confusion) >= 0.3:
+    if tier == "soft":
         confusion_line = (
             "Transcription caution: the reference transcription for this section may be "
             "unreliable because another instrument (e.g. piano) may be interfering with the "
-            "guitar. Hedge any note- or chord-specific advice accordingly.\n"
+            "guitar. Hedge any note- or chord-specific advice accordingly, and suggest "
+            "checking the part by ear against the recording.\n"
+        )
+    elif tier == "strong":
+        confusion_line = (
+            "Transcription caution: the reference transcription for this section is likely "
+            "unreliable — another instrument (e.g. piano) appears to be interfering with the "
+            "guitar. Do not assert specific technique claims (bends, vibrato, grace notes); "
+            "frame this section as an approximate guide and recommend listening to the "
+            "original recording.\n"
         )
     return (
         "<section_context>\n"
@@ -237,6 +248,53 @@ def _section_context_block(
         "Write one concrete playing adjustment specific to this section's phrase shape.\n"
         "</section_context>\n\n"
     )
+
+
+# Commit 156: deterministic backstop — hedge markers + templated caveat live
+# here, in one place. After the model returns (or when no model ran and the
+# fallback copy is used), if confusion is at/above the hedge trigger and the
+# text contains none of these markers, the caveat is appended in code so
+# hedging is observable regardless of model output or availability.
+HEDGE_MARKERS = (
+    "by ear",
+    "transcri",
+    "uncertain",
+    "approximate",
+    "not sure",
+    "hard to tell",
+    "may be unreliable",
+    "might be",
+)
+
+HEDGE_CAVEAT = (
+    " One caveat: the reference transcription here may include notes from "
+    "other instruments, so check this part by ear against the recording."
+)
+
+
+def _text_has_hedge(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in HEDGE_MARKERS)
+
+
+def apply_hedge_backstop(
+    note: str, explanation: str, instrument_confusion: float | None
+) -> tuple[str, str]:
+    """Append the templated caveat when hedging is required but absent.
+
+    Missing confusion (None) or below-trigger values return the text
+    untouched. Already-hedged text is never doubled. Hedge about the
+    transcription, never about the player.
+
+    Applied on every coach path — model output and the fallback copy alike
+    (Commit 156), so a failing or unavailable model never silently drops the
+    hedge.
+    """
+    if hedge_tier(instrument_confusion) == "none":
+        return note, explanation
+    if _text_has_hedge(note) or _text_has_hedge(explanation):
+        return note, explanation
+    return note, (explanation or "") + HEDGE_CAVEAT
 
 
 def _focus_area_directive(focus_area: CoachFocusArea | None) -> str:
@@ -626,17 +684,23 @@ def generate_coach_fields_for_section_with_status(
     instrument_confusion: float | None = None,
 ) -> CoachCallResult:
     """Return coach_note + coach_explanation, with timeout and dev fallback."""
+    # Commit 156: every fallback path still owes the hedge — the backstop is
+    # applied to fallback copy too, so hedging stays observable even when no
+    # model ran (pytest mode, missing key, timeout, parse/API error).
+    def _fallback(reason: str) -> CoachCallResult:
+        note, explanation = _fallback_coach_fields()
+        note, explanation = apply_hedge_backstop(note, explanation, instrument_confusion)
+        return CoachCallResult(note=note, explanation=explanation, fallback_reason=reason)
+
     # Keep test runs deterministic and fully offline even when a real key is present.
     if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("HARMONIQ_ENABLE_COACH_IN_TESTS") != "1":
         logger.info("coach fallback reason=pytest_mode")
-        note, explanation = _fallback_coach_fields()
-        return CoachCallResult(note=note, explanation=explanation, fallback_reason="pytest_mode")
+        return _fallback("pytest_mode")
 
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         logger.warning("coach fallback reason=missing_api_key")
-        note, explanation = _fallback_coach_fields()
-        return CoachCallResult(note=note, explanation=explanation, fallback_reason="missing_api_key")
+        return _fallback("missing_api_key")
 
     user_prompt = build_coach_user_prompt(
         section_label=section_label,
@@ -685,6 +749,7 @@ def generate_coach_fields_for_section_with_status(
                 weak_focus=weak_focus,
                 focus_terms=focus_terms,
             ):
+                note, explanation = apply_hedge_backstop(note, explanation, instrument_confusion)
                 return CoachCallResult(note=note, explanation=explanation, fallback_reason=None)
             logger.info(
                 "coach profile_focus_retry attempt=%s/%s weak_focus=%s",
@@ -693,16 +758,13 @@ def generate_coach_fields_for_section_with_status(
                 weak_focus,
             )
         logger.warning("coach fallback reason=parse_error")
-        note, explanation = _fallback_coach_fields()
-        return CoachCallResult(note=note, explanation=explanation, fallback_reason="parse_error")
+        return _fallback("parse_error")
     except FutureTimeoutError:
         logger.warning("coach fallback reason=timeout")
-        note, explanation = _fallback_coach_fields()
-        return CoachCallResult(note=note, explanation=explanation, fallback_reason="timeout")
+        return _fallback("timeout")
     except Exception as exc:
         logger.warning("coach fallback reason=api_error error=%s", exc.__class__.__name__)
-        note, explanation = _fallback_coach_fields()
-        return CoachCallResult(note=note, explanation=explanation, fallback_reason="api_error")
+        return _fallback("api_error")
 
 
 def generate_onboarding_placement_summary(
@@ -1033,7 +1095,9 @@ def hydrate_coach_copy_into_sections(
             style_label=style_label,
             technique_hints=technique_hints,
             focus_area=focus_area,
-            instrument_confusion=getattr(sec, "instrument_confusion", None),
+            # Commit 156: typed schema field (LessonSectionStub.instrument_confusion).
+            # A missing wire fails loudly here instead of hiding behind getattr.
+            instrument_confusion=sec.instrument_confusion,
         )
         futures_to_idx[future] = idx
 
@@ -1052,8 +1116,11 @@ def hydrate_coach_copy_into_sections(
             logger.warning("hydrate_coach_copy section=%s fallback reason=timeout", idx)
             if fallback_reason is None:
                 fallback_reason = "timeout"
-            # Use fallback for this section
+            # Use fallback for this section (Commit 156: hedge applied here too)
             note, explanation = _fallback_coach_fields()
+            note, explanation = apply_hedge_backstop(
+                note, explanation, sections[idx].instrument_confusion
+            )
             results_by_idx[idx] = CoachCallResult(
                 note=note, explanation=explanation, fallback_reason="timeout"
             )
@@ -1062,6 +1129,9 @@ def hydrate_coach_copy_into_sections(
             if fallback_reason is None:
                 fallback_reason = "api_error"
             note, explanation = _fallback_coach_fields()
+            note, explanation = apply_hedge_backstop(
+                note, explanation, sections[idx].instrument_confusion
+            )
             results_by_idx[idx] = CoachCallResult(
                 note=note, explanation=explanation, fallback_reason="api_error"
             )

@@ -292,6 +292,12 @@ export interface LessonSection {
   repeat_index?: number | null
   /** Commit 119: confidence in the semantic section label (0-1). <0.6 triggers "Section N" fallback. */
   label_confidence?: number | null
+  /** Commit 156: per-section instrument confusion (0-1); null/undefined = unknown. */
+  instrument_confusion?: number | null
+  /** Commit 156: alias of instrument_confusion until a true solo-branch leakage signal exists. */
+  leakage_risk?: number | null
+  /** Commit 156: per-section chord transcription confidence (heuristic). */
+  chord_confidence?: number | null
   [key: string]: unknown
 }
 
@@ -316,6 +322,8 @@ export interface LessonJSON {
   tempo?: number | null
   tempo_confidence?: number | null
   transcription_confidence?: number | null
+  /** Commit 156: coarse band for the heuristic transcription confidence; null = unknown. Not a calibrated probability. */
+  confidence_band?: 'low' | 'medium' | 'high' | null
   beat_grid?: number[]
   /** Positive: delay metronome vs stems (seconds). Optional backend / manual calibration. */
   beat_align_offset_sec?: number | null

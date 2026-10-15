@@ -17,6 +17,13 @@ from typing import Any
 from app.schemas import ChordTimeline
 
 
+#: Commit 156: public names in this module with no production caller under
+#: app/ must be listed here AND carry an "Evaluation-only" docstring marker
+#: AND be documented in docs/EVALUATION.md. Empty while everything is wired;
+#: the AST gate test (tests/test_commit156_confidence_fields.py) enforces it.
+EVALUATION_ONLY: frozenset[str] = frozenset()
+
+
 def chord_section_confidence(
     chord_timeline: ChordTimeline | dict | None,
     *,

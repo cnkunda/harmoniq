@@ -419,6 +419,14 @@ class LessonSectionStub(BaseModel):
     transcription_metadata: dict[str, Any] | None = None
     # Commit 108: MusicXML score for this section (canonical render format)
     musicxml: str | None = None
+    # Commit 156: per-section instrument confusion (0-1) from dual-path
+    # divergence (or the MT3-path heuristic proxy); None means unknown.
+    instrument_confusion: float | None = None
+    # Commit 156: alias of instrument_confusion until a true solo-branch
+    # leakage signal exists (README/PRD promise per-section leakage_risk).
+    leakage_risk: float | None = None
+    # Commit 156: per-section chord transcription confidence (heuristic).
+    chord_confidence: float | None = None
 
 
 class LessonJSON(BaseModel):
@@ -462,6 +470,13 @@ class LessonJSON(BaseModel):
     # Commit 112: Continuous stem quality confidence (0-1) and instrument confusion metric
     stem_confidence: float | None = None
     instrument_confusion: float | None = None
+    # Commit 156: per-section confusion scores, typed (previously passed as
+    # an undeclared extra). Mirrors the frontend InstrumentConfusionPerSection.
+    instrument_confusion_per_section: list[SectionConfusionScore] | None = None
+    # Commit 156: coarse band for the heuristic transcription confidence
+    # ("low" | "medium" | "high"); None when unknown. Not a calibrated
+    # probability — keeps the UI from implying false precision.
+    confidence_band: Literal["low", "medium", "high"] | None = None
     # Commit 123: Solo harmony enrichment
     harmonized_solo: HarmonizedSoloNotes | None = None
     per_bar_analysis: list[BarScope] | None = None

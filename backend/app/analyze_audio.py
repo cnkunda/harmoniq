@@ -36,7 +36,13 @@ from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidenc
 from app.beat_grid import estimate_beat_grid
 from app.chord_enrichment import assign_roman_numerals
 from app.chord_inference import infer_chords, infer_chords_dual_path
-from app.instrument_confusion import compute_per_section_confusion
+from app.instrument_confusion import compute_per_section_confusion, heuristic_mt3_section_confusion
+from app.confidence_thresholds import HEDGE_TRIGGER, confidence_band
+from app.transcription_confidence import (
+    chord_section_confidence,
+    composite_transcription_confidence,
+    vocals_coverage_confidence,
+)
 from app.mt3 import transcribe_with_fallback
 from app.solo_inference import infer_solo
 from app.solo_harmony_analyzer import SoloHarmonizer
@@ -449,7 +455,7 @@ def build_lesson_json_from_librosa(
         assign_roman_numerals(chord_timeline.events, summary.key_name)
 
     # Commit 112: flag high instrument confusion in stem quality flags
-    if instrument_confusion is not None and instrument_confusion > 0.3:
+    if instrument_confusion is not None and instrument_confusion >= HEDGE_TRIGGER:
         if stem_classification is not None:
             existing_flags = list(stem_classification.flags)
             if "high_instrument_confusion" not in existing_flags:
@@ -485,6 +491,9 @@ def build_lesson_json_from_librosa(
 
     # Commit 117: Run Whisper before section construction so refinement has
     # all three signals (chords, vocals, energy).
+    # Commit 156: the returned float is superseded by the composite computed
+    # before tab gating below (vocals now enter as beat-coverage, not this
+    # word-count/avg-logprob heuristic); only lyrics_aligned is used here.
     lyrics_aligned, transcription_confidence = transcribe_vocals_to_lyrics_aligned(
         vocals_stem_path, beat_grid=beat_grid_list, bar_timestamps=bar_timestamps
     )
@@ -663,6 +672,27 @@ def build_lesson_json_from_librosa(
         
         sections[i] = LessonSectionStub(**section_dict)
 
+    # Commit 156: composite transcription confidence replaces the vocals-only
+    # value (user decision — instrumentals now score from chord confidence
+    # instead of the ~0.1 vocals floor; see docs/EVALUATION.md). The score is
+    # a hand-tuned heuristic, not a calibrated probability. Computed here so
+    # the tab/alt-tab gating below consumes the same value the lesson reports
+    # (Commit 156 user decision — previously tabs were gated on the raw
+    # vocals value, which stayed ~0.1 for instrumentals).
+    vocals_conf = (
+        vocals_coverage_confidence(lyrics_aligned, len(beat_grid_list))
+        if lyrics_aligned and beat_grid_list
+        else None
+    )
+    song_chord_conf = (
+        chord_section_confidence(chord_timeline) if chord_timeline is not None else None
+    )
+    stem_usable = stem_classification.guitar_stem_usable if stem_classification else True
+    transcription_confidence = composite_transcription_confidence(
+        song_chord_conf, vocals_conf, guitar_stem_usable=bool(stem_usable)
+    )
+    song_confidence_band = confidence_band(transcription_confidence)
+
     skip_tabs = stem_classification is not None and not stem_classification.guitar_stem_usable
     tab_artifacts: dict[str, str] | None = None
 
@@ -720,6 +750,53 @@ def build_lesson_json_from_librosa(
         chord_timeline=chord_timeline,
         fusion_log=dual_fusion_log or [],
     )
+    # Commit 156: MT3-primary jobs never run the dual-path branch — fall back
+    # to the heuristic proxy (clearly labeled; see instrument_confusion.py).
+    # Priority per section: dual-path divergence > MT3 proxy > song-level
+    # dual value (coarse fallback, documented) > None (unknown).
+    mt3_proxy_confusion = (
+        heuristic_mt3_section_confusion(sections, chord_timeline)
+        if not per_section_confusion and chord_timeline is not None
+        else []
+    )
+    # Sections with no chord events carry zero evidence — dual-path emits 0.0
+    # for them (Commit 121 contract), but "missing means unknown, never 0":
+    # drop those entries so the section falls through to the proxy / song
+    # fallback / None instead of asserting "no interference".
+    dual_by_section = {
+        s.section_index: s.instrument_confusion
+        for s in per_section_confusion
+        if s.beat_count > 0
+    }
+    proxy_by_section = {s.section_index: s.instrument_confusion for s in mt3_proxy_confusion}
+    # Preserve the skip-tabs cap: when the guitar stem is unusable, section
+    # confidence stays capped at 0.25 (same as the pre-156 vocals path).
+    tabs_skipped = stem_classification is not None and not stem_classification.guitar_stem_usable
+    section_cap = 0.25 if tabs_skipped else 1.0
+    for i, sec in enumerate(sections):
+        sec_start = sec.start_time_seconds
+        sec_end = sec.end_time_seconds
+        if sec_end is None and i + 1 < len(sections):
+            sec_end = sections[i + 1].start_time_seconds
+        section_chord_conf = (
+            chord_section_confidence(
+                chord_timeline, section_start=sec_start, section_end=sec_end
+            )
+            if chord_timeline is not None
+            else None
+        )
+        if section_chord_conf is not None:
+            sec.chord_confidence = section_chord_conf
+            sec.confidence = min(section_chord_conf, section_cap)
+        if i in dual_by_section:
+            sec.instrument_confusion = dual_by_section[i]
+        elif i in proxy_by_section:
+            sec.instrument_confusion = proxy_by_section[i]
+        elif instrument_confusion is not None:
+            sec.instrument_confusion = instrument_confusion
+        # leakage_risk is an alias of instrument_confusion until a true
+        # solo-branch leakage signal exists (README/PRD promise).
+        sec.leakage_risk = sec.instrument_confusion
 
     # Commit 121: Log per-job instrument confusion for model improvement tracking
     if instrument_confusion is not None:
@@ -773,6 +850,9 @@ def build_lesson_json_from_librosa(
         tempo=summary.tempo_bpm,
         tempo_confidence=summary.tempo_confidence,
         transcription_confidence=transcription_confidence,
+        confidence_band=song_confidence_band,
+        # Flat beat list preserved for backward compat (frontend metronome
+        # alignment + section-start fallback read lesson.beat_grid directly).
         beat_grid=beat_grid_list,
         bar_timestamps=bar_timestamps,
         stems=stems,
@@ -786,7 +866,9 @@ def build_lesson_json_from_librosa(
         beat_grid_structured=beat_grid,
         stem_routing=routing_hints,
         instrument_confusion=instrument_confusion,
-        instrument_confusion_per_section=per_section_confusion,
+        instrument_confusion_per_section=(
+            per_section_confusion if per_section_confusion else (mt3_proxy_confusion or None)
+        ),
         harmonized_solo=harmonized_solo,
         per_bar_analysis=per_bar_analysis,
         transcription_source=transcription_source,

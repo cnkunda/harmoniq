@@ -32,6 +32,15 @@ Last updated: July 2026
 | Non-western instruments (kora, mbira, etc.) | Instrument routed to "other" stem | Only 6 stems: guitar, bass, drums, vocals, piano, other | Full-mix Branch A still produces chords |
 | Low bitrate MP3 (<128kbps) | Artifacts in all stems | Compression artifacts confuse separation | Use WAV or FLAC source |
 | YouTube with varying audio quality | Stems have bleed between channels | yt-dlp may return variable-bitrate with encoding artifacts | Upload WAV directly when possible |
+| Piano bleed into guitar stem | Wrong notes in tab/solo on affected sections | `htdemucs_6s` lets piano/vocal bleed through; stock MT3 lacks MR-MT3 training-time leakage mitigations | App hedges coach copy on high-confusion sections (Commit 156: caution clause ≥ 0.3, approximate-guide framing ≥ 0.6, plus a deterministic appended caveat); check the part by ear against the recording |
+
+## Instrument Confusion (Commit 156)
+
+| Scenario | Symptom | Root Cause | What the app does |
+|----------|---------|------------|-------------------|
+| Piano-forward mix on CRNN dual-path branch | High per-section `instrument_confusion` (stem-vs-mix chord disagreement) | Piano harmony dominates the full mix while the guitar stem says otherwise | Flags `high_instrument_confusion`, hedges section coach copy, downgrades `/score` confidence above 0.5 |
+| MT3-primary job with uncertain chords | Heuristic proxy confusion from low-confidence chord share | Dual-path divergence is unavailable on the MT3 path; proxy measures model uncertainty, not proven interference | Same hedging tiers apply; hedges are approximate by design |
+| No confusion data (single-path, empty sections) | `instrument_confusion` null | Nothing computed — unknown | Coach copy unchanged; null is never treated as 0 or high |
 
 ## Frontend
 

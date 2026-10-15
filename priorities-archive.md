@@ -22,6 +22,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Milestone B (Fretboard Dual-Mode Optimization) Archive Date:** July 17, 2026 — Complete. All 9 commits verified.
 **Milestone C (Engagement & Retention) Archive Date:** July 19, 2026 — Deferred, then promoted to [`PRIORITIES.md`](PRIORITIES.md) commits 159–167 during the roadmap restructure (specs moved, pointer table below).
 **Carry-over Fixes (Commits 151-154) Archive Date:** October 13, 2026 — Complete; all acceptance criteria verified. Moved back from [`PRIORITIES.md`](PRIORITIES.md).
+**Commit 156 (Research Module Wiring — transcription_confidence & instrument_confusion) Archive Date:** October 15, 2026 — Complete; all 5 ACs verified (backend pytest green); spec and implementation notes archived below.
 
 ---
 
@@ -1708,6 +1709,25 @@ chord books. No multiple position alternatives are offered.
 - [x] Per-job confusion logged for model improvement tracking
 - [x] Integration test: piano-dominant mix shows higher confusion than guitar-forward mix
 
+**Correction note (2026-10-14, Commit 156 — history above preserved as written):**
+real wiring state differs from the ticks above in three places. (1) "Coaching
+feedback hedged" was dead until Commit 156: per-section scores never reached
+the sections or the coach prompt (`getattr(sec, "instrument_confusion", None)`
+always `None`); hedging now fires via typed `LessonSectionStub.
+instrument_confusion` → `jobs.py` hydration → `build_coach_user_prompt`
+(tiers ≥ 0.3 / ≥ 0.6) plus a deterministic appended-caveat backstop.
+(2) "Displayed in review panel" is partly real: `components/InstrumentConfusionIndicator.tsx`
+(confusion badge + per-section bars) is wired into `app/session/review.tsx`, but
+the render gate keys off the song-level `instrument_confusion`, which only the
+CRNN dual-path branch populates — so on MT3-primary jobs (the primary path) the
+display stayed hidden. Commit 156 populates the per-section proxy but leaves the
+render gate to Commit 184.
+(3) Confusion is only measured on the CRNN dual-path branch; MT3-primary jobs
+use a documented low-confidence-share heuristic proxy, and `leakage_risk`
+remains an alias of `instrument_confusion` (no solo-branch leakage signal
+implemented despite README/PRD claims). Still outstanding: review-panel
+display, calibration (ECE), tier-aware scoring.
+
 ---
 
 ## Phase 2 (Archived) — Custom Chord Model Development (Superseded by MT3)
@@ -2007,6 +2027,7 @@ Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PR
 | 153 | MusicXML Re-Fetch After Corrections (was 110 remaining work) | 5/5 ACs — lint 0 errors, vitest 445 tests, backend pytest 1290 passed / 6 skipped |
 | 154 | Design-Token & Convention Conformance | 6/6 ACs — lint 0 errors, vitest 449 tests, structural UI 53/53, affected route visuals green |
 | 155 | ChordDiagram Native Rendering Verification (was 120 unchecked AC) | Web matrix green (open/barre/fallback/flat); Android + iOS environment-blocked with evidence; Detox green deferred to PRIORITIES commit 183 |
+| 156 | Research Module Wiring — transcription_confidence & instrument_confusion | 5/5 ACs — 26 new backend tests; backend pytest 1311 passed / 6 skipped; frontend lint 0 errors; follow-ups filed as PRIORITIES commit 184 |
 
 Full specs archived verbatim below.
 
@@ -2180,3 +2201,48 @@ Full specs archived verbatim below.
 - [x] Barre/finger/barre markers legible at session-screen sizes on ~~both platforms~~ web (`md` + `sm` inspected) — native unverified, same blocker
 - [x] Archived AC ticked with verification note (archive Commit 120 line, ticked 2026-10-14)
 - [ ] Detox smoke test green — **deferred to PRIORITIES.md commit 183** (assertion committed, harness blocked by the onnxruntime-web bundling failure)
+
+---
+
+### Commit 156: Research Module Wiring — transcription_confidence & instrument_confusion
+
+**Status:** Complete — all 5 ACs verified (5/5, two spec premises false, see notes). Moved from [`PRIORITIES.md`](PRIORITIES.md).
+
+**Goal:** Stop shipping dead research plumbing: either expose the confidence metrics and instrument-confusion hedging end-to-end, or explicitly document them as evaluation-only — no half-wired modules.
+
+**Current State (spec verbatim):**
+- `backend/app/transcription_confidence.py` exports `composite_transcription_confidence()` and `chord_section_confidence()` — covered by tests (`tests/test_transcription_confidence.py`, `test_analyze_confidence.py`, `test_tabgen.py`) but never called by the production pipeline or API responses.
+- `instrument_confusion` is computed per song (`analyze_audio.py:406`, threshold warning at `:439`) and `coach.py` accepts an `instrument_confusion` parameter (`coach.py:221`, hedged copy at ≥0.3, section hydration at `:1036` via `getattr`) — but `jobs.py` coach hydration never passes section-level confusion values, so the hedged-feedback behavior from archived Commit 121 is effectively dead.
+
+**Scope (spec verbatim):**
+
+- instrument_confusion → coach:
+  - Verify how per-section confusion reaches hydrated sections (`schemas.py:549/578` fields); pass them through `jobs.py` coach hydration into `build_section_prompt(..., instrument_confusion=...)`
+  - Unit test: section with confusion ≥0.3 produces hedged coach copy; section without → unchanged copy
+- transcription_confidence exposure:
+  - Add `composite_transcription_confidence` (and per-section chord confidence) to the analysis metadata returned in `LessonJSON` metadata / job result — or, if product-inappropriate, move the module under an evaluation-only namespace and document it in [`docs/EVALUATION.md`](docs/EVALUATION.md) as such
+  - No dead exports: every public function either has a production caller or an explicit "evaluation-only" docstring + doc reference
+- Update the archive Commit 121 ACs to reflect the real wiring state
+
+**Acceptance Criteria:**
+
+- [x] Coach hedging fires for high-confusion sections (unit-tested end-to-end from stored section → prompt)
+- [x] `composite_transcription_confidence` either appears in analysis metadata or is documented/renamed as evaluation-only
+- [x] Zero unwired public functions in `transcription_confidence.py`
+- [x] Archived Commit 121 status corrected
+- [x] `python -m pytest -q` green
+
+**Implementation notes:**
+
+- **Two spec premises were false (verified).** (1) There is no `build_section_prompt` — the prompt builder is `build_coach_user_prompt` (`coach.py:395`); the spec's line references (`coach.py:221/1036`, `schemas.py:549/578`, `analyze_audio.py:406/439`) are stale post-121–155. (2) The section-level values existed but never reached the sections: `compute_per_section_confusion` output went only into `LessonJSON.instrument_confusion_per_section`, so `getattr(sec, "instrument_confusion", None)` in `hydrate_coach_copy_into_sections` was always `None` and the Commit 121 hedged copy was dead. `leakage_risk` had zero backend references before this commit (frontend type only).
+- **New `backend/app/confidence_thresholds.py`** — single source of truth: `HEDGE_TRIGGER = 0.3`, `STRONG_HEDGE_TRIGGER = 0.6`, `CONFIDENCE_LOW_MAX = 0.5`, `CONFIDENCE_MEDIUM_MAX = 0.75`, plus `normalize_confusion` (clamps, NaN/bool/non-number → `None` = unknown), `hedge_tier` (`none`/`soft`/`strong`) and `confidence_band` (`low`/`medium`/`high`/`None`). `analyze_audio.py` and `score.py` now import `HEDGE_TRIGGER` instead of literals; `score.py`'s separate `> 0.5` confidence downgrade is intentionally stricter than the hedge trigger and was kept (comment added).
+- **Schema exposure** — `LessonSectionStub` gained optional `instrument_confusion` / `leakage_risk` / `chord_confidence`; `LessonJSON` gained typed `instrument_confusion_per_section: list[SectionConfusionScore] | None` (was an undeclared extra) and `confidence_band: Literal["low","medium","high"] | None`. `src/types/index.ts` mirrors all four (optional), so old payloads validate and new ones round-trip.
+- **Composite confidence replaced the vocals-only value (user decision 156.1 — do not revert).** `LessonJSON.transcription_confidence` = `composite_transcription_confidence(chord_confidence, vocals_coverage, guitar_stem_usable)` instead of the raw Whisper word-count/avg-logprob heuristic: instrumental tracks now score chord-level (duration-weighted mean event confidence) instead of the ~0.1 floor; floored 0.05–0.1 when nothing is available, capped 0.25 when the guitar stem is unusable. Documented loudly in [`docs/EVALUATION.md`](docs/EVALUATION.md) — it is a hand-tuned heuristic, not a calibrated probability.
+- **The composite is computed before tab gating (user decision 156.2)**, so `generate_tab_artifacts_for_guitar_stem`, `apply_tab_artifacts_to_sections`, `derive_section_confidence` and `low_snr_warning` all consume the value the lesson reports. Consequences on instrumentals: `tab_alt_position_gp5_base64` is now included (clears `TAB_ALT_CONFIDENCE_THRESHOLD = 0.6`) and `low_snr_warning` (`< 0.5`) stops firing spuriously. Per-section `chord_confidence` is also mirrored onto `sections[].confidence` (capped at 0.25 when tabs were skipped).
+- **MT3-path confusion heuristic (user decision 156.3).** MT3-primary jobs never run the CRNN dual-path branch, so `heuristic_mt3_section_confusion()` scores each section by the share of chord events below `MT3_PROXY_LOW_CONFIDENCE = 0.5` — model uncertainty, not measured stem-vs-mix divergence. Sections with no usable events emit no entry (missing ≠ 0). Resolution order per section: dual-path divergence > MT3 proxy > song-level value (coarse fallback) > `None`.
+- **Two-tier coach hedging + deterministic backstop.** `_section_context_block` emits a soft caution at ≥ 0.3 (suggests checking by ear) and a strong caution at ≥ 0.6 (no specific technique claims — bends, vibrato, grace notes — framed as approximate guide). `apply_hedge_backstop()` appends one templated caveat when the copy contains no hedge marker (`HEDGE_MARKERS`), on **every** path: model output, the `_fallback()` closure inside `generate_coach_fields_for_section_with_status` (pytest mode, missing API key, timeout, parse error, API error), and the executor-level fallbacks in `hydrate_coach_copy_into_sections` — hedging is observable regardless of model compliance or availability. Hedge copy blames the transcription, never the player.
+- **`leakage_risk` is an alias of `instrument_confusion`** per section until a real solo-branch leakage signal exists — the README/PRD "per-section leakage risk" promise is not backed by a metric yet; noted in the Commit 121 correction note and [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md).
+- **Tests — 26 new, all green** (`tests/test_commit156_hedging.py`, `tests/test_commit156_confidence_fields.py`, plus 4 pipeline tests in `tests/test_analyze_confidence.py`): tier/boundary/NaN/out-of-range cases, prompt byte-for-byte unchanged below trigger, backstop no-duplicate and untouched cases, backstop on the no-key and parse-error fallback paths (hedging must survive an unavailable model), hydration end-to-end via a fake `_call_claude_text` with exact call-count assertion, API field presence through `TestClient` `GET /analyze/{job_id}` (guards against `response_model` stripping), pre-156 payload compatibility, AST dead-export gate (`EVALUATION_ONLY`), MT3 proxy scoring/empty-skip, plus pipeline regressions: `lesson.beat_grid` must stay populated, the value handed to tab generation must equal the reported composite, and a dual-path section with zero chord events must stay `null` (never a fabricated `0.0` — `beat_count == 0` entries are dropped from the stub mapping while the Commit 121 per-section surface is unchanged).
+- **Pipeline-test fixture hardened while writing those regressions:** `transcribe_with_fallback` is stubbed to raise (previously each test burned ~2 min attempting real MT3 on a dummy WAV), and the `infer_chords` patch now matches the real single-value return signature (the old tuple-shaped patch raised inside the CRNN branch, silently yielding an empty chord timeline — `chord_section_confidence` had therefore never been exercised in this suite).
+- **Regression found and fixed mid-commit:** the in-progress diff had dropped `beat_grid=beat_grid_list` from the `LessonJSON` constructor, so the flat backward-compat beat list serialized as `[]` — the frontend metronome click alignment (`src/audio/metronomeShared.ts`) and section-start fallback (`src/utils/lessonAudio.ts`) read it directly. Restored, with a test.
+- **Left out of scope (filed as follow-ups):** tier-aware scoring in `/score` (still the binary 0.5 downgrade); review-panel render gate + plain-language band wording + ECE calibration → **PRIORITIES.md commit 184**; `transcription_source` (mt3/crnn/chroma) is still not an input to the score, so CRNN/chroma-tier results can score as high as MT3 results.
