@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 156–183** (151–155 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 157–183** (151–155 completed → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -117,43 +117,15 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-## Active Backlog — Commits 156–183
+## Active Backlog — Commits 157–183
 
 Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
 
 ---
 
-**Group: Research plumbing & UX (156–158)**
+**Group: Research plumbing & UX (157–159)**
 
 ---
-
-### Commit 156: Research Module Wiring — transcription_confidence & instrument_confusion
-
-**Status:** Complete — all 5 ACs verified (backend pytest green; deviated from spec in places, see archive).
-
-**Goal:** Stop shipping dead research plumbing: either expose the confidence metrics and instrument-confusion hedging end-to-end, or explicitly document them as evaluation-only — no half-wired modules.
-
-**Current State:**
-- `backend/app/transcription_confidence.py` exports `composite_transcription_confidence()` and `chord_section_confidence()` — covered by tests (`tests/test_transcription_confidence.py`, `test_analyze_confidence.py`, `test_tabgen.py`) but never called by the production pipeline or API responses.
-- `instrument_confusion` is computed per song (`analyze_audio.py:406`, threshold warning at `:439`) and `coach.py` accepts an `instrument_confusion` parameter (`coach.py:221`, hedged copy at ≥0.3, section hydration at `:1036` via `getattr`) — but `jobs.py` coach hydration never passes section-level confusion values, so the hedged-feedback behavior from archived Commit 121 is effectively dead.
-
-**Scope:**
-
-- instrument_confusion → coach:
-  - Verify how per-section confusion reaches hydrated sections (`schemas.py:549/578` fields); pass them through `jobs.py` coach hydration into `build_section_prompt(..., instrument_confusion=...)`
-  - Unit test: section with confusion ≥0.3 produces hedged coach copy; section without → unchanged copy
-- transcription_confidence exposure:
-  - Add `composite_transcription_confidence` (and per-section chord confidence) to the analysis metadata returned in `LessonJSON` metadata / job result — or, if product-inappropriate, move the module under an evaluation-only namespace and document it in [`docs/EVALUATION.md`](docs/EVALUATION.md) as such
-  - No dead exports: every public function either has a production caller or an explicit "evaluation-only" docstring + doc reference
-- Update the archive Commit 121 ACs to reflect the real wiring state
-
-**Acceptance Criteria:**
-
-- [x] Coach hedging fires for high-confusion sections (unit-tested end-to-end from stored section → prompt)
-- [x] `composite_transcription_confidence` either appears in analysis metadata or is documented/renamed as evaluation-only
-- [x] Zero unwired public functions in `transcription_confidence.py`
-- [x] Archived Commit 121 status corrected
-- [x] `python -m pytest -q` green
 
 ---
 
