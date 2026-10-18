@@ -1,5 +1,7 @@
 /** Shared domain types — expanded in later commits; shapes match DESIGN_SYSTEM.md / backend schemas. */
 
+import type { BarScope, HarmonizedSoloNotes } from '@/src/types/soloHarmony'
+
 export type AnalyzeJobStatus = 'queued' | 'processing' | 'complete' | 'failed'
 
 /** Lesson payload from GET /analyze/{job_id} when status is complete — matches `backend/app/schemas.py` with extras allowed. */
@@ -370,6 +372,10 @@ export interface LessonJSON {
   instrument_confusion_per_section?: InstrumentConfusionPerSection[]
   /** Phase 2: Which pipeline tier produced this transcription: 'mt3', 'crnn', 'chroma', or null. */
   transcription_source?: string | null
+  /** Commit 157: Per-note chord-tone analysis of the reference solo; null when unavailable. */
+  harmonized_solo?: HarmonizedSoloNotes | null
+  /** Commit 157: Per-bar dominant chord, CAGED position, and suggested scales; null when unavailable. */
+  per_bar_analysis?: BarScope[] | null
 }
 
 // ---- Commit 110: Correction types ----

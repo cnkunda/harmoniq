@@ -14,7 +14,7 @@ from typing import Any
 from anthropic import Anthropic
 
 from app.confidence_thresholds import hedge_tier
-from app.schemas import CoachFocusArea, LessonSectionStub, MoodState, PlayerProfile
+from app.schemas import CoachFocusArea, HarmonizedSoloNotes, LessonSectionStub, MoodState, PlayerProfile
 
 logger = logging.getLogger("harmoniq.coach")
 logger.setLevel(logging.INFO)
@@ -48,6 +48,16 @@ class CoachCallResult:
     note: str
     explanation: str
     fallback_reason: str | None
+
+
+@dataclass(frozen=True)
+class SectionHarmonySummary:
+    """Chord-tone role mix for one section's analyzed solo notes (Commit 157)."""
+
+    analyzed_count: int
+    chord_tone_pct: float
+    tension_pct: float
+    chromatic_pct: float
 
 COACH_USER_PROMPT_TEMPLATE = """Return valid JSON with exactly three string fields:
 - coach_note
@@ -250,6 +260,61 @@ def _section_context_block(
     )
 
 
+def section_harmony_summary(
+    harmonized_solo: HarmonizedSoloNotes | None,
+    start: float | None,
+    end: float | None,
+) -> SectionHarmonySummary | None:
+    """Chord-tone role mix for the analyzed notes inside a section's window (Commit 157).
+
+    Returns None when there is no harmonized solo, the section bounds are
+    unknown, or no analyzed notes fall inside the window — missing data must
+    stay unknown rather than read as a fabricated 0%.
+    """
+    if harmonized_solo is None or start is None or end is None:
+        return None
+    analyzed = [
+        n
+        for n in harmonized_solo.notes
+        if n.chord_analysis is not None and start <= n.start_time < end
+    ]
+    total = len(analyzed)
+    if total == 0:
+        return None
+    chord_tones = sum(1 for n in analyzed if n.chord_analysis.chord_tone_type == "chord_tone")
+    tensions = sum(1 for n in analyzed if n.chord_analysis.chord_tone_type == "tension")
+    chromatic = sum(1 for n in analyzed if n.chord_analysis.chord_tone_type == "chromatic")
+    return SectionHarmonySummary(
+        analyzed_count=total,
+        chord_tone_pct=chord_tones / total,
+        tension_pct=tensions / total,
+        chromatic_pct=chromatic / total,
+    )
+
+
+def _harmony_context_block(summary: SectionHarmonySummary | None) -> str:
+    if summary is None:
+        return ""
+    # Ties resolve in bucket order (chord_tone → tension → chromatic):
+    # max() keeps the first maximal element.
+    buckets = (
+        (summary.chord_tone_pct, "chord tones", "coach on chord-tone targeting and melodic blend"),
+        (summary.tension_pct, "tensions", "coach on tension-note targeting and resolution"),
+        (summary.chromatic_pct, "chromatic notes", "coach on outside notes as passing tones toward resolution"),
+    )
+    _, dominant_label, directive = max(buckets, key=lambda bucket: bucket[0])
+    return (
+        "<harmony_context>\n"
+        f"The reference solo transcription in this section analyzes {summary.analyzed_count} notes: "
+        f"chord tones {round(summary.chord_tone_pct * 100)}%, "
+        f"tensions {round(summary.tension_pct * 100)}%, "
+        f"chromatic {round(summary.chromatic_pct * 100)}%.\n"
+        f"Dominant role: {dominant_label} — {directive}.\n"
+        "Let this shape the coaching angle without dumping music-theory jargon.\n"
+        "</harmony_context>\n\n"
+    )
+
+
 # Commit 156: deterministic backstop — hedge markers + templated caveat live
 # here, in one place. After the model returns (or when no model ran and the
 # fallback copy is used), if confusion is at/above the hedge trigger and the
@@ -408,6 +473,7 @@ def build_coach_user_prompt(
     technique_hints: list[str] | None = None,
     focus_area: CoachFocusArea | None = None,
     instrument_confusion: float | None = None,
+    harmony_summary: SectionHarmonySummary | None = None,
 ) -> str:
     """Assemble the user message: optional context blocks + fixed JSON contract."""
     # Dump profile once to avoid redundant serialization in helpers
@@ -419,6 +485,7 @@ def build_coach_user_prompt(
         _player_context_block(profile_data)
         + _song_style_block(style_label, technique_hints)
         + _section_context_block(section_label, key, instrument_confusion)
+        + _harmony_context_block(harmony_summary)
     )
     profile_priority = _profile_priority_directive(profile_data)
     focus_directive = _focus_area_directive(focus_area)
@@ -656,6 +723,7 @@ def generate_coach_fields_for_section(
     technique_hints: list[str] | None = None,
     focus_area: CoachFocusArea | None = None,
     instrument_confusion: float | None = None,
+    harmony_summary: SectionHarmonySummary | None = None,
 ) -> tuple[str, str]:
     result = generate_coach_fields_for_section_with_status(
         section_label=section_label,
@@ -667,6 +735,7 @@ def generate_coach_fields_for_section(
         technique_hints=technique_hints,
         focus_area=focus_area,
         instrument_confusion=instrument_confusion,
+        harmony_summary=harmony_summary,
     )
     return result.note, result.explanation
 
@@ -682,6 +751,7 @@ def generate_coach_fields_for_section_with_status(
     technique_hints: list[str] | None = None,
     focus_area: CoachFocusArea | None = None,
     instrument_confusion: float | None = None,
+    harmony_summary: SectionHarmonySummary | None = None,
 ) -> CoachCallResult:
     """Return coach_note + coach_explanation, with timeout and dev fallback."""
     # Commit 156: every fallback path still owes the hedge — the backstop is
@@ -712,6 +782,7 @@ def generate_coach_fields_for_section_with_status(
         technique_hints=technique_hints,
         focus_area=focus_area,
         instrument_confusion=instrument_confusion,
+        harmony_summary=harmony_summary,
     )
     focus_terms = _profile_focus_terms(player_profile)
     attempts = 1 + COACH_PROFILE_MAX_RETRIES if focus_terms else 1
@@ -1071,6 +1142,7 @@ def hydrate_coach_copy_into_sections(
     style_label: str | None = None,
     technique_hints: list[str] | None = None,
     focus_area: CoachFocusArea | None = None,
+    harmonized_solo: HarmonizedSoloNotes | None = None,
 ) -> tuple[list[LessonSectionStub], str, str | None]:
     """
     Populate section coach fields and report hydration status.
@@ -1085,6 +1157,10 @@ def hydrate_coach_copy_into_sections(
 
     futures_to_idx: dict[Any, int] = {}
     for idx, sec in enumerate(sections):
+        # Commit 157: section-scoped harmony stats (None → prompt unchanged).
+        harmony_summary = section_harmony_summary(
+            harmonized_solo, sec.start_time_seconds, sec.end_time_seconds
+        )
         future = _COACH_EXECUTOR.submit(
             generate_coach_fields_for_section_with_status,
             section_label=sec.label,
@@ -1098,6 +1174,7 @@ def hydrate_coach_copy_into_sections(
             # Commit 156: typed schema field (LessonSectionStub.instrument_confusion).
             # A missing wire fails loudly here instead of hiding behind getattr.
             instrument_confusion=sec.instrument_confusion,
+            harmony_summary=harmony_summary,
         )
         futures_to_idx[future] = idx
 

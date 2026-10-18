@@ -286,6 +286,8 @@ def _hydrate_coach_copy_job(
         style_label=lesson.style_label,
         technique_hints=[],
         focus_area=focus_area,
+        # Commit 157: section-scoped chord-tone context for coach prompts.
+        harmonized_solo=lesson.harmonized_solo,
     )
     patched = lesson.model_copy(update={"sections": enriched})
     jobs[job_id] = JobStatus(status="complete", result=patched, error=None)

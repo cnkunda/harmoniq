@@ -35,6 +35,12 @@ import { findProgressions, COMMON_PROGRESSIONS } from '@/src/music/progressionAn
 import type { ProgressionLabel } from '@/src/music/progressionAnalysis'
 import { formatChordDisplay } from '@/src/music/chordVoicing'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
+import {
+  barScopeForTime,
+  findHarmonizedNoteForSelection,
+  parseHarmonizedSolo,
+  parsePerBarAnalysis,
+} from '@/src/music/soloHarmony'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
@@ -353,9 +359,22 @@ function StudyScreenInner() {
 
   const tabs = useMemo(() => readSectionTabPayloads(section), [section])
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()
-  const positionLabel = typeof (section as Record<string, unknown> | undefined)?.primary_position === 'string'
-    ? ((section as Record<string, unknown>).primary_position as string)
-    : 'Tap a note to infer position'
+  const harmonizedSolo = useMemo(
+    () => parseHarmonizedSolo(lesson?.harmonized_solo),
+    [lesson?.harmonized_solo],
+  )
+  const perBarAnalysis = useMemo(
+    () => parsePerBarAnalysis(lesson?.per_bar_analysis),
+    [lesson?.per_bar_analysis],
+  )
+  const barScope = useMemo(
+    () => barScopeForTime(perBarAnalysis, tick.positionSec),
+    [perBarAnalysis, tick.positionSec],
+  )
+  const positionLabel = barScope?.primary_position
+    ?? (typeof (section as Record<string, unknown> | undefined)?.primary_position === 'string'
+      ? ((section as Record<string, unknown>).primary_position as string)
+      : 'Tap a note to infer position')
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
   const degreeRootPitchClass = useMemo(() => parseKey(keyLabel)?.semitone ?? null, [keyLabel])
   const scalePitchClasses = useMemo(() => getScalePitchClassesFromKey(keyLabel) ?? [], [keyLabel])
@@ -423,8 +442,13 @@ function StudyScreenInner() {
 
   const noteConfidence = typeof section?.confidence === 'number' ? section.confidence : (lesson?.transcription_confidence ?? null)
   const selectionDetail = useMemo(
-    () => buildNoteSelectionDetail(keyLabel, selectedNote, musicState.currentChord, noteConfidence),
-    [keyLabel, selectedNote, musicState.currentChord, noteConfidence],
+    () => buildNoteSelectionDetail(keyLabel, selectedNote, musicState.currentChord, noteConfidence, {
+      note: findHarmonizedNoteForSelection(harmonizedSolo, perBarAnalysis, {
+        midi: selectedNote?.midi,
+        timeSec: tick.positionSec,
+      }),
+    }),
+    [keyLabel, selectedNote, musicState.currentChord, noteConfidence, harmonizedSolo, perBarAnalysis, tick.positionSec],
   )
 
   const currentChordVoicing = useMemo(() => {
@@ -764,6 +788,12 @@ function StudyScreenInner() {
                 }
               }}
             />
+
+            {barScope && barScope.suggested_scales.length > 0 ? (
+              <Text className="font-sans text-xs text-muted-brown px-2 mt-1">
+                Scale ideas: {barScope.suggested_scales.join(' · ')}
+              </Text>
+            ) : null}
 
             <View className="mt-2">
              <ChordsAndLyrics

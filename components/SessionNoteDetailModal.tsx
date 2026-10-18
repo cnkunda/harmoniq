@@ -45,6 +45,7 @@ export function SessionNoteDetailModal({ detail, visible, onClose, currentChordV
                 coachText={detail.coach}
                 onDismiss={onClose}
                 chordToneStatus={detail.chordToneStatus}
+                harmonicDegree={detail.harmonicDegree}
                 confidence={detail.confidence}
               />
             </View>

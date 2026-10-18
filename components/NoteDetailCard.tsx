@@ -15,6 +15,8 @@ export type NoteDetailCardProps = {
   coachText: string
   onDismiss?: () => void
   chordToneStatus?: ChordToneStatus | null
+  /** Commit 157: backend scale-degree label ("R", "b3", …) when harmonized analysis exists. */
+  harmonicDegree?: string | null
   confidence?: number | null
 }
 
@@ -22,6 +24,7 @@ const STATUS_META: Record<ChordToneStatus, { label: string; color: string; dot: 
   chord_tone: { label: 'Chord tone', color: colors.success, dot: colors.success },
   tension: { label: 'Tension', color: colors.amber.accent, dot: colors.amber.light },
   chromatic: { label: 'Chromatic / Outside', color: colors.danger, dot: colors.danger },
+  pedal: { label: 'Pedal', color: colors.muted.light, dot: colors.muted.light },
 }
 
 function ChordToneBadge({ status }: { status: ChordToneStatus }) {
@@ -52,6 +55,7 @@ export function NoteDetailCard({
   coachText,
   onDismiss,
   chordToneStatus,
+  harmonicDegree,
   confidence,
 }: NoteDetailCardProps) {
   const translateX = useSharedValue(0)
@@ -120,9 +124,14 @@ export function NoteDetailCard({
           </View>
         </View>
 
-        {chordToneStatus || (confidence != null && confidence >= 0) ? (
+        {chordToneStatus || harmonicDegree || (confidence != null && confidence >= 0) ? (
           <View className="mb-4 flex-row flex-wrap items-center gap-2">
             {chordToneStatus ? <ChordToneBadge status={chordToneStatus} /> : null}
+            {harmonicDegree ? (
+              <View className="rounded-full border border-wood-600/50 bg-wood-900 px-2 py-1">
+                <Text className="font-mono text-[10px] text-amber-light">{harmonicDegree}</Text>
+              </View>
+            ) : null}
             {confidence != null && confidence >= 0 ? <ConfidenceBadge confidence={confidence} /> : null}
           </View>
         ) : null}

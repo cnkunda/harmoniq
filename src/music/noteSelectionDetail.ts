@@ -3,10 +3,11 @@ import { parseChordSymbol, noteToPitchClass } from '@/src/music/chordVoicing'
 import { allCellsForMidi, inferMidiFromNoteSelection, resolveFretCell } from '@/src/music/fretboardCell'
 import { suggestFingerings } from '@/src/music/fingerSuggestion'
 import { buildStudyCoachLine, midiToNoteName, scaleDegreeLabel } from '@/src/music/scaleDegree'
+import type { HarmonizedSoloNote } from '@/src/types/soloHarmony'
 
 export type SelectedFretNote = { string?: number; fret?: number; midi?: number }
 
-export type ChordToneStatus = 'chord_tone' | 'tension' | 'chromatic'
+export type ChordToneStatus = 'chord_tone' | 'tension' | 'chromatic' | 'pedal'
 
 export type NoteSelectionDetail = {
   noteName: string
@@ -15,6 +16,8 @@ export type NoteSelectionDetail = {
   alternateFingerLines: string[]
   coach: string
   chordToneStatus: ChordToneStatus | null
+  /** Backend scale-degree label ("R", "b3", …); null without harmonized data. */
+  harmonicDegree: string | null
   confidence: number | null
 }
 
@@ -69,6 +72,7 @@ export function buildNoteSelectionDetail(
   selectedNote: SelectedFretNote | null,
   currentChord?: string | null,
   confidence?: number | null,
+  harmony?: { note: HarmonizedSoloNote | null } | null,
 ): NoteSelectionDetail | null {
   if (!selectedNote) return null
   const midi = inferMidiFromNoteSelection(selectedNote)
@@ -85,7 +89,12 @@ export function buildNoteSelectionDetail(
   })
 
   let chordToneStatus: ChordToneStatus | null = null
-  if (currentChord && currentChord !== 'N') {
+  let harmonicDegree: string | null = null
+  const backendAnalysis = harmony?.note?.chord_analysis ?? null
+  if (backendAnalysis) {
+    chordToneStatus = backendAnalysis.chord_tone_type
+    harmonicDegree = backendAnalysis.scale_degree_name
+  } else if (currentChord && currentChord !== 'N') {
     const notePc = ((Math.round(midi) % 12) + 12) % 12
     const chordPcs = chordPitchClasses(currentChord)
     if (chordPcs.includes(notePc)) {
@@ -107,6 +116,7 @@ export function buildNoteSelectionDetail(
     alternateFingerLines,
     coach,
     chordToneStatus,
+    harmonicDegree,
     confidence: confidence ?? null,
   }
 }

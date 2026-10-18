@@ -17,6 +17,7 @@ import { PhrasingWaveformVisualizer } from '@/components/PhrasingWaveformVisuali
 import { ScoreSummaryCard } from '@/components/ReviewSessionPanel'
 import { SessionPitchReview } from '@/components/SessionPitchReview'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { SoloHarmonySummaryCard } from '@/components/SoloHarmonySummaryCard'
 import { toast } from '@/components/ToastConfig'
 import { ApiError, submitExportJob, submitScore, getCorrectionHistory, revertCorrection, type CorrectionHistory } from '@/src/api/analyze'
 import { isHarmoniqSkillMutationSkipped } from '@/src/config'
@@ -38,6 +39,7 @@ import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapScoreFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
+import { parseHarmonizedSolo } from '@/src/music/soloHarmony'
 import { coachReviewFromScoreResult } from '@/src/session/coachReviewFromScoreResult'
 import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhostTake'
 import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
@@ -168,6 +170,10 @@ export default function ReviewScreen() {
     }
     return result
   }, [lesson])
+  const harmonizedSolo = useMemo(
+    () => parseHarmonizedSolo(lesson?.harmonized_solo),
+    [lesson?.harmonized_solo],
+  )
   const [reviewChordPosIndex, setReviewChordPosIndex] = useState<Record<string, number>>({})
   const gp5ForExport = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
   const songTitleBase =
@@ -615,6 +621,8 @@ export default function ReviewScreen() {
           </View>
         </View>
       )}
+
+      {harmonizedSolo ? <SoloHarmonySummaryCard harmonized={harmonizedSolo} /> : null}
 
       {lesson?.instrument_confusion !== null && lesson?.instrument_confusion !== undefined ? (
         <View className="mt-3">
