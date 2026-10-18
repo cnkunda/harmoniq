@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 157–183** (151–155 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 158–183** (151–155 completed → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -117,46 +117,13 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-## Active Backlog — Commits 157–183
+## Active Backlog — Commits 158–183
 
 Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
 
 ---
 
-**Group: Research plumbing & UX (157–159)**
-
----
-
----
-
-### Commit 157: Harmonized Solo UI + Coach Chord-Tone Integration (was 123 follow-up)
-
-**Status:** ready
-
-**Goal:** Surface the backend's harmonized solo analysis to users and coaches — chord-tone status, scale degrees, and per-bar position data are computed on every analysis but displayed nowhere.
-
-**Current State:** `backend/app/solo_harmony_analyzer.py` runs after chord+solo inference and populates `harmonized_solo` + `per_bar_analysis` in `LessonJSON` (`analyze_audio.py:453-468, 777`) — per-note `ChordToneAnalysis` (R, b3, 5, tension, chromatic), chord-tone percentages, per-bar CAGED position and suggested scales. Zero frontend consumer: `src/types/soloHarmony.ts` was removed as an orphan in commit `5505726`. Coach prompts never reference chord-tone data (explicit follow-up in [`docs/priorities-archive.md`](docs/priorities-archive.md), Commit 123).
-
-**Scope:**
-
-- Recreate typed frontend models (`src/types/soloHarmony.ts`): `ChordToneAnalysis`, `BarScope`, `HarmonizedSoloNotes` mirroring backend schemas
-- Study screen note detail (extends `SessionNoteDetailModal` / Milestone B1 note detail):
-  - Chord-tone status badge: chord tone (sage) / tension (amber) / chromatic (terracotta) using existing palette tokens
-  - Scale degree label (`R`, `b3`, `5`, `b7`…) from `chord_analysis.scale_degree_name`
-  - Bar position hint (`primary_position`) + suggested scales from `per_bar_analysis`
-- Review screen: surface aggregate `chord_tone_pct` / `tension_note_pct` / `chromatic_pct` in the session summary
-- Coach integration: pass chord-tone aggregates into coach prompt context (e.g., "38% of solo notes were chord tones — coach on tension-note targeting") when `harmonized_solo` is present
-- Graceful absence: all consumers handle `harmonized_solo = None` (older jobs, missing chords/solo) with no UI breakage
-- Unit tests for type parsing + fallback paths; component test for note-detail rendering
-
-**Acceptance Criteria:**
-
-- [ ] Tapped solo note shows chord-tone status + scale degree from `harmonized_solo`
-- [ ] Per-bar position/scale hints visible in Study when available
-- [ ] Chord-tone percentages shown in Review summary
-- [ ] Coach prompt includes chord-tone stats when present; unchanged when absent
-- [ ] Jobs without `harmonized_solo` render everything else normally
-- [ ] `npm run lint` + `npm run test` + backend pytest green
+**Group: Research plumbing & UX (158–159)**
 
 ---
 

@@ -23,6 +23,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Milestone C (Engagement & Retention) Archive Date:** July 19, 2026 — Deferred, then promoted to [`PRIORITIES.md`](PRIORITIES.md) commits 159–167 during the roadmap restructure (specs moved, pointer table below).
 **Carry-over Fixes (Commits 151-154) Archive Date:** October 13, 2026 — Complete; all acceptance criteria verified. Moved back from [`PRIORITIES.md`](PRIORITIES.md).
 **Commit 156 (Research Module Wiring — transcription_confidence & instrument_confusion) Archive Date:** October 15, 2026 — Complete; all 5 ACs verified (backend pytest green); spec and implementation notes archived below.
+**Commit 157 (Harmonized Solo UI + Coach Chord-Tone Integration) Archive Date:** October 18, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 484 passed, backend pytest green); spec and implementation notes archived below.
 
 ---
 
@@ -2246,3 +2247,40 @@ Full specs archived verbatim below.
 - **Pipeline-test fixture hardened while writing those regressions:** `transcribe_with_fallback` is stubbed to raise (previously each test burned ~2 min attempting real MT3 on a dummy WAV), and the `infer_chords` patch now matches the real single-value return signature (the old tuple-shaped patch raised inside the CRNN branch, silently yielding an empty chord timeline — `chord_section_confidence` had therefore never been exercised in this suite).
 - **Regression found and fixed mid-commit:** the in-progress diff had dropped `beat_grid=beat_grid_list` from the `LessonJSON` constructor, so the flat backward-compat beat list serialized as `[]` — the frontend metronome click alignment (`src/audio/metronomeShared.ts`) and section-start fallback (`src/utils/lessonAudio.ts`) read it directly. Restored, with a test.
 - **Left out of scope (filed as follow-ups):** tier-aware scoring in `/score` (still the binary 0.5 downgrade); review-panel render gate + plain-language band wording + ECE calibration → **PRIORITIES.md commit 184**; `transcription_source` (mt3/crnn/chroma) is still not an input to the score, so CRNN/chroma-tier results can score as high as MT3 results.
+
+---
+
+### Commit 157: Harmonized Solo UI + Coach Chord-Tone Integration (was 123 follow-up)
+
+**Status:** Complete — all 6 ACs verified (6/6). Moved from [`PRIORITIES.md`](PRIORITIES.md).
+
+**Goal:** Surface the backend's harmonized solo analysis to users and coaches — chord-tone status, scale degrees, and per-bar position data are computed on every analysis but displayed nowhere.
+
+**Current State (spec verbatim):** `backend/app/solo_harmony_analyzer.py` runs after chord+solo inference and populates `harmonized_solo` + `per_bar_analysis` in `LessonJSON` (`analyze_audio.py:453-468, 777`) — per-note `ChordToneAnalysis` (R, b3, 5, tension, chromatic), chord-tone percentages, per-bar CAGED position and suggested scales. Zero frontend consumer: `src/types/soloHarmony.ts` was removed as an orphan in commit `5505726`. Coach prompts never reference chord-tone data (explicit follow-up in [`docs/priorities-archive.md`](docs/priorities-archive.md), Commit 123).
+
+**Scope (spec verbatim):**
+
+- Recreate typed frontend models (`src/types/soloHarmony.ts`): `ChordToneAnalysis`, `BarScope`, `HarmonizedSoloNotes` mirroring backend schemas
+- Study screen note detail (extends `SessionNoteDetailModal` / Milestone B1 note detail):
+  - Chord-tone status badge: chord tone (sage) / tension (amber) / chromatic (terracotta) using existing palette tokens
+  - Scale degree label (`R`, `b3`, `5`, `b7`…) from `chord_analysis.scale_degree_name`
+  - Bar position hint (`primary_position`) + suggested scales from `per_bar_analysis`
+- Review screen: surface aggregate `chord_tone_pct` / `tension_note_pct` / `chromatic_pct` in the session summary
+- Coach integration: pass chord-tone aggregates into coach prompt context (e.g., "38% of solo notes were chord tones — coach on tension-note targeting") when `harmonized_solo` is present
+- Graceful absence: all consumers handle `harmonized_solo = None` (older jobs, missing chords/solo) with no UI breakage
+- Unit tests for type parsing + fallback paths; component test for note-detail rendering
+
+**Acceptance Criteria:**
+
+- [x] Tapped solo note shows chord-tone status + scale degree from `harmonized_solo`
+- [x] Per-bar position/scale hints visible in Study when available
+- [x] Chord-tone percentages shown in Review summary
+- [x] Coach prompt includes chord-tone stats when present; unchanged when absent
+- [x] Jobs without `harmonized_solo` render everything else normally
+- [x] `npm run lint` + `npm run test` + backend pytest green
+
+**Implementation notes:**
+
+- Frontend: new `src/types/soloHarmony.ts` + `src/music/soloHarmony.ts` (tolerant parsers, time-range bar matching — never array-index bar matching, selection→note matcher with deterministic tie-breaks, percent formatter); `LessonJSON` gains optional `harmonized_solo`/`per_bar_analysis`; `buildNoteSelectionDetail` takes an optional harmony arg (backend chord-tone status + scale degree take precedence over local chord math; `ChordToneStatus` gains `'pedal'`); `NoteDetailCard` degree chip + pedal badge; `SessionNoteDetailModal` pass-through; new `SoloHarmonySummaryCard` on Review; Study gets bar-scope position-hint precedence and a "Scale ideas:" line under the fretboard. 30 new vitest tests (484 total pass).
+- Backend: `coach.py` — `SectionHarmonySummary`, `section_harmony_summary()` (section-window stats; `None` on missing data — never fabricated 0%), `_harmony_context_block()`, threaded through `build_coach_user_prompt` / `generate_coach_fields_for_section` / `generate_coach_fields_for_section_with_status` / `hydrate_coach_copy_into_sections`; `jobs.py::_hydrate_coach_copy_job` passes `lesson.harmonized_solo`. Coach prompt is byte-identical when no harmonized data. 15 new pytest tests.
+- Verification: lint 0 errors; vitest 484 passed; backend suite fully green (1330 passed, 6 skipped) after the pre-existing-failure fix commit; CI 11-file set green.
