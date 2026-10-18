@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 
@@ -93,11 +92,11 @@ class TestNoChordTransitions:
 class TestCaching:
     def test_save_and_load_roundtrip(self):
         matrix = build_transition_matrix()
-        with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as f:
-            save_transition_matrix(matrix, Path(f.name))
-            loaded = load_transition_matrix(Path(f.name))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_path = Path(tmpdir) / "test_matrix.npy"
+            save_transition_matrix(matrix, cache_path)
+            loaded = load_transition_matrix(cache_path)
             np.testing.assert_allclose(np.array(loaded), matrix, atol=1e-6)
-            os.unlink(f.name)
 
     def test_cache_miss_builds_matrix(self):
         with tempfile.TemporaryDirectory() as tmpdir:

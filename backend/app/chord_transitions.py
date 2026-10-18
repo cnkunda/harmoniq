@@ -185,7 +185,10 @@ def load_transition_matrix(path: Path | None = None) -> np.ndarray:
 
     target = path or _CACHE_FILE
     if target.exists():
-        matrix = np.load(str(target), mmap_mode="r")
+        # Materialize into memory: an mmap-backed array keeps the cache file
+        # handle open for the process lifetime, which blocks replacing or
+        # deleting the cache file on Windows (WinError 32).
+        matrix = np.load(str(target))
         logger.info("Loaded cached transition matrix from %s", target)
         _TRANSITION_MATRIX = matrix
         return matrix
