@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 158–183** (151–155 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 159–183** (151–155 completed → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -117,38 +117,9 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-## Active Backlog — Commits 158–183
+## Active Backlog — Commits 159–183
 
 Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
-
----
-
-**Group: Research plumbing & UX (158–159)**
-
----
-
-### Commit 158: UX Audit Loop Re-Run & Gap Fixes
-
-**Status:** ready
-
-**Goal:** Re-run the automated UX gap-detection loop and clear every error/warning gap so the live UI matches the design system.
-
-**Current State:** `docs/audit/ui-feedback-report.json` was generated 2026-07-19 — stale relative to the palette refresh, merge, and code-review passes since. The `npm run ux:improve` workflow (Playwright capture → vision-tool analysis → gap report) and `npm run ux:verify` re-analysis exist and are documented in AGENTS.md.
-
-**Scope:**
-
-- Start Expo web (`npm run web` or `PLAYWRIGHT_USE_WEBSERVER=1 npm run ux:improve`)
-- Run `npm run ux:improve`; read `allGapsByRoute` from the fresh report
-- Fix every `error`-severity gap and as many `warning` gaps as feasible by editing the route's source file (follow `.opencode/instructions/UX_IMPROVE_LOOP.md`)
-- Re-run `npm run ux:verify` to confirm; loop up to 5 iterations until `isComplete: true`
-- Commit code fixes together with the refreshed report
-
-**Acceptance Criteria:**
-
-- [ ] Fresh `ui-feedback-report.json` with `isComplete: true`
-- [ ] Zero error-severity gaps remaining
-- [ ] All warning gaps fixed or explicitly waived with rationale in the report
-- [ ] `npm run lint` + `npm run test` green after fixes
 
 ---
 

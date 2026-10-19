@@ -24,6 +24,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Carry-over Fixes (Commits 151-154) Archive Date:** October 13, 2026 — Complete; all acceptance criteria verified. Moved back from [`PRIORITIES.md`](PRIORITIES.md).
 **Commit 156 (Research Module Wiring — transcription_confidence & instrument_confusion) Archive Date:** October 15, 2026 — Complete; all 5 ACs verified (backend pytest green); spec and implementation notes archived below.
 **Commit 157 (Harmonized Solo UI + Coach Chord-Tone Integration) Archive Date:** October 18, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 484 passed, backend pytest green); spec and implementation notes archived below.
+**Commit 158 (UX Audit Loop Re-Run & Gap Fixes) Archive Date:** October 19, 2026 — Complete; all 4 ACs verified (report isComplete: true, 0 error-severity gaps, all 46 residual flags waived with rationale in the report; lint 0 errors, vitest 484 passed); spec and implementation notes archived below.
 
 ---
 
@@ -2284,3 +2285,38 @@ Full specs archived verbatim below.
 - Frontend: new `src/types/soloHarmony.ts` + `src/music/soloHarmony.ts` (tolerant parsers, time-range bar matching — never array-index bar matching, selection→note matcher with deterministic tie-breaks, percent formatter); `LessonJSON` gains optional `harmonized_solo`/`per_bar_analysis`; `buildNoteSelectionDetail` takes an optional harmony arg (backend chord-tone status + scale degree take precedence over local chord math; `ChordToneStatus` gains `'pedal'`); `NoteDetailCard` degree chip + pedal badge; `SessionNoteDetailModal` pass-through; new `SoloHarmonySummaryCard` on Review; Study gets bar-scope position-hint precedence and a "Scale ideas:" line under the fretboard. 30 new vitest tests (484 total pass).
 - Backend: `coach.py` — `SectionHarmonySummary`, `section_harmony_summary()` (section-window stats; `None` on missing data — never fabricated 0%), `_harmony_context_block()`, threaded through `build_coach_user_prompt` / `generate_coach_fields_for_section` / `generate_coach_fields_for_section_with_status` / `hydrate_coach_copy_into_sections`; `jobs.py::_hydrate_coach_copy_job` passes `lesson.harmonized_solo`. Coach prompt is byte-identical when no harmonized data. 15 new pytest tests.
 - Verification: lint 0 errors; vitest 484 passed; backend suite fully green (1330 passed, 6 skipped) after the pre-existing-failure fix commit; CI 11-file set green.
+
+---
+
+### Commit 158: UX Audit Loop Re-Run & Gap Fixes
+
+**Status:** Complete — all 4 ACs verified (4/4). Moved from [`PRIORITIES.md`](PRIORITIES.md).
+
+**Goal:** Re-run the automated UX gap-detection loop and clear every error/warning gap so the live UI matches the design system.
+
+**Current State (spec verbatim):** `docs/audit/ui-feedback-report.json` was generated 2026-07-19 — stale relative to the palette refresh, merge, and code-review passes since. The `npm run ux:improve` workflow (Playwright capture → vision-tool analysis → gap report) and `npm run ux:verify` re-analysis exist and are documented in AGENTS.md.
+
+**Scope (spec verbatim):**
+
+- Start Expo web (`npm run web` or `PLAYWRIGHT_USE_WEBSERVER=1 npm run ux:improve`)
+- Run `npm run ux:improve`; read `allGapsByRoute` from the fresh report
+- Fix every `error`-severity gap and as many `warning` gaps as feasible by editing the route's source file (follow `.opencode/instructions/UX_IMPROVE_LOOP.md`)
+- Re-run `npm run ux:verify` to confirm; loop up to 5 iterations until `isComplete: true`
+- Commit code fixes together with the refreshed report
+
+**Acceptance Criteria:**
+
+- [x] Fresh `ui-feedback-report.json` with `isComplete: true`
+- [x] Zero error-severity gaps remaining
+- [x] All warning gaps fixed or explicitly waived with rationale in the report
+- [x] `npm run lint` + `npm run test` green after fixes
+
+**Implementation notes:**
+
+- **Vision backend swap (local fallback):** cloud vision backends hit quota/key failures mid-loop (Gemini 429 → 24h cooldown), and the first iteration-4 run produced a false `isComplete` with 0/50 analyses — rejected, not committed. Re-ran on a local Ollama instance installed userspace in WSL (v0.40.6, CPU-only — the GTX 1050's sm_61 is not covered by the bundled CUDA kernels) with `moondream:latest` (≈25–35s/image; `gemma3:4b` measured ~3 min/image, over the loop's 60s per-analysis timeout). Vision-tool config `DEFAULT_MODEL=ollama/moondream:latest`; proxy timeouts raised (`FAST_TIMEOUT=330`, urlopen 360s, `num_predict=220`), originals backed up as `*.bak-ux158`.
+- **Run:** clean `npm run ux:verify` analyzed 46/50 screenshots; 4 viewport analyses exceeded the loop's 60s host timeout (`/review-archive/demo-session`, `/scale-explorer`, `/session/listen`, `/session/musical-tolerance`), were re-run manually through the same vision pipeline, and patched into the report (`completedLate`).
+- **Adjudication (recorded in the report):** `isComplete: true`; 0 error-severity gaps; all 46 remaining flags waived with per-gap `waiver.reason` + `triggerSources` — every one is a keyword-derived false positive from descriptive vision prose ("color/contrast/font" used descriptively). Per user decision, real defects were fixed in code and the noise was waived, without expanding the audit tooling.
+- **Fixed defects (found by the loop):** `app/session/_layout.tsx` — React Navigation's default light scene background (`rgb(242,242,242)`) covered the shared `WoodGradient` on every `/session/*` route; wrapped the stack in a dark `ThemeProvider`. `app/(tabs)/library.tsx` — Songs/Licks segmented pills collapsed to content width; wrapped both `AnimatedPressable`s in `flex-1` containers (the wrapper drops `flex-1`).
+- **Known capture race (documented, out of scope):** 20 of 25 full-page PNGs are blank-white from the race in `tests/ui/support/capture.ts`; viewport captures confirm correct dark UI rendering. Recorded in the report's adjudication block.
+- **Artifacts:** `docs/audit/ux-improve-state.json` iteration → 5; `docs/audit/.ux-loop-complete` marker written. Local-only `.opencode/instructions/UX_IMPROVE_LOOP.md` gained a "Vision backend: local Ollama fallback" section (setup, config, timeouts) plus an AGENTS.md pointer (commit `cdc14e6`) so future runs reach for the working local backend first.
+- **Verification:** `npm run lint` 0 errors; `npm run test` 484/484 passed.
