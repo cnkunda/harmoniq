@@ -1,3 +1,4 @@
+import { DarkTheme, ThemeProvider } from '@react-navigation/native'
 import { Stack, usePathname } from 'expo-router'
 import { useEffect } from 'react'
 import { View } from 'react-native'
@@ -5,8 +6,16 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { SessionChromeBar } from '@/components/SessionChromeBar'
 import { WoodGradient } from '@/components/WoodGradient'
+import { colors } from '@/src/constants/colors'
 import { sessionStepIndexFromPathname, type SessionStep } from '@/src/constants/sessionFlow'
 import { useSessionPhaseStore } from '@/src/stores/sessionPhaseStore'
+
+// Scenes otherwise inherit React Navigation's default light background
+// (rgb(242,242,242)), which covers the shared WoodGradient.
+const SESSION_NAV_THEME = {
+  ...DarkTheme,
+  colors: { ...DarkTheme.colors, background: colors.wood[900] },
+}
 
 export default function SessionLayout() {
   const pathname = usePathname()
@@ -26,7 +35,9 @@ export default function SessionLayout() {
       <WoodGradient variant="background" className="flex-1">
         <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
           <SessionChromeBar />
-          <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
+          <ThemeProvider value={SESSION_NAV_THEME}>
+            <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }} />
+          </ThemeProvider>
         </SafeAreaView>
       </WoodGradient>
     </View>

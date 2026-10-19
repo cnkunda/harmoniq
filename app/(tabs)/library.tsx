@@ -334,38 +334,42 @@ export default function LibraryScreen() {
             </View>
 
             <View className="mb-6 flex-row rounded-2xl border border-wood-600/50 bg-transparent p-1.5 shadow-sm shadow-black/20">
-              <AnimatedPressable haptic="light"
-                onPress={() => setLibraryTab('lessons')}
-                className={`flex-1 rounded-xl py-2.5 ${
-                  libraryTab === 'lessons'
-                    ? 'bg-amber-light shadow-inner-wood'
-                    : 'bg-transparent'
-                }`}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: libraryTab === 'lessons' }}
-              >
-                <Text
-                  className={`text-center font-sans-medium text-sm ${libraryTab === 'lessons' ? 'text-wood-900' : 'text-muted-brown'}`}
+              <View className="flex-1">
+                <AnimatedPressable haptic="light"
+                  onPress={() => setLibraryTab('lessons')}
+                  className={`rounded-xl py-2.5 ${
+                    libraryTab === 'lessons'
+                      ? 'bg-amber-light shadow-inner-wood'
+                      : 'bg-transparent'
+                  }`}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: libraryTab === 'lessons' }}
                 >
-                  Songs
-                </Text>
-              </AnimatedPressable>
-              <AnimatedPressable haptic="light"
-                onPress={() => setLibraryTab('licks')}
-                className={`flex-1 rounded-xl py-2.5 ${
-                  libraryTab === 'licks'
-                    ? 'bg-amber-light shadow-inner-wood'
-                    : 'bg-transparent'
-                }`}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: libraryTab === 'licks' }}
-              >
-                <Text
-                  className={`text-center font-sans-medium text-sm ${libraryTab === 'licks' ? 'text-wood-900' : 'text-muted-brown'}`}
+                  <Text
+                    className={`text-center font-sans-medium text-sm ${libraryTab === 'lessons' ? 'text-wood-900' : 'text-muted-brown'}`}
+                  >
+                    Songs
+                  </Text>
+                </AnimatedPressable>
+              </View>
+              <View className="flex-1">
+                <AnimatedPressable haptic="light"
+                  onPress={() => setLibraryTab('licks')}
+                  className={`rounded-xl py-2.5 ${
+                    libraryTab === 'licks'
+                      ? 'bg-amber-light shadow-inner-wood'
+                      : 'bg-transparent'
+                  }`}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: libraryTab === 'licks' }}
                 >
-                  Licks
-                </Text>
-              </AnimatedPressable>
+                  <Text
+                    className={`text-center font-sans-medium text-sm ${libraryTab === 'licks' ? 'text-wood-900' : 'text-muted-brown'}`}
+                  >
+                    Licks
+                  </Text>
+                </AnimatedPressable>
+              </View>
             </View>
 
             <View className="mb-10 flex-row items-center gap-3">
