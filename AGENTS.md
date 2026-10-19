@@ -80,6 +80,7 @@ Two MCPs drive automated UI/UX gap detection and self-healing:
 
 - **Playwright MCP** — browser automation (navigation, screenshot capture)
 - **vision-tool MCP** — image analysis via 23 vision backends (Gemini, Azure, Groq, etc.)
+- **Local fallback** — when cloud backends hit quota/key errors, the proxy analyzes via a local Ollama `moondream` model in WSL (setup: [`.opencode/instructions/UX_IMPROVE_LOOP.md`](.opencode/instructions/UX_IMPROVE_LOOP.md) → "Vision backend: local Ollama fallback")
 
 **Run from Git Bash** — frontend toolchain (npm, Node, Playwright) lives there.
 Python/vision-tool runs in WSL — the scripts auto-detect Windows and call `wsl.exe python3` transparently.
