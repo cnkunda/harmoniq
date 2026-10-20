@@ -8,8 +8,8 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Milestone B (Fretboard Dual-Mode)** — archived, complete.  
 **Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159 completed → archived).  
 **Milestone D (Infrastructure)** — partially implemented; remaining gaps at commits 169–172 (151 SSE progress stream completed → archived).  
-**Current Phase 2** — Pipeline validation & publication close-out (commits 149–150).  
-**Active backlog** — numbered commits **149–183** below (one commit = one spec; 151–159 completed → archived).  
+**Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
+**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149 and 151–159 completed → archived).  
 **Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 177–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 160–183** (151–159 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 160–183** (149 and 151–159 completed → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -29,15 +29,15 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 ---
 
-## PHASE 2: Pipeline Validation & Publication — Commits 149–150
+## PHASE 2: Pipeline Validation & Publication — Commit 150 (149 archived)
 
-**Status:** In Progress — clean-clone verification green (6/7 release-gate ACs); Part 2 external publication held open by owner
+**Status:** In Progress — Commit 149 complete (7/7 release-gate ACs); Commit 150 (Part 3) ready
 
 **What this phase is:**
 - Validate the MT3-primary + CRNN-fallback pipeline on a real song set (done — see [`docs/EVALUATION.md`](docs/EVALUATION.md))
 - Document known failure modes and evaluation results (done — see [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md))
-- Publish Part 2 and Part 3 blog posts (Part 2 announced in-repo at [`docs/RESEARCH.md`](docs/RESEARCH.md); external publication pending owner; Part 3 = commit 150)
-- Verify everything works from a clean clone and sync the roadmap to reality (commit 149 — verification done, see below)
+- Publish Part 2 and Part 3 blog posts (Part 2 published to harmoniq.ai/blog October 2026; Part 3 = commit 150)
+- Verify everything works from a clean clone and sync the roadmap to reality (commit 149 — complete, see [`priorities-archive.md`](priorities-archive.md))
 
 **What this phase is not:**
 - New feature development (engagement features start at commit 159)
@@ -69,38 +69,13 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-### Commit 149: Phase 2 Release-Gate Verification & Roadmap Sync
-
-**Status:** In Progress — 6/7 ACs green (verification complete; AC6 external publication held open by owner decision)
-
-**Goal:** Verify the Phase 2 release gate from a clean clone, tick the acceptance criteria that pass, close stale criteria, and leave the roadmap matching reality.
-
-**Current State:** Clean-clone verification completed Oct 10 2026 at commit `d61b8d9` (clone of local main; Node 24.15.0, Python 3.11.15 for CI parity, Python 3.12.1 for the MT3 extra). Frontend: `npm ci` exit 0, `npm run lint` exit 0, vitest **439/439** (the old 399 claim was stale). Backend CI parity: scoring set (11 files per `scoring-tests.yml`) **237 passed / 2 skipped exit 0**; full `ci.yml`-env suite **1270 passed / 11 failed / 10 skipped** — the 11 are environment-coupled, not regressions, and are filed as commits 181 (8 CI env-toggle × unit-test conflicts) and 182 (3 AlphaTab optional-dep guards). Smoke test green: `quick_smoke_test.py` exit 0 on bundled `reggae_clean_30s.wav` via the full MT3 pipeline (first run 643s CPU; cache-hit rerun ~5s). Seven trivial clean-clone fixes were made along the way (smoke audio fallback `827f87e`, AlphaTab lint `fdc62fb`, music21+tenacity deps `abc2bef`, mt3-extra resolvability `f4cbcda`, tensorboard dep `75a19e1`, gin fetch in download script `892faac`, smoke `--timeout` `d61b8d9`). R1 (Pipeline Validation) and R3 (Open-Source Hardening) are complete in substance with clean-clone evidence; R2 is complete in-repo except external publication of Part 2, which the owner will do later. The stale archived AC 98c (mobile latency) is closed as superseded by the Milestone A on-device benchmark (`tests/benchmarks/chordModelLatency.ts`).
-
-**Scope:**
-
-- Run clean-clone verification end-to-end:
-  - Fresh clone → `npm ci` → `npm run lint` → `npm run test`
-  - Fresh venv → `pip install -e ".[dev]"` → `python -m pytest -q`
-  - `python scripts/quick_smoke_test.py` on the bundled reference audio
-- Fix or file issues: any failure found becomes a new backlog commit (do not silently drop ACs)
-- Tick every R1–R3 acceptance criterion that the verification proves
-- Close the stale 98c AC in [`priorities-archive.md`](priorities-archive.md) as *superseded by the Milestone A on-device benchmark*
-- Leave R2's publication AC open — external publication of Part 2 is an owner action (in-repo announcement at [`docs/RESEARCH.md`](docs/RESEARCH.md))
-- Fold this section's ACs into the release-gate list below and tick them
-- Sync "At a glance" / phase headers so no stale "deferred" claims remain (Milestone C/D status notes are already updated — verify)
-
-**Acceptance Criteria:** ticked and merged into the release-gate ledger at the end of this file ("Acceptance Criteria (Phase 2 release gate → Commit 149)"). Result: **6/7 green** — AC6 (Part 2 external publication to harmoniq.ai/blog) is held open by owner decision; in-repo announcement lives at [`docs/RESEARCH.md`](docs/RESEARCH.md).
-
----
-
 ### Commit 150: Part 3 Blog Post — The Meta-Layer (was R4)
 
 **Status:** ready
 
 **Goal:** Write and publish Part 3 of the Harmoniq blog series: building an AI product with AI assistance — the recursive loop of planning, implementing, reviewing, and deciding when to push through a plateau versus change approach.
 
-**Current State:** Part 2 draft is in-repo (`docs/blog/why-harmoniq-part-2.md`) and announced at [`docs/RESEARCH.md`](docs/RESEARCH.md) (external publication pending owner); it promises Part 3 at its conclusion: *"Part 3 will be about the meta-layer of this project: building an AI product with AI assistance, and what that recursive loop taught me about learning, building, and when to push through a plateau versus when to find a different path."* No Part 3 draft exists.
+**Current State:** Part 2 is published at harmoniq.ai/blog (owner-confirmed live October 20, 2026) and lives in-repo at `docs/blog/why-harmoniq-part-2.md`; it promises Part 3 at its conclusion: *"Part 3 will be about the meta-layer of this project: building an AI product with AI assistance, and what that recursive loop taught me about learning, building, and when to push through a plateau versus when to find a different path."* No Part 3 draft exists.
 
 **Scope:**
 
@@ -863,25 +838,3 @@ Shared encoder (CQT → Conv → BiLSTM, ~200K params)
 The pipeline currently relies on MT3 (JAX, CPU, ~5 min per song) as the primary transcriber. With GPU access, Phase 3 executes commits 174–176 in order.
 
 **Aspirational (further out):** lead sheet agent (commit 177), zero-latency pitch detection (commit 178), virtual mentor agent (commit 179), evaluation set expansion (commit 180). Dynamic backing track generation (MRT2) already shipped — see `backend/app/jam_backing.py`.
-
----
-
-## Acceptance Criteria (Phase 2 release gate → Commit 149)
-
-Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure commit `6182193`), the original Phase 2 release-gate list, and the Commit 149 spec. Verified from a clean clone of local main at commit `d61b8d9` (Oct 10 2026). Origin tags: **R1** pipeline validation, **R2** documentation & publication, **R3** open-source hardening, **gate** original release-gate list, **149** Commit 149 clean-clone verification.
-
-- [x] MT3-powered pipeline produces chord-solo LessonJSON for a defined 5-song test set — all 5 returned complete LessonJSON (pass/warn/fail are quality verdicts: 3 pass / 1 warn / 1 fail) — **see [`docs/EVALUATION.md`](docs/EVALUATION.md)** (R1-AC1 + gate)
-- [x] Fallback chain documented with real examples — **see [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md)** (R1-AC2 + gate)
-- [x] 5-song smoke test documented with pass/warn/fail per song — **3 pass / 1 warn / 1 fail** (gate)
-- [x] CI test suite passes from a clean clone (R1-AC3), split into precise lines below (149-AC1/AC2):
-  - [x] `npm run lint` passes (0 errors) on a clean clone — **exit 0 after the `expo-env.d.ts` fix `fdc62fb`; Node 24.15.0 used (env has no Node 22; CI uses 22/20)** (R3-AC1 + 149-AC1)
-  - [x] `npm run test` passes on a clean clone — **439/439 vitest (the old 399 claim was stale)** (R3-AC2 + 149-AC1)
-  - [x] Backend core pytest set passes on a clean clone — **237 passed / 2 skipped, exit 0** on the CI scoring set (11 files per `scoring-tests.yml`; the old "12 core files" count was stale) (R3-AC3 + 149-AC2); full `ci.yml`-env suite: **1270 passed / 11 failed / 10 skipped** — the 11 are environment-coupled, not regressions (8 CI env-toggle × unit-test conflicts → commit 181; 3 AlphaTab optional-dep guards → commit 182)
-- [x] Quick-smoke-test script runs without errors on a reference audio file — **clean-clone exit 0 on bundled `reggae_clean_30s.wav` via the full MT3 pipeline (first run 643s CPU, cache-hit rerun ~5s; `--timeout` default 900s)** (R3-AC4 + gate + 149-AC3)
-- [x] Every former R1–R3 AC is ticked with evidence, filed as a backlog commit (181/182), or explicitly held open — **nothing silently dropped** (149-AC4)
-- [x] Stale 98c mobile-latency AC closed as superseded by `tests/benchmarks/chordModelLatency.ts` — **closed in [`priorities-archive.md`](priorities-archive.md)** (149-AC5)
-- [ ] Part 2 blog post published to harmoniq.ai/blog — **in-repo announcement at [`docs/RESEARCH.md`](docs/RESEARCH.md); harmoniq.ai unreachable at verification time; owner will publish externally later — held open by owner decision (R2-AC1 + gate + 149-AC6)**
-- [x] README has research abstract at the top — **verified** (R2-AC2)
-- [x] `python scripts/download_mt3_checkpoint.py` automates MT3 setup — **verified clean-clone end-to-end after the Commit 149 fix `892faac` (tensors + gin configs); the MT3 extra resolves on Python 3.12 — current flax requires ≥3.12** (R2-AC3 + gate)
-- [x] `docs/KNOWN_FAILURES.md` and `docs/EVALUATION.md` exist and are accurate — **verified against repo state** (R2-AC4)
-- [x] Roadmap status sections match codebase reality (this file + archive pointers) — **stale claims fixed by this commit: Milestone D line (151 done), 399/1270 baselines, Part 2 publication wording, `docs/E2E_DEMO.md` 98c reference, `docs/VISUAL_AUDIT.md` commit-106 row** (149-AC7)

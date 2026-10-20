@@ -121,7 +121,7 @@ Key structural limitations:
 
 | Output | Target | Status |
 |--------|--------|--------|
-| Part 2 blog post (pipeline walkthrough) | harmoniq.ai/blog | Published |
+| Part 2 blog post (pipeline walkthrough) | harmoniq.ai/blog | Published (October 2026) |
 | Part 3 blog post (meta-layer) | harmoniq.ai/blog | Planned |
 | Open-source release | github.com/cnkunda/harmoniq | Published |
 | ISMIR 2027 Late-Breaking Demo | ISMIR 2027 | Stretch goal |

@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the completed carry-over fixes (commits 151–155) and engagement Commit 159. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commit 159. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 149–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1 → 159 (completed → archived), Milestone C2–C9 → 160–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification) and commit 159 (user feedback & manual overrides) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1 → 159 (completed → archived), Milestone C2–C9 → 160–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commit 159 (user feedback & manual overrides), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -26,6 +26,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 157 (Harmonized Solo UI + Coach Chord-Tone Integration) Archive Date:** October 18, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 484 passed, backend pytest green); spec and implementation notes archived below.
 **Commit 158 (UX Audit Loop Re-Run & Gap Fixes) Archive Date:** October 19, 2026 — Complete; all 4 ACs verified (report isComplete: true, 0 error-severity gaps, all 46 residual flags waived with rationale in the report; lint 0 errors, vitest 484 passed); spec and implementation notes archived below.
 **Commit 159 (User Feedback & Manual Overrides) Archive Date:** October 20, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped); spec and implementation notes archived below.
+**Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
 
@@ -2361,3 +2362,52 @@ Full specs archived verbatim below.
 - **Frontend:** `submitFeedback` / `revertFeedbackRecord` / `fetchFeedbackExport` API methods; `useCorrectionStore` report/revert actions with server-sync results; chord and note "Report incorrect" affordances in Study and Listen; note-detail "Correct note" restored; Review renders structured counts with legacy correction-history fallback; Settings gains cumulative stats and a `/settings/feedback` dashboard with local/server exports and revert.
 - **Exports:** per-job `chord_feedback_<job>.json` / `solo_feedback_<job>.json` server exports with local fallback, and all-feedback `chord_feedback.json` / `solo_feedback.json`; chord exports include `wrong_chord` negative labels and solo exports include note feedback.
 - **Verification:** `npm run lint` 0 errors; `npm run test` 490/490 passed; backend `python -m pytest -q` 1342 passed / 6 skipped; new `backend/tests/test_commit159_feedback.py` added to CI. Committed as `991d02c` (`feat: Commit 159 — User Feedback & Manual Overrides`).
+
+---
+
+### Commit 149: Phase 2 Release-Gate Verification & Roadmap Sync
+
+**Status:** Complete — all 7 ACs verified (7/7). Moved from [`PRIORITIES.md`](PRIORITIES.md).
+
+**Goal:** Verify the Phase 2 release gate from a clean clone, tick the acceptance criteria that pass, close stale criteria, and leave the roadmap matching reality.
+
+**Current State:** Current-HEAD re-verification completed Oct 20 2026 at commit `f6f5602`: `npm run lint` exit 0, vitest **490/490**, backend full suite **1342 passed / 6 skipped**, CI scoring set (12 files incl `test_commit159_feedback.py`) **249 passed / 2 skipped**. Clean-clone verification completed Oct 10 2026 at commit `d61b8d9` (clone of local main; Node 24.15.0, Python 3.11.15 for CI parity, Python 3.12.1 for the MT3 extra). Frontend: `npm ci` exit 0, `npm run lint` exit 0, vitest **439/439** (the old 399 claim was stale). Backend CI parity: then-11-file scoring set **237 passed / 2 skipped exit 0**; full `ci.yml`-env suite **1270 passed / 11 failed / 10 skipped** — the 11 are environment-coupled, not regressions, and are filed as commits 181 (8 CI env-toggle × unit-test conflicts) and 182 (3 AlphaTab optional-dep guards). Smoke test green: `quick_smoke_test.py` exit 0 on bundled `reggae_clean_30s.wav` via the full MT3 pipeline (first run 643s CPU; cache-hit rerun ~5s). Seven trivial clean-clone fixes were made along the way (smoke audio fallback `827f87e`, AlphaTab lint `fdc62fb`, music21+tenacity deps `abc2bef`, mt3-extra resolvability `f4cbcda`, tensorboard dep `75a19e1`, gin fetch in download script `892faac`, smoke `--timeout` `d61b8d9`). R1 (Pipeline Validation), R2 (Documentation & Publication), and R3 (Open-Source Hardening) are complete; Part 2 was published to harmoniq.ai/blog on Oct 20 2026. The stale archived AC 98c (mobile latency) is closed as superseded by the Milestone A on-device benchmark (`tests/benchmarks/chordModelLatency.ts`).
+
+**Scope:**
+
+- Run clean-clone verification end-to-end:
+  - Fresh clone → `npm ci` → `npm run lint` → `npm run test`
+  - Fresh venv → `pip install -e ".[dev]"` → `python -m pytest -q`
+  - `python scripts/quick_smoke_test.py` on the bundled reference audio
+- Fix or file issues: any failure found becomes a new backlog commit (do not silently drop ACs)
+- Tick every R1–R3 acceptance criterion that the verification proves
+- Close the stale 98c AC in [`priorities-archive.md`](priorities-archive.md) as *superseded by the Milestone A on-device benchmark*
+- Confirm Part 2 external publication and tick R2's publication AC
+- Fold this section's ACs into the release-gate ledger and tick them
+- Sync "At a glance" / phase headers so no stale "deferred" claims remain (Milestone C/D status notes are already updated — verify)
+
+**Acceptance Criteria (release-gate ledger):**
+
+Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure commit `6182193`), the original Phase 2 release-gate list, and the Commit 149 spec. Clean-clone evidence from commit `d61b8d9` (Oct 10 2026); counts re-verified on current HEAD `f6f5602` (Oct 20 2026); Part 2 external publication confirmed live at harmoniq.ai/blog (Oct 20 2026). Origin tags: **R1** pipeline validation, **R2** documentation & publication, **R3** open-source hardening, **gate** original release-gate list, **149** Commit 149 clean-clone verification.
+
+- [x] MT3-powered pipeline produces chord-solo LessonJSON for a defined 5-song test set — all 5 returned complete LessonJSON (pass/warn/fail are quality verdicts: 3 pass / 1 warn / 1 fail) — **see [`docs/EVALUATION.md`](docs/EVALUATION.md)** (R1-AC1 + gate)
+- [x] Fallback chain documented with real examples — **see [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md)** (R1-AC2 + gate)
+- [x] 5-song smoke test documented with pass/warn/fail per song — **3 pass / 1 warn / 1 fail** (gate)
+- [x] CI test suite passes from a clean clone (R1-AC3), split into precise lines below (149-AC1/AC2):
+  - [x] `npm run lint` passes (0 errors) on a clean clone — **exit 0 after the `expo-env.d.ts` fix `fdc62fb`; Node 24.15.0 used (env has no Node 22; CI uses 22/20)** (R3-AC1 + 149-AC1)
+  - [x] `npm run test` passes on a clean clone — **439/439 vitest (the old 399 claim was stale)**; current HEAD `f6f5602`: **490/490** (R3-AC2 + 149-AC1)
+  - [x] Backend core pytest set passes on a clean clone — **237 passed / 2 skipped, exit 0** on the then-11-file CI scoring set; `scoring-tests.yml` now has 12 files including `test_commit159_feedback.py`. Current HEAD `f6f5602`: scoring set **249 passed / 2 skipped**, full suite **1342 passed / 6 skipped** (R3-AC3 + 149-AC2); historical `ci.yml`-env suite: **1270 passed / 11 failed / 10 skipped** — the 11 are environment-coupled, not regressions (8 CI env-toggle × unit-test conflicts → commit 181; 3 AlphaTab optional-dep guards → commit 182)
+- [x] Quick-smoke-test script runs without errors on a reference audio file — **clean-clone exit 0 on bundled `reggae_clean_30s.wav` via the full MT3 pipeline (first run 643s CPU, cache-hit rerun ~5s; `--timeout` default 900s)** (R3-AC4 + gate + 149-AC3)
+- [x] Every former R1–R3 AC is ticked with evidence, filed as a backlog commit (181/182), or explicitly held open — **nothing silently dropped** (149-AC4)
+- [x] Stale 98c mobile-latency AC closed as superseded by `tests/benchmarks/chordModelLatency.ts` — **closed in [`priorities-archive.md`](priorities-archive.md)** (149-AC5)
+- [x] Part 2 blog post published to harmoniq.ai/blog — **owner-confirmed live October 20, 2026; in-repo copy at [`docs/blog/why-harmoniq-part-2.md`](docs/blog/why-harmoniq-part-2.md) and announcement at [`docs/RESEARCH.md`](docs/RESEARCH.md)** (R2-AC1 + gate + 149-AC6)
+- [x] README has research abstract at the top — **verified** (R2-AC2)
+- [x] `python scripts/download_mt3_checkpoint.py` automates MT3 setup — **verified clean-clone end-to-end after the Commit 149 fix `892faac` (tensors + gin configs); the MT3 extra resolves on Python 3.12 — current flax requires ≥3.12** (R2-AC3 + gate)
+- [x] `docs/KNOWN_FAILURES.md` and `docs/EVALUATION.md` exist and are accurate — **verified against repo state** (R2-AC4)
+- [x] Roadmap status sections match codebase reality (this file + archive pointers) — **stale claims fixed by this commit: Milestone D line (151 done), 399/1270 baselines, Part 2 publication wording, `docs/E2E_DEMO.md` 98c reference, `docs/VISUAL_AUDIT.md` commit-106 row**; re-synced Oct 20 2026: Part 2 publication recorded as live, release-gate counts refreshed to current HEAD, Commit 149 moved to [`priorities-archive.md`](priorities-archive.md) (149-AC7)
+
+**Implementation notes:**
+
+- **Clean-clone evidence:** commit `d61b8d9` (Oct 10 2026); counts re-verified at `f6f5602` (Oct 20 2026) — lint 0 errors, vitest 490/490, backend full suite 1342 passed / 6 skipped, CI scoring set 249 passed / 2 skipped.
+- **Publication:** Part 2 confirmed live at harmoniq.ai/blog on Oct 20 2026; [`docs/RESEARCH.md`](docs/RESEARCH.md) and the release-gate ledger record the published status.
+- **Roadmap sync:** Commit 149 status, phase headers, active-backlog range, and archive pointers updated; Commit 149 spec and release-gate ledger moved here.
