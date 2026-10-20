@@ -108,7 +108,7 @@ export default function ReviewArchiveScreen() {
               <ScoreSummaryCard score={score} />
             ) : (
               <View className="mt-4 rounded-lg border border-wood-600/40 bg-wood-800/10 px-3 py-3">
-                <Text className="font-sans text-sm text-muted-light">
+                <Text className="font-sans text-sm text-wood-600">
                   No score snapshot for this session. Newer sessions save full review data automatically after you run
                   score.
                 </Text>

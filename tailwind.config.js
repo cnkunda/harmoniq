@@ -35,6 +35,8 @@ module.exports = {
         hairline: 'rgba(232,210,181,0.10)',
         muted: {
           brown: '#b39a86',
+          light: '#B8A99A',
+          cream: '#C2B5A3',
         },
         muted2: '#8a7362',
         danger: '#C17B5F',

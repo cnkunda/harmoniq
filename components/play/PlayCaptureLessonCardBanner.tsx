@@ -45,7 +45,7 @@ export function PlayCaptureLessonCardBanner({
         >
           <Text
             className={`font-mono text-[10px] font-medium ${
-              playing && ready && !loading ? 'text-wood-900' : 'text-muted-light'
+              playing && ready && !loading ? 'text-wood-900' : 'text-wood-600'
             }`}
           >
             {backing}
@@ -68,7 +68,7 @@ export function PlayCaptureLessonCardBanner({
             }`}
           >
             <Text
-              className={`font-mono text-[10px] font-medium ${recording ? 'text-danger' : 'text-muted-light'}`}
+              className={`font-mono text-[10px] font-medium ${recording ? 'text-danger' : 'text-wood-600'}`}
             >
               {recording ? 'Recording' : 'Idle'}
             </Text>

@@ -83,7 +83,7 @@ export function PlayCaptureCard({
       <Text className="font-sans-medium text-sm leading-snug text-wood-900" numberOfLines={2}>
         {songTitle}
       </Text>
-      <Text className="font-sans text-xs text-muted-light">{sectionLine}</Text>
+      <Text className="font-sans text-xs text-wood-600">{sectionLine}</Text>
 
       <View className={rowWrap}>
         <View className="min-w-0 flex-1 flex-row items-center gap-2">
@@ -131,7 +131,7 @@ export function PlayCaptureCard({
       </View>
 
       {autostopTriggered ? (
-        <Text className="font-sans text-xs text-muted-light">Auto-end triggered after 5 seconds of silence.</Text>
+        <Text className="font-sans text-xs text-wood-600">Auto-end triggered after 5 seconds of silence.</Text>
       ) : null}
       {take ? (
         <Text className="font-sans text-xs text-wood-900">

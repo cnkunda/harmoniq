@@ -675,8 +675,9 @@ export default function SettingsScreen() {
           <AnimatedPressable
             onPress={() => router.push('/settings/feedback')}
             haptic="light"
-            className="mb-3 flex-row items-center justify-center gap-2 rounded-lg border border-wood-600/50 bg-wood-900/40 px-4 py-3"
+            className="mb-3 flex min-h-[44px] flex-row items-center justify-center gap-2 rounded-lg border border-wood-600/50 bg-wood-900/40 px-4 py-3"
             accessibilityRole="button"
+            accessibilityLabel="Open feedback and correction history"
           >
             <MessageSquare color={colors.amber.accent} size={18} strokeWidth={2} />
             <Text className="font-sans-medium text-cream">Feedback & correction history</Text>

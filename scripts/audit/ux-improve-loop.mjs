@@ -10,6 +10,10 @@
  * Output:
  *   docs/audit/ui-feedback-report.json  — full gap report
  *   docs/audit/ux-improve-state.json    — loop state tracker
+ *
+ * Gap derivation is viewport-authoritative. Full-page screenshots are kept as
+ * archival artifacts but are not analyzed: the app scrolls inside internal
+ * containers, and full-page captures can race to blank.
  */
 import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
@@ -95,7 +99,6 @@ async function analyzeScreenshot(screenshotPath) {
 async function analyzeRoute(entry) {
   const dir = entry.directory;
   const viewportResult = await analyzeScreenshot(path.join(dir, "viewport.png"));
-  const fullPageResult = await analyzeScreenshot(path.join(dir, "full-page.png"));
   const stateResults = {};
   if (entry.stateScreenshots) {
     for (const [state, screenshotPath] of Object.entries(entry.stateScreenshots)) {
@@ -105,16 +108,16 @@ async function analyzeRoute(entry) {
   return {
     route: entry.route,
     viewport: viewportResult,
-    fullPage: fullPageResult,
     states: stateResults,
     analyzedAt: new Date().toISOString(),
   };
 }
 
 function deriveGaps(analysis) {
+  // Viewport is authoritative: internal scroll containers make full-page captures
+  // unreliable, so full-page images are archival artifacts only.
   const text = [
     analysis.viewport.description || "",
-    analysis.fullPage.description || "",
     ...Object.values(analysis.states).map((s) => s.description || ""),
   ].join(" ").toLowerCase();
 

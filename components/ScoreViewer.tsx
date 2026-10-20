@@ -428,7 +428,7 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
-            <Text className="text-center font-sans text-[11px] text-muted-light">
+            <Text className="text-center font-sans text-[11px] text-wood-600">
               MusicXML score not available for this song yet.
             </Text>
           </View>

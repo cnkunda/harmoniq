@@ -1,7 +1,7 @@
 # Known Pipeline Failures & Limitations
 
 This document tracks known failure modes in the Harmoniq transcription pipeline.
-Last updated: July 2026
+Last updated: October 2026
 
 ## MT3 (Primary)
 
@@ -47,6 +47,7 @@ Last updated: July 2026
 | Scenario | Symptom | Root Cause | Workaround |
 |----------|---------|------------|------------|
 | Web mic requires HTTPS | `getUserMedia` blocked on HTTP | Browser security requirement | Use `http://localhost` for development |
+| Headless Chromium has no microphone | Uncaught error overlay: `[PitchStream.web] Unable to access microphone: Not supported` on `/session/tune` | Headless browser exposes no mic device; `usePitchStream().start()` rejection is uncaught | Run the tune step in a real browser with microphone permission; functional follow-up |
 | AlphaTab WebView on older Android | Tab rendering crashes | Underlying Chromium WebView version | Update WebView via Play Store |
 | Large lesson files (>10MB) | Slow initial render | Full MusicXML + audio stems loaded at once | Lazy-load sections |
 

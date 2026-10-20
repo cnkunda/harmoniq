@@ -98,7 +98,7 @@ export function WaveformPlaybackActions({ userWavBase64, referenceWavBase64, use
           <Text className="font-sans-medium text-sm text-wood-900">Play reference</Text>
         </AnimatedPressable>
       </View>
-      {label ? <Text className="mt-2 font-sans text-[11px] text-muted-light">{label}</Text> : null}
+      {label ? <Text className="mt-2 font-sans text-[11px] text-wood-600">{label}</Text> : null}
     </View>
   )
 }

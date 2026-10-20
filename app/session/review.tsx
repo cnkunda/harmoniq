@@ -678,13 +678,13 @@ export default function ReviewScreen() {
             noteResults={currentSession.noteResults}
           />
           {currentSession.bpmDriftSampleCount >= BPM_DRIFT_NOTE_MINIMUM ? (
-            <Text className="mt-2 font-sans text-xs text-wood-600">
+            <Text className="mt-2 font-sans text-xs text-muted-brown">
               Timing vs beat (mean): {currentSession.bpmDrift >= 0 ? '+' : ''}
               {Math.round(currentSession.bpmDrift)} ms — {currentSession.bpmDrift >= 0 ? 'ahead of grid' : 'behind grid'}
             </Text>
           ) : null}
           {currentSession.bestStreak > currentSession.bestStreakAtSessionStart ? (
-            <Text className="mt-1 font-sans text-xs text-wood-600">
+            <Text className="mt-1 font-sans text-xs text-muted-brown">
               New high clean-streak this session: {currentSession.bestStreak} beats (previous best at start:{' '}
               {currentSession.bestStreakAtSessionStart}).
             </Text>
@@ -732,7 +732,7 @@ export default function ReviewScreen() {
         </AnimatedPressable>
       </View>
 
-      <Text className="mt-2 font-mono text-[11px] text-wood-600">{exportState}</Text>
+      <Text className="mt-2 font-mono text-[11px] text-muted-brown">{exportState}</Text>
 
       {reviewError ? (
         <ErrorBanner
@@ -806,7 +806,7 @@ export default function ReviewScreen() {
       ) : null}
 
       {!sectionMidiBase64 && (tabs.full || tabs.skeleton || tabs.alt) ? (
-        <Text className="mt-2 font-sans text-[11px] text-wood-600">
+        <Text className="mt-2 font-sans text-[11px] text-muted-brown">
           Using generated fallback MIDI for export (section has no `midi_base64` yet).
         </Text>
       ) : null}

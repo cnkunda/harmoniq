@@ -32,6 +32,8 @@ async function waitForPageReady(page: Page): Promise<void> {
   } catch {
     // Some screens stream data or keep sockets open.
   }
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(750);
 }
 
 export async function captureRouteArtifacts(page: Page, route: RouteDefinition): Promise<CaptureResult> {
@@ -41,11 +43,12 @@ export async function captureRouteArtifacts(page: Page, route: RouteDefinition):
   await page.goto(routePath, { waitUntil: "domcontentloaded" });
   await waitForPageReady(page);
 
-  const fullPageScreenshot = path.join(outputDir, "full-page.png");
-  await page.screenshot({ path: fullPageScreenshot, fullPage: true });
-
+  // Viewport is the authoritative capture; full-page is archival only.
   const viewportScreenshot = path.join(outputDir, "viewport.png");
   await page.screenshot({ path: viewportScreenshot, fullPage: false });
+
+  const fullPageScreenshot = path.join(outputDir, "full-page.png");
+  await page.screenshot({ path: fullPageScreenshot, fullPage: true });
 
   const stateScreenshots: Partial<Record<UiState, string>> = {};
   const states: UiState[] = ["loading", "empty", "error", "modal"];

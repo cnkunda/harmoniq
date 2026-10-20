@@ -57,6 +57,8 @@ export function ChordStrip({ chordEvents, barTimestamps, onChordTap }: ChordStri
             <AnimatedPressable
               key={bc.bar}
               onPress={() => onChordTap?.(bc.eventIndex, bc.chord)}
+              accessibilityRole="button"
+              accessibilityLabel={`Chord ${isNoChord ? 'none' : formatChordDisplay(bc.chord)} at bar ${bc.bar + 1}`}
               className={`mx-0.5 items-center rounded-lg border px-2.5 py-1 ${
                 isActive
                   ? 'border-amber-accent bg-amber-accent/20'

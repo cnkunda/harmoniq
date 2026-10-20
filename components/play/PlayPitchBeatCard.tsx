@@ -66,6 +66,7 @@ export function PlayPitchBeatCard({
   const shell = embedded
     ? 'min-h-0 flex-1 overflow-hidden'
     : 'overflow-hidden rounded-2xl border border-wood-600/45 bg-cream-dark/55 shadow-sm shadow-black/10'
+  const mutedTextTone = embedded ? 'text-muted-light' : 'text-wood-600'
 
   return (
     <View className={shell}>
@@ -78,13 +79,13 @@ export function PlayPitchBeatCard({
 
       <View className="px-3 pb-3 pt-3">
         <View className="flex-row items-baseline justify-between gap-2">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">Pitch targets</Text>
+          <Text className={`font-sans-medium text-xs uppercase tracking-wide ${mutedTextTone}`}>Pitch targets</Text>
           {nQueue > 0 ? (
-            <Text className="shrink font-mono text-[10px] text-wood-600">
+            <Text className={`shrink font-mono text-[10px] ${mutedTextTone}`}>
               {nQueue} note{nQueue === 1 ? '' : 's'}
             </Text>
           ) : (
-            <Text className="shrink font-mono text-[10px] text-wood-600">Tab…</Text>
+            <Text className={`shrink font-mono text-[10px] ${mutedTextTone}`}>Tab…</Text>
           )}
         </View>
 
@@ -128,11 +129,11 @@ export function PlayPitchBeatCard({
 
       <View className="px-3 pb-3 pt-3">
         <View className="flex-row items-baseline justify-between gap-2">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-600">Score · by beat</Text>
+          <Text className={`font-sans-medium text-xs uppercase tracking-wide ${mutedTextTone}`}>Score · by beat</Text>
           {pct != null ? (
-            <Text className="font-mono text-[10px] text-wood-900">{pct}% on-pitch</Text>
+            <Text className={`font-mono text-[10px] ${embedded ? 'text-muted-light' : 'text-wood-900'}`}>{pct}% on-pitch</Text>
           ) : (
-            <Text className="font-mono text-[10px] text-wood-600">—</Text>
+            <Text className={`font-mono text-[10px] ${mutedTextTone}`}>—</Text>
           )}
         </View>
         <View className="mt-2">
@@ -142,14 +143,14 @@ export function PlayPitchBeatCard({
           <View className="mt-1.5 flex-row gap-0.5">
             {alignedLabels.map((label, i) => (
               <View key={`lb-${i}-${label}`} className="min-w-[6px] flex-1 items-center">
-                <Text className="font-mono text-[8px] text-wood-600" numberOfLines={1}>
+                <Text className={`font-mono text-[8px] ${mutedTextTone}`} numberOfLines={1}>
                   {label}
                 </Text>
               </View>
             ))}
           </View>
         ) : null}
-        <Text className="mt-1.5 font-sans text-[10px] text-wood-600">
+        <Text className={`mt-1.5 font-sans text-[10px] ${mutedTextTone}`}>
           Hits {hit} · Close {close} · Miss {miss}
         </Text>
       </View>

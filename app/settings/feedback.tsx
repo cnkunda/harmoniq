@@ -147,6 +147,7 @@ export default function FeedbackDashboardScreen() {
       setExporting(`${jobId}:${split}`)
       try {
         let payload: FeedbackExportResponse
+        let fallbackWarning: string | null = null
         if (jobId === DEMO_LESSON_JOB_ID) {
           payload = localExportPayload(
             deduped.filter((row) => row.job_id === jobId),
@@ -157,21 +158,19 @@ export default function FeedbackDashboardScreen() {
           try {
             payload = await fetchFeedbackExport(jobId, split)
           } catch (e) {
-            const fallback = localExportPayload(
+            payload = localExportPayload(
               deduped.filter((row) => row.job_id === jobId),
               split,
               jobId,
             )
-            toast.error(
-              `Server export unavailable; exporting local records instead: ${
-                e instanceof Error ? e.message : 'unknown error'
-              }`,
-            )
-            payload = fallback
+            fallbackWarning = `Server export unavailable; exporting local records instead: ${
+              e instanceof Error ? e.message : 'unknown error'
+            }`
           }
         }
         await shareFeedbackJson(payload, filename)
-        toast.success('Feedback export ready')
+        if (fallbackWarning) toast.error(fallbackWarning)
+        else toast.success('Feedback export ready')
       } catch (e) {
         toast.error(`Export failed: ${e instanceof Error ? e.message : 'unknown error'}`)
       } finally {
@@ -279,7 +278,7 @@ export default function FeedbackDashboardScreen() {
           <AnimatedPressable
             onPress={() => router.back()}
             haptic="light"
-            className="rounded-full border border-wood-600/50 bg-wood-800/60 p-2"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-wood-600/50 bg-wood-800/60"
             accessibilityRole="button"
             accessibilityLabel="Back to settings"
           >
@@ -318,8 +317,9 @@ export default function FeedbackDashboardScreen() {
             onPress={() => void exportAll('chord')}
             disabled={exporting != null || deduped.length === 0}
             haptic="light"
-            className="flex-1 flex-row items-center justify-center gap-2 rounded-lg border border-amber-accent/50 bg-amber-accent/15 px-3 py-2.5 disabled:opacity-50"
+            className="flex min-h-[44px] flex-1 flex-row items-center justify-center gap-2 rounded-lg border border-amber-accent/50 bg-amber-accent/15 px-3 py-2.5 disabled:opacity-50"
             accessibilityRole="button"
+            accessibilityLabel="Export all chord feedback"
           >
             <Download color={colors.amber.accent} size={16} strokeWidth={2} />
             <Text className="font-sans-medium text-xs text-amber-light">
@@ -330,8 +330,9 @@ export default function FeedbackDashboardScreen() {
             onPress={() => void exportAll('solo')}
             disabled={exporting != null || deduped.length === 0}
             haptic="light"
-            className="flex-1 flex-row items-center justify-center gap-2 rounded-lg border border-amber-accent/50 bg-amber-accent/15 px-3 py-2.5 disabled:opacity-50"
+            className="flex min-h-[44px] flex-1 flex-row items-center justify-center gap-2 rounded-lg border border-amber-accent/50 bg-amber-accent/15 px-3 py-2.5 disabled:opacity-50"
             accessibilityRole="button"
+            accessibilityLabel="Export all solo feedback"
           >
             <Download color={colors.amber.accent} size={16} strokeWidth={2} />
             <Text className="font-sans-medium text-xs text-amber-light">
@@ -370,8 +371,9 @@ export default function FeedbackDashboardScreen() {
                 <AnimatedPressable
                   onPress={() => void exportJob(job.jobId, 'chord')}
                   disabled={exporting != null}
-                  className="flex-1 rounded-lg border border-wood-600/50 bg-wood-900/40 px-3 py-2 disabled:opacity-50"
+                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-wood-600/50 bg-wood-900/40 px-3 py-2 disabled:opacity-50"
                   accessibilityRole="button"
+                  accessibilityLabel={`Export chord feedback for ${job.jobId}`}
                 >
                   <Text className="text-center font-sans-medium text-[11px] text-cream">
                     {exporting === `${job.jobId}:chord` ? 'Exporting…' : 'Export chords'}
@@ -380,8 +382,9 @@ export default function FeedbackDashboardScreen() {
                 <AnimatedPressable
                   onPress={() => void exportJob(job.jobId, 'solo')}
                   disabled={exporting != null}
-                  className="flex-1 rounded-lg border border-wood-600/50 bg-wood-900/40 px-3 py-2 disabled:opacity-50"
+                  className="flex min-h-[44px] flex-1 items-center justify-center rounded-lg border border-wood-600/50 bg-wood-900/40 px-3 py-2 disabled:opacity-50"
                   accessibilityRole="button"
+                  accessibilityLabel={`Export solo feedback for ${job.jobId}`}
                 >
                   <Text className="text-center font-sans-medium text-[11px] text-cream">
                     {exporting === `${job.jobId}:solo` ? 'Exporting…' : 'Export solo'}
@@ -409,9 +412,9 @@ export default function FeedbackDashboardScreen() {
                       onPress={() => confirmRevert(row)}
                       disabled={busyId === row.id}
                       haptic="light"
-                      className="rounded-full border border-danger/40 bg-danger/10 p-2 disabled:opacity-50"
+                      className="flex h-11 w-11 items-center justify-center rounded-full border border-danger/40 bg-danger/10 disabled:opacity-50"
                       accessibilityRole="button"
-                      accessibilityLabel="Revert feedback"
+                      accessibilityLabel={`Revert ${FEEDBACK_TYPE_LABELS[row.feedback_type]} for event ${row.event_index + 1}`}
                     >
                       <RotateCcw color={colors.danger} size={16} strokeWidth={2} />
                     </AnimatedPressable>
