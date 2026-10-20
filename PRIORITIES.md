@@ -6,10 +6,10 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Phase 2 commits 98–148** — archived.  
 **Milestone A (MT3-Primary Pipeline)** — archived, complete.  
 **Milestone B (Fretboard Dual-Mode)** — archived, complete.  
-**Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167).  
+**Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159 completed → archived).  
 **Milestone D (Infrastructure)** — partially implemented; remaining gaps at commits 169–172 (151 SSE progress stream completed → archived).  
 **Current Phase 2** — Pipeline validation & publication close-out (commits 149–150).  
-**Active backlog** — numbered commits **149–183** below (one commit = one spec; 151–155 completed → archived).  
+**Active backlog** — numbered commits **149–183** below (one commit = one spec; 151–159 completed → archived).  
 **Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 177–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 159–183** (151–155 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (149–150), then backlog 160–183** (151–159 completed → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -117,44 +117,13 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-## Active Backlog — Commits 159–183
+## Active Backlog — Commits 160–183
 
 Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
 
 ---
 
 **Group: Engagement features — promoted from Milestone C (159–167), then left-handed parity (168)**
-
----
-
-### Commit 159: User Feedback & Manual Overrides (was C1)
-
-**Status:** Complete
-
-**Goal:** Turn ad-hoc corrections into first-class structured feedback — a one-tap "report incorrect" path that persists to a `user_feedback` table and feeds the Branch A/B distillation datasets.
-
-**Current State:** Correction plumbing already exists from archive Commit 110: `useCorrectionStore` with chord/note/voicing overrides, `PATCH /analyze/{job_id}/chord/{beat_index}` + `/solo-note` + `/voicing` endpoints, `correction_count`/`correction_coverage` metrics on `LessonJSON`, and `GET /analyze/{job_id}/corrections/export`. What's missing: no single `POST /analyze/{job_id}/feedback` endpoint, no `user_feedback` table, no chord-vs-solo split exports (`chord_feedback.json` / `solo_feedback.json`), no Review-screen summary, and no Settings feedback dashboard.
-
-**Scope:**
-- Extend existing `useCorrectionStore` with a "report incorrect" action on any chord/note in the fretboard or chord timeline
-- Add `POST /analyze/{job_id}/feedback` backend endpoint accepting structured feedback:
-  - `{ type: "chord_correction" | "note_correction" | "wrong_chord", event_index, original, corrected, reason? }`
-- Persist feedback to `user_feedback` SQLite table with `job_id`, `song_id`, `user_id`, `timestamp`, `feedback_type`, `original_value`, `corrected_value`
-- Route corrections to two distillation sets:
-  - Chord corrections → Branch A chord student's training set (exportable as `chord_feedback.json`)
-  - Note/solo corrections → Branch B solo student's training set (exportable as `solo_feedback.json`)
-- Add feedback summary in Review screen: "You corrected 3 chords and 2 notes in this session"
-- Add cumulative feedback stats to player profile: total corrections, most-corrected chord types
-- Feedback dashboard in Settings: list of all corrections with revert capability
-
-**Acceptance Criteria:**
-
-- [x] "Report incorrect" action available on any chord/note and persists structured feedback
-- [x] `user_feedback` table written on both SQLite (mobile) and IndexedDB (web)
-- [x] Chord and solo feedback exportable as `chord_feedback.json` / `solo_feedback.json`
-- [x] Review shows per-session correction summary
-- [x] Settings dashboard lists corrections with revert
-- [x] Migration added per [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md); tests green
 
 ---
 

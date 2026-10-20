@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the completed carry-over fixes (commits 151–155). Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the completed carry-over fixes (commits 151–155) and engagement Commit 159. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 149–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C9 → 159–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 149–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1 → 159 (completed → archived), Milestone C2–C9 → 160–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification) and commit 159 (user feedback & manual overrides) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -25,6 +25,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 156 (Research Module Wiring — transcription_confidence & instrument_confusion) Archive Date:** October 15, 2026 — Complete; all 5 ACs verified (backend pytest green); spec and implementation notes archived below.
 **Commit 157 (Harmonized Solo UI + Coach Chord-Tone Integration) Archive Date:** October 18, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 484 passed, backend pytest green); spec and implementation notes archived below.
 **Commit 158 (UX Audit Loop Re-Run & Gap Fixes) Archive Date:** October 19, 2026 — Complete; all 4 ACs verified (report isComplete: true, 0 error-severity gaps, all 46 residual flags waived with rationale in the report; lint 0 errors, vitest 484 passed); spec and implementation notes archived below.
+**Commit 159 (User Feedback & Manual Overrides) Archive Date:** October 20, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped); spec and implementation notes archived below.
 
 ---
 
@@ -2320,3 +2321,43 @@ Full specs archived verbatim below.
 - **Known capture race (documented, out of scope):** 20 of 25 full-page PNGs are blank-white from the race in `tests/ui/support/capture.ts`; viewport captures confirm correct dark UI rendering. Recorded in the report's adjudication block.
 - **Artifacts:** `docs/audit/ux-improve-state.json` iteration → 5; `docs/audit/.ux-loop-complete` marker written. Local-only `.opencode/instructions/UX_IMPROVE_LOOP.md` gained a "Vision backend: local Ollama fallback" section (setup, config, timeouts) plus an AGENTS.md pointer (commit `cdc14e6`) so future runs reach for the working local backend first.
 - **Verification:** `npm run lint` 0 errors; `npm run test` 484/484 passed.
+
+---
+
+### Commit 159: User Feedback & Manual Overrides (was C1)
+
+**Status:** Complete — all 6 ACs verified (6/6). Moved from [`PRIORITIES.md`](PRIORITIES.md).
+
+**Goal:** Turn ad-hoc corrections into first-class structured feedback — a one-tap "report incorrect" path that persists to a `user_feedback` table and feeds the Branch A/B distillation datasets.
+
+**Current State (spec verbatim):** Correction plumbing already exists from archive Commit 110: `useCorrectionStore` with chord/note/voicing overrides, `PATCH /analyze/{job_id}/chord/{beat_index}` + `/solo-note` + `/voicing` endpoints, `correction_count`/`correction_coverage` metrics on `LessonJSON`, and `GET /analyze/{job_id}/corrections/export`. What's missing: no single `POST /analyze/{job_id}/feedback` endpoint, no `user_feedback` table, no chord-vs-solo split exports (`chord_feedback.json` / `solo_feedback.json`), no Review-screen summary, and no Settings feedback dashboard.
+
+**Scope (spec verbatim):**
+
+- Extend existing `useCorrectionStore` with a "report incorrect" action on any chord/note in the fretboard or chord timeline
+- Add `POST /analyze/{job_id}/feedback` backend endpoint accepting structured feedback:
+  - `{ type: "chord_correction" | "note_correction" | "wrong_chord", event_index, original, corrected, reason? }`
+- Persist feedback to `user_feedback` SQLite table with `job_id`, `song_id`, `user_id`, `timestamp`, `feedback_type`, `original_value`, `corrected_value`
+- Route corrections to two distillation sets:
+  - Chord corrections → Branch A chord student's training set (exportable as `chord_feedback.json`)
+  - Note/solo corrections → Branch B solo student's training set (exportable as `solo_feedback.json`)
+- Add feedback summary in Review screen: "You corrected 3 chords and 2 notes in this session"
+- Add cumulative feedback stats to player profile: total corrections, most-corrected chord types
+- Feedback dashboard in Settings: list of all corrections with revert capability
+
+**Acceptance Criteria:**
+
+- [x] "Report incorrect" action available on any chord/note and persists structured feedback
+- [x] `user_feedback` table written on both SQLite (mobile) and IndexedDB (web)
+- [x] Chord and solo feedback exportable as `chord_feedback.json` / `solo_feedback.json`
+- [x] Review shows per-session correction summary
+- [x] Settings dashboard lists corrections with revert
+- [x] Migration added per [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md); tests green
+
+**Implementation notes:**
+
+- **Persistence:** native SQLite migration v17 adds `user_feedback` with job and unique `(job_id, feedback_type, event_index)` indexes plus rollback/partial-recovery handling; web IndexedDB v5 adds the store with a `job_id` index, hydration, persistence, stats, and clear support. Local upserts dedupe by job/type/event and keep an anonymous per-install `feedback_user_id` in `app_prefs`.
+- **Backend:** added `FeedbackType`, `FeedbackRequest`, `FeedbackRecord`, `FeedbackRevertRequest`, and `FeedbackExportResponse`; new endpoints `POST /analyze/{job_id}/feedback`, `POST /analyze/{job_id}/feedback/revert`, and `GET /analyze/{job_id}/feedback/export?split=chord|solo`; per-job append-only audit file `feedback.json`, event-index validation, deduped latest-record exports, and exclusion of reverted records.
+- **Frontend:** `submitFeedback` / `revertFeedbackRecord` / `fetchFeedbackExport` API methods; `useCorrectionStore` report/revert actions with server-sync results; chord and note "Report incorrect" affordances in Study and Listen; note-detail "Correct note" restored; Review renders structured counts with legacy correction-history fallback; Settings gains cumulative stats and a `/settings/feedback` dashboard with local/server exports and revert.
+- **Exports:** per-job `chord_feedback_<job>.json` / `solo_feedback_<job>.json` server exports with local fallback, and all-feedback `chord_feedback.json` / `solo_feedback.json`; chord exports include `wrong_chord` negative labels and solo exports include note feedback.
+- **Verification:** `npm run lint` 0 errors; `npm run test` 490/490 passed; backend `python -m pytest -q` 1342 passed / 6 skipped; new `backend/tests/test_commit159_feedback.py` added to CI. Committed as `991d02c` (`feat: Commit 159 — User Feedback & Manual Overrides`).
