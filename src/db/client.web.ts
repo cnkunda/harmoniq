@@ -4,6 +4,7 @@ import {
     getHarmoniqIdbHandle,
     idbClearPracticeStores,
     idbLoadEverything,
+    idbPersistFeedback,
     idbPersistJams,
     idbPersistLessons,
     idbPersistLicks,
@@ -41,9 +42,13 @@ import type {
     SessionJournalRow,
     SkillNodeRow,
     SkillSessionMutationRow,
+    UserFeedbackInsertInput,
+    UserFeedbackRow,
+    UserFeedbackStats,
 } from '@/src/db/types'
 import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
+import { buildFeedbackStats } from '@/src/utils/feedback'
 import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 
 const skillNodes = new Map<string, SkillNodeRow>()
@@ -55,6 +60,7 @@ const licks: LickRow[] = []
 const lessonCatalog: LessonPersistRow[] = []
 const jamSnapshots: JamSnapshotInsertInput[] = []
 const planCompletions: PracticePlanCompletionRow[] = []
+const userFeedback: UserFeedbackRow[] = []
 
 let initPromise: Promise<void> | null = null
 
@@ -149,6 +155,10 @@ function applyHydration(h: IdbHydration): void {
     a.completed_at < b.completed_at ? 1 : a.completed_at > b.completed_at ? -1 : 0,
   )
   planCompletions.push(...plansSorted)
+  userFeedback.length = 0
+  userFeedback.push(
+    ...[...(h.feedback ?? [])].sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0)),
+  )
   lessonCatalog.length = 0
   lessonCatalog.push(...(h.lessons ?? []).map((row) => ({ ...row })))
 }
@@ -179,6 +189,10 @@ async function flushPlanCompletions(): Promise<void> {
 
 async function flushLessons(): Promise<void> {
   await idbPersistLessons(getHarmoniqIdbHandle(), lessonCatalog)
+}
+
+async function flushFeedback(): Promise<void> {
+  await idbPersistFeedback(getHarmoniqIdbHandle(), userFeedback)
 }
 
 /**
@@ -636,6 +650,7 @@ export async function clearAllPracticeData(): Promise<void> {
   lessonCatalog.length = 0
   jamSnapshots.length = 0
   planCompletions.length = 0
+  userFeedback.length = 0
   for (const n of DEFAULT_SKILL_NODES) {
     skillNodes.set(n.id, defaultSkillRow(n))
   }
@@ -775,4 +790,65 @@ export async function hydrateWebLessonStore(): Promise<void> {
   const { useLessonStore } = await import('@/src/stores/lessonStore')
   if (useLessonStore.getState().lesson != null) return
   useLessonStore.setState({ lesson, status: 'complete', error: null })
+}
+
+function newFeedbackId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+/** Commit 159: upsert by (job_id, feedback_type, event_index). */
+export async function upsertUserFeedback(input: UserFeedbackInsertInput): Promise<UserFeedbackRow> {
+  await initDb()
+  seedWebSkillNodes()
+  const row: UserFeedbackRow = {
+    id: input.id ?? newFeedbackId(),
+    job_id: input.job_id,
+    song_id: input.song_id,
+    user_id: input.user_id,
+    timestamp: input.timestamp ?? new Date().toISOString(),
+    feedback_type: input.feedback_type,
+    event_index: input.event_index,
+    original_value: input.original_value,
+    corrected_value: input.corrected_value,
+    reason: input.reason,
+  }
+  const i = userFeedback.findIndex(
+    (x) =>
+      x.job_id === row.job_id &&
+      x.feedback_type === row.feedback_type &&
+      x.event_index === row.event_index,
+  )
+  if (i >= 0) userFeedback[i] = row
+  else userFeedback.push(row)
+  await flushFeedback()
+  return row
+}
+
+export async function listUserFeedback(): Promise<UserFeedbackRow[]> {
+  await initDb()
+  seedWebSkillNodes()
+  return [...userFeedback].sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0))
+}
+
+export async function listUserFeedbackForJob(jobId: string): Promise<UserFeedbackRow[]> {
+  await initDb()
+  seedWebSkillNodes()
+  const jid = jobId.trim()
+  if (!jid) return []
+  return userFeedback
+    .filter((row) => row.job_id === jid)
+    .sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0))
+}
+
+export async function deleteUserFeedback(id: string): Promise<void> {
+  await initDb()
+  seedWebSkillNodes()
+  const i = userFeedback.findIndex((row) => row.id === id)
+  if (i < 0) return
+  userFeedback.splice(i, 1)
+  await flushFeedback()
+}
+
+export async function getUserFeedbackStats(): Promise<UserFeedbackStats> {
+  return buildFeedbackStats(await listUserFeedback())
 }

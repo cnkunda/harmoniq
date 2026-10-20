@@ -8,6 +8,7 @@ import {
   Download,
   Guitar,
   Link2,
+  MessageSquare,
   Music,
   Settings as SettingsIcon,
   Sliders,
@@ -44,6 +45,7 @@ import {
   buildJournalExportText,
   clearAllPracticeData,
   getAppPref,
+  getUserFeedbackStats,
   setAppPref,
 } from '@/src/db/client'
 import {
@@ -64,6 +66,7 @@ PREF_MOOD_CHECK_SKIP,
   PREF_VOICE_COACH_RATE,
   type CoachVoiceId,
 } from '@/src/db/schema'
+import type { UserFeedbackStats } from '@/src/db/types'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
 import { fetchPersistAndDeriveSpotifyTaste } from '@/src/spotify/fetchPersistAndDeriveSpotify'
 import { formatSpotifySetupError } from '@/src/spotify/spotifyConnectErrors'
@@ -122,6 +125,7 @@ export default function SettingsScreen() {
   const [spotifyProfile, setSpotifyProfile] = useState<SpotifyTasteProfile | null>(null)
   const [derivedTasteLabel, setDerivedTasteLabel] = useState<string | null>(null)
   const [experienceLevelSaved, setExperienceLevelSaved] = useState<string | null>(null)
+  const [feedbackStats, setFeedbackStats] = useState<UserFeedbackStats | null>(null)
 
   const loadPrefs = useCallback(async () => {
     const [full, legacyFull, hz, style, metro, skipMood, voice, tasteJson, derivedTasteRaw, expSaved] = await Promise.all([
@@ -159,6 +163,16 @@ export default function SettingsScreen() {
     useCallback(() => {
       void loadPrefs()
     }, [loadPrefs]),
+  )
+
+  useFocusEffect(
+    useCallback(() => {
+      void getUserFeedbackStats()
+        .then(setFeedbackStats)
+        .catch((e) => {
+          toast.error(`Could not load feedback stats: ${e instanceof Error ? e.message : 'unknown error'}`)
+        })
+    }, []),
   )
 
   useFocusEffect(
@@ -408,6 +422,28 @@ export default function SettingsScreen() {
               </Text>
             </View>
           </View>
+          <AnimatedPressable
+            onPress={() => router.push('/settings/feedback')}
+            haptic="light"
+            className="mt-4 flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-900/40 p-3"
+            accessibilityRole="button"
+            accessibilityLabel="Open feedback and corrections"
+          >
+            <MessageSquare color={colors.amber.accent} size={20} strokeWidth={2} />
+            <View className="flex-1">
+              <Text className="font-sans-medium text-sm text-cream">Feedback & corrections</Text>
+              <Text className="mt-0.5 font-sans text-[11px] text-muted-light">
+                {feedbackStats && feedbackStats.total > 0
+                  ? `${feedbackStats.total} report${feedbackStats.total === 1 ? '' : 's'}${
+                      feedbackStats.most_corrected_chords[0]
+                        ? ` · most corrected ${feedbackStats.most_corrected_chords[0].chord}`
+                        : ''
+                    }`
+                  : 'Review your reported chords and notes'}
+              </Text>
+            </View>
+            <ChevronRight color={colors.muted.light} size={18} strokeWidth={2} />
+          </AnimatedPressable>
         </SettingsCard>
 
         {/* Practice Settings */}
@@ -636,6 +672,15 @@ export default function SettingsScreen() {
           description="Export or clear your practice data"
           defaultOpen={false}
         >
+          <AnimatedPressable
+            onPress={() => router.push('/settings/feedback')}
+            haptic="light"
+            className="mb-3 flex-row items-center justify-center gap-2 rounded-lg border border-wood-600/50 bg-wood-900/40 px-4 py-3"
+            accessibilityRole="button"
+          >
+            <MessageSquare color={colors.amber.accent} size={18} strokeWidth={2} />
+            <Text className="font-sans-medium text-cream">Feedback & correction history</Text>
+          </AnimatedPressable>
           <AnimatedPressable
             onPress={() => void exportJournal()}
             disabled={exportBusy}

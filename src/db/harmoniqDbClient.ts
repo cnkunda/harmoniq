@@ -16,6 +16,9 @@ import type {
     SessionJournalRow,
     SkillNodeRow,
     SkillSessionMutationRow,
+    UserFeedbackInsertInput,
+    UserFeedbackRow,
+    UserFeedbackStats,
 } from '@/src/db/types'
 import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 
@@ -66,4 +69,10 @@ export interface HarmoniqDbClient {
   deleteLessonByJobId(jobId: string): Promise<void>
   /** Web: hydrate Zustand from IDB lesson cache. Native: no-op. */
   hydrateWebLessonStore(): Promise<void>
+  /** Commit 159: latest feedback per (job, type, event), newest first. */
+  upsertUserFeedback(input: UserFeedbackInsertInput): Promise<UserFeedbackRow>
+  listUserFeedback(): Promise<UserFeedbackRow[]>
+  listUserFeedbackForJob(jobId: string): Promise<UserFeedbackRow[]>
+  deleteUserFeedback(id: string): Promise<void>
+  getUserFeedbackStats(): Promise<UserFeedbackStats>
 }

@@ -80,6 +80,7 @@ export default function RootLayout() {
             <Stack.Screen name="add-song" options={{ presentation: 'modal' }} />
             <Stack.Screen name="listening" />
             <Stack.Screen name="review-archive/[sessionId]" />
+            <Stack.Screen name="settings/feedback" />
             <Stack.Screen name="session" />
           </Stack>
           <Toast config={toastConfig} />

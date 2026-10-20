@@ -14,6 +14,10 @@ export type NoteDetailCardProps = {
   alternateFingerLines?: string[]
   coachText: string
   onDismiss?: () => void
+  /** Commit 159: report the displayed note as incorrectly transcribed. */
+  onReportIncorrect?: () => void
+  /** Commit 159: open the existing note correction controls for this note. */
+  onCorrectNote?: () => void
   chordToneStatus?: ChordToneStatus | null
   /** Commit 157: backend scale-degree label ("R", "b3", …) when harmonized analysis exists. */
   harmonicDegree?: string | null
@@ -54,6 +58,8 @@ export function NoteDetailCard({
   alternateFingerLines,
   coachText,
   onDismiss,
+  onReportIncorrect,
+  onCorrectNote,
   chordToneStatus,
   harmonicDegree,
   confidence,
@@ -157,6 +163,33 @@ export function NoteDetailCard({
         <View className="mt-4 rounded-2xl border border-wood-600 bg-wood-700 p-4">
           <Text className="font-sans text-xs leading-relaxed text-cream">{coachText}</Text>
         </View>
+
+        {onReportIncorrect || onCorrectNote ? (
+          <View className="mt-4 flex-row flex-wrap gap-2">
+            {onCorrectNote ? (
+              <AnimatedPressable
+                haptic="light"
+                onPress={onCorrectNote}
+                className="rounded-full border border-amber-accent/60 bg-amber-accent/10 px-3 py-2"
+                accessibilityRole="button"
+                accessibilityLabel="Correct this note"
+              >
+                <Text className="font-sans-medium text-xs text-amber-light">Correct note</Text>
+              </AnimatedPressable>
+            ) : null}
+            {onReportIncorrect ? (
+              <AnimatedPressable
+                haptic="light"
+                onPress={onReportIncorrect}
+                className="rounded-full border border-danger/45 bg-danger/10 px-3 py-2"
+                accessibilityRole="button"
+                accessibilityLabel="Report this note as incorrect"
+              >
+                <Text className="font-sans-medium text-xs text-danger">Report incorrect</Text>
+              </AnimatedPressable>
+            ) : null}
+          </View>
+        ) : null}
 
         <Text className="mt-4 font-sans text-[10px] text-muted-light">
           Drag to reposition. Tap another note in score or fretboard to compare.

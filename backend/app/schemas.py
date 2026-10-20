@@ -1069,6 +1069,58 @@ class CorrectionExportRequest(BaseModel):
     format: Literal["json", "csv"] = Field(default="json", description="Export format")
 
 
+# Commit 159 — structured user feedback and training exports.
+
+FeedbackType = Literal["chord_correction", "note_correction", "wrong_chord"]
+
+
+class FeedbackRequest(BaseModel):
+    """POST /analyze/{job_id}/feedback — record structured user feedback."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    feedback_type: FeedbackType
+    event_index: int = Field(..., ge=0, description="Index into chord timeline or solo notes")
+    original_value: dict[str, Any] = Field(default_factory=dict)
+    corrected_value: dict[str, Any] | None = Field(default=None)
+    reason: str | None = Field(default=None, max_length=200)
+
+
+class FeedbackRecord(BaseModel):
+    """One persisted feedback record in a job's feedback.json audit log."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    job_id: str
+    song_id: str
+    feedback_type: FeedbackType
+    event_index: int
+    original_value: dict[str, Any] = Field(default_factory=dict)
+    corrected_value: dict[str, Any] | None = None
+    reason: str | None = None
+    created_at: str = Field(default="", description="ISO timestamp of feedback creation")
+    reverted_at: str | None = Field(default=None, description="ISO timestamp when feedback was reverted")
+
+
+class FeedbackRevertRequest(BaseModel):
+    """POST /analyze/{job_id}/feedback/revert — mark the latest record for an event reverted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    feedback_type: FeedbackType
+    event_index: int = Field(..., ge=0, description="Index into chord timeline or solo notes")
+
+
+class FeedbackExportResponse(BaseModel):
+    """GET /analyze/{job_id}/feedback/export — deduped, non-reverted training records."""
+
+    job_id: str
+    split: Literal["chord", "solo"]
+    exported_at: str
+    records: list[FeedbackRecord] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # Commit 111: Jam Mode Summary Agent
 # ---------------------------------------------------------------------------

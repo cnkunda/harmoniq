@@ -129,7 +129,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 159: User Feedback & Manual Overrides (was C1)
 
-**Status:** deferred
+**Status:** Complete
 
 **Goal:** Turn ad-hoc corrections into first-class structured feedback — a one-tap "report incorrect" path that persists to a `user_feedback` table and feeds the Branch A/B distillation datasets.
 
@@ -149,12 +149,12 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] "Report incorrect" action available on any chord/note and persists structured feedback
-- [ ] `user_feedback` table written on both SQLite (mobile) and IndexedDB (web)
-- [ ] Chord and solo feedback exportable as `chord_feedback.json` / `solo_feedback.json`
-- [ ] Review shows per-session correction summary
-- [ ] Settings dashboard lists corrections with revert
-- [ ] Migration added per [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md); tests green
+- [x] "Report incorrect" action available on any chord/note and persists structured feedback
+- [x] `user_feedback` table written on both SQLite (mobile) and IndexedDB (web)
+- [x] Chord and solo feedback exportable as `chord_feedback.json` / `solo_feedback.json`
+- [x] Review shows per-session correction summary
+- [x] Settings dashboard lists corrections with revert
+- [x] Migration added per [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md); tests green
 
 ---
 

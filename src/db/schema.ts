@@ -142,6 +142,9 @@ export const PREF_DAILY_LICK_DISMISSED = 'daily_lick_dismissed_'
 /** Commit 72: `default` | `female` | `male` — OS voice selection hint. */
 export const PREF_VOICE_COACH_GENDER = 'voice_coach_gender'
 
+/** Commit 159: anonymous per-install id attached to exported feedback. */
+export const PREF_FEEDBACK_USER_ID = 'feedback_user_id'
+
 export const COACH_VOICE_OPTIONS = ['warm', 'concise', 'technical'] as const
 export type CoachVoiceId = (typeof COACH_VOICE_OPTIONS)[number]
 
@@ -280,6 +283,35 @@ export const MIGRATION_V16_JAM_SNAPSHOT_INFERRED_MODE = 'ALTER TABLE jam_snapsho
 
 /** Rollback for v16: remove inferred_mode column. */
 export const ROLLBACK_V16_JAM_SNAPSHOT_INFERRED_MODE = 'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS inferred_mode'
+
+/** v17: structured user feedback for chord/note corrections + exports (commit 159). */
+export const MIGRATION_V17_USER_FEEDBACK = `
+CREATE TABLE IF NOT EXISTS user_feedback (
+  id TEXT PRIMARY KEY NOT NULL,
+  job_id TEXT NOT NULL,
+  song_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  timestamp TEXT NOT NULL,
+  feedback_type TEXT NOT NULL CHECK (feedback_type IN ('chord_correction', 'note_correction', 'wrong_chord')),
+  event_index INTEGER NOT NULL,
+  original_value TEXT NOT NULL,
+  corrected_value TEXT,
+  reason TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_user_feedback_job ON user_feedback (job_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_feedback_job_type_event ON user_feedback (job_id, feedback_type, event_index);
+`
+
+/** Rollback for v17: drop feedback table. */
+export const ROLLBACK_V17_USER_FEEDBACK = [
+  'DROP INDEX IF EXISTS idx_user_feedback_job_type_event',
+  'DROP INDEX IF EXISTS idx_user_feedback_job',
+  'DROP TABLE IF EXISTS user_feedback',
+] as const
+
+/** Partial-recovery path when the v17 table already exists but the dedupe index was not created. */
+export const MIGRATION_V17_USER_FEEDBACK_UNIQUE_INDEX =
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_user_feedback_job_type_event ON user_feedback (job_id, feedback_type, event_index)'
 
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },

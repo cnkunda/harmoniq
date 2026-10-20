@@ -15,6 +15,8 @@ import {
     MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION,
     MIGRATION_V15_JAM_SNAPSHOT_SUMMARY,
     MIGRATION_V16_JAM_SNAPSHOT_INFERRED_MODE,
+    MIGRATION_V17_USER_FEEDBACK,
+    MIGRATION_V17_USER_FEEDBACK_UNIQUE_INDEX,
     MIGRATION_V3_APP_PREFS,
     MIGRATION_V4_SESSIONS_REVIEW,
     MIGRATION_V5_LICKS_STEMS_JSON,
@@ -32,6 +34,7 @@ import {
     ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION,
     ROLLBACK_V15_JAM_SNAPSHOT_SUMMARY,
     ROLLBACK_V16_JAM_SNAPSHOT_INFERRED_MODE,
+    ROLLBACK_V17_USER_FEEDBACK,
     ROLLBACK_V4_SESSIONS_REVIEW,
     ROLLBACK_V5_LICKS_STEMS_JSON,
     ROLLBACK_V6_JAM_SNAPSHOT_CONTEXT,
@@ -57,8 +60,12 @@ import type {
     SessionJournalRow,
     SkillNodeRow,
     SkillSessionMutationRow,
+    UserFeedbackInsertInput,
+    UserFeedbackRow,
+    UserFeedbackStats,
 } from '@/src/db/types'
 import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
+import { buildFeedbackStats } from '@/src/utils/feedback'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
 import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 
@@ -328,6 +335,26 @@ async function applyMigrations(): Promise<void> {
       await applyMigrationWithRollback(16, MIGRATION_V16_JAM_SNAPSHOT_INFERRED_MODE, ROLLBACK_V16_JAM_SNAPSHOT_INFERRED_MODE)
     } else {
       await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 16, new Date().toISOString())
+    }
+  }
+  if (current < 17) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(user_feedback)')
+    if ((cols ?? []).length === 0) {
+      await applyMigrationWithRollback(17, MIGRATION_V17_USER_FEEDBACK, ROLLBACK_V17_USER_FEEDBACK)
+    } else {
+      const indexes = await db.getAllAsync<{ name: string; unique: number }>('PRAGMA index_list(user_feedback)')
+      const hasUnique = (indexes ?? []).some(
+        (index) => index.name === 'idx_user_feedback_job_type_event' || index.unique === 1,
+      )
+      if (!hasUnique) {
+        await applyMigrationWithRollback(
+          17,
+          MIGRATION_V17_USER_FEEDBACK_UNIQUE_INDEX,
+          'DROP INDEX IF EXISTS idx_user_feedback_job_type_event',
+        )
+      } else {
+        await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 17, new Date().toISOString())
+      }
     }
   }
   for (const n of DEFAULT_SKILL_NODES) {
@@ -861,6 +888,7 @@ export async function clearAllPracticeData(): Promise<void> {
   await db.execAsync('DELETE FROM lessons')
   await db.execAsync('DELETE FROM jam_snapshots')
   await db.execAsync('DELETE FROM practice_plan_completions')
+  await db.execAsync('DELETE FROM user_feedback')
   await db.execAsync(
     `UPDATE skill_nodes SET score = 0, sessions_count = 0, last_session_date = NULL,
      easiness_factor = 2.5, interval_days = 1, next_review_date = NULL, sm2_repetitions = 0,
@@ -1071,3 +1099,82 @@ export async function getLatestGhostReference(jobId: string, sectionIndex: numbe
 
 /** No-op on native (lesson cache is web IDB only). */
 export async function hydrateWebLessonStore(): Promise<void> {}
+
+function newFeedbackId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+const USER_FEEDBACK_COLUMNS =
+  'id, job_id, song_id, user_id, timestamp, feedback_type, event_index, original_value, corrected_value, reason'
+
+/** Commit 159: upsert by (job_id, feedback_type, event_index). */
+export async function upsertUserFeedback(input: UserFeedbackInsertInput): Promise<UserFeedbackRow> {
+  await initDb()
+  const db = await getDb()
+  const row: UserFeedbackRow = {
+    id: input.id ?? newFeedbackId(),
+    job_id: input.job_id,
+    song_id: input.song_id,
+    user_id: input.user_id,
+    timestamp: input.timestamp ?? new Date().toISOString(),
+    feedback_type: input.feedback_type,
+    event_index: input.event_index,
+    original_value: input.original_value,
+    corrected_value: input.corrected_value,
+    reason: input.reason,
+  }
+  await db.runAsync(
+    `INSERT INTO user_feedback (${USER_FEEDBACK_COLUMNS})
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(job_id, feedback_type, event_index) DO UPDATE SET
+       id = excluded.id,
+       song_id = excluded.song_id,
+       user_id = excluded.user_id,
+       timestamp = excluded.timestamp,
+       original_value = excluded.original_value,
+       corrected_value = excluded.corrected_value,
+       reason = excluded.reason`,
+    row.id,
+    row.job_id,
+    row.song_id,
+    row.user_id,
+    row.timestamp,
+    row.feedback_type,
+    row.event_index,
+    row.original_value,
+    row.corrected_value,
+    row.reason,
+  )
+  return row
+}
+
+export async function listUserFeedback(): Promise<UserFeedbackRow[]> {
+  await initDb()
+  const db = await getDb()
+  const rows = await db.getAllAsync<UserFeedbackRow>(
+    `SELECT ${USER_FEEDBACK_COLUMNS} FROM user_feedback ORDER BY timestamp DESC`,
+  )
+  return rows ?? []
+}
+
+export async function listUserFeedbackForJob(jobId: string): Promise<UserFeedbackRow[]> {
+  await initDb()
+  const db = await getDb()
+  const jid = jobId.trim()
+  if (!jid) return []
+  const rows = await db.getAllAsync<UserFeedbackRow>(
+    `SELECT ${USER_FEEDBACK_COLUMNS} FROM user_feedback WHERE job_id = ? ORDER BY timestamp DESC`,
+    jid,
+  )
+  return rows ?? []
+}
+
+export async function deleteUserFeedback(id: string): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  await db.runAsync('DELETE FROM user_feedback WHERE id = ?', id)
+}
+
+export async function getUserFeedbackStats(): Promise<UserFeedbackStats> {
+  return buildFeedbackStats(await listUserFeedback())
+}

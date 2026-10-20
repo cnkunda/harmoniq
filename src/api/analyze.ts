@@ -9,6 +9,10 @@ import type {
   CoachHydrationStatusPayload,
   CurriculumSuggestResponse,
   CurriculumSuggestion,
+  FeedbackExportResponse,
+  FeedbackExportSplit,
+  FeedbackRecord,
+  FeedbackSubmission,
   JamResult,
   LearningContextPayload,
   LessonJSON,
@@ -1325,5 +1329,36 @@ export interface ChordEnrichmentStatus {
 export async function fetchChordEnrichmentStatus(jobId: string): Promise<ChordEnrichmentStatus> {
   return request<ChordEnrichmentStatus>(
     `/analyze/${encodeURIComponent(jobId)}/chord-enrichment`,
+  )
+}
+
+// ---- Commit 159: user feedback APIs ---------------------------------------
+
+export async function submitFeedback(jobId: string, payload: FeedbackSubmission): Promise<FeedbackRecord> {
+  return request<FeedbackRecord>(`/analyze/${encodeURIComponent(jobId)}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function revertFeedbackRecord(
+  jobId: string,
+  feedbackType: FeedbackSubmission['feedback_type'],
+  eventIndex: number,
+): Promise<FeedbackRecord> {
+  return request<FeedbackRecord>(`/analyze/${encodeURIComponent(jobId)}/feedback/revert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feedback_type: feedbackType, event_index: eventIndex }),
+  })
+}
+
+export async function fetchFeedbackExport(
+  jobId: string,
+  split: FeedbackExportSplit,
+): Promise<FeedbackExportResponse> {
+  return request<FeedbackExportResponse>(
+    `/analyze/${encodeURIComponent(jobId)}/feedback/export?split=${encodeURIComponent(split)}`,
   )
 }

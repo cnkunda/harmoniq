@@ -613,3 +613,39 @@ export interface CorrectionHistory {
   correction_count: number
   correction_coverage: number
 }
+
+// ---------------------------------------------------------------------------
+// Commit 159: User feedback types
+// ---------------------------------------------------------------------------
+
+export type FeedbackType = 'chord_correction' | 'note_correction' | 'wrong_chord'
+
+export interface FeedbackRecord {
+  id: string
+  job_id: string
+  song_id: string
+  feedback_type: FeedbackType
+  event_index: number
+  original_value: Record<string, unknown>
+  corrected_value: Record<string, unknown> | null
+  reason: string | null
+  created_at: string
+  reverted_at: string | null
+}
+
+export interface FeedbackSubmission {
+  feedback_type: FeedbackType
+  event_index: number
+  original_value: Record<string, unknown>
+  corrected_value?: Record<string, unknown> | null
+  reason?: string | null
+}
+
+export type FeedbackExportSplit = 'chord' | 'solo'
+
+export interface FeedbackExportResponse {
+  job_id: string
+  split: FeedbackExportSplit
+  exported_at: string
+  records: FeedbackRecord[]
+}

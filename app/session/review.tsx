@@ -31,9 +31,10 @@ import {
     insertLickRow,
     insertPracticePlanCompletionRow,
     insertSessionRow,
+    listUserFeedbackForJob,
 } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_MOOD, PREF_MUSICAL_TOLERANCE_MODE } from '@/src/db/schema'
-import type { GhostReferenceRow } from '@/src/db/types'
+import type { GhostReferenceRow, UserFeedbackRow } from '@/src/db/types'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
@@ -57,6 +58,7 @@ import { useSkillStore } from '@/src/stores/skillStore'
 import { useAppStore } from '@/src/stores/useAppStore'
 import type { MusicalToleranceMode, ScoreResult } from '@/src/types'
 import { bytesToBase64 } from '@/src/utils/bytesToBase64'
+import { summarizeFeedbackRows } from '@/src/utils/feedback'
 import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
 import { shareExportedBlob } from '@/src/utils/exportShare'
 import { firstLessonStemRelPath, serializeLessonStemsJson } from '@/src/utils/lessonAudio'
@@ -137,6 +139,7 @@ export default function ReviewScreen() {
   const [ghostRowForViz, setGhostRowForViz] = useState<GhostReferenceRow | null>(null)
   const [correctionHistory, setCorrectionHistory] = useState<CorrectionHistory | null>(null)
   const [showCorrections, setShowCorrections] = useState(false)
+  const [feedbackRows, setFeedbackRows] = useState<UserFeedbackRow[]>([])
 
   const jobId = typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : null
 
@@ -174,6 +177,7 @@ export default function ReviewScreen() {
     () => parseHarmonizedSolo(lesson?.harmonized_solo),
     [lesson?.harmonized_solo],
   )
+  const feedbackSummary = useMemo(() => summarizeFeedbackRows(feedbackRows), [feedbackRows])
   const [reviewChordPosIndex, setReviewChordPosIndex] = useState<Record<string, number>>({})
   const gp5ForExport = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null
   const songTitleBase =
@@ -191,8 +195,38 @@ export default function ReviewScreen() {
 
   // Load correction history for this job
   useEffect(() => {
+    if (!jobId || isDemo) return
+    let cancelled = false
+    void getCorrectionHistory(jobId)
+      .then((h) => {
+        if (!cancelled) setCorrectionHistory(h)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setCorrectionHistory(null)
+        toast.error(`Could not load correction history: ${e instanceof Error ? e.message : 'unknown error'}`)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo, jobId])
+
+  // Commit 159: load local structured feedback for the session summary.
+  useEffect(() => {
     if (!jobId) return
-    void getCorrectionHistory(jobId).then((h) => setCorrectionHistory(h)).catch(() => {})
+    let cancelled = false
+    void listUserFeedbackForJob(jobId)
+      .then((rows) => {
+        if (!cancelled) setFeedbackRows(rows)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setFeedbackRows([])
+        toast.error(`Could not load feedback summary: ${e instanceof Error ? e.message : 'unknown error'}`)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [jobId])
 
   const handleRevertCorrection = useCallback(async (correctionIndex: number) => {
@@ -720,6 +754,30 @@ export default function ReviewScreen() {
       ) : null}
 
       {score ? <ScoreSummaryCard score={score} /> : null}
+
+      {/* Commit 159: structured feedback summary */}
+      {feedbackRows.length > 0 || (correctionHistory?.correction_count ?? 0) > 0 ? (
+        <View className="mt-3 rounded-lg border border-wood-600/20 bg-cream px-3 py-2 shadow-sm">
+          <View className="flex-row items-center justify-between">
+            <Text className="font-sans-medium text-xs text-wood-900">Session feedback</Text>
+            <Text className="font-sans text-[10px] text-wood-600">
+              {feedbackRows.length > 0
+                ? `${feedbackSummary.total} report${feedbackSummary.total === 1 ? '' : 's'}`
+                : 'Legacy'}
+            </Text>
+          </View>
+          {feedbackRows.length > 0 ? (
+            <Text className="mt-1 font-sans text-[10px] text-wood-600">
+              {feedbackSummary.chord_corrections} chord · {feedbackSummary.note_corrections} note ·{' '}
+              {feedbackSummary.wrong_chords} flagged
+            </Text>
+          ) : (
+            <Text className="mt-1 font-sans text-[10px] text-wood-600">
+              Legacy correction history: {correctionHistory?.correction_count ?? 0} saved before structured feedback.
+            </Text>
+          )}
+        </View>
+      ) : null}
 
       {/* Correction History */}
       {correctionHistory && correctionHistory.corrections.length > 0 ? (

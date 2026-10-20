@@ -51,6 +51,11 @@ from app.schemas import (
     CorrectionHistory,
     CorrectionRecord,
     CorrectionRevertRequest,
+    FeedbackExportResponse,
+    FeedbackRecord,
+    FeedbackRequest,
+    FeedbackRevertRequest,
+    FeedbackType,
     JobStatus,
     SoloNote,
     SoloNoteCorrectionRequest,
@@ -589,6 +594,43 @@ def _save_correction_history(job_id: str, corrections: list[dict]) -> None:
         json.dump(corrections, f, indent=2)
 
 
+def _load_feedback(job_id: str) -> list[dict]:
+    """Load structured feedback from the job's audit log."""
+    feedback_path = get_job_dir(job_id) / "feedback.json"
+    if feedback_path.exists():
+        with open(feedback_path) as f:
+            return json.load(f)
+    return []
+
+
+def _save_feedback(job_id: str, feedback: list[dict]) -> None:
+    """Persist structured feedback for a job."""
+    job_dir = get_job_dir(job_id)
+    job_dir.mkdir(parents=True, exist_ok=True)
+    with open(job_dir / "feedback.json", "w") as f:
+        json.dump(feedback, f, indent=2)
+
+
+def _feedback_event_exists(job_id: str, feedback_type: FeedbackType, event_index: int) -> bool:
+    """Validate an event index against the artifact relevant to the feedback type."""
+    _, chord_timeline, solo_notes = _load_job_artifacts(job_id)
+    if feedback_type == "note_correction":
+        return solo_notes is not None and 0 <= event_index < len(solo_notes.notes)
+    return chord_timeline is not None and 0 <= event_index < len(chord_timeline.events)
+
+
+def _latest_feedback_records(records: list[FeedbackRecord]) -> list[FeedbackRecord]:
+    """Keep the newest non-reverted record per (type, event), preserving log order."""
+    latest_by_event: dict[tuple[str, int], FeedbackRecord] = {}
+    for record in records:
+        key = (record.feedback_type, record.event_index)
+        previous = latest_by_event.get(key)
+        if previous is None or record.created_at >= previous.created_at:
+            latest_by_event[key] = record
+    latest_ids = {record.id for record in latest_by_event.values() if record.reverted_at is None}
+    return [record for record in records if record.id in latest_ids]
+
+
 def _rebuild_score_for_job(job_id: str) -> None:
     """Rebuild lesson- and section-level MusicXML from the corrected artifacts (Commit 153).
 
@@ -922,6 +964,97 @@ async def export_corrections(job_id: str, req: CorrectionExportRequest) -> dict:
         return {"format": "csv", "data": buf.getvalue(), "count": len(filtered)}
 
     return {"format": "json", "data": filtered, "count": len(filtered)}
+
+
+# Commit 159 — structured user feedback (audit log only; PATCH endpoints apply changes).
+
+@router.post(
+    "/analyze/{job_id}/feedback",
+    response_model=FeedbackRecord,
+    summary="POST /analyze/{job_id}/feedback — record structured user feedback",
+)
+async def submit_feedback(job_id: str, req: FeedbackRequest) -> FeedbackRecord:
+    if jobs.get(job_id) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
+    if not _feedback_event_exists(job_id, req.feedback_type, req.event_index):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid event_index {req.event_index} for feedback_type {req.feedback_type}",
+        )
+    if req.feedback_type == "chord_correction":
+        corrected_chord = (req.corrected_value or {}).get("chord")
+        if not isinstance(corrected_chord, str) or not corrected_chord.strip():
+            raise HTTPException(status_code=400, detail="chord_correction requires corrected_value.chord")
+    if req.feedback_type == "note_correction" and req.corrected_value is None:
+        raise HTTPException(status_code=400, detail="note_correction requires corrected_value")
+
+    record = FeedbackRecord(
+        id=str(uuid.uuid4()),
+        job_id=job_id,
+        song_id=job_id,
+        feedback_type=req.feedback_type,
+        event_index=req.event_index,
+        original_value=req.original_value,
+        corrected_value=req.corrected_value if req.feedback_type != "wrong_chord" else None,
+        reason=req.reason,
+        created_at=datetime.datetime.now().isoformat(),
+    )
+    feedback = _load_feedback(job_id)
+    feedback.append(record.model_dump())
+    _save_feedback(job_id, feedback)
+    return record
+
+
+@router.post(
+    "/analyze/{job_id}/feedback/revert",
+    response_model=FeedbackRecord,
+    summary="POST /analyze/{job_id}/feedback/revert — mark latest event feedback reverted",
+)
+async def revert_feedback(job_id: str, req: FeedbackRevertRequest) -> FeedbackRecord:
+    if jobs.get(job_id) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
+
+    feedback = _load_feedback(job_id)
+    target_index = -1
+    for index in range(len(feedback) - 1, -1, -1):
+        item = feedback[index]
+        if item.get("feedback_type") == req.feedback_type and item.get("event_index") == req.event_index:
+            target_index = index
+            break
+    if target_index < 0:
+        raise HTTPException(status_code=404, detail="Feedback record not found")
+    if feedback[target_index].get("reverted_at") is not None:
+        raise HTTPException(status_code=409, detail="Feedback record already reverted")
+
+    feedback[target_index]["reverted_at"] = datetime.datetime.now().isoformat()
+    _save_feedback(job_id, feedback)
+    return FeedbackRecord(**feedback[target_index])
+
+
+@router.get(
+    "/analyze/{job_id}/feedback/export",
+    response_model=FeedbackExportResponse,
+    summary="GET /analyze/{job_id}/feedback/export — deduped chord/solo training feedback",
+)
+async def export_feedback(job_id: str, split: str = "chord") -> FeedbackExportResponse:
+    if jobs.get(job_id) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job_id: {job_id}")
+    if split not in ("chord", "solo"):
+        raise HTTPException(status_code=400, detail="split must be 'chord' or 'solo'")
+
+    records = [FeedbackRecord(**item) for item in _load_feedback(job_id)]
+    latest = _latest_feedback_records(records)
+    if split == "chord":
+        selected = [record for record in latest if record.feedback_type in ("chord_correction", "wrong_chord")]
+    else:
+        selected = [record for record in latest if record.feedback_type == "note_correction"]
+
+    return FeedbackExportResponse(
+        job_id=job_id,
+        split=split,
+        exported_at=datetime.datetime.now().isoformat(),
+        records=selected,
+    )
 
 
 @router.post(

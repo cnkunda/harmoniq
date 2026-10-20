@@ -253,3 +253,32 @@ export type LessonListRow = {
 export type LessonPersistRow = LessonListRow & {
   lesson_json: string
 }
+
+/** Commit 159: structured user feedback on transcribed events. */
+export type FeedbackType = 'chord_correction' | 'note_correction' | 'wrong_chord'
+
+export type UserFeedbackRow = {
+  id: string
+  job_id: string
+  song_id: string
+  user_id: string
+  timestamp: string
+  feedback_type: FeedbackType
+  event_index: number
+  original_value: string
+  corrected_value: string | null
+  reason: string | null
+}
+
+export type UserFeedbackInsertInput = Omit<UserFeedbackRow, 'id' | 'timestamp'> & {
+  id?: string
+  timestamp?: string
+}
+
+export type UserFeedbackStats = {
+  total: number
+  chord_corrections: number
+  note_corrections: number
+  wrong_chords: number
+  most_corrected_chords: Array<{ chord: string; count: number }>
+}

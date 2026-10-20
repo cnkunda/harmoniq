@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Modal, View, Text } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
@@ -31,6 +31,8 @@ type NoteCorrectionPanelProps = {
     noteIndex: number,
     corrected: { pitch?: number; duration?: number; start_time?: number; string?: number; fret?: number },
   ) => void
+  /** Commit 159: flag the detected note without changing its values. */
+  onReportWrong?: (noteIndex: number) => void
   onClose: () => void
 }
 
@@ -42,12 +44,21 @@ export function NoteCorrectionPanel({
   currentString,
   currentFret,
   onSelect,
+  onReportWrong,
   onClose,
 }: NoteCorrectionPanelProps) {
   const [pitch, setPitch] = useState(originalPitch)
   const [duration, setDuration] = useState(originalDuration)
   const [fret, setFret] = useState(currentFret ?? 0)
   const [string, setString] = useState(currentString ?? 1)
+
+  useEffect(() => {
+    if (!visible) return
+    setPitch(originalPitch)
+    setDuration(originalDuration)
+    setFret(currentFret ?? 0)
+    setString(currentString ?? 1)
+  }, [visible, noteIndex, originalPitch, originalDuration, currentString, currentFret])
 
   const noteName = midiToNoteName(pitch)
   const octave = Math.floor(pitch / 12 - 1)
@@ -67,6 +78,11 @@ export function NoteCorrectionPanel({
   }
 
   const hasChanges = pitch !== originalPitch || duration !== originalDuration || fret !== (currentFret ?? 0) || string !== (currentString ?? 1)
+
+  const handleReportWrong = () => {
+    onReportWrong?.(noteIndex)
+    onClose()
+  }
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -182,7 +198,18 @@ export function NoteCorrectionPanel({
             </View>
 
             {/* Actions */}
-            <View className="flex-row justify-end gap-2">
+            <View className="flex-row flex-wrap items-center justify-end gap-2">
+              {onReportWrong ? (
+                <AnimatedPressable
+                  onPress={handleReportWrong}
+                  haptic="light"
+                  className="rounded-full border border-danger/45 bg-danger/10 px-4 py-2"
+                  accessibilityRole="button"
+                  accessibilityLabel="Report this note as incorrect"
+                >
+                  <Text className="font-sans-medium text-sm text-danger">Report incorrect</Text>
+                </AnimatedPressable>
+              ) : null}
               <AnimatedPressable
                 onPress={onClose}
                 className="rounded-full border border-wood-600/40 bg-wood-900/10 px-4 py-2"

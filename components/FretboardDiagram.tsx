@@ -65,8 +65,6 @@ type FretboardDiagramProps = {
   pulseKey?: number
   scalePitchClasses?: readonly number[] | null
   onSelectNote?: (note: { string: number; fret: number; midi: number }) => void
-  /** Commit 110: Tap a solo note (red) to open note correction UI. */
-  onNoteTap?: (noteIndex: number, note: { string: number; fret: number; midi: number }) => void
   lastCellResult?: FretboardLastCellResult | null
   overlayMode?: FretboardOverlayMode
   degreeRootPitchClass?: number | null

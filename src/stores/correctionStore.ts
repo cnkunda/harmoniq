@@ -1,9 +1,19 @@
 import { create } from 'zustand'
 
-import { getAppPref, setAppPref } from '@/src/db/client'
+import {
+  deleteUserFeedback,
+  getAppPref,
+  listUserFeedbackForJob,
+  setAppPref,
+  upsertUserFeedback,
+} from '@/src/db/client'
+import { PREF_FEEDBACK_USER_ID } from '@/src/db/schema'
+import type { UserFeedbackRow } from '@/src/db/types'
+import { revertFeedbackRecord as apiRevertFeedback, submitFeedback } from '@/src/api/analyze'
 import type {
   ChordCorrection,
   CorrectionSet,
+  FeedbackSubmission,
   NoteCorrection,
   VoicingOverride,
 } from '@/src/types'
@@ -34,6 +44,24 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
+function generateFeedbackUserId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `feedback-${generateId()}`
+}
+
+/** Anonymous per-install id for feedback exports. */
+export async function getOrCreateFeedbackUserId(): Promise<string> {
+  const existing = (await getAppPref(PREF_FEEDBACK_USER_ID))?.trim()
+  if (existing) return existing
+  const id = generateFeedbackUserId()
+  await setAppPref(PREF_FEEDBACK_USER_ID, id)
+  return id
+}
+
+export type FeedbackSyncResult = {
+  serverSynced: boolean
+  syncError?: string
+}
+
 // ---- Store ----
 
 export interface CorrectionStoreState {
@@ -62,11 +90,26 @@ export interface CorrectionStoreState {
   revertCorrection: (jobId: string, correctionId: string) => Promise<void>
   /** Get the correction set for a job (returns empty set if none). */
   getCorrections: (jobId: string) => CorrectionSet
+
+  /** Commit 159: structured feedback currently loaded per job. */
+  feedbackByJob: Record<string, UserFeedbackRow[]>
+  hydrateFeedback: (jobId: string) => Promise<void>
+  reportFeedback: (
+    jobId: string,
+    submission: FeedbackSubmission,
+    options?: { syncToServer?: boolean },
+  ) => Promise<UserFeedbackRow & FeedbackSyncResult>
+  revertFeedback: (
+    row: UserFeedbackRow,
+    options?: { syncToServer?: boolean },
+  ) => Promise<FeedbackSyncResult>
+  getFeedbackForJob: (jobId: string) => UserFeedbackRow[]
 }
 
 export const useCorrectionStore = create<CorrectionStoreState>((set, get) => ({
   corrections: {},
   hydrated: false,
+  feedbackByJob: {},
 
   hydrate: async (jobId: string) => {
     const raw = await getAppPref(prefKey(jobId))
@@ -155,4 +198,68 @@ export const useCorrectionStore = create<CorrectionStoreState>((set, get) => ({
   getCorrections: (jobId: string) => {
     return get().corrections[jobId] ?? { chordCorrections: [], noteCorrections: [], voicingOverrides: [] }
   },
+
+  hydrateFeedback: async (jobId: string) => {
+    const rows = await listUserFeedbackForJob(jobId)
+    set((s) => ({ feedbackByJob: { ...s.feedbackByJob, [jobId]: rows } }))
+  },
+
+  reportFeedback: async (jobId, submission, options) => {
+    const userId = await getOrCreateFeedbackUserId()
+    const timestamp = new Date().toISOString()
+    const row = await upsertUserFeedback({
+      job_id: jobId,
+      song_id: jobId,
+      user_id: userId,
+      timestamp,
+      feedback_type: submission.feedback_type,
+      event_index: submission.event_index,
+      original_value: JSON.stringify(submission.original_value ?? {}),
+      corrected_value:
+        submission.corrected_value == null ? null : JSON.stringify(submission.corrected_value),
+      reason: submission.reason ?? null,
+    })
+    set((s) => {
+      const current = s.feedbackByJob[jobId] ?? []
+      const next = [row, ...current.filter((item) => item.id !== row.id)].sort((a, b) =>
+        a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0,
+      )
+      return { feedbackByJob: { ...s.feedbackByJob, [jobId]: next } }
+    })
+
+    if (options?.syncToServer === false) return { ...row, serverSynced: false }
+    try {
+      await submitFeedback(jobId, submission)
+      return { ...row, serverSynced: true }
+    } catch (e) {
+      const syncError = e instanceof Error ? e.message : String(e)
+      if (__DEV__) console.warn('[correctionStore] feedback server sync failed', jobId, syncError)
+      return { ...row, serverSynced: false, syncError }
+    }
+  },
+
+  revertFeedback: async (row, options) => {
+    await deleteUserFeedback(row.id)
+    set((s) => {
+      const current = s.feedbackByJob[row.job_id] ?? []
+      return {
+        feedbackByJob: {
+          ...s.feedbackByJob,
+          [row.job_id]: current.filter((item) => item.id !== row.id),
+        },
+      }
+    })
+
+    if (options?.syncToServer === false) return { serverSynced: false }
+    try {
+      await apiRevertFeedback(row.job_id, row.feedback_type, row.event_index)
+      return { serverSynced: true }
+    } catch (e) {
+      const syncError = e instanceof Error ? e.message : String(e)
+      if (__DEV__) console.warn('[correctionStore] feedback revert sync failed', row.job_id, syncError)
+      return { serverSynced: false, syncError }
+    }
+  },
+
+  getFeedbackForJob: (jobId: string) => get().feedbackByJob[jobId] ?? [],
 }))

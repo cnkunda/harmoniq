@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Modal, ScrollView, View, Text } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
@@ -20,6 +20,8 @@ type ChordCorrectionModalProps = {
   songKey: string | null
   eventIndex: number
   onSelect: (eventIndex: number, newChord: string) => void
+  /** Commit 159: report the detected chord as wrong without a replacement. */
+  onMarkWrong?: () => void
   onClose: () => void
 }
 
@@ -29,10 +31,17 @@ export function ChordCorrectionModal({
   songKey,
   eventIndex,
   onSelect,
+  onMarkWrong,
   onClose,
 }: ChordCorrectionModalProps) {
   const [selected, setSelected] = useState(currentChord)
   const [showChromatic, setShowChromatic] = useState(false)
+
+  useEffect(() => {
+    if (!visible) return
+    setSelected(currentChord)
+    setShowChromatic(false)
+  }, [visible, currentChord, eventIndex])
 
   const diatonic = songKey ? getDiatonicChords(songKey) : []
   const chromatic = getChromaticChords()
@@ -41,6 +50,11 @@ export function ChordCorrectionModal({
     if (selected !== currentChord) {
       onSelect(eventIndex, selected)
     }
+    onClose()
+  }
+
+  const handleMarkWrong = () => {
+    onMarkWrong?.()
     onClose()
   }
 
@@ -128,7 +142,18 @@ export function ChordCorrectionModal({
             )}
 
             {/* Actions */}
-            <View className="flex-row justify-end gap-2">
+            <View className="flex-row flex-wrap items-center justify-end gap-2">
+              {onMarkWrong ? (
+                <AnimatedPressable
+                  onPress={handleMarkWrong}
+                  haptic="light"
+                  className="rounded-full border border-danger/45 bg-danger/10 px-4 py-2"
+                  accessibilityRole="button"
+                  accessibilityLabel="Report this chord as incorrect"
+                >
+                  <Text className="font-sans-medium text-sm text-danger">Report incorrect</Text>
+                </AnimatedPressable>
+              ) : null}
               <AnimatedPressable
                 onPress={onClose}
                 className="rounded-full border border-wood-600/40 bg-wood-900/10 px-4 py-2"

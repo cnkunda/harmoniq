@@ -14,10 +14,11 @@ import type {
     PracticePlanCompletionRow,
     SessionArchiveRow,
     SkillNodeRow,
+    UserFeedbackRow,
 } from '@/src/db/types'
 
 const DB_NAME = 'harmoniq_web_v1'
-const DB_VERSION = 4
+const DB_VERSION = 5
 
 const S_PREFS = 'app_prefs'
 const S_SESSIONS = 'sessions'
@@ -27,6 +28,7 @@ const S_JAM = 'jam_snapshots'
 const S_PLAN_COMPLETIONS = 'practice_plan_completions'
 const S_LESSON = 'lesson_cache'
 const S_LESSONS = 'lessons'
+const S_FEEDBACK = 'user_feedback'
 const S_MIGRATIONS = 'schema_migrations'
 
 type PrefRow = { key: string; value: string }
@@ -78,6 +80,10 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
         if (!db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) {
           db.createObjectStore(S_PLAN_COMPLETIONS, { keyPath: 'id' })
         }
+        if (!db.objectStoreNames.contains(S_FEEDBACK)) {
+          const feedbackStore = db.createObjectStore(S_FEEDBACK, { keyPath: 'id' })
+          feedbackStore.createIndex('job_id', 'job_id', { unique: false })
+        }
         
         // Record migration for version 4 (migration tracking system)
         if (oldVersion < 4) {
@@ -88,6 +94,17 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
           }
           if (__DEV__) {
             console.log('[db/web] Migration v4 SUCCESS')
+          }
+        }
+
+        if (oldVersion < 5) {
+          const tx = r.transaction
+          if (tx) {
+            const migrationStore = tx.objectStore(S_MIGRATIONS)
+            migrationStore.put({ version: 5, applied_at: new Date().toISOString() })
+          }
+          if (__DEV__) {
+            console.log('[db/web] Migration v5 SUCCESS')
           }
         }
       } catch (e) {
@@ -162,12 +179,13 @@ export type IdbHydration = {
   licks: LickRow[]
   jams: JamSnapshotInsertInput[]
   planCompletions: PracticePlanCompletionRow[]
+  feedback: UserFeedbackRow[]
   lesson: LessonJSON | null
   lessons: LessonPersistRow[]
 }
 
 export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> {
-  const [prefs, sessions, skillNodes, licks, jams, planCompletions, lessonRows, lessonCatalog] = await Promise.all([
+  const [prefs, sessions, skillNodes, licks, jams, planCompletions, feedback, lessonRows, lessonCatalog] = await Promise.all([
     getAllStore<PrefRow>(db, S_PREFS),
     getAllStore<SessionArchiveRow>(db, S_SESSIONS),
     getAllStore<SkillNodeRow>(db, S_SKILL_NODES),
@@ -176,6 +194,7 @@ export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> 
     db.objectStoreNames.contains(S_PLAN_COMPLETIONS)
       ? getAllStore<PracticePlanCompletionRow>(db, S_PLAN_COMPLETIONS)
       : Promise.resolve([]),
+    db.objectStoreNames.contains(S_FEEDBACK) ? getAllStore<UserFeedbackRow>(db, S_FEEDBACK) : Promise.resolve([]),
     getAllStore<LessonCacheRow>(db, S_LESSON),
     db.objectStoreNames.contains(S_LESSONS) ? getAllStore<LessonPersistRow>(db, S_LESSONS) : Promise.resolve([]),
   ])
@@ -187,6 +206,7 @@ export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> 
     licks,
     jams,
     planCompletions,
+    feedback,
     lesson: latest?.lesson ?? null,
     lessons: lessonCatalog,
   }
@@ -220,6 +240,11 @@ export async function idbPersistJams(db: IDBDatabase | null, rows: JamSnapshotIn
 export async function idbPersistPlanCompletions(db: IDBDatabase | null, rows: PracticePlanCompletionRow[]): Promise<void> {
   if (!db || !db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) return
   await putAll(db, S_PLAN_COMPLETIONS, rows)
+}
+
+export async function idbPersistFeedback(db: IDBDatabase | null, rows: UserFeedbackRow[]): Promise<void> {
+  if (!db || !db.objectStoreNames.contains(S_FEEDBACK)) return
+  await putAll(db, S_FEEDBACK, rows)
 }
 
 export async function idbPersistLessons(db: IDBDatabase | null, rows: LessonPersistRow[]): Promise<void> {
@@ -282,6 +307,9 @@ export async function idbClearPracticeStores(db: IDBDatabase | null): Promise<vo
   await clearStore(db, S_JAM)
   if (db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) {
     await clearStore(db, S_PLAN_COMPLETIONS)
+  }
+  if (db.objectStoreNames.contains(S_FEEDBACK)) {
+    await clearStore(db, S_FEEDBACK)
   }
   await clearStore(db, S_SKILL_NODES)
   if (db.objectStoreNames.contains(S_LESSONS)) {

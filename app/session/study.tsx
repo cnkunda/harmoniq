@@ -53,6 +53,7 @@ import {
   readFretboardShareStateFromLocation,
   type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
+import { findSoloNoteIndexForSelection } from '@/src/utils/feedback'
 import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
@@ -211,6 +212,7 @@ function StudyScreenInner() {
   const [noteModalString, setNoteModalString] = useState<number | undefined>(undefined)
   const [noteModalFret, setNoteModalFret] = useState<number | undefined>(undefined)
   const applyNoteCorrectionStore = useCorrectionStore((s) => s.applyNoteCorrection)
+  const reportFeedback = useCorrectionStore((s) => s.reportFeedback)
   // Correction-aware chord events for display
   const correctedChordEvents = useMemo(() => {
     const raw = getLessonWideChordEvents(lesson)
@@ -298,6 +300,7 @@ function StudyScreenInner() {
   }, [])
 
   const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
+  const soloNotesForFeedback = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? []
 
   // Update theory annotation based on current chord during playback
   useEffect(() => {
@@ -450,6 +453,68 @@ function StudyScreenInner() {
     }),
     [keyLabel, selectedNote, musicState.currentChord, noteConfidence, harmonizedSolo, perBarAnalysis, tick.positionSec],
   )
+
+  const notifyFeedbackSaved = useCallback((result: { serverSynced: boolean; syncError?: string }) => {
+    if (result.serverSynced) {
+      toast.success('Feedback saved')
+    } else if (result.syncError) {
+      toast.error(`Feedback saved on this device; server sync failed: ${result.syncError}`)
+    } else {
+      toast.success('Feedback saved on this device')
+    }
+  }, [])
+
+  const reportSelectedNote = useCallback(async () => {
+    if (!jobId) {
+      toast.error('No analyzed song is loaded for feedback.')
+      return
+    }
+    const index = findSoloNoteIndexForSelection(soloNotesForFeedback, {
+      midi: selectedNote?.midi,
+      timeSec: tick.positionSec,
+    })
+    if (index < 0) {
+      toast.error('Could not match this note to the transcribed solo line.')
+      return
+    }
+    const note = soloNotesForFeedback[index]!
+    try {
+      const result = await reportFeedback(
+        jobId,
+        {
+          feedback_type: 'note_correction',
+          event_index: index,
+          original_value: { pitch: note.pitch, duration: note.duration, start_time: note.start_time },
+          corrected_value: {},
+        },
+        { syncToServer: !isDemo },
+      )
+      notifyFeedbackSaved(result)
+      setNoteModalOpen(false)
+    } catch (e) {
+      toast.error(`Could not save feedback: ${e instanceof Error ? e.message : 'unknown error'}`)
+    }
+  }, [isDemo, jobId, notifyFeedbackSaved, reportFeedback, selectedNote?.midi, soloNotesForFeedback, tick.positionSec])
+
+  const correctSelectedNote = useCallback(() => {
+    const index = findSoloNoteIndexForSelection(soloNotesForFeedback, {
+      midi: selectedNote?.midi,
+      timeSec: tick.positionSec,
+    })
+    if (index < 0) {
+      toast.error('Could not match this note to the transcribed solo line.')
+      return
+    }
+    const note = soloNotesForFeedback[index]!
+    setNoteModalIndex(index)
+    setNoteModalPitch(note.pitch)
+    setNoteModalDuration(note.duration)
+    setNoteModalStartTime(note.start_time)
+    setNoteModalString(selectedNote?.string)
+    setNoteModalFret(selectedNote?.fret)
+    setNoteModalOpen(false)
+    setNoteModalVisible(true)
+  }, [selectedNote?.fret, selectedNote?.midi, selectedNote?.string, soloNotesForFeedback, tick.positionSec])
 
   const currentChordVoicing = useMemo(() => {
     if (currentBar == null || !chordTimelineEvents) return null
@@ -772,21 +837,6 @@ function StudyScreenInner() {
                 setFretPulseKey((k) => k + 1)
                 setNoteModalOpen(true)
               }}
-              onNoteTap={(_noteIndex, note) => {
-                // Find the original solo note by matching MIDI pitch
-                const soloNotes = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? []
-                const matchIdx = soloNotes.findIndex((n) => n.pitch === note.midi)
-                if (matchIdx >= 0) {
-                  const sn = soloNotes[matchIdx]
-                  setNoteModalIndex(matchIdx)
-                  setNoteModalPitch(sn.pitch)
-                  setNoteModalDuration(sn.duration)
-                  setNoteModalStartTime(sn.start_time)
-                  setNoteModalString(note.string)
-                  setNoteModalFret(note.fret)
-                  setNoteModalVisible(true)
-                }
-              }}
             />
 
             {barScope && barScope.suggested_scales.length > 0 ? (
@@ -855,6 +905,8 @@ function StudyScreenInner() {
         visible={noteModalOpen}
         onClose={() => setNoteModalOpen(false)}
         currentChordVoicing={currentChordVoicing}
+        onReportIncorrect={() => void reportSelectedNote()}
+        onCorrectNote={correctSelectedNote}
       />
 
       {/* Commit 110: Chord correction modal */}
@@ -865,6 +917,20 @@ function StudyScreenInner() {
         eventIndex={chordModalIndex}
         onSelect={async (idx, newChord) => {
           const original = correctedChordEvents?.[idx]?.chord ?? 'N'
+          if (jobId) {
+            void reportFeedback(
+              jobId,
+              {
+                feedback_type: 'chord_correction',
+                event_index: idx,
+                original_value: { chord: original },
+                corrected_value: { chord: newChord },
+              },
+              { syncToServer: !isDemo },
+            ).then(notifyFeedbackSaved).catch((e) => {
+              toast.error(`Could not save feedback: ${e instanceof Error ? e.message : 'unknown error'}`)
+            })
+          }
           await applyChordCorrectionStore(jobId, idx, original, newChord)
           // Re-apply to lesson for immediate display
           if (lesson && jobId) {
@@ -888,6 +954,25 @@ function StudyScreenInner() {
               })
           }
         }}
+        onMarkWrong={() => {
+          if (!jobId) {
+            toast.error('No analyzed song is loaded for feedback.')
+            return
+          }
+          const original = correctedChordEvents?.[chordModalIndex]?.chord ?? chordModalChord
+          void reportFeedback(
+            jobId,
+            {
+              feedback_type: 'wrong_chord',
+              event_index: chordModalIndex,
+              original_value: { chord: original },
+              corrected_value: null,
+            },
+            { syncToServer: !isDemo },
+          ).then(notifyFeedbackSaved).catch((e) => {
+            toast.error(`Could not save feedback: ${e instanceof Error ? e.message : 'unknown error'}`)
+          })
+        }}
         onClose={() => setChordModalVisible(false)}
       />
 
@@ -901,6 +986,24 @@ function StudyScreenInner() {
         currentString={noteModalString}
         currentFret={noteModalFret}
         onSelect={async (idx, corrected) => {
+          if (jobId) {
+            void reportFeedback(
+              jobId,
+              {
+                feedback_type: 'note_correction',
+                event_index: idx,
+                original_value: {
+                  pitch: noteModalPitch,
+                  duration: noteModalDuration,
+                  start_time: noteModalStartTime,
+                },
+                corrected_value: corrected,
+              },
+              { syncToServer: !isDemo },
+            ).then(notifyFeedbackSaved).catch((e) => {
+              toast.error(`Could not save feedback: ${e instanceof Error ? e.message : 'unknown error'}`)
+            })
+          }
           await applyNoteCorrectionStore(
             jobId,
             idx,
@@ -935,6 +1038,29 @@ function StudyScreenInner() {
                 )
               })
           }
+        }}
+        onReportWrong={(idx) => {
+          if (!jobId) {
+            toast.error('No analyzed song is loaded for feedback.')
+            return
+          }
+          const note = soloNotesForFeedback[idx]
+          if (!note) {
+            toast.error('Could not find the transcribed note for feedback.')
+            return
+          }
+          void reportFeedback(
+            jobId,
+            {
+              feedback_type: 'note_correction',
+              event_index: idx,
+              original_value: { pitch: note.pitch, duration: note.duration, start_time: note.start_time },
+              corrected_value: {},
+            },
+            { syncToServer: !isDemo },
+          ).then(notifyFeedbackSaved).catch((e) => {
+            toast.error(`Could not save feedback: ${e instanceof Error ? e.message : 'unknown error'}`)
+          })
         }}
         onClose={() => setNoteModalVisible(false)}
       />

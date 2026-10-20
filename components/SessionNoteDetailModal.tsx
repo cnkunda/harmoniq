@@ -10,9 +10,20 @@ type SessionNoteDetailModalProps = {
   onClose: () => void
   /** Commit B9: Current chord's voicing label to display as a badge. */
   currentChordVoicing?: string | null
+  /** Commit 159: report the displayed note as incorrectly transcribed. */
+  onReportIncorrect?: () => void
+  /** Commit 159: open the note correction controls for this note. */
+  onCorrectNote?: () => void
 }
 
-export function SessionNoteDetailModal({ detail, visible, onClose, currentChordVoicing }: SessionNoteDetailModalProps) {
+export function SessionNoteDetailModal({
+  detail,
+  visible,
+  onClose,
+  currentChordVoicing,
+  onReportIncorrect,
+  onCorrectNote,
+}: SessionNoteDetailModalProps) {
   return (
     <Modal visible={visible && detail != null} transparent animationType="fade" onRequestClose={onClose}>
       <View className="flex-1">
@@ -44,6 +55,8 @@ export function SessionNoteDetailModal({ detail, visible, onClose, currentChordV
                 alternateFingerLines={detail.alternateFingerLines}
                 coachText={detail.coach}
                 onDismiss={onClose}
+                onReportIncorrect={onReportIncorrect}
+                onCorrectNote={onCorrectNote}
                 chordToneStatus={detail.chordToneStatus}
                 harmonicDegree={detail.harmonicDegree}
                 confidence={detail.confidence}

@@ -70,13 +70,15 @@ If a migration fails:
 - V12: Add ghost_recording_mime to sessions
 - V13: Add mood to sessions
 - V14: Add schema_version to skill_nodes (Jazz Extensions support)
-- V15: Add inferred_mode to jam_snapshots (Milestone B — Commit B3)
+- V15: Add summary_bundle_json and phrases_json to jam_snapshots
+- V16: Add inferred_mode to jam_snapshots (Milestone B — Commit B3)
+- V17: Add user_feedback table + job/dedupe indexes (Commit 159)
 
 ## Web (IndexedDB) Migrations
 
 ### Location
 - Migration runner: `src/db/idbWeb.ts` (openHarmoniqIdb function)
-- Current version: 4
+- Current version: 5
 
 ### Version Tracking
 Migrations are tracked in the `schema_migrations` object store:
@@ -87,7 +89,7 @@ type MigrationRow = { version: number; applied_at: string }
 ### Migration Pattern
 IndexedDB uses built-in versioning:
 ```typescript
-const DB_VERSION = 4
+const DB_VERSION = 5
 const r = indexedDB.open(DB_NAME, DB_VERSION)
 r.onupgradeneeded = (event) => {
   const oldVersion = (event as IDBVersionChangeEvent).oldVersion
@@ -104,6 +106,7 @@ IndexedDB provides automatic rollback:
 ### Current Migration Versions
 - V1-V3: Initial object stores (prefs, sessions, skill_nodes, licks, jams, lesson cache, lessons, plan_completions)
 - V4: Add schema_migrations tracking store
+- V5: Add user_feedback store with job_id index (Commit 159)
 
 ## Data Validation
 
@@ -131,26 +134,26 @@ export async function validateSessionsPreservation(
 
 1. Add migration SQL to `src/db/schema.ts`:
 ```typescript
-export const MIGRATION_V15_EXAMPLE = 'ALTER TABLE skill_nodes ADD COLUMN new_field TEXT'
-export const ROLLBACK_V15_EXAMPLE = 'ALTER TABLE skill_nodes DROP COLUMN IF EXISTS new_field'
+export const MIGRATION_V18_EXAMPLE = 'ALTER TABLE skill_nodes ADD COLUMN new_field TEXT'
+export const ROLLBACK_V18_EXAMPLE = 'ALTER TABLE skill_nodes DROP COLUMN IF EXISTS new_field'
 ```
 
 2. Add imports to `src/db/client.native.ts`:
 ```typescript
 import {
-  MIGRATION_V15_EXAMPLE,
-  ROLLBACK_V15_EXAMPLE,
+  MIGRATION_V18_EXAMPLE,
+  ROLLBACK_V18_EXAMPLE,
   // ... other imports
 } from '@/src/db/schema'
 ```
 
 3. Add migration logic to `applyMigrations()`:
 ```typescript
-if (current < 15) {
+if (current < 18) {
   const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(skill_nodes)')
   const names = new Set((cols ?? []).map((c) => c.name))
   if (!names.has('new_field')) {
-    await applyMigrationWithRollback(15, MIGRATION_V15_EXAMPLE, ROLLBACK_V15_EXAMPLE)
+    await applyMigrationWithRollback(18, MIGRATION_V18_EXAMPLE, ROLLBACK_V18_EXAMPLE)
   }
 }
 ```
@@ -167,12 +170,12 @@ export type SkillNodeRow = {
 
 1. Increment `DB_VERSION` in `src/db/idbWeb.ts`:
 ```typescript
-const DB_VERSION = 5
+const DB_VERSION = 6
 ```
 
 2. Add version-specific logic in `onupgradeneeded`:
 ```typescript
-if (oldVersion < 5) {
+if (oldVersion < 6) {
   // Add new object store or modify existing
   if (!db.objectStoreNames.contains(S_NEW_STORE)) {
     db.createObjectStore(S_NEW_STORE, { keyPath: 'id' })
@@ -181,7 +184,7 @@ if (oldVersion < 5) {
   const tx = r.transaction
   if (tx) {
     const migrationStore = tx.objectStore(S_MIGRATIONS)
-    migrationStore.put({ version: 5, applied_at: new Date().toISOString() })
+    migrationStore.put({ version: 6, applied_at: new Date().toISOString() })
   }
 }
 ```

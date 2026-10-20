@@ -93,6 +93,7 @@ function ListenScreenInner() {
   const jobId = lesson?.job_id ?? ''
   const corrections = useCorrectionStore((s) => s.corrections[jobId])
   const applyChordCorrection = useCorrectionStore((s) => s.applyChordCorrection)
+  const reportFeedback = useCorrectionStore((s) => s.reportFeedback)
 
   const rawChordEvents = getLessonWideChordEvents(lesson)
   const chordEvents: Array<{ timestamp: number; chord: string; confidence: number }> | null = (() => {
@@ -110,6 +111,16 @@ function ListenScreenInner() {
     return patched?.events ?? normalized
   })()
   const barTimestamps = lesson?.bar_timestamps ?? null
+
+  const notifyFeedbackSaved = useCallback((result: { serverSynced: boolean; syncError?: string }) => {
+    if (result.serverSynced) {
+      toast.success('Feedback saved')
+    } else if (result.syncError) {
+      toast.error(`Feedback saved on this device; server sync failed: ${result.syncError}`)
+    } else {
+      toast.success('Feedback saved on this device')
+    }
+  }, [])
 
   useEffect(() => {
     const raw = params.section
@@ -282,6 +293,20 @@ function ListenScreenInner() {
         eventIndex={chordModalIndex}
         onSelect={async (idx, newChord) => {
           const original = chordEvents?.[idx]?.chord ?? 'N'
+          if (jobId) {
+            void reportFeedback(
+              jobId,
+              {
+                feedback_type: 'chord_correction',
+                event_index: idx,
+                original_value: { chord: original },
+                corrected_value: { chord: newChord },
+              },
+              { syncToServer: !isDemo },
+            ).then(notifyFeedbackSaved).catch((e) => {
+              toast.error(`Could not save feedback: ${e instanceof Error ? e.message : 'unknown error'}`)
+            })
+          }
           await applyChordCorrection(jobId, idx, original, newChord)
           // Re-apply to lesson for immediate display
           if (lesson && jobId) {
@@ -304,6 +329,25 @@ function ListenScreenInner() {
                 )
               })
           }
+        }}
+        onMarkWrong={() => {
+          if (!jobId) {
+            toast.error('No analyzed song is loaded for feedback.')
+            return
+          }
+          const original = chordEvents?.[chordModalIndex]?.chord ?? chordModalChord
+          void reportFeedback(
+            jobId,
+            {
+              feedback_type: 'wrong_chord',
+              event_index: chordModalIndex,
+              original_value: { chord: original },
+              corrected_value: null,
+            },
+            { syncToServer: !isDemo },
+          ).then(notifyFeedbackSaved).catch((e) => {
+            toast.error(`Could not save feedback: ${e instanceof Error ? e.message : 'unknown error'}`)
+          })
         }}
         onClose={() => setChordModalVisible(false)}
       />
