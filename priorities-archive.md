@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–160. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–161. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C2 → 159–160 (completed → archived), Milestone C3–C9 → 161–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–160 (user feedback & manual overrides, jam summary agent), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C3 → 159–161 (completed → archived), Milestone C4–C9 → 162–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–161 (user feedback & manual overrides, jam summary agent, play engagement analytics), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -27,6 +27,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 158 (UX Audit Loop Re-Run & Gap Fixes) Archive Date:** October 19, 2026 — Complete; all 4 ACs verified (report isComplete: true, 0 error-severity gaps, all 46 residual flags waived with rationale in the report; lint 0 errors, vitest 484 passed); spec and implementation notes archived below.
 **Commit 159 (User Feedback & Manual Overrides) Archive Date:** October 20, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped); spec and implementation notes archived below.
 **Commit 160 (Jam Mode Summary Agent) Archive Date:** October 20, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 504 passed, Playwright 64 passed, backend pytest 1366 passed / 6 skipped; CI scoring set 287 passed / 2 skipped); spec and implementation notes archived below.
+**Commit 161 (Play Engagement Analytics) Archive Date:** October 21, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 526 passed, Playwright 68 passed; native migration typechecked, no device smoke run); spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -2009,7 +2010,7 @@ display, calibration (ECE), tier-aware scoring.
 |-------------|----------|
 | Commit C1: User Feedback & Manual Overrides | Archived below (commit 159) |
 | Commit C2: Jam Mode Summary Agent | Archived below (commit 160) |
-| Commit C3: Play Engagement Analytics | PRIORITIES.md commit 161 |
+| Commit C3: Play Engagement Analytics | Archived below (commit 161) |
 | Commit C4: Dynamic Session Engine | PRIORITIES.md commit 162 |
 | Commit C5: Orient-as-Hint | PRIORITIES.md commit 163 |
 | Commit C6: Mastery & Integrity | PRIORITIES.md commit 164 |
@@ -2017,7 +2018,7 @@ display, calibration (ECE), tier-aware scoring.
 | Commit C8: Three-Tier Output Strategy | PRIORITIES.md commit 166 |
 | Commit C9: Multi-Instrument Diagram Support | PRIORITIES.md commit 167 |
 
-Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PRIORITIES.md`](PRIORITIES.md) Active Backlog. Current-state notes from the archive, for reference: correction store (`useCorrectionStore`) fully implemented with chord/note/voicing overrides and DB persistence; jam mode (`app/(tabs)/jam/index.tsx`) is a full single-tab experience with backing tracks, scale detection, phrase coaching, and save flow; SM-2 spaced repetition engine (`src/spaced/sm2.ts`) powers skill node mutations; practice plan sequencer (`backend/app/sequencer.py`) generates slot-based plans. No analytics infrastructure, no three-tier output, no multi-instrument support, no chord pulse dashboard exist.
+Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PRIORITIES.md`](PRIORITIES.md) Active Backlog. Current-state notes from the archive, for reference: correction store (`useCorrectionStore`) fully implemented with chord/note/voicing overrides and DB persistence; jam mode (`app/(tabs)/jam/index.tsx`) is a full single-tab experience with backing tracks, scale detection, phrase coaching, and save flow; SM-2 spaced repetition engine (`src/spaced/sm2.ts`) powers skill node mutations; practice plan sequencer (`backend/app/sequencer.py`) generates slot-based plans. Analytics infrastructure now lives in `src/analytics/` (commit 161). No three-tier output, no multi-instrument support, and no chord pulse dashboard exist.
 
 ---
 
@@ -2456,3 +2457,49 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **Practice:** new root route `app/jam-practice.tsx` loops a classic backing track between `backing_start_ms` / `backing_end_ms` at 0.75×. `src/jam/jamPracticeTrack.ts` resolves the track by id, then by key+BPM, then by a single same-key track. AI-generated jams without a saved loop fall back to a matching classic loop or disable the action with an explanation.
 - **Deliberate deviations:** reused the existing `jam_snapshots.summary_bundle_json` instead of adding a duplicate `summary_json` column; `chord` in per-phrase feedback carries the inferred scale label because the payload has no per-phrase chord; the dedicated `/jam-practice` route avoids side effects in the 7-step session flow.
 - **Verification:** `npm run lint` 0 errors; `npm run test` 504/504 passed; `npm run test:ui` 64/64 passed; backend full suite 1366 passed / 6 skipped; CI scoring set 287 passed / 2 skipped. Added `backend/tests/test_jam_scoring.py` and `backend/tests/test_jam_summary.py` to `scoring-tests.yml`. Committed as `caf7050` (`feat: Commit 160 — Jam Mode Summary Agent`).
+
+---
+
+### Commit 161: Play Engagement Analytics (was C3)
+
+**Status:** Complete — all 5 ACs verified (5/5). Moved from [`PRIORITIES.md`](PRIORITIES.md).
+
+**Goal (spec verbatim):** A lightweight, opt-out client event bus that records practice behavior so engagement metrics (completion rate, session frequency, most-practiced songs) can be measured and exported.
+
+**Current State (spec verbatim):** No analytics infrastructure exists. The only telemetry is `src/analytics/firstAudioPlay.ts` — a dev-only one-shot console logger, not an event bus. No `AnalyticsEvent` union, no `analytics_events` table, no metric queries, no opt-out preference, no CSV export.
+
+**Scope (spec verbatim):**
+
+- Create `src/analytics/eventBus.ts`: lightweight custom event bus (no third-party SDK)
+  - `emit(event: AnalyticsEvent)` and `subscribe(handler)` pattern
+  - Events batched in memory, flushed to SQLite every 30 seconds or on app background
+- Define `AnalyticsEvent` type union:
+  - `session_start`, `session_complete`, `session_step_progress`, `session_abandon`
+  - `play_along_start`, `play_along_complete`, `play_along_discard`
+  - `feature_usage`, `correction_made`, `jam_complete`
+- Add `analytics_events` SQLite table: `id, user_id, event_type, payload_json, timestamp`
+- Track per-user per-song engagement metrics:
+  - Total play-along duration, average session length, completion rate
+  - Most-practiced songs, most-corrected chord types
+  - Session frequency (sessions per day/week)
+- Add opt-out toggle in Settings: "Share practice data" (default: on)
+- Add privacy notice in onboarding: "We track practice patterns to improve your experience. Opt out anytime."
+- Export analytics as CSV in Settings > Privacy > Export my data
+
+**Acceptance Criteria:**
+
+- [x] Events emitted at documented points and flushed to SQLite (batch + background)
+- [x] Opt-out stops emission; default-on with onboarding notice
+- [x] CSV export produces parseable file
+- [x] Metrics queries power a basic engagement view
+- [x] Migration + tests green on mobile and web
+
+**Implementation notes:**
+
+- **Event contract and bus:** `src/analytics/types.ts` defines the discriminated union for all 10 events, a payload map keyed by event type, and normalized rows. `src/analytics/eventBus.ts` owns the in-memory queue, UUID/ISO normalization, a 30s flush interval (`ANALYTICS_FLUSH_INTERVAL_MS`), platform background flushing, subscription hooks, and a serialized `flushChain`. Flush failures re-queue the failed batch at the front and reject to the caller; timer/background callers swallow after the bus logs `[analytics]`. The anonymous per-install `user_id` is resolved lazily at flush time from `analytics_user_id`, so queued events do not embed an identity before opt-out is known.
+- **Lifecycle instrumentation:** `src/analytics/sessionTracker.ts` emits exactly one `session_start` per session, then `session_step_progress` only on step changes, and `session_complete` from the review screen's both session-insert paths. `handleSessionLayoutUnmount()` uses a 300ms grace timer (`SESSION_LEAVE_GRACE_MS`) to survive React StrictMode remounts before emitting `session_abandon`. `app/session/_layout.tsx` feeds pathname changes and cleans up; `src/session/usePlayCapture.ts` emits start/complete/discard; `src/stores/correctionStore.ts` emits after the local feedback upsert; `app/(tabs)/jam/index.tsx` emits only after the snapshot row is saved.
+- **Persistence:** SQLite migration v19 creates `analytics_events` plus timestamp and event-type indexes, with `insertAnalyticsEvents()` using one transaction and newest-first `listAnalyticsEvents()`. IndexedDB version 6 adds the `analytics_events` store with a timestamp index, hydration/load/persist support, and clearing in `clearAllPracticeData()`. Both native and web clear paths delete analytics rows; the Settings clear-all flow also drops the in-memory queue. Opt-out is persisted as `analytics_opt_out` (`"1"` = off, missing/`"0"` = on) before in-memory state changes.
+- **Privacy and insights UI:** Settings gains a default-open Privacy section with the "Share practice data" switch, a "Practice insights" entry (`/settings/analytics`), an event count, and an "Export my data" action. The insights view summarizes total/completed sessions, completion rate, average session length, play-along total/average, top songs, top corrected chords, and the rolling 7-day session chart. Onboarding shows the exact notice copy. CSV export flushes first, uses deterministic timestamp/id order with RFC 4180 escaping and CRLF line endings, and downloads `harmoniq-analytics-YYYY-MM-DD.csv` through `shareExportedBlob`.
+- **Metric definitions:** most-practiced songs come from non-empty `session_start.song_title` values; blank titles are ignored in the ranking and counted in `sessionsWithoutSongTitle`. Completed-session duration uses `session_complete.duration_sec`; play-along totals use completed takes only. `sessionsThisWeek` is the sum of the last seven local calendar days; malformed payload JSON and invalid timestamps are ignored rather than thrown.
+- **Deliberate choices:** analytics uses its own anonymous per-install id rather than coupling to feedback identity; CSV exports analytics events only (feedback remains a separate local dataset); opting out drops pending in-memory events while keeping persisted rows until the user clears them or exports; no backend, network upload, third-party SDK, raw audio, or free-text payloads were added.
+- **Verification:** `npm run lint` 0 errors; full Vitest suite 526/526 passed with `--testTimeout=30000` (the known `designTokenConformance` 5s timeout flaked in the default full run and passes alone); `npm run test:ui` 68/68 passed on Chromium, including the new analytics settings/insights/CSV/onboarding spec. The native migration was typechecked but no simulator/device smoke was run. Committed as `2d5ebbc` (`feat: Commit 161 — Play Engagement Analytics`).

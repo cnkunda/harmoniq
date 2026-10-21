@@ -6,10 +6,10 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Phase 2 commits 98–148** — archived.  
 **Milestone A (MT3-Primary Pipeline)** — archived, complete.  
 **Milestone B (Fretboard Dual-Mode)** — archived, complete.  
-**Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–160 completed → archived).  
+**Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–161 completed → archived).  
 **Milestone D (Infrastructure)** — partially implemented; remaining gaps at commits 169–172 (151 SSE progress stream completed → archived).  
 **Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
-**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149 and 151–160 completed → archived).  
+**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149 and 151–161 completed → archived).  
 **Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 177–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 161–183** (149 and 151–160 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 162–183** (149 and 151–161 completed → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -92,48 +92,13 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-## Active Backlog — Commits 160–183
+## Active Backlog — Commits 162–183
 
 Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
 
 ---
 
 **Group: Engagement features — promoted from Milestone C (159–167), then left-handed parity (168)**
-
----
-
-### Commit 161: Play Engagement Analytics (was C3)
-
-**Status:** Complete
-
-**Goal:** A lightweight, opt-out client event bus that records practice behavior so engagement metrics (completion rate, session frequency, most-practiced songs) can be measured and exported.
-
-**Current State:** No analytics infrastructure exists. The only telemetry is `src/analytics/firstAudioPlay.ts` — a dev-only one-shot console logger, not an event bus. No `AnalyticsEvent` union, no `analytics_events` table, no metric queries, no opt-out preference, no CSV export.
-
-**Scope:**
-- Create `src/analytics/eventBus.ts`: lightweight custom event bus (no third-party SDK)
-  - `emit(event: AnalyticsEvent)` and `subscribe(handler)` pattern
-  - Events batched in memory, flushed to SQLite every 30 seconds or on app background
-- Define `AnalyticsEvent` type union:
-  - `session_start`, `session_complete`, `session_step_progress`, `session_abandon`
-  - `play_along_start`, `play_along_complete`, `play_along_discard`
-  - `feature_usage`, `correction_made`, `jam_complete`
-- Add `analytics_events` SQLite table: `id, user_id, event_type, payload_json, timestamp`
-- Track per-user per-song engagement metrics:
-  - Total play-along duration, average session length, completion rate
-  - Most-practiced songs, most-corrected chord types
-  - Session frequency (sessions per day/week)
-- Add opt-out toggle in Settings: "Share practice data" (default: on)
-- Add privacy notice in onboarding: "We track practice patterns to improve your experience. Opt out anytime."
-- Export analytics as CSV in Settings > Privacy > Export my data
-
-**Acceptance Criteria:**
-
-- [x] Events emitted at documented points and flushed to SQLite (batch + background)
-- [x] Opt-out stops emission; default-on with onboarding notice
-- [x] CSV export produces parseable file
-- [x] Metrics queries power a basic engagement view
-- [x] Migration + tests green on mobile and web
 
 ---
 
