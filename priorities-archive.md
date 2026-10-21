@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–161. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–162. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C3 → 159–161 (completed → archived), Milestone C4–C9 → 162–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–161 (user feedback & manual overrides, jam summary agent, play engagement analytics), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–162 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -28,6 +28,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 159 (User Feedback & Manual Overrides) Archive Date:** October 20, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped); spec and implementation notes archived below.
 **Commit 160 (Jam Mode Summary Agent) Archive Date:** October 20, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 504 passed, Playwright 64 passed, backend pytest 1366 passed / 6 skipped; CI scoring set 287 passed / 2 skipped); spec and implementation notes archived below.
 **Commit 161 (Play Engagement Analytics) Archive Date:** October 21, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 526 passed, Playwright 68 passed; native migration typechecked, no device smoke run); spec and implementation notes archived below.
+**Commit 162 (Dynamic Session Engine) Archive Date:** October 21, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 538 passed, backend pytest 1381 passed / 6 skipped, Playwright non-visual 71 passed; native migration typechecked, no device smoke run); spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -2503,3 +2504,50 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **Metric definitions:** most-practiced songs come from non-empty `session_start.song_title` values; blank titles are ignored in the ranking and counted in `sessionsWithoutSongTitle`. Completed-session duration uses `session_complete.duration_sec`; play-along totals use completed takes only. `sessionsThisWeek` is the sum of the last seven local calendar days; malformed payload JSON and invalid timestamps are ignored rather than thrown.
 - **Deliberate choices:** analytics uses its own anonymous per-install id rather than coupling to feedback identity; CSV exports analytics events only (feedback remains a separate local dataset); opting out drops pending in-memory events while keeping persisted rows until the user clears them or exports; no backend, network upload, third-party SDK, raw audio, or free-text payloads were added.
 - **Verification:** `npm run lint` 0 errors; full Vitest suite 526/526 passed with `--testTimeout=30000` (the known `designTokenConformance` 5s timeout flaked in the default full run and passes alone); `npm run test:ui` 68/68 passed on Chromium, including the new analytics settings/insights/CSV/onboarding spec. The native migration was typechecked but no simulator/device smoke was run. Committed as `2d5ebbc` (`feat: Commit 161 — Play Engagement Analytics`).
+
+---
+
+### Commit 162: Dynamic Session Engine (was C4)
+
+**Status:** Complete — all 6 ACs verified (6/6). Moved from [`PRIORITIES.md`](PRIORITIES.md).
+
+**Goal (spec verbatim):** Make practice plans self-adjusting — re-evaluate remaining slots after each one completes, insert remediation or skip ahead, and survive app restarts.
+
+**Current State (spec verbatim):** `backend/app/sequencer.py` builds deterministic slot plans (`generate_practice_plan()`, mood-aware since commit 76) and the frontend drives them via `src/stores/planStore.ts` + `src/session/practicePlanNavigation.ts`. Missing: no `POST /session/plan/adapt` endpoint, no mid-session re-evaluation, no `practice_plans` persistence columns (`current_slot_index`, `slot_results_json`, `adaptation_log`) — plans are ephemeral, no resume-after-restart, no plan history or regenerate UI. SM-2 (`src/spaced/sm2.ts`) computes skill scores but they do not feed slot selection.
+
+**Scope (spec verbatim):**
+
+- Extend `PracticePlanPayload` to support mid-session adaptation:
+  - After each slot completes, re-evaluate remaining slots based on actual performance
+  - If a slot scored <50%, insert a remediation slot before the next planned slot
+  - If a slot scored >90%, skip the next easier slot and advance
+- Add `POST /session/plan/adapt` backend endpoint:
+  - Input: current plan state, last slot performance (accuracy, timing, completion)
+  - Output: updated remaining slots with possible insertions/removals
+- Wire SM-2 spaced repetition into plan sequencing:
+  - `skill_mutator.ts` already computes per-skill scores — feed these into slot selection
+  - Weak skills get more frequent practice slots; strong skills get review-only slots
+- Add plan progress persistence to `practice_plans` table:
+  - `current_slot_index`, `slot_results_json`, `adaptation_log`
+  - Resume plan after app restart from last completed slot
+- Add plan history UI: list of completed plans with per-slot scores
+- Add "Regenerate plan" button that re-runs `generate_practice_plan()` with updated profile
+
+**Acceptance Criteria:**
+
+- [x] Low-scoring slot triggers remediation insertion; high-scoring slot skips forward
+- [x] SM-2 skill scores influence next-slot selection
+- [x] Plan resumes after app restart from last completed slot
+- [x] Plan history lists completed plans with per-slot scores
+- [x] Regenerate button produces an updated plan
+- [x] Backend endpoint + frontend flow tested
+
+**Implementation notes:**
+
+- **Backend adaptation:** `backend/app/plan_adapter.py` deep-copies the plan, validates the slot index and matching slot ID, and applies at most one adaptation. Accuracy below `0.50` inserts a 180-second remediation immediately after the current slot unless the current slot is final, already a remediation, or already followed by its remediation. Accuracy above `0.90` removes only the immediately following slot when its difficulty is strictly lower. Exact `0.50`/`0.90`, missing accuracy, incomplete slots, and `confidence == "low"` do nothing. Free-jam time is reclaimed down to a 120-second floor; the plan total grows when no free jam is available. `POST /session/plan/adapt` returns 400 for an invalid index or slot ID.
+- **SM-2 sequencing:** `backend/app/curriculum.py::select_skill_focus()` ranks skill nodes with `(1 - score) * 0.55 + due * 0.25 + weak * 0.20`, treating `score < 0.45` or a mapped `weak_areas` entry as weak and `next_review_date <= today` as due, with node ID as the deterministic tie-breaker. The sequencer targets the selected weak/due skill as a practice technique slot; a strong skill (`score >= 0.85`, not weak) becomes a review slot at `max(120, 0.6 * technique_budget)` and returns the unused seconds to free jam. Plans and slots now carry stable `plan_id`/`slot_id`, `difficulty`, `intent`, `target_skill`, and remediation linkage.
+- **Contracts and persistence:** `src/session/planNormalization.ts` fills IDs/defaults at backend, DB-restore, daily-lick, and legacy-completion boundaries while preserving existing IDs. SQLite migration v20 and IndexedDB v7 add `practice_plans`; the active-plan lifecycle is start (abandon older active rows), resume, progress update, and complete/abandon. `practice_plan_completions.plan_json` is enriched with `slot_results` and `adaptation_log`; legacy rows without these fields remain readable. The root layout restores an active plan after DB init, and Home gives an active plan precedence over preview/regenerate.
+- **Completion flow:** `src/session/planProgress.ts::completePracticePlanSlot()` appends the slot result (including completion-only “Done” results for unscored steps), saves progress, requests adaptation when accuracy exists, persists the adapted plan/log, advances, or finalizes when the plan ends. It also finalizes when high-score adaptation removes the last remaining slot. Adaptation failure appends a local no-op (`reason: "adapt_failed"`) and continues with the current plan. Finalization writes completion history and a session row, marks the plan completed, completes the analytics session, clears preview/Zustand state, toasts, and routes home. Review, Jam, Warmup, and `SessionChromeBar` all use this flow; the Review header advance is hidden so the scored path remains authoritative.
+- **UI:** Home renders an active-plan resume card with current step, retains the preview regenerate button, and surfaces inline errors. `TodaysPlanCard` distinguishes remediation/review slots. Progress renders per-slot pitch/timing or “Done” plus remediation/skipped counts. A completed plan therefore appears in the existing merged session/plan history timeline.
+- **Deliberate choices:** Commit 164 atomic session-state/idempotency work was excluded. Adaptation thresholds use pitch accuracy only; timing is recorded but not thresholded. Remediation reuses the original slot type/lesson rather than introducing a new slot type. Plan generation selects one SM-2 skill focus per plan. No backfill of old completion rows was added. The native migration was typechecked but no simulator/device smoke test was run.
+- **Verification:** `npm run lint` 0 errors; full Vitest suite 538/538 passed; backend `python -m pytest -q` 1381 passed / 6 skipped; Playwright non-visual suite 71/71 passed on Chromium; `git diff --check` clean. The only remaining Playwright visual failure is the pre-existing root onboarding snapshot drift (missing analytics notice copy), unrelated to Commit 162. Committed as `db7ab00` (`feat: Commit 162 — Dynamic Session Engine`).

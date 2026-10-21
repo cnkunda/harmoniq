@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 162–183** (149 and 151–161 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 163–183** (149 and 151–162 completed → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -92,49 +92,13 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-## Active Backlog — Commits 162–183
+## Active Backlog — Commits 163–183
 
 Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
 
 ---
 
 **Group: Engagement features — promoted from Milestone C (159–167), then left-handed parity (168)**
-
----
-
-### Commit 162: Dynamic Session Engine (was C4)
-
-**Status:** deferred
-
-**Goal:** Make practice plans self-adjusting — re-evaluate remaining slots after each one completes, insert remediation or skip ahead, and survive app restarts.
-
-**Current State:** `backend/app/sequencer.py` builds deterministic slot plans (`generate_practice_plan()`, mood-aware since commit 76) and the frontend drives them via `src/stores/planStore.ts` + `src/session/practicePlanNavigation.ts`. Missing: no `POST /session/plan/adapt` endpoint, no mid-session re-evaluation, no `practice_plans` persistence columns (`current_slot_index`, `slot_results_json`, `adaptation_log`) — plans are ephemeral, no resume-after-restart, no plan history or regenerate UI. SM-2 (`src/spaced/sm2.ts`) computes skill scores but they do not feed slot selection.
-
-**Scope:**
-- Extend `PracticePlanPayload` to support mid-session adaptation:
-  - After each slot completes, re-evaluate remaining slots based on actual performance
-  - If a slot scored <50%, insert a remediation slot before the next planned slot
-  - If a slot scored >90%, skip the next easier slot and advance
-- Add `POST /session/plan/adapt` backend endpoint:
-  - Input: current plan state, last slot performance (accuracy, timing, completion)
-  - Output: updated remaining slots with possible insertions/removals
-- Wire SM-2 spaced repetition into plan sequencing:
-  - `skill_mutator.ts` already computes per-skill scores — feed these into slot selection
-  - Weak skills get more frequent practice slots; strong skills get review-only slots
-- Add plan progress persistence to `practice_plans` table:
-  - `current_slot_index`, `slot_results_json`, `adaptation_log`
-  - Resume plan after app restart from last completed slot
-- Add plan history UI: list of completed plans with per-slot scores
-- Add "Regenerate plan" button that re-runs `generate_practice_plan()` with updated profile
-
-**Acceptance Criteria:**
-
-- [ ] Low-scoring slot triggers remediation insertion; high-scoring slot skips forward
-- [ ] SM-2 skill scores influence next-slot selection
-- [ ] Plan resumes after app restart from last completed slot
-- [ ] Plan history lists completed plans with per-slot scores
-- [ ] Regenerate button produces an updated plan
-- [ ] Backend endpoint + frontend flow tested
 
 ---
 
