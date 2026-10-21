@@ -20,6 +20,7 @@ import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { SoloHarmonySummaryCard } from '@/components/SoloHarmonySummaryCard'
 import { toast } from '@/components/ToastConfig'
 import { ApiError, submitExportJob, submitScore, getCorrectionHistory, revertCorrection, type CorrectionHistory } from '@/src/api/analyze'
+import { completeSession } from '@/src/analytics/sessionTracker'
 import { isHarmoniqSkillMutationSkipped } from '@/src/config'
 import { sessionEntryHref } from '@/src/constants/sessionFlow'
 import {
@@ -316,6 +317,7 @@ export default function ReviewScreen() {
         is_ghost_reference: false,
         mood: ((await getAppPref(PREF_MOOD_CHECK_LAST_MOOD)) as 'focused' | 'loose' | 'tired' | 'on_fire' | null) ?? null,
       })
+      completeSession()
       void useDnaStore.getState().refresh()
       await applyReviewSkillUpdates({
         node_scores: result.node_scores,
@@ -552,6 +554,7 @@ export default function ReviewScreen() {
           section_index: null,
           is_ghost_reference: false,
         })
+        completeSession()
       } catch (e) {
         if (__DEV__) console.warn('[review] plan completion persist failed', e)
       }

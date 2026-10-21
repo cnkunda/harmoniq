@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { emit } from '@/src/analytics/eventBus'
 import { createSessionRecorder } from '@/src/audio/recordSession'
 import type { RecordedTake } from '@/src/audio/recordSession.types'
 import { submitQuickFeedback } from '@/src/api/analyze'
@@ -303,6 +304,7 @@ export function usePlayCapture(tempo: number | null | undefined) {
   }, [])
 
   const startCapture = useCallback(async () => {
+    const previousTake = useSessionPlayStore.getState().latestTake
     setStatus('Starting mic + recorder…')
     setQuickCoachText(null)
     stoppingCaptureRef.current = false
@@ -346,6 +348,16 @@ export function usePlayCapture(tempo: number | null | undefined) {
       setRecordingWallClockStartedAtMs(Date.now())
       setPitchRunning(true)
       setStatus('Capturing performance')
+      if (previousTake) {
+        emit({
+          type: 'play_along_discard',
+          payload: { duration_sec: previousTake.durationMs / 1000 },
+        })
+      }
+      emit({
+        type: 'play_along_start',
+        payload: { tempo_bpm: typeof tempo === 'number' && Number.isFinite(tempo) ? tempo : null },
+      })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       setRecordingWallClockStartedAtMs(null)
@@ -366,7 +378,7 @@ export function usePlayCapture(tempo: number | null | undefined) {
       }
       throw e
     }
-  }, [resetAccuracyTracking, start, pruneRmsHistory])
+  }, [resetAccuracyTracking, start, pruneRmsHistory, tempo])
 
   const stopCapture = useCallback(
     async (reason: 'done' | 'silence') => {
@@ -401,6 +413,14 @@ export function usePlayCapture(tempo: number | null | undefined) {
         setTake(rec)
         setLatestTake(rec)
         setStatus(reason === 'silence' ? 'Auto-stopped after 5s silence' : 'Capture stopped')
+        emit({
+          type: 'play_along_complete',
+          payload: {
+            duration_sec: rec.durationMs / 1000,
+            tempo_bpm: typeof tempo === 'number' && Number.isFinite(tempo) ? tempo : null,
+            reason,
+          },
+        })
 
         const apiPattern = patternSnapshot.filter((x) => x !== 'ignored') as Array<
           'hit' | 'close' | 'miss' | 'vibrato'

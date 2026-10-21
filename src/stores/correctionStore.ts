@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 
+import { emit } from '@/src/analytics/eventBus'
 import {
   deleteUserFeedback,
   getAppPref,
@@ -225,6 +226,15 @@ export const useCorrectionStore = create<CorrectionStoreState>((set, get) => ({
         a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0,
       )
       return { feedbackByJob: { ...s.feedbackByJob, [jobId]: next } }
+    })
+
+    emit({
+      type: 'correction_made',
+      payload: {
+        job_id: row.job_id,
+        feedback_type: row.feedback_type,
+        event_index: row.event_index,
+      },
     })
 
     if (options?.syncToServer === false) return { ...row, serverSynced: false }

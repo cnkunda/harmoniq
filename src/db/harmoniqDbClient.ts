@@ -1,4 +1,5 @@
 import type {
+    AnalyticsEventRow,
     HomeSuggestion,
     JamSnapshotInsertInput,
     JamSnapshotRow,
@@ -84,4 +85,8 @@ export interface HarmoniqDbClient {
   listUserFeedbackForJob(jobId: string): Promise<UserFeedbackRow[]>
   deleteUserFeedback(id: string): Promise<void>
   getUserFeedbackStats(): Promise<UserFeedbackStats>
+  /** Commit 161: insert/replace local analytics rows. */
+  insertAnalyticsEvents(rows: AnalyticsEventRow[]): Promise<void>
+  /** Commit 161: newest-first local analytics rows. */
+  listAnalyticsEvents(): Promise<AnalyticsEventRow[]>
 }

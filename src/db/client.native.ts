@@ -18,6 +18,7 @@ import {
     MIGRATION_V17_USER_FEEDBACK,
     MIGRATION_V17_USER_FEEDBACK_UNIQUE_INDEX,
     MIGRATION_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
+    MIGRATION_V19_ANALYTICS_EVENTS,
     MIGRATION_V3_APP_PREFS,
     MIGRATION_V4_SESSIONS_REVIEW,
     MIGRATION_V5_LICKS_STEMS_JSON,
@@ -37,6 +38,7 @@ import {
     ROLLBACK_V16_JAM_SNAPSHOT_INFERRED_MODE,
     ROLLBACK_V17_USER_FEEDBACK,
     ROLLBACK_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
+    ROLLBACK_V19_ANALYTICS_EVENTS,
     ROLLBACK_V4_SESSIONS_REVIEW,
     ROLLBACK_V5_LICKS_STEMS_JSON,
     ROLLBACK_V6_JAM_SNAPSHOT_CONTEXT,
@@ -45,6 +47,7 @@ import {
     ROLLBACK_V9_SKILL_TECHNIQUE_ROLL
 } from '@/src/db/schema'
 import type {
+    AnalyticsEventRow,
     GhostReferenceRow,
     HomeSuggestion,
     JamSnapshotInsertInput,
@@ -371,6 +374,9 @@ async function applyMigrations(): Promise<void> {
     } else {
       await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 18, new Date().toISOString())
     }
+  }
+  if (current < 19) {
+    await applyMigrationWithRollback(19, MIGRATION_V19_ANALYTICS_EVENTS, ROLLBACK_V19_ANALYTICS_EVENTS)
   }
   for (const n of DEFAULT_SKILL_NODES) {
     await db.runAsync(
@@ -937,6 +943,7 @@ export async function clearAllPracticeData(): Promise<void> {
   await db.execAsync('DELETE FROM jam_snapshots')
   await db.execAsync('DELETE FROM practice_plan_completions')
   await db.execAsync('DELETE FROM user_feedback')
+  await db.execAsync('DELETE FROM analytics_events')
   await db.execAsync(
     `UPDATE skill_nodes SET score = 0, sessions_count = 0, last_session_date = NULL,
      easiness_factor = 2.5, interval_days = 1, next_review_date = NULL, sm2_repetitions = 0,
@@ -1225,4 +1232,35 @@ export async function deleteUserFeedback(id: string): Promise<void> {
 
 export async function getUserFeedbackStats(): Promise<UserFeedbackStats> {
   return buildFeedbackStats(await listUserFeedback())
+}
+
+/** Commit 161: persist queued analytics events in one transaction. */
+export async function insertAnalyticsEvents(rows: AnalyticsEventRow[]): Promise<void> {
+  if (rows.length === 0) return
+  await initDb()
+  const db = await getDb()
+  await db.withTransactionAsync(async () => {
+    for (const row of rows) {
+      await db.runAsync(
+        `INSERT OR REPLACE INTO analytics_events (id, user_id, event_type, payload_json, timestamp)
+         VALUES (?, ?, ?, ?, ?)`,
+        row.id,
+        row.user_id,
+        row.event_type,
+        row.payload_json,
+        row.timestamp,
+      )
+    }
+  })
+}
+
+/** Commit 161: newest-first analytics rows for metrics + export. */
+export async function listAnalyticsEvents(): Promise<AnalyticsEventRow[]> {
+  await initDb()
+  const db = await getDb()
+  const rows = await db.getAllAsync<AnalyticsEventRow>(
+    `SELECT id, user_id, event_type, payload_json, timestamp
+     FROM analytics_events ORDER BY timestamp DESC, id DESC`,
+  )
+  return rows ?? []
 }

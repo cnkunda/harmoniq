@@ -49,6 +49,9 @@ export default function OnboardingWelcomeScreen() {
           After this, Home lines up the same choices: try the demo, add a song, take the optional style quiz, or connect
           Spotify.
         </Text>
+        <Text className="mt-4 max-w-sm self-center text-center font-sans text-xs leading-5 text-muted-light">
+          We track practice patterns to improve your experience. Opt out anytime.
+        </Text>
         <AnimatedPressable haptic="light"
           onPress={onContinue}
           disabled={routing}

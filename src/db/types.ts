@@ -1,3 +1,13 @@
+import type { AnalyticsEventType } from '@/src/analytics/types'
+
+export type AnalyticsEventRow = {
+  id: string
+  user_id: string
+  event_type: AnalyticsEventType
+  payload_json: string
+  timestamp: string
+}
+
 export type SessionInsertInput = {
   id: string
   song_title: string | null

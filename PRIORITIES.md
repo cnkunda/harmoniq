@@ -104,7 +104,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 161: Play Engagement Analytics (was C3)
 
-**Status:** deferred
+**Status:** Complete
 
 **Goal:** A lightweight, opt-out client event bus that records practice behavior so engagement metrics (completion rate, session frequency, most-practiced songs) can be measured and exported.
 
@@ -129,11 +129,11 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] Events emitted at documented points and flushed to SQLite (batch + background)
-- [ ] Opt-out stops emission; default-on with onboarding notice
-- [ ] CSV export produces parseable file
-- [ ] Metrics queries power a basic engagement view
-- [ ] Migration + tests green on mobile and web
+- [x] Events emitted at documented points and flushed to SQLite (batch + background)
+- [x] Opt-out stops emission; default-on with onboarding notice
+- [x] CSV export produces parseable file
+- [x] Metrics queries power a basic engagement view
+- [x] Migration + tests green on mobile and web
 
 ---
 

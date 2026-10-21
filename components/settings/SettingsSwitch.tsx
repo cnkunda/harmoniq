@@ -21,6 +21,8 @@ export function SettingsSwitch({ label, description, value, onValueChange }: Set
       <Switch
         value={value}
         onValueChange={onValueChange}
+        accessibilityLabel={label}
+        style={{ minHeight: 44, minWidth: 44 }}
         trackColor={{ false: colors.wood[600], true: colors.amber.accent }}
         thumbColor={value ? colors.amber.light : colors.wood[500]}
       />

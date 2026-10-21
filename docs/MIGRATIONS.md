@@ -74,12 +74,13 @@ If a migration fails:
 - V16: Add inferred_mode to jam_snapshots (Milestone B — Commit B3)
 - V17: Add user_feedback table + job/dedupe indexes (Commit 159)
 - V18: Add summary_status to jam_snapshots (Commit 160; web IndexedDB is schemaless, no version bump)
+- V19: Add analytics_events table + type/timestamp indexes (Commit 161)
 
 ## Web (IndexedDB) Migrations
 
 ### Location
 - Migration runner: `src/db/idbWeb.ts` (openHarmoniqIdb function)
-- Current version: 5
+- Current version: 6
 
 ### Version Tracking
 Migrations are tracked in the `schema_migrations` object store:
@@ -90,7 +91,7 @@ type MigrationRow = { version: number; applied_at: string }
 ### Migration Pattern
 IndexedDB uses built-in versioning:
 ```typescript
-const DB_VERSION = 5
+const DB_VERSION = 6
 const r = indexedDB.open(DB_NAME, DB_VERSION)
 r.onupgradeneeded = (event) => {
   const oldVersion = (event as IDBVersionChangeEvent).oldVersion
@@ -108,6 +109,7 @@ IndexedDB provides automatic rollback:
 - V1-V3: Initial object stores (prefs, sessions, skill_nodes, licks, jams, lesson cache, lessons, plan_completions)
 - V4: Add schema_migrations tracking store
 - V5: Add user_feedback store with job_id index (Commit 159)
+- V6: Add analytics_events store with timestamp index (Commit 161)
 
 ## Data Validation
 

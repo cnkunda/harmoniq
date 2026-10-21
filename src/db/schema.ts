@@ -148,6 +148,11 @@ export const PREF_FEEDBACK_USER_ID = 'feedback_user_id'
 /** Commit 160: persisted post-jam coaching persona (`encouraging` | `technical`). */
 export const PREF_JAM_SUMMARY_PERSONA = 'jam_summary_persona'
 
+/** Commit 161: `"1"` = local analytics opt-out. Missing or `"0"` = enabled. */
+export const PREF_ANALYTICS_OPT_OUT = 'analytics_opt_out'
+/** Commit 161: anonymous per-install id for analytics rows. */
+export const PREF_ANALYTICS_USER_ID = 'analytics_user_id'
+
 export const COACH_VOICE_OPTIONS = ['warm', 'concise', 'technical'] as const
 export type CoachVoiceId = (typeof COACH_VOICE_OPTIONS)[number]
 
@@ -323,6 +328,26 @@ export const MIGRATION_V18_JAM_SNAPSHOT_SUMMARY_STATUS =
 /** Rollback for v18: remove summary_status column. */
 export const ROLLBACK_V18_JAM_SNAPSHOT_SUMMARY_STATUS =
   'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS summary_status'
+
+/** v19: local-only practice analytics events (Commit 161). */
+export const MIGRATION_V19_ANALYTICS_EVENTS = `
+CREATE TABLE IF NOT EXISTS analytics_events (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  timestamp TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_timestamp ON analytics_events (timestamp);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON analytics_events (event_type);
+`
+
+/** Rollback for v19: drop analytics indexes + table. */
+export const ROLLBACK_V19_ANALYTICS_EVENTS = [
+  'DROP INDEX IF EXISTS idx_analytics_events_type',
+  'DROP INDEX IF EXISTS idx_analytics_events_timestamp',
+  'DROP TABLE IF EXISTS analytics_events',
+] as const
 
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },

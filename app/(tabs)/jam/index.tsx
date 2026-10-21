@@ -28,6 +28,7 @@ import {
     submitJamScore,
 } from '@/src/api/analyze'
 import { requestJamBacking, type JamPersonaChoice, type JamPhraseMetrics, type JamSummaryBundle } from '@/src/api/jam'
+import { emit } from '@/src/analytics/eventBus'
 import { BACKING_TRACKS, type BackingTrackDefinition, type BackingTrackId } from '@/src/constants/backingTracks'
 import { getAllSkillNodes, getAppPref, getLessonByJobId, insertJamSnapshotRow, insertPracticePlanCompletionRow, insertSessionRow } from '@/src/db/client'
 import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
@@ -609,6 +610,15 @@ export default function JamScreen() {
         summary_bundle_json: null,
         phrases_json: phrasesJson,
         summary_status: summaryStatus,
+      })
+      emit({
+        type: 'jam_complete',
+        payload: {
+          duration_sec: durationSeconds,
+          track_id: trackIdForSave,
+          track_label: trackLabelForSave,
+          inferred_scale_label: inferred === '—' ? null : inferred,
+        },
       })
       void useDnaStore.getState().refresh()
     } catch (e) {

@@ -6,8 +6,10 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { SessionChromeBar } from '@/components/SessionChromeBar'
 import { WoodGradient } from '@/components/WoodGradient'
+import { handleSessionLayoutUnmount, trackSessionPathname } from '@/src/analytics/sessionTracker'
 import { colors } from '@/src/constants/colors'
 import { sessionStepIndexFromPathname, type SessionStep } from '@/src/constants/sessionFlow'
+import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPhaseStore } from '@/src/stores/sessionPhaseStore'
 
 // Scenes otherwise inherit React Navigation's default light background
@@ -29,6 +31,18 @@ export default function SessionLayout() {
     const currentStep = steps[stepIndex] as SessionStep
     syncPhaseFromStep(currentStep)
   }, [pathname, syncPhaseFromStep])
+
+  useEffect(() => {
+    trackSessionPathname(pathname, {
+      songTitle: useLessonStore.getState().lesson?.song_title ?? null,
+    })
+  }, [pathname])
+
+  useEffect(() => {
+    return () => {
+      handleSessionLayoutUnmount()
+    }
+  }, [])
 
   return (
     <View className="flex-1 bg-wood-900">

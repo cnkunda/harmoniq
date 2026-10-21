@@ -4,6 +4,7 @@ import {
     getHarmoniqIdbHandle,
     idbClearPracticeStores,
     idbLoadEverything,
+    idbPersistAnalytics,
     idbPersistFeedback,
     idbPersistJams,
     idbPersistLessons,
@@ -24,6 +25,7 @@ import {
     PREF_TASTE_PROFILE_JSON,
 } from '@/src/db/schema'
 import type {
+    AnalyticsEventRow,
     GhostReferenceRow,
     HomeSuggestion,
     JamSnapshotInsertInput,
@@ -61,6 +63,8 @@ const lessonCatalog: LessonPersistRow[] = []
 const jamSnapshots: JamSnapshotInsertInput[] = []
 const planCompletions: PracticePlanCompletionRow[] = []
 const userFeedback: UserFeedbackRow[] = []
+/** Newest-first (matches native `ORDER BY timestamp DESC, id DESC`). */
+const analyticsEvents: AnalyticsEventRow[] = []
 
 let initPromise: Promise<void> | null = null
 
@@ -159,6 +163,8 @@ function applyHydration(h: IdbHydration): void {
   userFeedback.push(
     ...[...(h.feedback ?? [])].sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0)),
   )
+  analyticsEvents.length = 0
+  analyticsEvents.push(...sortAnalyticsEvents(h.analyticsEvents ?? []))
   lessonCatalog.length = 0
   lessonCatalog.push(...(h.lessons ?? []).map((row) => ({ ...row })))
 }
@@ -193,6 +199,17 @@ async function flushLessons(): Promise<void> {
 
 async function flushFeedback(): Promise<void> {
   await idbPersistFeedback(getHarmoniqIdbHandle(), userFeedback)
+}
+
+async function flushAnalytics(): Promise<void> {
+  await idbPersistAnalytics(getHarmoniqIdbHandle(), analyticsEvents)
+}
+
+function sortAnalyticsEvents(rows: AnalyticsEventRow[]): AnalyticsEventRow[] {
+  return [...rows].sort((a, b) => {
+    if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? 1 : -1
+    return a.id < b.id ? 1 : a.id > b.id ? -1 : 0
+  })
 }
 
 /**
@@ -675,6 +692,7 @@ export async function clearAllPracticeData(): Promise<void> {
   jamSnapshots.length = 0
   planCompletions.length = 0
   userFeedback.length = 0
+  analyticsEvents.length = 0
   for (const n of DEFAULT_SKILL_NODES) {
     skillNodes.set(n.id, defaultSkillRow(n))
   }
@@ -875,4 +893,26 @@ export async function deleteUserFeedback(id: string): Promise<void> {
 
 export async function getUserFeedbackStats(): Promise<UserFeedbackStats> {
   return buildFeedbackStats(await listUserFeedback())
+}
+
+/** Commit 161: upsert analytics rows by id and mirror them to IndexedDB. */
+export async function insertAnalyticsEvents(rows: AnalyticsEventRow[]): Promise<void> {
+  if (rows.length === 0) return
+  await initDb()
+  seedWebSkillNodes()
+  for (const row of rows) {
+    const index = analyticsEvents.findIndex((existing) => existing.id === row.id)
+    const clone: AnalyticsEventRow = { ...row }
+    if (index >= 0) analyticsEvents[index] = clone
+    else analyticsEvents.push(clone)
+  }
+  analyticsEvents.splice(0, analyticsEvents.length, ...sortAnalyticsEvents(analyticsEvents))
+  await flushAnalytics()
+}
+
+/** Commit 161: newest-first analytics rows for metrics + export. */
+export async function listAnalyticsEvents(): Promise<AnalyticsEventRow[]> {
+  await initDb()
+  seedWebSkillNodes()
+  return sortAnalyticsEvents(analyticsEvents)
 }

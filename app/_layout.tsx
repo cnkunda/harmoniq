@@ -23,6 +23,7 @@ import { NoiseOverlay } from '@/components/NoiseOverlay'
 import Toast from 'react-native-toast-message'
 
 import { toastConfig } from '@/components/ToastConfig'
+import { startAnalytics } from '@/src/analytics/eventBus'
 import { hydrateVoiceCoachPrefs } from '@/src/audio/hydrateVoiceCoachPrefs'
 import { hydrateWebLessonStore, initDb } from '@/src/db/client'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
@@ -53,6 +54,7 @@ export default function RootLayout() {
     void (async () => {
       try {
         await initDb()
+        await startAnalytics()
         await useSessionPrefsStore.getState().hydrate()
         await hydrateVoiceCoachPrefs()
         if (Platform.OS === 'web') {
@@ -81,6 +83,7 @@ export default function RootLayout() {
             <Stack.Screen name="listening" />
             <Stack.Screen name="review-archive/[sessionId]" />
             <Stack.Screen name="settings/feedback" />
+            <Stack.Screen name="settings/analytics" />
             <Stack.Screen name="session" />
             <Stack.Screen name="jam-practice" />
           </Stack>

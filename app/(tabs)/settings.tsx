@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy'
 import { useRouter } from 'expo-router'
 import * as Sharing from 'expo-sharing'
 import {
+  BarChart3,
   ChevronRight,
   Database,
   Download,
@@ -11,6 +12,7 @@ import {
   MessageSquare,
   Music,
   Settings as SettingsIcon,
+  ShieldCheck,
   Sliders,
   Trash2,
   User,
@@ -37,6 +39,13 @@ import {
   SettingsSwitch,
 } from '@/components/settings'
 import { toast } from '@/components/ToastConfig'
+import { analyticsEventsToCsv } from '@/src/analytics/csv'
+import {
+  clearAnalyticsQueue,
+  emit,
+  flushAnalytics,
+  setAnalyticsEnabled as setAnalyticsBusEnabled,
+} from '@/src/analytics/eventBus'
 import { disconnectSpotifyServer, fetchSpotifyTasteProfile, parseTasteProfileJson } from '@/src/api/analyze'
 import { hydrateVoiceCoachPrefs } from '@/src/audio/hydrateVoiceCoachPrefs'
 import { stop as stopVoiceCoach } from '@/src/audio/voiceCoach'
@@ -46,10 +55,13 @@ import {
   clearAllPracticeData,
   getAppPref,
   getUserFeedbackStats,
+  initDb,
+  listAnalyticsEvents,
   setAppPref,
 } from '@/src/db/client'
 import {
   COACH_VOICE_OPTIONS,
+  PREF_ANALYTICS_OPT_OUT,
   PREF_COACH_VOICE,
   PREF_EXPERIENCE_LEVEL,
   PREF_METRONOME_DEFAULT_ON,
@@ -77,6 +89,7 @@ import { useSkillStore } from '@/src/stores/skillStore'
 import type { VoiceGenderPref } from '@/src/stores/voiceCoachPrefsStore'
 import { useVoiceCoachPrefsStore } from '@/src/stores/voiceCoachPrefsStore'
 import type { SpotifyTasteProfile } from '@/src/types'
+import { shareExportedBlob } from '@/src/utils/exportShare'
 
 function isCoachVoice(s: string): s is CoachVoiceId {
   return (COACH_VOICE_OPTIONS as readonly string[]).includes(s)
@@ -126,25 +139,32 @@ export default function SettingsScreen() {
   const [derivedTasteLabel, setDerivedTasteLabel] = useState<string | null>(null)
   const [experienceLevelSaved, setExperienceLevelSaved] = useState<string | null>(null)
   const [feedbackStats, setFeedbackStats] = useState<UserFeedbackStats | null>(null)
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(true)
+  const [analyticsEventCount, setAnalyticsEventCount] = useState(0)
+  const [analyticsExportBusy, setAnalyticsExportBusy] = useState(false)
 
   const loadPrefs = useCallback(async () => {
-    const [full, legacyFull, hz, style, metro, skipMood, voice, tasteJson, derivedTasteRaw, expSaved] = await Promise.all([
-      getAppPref(PREF_PREFER_FULL_TABS),
-      getAppPref(PREF_PREFER_SIMPLER_TABS_LEGACY),
-      getAppPref(PREF_STANDARD_TUNING_HZ),
-      getAppPref(PREF_STYLE_FOCUS),
-      getAppPref(PREF_METRONOME_DEFAULT_ON),
-      getAppPref(PREF_MOOD_CHECK_SKIP),
-      getAppPref(PREF_COACH_VOICE),
-      getAppPref(PREF_SPOTIFY_TASTE_PROFILE_JSON),
-      getAppPref(PREF_TASTE_PROFILE_JSON),
-      getAppPref(PREF_EXPERIENCE_LEVEL),
-    ])
+    await initDb()
+    const [full, legacyFull, hz, style, metro, skipMood, voice, tasteJson, derivedTasteRaw, expSaved, analyticsOptOut] =
+      await Promise.all([
+        getAppPref(PREF_PREFER_FULL_TABS),
+        getAppPref(PREF_PREFER_SIMPLER_TABS_LEGACY),
+        getAppPref(PREF_STANDARD_TUNING_HZ),
+        getAppPref(PREF_STYLE_FOCUS),
+        getAppPref(PREF_METRONOME_DEFAULT_ON),
+        getAppPref(PREF_MOOD_CHECK_SKIP),
+        getAppPref(PREF_COACH_VOICE),
+        getAppPref(PREF_SPOTIFY_TASTE_PROFILE_JSON),
+        getAppPref(PREF_TASTE_PROFILE_JSON),
+        getAppPref(PREF_EXPERIENCE_LEVEL),
+        getAppPref(PREF_ANALYTICS_OPT_OUT),
+      ])
     setPreferFullTabs(full === '1' || (full == null && legacyFull === '0'))
     setTuningHz(hz && hz.trim() ? hz : '440')
     setStyleFocus(style ?? '')
     setMetronomeDefaultOn(metro !== '0')
     setSkipMoodCheck(skipMood === '1')
+    setAnalyticsEnabled(analyticsOptOut !== '1')
     const vRaw = voice ?? ''
     setCoachVoice(isCoachVoice(vRaw) ? vRaw : 'warm')
     setSpotifyProfile(parseStoredSpotifyProfile(tasteJson))
@@ -172,6 +192,28 @@ export default function SettingsScreen() {
         .catch((e) => {
           toast.error(`Could not load feedback stats: ${e instanceof Error ? e.message : 'unknown error'}`)
         })
+    }, []),
+  )
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      void (async () => {
+        await flushAnalytics().catch((e) => {
+          console.warn('[settings] analytics flush skipped', e instanceof Error ? e.message : String(e))
+        })
+        try {
+          const events = await listAnalyticsEvents()
+          if (!cancelled) setAnalyticsEventCount(events.length)
+        } catch (e) {
+          if (!cancelled) {
+            toast.error(`Could not load analytics events: ${e instanceof Error ? e.message : 'unknown error'}`)
+          }
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
     }, []),
   )
 
@@ -280,6 +322,50 @@ export default function SettingsScreen() {
     useVoiceCoachPrefsStore.getState().setAll({ gender: g })
   }
 
+  const persistAnalyticsEnabled = async (nextEnabled: boolean) => {
+    try {
+      await setAnalyticsBusEnabled(nextEnabled)
+      setAnalyticsEnabled(nextEnabled)
+      toast.success(nextEnabled ? 'Practice data sharing enabled.' : 'Practice data sharing paused.')
+    } catch (e) {
+      toast.error(`Could not save analytics preference: ${e instanceof Error ? e.message : 'unknown error'}`)
+    }
+  }
+
+  const exportAnalyticsCsv = async () => {
+    setAnalyticsExportBusy(true)
+    try {
+      await flushAnalytics().catch((e) => {
+        console.warn('[settings] analytics flush skipped', e instanceof Error ? e.message : String(e))
+      })
+      const events = await listAnalyticsEvents()
+      setAnalyticsEventCount(events.length)
+      if (events.length === 0) {
+        toast.error('No analytics events to export yet.')
+        return
+      }
+      const stamp = new Date().toISOString().slice(0, 10)
+      const fileName = `harmoniq-analytics-${stamp}.csv`
+      const csv = analyticsEventsToCsv(events)
+      await shareExportedBlob({
+        blob: new Blob([csv], { type: 'text/csv;charset=utf-8' }),
+        mimeType: 'text/csv;charset=utf-8',
+        contentDisposition: `attachment; filename="${fileName}"`,
+        fallbackBase: `harmoniq-analytics-${stamp}`,
+        dialogTitle: 'Export practice data',
+      })
+      emit({
+        type: 'feature_usage',
+        payload: { feature: 'analytics_export', event_count: events.length },
+      })
+      toast.success('Practice data export ready.')
+    } catch (e) {
+      toast.error(`Analytics export failed: ${e instanceof Error ? e.message : 'unknown error'}`)
+    } finally {
+      setAnalyticsExportBusy(false)
+    }
+  }
+
   const exportJournal = async () => {
     setExportBusy(true)
     try {
@@ -322,7 +408,10 @@ export default function SettingsScreen() {
   const runClearPracticeData = () => {
     void (async () => {
       try {
+        clearAnalyticsQueue()
         await clearAllPracticeData()
+        clearAnalyticsQueue()
+        setAnalyticsEventCount(0)
         resetLesson()
         clearAnnotations()
         await loadSkills()
@@ -703,6 +792,55 @@ export default function SettingsScreen() {
             <Trash2 color={colors.danger} size={18} strokeWidth={2} />
             <Text className="font-sans-medium text-danger">Clear all practice data…</Text>
           </AnimatedPressable>
+        </SettingsSection>
+
+        {/* Privacy */}
+        <SettingsSection
+          icon={ShieldCheck}
+          title="Privacy"
+          description="Control anonymous local practice analytics"
+          defaultOpen={true}
+        >
+          <SettingsSwitch
+            label="Share practice data"
+            description="Anonymous local events help improve practice features. Opt out anytime; existing data stays on this device."
+            value={analyticsEnabled}
+            onValueChange={(v) => void persistAnalyticsEnabled(v)}
+          />
+          <AnimatedPressable
+            onPress={() => router.push('/settings/analytics')}
+            haptic="light"
+            className="mt-4 flex min-h-[44px] flex-row items-center gap-3 rounded-lg border border-wood-600/50 bg-wood-900/40 p-3"
+            accessibilityRole="button"
+            accessibilityLabel="Open practice insights"
+          >
+            <BarChart3 color={colors.amber.accent} size={20} strokeWidth={2} />
+            <View className="flex-1">
+              <Text className="font-sans-medium text-sm text-cream">Practice insights</Text>
+              <Text className="mt-0.5 font-sans text-[11px] text-muted-light">
+                Session consistency, practice time, and top songs
+              </Text>
+            </View>
+            <ChevronRight color={colors.muted.light} size={18} strokeWidth={2} />
+          </AnimatedPressable>
+          <AnimatedPressable
+            onPress={() => void exportAnalyticsCsv()}
+            disabled={analyticsExportBusy || analyticsEventCount === 0}
+            haptic="medium"
+            className="mt-3 flex min-h-[44px] flex-row items-center justify-center gap-2 rounded-lg border border-amber-accent/50 bg-amber-accent/15 px-4 py-3 disabled:opacity-50"
+            accessibilityRole="button"
+            accessibilityLabel="Export my data"
+          >
+            <Download color={colors.amber.accent} size={18} strokeWidth={2} />
+            <Text className="font-sans-medium text-amber-light">
+              {analyticsExportBusy ? 'Preparing export…' : 'Export my data'}
+            </Text>
+          </AnimatedPressable>
+          <Text className="mt-2 font-sans text-[11px] text-muted-light">
+            {analyticsEventCount === 0
+              ? 'No local analytics events yet. Events appear after you practice.'
+              : `${analyticsEventCount} local event${analyticsEventCount === 1 ? '' : 's'} stored on this device.`}
+          </Text>
         </SettingsSection>
       </ScrollView>
     </SafeAreaView>
