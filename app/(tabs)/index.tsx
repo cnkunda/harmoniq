@@ -33,6 +33,7 @@ import { colors } from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import {
   getAllSkillNodes,
+  getActivePracticePlanRow,
   getAppPref,
   getHomeSuggestion,
   getLessonByJobId,
@@ -52,7 +53,12 @@ import {
   type DailyLick,
 } from '@/src/home/dailyLick'
 import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
-import { startPracticePlanFromHome } from '@/src/session/practicePlanNavigation'
+import { resumeActivePracticePlan, startActivePracticePlan } from '@/src/session/activePlanPersistence'
+import { normalizePracticePlan } from '@/src/session/planNormalization'
+import {
+  resumePracticePlanFromHome,
+  startPracticePlanFromHome,
+} from '@/src/session/practicePlanNavigation'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
@@ -226,9 +232,11 @@ export default function HomeScreen() {
   const [dailyLickDismissed, setDailyLickDismissed] = useState(false)
   const [lickDateOffset, setLickDateOffset] = useState(0)
   const [practicePlan, setPracticePlan] = useState<PracticePlanPayload | null>(null)
+  const [practicePlanMode, setPracticePlanMode] = useState<'preview' | 'resume'>('preview')
   const [practicePlanLoading, setPracticePlanLoading] = useState(false)
   const [practicePlanStartError, setPracticePlanStartError] = useState<string | null>(null)
   const [planStartBusy, setPlanStartBusy] = useState(false)
+  const [regenerateBusy, setRegenerateBusy] = useState(false)
   const [demoBusy, setDemoBusy] = useState(false)
   const [spotifyBusy, setSpotifyBusy] = useState(false)
   const [, setTasteSongHints] = useState<string[]>([])
@@ -250,12 +258,12 @@ export default function HomeScreen() {
     return Math.min(planSlotIndex, currentPlan.slots.length - 1)
   }, [practicePlan, currentPlan, planSlotIndex])
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((options?: { keepPreviewOnError?: boolean }) => {
     setLoadError(false)
     setDrillLatestError(null)
     setPracticePlanStartError(null)
     setPracticePlanLoading(true)
-    void Promise.all([
+    return Promise.all([
       getHomeSuggestion(),
       listSessionsJournal(),
       listLessonsJournal(),
@@ -263,8 +271,9 @@ export default function HomeScreen() {
       getAppPref(PREF_TASTE_PROFILE_JSON),
       getAppPref(PREF_SPOTIFY_TASTE_PROFILE_JSON),
       listPracticePlanCompletions(),
+      getActivePracticePlanRow(),
     ])
-      .then(async ([homeSuggestion, sessions, lessons, skillRows, tasteRaw, spotifyRaw, planCompletions]) => {
+      .then(async ([homeSuggestion, sessions, lessons, skillRows, tasteRaw, spotifyRaw, planCompletions, activePlanRow]) => {
         setSuggestion(homeSuggestion)
         setSessionsLog(sessions)
         setLessons(lessons)
@@ -290,6 +299,22 @@ export default function HomeScreen() {
           setDailyLickDismissed(true)
         }
 
+        if (activePlanRow) {
+          const inMemory = usePlanStore.getState().currentPlan
+          const activePlan =
+            inMemory?.plan_id === activePlanRow.plan_id
+              ? inMemory
+              : await resumeActivePracticePlan()
+          if (activePlan?.slots.length) {
+            setPracticePlan(activePlan)
+            setPracticePlanMode('resume')
+            setPracticePlanLoading(false)
+            return
+          }
+        }
+
+        setPracticePlanMode('preview')
+
         if (homeSuggestion?.kind === 'cold_start') {
           setPracticePlan(null)
           setPracticePlanLoading(false)
@@ -305,7 +330,8 @@ export default function HomeScreen() {
           !planState.isHomePreviewStale() &&
           (!hasMultiLessonLibrary || cachedIsFullSequencerPlan)
         ) {
-          setPracticePlan(cachedPreview)
+          const normalizedPreview = normalizePracticePlan(cachedPreview)
+          setPracticePlan(normalizedPreview)
           setPracticePlanLoading(false)
           return
         }
@@ -329,14 +355,18 @@ export default function HomeScreen() {
             mood,
             library_lessons: libraryLessons,
           })
-          const next = plan.slots?.length ? plan : null
+          const next = plan.slots?.length ? normalizePracticePlan(plan) : null
           setPracticePlan(next)
           if (next) {
             usePlanStore.getState().setHomePreviewPlan(next)
           }
         } catch (e) {
           console.warn('[home] practice plan unavailable', e)
-          setPracticePlan(null)
+          if (options?.keepPreviewOnError) {
+            setPracticePlanStartError('Could not regenerate your plan. Try again.')
+          } else {
+            setPracticePlan(null)
+          }
         } finally {
           setPracticePlanLoading(false)
         }
@@ -348,6 +378,11 @@ export default function HomeScreen() {
         setLatestPlanCompletion(null)
         setPracticePlanLoading(false)
         setSpotifyLinked(false)
+        if (options?.keepPreviewOnError) {
+          setPracticePlanStartError('Could not regenerate your plan. Try again.')
+        } else {
+          setPracticePlan(null)
+        }
       })
   }, [lickDateOffset])
 
@@ -442,9 +477,14 @@ export default function HomeScreen() {
     if (!dailyLick) return
     try {
       const plan: PracticePlanPayload = {
+        plan_id: `${dailyLick.id}-plan`,
         slots: [
           {
+            slot_id: `${dailyLick.id}-slot`,
             slot_type: 'warmup',
+            difficulty: 1,
+            intent: 'practice',
+            target_skill: dailyLick.pattern.techniqueTags[0] ?? null,
             duration_seconds: dailyLick.pattern.defaultDurationSeconds,
             title: dailyLick.name,
             coach_intro: dailyLick.description,
@@ -468,7 +508,7 @@ export default function HomeScreen() {
         ],
         total_duration_seconds: dailyLick.pattern.defaultDurationSeconds,
       }
-      usePlanStore.getState().setPlan(plan)
+      await startActivePracticePlan(plan)
       router.push('/session/warmup')
     } catch {
       toast.error('Could not start daily lick.')
@@ -516,16 +556,34 @@ export default function HomeScreen() {
   )
 
   const onStartPracticePlan = useCallback(() => {
-    if (!practicePlan?.slots?.length) return
+    if (!practicePlan?.slots?.length || planStartBusy) return
     setPracticePlanStartError(null)
     setPlanStartBusy(true)
-    void startPracticePlanFromHome(router, { saveLesson, setLessonSectionIndex }, practicePlan)
+    const deps = { saveLesson, setLessonSectionIndex }
+    const action =
+      practicePlanMode === 'resume'
+        ? resumePracticePlanFromHome(router, deps)
+        : startPracticePlanFromHome(router, deps, practicePlan)
+    void action
       .catch((e) => {
         const msg = e instanceof Error ? e.message : 'Could not start this plan.'
         setPracticePlanStartError(msg)
       })
       .finally(() => setPlanStartBusy(false))
-  }, [practicePlan, router, saveLesson, setLessonSectionIndex])
+  }, [practicePlan, planStartBusy, practicePlanMode, router, saveLesson, setLessonSectionIndex])
+
+  const onRegeneratePracticePlan = useCallback(() => {
+    if (regenerateBusy || practicePlanMode === 'resume') return
+    setPracticePlanStartError(null)
+    usePlanStore.getState().setHomePreviewPlan(null)
+    setRegenerateBusy(true)
+    void refresh({ keepPreviewOnError: true }).finally(() => setRegenerateBusy(false))
+  }, [regenerateBusy, practicePlanMode, refresh])
+
+  const displayedPlanSlotIndex =
+    practicePlanMode === 'resume'
+      ? Math.min(planSlotIndex, Math.max(0, (practicePlan?.slots.length ?? 1) - 1))
+      : validPlanSlotIndex
 
   return (
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
@@ -553,7 +611,7 @@ export default function HomeScreen() {
                    <View>
                      <Text className="font-sans text-sm text-cream">Could not load your suggestion.</Text>
                      <AnimatedPressable
-                       onPress={refresh}
+                       onPress={() => void refresh()}
                        className="mt-4 rounded-xl border border-amber-accent/60 bg-wood-900/50 px-4 py-3"
                        accessibilityRole="button"
                        accessibilityLabel="Retry loading suggestion"
@@ -564,6 +622,16 @@ export default function HomeScreen() {
                 ) : (
                   <Text className="font-sans text-sm text-cream">Loading suggestion…</Text>
                 )
+              ) : practicePlanMode === 'resume' && !practicePlanLoading && practicePlan?.slots?.length ? (
+                <TodaysPlanCard
+                  plan={practicePlan}
+                  sessionMinutes={recommendedMinutes}
+                  currentSlotIndex={displayedPlanSlotIndex}
+                  onStart={() => void onStartPracticePlan()}
+                  busy={planStartBusy}
+                  errorText={practicePlanStartError}
+                  mode="resume"
+                />
               ) : suggestion.kind === 'cold_start' ? (
                 <View className="w-full max-w-md self-center">
                   {/* Matches onboarding welcome: icon, headline scale, readable measure */}
@@ -656,10 +724,13 @@ export default function HomeScreen() {
                 <TodaysPlanCard
                   plan={practicePlan}
                   sessionMinutes={recommendedMinutes}
-                  currentSlotIndex={validPlanSlotIndex}
+                  currentSlotIndex={displayedPlanSlotIndex}
                   onStart={() => void onStartPracticePlan()}
                   busy={planStartBusy}
                   errorText={practicePlanStartError}
+                  mode="preview"
+                  onRegenerate={onRegeneratePracticePlan}
+                  regenerateBusy={regenerateBusy}
                 />
               ) : suggestion.kind === 'active_lesson' ? (
                 <>

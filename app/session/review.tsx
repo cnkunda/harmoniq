@@ -30,7 +30,6 @@ import {
     getLatestGhostReference,
     getSessionCount,
     insertLickRow,
-    insertPracticePlanCompletionRow,
     insertSessionRow,
     listUserFeedbackForJob,
 } from '@/src/db/client'
@@ -44,7 +43,8 @@ import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { parseHarmonizedSolo } from '@/src/music/soloHarmony'
 import { coachReviewFromScoreResult } from '@/src/session/coachReviewFromScoreResult'
 import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhostTake'
-import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
+import { abandonActivePlan } from '@/src/session/activePlanPersistence'
+import { completePracticePlanSlot, slotPerformanceFromScoreResult } from '@/src/session/planProgress'
 import {
     sessionAccuracy01FromScoreResult,
     timingStability01FromScoreResult,
@@ -502,10 +502,8 @@ export default function ReviewScreen() {
       return
     }
 
-    const { currentPlan, currentSlotIndex, clearPlan } = usePlanStore.getState()
-    const slots = currentPlan?.slots
-    const hasNext = Boolean(slots?.length && currentSlotIndex < slots.length - 1)
-    const activeSlot = slots?.[currentSlotIndex]
+    const { currentPlan, currentSlotIndex } = usePlanStore.getState()
+    const activeSlot = currentPlan?.slots[currentSlotIndex]
     const slotRef =
       typeof activeSlot?.lesson_ref === 'string' && activeSlot.lesson_ref.trim().length > 0
         ? activeSlot.lesson_ref.trim()
@@ -514,55 +512,26 @@ export default function ReviewScreen() {
     /** Avoid advancing a stale plan when the user opened a different song than this slot references. */
     const planLessonConflict = Boolean(slotRef && currentJobId && slotRef !== currentJobId)
 
-    if (currentPlan && hasNext && !planLessonConflict) {
-      try {
-        const nextSlot = slots?.[currentSlotIndex + 1]
-        if (nextSlot?.slot_type === 'free_jam') {
-          toast.success('Song practice complete — opening Jam.')
-        }
-        await navigateToPracticePlanSlot(router, { saveLesson, setLessonSectionIndex }, currentSlotIndex + 1)
-        return
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not open the next plan section.')
+    if (currentPlan) {
+      if (planLessonConflict) {
+        await abandonActivePlan(currentPlan.plan_id)
+        router.replace('/(tabs)')
         return
       }
-    }
-    // Final step of plan - record completion and session
-    if (currentPlan && slots && slots.length > 0) {
       try {
-        await insertPracticePlanCompletionRow({
-          id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          completed_at: new Date().toISOString(),
-          plan_json: JSON.stringify(currentPlan),
+        await completePracticePlanSlot({
+          router,
+          deps: { saveLesson, setLessonSectionIndex },
+          slotIndex: currentSlotIndex,
+          performance: activeSlot ? slotPerformanceFromScoreResult(activeSlot, score) : null,
         })
-        // Also insert session row so plan completions count toward home page progress
-        const firstSlot = slots[0]
-        const sessionTitle = firstSlot?.slot_type === 'song_section'
-          ? (firstSlot.title ?? 'Practice session')
-          : (firstSlot?.title ?? 'Practice session')
-        await insertSessionRow({
-          id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          song_title: sessionTitle,
-          artist: typeof lesson?.artist === 'string' ? lesson.artist : null,
-          section_label: `${slots.length}-section plan`,
-          date: new Date().toISOString(),
-          coach_review: null,
-          pitch_accuracy: null,
-          phrasing_score: null,
-          nodes_targeted: [],
-          job_id: typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : null,
-          section_index: null,
-          is_ghost_reference: false,
-        })
-        completeSession()
       } catch (e) {
-        if (__DEV__) console.warn('[review] plan completion persist failed', e)
+        toast.error(e instanceof Error ? e.message : 'Could not continue the practice plan.')
       }
-      clearPlan()
+      return
     }
-    if (currentPlan) clearPlan()
     router.replace('/(tabs)')
-  }, [clearLatestTake, lesson?.artist, lesson?.job_id, lesson?.sections?.length, router, saveLesson, sectionIndex, setLessonSectionIndex])
+  }, [clearLatestTake, lesson?.job_id, lesson?.sections?.length, router, saveLesson, score, sectionIndex, setLessonSectionIndex])
 
   const saveLick = useCallback(async () => {
     const gp5 = tabs.full ?? tabs.skeleton ?? tabs.alt ?? null

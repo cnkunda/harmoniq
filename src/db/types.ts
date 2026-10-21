@@ -213,6 +213,40 @@ export type PracticePlanCompletionInsertInput = {
   plan_json: string
 }
 
+/** Commit 162: lifecycle for paused/completed dynamic practice plans. */
+export type PracticePlanStatus = 'active' | 'completed' | 'abandoned'
+
+export type PracticePlanRow = {
+  plan_id: string
+  status: PracticePlanStatus
+  current_slot_index: number
+  /** Serialized `PracticePlanPayload` with stable IDs. */
+  plan_json: string
+  /** Serialized `PlanSlotResultPayload[]`. */
+  slot_results_json: string
+  /** Serialized `PlanAdaptationPayload[]`. */
+  adaptation_log: string
+  started_at: string
+  updated_at: string
+}
+
+export type PracticePlanStartInput = {
+  plan_id: string
+  plan_json: string
+  current_slot_index?: number
+  slot_results_json?: string
+  adaptation_log?: string
+  started_at?: string
+}
+
+export type PracticePlanStateUpdate = {
+  plan_json?: string
+  current_slot_index?: number
+  slot_results_json?: string
+  adaptation_log?: string
+  updated_at?: string
+}
+
 export type JamSnapshotInsertInput = {
   id: string
   date: string

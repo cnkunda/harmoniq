@@ -349,6 +349,27 @@ export const ROLLBACK_V19_ANALYTICS_EVENTS = [
   'DROP TABLE IF EXISTS analytics_events',
 ] as const
 
+/** v20: resumable active plans + per-slot results/adaptation log (Commit 162). */
+export const MIGRATION_V20_PRACTICE_PLANS = `
+CREATE TABLE IF NOT EXISTS practice_plans (
+  plan_id TEXT PRIMARY KEY NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  current_slot_index INTEGER NOT NULL DEFAULT 0,
+  plan_json TEXT NOT NULL,
+  slot_results_json TEXT NOT NULL DEFAULT '[]',
+  adaptation_log TEXT NOT NULL DEFAULT '[]',
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_practice_plans_status_updated ON practice_plans (status, updated_at);
+`
+
+/** Rollback for v20: drop plan index + table. */
+export const ROLLBACK_V20_PRACTICE_PLANS = [
+  'DROP INDEX IF EXISTS idx_practice_plans_status_updated',
+  'DROP TABLE IF EXISTS practice_plans',
+] as const
+
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },
   { id: 'phrasing', label: 'Phrasing' },

@@ -75,12 +75,13 @@ If a migration fails:
 - V17: Add user_feedback table + job/dedupe indexes (Commit 159)
 - V18: Add summary_status to jam_snapshots (Commit 160; web IndexedDB is schemaless, no version bump)
 - V19: Add analytics_events table + type/timestamp indexes (Commit 161)
+- V20: Add practice_plans active-plan persistence table + status/updated index (Commit 162)
 
 ## Web (IndexedDB) Migrations
 
 ### Location
 - Migration runner: `src/db/idbWeb.ts` (openHarmoniqIdb function)
-- Current version: 6
+- Current version: 7
 
 ### Version Tracking
 Migrations are tracked in the `schema_migrations` object store:
@@ -91,7 +92,7 @@ type MigrationRow = { version: number; applied_at: string }
 ### Migration Pattern
 IndexedDB uses built-in versioning:
 ```typescript
-const DB_VERSION = 6
+const DB_VERSION = 7
 const r = indexedDB.open(DB_NAME, DB_VERSION)
 r.onupgradeneeded = (event) => {
   const oldVersion = (event as IDBVersionChangeEvent).oldVersion
@@ -110,6 +111,7 @@ IndexedDB provides automatic rollback:
 - V4: Add schema_migrations tracking store
 - V5: Add user_feedback store with job_id index (Commit 159)
 - V6: Add analytics_events store with timestamp index (Commit 161)
+- V7: Add practice_plans store with status/updated index (Commit 162)
 
 ## Data Validation
 
@@ -173,12 +175,12 @@ export type SkillNodeRow = {
 
 1. Increment `DB_VERSION` in `src/db/idbWeb.ts`:
 ```typescript
-const DB_VERSION = 6
+const DB_VERSION = 7
 ```
 
 2. Add version-specific logic in `onupgradeneeded`:
 ```typescript
-if (oldVersion < 6) {
+if (oldVersion < 7) {
   // Add new object store or modify existing
   if (!db.objectStoreNames.contains(S_NEW_STORE)) {
     db.createObjectStore(S_NEW_STORE, { keyPath: 'id' })
@@ -187,7 +189,7 @@ if (oldVersion < 6) {
   const tx = r.transaction
   if (tx) {
     const migrationStore = tx.objectStore(S_MIGRATIONS)
-    migrationStore.put({ version: 6, applied_at: new Date().toISOString() })
+    migrationStore.put({ version: 7, applied_at: new Date().toISOString() })
   }
 }
 ```

@@ -13,13 +13,14 @@ import type {
     LessonPersistRow,
     LickRow,
     PracticePlanCompletionRow,
+    PracticePlanRow,
     SessionArchiveRow,
     SkillNodeRow,
     UserFeedbackRow,
 } from '@/src/db/types'
 
 const DB_NAME = 'harmoniq_web_v1'
-const DB_VERSION = 6
+const DB_VERSION = 7
 
 const S_PREFS = 'app_prefs'
 const S_SESSIONS = 'sessions'
@@ -27,6 +28,7 @@ const S_SKILL_NODES = 'skill_nodes'
 const S_LICKS = 'licks'
 const S_JAM = 'jam_snapshots'
 const S_PLAN_COMPLETIONS = 'practice_plan_completions'
+const S_PRACTICE_PLANS = 'practice_plans'
 const S_LESSON = 'lesson_cache'
 const S_LESSONS = 'lessons'
 const S_FEEDBACK = 'user_feedback'
@@ -82,6 +84,10 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
         if (!db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) {
           db.createObjectStore(S_PLAN_COMPLETIONS, { keyPath: 'id' })
         }
+        if (!db.objectStoreNames.contains(S_PRACTICE_PLANS)) {
+          const plansStore = db.createObjectStore(S_PRACTICE_PLANS, { keyPath: 'plan_id' })
+          plansStore.createIndex('status_updated', ['status', 'updated_at'], { unique: false })
+        }
         if (!db.objectStoreNames.contains(S_FEEDBACK)) {
           const feedbackStore = db.createObjectStore(S_FEEDBACK, { keyPath: 'id' })
           feedbackStore.createIndex('job_id', 'job_id', { unique: false })
@@ -124,6 +130,17 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
             console.log('[db/web] Migration v6 SUCCESS')
           }
         }
+
+        if (oldVersion < 7) {
+          const tx = r.transaction
+          if (tx) {
+            const migrationStore = tx.objectStore(S_MIGRATIONS)
+            migrationStore.put({ version: 7, applied_at: new Date().toISOString() })
+          }
+          if (__DEV__) {
+            console.log('[db/web] Migration v7 SUCCESS')
+          }
+        }
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e)
         if (__DEV__) {
@@ -156,7 +173,7 @@ async function clearStore(db: IDBDatabase, name: string): Promise<void> {
   })
 }
 
-async function putAll<T extends { id: string }>(db: IDBDatabase, name: string, rows: T[]): Promise<void> {
+async function putAll<T>(db: IDBDatabase, name: string, rows: T[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(name, 'readwrite')
     tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'))
@@ -196,6 +213,7 @@ export type IdbHydration = {
   licks: LickRow[]
   jams: JamSnapshotInsertInput[]
   planCompletions: PracticePlanCompletionRow[]
+  practicePlans: PracticePlanRow[]
   feedback: UserFeedbackRow[]
   analyticsEvents: AnalyticsEventRow[]
   lesson: LessonJSON | null
@@ -203,7 +221,7 @@ export type IdbHydration = {
 }
 
 export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> {
-  const [prefs, sessions, skillNodes, licks, jams, planCompletions, feedback, analyticsEvents, lessonRows, lessonCatalog] =
+  const [prefs, sessions, skillNodes, licks, jams, planCompletions, practicePlans, feedback, analyticsEvents, lessonRows, lessonCatalog] =
     await Promise.all([
       getAllStore<PrefRow>(db, S_PREFS),
       getAllStore<SessionArchiveRow>(db, S_SESSIONS),
@@ -213,6 +231,7 @@ export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> 
       db.objectStoreNames.contains(S_PLAN_COMPLETIONS)
         ? getAllStore<PracticePlanCompletionRow>(db, S_PLAN_COMPLETIONS)
         : Promise.resolve([]),
+      db.objectStoreNames.contains(S_PRACTICE_PLANS) ? getAllStore<PracticePlanRow>(db, S_PRACTICE_PLANS) : Promise.resolve([]),
       db.objectStoreNames.contains(S_FEEDBACK) ? getAllStore<UserFeedbackRow>(db, S_FEEDBACK) : Promise.resolve([]),
       db.objectStoreNames.contains(S_ANALYTICS) ? getAllStore<AnalyticsEventRow>(db, S_ANALYTICS) : Promise.resolve([]),
       getAllStore<LessonCacheRow>(db, S_LESSON),
@@ -226,6 +245,7 @@ export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> 
     licks,
     jams,
     planCompletions,
+    practicePlans,
     feedback,
     analyticsEvents,
     lesson: latest?.lesson ?? null,
@@ -261,6 +281,11 @@ export async function idbPersistJams(db: IDBDatabase | null, rows: JamSnapshotIn
 export async function idbPersistPlanCompletions(db: IDBDatabase | null, rows: PracticePlanCompletionRow[]): Promise<void> {
   if (!db || !db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) return
   await putAll(db, S_PLAN_COMPLETIONS, rows)
+}
+
+export async function idbPersistPracticePlans(db: IDBDatabase | null, rows: PracticePlanRow[]): Promise<void> {
+  if (!db || !db.objectStoreNames.contains(S_PRACTICE_PLANS)) return
+  await putAll(db, S_PRACTICE_PLANS, rows)
 }
 
 export async function idbPersistFeedback(db: IDBDatabase | null, rows: UserFeedbackRow[]): Promise<void> {
@@ -333,6 +358,9 @@ export async function idbClearPracticeStores(db: IDBDatabase | null): Promise<vo
   await clearStore(db, S_JAM)
   if (db.objectStoreNames.contains(S_PLAN_COMPLETIONS)) {
     await clearStore(db, S_PLAN_COMPLETIONS)
+  }
+  if (db.objectStoreNames.contains(S_PRACTICE_PLANS)) {
+    await clearStore(db, S_PRACTICE_PLANS)
   }
   if (db.objectStoreNames.contains(S_FEEDBACK)) {
     await clearStore(db, S_FEEDBACK)

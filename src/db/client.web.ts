@@ -10,6 +10,7 @@ import {
     idbPersistLessons,
     idbPersistLicks,
     idbPersistPlanCompletions,
+    idbPersistPracticePlans,
     idbPersistPrefs,
     idbPersistSessions,
     idbPersistSkillNodes,
@@ -38,6 +39,10 @@ import type {
     NodeSessionSnippet,
     PracticePlanCompletionInsertInput,
     PracticePlanCompletionRow,
+    PracticePlanRow,
+    PracticePlanStartInput,
+    PracticePlanStateUpdate,
+    PracticePlanStatus,
     ReviewSkillUpdateInput,
     SessionArchiveRow,
     SessionInsertInput,
@@ -62,6 +67,7 @@ const licks: LickRow[] = []
 const lessonCatalog: LessonPersistRow[] = []
 const jamSnapshots: JamSnapshotInsertInput[] = []
 const planCompletions: PracticePlanCompletionRow[] = []
+const practicePlans: PracticePlanRow[] = []
 const userFeedback: UserFeedbackRow[] = []
 /** Newest-first (matches native `ORDER BY timestamp DESC, id DESC`). */
 const analyticsEvents: AnalyticsEventRow[] = []
@@ -159,6 +165,12 @@ function applyHydration(h: IdbHydration): void {
     a.completed_at < b.completed_at ? 1 : a.completed_at > b.completed_at ? -1 : 0,
   )
   planCompletions.push(...plansSorted)
+  practicePlans.length = 0
+  practicePlans.push(
+    ...[...(h.practicePlans ?? [])].sort((a, b) =>
+      a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0,
+    ),
+  )
   userFeedback.length = 0
   userFeedback.push(
     ...[...(h.feedback ?? [])].sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0)),
@@ -191,6 +203,10 @@ async function flushJams(): Promise<void> {
 
 async function flushPlanCompletions(): Promise<void> {
   await idbPersistPlanCompletions(getHarmoniqIdbHandle(), planCompletions)
+}
+
+async function flushPracticePlans(): Promise<void> {
+  await idbPersistPracticePlans(getHarmoniqIdbHandle(), practicePlans)
 }
 
 async function flushLessons(): Promise<void> {
@@ -661,10 +677,80 @@ export async function insertPracticePlanCompletionRow(input: PracticePlanComplet
 }
 
 export async function listPracticePlanCompletions(): Promise<PracticePlanCompletionRow[]> {
+  await initDb()
   seedWebSkillNodes()
   return [...planCompletions].sort((a, b) =>
     a.completed_at < b.completed_at ? 1 : a.completed_at > b.completed_at ? -1 : 0,
   )
+}
+
+export async function startActivePracticePlanRow(input: PracticePlanStartInput): Promise<void> {
+  await initDb()
+  const now = new Date().toISOString()
+  for (let i = 0; i < practicePlans.length; i += 1) {
+    const row = practicePlans[i]!
+    if (row.status === 'active') practicePlans[i] = { ...row, status: 'abandoned', updated_at: now }
+  }
+  const row: PracticePlanRow = {
+    plan_id: input.plan_id,
+    status: 'active',
+    current_slot_index: Math.max(0, Math.floor(input.current_slot_index ?? 0)),
+    plan_json: input.plan_json,
+    slot_results_json: input.slot_results_json ?? '[]',
+    adaptation_log: input.adaptation_log ?? '[]',
+    started_at: input.started_at ?? now,
+    updated_at: now,
+  }
+  const existing = practicePlans.findIndex((item) => item.plan_id === row.plan_id)
+  if (existing >= 0) practicePlans[existing] = row
+  else practicePlans.unshift(row)
+  await flushPracticePlans()
+}
+
+export async function getActivePracticePlanRow(): Promise<PracticePlanRow | null> {
+  await initDb()
+  const row = [...practicePlans]
+    .filter((item) => item.status === 'active')
+    .sort((a, b) => (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0))[0]
+  return row ? { ...row } : null
+}
+
+export async function updatePracticePlanRowState(
+  planId: string,
+  update: PracticePlanStateUpdate,
+): Promise<void> {
+  await initDb()
+  const index = practicePlans.findIndex((row) => row.plan_id === planId)
+  if (index < 0) return
+  const row = practicePlans[index]!
+  practicePlans[index] = {
+    ...row,
+    ...(update.plan_json !== undefined ? { plan_json: update.plan_json } : {}),
+    ...(update.current_slot_index !== undefined
+      ? { current_slot_index: Math.max(0, Math.floor(update.current_slot_index)) }
+      : {}),
+    ...(update.slot_results_json !== undefined ? { slot_results_json: update.slot_results_json } : {}),
+    ...(update.adaptation_log !== undefined ? { adaptation_log: update.adaptation_log } : {}),
+    updated_at: update.updated_at ?? new Date().toISOString(),
+  }
+  await flushPracticePlans()
+}
+
+export async function markPracticePlanStatus(
+  planId: string,
+  status: PracticePlanStatus,
+): Promise<void> {
+  await initDb()
+  const index = practicePlans.findIndex((row) => row.plan_id === planId)
+  if (index < 0) return
+  practicePlans[index] = { ...practicePlans[index]!, status, updated_at: new Date().toISOString() }
+  await flushPracticePlans()
+}
+
+export async function clearPracticePlans(): Promise<void> {
+  await initDb()
+  practicePlans.length = 0
+  await flushPracticePlans()
 }
 
 export async function buildJournalExportText(): Promise<string> {
@@ -691,6 +777,7 @@ export async function clearAllPracticeData(): Promise<void> {
   lessonCatalog.length = 0
   jamSnapshots.length = 0
   planCompletions.length = 0
+  practicePlans.length = 0
   userFeedback.length = 0
   analyticsEvents.length = 0
   for (const n of DEFAULT_SKILL_NODES) {

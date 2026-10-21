@@ -15,10 +15,12 @@ import { PitchIndicator } from '@/components/PitchIndicator'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
+import { toast } from '@/components/ToastConfig'
 import { WarmupTimerRing } from '@/components/WarmupTimerRing'
 import { speak } from '@/src/audio/voiceCoach'
 import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
+import { completePracticePlanSlot } from '@/src/session/planProgress'
 import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useLessonStore } from '@/src/stores/lessonStore'
@@ -198,6 +200,17 @@ function WarmupScreenInner() {
   }, [ex?.fretboard_guide])
 
   const goNextSection = () => {
+    if (plan?.slots.length) {
+      void completePracticePlanSlot({
+        router,
+        deps: { saveLesson, setLessonSectionIndex },
+        slotIndex: idx,
+        performance: null,
+      }).catch((e: unknown) => {
+        toast.error(e instanceof Error ? e.message : 'Could not finish the practice plan.')
+      })
+      return
+    }
     void navigateToPracticePlanSlot(router, { saveLesson, setLessonSectionIndex }, idx + 1)
   }
 

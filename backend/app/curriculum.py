@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Iterable
 
-from app.schemas import LessonJSON, PlayerProfile
+from app.schemas import LessonJSON, PlayerProfile, SkillNode
 
 
 _WEAK_AREA_TOKENS: dict[str, tuple[str, ...]] = {
@@ -24,6 +25,23 @@ _TECHNIQUE_SKILL_LABEL: dict[str, str] = {
     "pitch_accuracy": "Pitch",
 }
 
+_SKILL_NODE_TO_AREA: dict[str, str] = {
+    "bend_accuracy": "bending",
+    "vibrato_control": "vibrato",
+    "timing": "timing",
+    "phrasing": "phrasing",
+    "pitch_accuracy": "pitch",
+}
+
+_AREA_KEYWORDS: tuple[tuple[str, str], ...] = (
+    ("bend", "bending"),
+    ("vibrato", "vibrato"),
+    ("timing", "timing"),
+    ("phrasing", "phrasing"),
+    ("pitch", "pitch"),
+    ("intonation", "pitch"),
+)
+
 
 @dataclass(frozen=True)
 class CurriculumSuggestion:
@@ -31,6 +49,88 @@ class CurriculumSuggestion:
     reason_label: str
     technique_focus: str
     score: float
+
+
+@dataclass(frozen=True)
+class SkillFocus:
+    """Deterministic SM-2-aware skill target for a generated plan."""
+
+    node_id: str
+    label: str
+    area: str
+    score: float
+    is_weak: bool
+    is_due: bool
+    is_strong: bool
+
+
+def _area_for_skill(node: SkillNode) -> str | None:
+    key = (node.id or "").strip().lower()
+    if key in _SKILL_NODE_TO_AREA:
+        return _SKILL_NODE_TO_AREA[key]
+    blob = f"{key} {(node.label or '').strip().lower()}"
+    for keyword, area in _AREA_KEYWORDS:
+        if keyword in blob:
+            return area
+    return None
+
+
+def _normalize_weak_area(value: str) -> str:
+    return (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def select_skill_focus(
+    player_profile: PlayerProfile | None,
+    *,
+    today: date | None = None,
+) -> SkillFocus | None:
+    """Pick one skill target from SM-2 state; ties break by node ID for determinism."""
+    if player_profile is None or not player_profile.skill_nodes:
+        return None
+
+    weak_areas = {
+        _SKILL_NODE_TO_AREA.get(_normalize_weak_area(value), _normalize_weak_area(value))
+        for value in (player_profile.weak_areas or [])
+        if isinstance(value, str) and value.strip()
+    }
+    current_day = today or date.today()
+    candidates: list[tuple[float, str, SkillFocus]] = []
+
+    for node in player_profile.skill_nodes:
+        if node.score is None:
+            continue
+        node_id = (node.id or "").strip()
+        if not node_id:
+            continue
+        area = _area_for_skill(node)
+        if area is None:
+            continue
+        score = max(0.0, min(1.0, float(node.score)))
+        is_weak = score < 0.45 or area in weak_areas
+        is_due = node.next_review_date is not None and node.next_review_date <= current_day
+        is_strong = score >= 0.85 and not is_weak
+        priority = (1.0 - score) * 0.55 + (0.25 if is_due else 0.0) + (0.20 if is_weak else 0.0)
+        label = (node.label or "").strip() or _TECHNIQUE_SKILL_LABEL.get(node_id, area.title())
+        candidates.append(
+            (
+                priority,
+                node_id,
+                SkillFocus(
+                    node_id=node_id,
+                    label=label,
+                    area=area,
+                    score=score,
+                    is_weak=is_weak,
+                    is_due=is_due,
+                    is_strong=is_strong,
+                ),
+            )
+        )
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (-item[0], item[1]))
+    return candidates[0][2]
 
 
 def _extract_section_techniques(lesson: LessonJSON) -> set[str]:

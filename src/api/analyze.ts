@@ -16,6 +16,8 @@ import type {
   JamResult,
   LearningContextPayload,
   LessonJSON,
+  PlanAdaptResponsePayload,
+  PlanSlotPerformancePayload,
   PlayerProfilePayload,
   PracticePlanPayload,
   QuizAnswersPayload,
@@ -443,6 +445,12 @@ export function buildPlayerProfileFromSkillNodes(
         id: n.id,
         label: n.label,
         ...(score != null ? { score } : {}),
+        sessions_count: n.sessions_count,
+        last_session_date: n.last_session_date,
+        easiness_factor: n.easiness_factor,
+        interval_days: n.interval_days,
+        next_review_date: n.next_review_date,
+        sm2_repetitions: n.sm2_repetitions,
       }
     })
     base = { weak_areas, skill_nodes }
@@ -932,6 +940,19 @@ export async function generatePracticePlan(payload: {
       mood: payload.mood ?? null,
       library_lessons: payload.library_lessons ?? [],
     }),
+  })
+}
+
+/** Commit 162: adapt remaining plan slots after a completed slot. */
+export async function adaptPracticePlan(payload: {
+  plan: PracticePlanPayload
+  slot_index: number
+  slot_performance: PlanSlotPerformancePayload
+}): Promise<PlanAdaptResponsePayload> {
+  return request<PlanAdaptResponsePayload>('/session/plan/adapt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   })
 }
 

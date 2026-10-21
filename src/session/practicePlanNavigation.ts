@@ -3,9 +3,23 @@ import type { Router } from 'expo-router'
 import { speak } from '@/src/audio/voiceCoach'
 import { sessionEntryHref } from '@/src/constants/sessionFlow'
 import { getLessonByJobId } from '@/src/db/client'
+import {
+  resumeActivePracticePlan,
+  saveActivePlanProgress,
+  startActivePracticePlan,
+} from '@/src/session/activePlanPersistence'
 import { usePlanStore } from '@/src/stores/planStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import type { LessonJSON, PracticePlanPayload } from '@/src/types'
+
+async function persistCurrentPosition(): Promise<void> {
+  const state = usePlanStore.getState()
+  await saveActivePlanProgress({
+    slotIndex: state.currentSlotIndex,
+    slotResults: state.slotResults,
+    adaptationLog: state.adaptationLog,
+  })
+}
 
 export async function navigateToPracticePlanSlot(
   router: Router,
@@ -19,9 +33,6 @@ export async function navigateToPracticePlanSlot(
   if (!currentPlan?.slots?.length) return
   if (slotIndex < 0 || slotIndex >= currentPlan.slots.length) return
   const slot = currentPlan.slots[slotIndex]
-  setCurrentSlotIndex(slotIndex)
-  const intro = typeof slot.coach_intro === 'string' ? slot.coach_intro.trim() : ''
-  if (intro) speak(intro)
   const skipTune = useSessionPrefsStore.getState().skipTuneStep
 
   if (slot.slot_type === 'song_section' && slot.lesson_ref) {
@@ -31,9 +42,18 @@ export async function navigateToPracticePlanSlot(
     }
     deps.saveLesson(lesson)
     deps.setLessonSectionIndex(0)
+    setCurrentSlotIndex(slotIndex)
+    await persistCurrentPosition()
+    const intro = typeof slot.coach_intro === 'string' ? slot.coach_intro.trim() : ''
+    if (intro) speak(intro)
     router.push(sessionEntryHref(skipTune))
     return
   }
+
+  setCurrentSlotIndex(slotIndex)
+  await persistCurrentPosition()
+  const intro = typeof slot.coach_intro === 'string' ? slot.coach_intro.trim() : ''
+  if (intro) speak(intro)
   if (slot.slot_type === 'free_jam') {
     router.push('/(tabs)/jam')
     return
@@ -57,6 +77,24 @@ export async function startPracticePlanFromHome(
   },
   plan: PracticePlanPayload,
 ): Promise<void> {
-  usePlanStore.getState().setPlan(plan)
+  await startActivePracticePlan(plan)
   await navigateToPracticePlanSlot(router, deps, 0)
+}
+
+export async function resumePracticePlanFromHome(
+  router: Router,
+  deps: {
+    saveLesson: (lesson: LessonJSON) => void
+    setLessonSectionIndex: (index: number) => void
+  },
+): Promise<void> {
+  if (!usePlanStore.getState().currentPlan?.slots.length) {
+    const restored = await resumeActivePracticePlan()
+    if (!restored) throw new Error('No active practice plan to resume.')
+  }
+  const state = usePlanStore.getState()
+  const plan = state.currentPlan
+  if (!plan?.slots.length) throw new Error('No active practice plan to resume.')
+  const index = Math.max(0, Math.min(plan.slots.length - 1, state.currentSlotIndex))
+  await navigateToPracticePlanSlot(router, deps, index)
 }

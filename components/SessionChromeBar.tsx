@@ -2,11 +2,13 @@ import { usePathname, useRouter } from 'expo-router'
 import { ArrowRight, X } from 'lucide-react-native'
 import { Alert, Text, View } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { toast } from '@/components/ToastConfig'
 
 import { colors } from '@/src/constants/colors'
 import { SESSION_STEPS, sessionStepIndexFromPathname } from '@/src/constants/sessionFlow'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
-import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
+import { abandonActivePlan } from '@/src/session/activePlanPersistence'
+import { completePracticePlanSlot } from '@/src/session/planProgress'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
 
@@ -22,7 +24,6 @@ export function SessionChromeBar() {
   const router = useRouter()
   const plan = usePlanStore((s) => s.currentPlan)
   const idx = usePlanStore((s) => s.currentSlotIndex)
-  const clearPlan = usePlanStore((s) => s.clearPlan)
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const lessonJobId = useLessonStore((s) => s.lesson?.job_id)
@@ -32,7 +33,9 @@ export function SessionChromeBar() {
 
   const active = sessionStepIndexFromPathname(pathname)
   const showStepDots = active >= 0
-  const onTuneScreen = pathname.replace(/\/+$/, '').split('/').pop() === 'tune'
+  const currentStep = pathname.replace(/\/+$/, '').split('/').pop()
+  const onTuneScreen = currentStep === 'tune'
+  const onReviewScreen = currentStep === 'review'
 
   const closeSessionOrHome = () => {
     router.replace('/(tabs)')
@@ -63,13 +66,14 @@ export function SessionChromeBar() {
   const hasNext = hasPlan && slots != null && idx < slots.length - 1
 
   const goNextSection = () => {
-    void (async () => {
-      try {
-        await navigateToPracticePlanSlot(router, { saveLesson, setLessonSectionIndex }, idx + 1)
-      } catch (e) {
-        console.warn('[SessionChromeBar] next section failed', e)
-      }
-    })()
+    void completePracticePlanSlot({
+      router,
+      deps: { saveLesson, setLessonSectionIndex },
+      slotIndex: idx,
+      performance: null,
+    }).catch((e: unknown) => {
+      toast.error(e instanceof Error ? e.message : 'Could not continue the practice plan.')
+    })
   }
 
   return (
@@ -123,7 +127,7 @@ export function SessionChromeBar() {
               >
                 <X color={colors.cream} size={20} strokeWidth={2} />
               </AnimatedPressable>
-              {hasPlan && hasNext ? (
+              {hasPlan && hasNext && !onReviewScreen ? (
                 <AnimatedPressable
                   haptic="light"
                   onPress={goNextSection}
@@ -140,7 +144,7 @@ export function SessionChromeBar() {
           ) : (
             <View className="flex-row items-center gap-2">
               {hasPlan ? (
-                hasNext ? (
+                onReviewScreen ? null : hasNext ? (
                   <AnimatedPressable
                     haptic="light"
                     onPress={goNextSection}
@@ -155,9 +159,11 @@ export function SessionChromeBar() {
                 ) : (
                   <AnimatedPressable
                     haptic="light"
-                    onPress={() => clearPlan()}
+                    onPress={() => {
+                      if (plan) void abandonActivePlan(plan.plan_id)
+                    }}
                     accessibilityRole="button"
-                    accessibilityLabel="Clear practice plan"
+                    accessibilityLabel="End practice plan"
                     hitSlop={10}
                   >
                     <Text className="font-sans-medium text-sm text-cream text-right">End plan</Text>

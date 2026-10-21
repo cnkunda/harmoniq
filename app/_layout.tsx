@@ -26,6 +26,7 @@ import { toastConfig } from '@/components/ToastConfig'
 import { startAnalytics } from '@/src/analytics/eventBus'
 import { hydrateVoiceCoachPrefs } from '@/src/audio/hydrateVoiceCoachPrefs'
 import { hydrateWebLessonStore, initDb } from '@/src/db/client'
+import { resumeActivePracticePlan } from '@/src/session/activePlanPersistence'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 
 cssInterop(LinearGradient, { className: 'style' })
@@ -54,6 +55,10 @@ export default function RootLayout() {
     void (async () => {
       try {
         await initDb()
+        const resumedPlan = await resumeActivePracticePlan()
+        if (resumedPlan) {
+          console.log('[planPersistence] restored active plan', resumedPlan.plan_id)
+        }
         await startAnalytics()
         await useSessionPrefsStore.getState().hydrate()
         await hydrateVoiceCoachPrefs()

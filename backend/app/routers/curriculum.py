@@ -5,11 +5,21 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.curriculum import suggest_next_session
 from app.jobs import jobs
-from app.schemas import CurriculumSuggestRequest, CurriculumSuggestResponse, CurriculumSuggestionItem, PracticePlan, PracticePlanRequest, LessonJSON
+from app.plan_adapter import adapt_practice_plan
+from app.schemas import (
+    CurriculumSuggestRequest,
+    CurriculumSuggestResponse,
+    CurriculumSuggestionItem,
+    LessonJSON,
+    PlanAdaptRequest,
+    PlanAdaptResponse,
+    PracticePlan,
+    PracticePlanRequest,
+)
 from app.sequencer import generate_practice_plan
 
 logger = logging.getLogger("harmoniq.api.curriculum")
@@ -78,3 +88,15 @@ async def practice_plan(payload: PracticePlanRequest) -> PracticePlan:
         skip_llm=skip_llm,
         mood=payload.mood,
     )
+
+
+@router.post(
+    "/session/plan/adapt",
+    response_model=PlanAdaptResponse,
+    summary="POST /session/plan/adapt — insert remediation or skip an easier slot",
+)
+async def session_plan_adapt(payload: PlanAdaptRequest) -> PlanAdaptResponse:
+    try:
+        return adapt_practice_plan(payload.plan, payload.slot_index, payload.slot_performance)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

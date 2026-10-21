@@ -247,10 +247,17 @@ export default function ProgressScreen() {
                       )
                     }
                     const row = item.completion
-                    const { stepCount, firstTitle } = summaryFromPlanCompletionRow(row)
+                    const { stepCount, firstTitle, slotResults, remediationCount, skippedCount } =
+                      summaryFromPlanCompletionRow(row)
+                    const notes = [
+                      remediationCount > 0
+                        ? `${remediationCount} remediation${remediationCount === 1 ? '' : 's'}`
+                        : null,
+                      skippedCount > 0 ? `${skippedCount} skipped` : null,
+                    ].filter((value): value is string => value != null)
                     const subtitle =
                       stepCount > 0
-                        ? `${stepCount}-section plan${firstTitle ? ` · started with ${firstTitle}` : ''}`
+                        ? `${stepCount}-step plan${firstTitle ? ` · started with ${firstTitle}` : ''}${notes.length ? ` · ${notes.join(' · ')}` : ''}`
                         : 'Practice plan'
                     return (
                       <View
@@ -271,9 +278,31 @@ export default function ProgressScreen() {
                             {formatRelativeSessionDate(row.completed_at)}
                           </Text>
                         </View>
-                        <Text className="border-t border-wood-700/50 pt-3 font-sans text-sm leading-relaxed text-cream/80">
-                          &ldquo;Nice work closing the loop—this full plan is in the books.&rdquo;
-                        </Text>
+                        {slotResults.length > 0 ? (
+                          <View className="gap-1.5 border-t border-wood-700/50 pt-3">
+                            {slotResults.map((result) => (
+                              <View key={result.slot_id} className="flex-row items-center gap-3">
+                                <Text className="flex-1 font-sans text-sm text-cream/85" numberOfLines={1}>
+                                  {result.title || result.slot_type.replace(/_/g, ' ')}
+                                </Text>
+                                <Text className="font-sans text-xs text-muted-light">
+                                  {result.accuracy != null
+                                    ? `${Math.round(result.accuracy * 100)}% pitch`
+                                    : 'Done'}
+                                </Text>
+                                {result.timing != null ? (
+                                  <Text className="font-sans text-xs text-muted-light/80">
+                                    {Math.round(result.timing * 100)}% timing
+                                  </Text>
+                                ) : null}
+                              </View>
+                            ))}
+                          </View>
+                        ) : (
+                          <Text className="border-t border-wood-700/50 pt-3 font-sans text-sm leading-relaxed text-cream/80">
+                            &ldquo;Nice work closing the loop—this full plan is in the books.&rdquo;
+                          </Text>
+                        )}
                       </View>
                     )
                   })}

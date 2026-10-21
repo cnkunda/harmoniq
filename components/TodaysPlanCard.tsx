@@ -1,3 +1,4 @@
+import { RefreshCw } from 'lucide-react-native'
 import { ActivityIndicator, Text, View } from 'react-native'
 import Animated, { FadeInDown } from 'react-native-reanimated'
 
@@ -22,10 +23,15 @@ function stepLabel(slot: DrillSlotPayload): string {
 }
 
 function sublabel(slot: DrillSlotPayload): string {
-  if (slot.slot_type === 'warmup') return 'Finger warm-up'
-  if (slot.slot_type === 'free_jam') return 'Open practice'
-  if (slot.slot_type === 'technique') return slot.title.trim() || 'Technique practice'
-  return slot.title.trim() || 'Section practice'
+  const base =
+    slot.slot_type === 'warmup'
+      ? 'Finger warm-up'
+      : slot.slot_type === 'free_jam'
+        ? 'Open practice'
+        : slot.title.trim() || (slot.slot_type === 'technique' ? 'Technique practice' : 'Section practice')
+  if (slot.intent === 'remediation') return `Remediation · ${base}`
+  if (slot.intent === 'review') return `Review · ${base.replace(/\s+review$/i, '')}`
+  return base
 }
 
 function formatDuration(seconds: number): string {
@@ -101,6 +107,9 @@ export function TodaysPlanCard({
   onStart,
   busy,
   errorText,
+  mode = 'preview',
+  onRegenerate,
+  regenerateBusy,
 }: {
   plan: PracticePlanPayload
   sessionMinutes: number
@@ -108,20 +117,49 @@ export function TodaysPlanCard({
   onStart: () => void
   busy?: boolean
   errorText?: string | null
+  mode?: 'preview' | 'resume'
+  onRegenerate?: () => void
+  regenerateBusy?: boolean
 }) {
+  const isResume = mode === 'resume'
   return (
     <Animated.View entering={FadeInDown.duration(380).delay(40)}>
       <View className="mb-4 flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1">
-          <Text className="mb-1 font-serif text-2xl text-cream">Your {sessionMinutes}-min session</Text>
-          <Text className="font-sans text-sm text-amber-light/80">{plan.slots.length} steps · guided path</Text>
+          <Text className="mb-1 font-serif text-2xl text-cream">
+            {isResume ? `Resume your ${sessionMinutes}-min session` : `Your ${sessionMinutes}-min session`}
+          </Text>
+          <Text className="font-sans text-sm text-amber-light/80">
+            {isResume
+              ? `Step ${currentSlotIndex + 1} of ${plan.slots.length} · pick up where you left off`
+              : `${plan.slots.length} steps · guided path`}
+          </Text>
         </View>
+        {!isResume && onRegenerate ? (
+          <AnimatedPressable
+            onPress={onRegenerate}
+            disabled={regenerateBusy}
+            haptic="light"
+            className="flex-row items-center gap-1.5 rounded-lg border border-wood-600/60 px-3 py-2 disabled:opacity-50"
+            accessibilityRole="button"
+            accessibilityLabel="Regenerate practice plan"
+          >
+            {regenerateBusy ? (
+              <ActivityIndicator color={colors.amber.light} size="small" />
+            ) : (
+              <RefreshCw color={colors.amber.light} size={14} strokeWidth={2} />
+            )}
+            <Text className="font-sans-medium text-xs text-amber-light">
+              {regenerateBusy ? 'Updating…' : 'Regenerate'}
+            </Text>
+          </AnimatedPressable>
+        ) : null}
       </View>
 
       <View className="mb-4 gap-2">
         {plan.slots.map((slot, i) => (
           <StepRow
-            key={`${slot.slot_type}-${i}`}
+            key={slot.slot_id ?? `${slot.slot_type}-${i}`}
             index={i}
             label={stepLabel(slot)}
             sub={sublabel(slot)}
@@ -139,10 +177,12 @@ export function TodaysPlanCard({
         haptic="medium"
         className="flex-row items-center justify-center gap-2 self-stretch rounded-xl bg-amber-accent px-8 py-3.5 shadow-md disabled:opacity-50 sm:self-start"
         accessibilityRole="button"
-        accessibilityLabel="Start today's practice session"
+        accessibilityLabel={isResume ? "Resume today's practice session" : "Start today's practice session"}
       >
         {busy ? <ActivityIndicator color={colors.wood[900]} /> : null}
-        <Text className="font-sans-medium text-base text-wood-900">{busy ? 'Starting…' : 'Start session'}</Text>
+        <Text className="font-sans-medium text-base text-wood-900">
+          {busy ? (isResume ? 'Resuming…' : 'Starting…') : isResume ? 'Resume session' : 'Start session'}
+        </Text>
       </AnimatedPressable>
     </Animated.View>
   )

@@ -11,6 +11,10 @@ import type {
     NodeSessionSnippet,
     PracticePlanCompletionInsertInput,
     PracticePlanCompletionRow,
+    PracticePlanRow,
+    PracticePlanStartInput,
+    PracticePlanStateUpdate,
+    PracticePlanStatus,
     ReviewSkillUpdateInput,
     SessionArchiveRow,
     SessionInsertInput,
@@ -67,6 +71,12 @@ export interface HarmoniqDbClient {
   ): Promise<void>
   insertPracticePlanCompletionRow(input: PracticePlanCompletionInsertInput): Promise<void>
   listPracticePlanCompletions(): Promise<PracticePlanCompletionRow[]>
+  /** Commit 162: start a plan, abandoning any older active row. */
+  startActivePracticePlanRow(input: PracticePlanStartInput): Promise<void>
+  getActivePracticePlanRow(): Promise<PracticePlanRow | null>
+  updatePracticePlanRowState(planId: string, update: PracticePlanStateUpdate): Promise<void>
+  markPracticePlanStatus(planId: string, status: PracticePlanStatus): Promise<void>
+  clearPracticePlans(): Promise<void>
   buildJournalExportText(): Promise<string>
   clearAllPracticeData(): Promise<void>
   insertLickRow(input: LickInsertInput): Promise<void>

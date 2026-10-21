@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import uuid4
 
 from app.coach import generate_practice_plan_intros, template_practice_plan_intros
-from app.curriculum import suggest_next_session
+from app.curriculum import select_skill_focus, suggest_next_session
 from app.exercises.warmup_generator import generate_warmup
 from app.schemas import DrillSlot, LessonJSON, MoodState, PlayerProfile, PracticePlan, SlotType, WarmupPlan
 
@@ -25,6 +26,20 @@ def _top_technique_focus(profile: PlayerProfile | None) -> str:
         if w:
             return _TECHNIQUE_LABEL.get(w, w.replace("_", " ").title())
     return "Timing"
+
+
+def _slot_difficulty(slot_type: SlotType, intent: str, wplan: WarmupPlan | None) -> int:
+    if slot_type == "technique":
+        return 1 if intent in {"review", "remediation"} else 2
+    if slot_type == "song_section":
+        return 3
+    if slot_type == "free_jam":
+        return 2
+    if slot_type == "warmup":
+        if wplan is not None and wplan.exercises:
+            return max(1, min(3, max(int(e.difficulty) for e in wplan.exercises)))
+        return 2
+    return 2
 
 
 def _song_section_title(lesson: LessonJSON) -> str:
@@ -91,6 +106,7 @@ def generate_practice_plan(
     """Build ordered drill slots; Claude hydrates one-sentence coach_intro per slot (batched)."""
     total_sec = _budget_seconds(duration_minutes, mood)
     profile = player_profile or PlayerProfile()
+    focus = select_skill_focus(profile)
     lib = [l for l in library_lessons if (l.job_id or "").strip()]
     n_lib = len(lib)
     seed = n_lib + len(profile.weak_areas or []) * 17 + int(duration_minutes) * 3 + ((_MOOD_SEED.get(mood) or 0) if mood else 0)
@@ -132,8 +148,10 @@ def generate_practice_plan(
         omit_technique = mood == "tired"
         old_w = min(300, max(180, int(total_sec * 0.16)))
         t = min(360, max(240, int(total_sec * 0.20)))
+        tech_intent = "review" if focus is not None and focus.is_strong else "practice"
+        tech_duration = max(120, int(round(t * 0.6))) if tech_intent == "review" and not omit_technique else t
         song = max(240, int(total_sec * 0.38))
-        fj = total_sec - old_w - t - song
+        fj = total_sec - old_w - tech_duration - song
         if not omit_technique:
             if fj < 120:
                 shift = 120 - fj
@@ -147,7 +165,7 @@ def generate_practice_plan(
                 fj = 120
                 song = max(180, song - shortfall)
 
-        tech_label = _top_technique_focus(profile)
+        tech_label = focus.label if focus is not None else _top_technique_focus(profile)
         ranked = suggest_next_session(profile, lib)
         if not ranked:
             raise RuntimeError("practice_plan: suggest_next_session returned empty despite non-empty library")
@@ -181,12 +199,14 @@ def generate_practice_plan(
             slots_outline.append(
                 {
                     "slot_type": "technique",
-                    "title": f"{tech_label} drill",
-                    "duration_seconds": t,
+                    "title": f"{tech_label} review" if tech_intent == "review" else f"{tech_label} drill",
+                    "duration_seconds": tech_duration,
                     "exercise_ref": None,
-                    "technique_focus": (profile.weak_areas[0] if profile.weak_areas else "timing"),
+                    "technique_focus": (focus.area if focus is not None else (profile.weak_areas[0] if profile.weak_areas else "timing")),
                     "lesson_ref": None,
                     "song_title": None,
+                    "intent": tech_intent,
+                    "target_skill": focus.node_id if focus is not None else None,
                 },
             )
         slots_outline.append(
@@ -227,8 +247,10 @@ def generate_practice_plan(
         st: SlotType = meta["slot_type"]
         wplan_raw = meta.get("warmup_plan")
         wplan = WarmupPlan.model_validate(wplan_raw) if isinstance(wplan_raw, dict) else None
+        intent = str(meta.get("intent") or "practice")
         slots.append(
             DrillSlot(
+                slot_id=str(uuid4()),
                 slot_type=st,
                 duration_seconds=int(meta["duration_seconds"]),
                 title=str(meta["title"]),
@@ -237,9 +259,12 @@ def generate_practice_plan(
                 exercise_ref=meta.get("exercise_ref"),
                 technique_focus=meta.get("technique_focus"),
                 warmup_plan=wplan,
+                difficulty=_slot_difficulty(st, intent, wplan),
+                intent=intent,
+                target_skill=meta.get("target_skill"),
             ),
         )
 
     total = sum(s.duration_seconds for s in slots)
-    return PracticePlan(slots=slots, total_duration_seconds=total)
+    return PracticePlan(plan_id=str(uuid4()), slots=slots, total_duration_seconds=total)
 

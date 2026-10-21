@@ -19,6 +19,7 @@ import {
     MIGRATION_V17_USER_FEEDBACK_UNIQUE_INDEX,
     MIGRATION_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
     MIGRATION_V19_ANALYTICS_EVENTS,
+    MIGRATION_V20_PRACTICE_PLANS,
     MIGRATION_V3_APP_PREFS,
     MIGRATION_V4_SESSIONS_REVIEW,
     MIGRATION_V5_LICKS_STEMS_JSON,
@@ -39,6 +40,7 @@ import {
     ROLLBACK_V17_USER_FEEDBACK,
     ROLLBACK_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
     ROLLBACK_V19_ANALYTICS_EVENTS,
+    ROLLBACK_V20_PRACTICE_PLANS,
     ROLLBACK_V4_SESSIONS_REVIEW,
     ROLLBACK_V5_LICKS_STEMS_JSON,
     ROLLBACK_V6_JAM_SNAPSHOT_CONTEXT,
@@ -59,6 +61,10 @@ import type {
     NodeSessionSnippet,
     PracticePlanCompletionInsertInput,
     PracticePlanCompletionRow,
+    PracticePlanRow,
+    PracticePlanStartInput,
+    PracticePlanStateUpdate,
+    PracticePlanStatus,
     ReviewSkillUpdateInput,
     SessionArchiveRow,
     SessionInsertInput,
@@ -377,6 +383,9 @@ async function applyMigrations(): Promise<void> {
   }
   if (current < 19) {
     await applyMigrationWithRollback(19, MIGRATION_V19_ANALYTICS_EVENTS, ROLLBACK_V19_ANALYTICS_EVENTS)
+  }
+  if (current < 20) {
+    await applyMigrationWithRollback(20, MIGRATION_V20_PRACTICE_PLANS, ROLLBACK_V20_PRACTICE_PLANS)
   }
   for (const n of DEFAULT_SKILL_NODES) {
     await db.runAsync(
@@ -918,6 +927,109 @@ export async function listPracticePlanCompletions(): Promise<PracticePlanComplet
   }))
 }
 
+function mapPracticePlanRow(row: PracticePlanRow): PracticePlanRow {
+  return {
+    plan_id: row.plan_id,
+    status:
+      row.status === 'active' || row.status === 'completed' || row.status === 'abandoned'
+        ? row.status
+        : 'active',
+    current_slot_index: Number.isFinite(row.current_slot_index) ? Math.max(0, Math.floor(row.current_slot_index)) : 0,
+    plan_json: row.plan_json,
+    slot_results_json: row.slot_results_json || '[]',
+    adaptation_log: row.adaptation_log || '[]',
+    started_at: row.started_at,
+    updated_at: row.updated_at,
+  }
+}
+
+export async function startActivePracticePlanRow(input: PracticePlanStartInput): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  const now = new Date().toISOString()
+  const startedAt = input.started_at ?? now
+  await db.runAsync(
+    `UPDATE practice_plans SET status = 'abandoned', updated_at = ? WHERE status = 'active'`,
+    now,
+  )
+  await db.runAsync(
+    `INSERT OR REPLACE INTO practice_plans
+     (plan_id, status, current_slot_index, plan_json, slot_results_json, adaptation_log, started_at, updated_at)
+     VALUES (?, 'active', ?, ?, ?, ?, ?, ?)`,
+    input.plan_id,
+    Math.max(0, Math.floor(input.current_slot_index ?? 0)),
+    input.plan_json,
+    input.slot_results_json ?? '[]',
+    input.adaptation_log ?? '[]',
+    startedAt,
+    now,
+  )
+}
+
+export async function getActivePracticePlanRow(): Promise<PracticePlanRow | null> {
+  await initDb()
+  const db = await getDb()
+  const rows = await db.getAllAsync<PracticePlanRow>(
+    `SELECT plan_id, status, current_slot_index, plan_json, slot_results_json, adaptation_log, started_at, updated_at
+     FROM practice_plans WHERE status = 'active' ORDER BY updated_at DESC LIMIT 1`,
+  )
+  const row = rows?.[0]
+  return row ? mapPracticePlanRow(row) : null
+}
+
+export async function updatePracticePlanRowState(
+  planId: string,
+  update: PracticePlanStateUpdate,
+): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  const fields: string[] = []
+  const args: (string | number)[] = []
+  if (update.plan_json !== undefined) {
+    fields.push('plan_json = ?')
+    args.push(update.plan_json)
+  }
+  if (update.current_slot_index !== undefined) {
+    fields.push('current_slot_index = ?')
+    args.push(Math.max(0, Math.floor(update.current_slot_index)))
+  }
+  if (update.slot_results_json !== undefined) {
+    fields.push('slot_results_json = ?')
+    args.push(update.slot_results_json)
+  }
+  if (update.adaptation_log !== undefined) {
+    fields.push('adaptation_log = ?')
+    args.push(update.adaptation_log)
+  }
+  fields.push('updated_at = ?')
+  args.push(update.updated_at ?? new Date().toISOString())
+  args.push(planId)
+  await db.runAsync(
+    `UPDATE practice_plans SET ${fields.join(', ')} WHERE plan_id = ?`,
+    ...args,
+  )
+}
+
+export async function markPracticePlanStatus(
+  planId: string,
+  status: PracticePlanStatus,
+): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  await db.runAsync(
+    'UPDATE practice_plans SET status = ?, updated_at = ? WHERE plan_id = ?',
+    status,
+    new Date().toISOString(),
+    planId,
+  )
+}
+
+export async function clearPracticePlans(): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  await db.execAsync('DELETE FROM practice_plans')
+}
+
 export async function buildJournalExportText(): Promise<string> {
   const [sessions, licks, jams, skills] = await Promise.all([
     listSessionsJournal(),
@@ -942,6 +1054,7 @@ export async function clearAllPracticeData(): Promise<void> {
   await db.execAsync('DELETE FROM lessons')
   await db.execAsync('DELETE FROM jam_snapshots')
   await db.execAsync('DELETE FROM practice_plan_completions')
+  await db.execAsync('DELETE FROM practice_plans')
   await db.execAsync('DELETE FROM user_feedback')
   await db.execAsync('DELETE FROM analytics_events')
   await db.execAsync(

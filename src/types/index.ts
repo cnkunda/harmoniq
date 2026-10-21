@@ -13,9 +13,22 @@ export interface LearningContextPayload {
   solo_focus_notes?: string
 }
 
+/** Skill snapshot sent to the backend for SM-2-aware plan selection. */
+export interface SkillNodePayload {
+  id: string
+  label?: string | null
+  score?: number
+  sessions_count?: number
+  last_session_date?: string | null
+  easiness_factor?: number
+  interval_days?: number
+  next_review_date?: string | null
+  sm2_repetitions?: number
+}
+
 export interface PlayerProfilePayload {
   weak_areas?: string[]
-  skill_nodes?: Array<{ id: string; label?: string | null; score?: number }>
+  skill_nodes?: SkillNodePayload[]
   taste_profile?: TasteProfilePayload
   learning_context?: LearningContextPayload
   focus_area?: 'timing' | 'vibrato' | 'dynamics' | 'phrasing' | 'bending' | 'rhythm' | 'expression'
@@ -34,6 +47,8 @@ export interface CurriculumSuggestResponse {
 /** POST /practice/plan (commit 70). */
 export type PracticeSlotType = 'warmup' | 'technique' | 'song_section' | 'free_jam'
 export type MoodState = 'focused' | 'loose' | 'tired' | 'on_fire'
+export type PlanSlotIntent = 'practice' | 'remediation' | 'review'
+export type PlanConfidence = 'low' | 'medium' | 'high'
 
 /** Matches `FretboardGuideCell` / pool `fretboard_guide.cells` (tab string 1 = high E). */
 export type WarmupFretboardGuideVariant = 'primary' | 'secondary'
@@ -69,6 +84,7 @@ export interface WarmupPlanPayload {
 }
 
 export interface DrillSlotPayload {
+  slot_id: string
   slot_type: PracticeSlotType
   duration_seconds: number
   title: string
@@ -77,11 +93,52 @@ export interface DrillSlotPayload {
   exercise_ref?: string | null
   technique_focus?: string | null
   warmup_plan?: WarmupPlanPayload | null
+  difficulty: 1 | 2 | 3
+  intent: PlanSlotIntent
+  target_skill?: string | null
+  remediation_for_slot_id?: string | null
 }
 
 export interface PracticePlanPayload {
+  plan_id: string
   slots: DrillSlotPayload[]
   total_duration_seconds: number
+}
+
+export interface PlanSlotPerformancePayload {
+  slot_id: string
+  slot_type: PracticeSlotType
+  title: string
+  accuracy?: number | null
+  timing?: number | null
+  confidence?: PlanConfidence | null
+  completion: boolean
+}
+
+export interface PlanSlotResultPayload extends PlanSlotPerformancePayload {
+  completed_at?: string | null
+}
+
+export interface PlanAdaptationPayload {
+  slot_id: string
+  action: 'insert_remediation' | 'skip_easier' | 'none'
+  reason: string
+  original_duration_seconds?: number | null
+  new_duration_seconds?: number | null
+  inserted_slot_id?: string | null
+}
+
+export interface PlanAdaptResponsePayload {
+  plan: PracticePlanPayload
+  next_slot_index: number
+  slot_result: PlanSlotResultPayload
+  adaptation?: PlanAdaptationPayload | null
+}
+
+/** Enriched `practice_plan_completions.plan_json` written by Commit 162. */
+export interface CompletedPracticePlanPayload extends PracticePlanPayload {
+  slot_results?: PlanSlotResultPayload[]
+  adaptation_log?: PlanAdaptationPayload[]
 }
 
 /** GET /taste/spotify — commit 67 (no tokens). */
@@ -542,6 +599,7 @@ export interface SkillNode {
   easiness_factor: number
   interval_days: number
   next_review_date: string
+  sm2_repetitions: number
 }
 
 export interface Annotation {

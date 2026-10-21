@@ -106,3 +106,103 @@ def test_mood_changes_template_intro_energy() -> None:
     )
     assert "gentle" in tired.slots[0].coach_intro.lower()
     assert "great spark" in on_fire.slots[0].coach_intro.lower()
+
+
+def _lesson_library() -> list[LessonJSON]:
+    return [
+        _lesson(job_id="job-a", style="rock", section_tags=["bend"]),
+        _lesson(job_id="job-b", style="rock", section_tags=["vibrato"]),
+    ]
+
+
+def test_plan_and_slot_ids_are_stable_nonempty_and_unique() -> None:
+    plan = generate_practice_plan(
+        player_profile=PlayerProfile(weak_areas=["bending"]),
+        library_lessons=_lesson_library(),
+        duration_minutes=25,
+        skip_llm=True,
+    )
+    assert plan.plan_id
+    assert len({s.slot_id for s in plan.slots}) == len(plan.slots)
+    assert all(s.slot_id for s in plan.slots)
+    assert plan.total_duration_seconds == sum(s.duration_seconds for s in plan.slots)
+
+
+def test_slot_difficulty_mapping() -> None:
+    plan = generate_practice_plan(
+        player_profile=PlayerProfile(weak_areas=["bending"]),
+        library_lessons=_lesson_library(),
+        duration_minutes=25,
+        skip_llm=True,
+    )
+    by_type = {s.slot_type: s for s in plan.slots}
+    assert by_type["technique"].difficulty == 2
+    assert by_type["song_section"].difficulty == 3
+    assert by_type["free_jam"].difficulty == 2
+    warmup_difficulty = max(e.difficulty for e in by_type["warmup"].warmup_plan.exercises)
+    assert by_type["warmup"].difficulty == warmup_difficulty
+    assert all(s.intent == "practice" for s in plan.slots)
+
+
+def test_due_skill_outranks_higher_scoring_non_due_skill() -> None:
+    from datetime import date
+
+    from app.curriculum import select_skill_focus
+    from app.schemas import SkillNode
+
+    profile = PlayerProfile(
+        skill_nodes=[
+            SkillNode(id="bend_accuracy", label="Bending", score=0.5),
+            SkillNode(id="timing", label="Timing", score=0.6, next_review_date=date(2026, 1, 1)),
+        ],
+    )
+    focus = select_skill_focus(profile, today=date(2026, 6, 1))
+    assert focus is not None
+    assert focus.node_id == "timing"
+    assert focus.is_due is True
+
+
+def test_weak_skill_becomes_practice_target() -> None:
+    from app.schemas import SkillNode
+
+    plan = generate_practice_plan(
+        player_profile=PlayerProfile(
+            weak_areas=["bending"],
+            skill_nodes=[SkillNode(id="bend_accuracy", label="Bending", score=0.3)],
+        ),
+        library_lessons=_lesson_library(),
+        duration_minutes=25,
+        skip_llm=True,
+    )
+    technique = next(s for s in plan.slots if s.slot_type == "technique")
+    assert technique.title == "Bending drill"
+    assert technique.intent == "practice"
+    assert technique.target_skill == "bend_accuracy"
+    assert technique.technique_focus == "bending"
+
+
+def test_strong_skill_becomes_review_slot_with_reclaimed_time() -> None:
+    from app.schemas import SkillNode
+
+    standard = generate_practice_plan(
+        player_profile=PlayerProfile(skill_nodes=[SkillNode(id="bend_accuracy", label="Bending", score=0.5)]),
+        library_lessons=_lesson_library(),
+        duration_minutes=25,
+        skip_llm=True,
+    )
+    strong = generate_practice_plan(
+        player_profile=PlayerProfile(skill_nodes=[SkillNode(id="bend_accuracy", label="Bending", score=0.92)]),
+        library_lessons=_lesson_library(),
+        duration_minutes=25,
+        skip_llm=True,
+    )
+    standard_technique = next(s for s in standard.slots if s.slot_type == "technique")
+    review = next(s for s in strong.slots if s.slot_type == "technique")
+    assert review.title == "Bending review"
+    assert review.intent == "review"
+    assert review.difficulty == 1
+    assert review.duration_seconds < standard_technique.duration_seconds
+    assert strong.total_duration_seconds == 25 * 60
+    assert next(s for s in strong.slots if s.slot_type == "free_jam").duration_seconds > next(
+        s for s in standard.slots if s.slot_type == "free_jam"
+    ).duration_seconds

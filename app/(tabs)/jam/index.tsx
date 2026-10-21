@@ -30,7 +30,7 @@ import {
 import { requestJamBacking, type JamPersonaChoice, type JamPhraseMetrics, type JamSummaryBundle } from '@/src/api/jam'
 import { emit } from '@/src/analytics/eventBus'
 import { BACKING_TRACKS, type BackingTrackDefinition, type BackingTrackId } from '@/src/constants/backingTracks'
-import { getAllSkillNodes, getAppPref, getLessonByJobId, insertJamSnapshotRow, insertPracticePlanCompletionRow, insertSessionRow } from '@/src/db/client'
+import { getAllSkillNodes, getAppPref, insertJamSnapshotRow } from '@/src/db/client'
 import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import { mapBrowserMicBlockedForJam, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { prepareJamBackingPlayable } from '@/src/jam/jamBackingPlayable'
@@ -49,11 +49,11 @@ import {
 import { normalizeExternalAudioSrcForTabHarness } from '@/src/jam/normalizeJamTabAudioUri'
 import { createPitchClassHistogram, type BestScaleMatch } from '@/src/jam/pitchClassHistogram'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
+import { completePracticePlanSlot } from '@/src/session/planProgress'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useDnaStore } from '@/src/stores/dnaStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
-import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import {
     buildFretboardShareUrl,
     readFretboardShareStateFromLocation,
@@ -141,8 +141,6 @@ export default function JamScreen() {
 
   const currentPlan = usePlanStore((s) => s.currentPlan)
   const currentSlotIndex = usePlanStore((s) => s.currentSlotIndex)
-  const setCurrentSlotIndex = usePlanStore((s) => s.setCurrentSlotIndex)
-  const clearPlan = usePlanStore((s) => s.clearPlan)
   /** Final plan step is often `free_jam`; SessionChromeBar only covers `/session/*`, so we surface completion here. */
   const activePlanJamSlot = useMemo(() => {
     const slots = currentPlan?.slots
@@ -869,102 +867,28 @@ export default function JamScreen() {
                   ? 'This is the last section in your plan. When you are done jamming, complete the session to clear the plan and go home.'
                   : 'When you are done jamming, continue to the next section in your plan.'}
               </Text>
-              {isFinalPlanStep ? (
-                <AnimatedPressable haptic="light"
-                  onPress={() => {
-                    void (async () => {
-                      const plan = currentPlan
-                      const nSlots = plan?.slots?.length ?? 0
-                      if (plan && nSlots > 0) {
-                        try {
-                          await insertPracticePlanCompletionRow({
-                            id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-                            completed_at: new Date().toISOString(),
-                            plan_json: JSON.stringify(plan),
-                          })
-                          // Also insert a session row so plan completions count toward home page progress
-                          const firstSlot = plan.slots?.[0]
-                          const sessionTitle = firstSlot?.slot_type === 'song_section'
-                            ? (firstSlot.title ?? 'Practice session')
-                            : (firstSlot?.title ?? 'Practice session')
-                          await insertSessionRow({
-                            id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-                            song_title: sessionTitle,
-                            artist: null,
-                            section_label: `${nSlots}-section plan`,
-                            date: new Date().toISOString(),
-                            coach_review: null,
-                            pitch_accuracy: null,
-                            phrasing_score: null,
-                            nodes_targeted: [],
-                            job_id: firstSlot?.lesson_ref ?? null,
-                            section_index: null,
-                            is_ghost_reference: false,
-                          })
-                        } catch (e) {
-                          if (__DEV__) console.warn('[jam] plan completion persist failed', e)
-                        }
-                      }
-                      clearPlan()
-                      toast.success('Practice plan complete.')
-                      router.replace('/(tabs)')
-                    })()
-                  }}
-                  className="mt-3 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
-                  accessibilityRole="button"
-                  accessibilityLabel="Complete practice session and return home"
-                >
-                  <Text className="text-center font-sans-medium text-base text-wood-900">Complete session</Text>
-                </AnimatedPressable>
-              ) : (
-                <AnimatedPressable haptic="light"
-                  onPress={() => {
-                    void (async () => {
-                      try {
-                        const nextIndex = currentSlotIndex + 1
-                        const slots = currentPlan?.slots
-                        if (!slots || nextIndex >= slots.length) return
-                        setCurrentSlotIndex(nextIndex)
-                        const nextSlot = slots[nextIndex]
-                        const saveLesson = useLessonStore.getState().saveLesson
-                        const setLessonSectionIndex = useLessonStore.getState().setLessonSectionIndex
-                        if (nextSlot.slot_type === 'song_section' && nextSlot.lesson_ref) {
-                          const lesson = await getLessonByJobId(nextSlot.lesson_ref)
-                          if (!lesson) {
-                            toast.error(`No saved lesson for job ${nextSlot.lesson_ref}. Open the song from Library first.`)
-                            return
-                          }
-                          saveLesson(lesson)
-                          setLessonSectionIndex(0)
-                          const skipTune = useSessionPrefsStore.getState().skipTuneStep
-                          router.replace(skipTune ? '/session/listen' : '/session/tune')
-                          return
-                        }
-                        if (nextSlot.slot_type === 'free_jam') {
-                          router.replace('/(tabs)/jam')
-                          return
-                        }
-                        if (nextSlot.slot_type === 'warmup' && nextSlot.warmup_plan?.exercises?.length) {
-                          router.replace('/session/warmup')
-                          return
-                        }
-                        if (nextSlot.slot_type === 'technique') {
-                          router.replace('/session/study')
-                          return
-                        }
-                        router.replace('/session/slow')
-                      } catch (e) {
-                        toast.error(e instanceof Error ? e.message : 'Could not navigate to next step')
-                      }
-                    })()
-                  }}
-                  className="mt-3 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
-                  accessibilityRole="button"
-                        accessibilityLabel="Go to next section in practice plan"
-                >
-                  <Text className="text-center font-sans-medium text-base text-wood-900">Next section</Text>
-                </AnimatedPressable>
-              )}
+              <AnimatedPressable haptic="light"
+                onPress={() => {
+                  void completePracticePlanSlot({
+                    router,
+                    deps: {
+                      saveLesson: useLessonStore.getState().saveLesson,
+                      setLessonSectionIndex: useLessonStore.getState().setLessonSectionIndex,
+                    },
+                    slotIndex: currentSlotIndex,
+                    performance: null,
+                  }).catch((e: unknown) => {
+                    toast.error(e instanceof Error ? e.message : 'Could not continue the practice plan.')
+                  })
+                }}
+                className="mt-3 min-h-[48px] justify-center rounded-xl bg-amber-accent px-4 py-3"
+                accessibilityRole="button"
+                accessibilityLabel={isFinalPlanStep ? 'Complete practice session and return home' : 'Go to next section in practice plan'}
+              >
+                <Text className="text-center font-sans-medium text-base text-wood-900">
+                  {isFinalPlanStep ? 'Complete session' : 'Next section'}
+                </Text>
+              </AnimatedPressable>
             </View>
           ) : null}
 

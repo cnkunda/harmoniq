@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -15,6 +16,11 @@ class SkillNode(BaseModel):
     id: str
     label: str | None = None
     score: float | None = Field(default=None, ge=0.0, le=1.0)
+    next_review_date: date | None = None
+    interval_days: int | None = Field(default=None, ge=0)
+    easiness_factor: float | None = Field(default=None, ge=1.3)
+    sessions_count: int | None = Field(default=None, ge=0)
+    sm2_repetitions: int | None = Field(default=None, ge=0)
 
 
 class QuizAnswers(BaseModel):
@@ -84,6 +90,10 @@ class CurriculumSuggestResponse(BaseModel):
 
 SlotType = Literal["warmup", "technique", "song_section", "free_jam"]
 
+PlanSlotIntent = Literal["practice", "remediation", "review"]
+
+PlanConfidence = Literal["low", "medium", "high"]
+
 MoodState = Literal["focused", "loose", "tired", "on_fire"]
 
 CoachFocusArea = Literal["timing", "vibrato", "dynamics", "phrasing", "bending", "rhythm", "expression"]
@@ -142,6 +152,7 @@ class DrillSlot(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
+    slot_id: str = Field(..., min_length=1, max_length=80)
     slot_type: SlotType
     duration_seconds: int = Field(..., ge=60, le=7200)
     title: str = Field(..., min_length=1, max_length=200)
@@ -150,6 +161,10 @@ class DrillSlot(BaseModel):
     exercise_ref: str | None = Field(default=None, max_length=80)
     technique_focus: str | None = Field(default=None, max_length=80)
     warmup_plan: WarmupPlan | None = None
+    difficulty: int = Field(default=2, ge=1, le=3)
+    intent: PlanSlotIntent = "practice"
+    target_skill: str | None = Field(default=None, max_length=80)
+    remediation_for_slot_id: str | None = Field(default=None, max_length=80)
 
 
 class PracticePlan(BaseModel):
@@ -157,8 +172,63 @@ class PracticePlan(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
+    plan_id: str = Field(..., min_length=1, max_length=80)
     slots: list[DrillSlot] = Field(default_factory=list)
     total_duration_seconds: int = Field(ge=0, default=0)
+
+
+class PlanSlotPerformance(BaseModel):
+    """Client-reported result for one completed plan slot."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    slot_id: str = Field(..., min_length=1, max_length=80)
+    slot_type: SlotType
+    title: str = Field(..., min_length=1, max_length=200)
+    accuracy: float | None = Field(default=None, ge=0.0, le=1.0)
+    timing: float | None = Field(default=None, ge=0.0, le=1.0)
+    confidence: PlanConfidence | None = None
+    completion: bool
+
+
+class PlanSlotResult(PlanSlotPerformance):
+    """Persisted slot result, including when the slot finished."""
+
+    completed_at: datetime | None = None
+
+
+class PlanAdaptation(BaseModel):
+    """One deterministic adaptation applied after a slot."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    slot_id: str = Field(..., min_length=1, max_length=80)
+    action: Literal["insert_remediation", "skip_easier", "none"]
+    reason: str = Field(default="", max_length=500)
+    original_duration_seconds: int | None = Field(default=None, ge=0)
+    new_duration_seconds: int | None = Field(default=None, ge=0)
+    inserted_slot_id: str | None = Field(default=None, max_length=80)
+
+
+class PlanAdaptRequest(BaseModel):
+    """POST /session/plan/adapt payload."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    plan: PracticePlan
+    slot_index: int = Field(..., ge=0)
+    slot_performance: PlanSlotPerformance
+
+
+class PlanAdaptResponse(BaseModel):
+    """Adapted plan plus the completed slot result."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    plan: PracticePlan
+    next_slot_index: int = Field(..., ge=0)
+    slot_result: PlanSlotResult
+    adaptation: PlanAdaptation | None = None
 
 
 class PracticePlanRequest(BaseModel):
