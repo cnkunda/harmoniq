@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commit 159. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–160. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1 → 159 (completed → archived), Milestone C2–C9 → 160–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commit 159 (user feedback & manual overrides), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C2 → 159–160 (completed → archived), Milestone C3–C9 → 161–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–160 (user feedback & manual overrides, jam summary agent), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -26,6 +26,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 157 (Harmonized Solo UI + Coach Chord-Tone Integration) Archive Date:** October 18, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 484 passed, backend pytest green); spec and implementation notes archived below.
 **Commit 158 (UX Audit Loop Re-Run & Gap Fixes) Archive Date:** October 19, 2026 — Complete; all 4 ACs verified (report isComplete: true, 0 error-severity gaps, all 46 residual flags waived with rationale in the report; lint 0 errors, vitest 484 passed); spec and implementation notes archived below.
 **Commit 159 (User Feedback & Manual Overrides) Archive Date:** October 20, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped); spec and implementation notes archived below.
+**Commit 160 (Jam Mode Summary Agent) Archive Date:** October 20, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 504 passed, Playwright 64 passed, backend pytest 1366 passed / 6 skipped; CI scoring set 287 passed / 2 skipped); spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -2006,8 +2007,8 @@ display, calibration (ECE), tier-aware scoring.
 
 | Former spec | New home |
 |-------------|----------|
-| Commit C1: User Feedback & Manual Overrides | PRIORITIES.md commit 159 |
-| Commit C2: Jam Mode Summary Agent | PRIORITIES.md commit 160 |
+| Commit C1: User Feedback & Manual Overrides | Archived below (commit 159) |
+| Commit C2: Jam Mode Summary Agent | Archived below (commit 160) |
 | Commit C3: Play Engagement Analytics | PRIORITIES.md commit 161 |
 | Commit C4: Dynamic Session Engine | PRIORITIES.md commit 162 |
 | Commit C5: Orient-as-Hint | PRIORITIES.md commit 163 |
@@ -2016,7 +2017,7 @@ display, calibration (ECE), tier-aware scoring.
 | Commit C8: Three-Tier Output Strategy | PRIORITIES.md commit 166 |
 | Commit C9: Multi-Instrument Diagram Support | PRIORITIES.md commit 167 |
 
-Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PRIORITIES.md`](PRIORITIES.md) Active Backlog. Current-state notes from the archive, for reference: correction store (`useCorrectionStore`) fully implemented with chord/note/voicing overrides and DB persistence; jam mode (`app/(tabs)/jam.tsx`) is a full single-tab experience with backing tracks, scale detection, phrase coaching, and save flow; SM-2 spaced repetition engine (`src/spaced/sm2.ts`) powers skill node mutations; practice plan sequencer (`backend/app/sequencer.py`) generates slot-based plans. No analytics infrastructure, no three-tier output, no multi-instrument support, no chord pulse dashboard exist.
+Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PRIORITIES.md`](PRIORITIES.md) Active Backlog. Current-state notes from the archive, for reference: correction store (`useCorrectionStore`) fully implemented with chord/note/voicing overrides and DB persistence; jam mode (`app/(tabs)/jam/index.tsx`) is a full single-tab experience with backing tracks, scale detection, phrase coaching, and save flow; SM-2 spaced repetition engine (`src/spaced/sm2.ts`) powers skill node mutations; practice plan sequencer (`backend/app/sequencer.py`) generates slot-based plans. No analytics infrastructure, no three-tier output, no multi-instrument support, no chord pulse dashboard exist.
 
 ---
 
@@ -2411,3 +2412,47 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **Clean-clone evidence:** commit `d61b8d9` (Oct 10 2026); counts re-verified at `f6f5602` (Oct 20 2026) — lint 0 errors, vitest 490/490, backend full suite 1342 passed / 6 skipped, CI scoring set 249 passed / 2 skipped.
 - **Publication:** Part 2 confirmed live at harmoniq.ai/blog on Oct 20 2026; [`docs/RESEARCH.md`](docs/RESEARCH.md) and the release-gate ledger record the published status.
 - **Roadmap sync:** Commit 149 status, phase headers, active-backlog range, and archive pointers updated; Commit 149 spec and release-gate ledger moved here.
+
+---
+
+### Commit 160: Jam Mode Summary Agent (was C2)
+
+**Status:** Complete — all 6 ACs verified (6/6). Moved from [`PRIORITIES.md`](PRIORITIES.md).
+
+**Goal:** Post-jam, Claude-powered phrase-level analysis with a persona toggle — grade, strengths/weaknesses, and a one-tap "practice this phrase" loop launcher.
+
+**Current State (spec verbatim):** `POST /jam-score` (`main.py:844`) already returns a coach paragraph via `generate_jam_coach_summary()` (deterministic focus-key + reliability tags from duration/pitch maps), and `app/(tabs)/jam.tsx` has the full save flow. Missing: per-phrase structured analysis (`phrase_index`, `intonation_cents`, `timing_ms`, `transition_gap_ms`, `suggestion`), persona switching, grade + strengths modal, `summary_json` persistence, and a jam history screen (no `app/(tabs)/jam/` directory exists).
+
+**Scope (spec verbatim):**
+
+- Add `POST /jam/summary` backend endpoint triggered on jam save
+- Claude Haiku-powered post-jam analysis:
+  - Input: jam snapshot (scale, confidence, phrase features, backing track, duration)
+  - Output: structured summary with per-phrase feedback
+- Persona-switching via system prompt: "Encouraging coach" vs "Technical analyst" (user toggle in Jam settings)
+- Output schema: `{ phrase_index, chord, clarity, intonation_cents, timing_ms, transition_from, transition_gap_ms, suggestion }`
+- Display jam summary in a post-jam modal:
+  - Overall grade (A-F) from weighted phrase scores
+  - Top 3 strengths and top 3 areas for improvement
+  - "Practice this phrase" button → launches slow loop on weakest phrase
+- Persist summary to `jam_snapshots.summary_json` column
+- Add jam history list screen: `app/(tabs)/jam/history.tsx` showing past jams with summary previews
+
+**Acceptance Criteria:**
+
+- [x] Saving a jam triggers summary generation without blocking the save
+- [x] Post-jam modal shows grade, strengths, improvements, and per-phrase suggestions
+- [x] "Practice this phrase" launches slow loop on the weakest phrase
+- [x] Summaries persist and appear in jam history
+- [x] Both personas toggle correctly
+- [x] Backend tests green; LLM failure degrades gracefully (jam saves without summary)
+
+**Implementation notes:**
+
+- **Backend grading:** new `backend/app/jam_scoring.py` scores five components (intonation 30, timing 25, pitch variety 20, melodic range 15, density 10) 0–100, normalizes over the components actually present (legacy payloads without intonation are not capped), duration-weights phrases, ties go to the earliest phrase, and maps A≥90 / B≥80 / C≥70 / D≥60 / F. The letter grade is never authored by the LLM.
+- **Backend summary:** `/jam/summary` builds a weakest-first phrase table and passes it to Claude with the persona system prompt; `coach.py` now accepts a system prompt, uses a 15s timeout, caps strengths/focus areas at 3 and suggestions at 5, and rejects malformed, duplicate, or out-of-range phrase indices. Deterministic `fallback_phrase_suggestion()` fills any phrase the LLM did not cover, so the response always has one suggestion per returned phrase. `jam_vocabulary.py` now uses counted `note_count` and treats `beat_offset_mean` as milliseconds; intonation rolls up to `{"mean_abs": …}`.
+- **Persistence:** SQLite migration v18 adds nullable `summary_status` (`pending` / `ready` / `failed` / `skipped`); web IndexedDB is schemaless, so no version bump. New snapshots insert as `pending` (or `skipped` when there are no phrases); the background runner updates `summary_bundle_json`, `coach_summary`, and status without blocking save. Legacy null status is rendered as ready. `updateJamSnapshotSummary` added to both DB clients.
+- **Frontend:** the Jam screen moved to `app/(tabs)/jam/index.tsx` under a nested stack with `anchor: 'index'`; the persona toggle (`encouraging` → `learner`, `technical` → `transcriber`) persists in `app_prefs` key `jam_summary_persona`. `src/jam/jamSummaryRunner.ts` owns request/persist/retry with a stale-run guard; `JamSummaryModal` renders pending, ready, failed, and skipped states. `app/(tabs)/jam/history.tsx` awaits `initDb()` before listing snapshots, opens stored summaries, retries failed ones, and routes to practice. The modal closes before navigation.
+- **Practice:** new root route `app/jam-practice.tsx` loops a classic backing track between `backing_start_ms` / `backing_end_ms` at 0.75×. `src/jam/jamPracticeTrack.ts` resolves the track by id, then by key+BPM, then by a single same-key track. AI-generated jams without a saved loop fall back to a matching classic loop or disable the action with an explanation.
+- **Deliberate deviations:** reused the existing `jam_snapshots.summary_bundle_json` instead of adding a duplicate `summary_json` column; `chord` in per-phrase feedback carries the inferred scale label because the payload has no per-phrase chord; the dedicated `/jam-practice` route avoids side effects in the 7-step session flow.
+- **Verification:** `npm run lint` 0 errors; `npm run test` 504/504 passed; `npm run test:ui` 64/64 passed; backend full suite 1366 passed / 6 skipped; CI scoring set 287 passed / 2 skipped. Added `backend/tests/test_jam_scoring.py` and `backend/tests/test_jam_summary.py` to `scoring-tests.yml`. Committed as `caf7050` (`feat: Commit 160 — Jam Mode Summary Agent`).

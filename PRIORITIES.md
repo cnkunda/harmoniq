@@ -6,10 +6,10 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Phase 2 commits 98–148** — archived.  
 **Milestone A (MT3-Primary Pipeline)** — archived, complete.  
 **Milestone B (Fretboard Dual-Mode)** — archived, complete.  
-**Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159 completed → archived).  
+**Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–160 completed → archived).  
 **Milestone D (Infrastructure)** — partially implemented; remaining gaps at commits 169–172 (151 SSE progress stream completed → archived).  
 **Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
-**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149 and 151–159 completed → archived).  
+**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149 and 151–160 completed → archived).  
 **Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 177–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 160–183** (149 and 151–159 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 161–183** (149 and 151–160 completed → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -99,39 +99,6 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 ---
 
 **Group: Engagement features — promoted from Milestone C (159–167), then left-handed parity (168)**
-
----
-
-### Commit 160: Jam Mode Summary Agent (was C2)
-
-**Status:** Complete
-
-**Goal:** Post-jam, Claude-powered phrase-level analysis with a persona toggle — grade, strengths/weaknesses, and a one-tap "practice this phrase" loop launcher.
-
-**Current State:** `POST /jam-score` (`main.py:844`) already returns a coach paragraph via `generate_jam_coach_summary()` (deterministic focus-key + reliability tags from duration/pitch maps), and `app/(tabs)/jam.tsx` has the full save flow. Missing: per-phrase structured analysis (`phrase_index`, `intonation_cents`, `timing_ms`, `transition_gap_ms`, `suggestion`), persona switching, grade + strengths modal, `summary_json` persistence, and a jam history screen (no `app/(tabs)/jam/` directory exists).
-
-**Scope:**
-- Add `POST /jam/summary` backend endpoint triggered on jam save
-- Claude Haiku-powered post-jam analysis:
-  - Input: jam snapshot (scale, confidence, phrase features, backing track, duration)
-  - Output: structured summary with per-phrase feedback
-- Persona-switching via system prompt: "Encouraging coach" vs "Technical analyst" (user toggle in Jam settings)
-- Output schema: `{ phrase_index, chord, clarity, intonation_cents, timing_ms, transition_from, transition_gap_ms, suggestion }`
-- Display jam summary in a post-jam modal:
-  - Overall grade (A-F) from weighted phrase scores
-  - Top 3 strengths and top 3 areas for improvement
-  - "Practice this phrase" button → launches slow loop on weakest phrase
-- Persist summary to `jam_snapshots.summary_json` column
-- Add jam history list screen: `app/(tabs)/jam/history.tsx` showing past jams with summary previews
-
-**Acceptance Criteria:**
-
-- [x] Saving a jam triggers summary generation without blocking the save
-- [x] Post-jam modal shows grade, strengths, improvements, and per-phrase suggestions
-- [x] "Practice this phrase" launches slow loop on the weakest phrase
-- [x] Summaries persist and appear in jam history
-- [x] Both personas toggle correctly
-- [x] Backend tests green; LLM failure degrades gracefully (jam saves without summary)
 
 ---
 
