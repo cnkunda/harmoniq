@@ -542,10 +542,12 @@ def _call_claude_streaming(
     user_prompt: str,
     max_tokens: int = 220,
     temperature: float = 1.0,
+    system_prompt: str = BASE_SYSTEM_PROMPT,
+    timeout_seconds: float = 15.0,
 ) -> str:
 
     start_time = time.perf_counter()
-    client = Anthropic(api_key=api_key)
+    client = Anthropic(api_key=api_key, timeout=timeout_seconds)
     chunks: list[str] = []
     first_chunk_time: float | None = None
 
@@ -558,7 +560,7 @@ def _call_claude_streaming(
                 model=model_id,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                system=BASE_SYSTEM_PROMPT,
+                system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             ) as stream:
                 for evt in stream:
@@ -600,12 +602,14 @@ def _call_claude_text(
     user_prompt: str,
     max_tokens: int = 220,
     temperature: float = 1.0,
+    system_prompt: str = BASE_SYSTEM_PROMPT,
 ) -> str:
     return _call_claude_streaming(
         api_key=api_key,
         user_prompt=user_prompt,
         max_tokens=max_tokens,
         temperature=temperature,
+        system_prompt=system_prompt,
     )
 
 
@@ -934,10 +938,20 @@ JAM_SUMMARY_USER_PROMPT = """Analyze this jam session and return a JSON object w
 
 {{
   "coach_summary": "1-3 sentence overall summary of the jam",
-  "coach_strengths": ["what went well 1", "what went well 2"],
-  "coach_focus_areas": ["area to work on 1", "area to work on 2"],
-  "coach_next_step": "specific next practice suggestion"
+  "coach_strengths": ["max 3 things that went well"],
+  "coach_focus_areas": ["max 3 areas to work on"],
+  "coach_next_step": "one specific practice action",
+  "phrase_feedback": [
+    {{"phrase_index": 0, "suggestion": "one specific suggestion for this phrase"}}
+  ]
 }}
+
+Rules:
+- Use only the measurements supplied below. Do not invent notes, chords, or numbers.
+- Give at most 3 strengths and at most 3 focus areas.
+- Return at most 5 phrase suggestions, weakest phrase first.
+- phrase_index must match an index from the phrase table.
+- No markdown inside strings.
 
 Jam data:
 - Duration: {duration_seconds}s
@@ -950,6 +964,9 @@ Jam data:
 - Pitch class weights: {pitch_weights}
 - Vocabulary patterns detected: {pattern_count}
 {pattern_details}
+Phrase table (weakest first):
+{phrase_table}
+
 Player context:
 - Skill level: {player_level}
 - Previous jams: {previous_jam_count}
@@ -972,11 +989,12 @@ def generate_jam_summary_with_claude(
     pitch_class_weight_map: dict[str, float],
     vocabulary_pattern_count: int,
     vocabulary_pattern_details: str,
+    phrase_table: str,
     player_level: str,
     previous_jam_count: int,
     weak_areas: list[str],
     persona: str,
-) -> dict[str, str] | None:
+) -> dict[str, Any] | None:
     """Call Claude for jam summary with persona-aware prompting.
 
     Returns parsed JSON dict or None on failure.
@@ -1005,6 +1023,7 @@ def generate_jam_summary_with_claude(
         pitch_weights=pitch_weights_str,
         pattern_count=vocabulary_pattern_count,
         pattern_details=vocabulary_pattern_details,
+        phrase_table=phrase_table or "none",
         player_level=player_level,
         previous_jam_count=previous_jam_count,
         weak_areas=weak_areas_str,
@@ -1014,8 +1033,9 @@ def generate_jam_summary_with_claude(
         raw = _call_claude_text(
             api_key=api_key,
             user_prompt=user_prompt,
-            max_tokens=350,
+            max_tokens=500,
             temperature=0.7,
+            system_prompt=system_prompt,
         )
         data = _extract_json_object(raw)
         if data is None:
@@ -1027,11 +1047,34 @@ def generate_jam_summary_with_claude(
         if not isinstance(summary, str) or not summary.strip():
             return None
 
+        phrase_feedback: list[dict[str, Any]] = []
+        raw_feedback = data.get("phrase_feedback")
+        if isinstance(raw_feedback, list):
+            seen_indices: set[int] = set()
+            for item in raw_feedback:
+                if not isinstance(item, dict):
+                    continue
+                phrase_index = item.get("phrase_index")
+                suggestion = item.get("suggestion")
+                if isinstance(phrase_index, bool) or not isinstance(phrase_index, int):
+                    continue
+                if phrase_index < 0 or phrase_index >= phrase_count or phrase_index in seen_indices:
+                    continue
+                if not isinstance(suggestion, str) or not suggestion.strip():
+                    continue
+                seen_indices.add(phrase_index)
+                phrase_feedback.append(
+                    {"phrase_index": phrase_index, "suggestion": suggestion.strip()}
+                )
+                if len(phrase_feedback) >= 5:
+                    break
+
         return {
             "coach_summary": summary.strip(),
-            "coach_strengths": _ensure_string_list(data.get("coach_strengths", [])),
-            "coach_focus_areas": _ensure_string_list(data.get("coach_focus_areas", [])),
+            "coach_strengths": _ensure_string_list(data.get("coach_strengths", []))[:3],
+            "coach_focus_areas": _ensure_string_list(data.get("coach_focus_areas", []))[:3],
             "coach_next_step": str(data.get("coach_next_step", "")).strip(),
+            "phrase_feedback": phrase_feedback,
         }
     except Exception:
         logger.exception("Claude jam summary call failed")

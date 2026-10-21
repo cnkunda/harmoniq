@@ -73,6 +73,7 @@ If a migration fails:
 - V15: Add summary_bundle_json and phrases_json to jam_snapshots
 - V16: Add inferred_mode to jam_snapshots (Milestone B — Commit B3)
 - V17: Add user_feedback table + job/dedupe indexes (Commit 159)
+- V18: Add summary_status to jam_snapshots (Commit 160; web IndexedDB is schemaless, no version bump)
 
 ## Web (IndexedDB) Migrations
 

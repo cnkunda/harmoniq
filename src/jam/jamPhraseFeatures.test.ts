@@ -33,4 +33,49 @@ describe('phraseToFeatures', () => {
     const f = phraseToFeatures(phrase, null)
     expect(f.meanBeatOffsetSec).toBeNull()
   })
+
+  it('computes mean absolute cents from onset readings', () => {
+    const phrase: JamPhrase = {
+      startTime: 0,
+      endTime: 1000,
+      notes: [
+        { tMs: 0, midi: 60, cents: 20 },
+        { tMs: 500, midi: 64, cents: -10 },
+        { tMs: 750, midi: 67, cents: null },
+      ],
+    }
+    const f = phraseToFeatures(phrase, 120)
+    expect(f.meanAbsCents).toBe(15)
+  })
+
+  it('reports phrase and backing boundaries', () => {
+    const phrase: JamPhrase = {
+      startTime: 200,
+      endTime: 2400,
+      notes: [
+        { tMs: 200, midi: 60, backingPosMs: 5000 },
+        { tMs: 900, midi: 64, backingPosMs: 5700 },
+        { tMs: 1600, midi: 67 },
+      ],
+    }
+    const f = phraseToFeatures(phrase, 120)
+    expect(f.startMs).toBe(200)
+    expect(f.endMs).toBe(2400)
+    expect(f.backingStartMs).toBe(5000)
+    expect(f.backingEndMs).toBe(7200)
+  })
+
+  it('maps phrase end when the last note has no backing position', () => {
+    const phrase: JamPhrase = {
+      startTime: 100,
+      endTime: 1100,
+      notes: [
+        { tMs: 100, midi: 60, backingPosMs: 300 },
+        { tMs: 600, midi: 64 },
+      ],
+    }
+    const f = phraseToFeatures(phrase, null)
+    expect(f.backingStartMs).toBe(300)
+    expect(f.backingEndMs).toBe(1300)
+  })
 })

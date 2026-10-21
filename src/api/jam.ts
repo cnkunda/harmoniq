@@ -39,6 +39,11 @@ export async function requestJamBacking(body: JamBackingRequestBody): Promise<Ja
 // Commit 111: Jam Mode Summary Agent
 // ---------------------------------------------------------------------------
 
+export type JamSummaryPersona = 'learner' | 'intermediate' | 'transcriber'
+
+/** Commit 160: the two choices exposed in the Jam UI. */
+export type JamPersonaChoice = 'encouraging' | 'technical'
+
 export type JamPhraseMetrics = {
   duration_ms: number
   notes_per_second: number
@@ -50,6 +55,25 @@ export type JamPhraseMetrics = {
   home_pitch_class?: string | null
   transition_from?: string | null
   transition_gap_ms?: number
+  /** Commit 160: counted onset notes in the phrase. */
+  note_count?: number
+  /** Commit 160: mean absolute intonation error in cents. */
+  intonation_cents?: number | null
+  start_ms?: number
+  end_ms?: number
+  backing_start_ms?: number | null
+  backing_end_ms?: number | null
+}
+
+export type JamPhraseFeedback = {
+  phrase_index: number
+  chord: string | null
+  clarity: number
+  intonation_cents: number | null
+  timing_ms: number | null
+  transition_from: string | null
+  transition_gap_ms: number
+  suggestion: string
 }
 
 export type JamVocabularyPattern = {
@@ -68,6 +92,12 @@ export type JamSummaryBundle = {
   timing_ms: number
   transition_from: string | null
   transition_gap_ms: number
+  /** Commit 160 — deterministic grade; never authored by the LLM. */
+  grade: 'A' | 'B' | 'C' | 'D' | 'F'
+  grade_score: number
+  grade_breakdown: Record<string, number>
+  phrase_feedback: JamPhraseFeedback[]
+  weakest_phrase_index: number | null
   phrase_count: number
   total_notes: number
   avg_notes_per_second: number
@@ -96,7 +126,7 @@ export type JamSummaryRequestBody = {
   track_bpm?: number | null
   phrases?: JamPhraseMetrics[]
   player_level?: 'beginner' | 'intermediate' | 'advanced'
-  persona?: 'learner' | 'intermediate' | 'transcriber' | null
+  persona?: JamSummaryPersona | null
   previous_jam_count?: number
   weak_areas?: string[]
 }

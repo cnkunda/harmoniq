@@ -1,6 +1,6 @@
 import { Asset } from 'expo-asset'
 import { Audio, type AVPlaybackStatus } from 'expo-av'
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Platform, ScrollView, Text, View } from 'react-native'
 import Animated, {
@@ -11,10 +11,12 @@ import Animated, {
     withTiming,
 } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { History } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
+import { JamSummaryModal, type JamSummaryStatus } from '@/components/JamSummaryModal'
 import { TabViewport } from '@/components/TabViewport'
 import { toast } from '@/components/ToastConfig'
 import { WoodGradient } from '@/components/WoodGradient'
@@ -25,8 +27,8 @@ import {
     parseTasteProfileJson,
     submitJamScore,
 } from '@/src/api/analyze'
-import { requestJamBacking, submitJamSummary, type JamPhraseMetrics, type JamSummaryBundle } from '@/src/api/jam'
-import { BACKING_TRACKS, type BackingTrackId } from '@/src/constants/backingTracks'
+import { requestJamBacking, type JamPersonaChoice, type JamPhraseMetrics, type JamSummaryBundle } from '@/src/api/jam'
+import { BACKING_TRACKS, type BackingTrackDefinition, type BackingTrackId } from '@/src/constants/backingTracks'
 import { getAllSkillNodes, getAppPref, getLessonByJobId, insertJamSnapshotRow, insertPracticePlanCompletionRow, insertSessionRow } from '@/src/db/client'
 import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import { mapBrowserMicBlockedForJam, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
@@ -35,7 +37,14 @@ import { coachFromPhraseFeatures } from '@/src/jam/jamPhraseCoach'
 import { phraseToFeatures } from '@/src/jam/jamPhraseFeatures'
 import { createJamPhraseSegmenter } from '@/src/jam/jamPhraseSegmenter'
 import { JAM_REFERENCE_TAB_GP5_BASE64 } from '@/src/jam/jamReferenceTabGp5Base64'
+import { buildJamPracticeHref, resolveJamPracticeTrack } from '@/src/jam/jamPracticeTrack'
 import { pickSuggestedClassicFromWeakAreas } from '@/src/jam/jamSuggestedClassic'
+import {
+  loadJamPersonaChoice,
+  requestJamSummary,
+  runJamSummary,
+  saveJamPersonaChoice,
+} from '@/src/jam/jamSummaryRunner'
 import { normalizeExternalAudioSrcForTabHarness } from '@/src/jam/normalizeJamTabAudioUri'
 import { createPitchClassHistogram, type BestScaleMatch } from '@/src/jam/pitchClassHistogram'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
@@ -85,6 +94,14 @@ export default function JamScreen() {
   const [webMicBlocked, setWebMicBlocked] = useState(false)
   const [micBannerKey, setMicBannerKey] = useState(0)
   const [busy, setBusy] = useState(false)
+  const [personaChoice, setPersonaChoice] = useState<JamPersonaChoice>('encouraging')
+  const [summaryModal, setSummaryModal] = useState<{
+    status: JamSummaryStatus
+    bundle: JamSummaryBundle | null
+    coachSummary: string
+    phrases: JamPhraseMetrics[]
+    track: BackingTrackDefinition | null
+  } | null>(null)
   const [lastJamDiagnostics, setLastJamDiagnostics] = useState<{
     inferredScale: string | null
     confidence: 'low' | 'medium' | 'high'
@@ -115,6 +132,7 @@ export default function JamScreen() {
   const jamLastStemPlayingRef = useRef(false)
   const lastScaleUiAtRef = useRef(0)
   const lastScaleTintRef = useRef<{ rootMidi: number; intervals: readonly number[] } | null>(null)
+  const summaryRunIdRef = useRef(0)
   const classicTrackDef = BACKING_TRACKS.find((t) => t.id === classicTrackId) ?? BACKING_TRACKS[0]
   jamBpmRef.current = classicTrackDef.bpm ?? null
   const activeJamTrackSource = backingMode === 'ai' ? 'AI instrumental · MRT2' : 'Offline loop (bundled)'
@@ -156,6 +174,12 @@ export default function JamScreen() {
           beat_offset_std:
             f.beatOffsetVarianceSec2 != null ? Math.sqrt(f.beatOffsetVarianceSec2) * 1000 : undefined,
           home_pitch_class: uniquePcs[0] ?? null,
+          note_count: phrase.notes.length,
+          intonation_cents: f.meanAbsCents,
+          start_ms: phrase.startTime,
+          end_ms: phrase.endTime,
+          backing_start_ms: f.backingStartMs,
+          backing_end_ms: f.backingEndMs,
           transition_from: accumulatedPhrasesRef.current.length > 0
             ? accumulatedPhrasesRef.current[accumulatedPhrasesRef.current.length - 1]!.home_pitch_class ?? null
             : null,
@@ -194,6 +218,18 @@ export default function JamScreen() {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+    loadJamPersonaChoice()
+      .then((choice) => {
+        if (!cancelled) setPersonaChoice(choice)
+      })
+      .catch((e) => console.warn('[Jam] could not load summary persona', e))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
     const shared = readFretboardShareStateFromLocation()
     if (!shared) return
@@ -218,6 +254,7 @@ export default function JamScreen() {
 
   useEffect(() => {
     return () => {
+      summaryRunIdRef.current += 1
       cancelAnimation(pulse)
       pulse.value = 1
       void stopPitch()
@@ -356,6 +393,8 @@ export default function JamScreen() {
 
   const attemptStartJam = useCallback(async () => {
     if (busy || isJamming) return
+    summaryRunIdRef.current += 1
+    setSummaryModal(null)
     setBusy(true)
     setWebMicBlocked(false)
     phraseSegmenterRef.current?.reset()
@@ -492,8 +531,6 @@ export default function JamScreen() {
     let reliabilityTags: string[] = [...localTags]
     let reliabilityConfidence: 'low' | 'medium' | 'high' = inferenceConfidence
     let reliabilitySignalQuality: number | null = null
-    let summaryBundleJson: string | null = null
-    let phrasesJson: string | null = null
 
     const trackIdForSave = backingMode === 'ai' ? AI_INSTRUMENTAL_TRACK_ID : classicTrackDef.id
     const promptSnap = lastAiPromptRef.current
@@ -539,33 +576,19 @@ export default function JamScreen() {
     const phrases = accumulatedPhrasesRef.current
     accumulatedPhrasesRef.current = []
     prevPhraseEndMsRef.current = null
-    if (phrases.length > 0) {
-      try {
-        const summaryRes = await submitJamSummary({
-          duration_seconds: durationSeconds,
-          pitch_class_weight_map: mergedPitchMap,
-          inferred_scale_label: inferred === '—' ? null : inferred,
-          inference_confidence: inferenceConfidence,
-          track_id: trackIdForSave,
-          track_label: trackLabelForSave,
-          track_key: classicTrackDef.key,
-          track_bpm: classicTrackDef.bpm,
-          phrases,
-          weak_areas: [...weakAreas],
-        })
-        summaryBundleJson = JSON.stringify(summaryRes.bundle)
-        phrasesJson = JSON.stringify(phrases)
-        if (summaryRes.bundle.coach_summary) {
-          coachSummary = summaryRes.bundle.coach_summary
-        }
-      } catch {
-        // Summary is best-effort; jam snapshot still saves without it
-      }
-    }
+    const hasPhrases = phrases.length > 0
+    const phrasesJson = hasPhrases ? JSON.stringify(phrases) : null
+    const summaryStatus: JamSummaryStatus = hasPhrases ? 'pending' : 'skipped'
+    const snapshotId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const practiceTrack = resolveJamPracticeTrack({
+      trackId: trackIdForSave,
+      trackKey: classicTrackDef.key,
+      trackBpm: classicTrackDef.bpm,
+    })
 
     try {
       await insertJamSnapshotRow({
-        id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        id: snapshotId,
         date: new Date().toISOString(),
         duration_seconds: durationSeconds,
         scale_position_map: Object.keys(mergedPitchMap).length > 0 ? mergedPitchMap : pitchClassWeightMap,
@@ -583,8 +606,9 @@ export default function JamScreen() {
         reliability_signal_quality: reliabilitySignalQuality,
         recurring_gestures: [],
         coach_summary: coachSummary,
-        summary_bundle_json: summaryBundleJson,
+        summary_bundle_json: null,
         phrases_json: phrasesJson,
+        summary_status: summaryStatus,
       })
       void useDnaStore.getState().refresh()
     } catch (e) {
@@ -606,11 +630,54 @@ export default function JamScreen() {
       inferredScale: inferred === '—' ? null : inferred,
       confidence: reliabilityConfidence,
       tags: reliabilityTags,
-      summaryBundle: summaryBundleJson ? (() => { try { return JSON.parse(summaryBundleJson) as JamSummaryBundle } catch { return null } })() : null,
+      summaryBundle: null,
+    })
+    setSummaryModal({
+      status: summaryStatus,
+      bundle: null,
+      coachSummary,
+      phrases,
+      track: practiceTrack,
     })
     setBusy(false)
     toast.success('Jam saved.')
     lastAiPromptRef.current = null
+
+    if (hasPhrases) {
+      const runId = ++summaryRunIdRef.current
+      const request = requestJamSummary({
+        duration_seconds: durationSeconds,
+        pitch_class_weight_map: mergedPitchMap,
+        inferred_scale_label: inferred === '—' ? null : inferred,
+        inference_confidence: inferenceConfidence,
+        track_id: trackIdForSave,
+        track_label: trackLabelForSave,
+        track_key: classicTrackDef.key,
+        track_bpm: classicTrackDef.bpm,
+        phrases,
+        personaChoice,
+        weak_areas: weakAreas,
+      })
+      void runJamSummary(snapshotId, request, coachSummary)
+        .then((bundle) => {
+          if (runId !== summaryRunIdRef.current) return
+          setSummaryModal((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: 'ready',
+                  bundle,
+                  coachSummary: bundle.coach_summary || prev.coachSummary,
+                }
+              : prev,
+          )
+          setLastJamDiagnostics((prev) => (prev ? { ...prev, summaryBundle: bundle } : prev))
+        })
+        .catch(() => {
+          if (runId !== summaryRunIdRef.current) return
+          setSummaryModal((prev) => (prev ? { ...prev, status: 'failed' } : prev))
+        })
+    }
   }, [
     backingMode,
     busy,
@@ -619,8 +686,10 @@ export default function JamScreen() {
     classicTrackDef.key,
     classicTrackDef.label,
     isJamming,
+    personaChoice,
     stopPitch,
     stopPulse,
+    weakAreas,
   ])
 
   const retryMic = useCallback(() => {
@@ -659,6 +728,34 @@ export default function JamScreen() {
     )
   }, [overlayMode, scalePitchClasses, scaleRootPitchClass, selectedNote])
 
+  const changePersona = useCallback((choice: JamPersonaChoice) => {
+    setPersonaChoice(choice)
+    void saveJamPersonaChoice(choice).catch((e) => {
+      console.warn('[Jam] could not save summary persona', e)
+      toast.error('Could not save the summary style on this device.')
+    })
+  }, [])
+
+  const practicePhrase = useCallback(
+    (phraseIndex: number, startMs: number | null | undefined, endMs: number | null | undefined) => {
+      const track = summaryModal?.track
+      if (!track || startMs == null || endMs == null || endMs <= startMs) {
+        toast.error('This phrase has no matching backing loop.')
+        return
+      }
+      setSummaryModal(null)
+      router.push(
+        buildJamPracticeHref({
+          trackId: track.id,
+          startMs,
+          endMs,
+          phraseIndex,
+        }),
+      )
+    },
+    [router, summaryModal?.track],
+  )
+
   const toggleFretboardTuner = useCallback(() => {
     void toggleTuner().catch((e) => {
       const message = e instanceof Error ? e.message : String(e)
@@ -675,18 +772,80 @@ export default function JamScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View className="mt-3 mb-2">
-            <Text className="mb-0.5 font-serif text-3xl text-cream">Jam Mode</Text>
-            <Text className="font-sans-medium text-sm text-cream">{classicTrackDef.label}</Text>
-            <Text className="mt-0.5 font-sans text-xs text-cream/80">
-              {activeJamTrackSource}
-              {classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'}
-              {classicTrackDef.key ? ` · ${classicTrackDef.key}` : ''}
-            </Text>
-            {weakAreas.length > 0 ? (
-              <Text className="mt-1 font-sans text-xs text-amber-light/90">
-                Focus: {weakAreas.join(', ')}
+            <View className="flex-row items-start justify-between">
+              <View className="flex-1 pr-3">
+                <Text className="mb-0.5 font-serif text-3xl text-cream">Jam Mode</Text>
+                <Text className="font-sans-medium text-sm text-cream">{classicTrackDef.label}</Text>
+                <Text className="mt-0.5 font-sans text-xs text-cream/80">
+                  {activeJamTrackSource}
+                  {classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'}
+                  {classicTrackDef.key ? ` · ${classicTrackDef.key}` : ''}
+                </Text>
+                {weakAreas.length > 0 ? (
+                  <Text className="mt-1 font-sans text-xs text-amber-light/90">
+                    Focus: {weakAreas.join(', ')}
+                  </Text>
+                ) : null}
+              </View>
+              <AnimatedPressable
+                onPress={() => router.push('/(tabs)/jam/history' as Href)}
+                haptic="light"
+                className="min-h-[44px] flex-row items-center gap-1.5 rounded-xl border border-wood-600/50 px-3"
+                accessibilityRole="button"
+                accessibilityLabel="Open jam history"
+              >
+                <History color={colors.amber.light} size={16} />
+                <Text className="font-sans-medium text-xs text-cream">History</Text>
+              </AnimatedPressable>
+            </View>
+
+            <View className="mt-3 rounded-xl border border-wood-700/45 bg-wood-800/40 px-3 py-2.5">
+              <Text className="font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
+                Summary style
               </Text>
-            ) : null}
+              <View className="mt-2 flex-row gap-2">
+                <AnimatedPressable
+                  onPress={() => changePersona('encouraging')}
+                  haptic="light"
+                  className={`flex-1 rounded-lg border px-3 py-2 ${
+                    personaChoice === 'encouraging'
+                      ? 'border-amber-accent/50 bg-amber-accent/10'
+                      : 'border-wood-700/60'
+                  }`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: personaChoice === 'encouraging' }}
+                  accessibilityLabel="Encouraging coach summary style"
+                >
+                  <Text
+                    className={`text-center font-sans-medium text-xs ${
+                      personaChoice === 'encouraging' ? 'text-amber-light' : 'text-cream/80'
+                    }`}
+                  >
+                    Encouraging coach
+                  </Text>
+                </AnimatedPressable>
+                <AnimatedPressable
+                  onPress={() => changePersona('technical')}
+                  haptic="light"
+                  className={`flex-1 rounded-lg border px-3 py-2 ${
+                    personaChoice === 'technical'
+                      ? 'border-amber-accent/50 bg-amber-accent/10'
+                      : 'border-wood-700/60'
+                  }`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: personaChoice === 'technical' }}
+                  accessibilityLabel="Technical analyst summary style"
+                >
+                  <Text
+                    className={`text-center font-sans-medium text-xs ${
+                      personaChoice === 'technical' ? 'text-amber-light' : 'text-cream/80'
+                    }`}
+                  >
+                    Technical analyst
+                  </Text>
+                </AnimatedPressable>
+              </View>
+            </View>
           </View>
 
           {activePlanJamSlot != null && currentPlan?.slots?.length ? (
@@ -1104,6 +1263,18 @@ export default function JamScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+      <JamSummaryModal
+        visible={summaryModal != null}
+        status={summaryModal?.status ?? 'skipped'}
+        bundle={summaryModal?.bundle ?? null}
+        coachSummary={summaryModal?.coachSummary ?? ''}
+        phrases={summaryModal?.phrases ?? []}
+        track={summaryModal?.track ?? null}
+        onClose={() => setSummaryModal(null)}
+        onPracticePhrase={(feedback, metrics) =>
+          practicePhrase(feedback.phrase_index, metrics.backing_start_ms, metrics.backing_end_ms)
+        }
+      />
     </WoodGradient>
   )
 }

@@ -82,6 +82,7 @@ export default function RootLayout() {
             <Stack.Screen name="review-archive/[sessionId]" />
             <Stack.Screen name="settings/feedback" />
             <Stack.Screen name="session" />
+            <Stack.Screen name="jam-practice" />
           </Stack>
           <Toast config={toastConfig} />
         </View>

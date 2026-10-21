@@ -55,6 +55,15 @@ export interface HarmoniqDbClient {
   applySessionMutation(updates: SkillSessionMutationRow[]): Promise<void>
   insertJamSnapshotRow(input: JamSnapshotInsertInput): Promise<void>
   listJamSnapshots(): Promise<JamSnapshotRow[]>
+  /** Commit 160: persist the background summary result for an existing snapshot. */
+  updateJamSnapshotSummary(
+    id: string,
+    input: {
+      summary_bundle_json: string | null
+      coach_summary: string
+      summary_status: 'pending' | 'ready' | 'failed' | 'skipped'
+    },
+  ): Promise<void>
   insertPracticePlanCompletionRow(input: PracticePlanCompletionInsertInput): Promise<void>
   listPracticePlanCompletions(): Promise<PracticePlanCompletionRow[]>
   buildJournalExportText(): Promise<string>

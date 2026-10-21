@@ -1138,11 +1138,19 @@ class JamPhraseMetrics(BaseModel):
     contour: Literal["rising", "falling", "arch", "static", "mixed"] = Field(
         default="mixed", description="Melodic contour shape"
     )
-    beat_offset_mean: float = Field(default=0.0, description="Mean offset from beat grid (0=on-beat, 0.5=off-beat)")
-    beat_offset_std: float = Field(default=0.0, ge=0, description="Std deviation of beat offset (rhythmic consistency)")
+    beat_offset_mean: float = Field(default=0.0, description="Mean offset from beat grid in milliseconds")
+    beat_offset_std: float = Field(default=0.0, ge=0, description="Std deviation of beat offset in milliseconds")
     home_pitch_class: str | None = Field(default=None, description="Most frequent pitch class in phrase (e.g. 'A', 'E')")
     transition_from: str | None = Field(default=None, description="Previous chord/scale context")
     transition_gap_ms: float = Field(default=0.0, ge=0, description="Silence gap before this phrase (ms)")
+
+    # Commit 160: counted notes, intonation, and absolute/backing timing.
+    note_count: int = Field(default=0, ge=0, description="Number of note onsets in the phrase")
+    intonation_cents: float | None = Field(default=None, description="Mean absolute intonation error in cents")
+    start_ms: float = Field(default=0.0, ge=0, description="Phrase start in the jam clock")
+    end_ms: float = Field(default=0.0, ge=0, description="Phrase end in the jam clock")
+    backing_start_ms: float | None = Field(default=None, ge=0, description="Backing-track position at phrase start")
+    backing_end_ms: float | None = Field(default=None, ge=0, description="Backing-track position at phrase end")
 
 
 class JamVocabularyPattern(BaseModel):
@@ -1160,6 +1168,21 @@ class JamVocabularyPattern(BaseModel):
     description: str = Field(default="", description="Human-readable description of the pattern")
 
 
+class JamPhraseFeedback(BaseModel):
+    """Structured per-phrase feedback returned in the summary bundle."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    phrase_index: int = Field(..., ge=0)
+    chord: str | None = None
+    clarity: float = Field(default=0.0, ge=0.0, le=1.0)
+    intonation_cents: float | None = None
+    timing_ms: float | None = None
+    transition_from: str | None = None
+    transition_gap_ms: float = 0.0
+    suggestion: str = ""
+
+
 class JamSummaryBundle(BaseModel):
     """Model-to-coach JSON bundle — deterministic metrics + Claude-generated coaching."""
 
@@ -1174,6 +1197,17 @@ class JamSummaryBundle(BaseModel):
     timing_ms: float = Field(default=0.0, description="Average timing offset from beat grid in milliseconds")
     transition_from: str | None = Field(default=None, description="Previous chord/scale context")
     transition_gap_ms: float = Field(default=0.0, ge=0, description="Gap before first phrase (ms)")
+
+    # Deterministic grade (server-computed; never set by the LLM)
+    grade: Literal["A", "B", "C", "D", "F"] = Field(default="C", description="Deterministic overall grade")
+    grade_score: float = Field(default=0.0, description="Deterministic overall score (0-100)")
+    grade_breakdown: dict[str, float] = Field(
+        default_factory=dict, description="Duration-weighted component scores (0-100)"
+    )
+    phrase_feedback: list[JamPhraseFeedback] = Field(
+        default_factory=list, description="Per-phrase structured feedback (weakest first)"
+    )
+    weakest_phrase_index: int | None = Field(default=None, description="Index of the lowest-scoring phrase")
 
     # Phrase-level metrics
     phrase_count: int = Field(default=0, ge=0, description="Number of detected phrases")

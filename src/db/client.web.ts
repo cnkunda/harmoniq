@@ -574,7 +574,30 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
     reliability_signal_quality: input.reliability_signal_quality ?? null,
     summary_bundle_json: input.summary_bundle_json ?? null,
     phrases_json: input.phrases_json ?? null,
+    summary_status: input.summary_status ?? null,
   })
+  await flushJams()
+}
+
+export async function updateJamSnapshotSummary(
+  id: string,
+  input: {
+    summary_bundle_json: string | null
+    coach_summary: string
+    summary_status: 'pending' | 'ready' | 'failed' | 'skipped'
+  },
+): Promise<void> {
+  seedWebSkillNodes()
+  const index = jamSnapshots.findIndex((row) => row.id === id)
+  if (index < 0) {
+    throw new Error(`Jam snapshot ${id} not found`)
+  }
+  jamSnapshots[index] = {
+    ...jamSnapshots[index]!,
+    summary_bundle_json: input.summary_bundle_json,
+    coach_summary: input.coach_summary,
+    summary_status: input.summary_status,
+  }
   await flushJams()
 }
 
@@ -603,6 +626,7 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
       coach_summary: j.coach_summary,
       summary_bundle_json: j.summary_bundle_json ?? null,
       phrases_json: j.phrases_json ?? null,
+      summary_status: j.summary_status ?? null,
     }))
 }
 

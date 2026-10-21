@@ -9,6 +9,8 @@ export type JamPhraseNote = {
   midi: number
   /** Loop timeline ms from `expo-av` when the note onset was captured (for beat feel). */
   backingPosMs?: number
+  /** Commit 160: pitch offset in cents captured at the onset. */
+  cents?: number | null
 }
 
 export type JamPhrase = {
@@ -28,6 +30,11 @@ function isSilentFrame(r: PitchReading): boolean {
   const hz = r.hz
   const usable = hz != null && Number.isFinite(hz) && hz > 0
   return !usable
+}
+
+function onsetCents(reading: PitchReading): number | null {
+  const cents = reading.cents
+  return typeof cents === 'number' && Number.isFinite(cents) ? cents : null
 }
 
 /**
@@ -98,10 +105,18 @@ export function createJamPhraseSegmenter(options: JamPhraseSegmenterOptions): {
     const midi = Math.round(reading.midi)
     const pos =
       typeof backingPosMs === 'number' && Number.isFinite(backingPosMs) ? backingPosMs : undefined
+    const cents = onsetCents(reading)
 
     if (!inPhrase) {
       inPhrase = true
-      notes = [{ tMs, midi, ...(pos != null ? { backingPosMs: pos } : {}) }]
+      notes = [
+        {
+          tMs,
+          midi,
+          ...(pos != null ? { backingPosMs: pos } : {}),
+          ...(cents != null ? { cents } : {}),
+        },
+      ]
       lastMidi = midi
       lastOnsetMs = tMs
       return
@@ -113,7 +128,12 @@ export function createJamPhraseSegmenter(options: JamPhraseSegmenterOptions): {
     }
 
     if (Math.abs(midi - lastMidi) >= 1 && tMs - lastOnsetMs >= onsetDebounceMs) {
-      notes.push({ tMs, midi, ...(pos != null ? { backingPosMs: pos } : {}) })
+      notes.push({
+        tMs,
+        midi,
+        ...(pos != null ? { backingPosMs: pos } : {}),
+        ...(cents != null ? { cents } : {}),
+      })
       lastMidi = midi
       lastOnsetMs = tMs
     }

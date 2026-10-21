@@ -13,6 +13,11 @@ function feat(partial: Partial<JamPhraseFeatures>): JamPhraseFeatures {
     meanBeatOffsetSec: null,
     beatOffsetVarianceSec2: null,
     noteCount: 3,
+    meanAbsCents: null,
+    startMs: 0,
+    endMs: 1200,
+    backingStartMs: null,
+    backingEndMs: null,
     ...partial,
   }
 }

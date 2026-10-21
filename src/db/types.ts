@@ -154,6 +154,9 @@ export type LickInsertInput = {
   date_saved: string
 }
 
+/** Commit 160: lifecycle of the post-jam summary for a snapshot. Legacy null = ready. */
+export type JamSummaryStatus = 'pending' | 'ready' | 'failed' | 'skipped'
+
 /** Row from `jam_snapshots` for export / listing. */
 export type JamSnapshotRow = {
   id: string
@@ -182,6 +185,8 @@ export type JamSnapshotRow = {
   summary_bundle_json: string | null
   /** Serialized JamPhraseMetrics[] captured during the jam session. */
   phrases_json: string | null
+  /** Commit 160: summary lifecycle; undefined/null legacy rows are treated as ready. */
+  summary_status?: JamSummaryStatus | null
 }
 
 /** Row when the user finishes a practice plan from Jam (final step). */
@@ -222,6 +227,8 @@ export type JamSnapshotInsertInput = {
   summary_bundle_json?: string | null
   /** Serialized JamPhraseMetrics[] captured during the jam session. */
   phrases_json?: string | null
+  /** Commit 160: summary lifecycle for retry/history. */
+  summary_status?: JamSummaryStatus | null
 }
 
 export type LickRow = {

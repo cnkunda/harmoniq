@@ -62,4 +62,29 @@ describe('createJamPhraseSegmenter', () => {
     seg.push(silent(), 600, 600)
     expect(onClosed).not.toHaveBeenCalled()
   })
+
+  it('captures cents at each onset', () => {
+    const closed: { notes: { cents?: number | null }[] }[] = []
+    const seg = createJamPhraseSegmenter({
+      onPhraseClosed: (p) => closed.push(p),
+    })
+    seg.push({ ...readingHz(440), cents: 12 }, 0, 0)
+    seg.push({ ...readingHz(523.25), cents: -7 }, 200, 200)
+    seg.push({ ...readingHz(659.25), cents: 3 }, 400, 400)
+    seg.flush(500)
+
+    expect(closed[0]!.notes.map((n) => n.cents)).toEqual([12, -7, 3])
+  })
+
+  it('omits cents when the reading does not carry it', () => {
+    const closed: { notes: { cents?: number | null }[] }[] = []
+    const seg = createJamPhraseSegmenter({
+      onPhraseClosed: (p) => closed.push(p),
+    })
+    const { cents: _cents, ...readingWithoutCents } = readingHz(440)
+    seg.push(readingWithoutCents as PitchReading, 0, 0)
+    seg.flush(100)
+
+    expect('cents' in closed[0]!.notes[0]!).toBe(false)
+  })
 })

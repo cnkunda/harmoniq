@@ -17,6 +17,7 @@ import {
     MIGRATION_V16_JAM_SNAPSHOT_INFERRED_MODE,
     MIGRATION_V17_USER_FEEDBACK,
     MIGRATION_V17_USER_FEEDBACK_UNIQUE_INDEX,
+    MIGRATION_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
     MIGRATION_V3_APP_PREFS,
     MIGRATION_V4_SESSIONS_REVIEW,
     MIGRATION_V5_LICKS_STEMS_JSON,
@@ -35,6 +36,7 @@ import {
     ROLLBACK_V15_JAM_SNAPSHOT_SUMMARY,
     ROLLBACK_V16_JAM_SNAPSHOT_INFERRED_MODE,
     ROLLBACK_V17_USER_FEEDBACK,
+    ROLLBACK_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
     ROLLBACK_V4_SESSIONS_REVIEW,
     ROLLBACK_V5_LICKS_STEMS_JSON,
     ROLLBACK_V6_JAM_SNAPSHOT_CONTEXT,
@@ -355,6 +357,19 @@ async function applyMigrations(): Promise<void> {
       } else {
         await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 17, new Date().toISOString())
       }
+    }
+  }
+  if (current < 18) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(jam_snapshots)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    if (!names.has('summary_status')) {
+      await applyMigrationWithRollback(
+        18,
+        MIGRATION_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
+        ROLLBACK_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
+      )
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 18, new Date().toISOString())
     }
   }
   for (const n of DEFAULT_SKILL_NODES) {
@@ -763,8 +778,8 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
      (id, date, duration_seconds, scale_position_map, pitch_class_weight_map, position_weight_map,
       inferred_scale_label, inferred_mode, inference_confidence, track_id, track_label, track_key, track_bpm,
       reliability_tags, reliability_confidence, reliability_signal_quality,
-      recurring_gestures, coach_summary, summary_bundle_json, phrases_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      recurring_gestures, coach_summary, summary_bundle_json, phrases_json, summary_status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.id,
     input.date,
     input.duration_seconds,
@@ -785,7 +800,32 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
     input.coach_summary,
     input.summary_bundle_json ?? null,
     input.phrases_json ?? null,
+    input.summary_status ?? null,
   )
+}
+
+export async function updateJamSnapshotSummary(
+  id: string,
+  input: {
+    summary_bundle_json: string | null
+    coach_summary: string
+    summary_status: 'pending' | 'ready' | 'failed' | 'skipped'
+  },
+): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  const result = await db.runAsync(
+    `UPDATE jam_snapshots
+     SET summary_bundle_json = ?, coach_summary = ?, summary_status = ?
+     WHERE id = ?`,
+    input.summary_bundle_json,
+    input.coach_summary,
+    input.summary_status,
+    id,
+  )
+  if (result.changes === 0) {
+    throw new Error(`Jam snapshot ${id} not found`)
+  }
 }
 
 export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
@@ -812,6 +852,7 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
     coach_summary: string | null
     summary_bundle_json: string | null
     phrases_json: string | null
+    summary_status: string | null
   }>('SELECT * FROM jam_snapshots ORDER BY date DESC')
   return (rows ?? []).map((r) => ({
     id: r.id,
@@ -837,6 +878,13 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
     coach_summary: r.coach_summary ?? '',
     summary_bundle_json: r.summary_bundle_json ?? null,
     phrases_json: r.phrases_json ?? null,
+    summary_status:
+      r.summary_status === 'pending' ||
+      r.summary_status === 'ready' ||
+      r.summary_status === 'failed' ||
+      r.summary_status === 'skipped'
+        ? r.summary_status
+        : null,
   }))
 }
 

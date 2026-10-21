@@ -145,6 +145,9 @@ export const PREF_VOICE_COACH_GENDER = 'voice_coach_gender'
 /** Commit 159: anonymous per-install id attached to exported feedback. */
 export const PREF_FEEDBACK_USER_ID = 'feedback_user_id'
 
+/** Commit 160: persisted post-jam coaching persona (`encouraging` | `technical`). */
+export const PREF_JAM_SUMMARY_PERSONA = 'jam_summary_persona'
+
 export const COACH_VOICE_OPTIONS = ['warm', 'concise', 'technical'] as const
 export type CoachVoiceId = (typeof COACH_VOICE_OPTIONS)[number]
 
@@ -312,6 +315,14 @@ export const ROLLBACK_V17_USER_FEEDBACK = [
 /** Partial-recovery path when the v17 table already exists but the dedupe index was not created. */
 export const MIGRATION_V17_USER_FEEDBACK_UNIQUE_INDEX =
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_user_feedback_job_type_event ON user_feedback (job_id, feedback_type, event_index)'
+
+/** v18: post-jam summary lifecycle (`pending` | `ready` | `failed` | `skipped`). */
+export const MIGRATION_V18_JAM_SNAPSHOT_SUMMARY_STATUS =
+  'ALTER TABLE jam_snapshots ADD COLUMN summary_status TEXT'
+
+/** Rollback for v18: remove summary_status column. */
+export const ROLLBACK_V18_JAM_SNAPSHOT_SUMMARY_STATUS =
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS summary_status'
 
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'pitch_accuracy', label: 'Pitch accuracy' },

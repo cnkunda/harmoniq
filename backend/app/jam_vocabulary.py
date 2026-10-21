@@ -295,7 +295,12 @@ def extract_bundle_metrics(
             "pitch_class_distribution": pitch_class_weight_map,
         }
 
-    total_notes = sum(max(int(p.notes_per_second * (p.duration_ms / 1000)), 1) for p in phrases)
+    total_notes = sum(
+        p.note_count
+        if p.note_count > 0
+        else max(int(round(p.notes_per_second * (p.duration_ms / 1000))), 1)
+        for p in phrases
+    )
     avg_nps = np.mean([p.notes_per_second for p in phrases]) if phrases else 0.0
     dominant_contour = _compute_contour(phrases)
 
@@ -307,12 +312,14 @@ def extract_bundle_metrics(
     else:
         clarity = 0.0
 
-    # Timing: mean beat offset in milliseconds
-    timing_values = [p.beat_offset_mean * (60000 / max(p.beat_offset_mean * 1000, 1)) for p in phrases]
-    timing_ms = float(np.mean(timing_values)) if timing_values else 0.0
+    # Timing: mean signed beat offset in milliseconds (device reports ms).
+    timing_ms = float(np.mean([p.beat_offset_mean for p in phrases])) if phrases else 0.0
 
-    # Intonation: placeholder (would need frequency data)
-    intonation_cents: dict[str, float] = {}
+    # Intonation: per-phrase mean absolute cents rolled up for the legacy dict field.
+    intonation_values = [p.intonation_cents for p in phrases if p.intonation_cents is not None]
+    intonation_cents: dict[str, float] = (
+        {"mean_abs": round(float(np.mean(intonation_values)), 1)} if intonation_values else {}
+    )
 
     # Vocabulary diversity
     diversity = _compute_vocabulary_diversity(phrases)

@@ -12,6 +12,12 @@ export type JamPhraseFeatures = {
   meanBeatOffsetSec: number | null
   beatOffsetVarianceSec2: number | null
   noteCount: number
+  /** Commit 160: mean absolute onset intonation error in cents. */
+  meanAbsCents: number | null
+  startMs: number
+  endMs: number
+  backingStartMs: number | null
+  backingEndMs: number | null
 }
 
 function signedBeatOffsetSec(absoluteSec: number, beatPeriodSec: number): number {
@@ -68,6 +74,27 @@ export function phraseToFeatures(phrase: JamPhrase, bpm: number | null | undefin
   const notesPerSecond = durationSec > 0.05 ? noteCount / durationSec : 0
   const contour = classifyContour(midis)
 
+  const cents = notes
+    .map((n) => n.cents)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  const meanAbsCents =
+    cents.length > 0 ? cents.reduce((sum, value) => sum + Math.abs(value), 0) / cents.length : null
+
+  let firstBackingMs: number | null = null
+  let lastBackingMs: number | null = null
+  let lastBackingNoteTMs: number | null = null
+  for (const note of notes) {
+    if (typeof note.backingPosMs !== 'number' || !Number.isFinite(note.backingPosMs)) continue
+    if (firstBackingMs == null) firstBackingMs = note.backingPosMs
+    lastBackingMs = note.backingPosMs
+    lastBackingNoteTMs = note.tMs
+  }
+  const backingStartMs = firstBackingMs
+  const backingEndMs =
+    lastBackingMs == null || lastBackingNoteTMs == null
+      ? null
+      : lastBackingMs + Math.max(0, phrase.endTime - lastBackingNoteTMs)
+
   let meanBeatOffsetSec: number | null = null
   let beatOffsetVarianceSec2: number | null = null
 
@@ -97,5 +124,10 @@ export function phraseToFeatures(phrase: JamPhrase, bpm: number | null | undefin
     meanBeatOffsetSec,
     beatOffsetVarianceSec2,
     noteCount,
+    meanAbsCents,
+    startMs: phrase.startTime,
+    endMs: phrase.endTime,
+    backingStartMs,
+    backingEndMs,
   }
 }

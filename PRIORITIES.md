@@ -104,7 +104,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 160: Jam Mode Summary Agent (was C2)
 
-**Status:** deferred
+**Status:** Complete
 
 **Goal:** Post-jam, Claude-powered phrase-level analysis with a persona toggle — grade, strengths/weaknesses, and a one-tap "practice this phrase" loop launcher.
 
@@ -126,12 +126,12 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] Saving a jam triggers summary generation without blocking the save
-- [ ] Post-jam modal shows grade, strengths, improvements, and per-phrase suggestions
-- [ ] "Practice this phrase" launches slow loop on the weakest phrase
-- [ ] Summaries persist and appear in jam history
-- [ ] Both personas toggle correctly
-- [ ] Backend tests green; LLM failure degrades gracefully (jam saves without summary)
+- [x] Saving a jam triggers summary generation without blocking the save
+- [x] Post-jam modal shows grade, strengths, improvements, and per-phrase suggestions
+- [x] "Practice this phrase" launches slow loop on the weakest phrase
+- [x] Summaries persist and appear in jam history
+- [x] Both personas toggle correctly
+- [x] Backend tests green; LLM failure degrades gracefully (jam saves without summary)
 
 ---
 
