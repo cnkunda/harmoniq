@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Svg, { Circle as SvgCircle, Line as SvgLine, Polygon as SvgPolygon } from 'react-native-svg'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { SettingsSegmented } from '@/components/settings/SettingsSegmented'
 import { WoodGradient } from '@/components/WoodGradient'
 import { RecentProgress } from '@/components/RecentProgress'
 import { toast } from '@/components/ToastConfig'
@@ -248,6 +249,8 @@ export default function HomeScreen() {
 
   const currentPlan = usePlanStore((s) => s.currentPlan)
   const planSlotIndex = usePlanStore((s) => s.currentSlotIndex)
+  const homePracticeMode = useSessionPrefsStore((s) => s.homePracticeMode)
+  const setHomePracticeMode = useSessionPrefsStore((s) => s.setHomePracticeMode)
 
   const validPlanSlotIndex = useMemo(() => {
     if (!practicePlan?.slots?.length || !currentPlan?.slots?.length) return 0
@@ -321,6 +324,13 @@ export default function HomeScreen() {
           return
         }
 
+        // Commit 164: single-song mode skips plan generation; active plans still resume above.
+        if (homePracticeMode === 'single') {
+          setPracticePlan(null)
+          setPracticePlanLoading(false)
+          return
+        }
+
         const planState = usePlanStore.getState()
         const cachedPreview = planState.homePreviewPlan
         const hasMultiLessonLibrary = lessons.length >= 2
@@ -384,7 +394,7 @@ export default function HomeScreen() {
           setPracticePlan(null)
         }
       })
-  }, [lickDateOffset])
+  }, [lickDateOffset, homePracticeMode])
 
   useFocusEffect(
     useCallback(() => {
@@ -599,6 +609,19 @@ export default function HomeScreen() {
             <Text className="mb-1 font-serif text-3xl text-cream">{getGreeting(displayName)}</Text>
             <Text className="font-sans text-base text-muted-brown">Ready to play?</Text>
           </View>
+
+          {suggestion != null && suggestion.kind !== 'cold_start' && practicePlanMode !== 'resume' ? (
+            <View className="mb-4">
+              <SettingsSegmented
+                label="Practice mode"
+                options={['Practice a song', 'Follow a plan']}
+                value={homePracticeMode === 'single' ? 'Practice a song' : 'Follow a plan'}
+                onValueChange={(value) => {
+                  void setHomePracticeMode(value === 'Practice a song' ? 'single' : 'plan')
+                }}
+              />
+            </View>
+          ) : null}
 
           <WoodGradient
             variant="translucentCard"

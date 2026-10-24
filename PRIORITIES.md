@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 164–183** (149, 151–162 completed → archived; **163 complete → pending commit**). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 164–183** (149, 151–162 completed → archived; **163 complete → archived; 164 complete → pending commit**). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -92,7 +92,7 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-## Active Backlog — Commits 163–183
+## Active Backlog — Commits 164–183
 
 Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
 
@@ -136,7 +136,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 164: Mastery & Integrity (was C6)
 
-**Status:** deferred
+**Status:** complete — ready for commit
 
 **Goal:** Make dynamic-session state crash-safe (atomic transactions, resume-on-restart) and add an explicit single-song vs follow-a-plan mode toggle.
 
@@ -158,11 +158,21 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] Skill + plan mutations are transactional (kill-mid-write leaves consistent state)
-- [ ] Incomplete session detected on restart with resume offer
-- [ ] Home toggle switches single vs dynamic modes
-- [ ] Replaying the same session result does not double-count mastery
-- [ ] Migration + tests green on both platforms
+- [x] Skill + plan mutations are transactional (kill-mid-write leaves consistent state)
+- [x] Incomplete session detected on restart with resume offer
+- [x] Home toggle switches single vs dynamic modes
+- [x] Replaying the same session result does not double-count mastery
+- [x] Migration + tests green on both platforms
+
+**Implementation notes:**
+
+- **Scope reconciliation with Commit 162:** 162 already shipped `practice_plans` (SQLite v20 / IDB v7), plan resume on restart (`resumeActivePracticePlan` in the root layout), and the dynamic multi-slot flow, so that AC ("incomplete session detected on restart with resume offer") is satisfied by plan resume. Rather than a separate `session_state` table, `practice_plans` gains a nullable `session_id` (v21 / IDB v8) and remains the single session-state store. Single-song resume is out of scope.
+- **Atomicity:** native `withTransactionAsync` now wraps `commitScoredSession`, `finalizePracticePlan`, `startActivePracticePlanRow` (the abandon-active + insert-new dual write), `commitTasteQuizProfile`, `seedPlacementBaseline`, and `clearAllPracticeData`. `insertAnalyticsEvents` already used a transaction. The `/score` network call in Review stays outside the transaction.
+- **Idempotency:** a stable `latestTakeId` is minted when a take is captured (`usePlayCapture`). `commitScoredSession` checks the new `applied_sessions` ledger inside the same transaction; a replay with the same id returns `{ applied: false }` and writes nothing. The standalone `applyReviewSkillUpdates` / `applySessionMutation` methods and `skillStore.applySessionMutation` were deleted; their logic lives in transaction-scoped internal helpers, preserving the SM-2 → re-read → technique-EMA ordering.
+- **Plan finalization:** `finalizePracticePlan` writes completion history + session row + `completed` status atomically and no-ops if the plan is already completed.
+- **Home mode toggle:** `SettingsSegmented` on Home switches "Practice a song" (single) vs "Follow a plan" (dynamic), persisted as `home_practice_mode` (default `plan`). Single mode skips plan generation so the single-song suggestion renders; an active resumable plan still pre-empts the toggle.
+- **Deliberate choices:** no backend changes (the session id is client-minted); web parity is best-effort single-tab because IndexedDB cross-store transactions are not used by the existing `flush*` helpers; clearing practice data also clears the ledger.
+- **Verification:** `npm run lint` 0 errors; vitest 560 passed; Playwright non-visual 71 passed; Playwright visual 52 passed after refreshing stale baselines that predated Commits 160–163 (onboarding analytics notice, jam History/summary controls, newly added routes) and fixing a pre-existing unhandled microphone-start rejection on the Tune screen. Native migration was typechecked but no device/simulator smoke test was run.
 
 ---
 

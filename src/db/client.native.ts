@@ -20,6 +20,7 @@ import {
     MIGRATION_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
     MIGRATION_V19_ANALYTICS_EVENTS,
     MIGRATION_V20_PRACTICE_PLANS,
+    MIGRATION_V21_SESSION_INTEGRITY,
     MIGRATION_V3_APP_PREFS,
     MIGRATION_V4_SESSIONS_REVIEW,
     MIGRATION_V5_LICKS_STEMS_JSON,
@@ -41,6 +42,7 @@ import {
     ROLLBACK_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
     ROLLBACK_V19_ANALYTICS_EVENTS,
     ROLLBACK_V20_PRACTICE_PLANS,
+    ROLLBACK_V21_SESSION_INTEGRITY,
     ROLLBACK_V4_SESSIONS_REVIEW,
     ROLLBACK_V5_LICKS_STEMS_JSON,
     ROLLBACK_V6_JAM_SNAPSHOT_CONTEXT,
@@ -50,6 +52,9 @@ import {
 } from '@/src/db/schema'
 import type {
     AnalyticsEventRow,
+    CommitScoredSessionInput,
+    CommitScoredSessionResult,
+    FinalizePracticePlanInput,
     GhostReferenceRow,
     HomeSuggestion,
     JamSnapshotInsertInput,
@@ -70,7 +75,6 @@ import type {
     SessionInsertInput,
     SessionJournalRow,
     SkillNodeRow,
-    SkillSessionMutationRow,
     UserFeedbackInsertInput,
     UserFeedbackRow,
     UserFeedbackStats,
@@ -78,6 +82,7 @@ import type {
 import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { buildFeedbackStats } from '@/src/utils/feedback'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
+import { computeSkillMutations, type NoteAccuracyBeats } from '@/src/session/skillMutator'
 import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 
 type DbHandle = Awaited<ReturnType<typeof SQLite.openDatabaseAsync>>
@@ -387,6 +392,25 @@ async function applyMigrations(): Promise<void> {
   if (current < 20) {
     await applyMigrationWithRollback(20, MIGRATION_V20_PRACTICE_PLANS, ROLLBACK_V20_PRACTICE_PLANS)
   }
+  if (current < 21) {
+    const planCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(practice_plans)')
+    const hasSessionId = (planCols ?? []).some((c) => c.name === 'session_id')
+    const ledgerTables = await db.getAllAsync<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'applied_sessions'",
+    )
+    const hasLedger = (ledgerTables ?? []).length > 0
+    if (hasSessionId && hasLedger) {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 21, new Date().toISOString())
+    } else {
+      const pendingStatements: string[] = []
+      if (!hasSessionId) pendingStatements.push(MIGRATION_V21_SESSION_INTEGRITY[0])
+      if (!hasLedger) {
+        pendingStatements.push(MIGRATION_V21_SESSION_INTEGRITY[1])
+        pendingStatements.push(MIGRATION_V21_SESSION_INTEGRITY[2])
+      }
+      await applyMigrationWithRollback(21, pendingStatements, ROLLBACK_V21_SESSION_INTEGRITY)
+    }
+  }
   for (const n of DEFAULT_SKILL_NODES) {
     await db.runAsync(
       `INSERT OR IGNORE INTO skill_nodes
@@ -406,6 +430,10 @@ export async function initDb(): Promise<void> {
 export async function insertSessionRow(input: SessionInsertInput): Promise<void> {
   await initDb()
   const db = await getDb()
+  await insertSessionRowInternal(db, input)
+}
+
+async function insertSessionRowInternal(db: DbHandle, input: SessionInsertInput): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO sessions
      (id, song_title, artist, section_label, date, coach_review, pitch_accuracy, phrasing_score, nodes_targeted,
@@ -605,35 +633,45 @@ export async function commitTasteQuizProfile(
   await initDb()
   const db = await getDb()
   const tier = experienceLevel === 'beginner' ? 0.2 : experienceLevel === 'advanced' ? 0.7 : 0.5
-  await setAppPref(PREF_TASTE_PROFILE_JSON, JSON.stringify(taste))
-  await setAppPref(PREF_EXPERIENCE_LEVEL, experienceLevel)
   const rows = await getAllSkillNodes()
-  for (const n of DEFAULT_SKILL_NODES) {
-    const row = rows.find((r) => r.id === n.id)
-    if (!row) continue
-    const u = deriveSkillNodeAfterSession(
-      {
-        score: row.score,
-        easiness_factor: row.easiness_factor,
-        interval_days: row.interval_days,
-        sm2_repetitions: row.sm2_repetitions,
-        sessions_count: row.sessions_count,
-      },
-      tier,
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'INSERT OR REPLACE INTO app_prefs (key, value) VALUES (?, ?)',
+      PREF_TASTE_PROFILE_JSON,
+      JSON.stringify(taste),
     )
     await db.runAsync(
-      `UPDATE skill_nodes SET score = ?, easiness_factor = ?, interval_days = ?, sm2_repetitions = ?,
-       next_review_date = ?, sessions_count = ?, last_session_date = ? WHERE id = ?`,
-      u.score,
-      u.easiness_factor,
-      u.interval_days,
-      u.sm2_repetitions,
-      u.next_review_date,
-      u.sessions_count,
-      u.last_session_date,
-      n.id,
+      'INSERT OR REPLACE INTO app_prefs (key, value) VALUES (?, ?)',
+      PREF_EXPERIENCE_LEVEL,
+      experienceLevel,
     )
-  }
+    for (const n of DEFAULT_SKILL_NODES) {
+      const row = rows.find((r) => r.id === n.id)
+      if (!row) continue
+      const u = deriveSkillNodeAfterSession(
+        {
+          score: row.score,
+          easiness_factor: row.easiness_factor,
+          interval_days: row.interval_days,
+          sm2_repetitions: row.sm2_repetitions,
+          sessions_count: row.sessions_count,
+        },
+        tier,
+      )
+      await db.runAsync(
+        `UPDATE skill_nodes SET score = ?, easiness_factor = ?, interval_days = ?, sm2_repetitions = ?,
+         next_review_date = ?, sessions_count = ?, last_session_date = ? WHERE id = ?`,
+        u.score,
+        u.easiness_factor,
+        u.interval_days,
+        u.sm2_repetitions,
+        u.next_review_date,
+        u.sessions_count,
+        u.last_session_date,
+        n.id,
+      )
+    }
+  })
 }
 
 /**
@@ -643,33 +681,35 @@ export async function commitTasteQuizProfile(
 async function seedPlacementBaseline(aggregatedNodeScores: Record<string, number>): Promise<void> {
   await initDb()
   const db = await getDb()
-  for (const n of DEFAULT_SKILL_NODES) {
-    const raw = aggregatedNodeScores[n.id]
-    const sessionScore =
-      typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0.05, Math.min(1, raw)) : 0.15
-    const u = deriveSkillNodeAfterSession(
-      {
-        score: 0,
-        easiness_factor: 2.5,
-        interval_days: 1,
-        sm2_repetitions: 0,
-        sessions_count: 0,
-      },
-      sessionScore,
-    )
-    await db.runAsync(
-      `UPDATE skill_nodes SET score = ?, easiness_factor = ?, interval_days = ?, sm2_repetitions = ?,
-       next_review_date = ?, sessions_count = ?, last_session_date = ? WHERE id = ?`,
-      u.score,
-      u.easiness_factor,
-      u.interval_days,
-      u.sm2_repetitions,
-      u.next_review_date,
-      u.sessions_count,
-      u.last_session_date,
-      n.id,
-    )
-  }
+  await db.withTransactionAsync(async () => {
+    for (const n of DEFAULT_SKILL_NODES) {
+      const raw = aggregatedNodeScores[n.id]
+      const sessionScore =
+        typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0.05, Math.min(1, raw)) : 0.15
+      const u = deriveSkillNodeAfterSession(
+        {
+          score: 0,
+          easiness_factor: 2.5,
+          interval_days: 1,
+          sm2_repetitions: 0,
+          sessions_count: 0,
+        },
+        sessionScore,
+      )
+      await db.runAsync(
+        `UPDATE skill_nodes SET score = ?, easiness_factor = ?, interval_days = ?, sm2_repetitions = ?,
+         next_review_date = ?, sessions_count = ?, last_session_date = ? WHERE id = ?`,
+        u.score,
+        u.easiness_factor,
+        u.interval_days,
+        u.sm2_repetitions,
+        u.next_review_date,
+        u.sessions_count,
+        u.last_session_date,
+        n.id,
+      )
+    }
+  })
 }
 
 export async function getLatestSessionWithSong(): Promise<LatestSessionSongRow | null> {
@@ -718,23 +758,7 @@ export async function getHomeSuggestion(): Promise<HomeSuggestion> {
   return { kind: 'ready', node, song }
 }
 
-export async function applySessionMutation(updates: SkillSessionMutationRow[]): Promise<void> {
-  if (updates.length === 0) return
-  await initDb()
-  const db = await getDb()
-  for (const u of updates) {
-    await db.runAsync(
-      'UPDATE skill_nodes SET score = ?, technique_roll_json = ? WHERE id = ?',
-      u.score,
-      u.technique_roll_json,
-      u.id,
-    )
-  }
-}
-
-export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Promise<void> {
-  await initDb()
-  const db = await getDb()
+async function applyReviewSkillUpdatesInternal(db: DbHandle, input: ReviewSkillUpdateInput): Promise<void> {
   for (const id of input.targeted_node_ids) {
     const row = await db.getFirstAsync<{
       id: string
@@ -781,6 +805,96 @@ export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Pr
       id,
     )
   }
+}
+
+/** Technique EMA + rolling history; reads post-SM-2 rows so ordering matches Review. */
+async function applyTechniqueEmaInternal(
+  db: DbHandle,
+  beats: NoteAccuracyBeats,
+  section: unknown,
+): Promise<void> {
+  const rows = await db.getAllAsync<SkillNodeRow>('SELECT * FROM skill_nodes')
+  const nodesById = new Map(
+    (rows ?? []).map((n) => [n.id, { score: n.score, technique_roll_json: n.technique_roll_json ?? null }]),
+  )
+  const updates = computeSkillMutations({ nodesById, beats, section })
+  for (const u of updates) {
+    await db.runAsync(
+      'UPDATE skill_nodes SET score = ?, technique_roll_json = ? WHERE id = ?',
+      u.score,
+      u.technique_roll_json,
+      u.id,
+    )
+  }
+}
+
+/**
+ * Commit 164: atomic + idempotent scored-session write.
+ * Replays with the same `session.id` are no-ops via the `applied_sessions` ledger.
+ */
+export async function commitScoredSession(
+  input: CommitScoredSessionInput,
+): Promise<CommitScoredSessionResult> {
+  await initDb()
+  const db = await getDb()
+  const sessionId = input.session.id
+  const now = new Date().toISOString()
+  let applied = false
+  await db.withTransactionAsync(async () => {
+    const existing = await db.getFirstAsync<{ session_id: string }>(
+      'SELECT session_id FROM applied_sessions WHERE session_id = ?',
+      sessionId,
+    )
+    if (existing) return
+    await insertSessionRowInternal(db, input.session)
+    await applyReviewSkillUpdatesInternal(db, input.reviewUpdates)
+    if (input.applyTechniqueEma) {
+      await applyTechniqueEmaInternal(db, input.beats, input.section)
+    }
+    await db.runAsync(
+      'INSERT INTO applied_sessions (session_id, applied_at, plan_id) VALUES (?, ?, ?)',
+      sessionId,
+      now,
+      input.plan_id ?? null,
+    )
+    if (input.plan_id) {
+      await db.runAsync(
+        'UPDATE practice_plans SET session_id = ?, updated_at = ? WHERE plan_id = ?',
+        sessionId,
+        now,
+        input.plan_id,
+      )
+    }
+    applied = true
+  })
+  return { applied }
+}
+
+/** Commit 164: completion history + session row + plan status in one transaction. */
+export async function finalizePracticePlan(input: FinalizePracticePlanInput): Promise<void> {
+  await initDb()
+  const db = await getDb()
+  const now = new Date().toISOString()
+  await db.withTransactionAsync(async () => {
+    const row = await db.getFirstAsync<{ status: string }>(
+      'SELECT status FROM practice_plans WHERE plan_id = ?',
+      input.plan_id,
+    )
+    if (row?.status === 'completed') return
+    await db.runAsync(
+      'INSERT OR REPLACE INTO practice_plan_completions (id, completed_at, plan_json) VALUES (?, ?, ?)',
+      input.completion.id,
+      input.completion.completed_at,
+      input.completion.plan_json,
+    )
+    await insertSessionRowInternal(db, input.session)
+    await db.runAsync(
+      'UPDATE practice_plans SET status = ?, updated_at = ? WHERE plan_id = ?',
+      'completed',
+      now,
+      input.plan_id,
+    )
+  })
 }
 
 export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promise<void> {
@@ -938,6 +1052,7 @@ function mapPracticePlanRow(row: PracticePlanRow): PracticePlanRow {
     plan_json: row.plan_json,
     slot_results_json: row.slot_results_json || '[]',
     adaptation_log: row.adaptation_log || '[]',
+    session_id: row.session_id ?? null,
     started_at: row.started_at,
     updated_at: row.updated_at,
   }
@@ -948,29 +1063,32 @@ export async function startActivePracticePlanRow(input: PracticePlanStartInput):
   const db = await getDb()
   const now = new Date().toISOString()
   const startedAt = input.started_at ?? now
-  await db.runAsync(
-    `UPDATE practice_plans SET status = 'abandoned', updated_at = ? WHERE status = 'active'`,
-    now,
-  )
-  await db.runAsync(
-    `INSERT OR REPLACE INTO practice_plans
-     (plan_id, status, current_slot_index, plan_json, slot_results_json, adaptation_log, started_at, updated_at)
-     VALUES (?, 'active', ?, ?, ?, ?, ?, ?)`,
-    input.plan_id,
-    Math.max(0, Math.floor(input.current_slot_index ?? 0)),
-    input.plan_json,
-    input.slot_results_json ?? '[]',
-    input.adaptation_log ?? '[]',
-    startedAt,
-    now,
-  )
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `UPDATE practice_plans SET status = 'abandoned', updated_at = ? WHERE status = 'active'`,
+      now,
+    )
+    await db.runAsync(
+      `INSERT OR REPLACE INTO practice_plans
+       (plan_id, status, current_slot_index, plan_json, slot_results_json, adaptation_log, session_id, started_at, updated_at)
+       VALUES (?, 'active', ?, ?, ?, ?, ?, ?, ?)`,
+      input.plan_id,
+      Math.max(0, Math.floor(input.current_slot_index ?? 0)),
+      input.plan_json,
+      input.slot_results_json ?? '[]',
+      input.adaptation_log ?? '[]',
+      input.session_id ?? null,
+      startedAt,
+      now,
+    )
+  })
 }
 
 export async function getActivePracticePlanRow(): Promise<PracticePlanRow | null> {
   await initDb()
   const db = await getDb()
   const rows = await db.getAllAsync<PracticePlanRow>(
-    `SELECT plan_id, status, current_slot_index, plan_json, slot_results_json, adaptation_log, started_at, updated_at
+    `SELECT plan_id, status, current_slot_index, plan_json, slot_results_json, adaptation_log, session_id, started_at, updated_at
      FROM practice_plans WHERE status = 'active' ORDER BY updated_at DESC LIMIT 1`,
   )
   const row = rows?.[0]
@@ -984,7 +1102,7 @@ export async function updatePracticePlanRowState(
   await initDb()
   const db = await getDb()
   const fields: string[] = []
-  const args: (string | number)[] = []
+  const args: (string | number | null)[] = []
   if (update.plan_json !== undefined) {
     fields.push('plan_json = ?')
     args.push(update.plan_json)
@@ -1000,6 +1118,10 @@ export async function updatePracticePlanRowState(
   if (update.adaptation_log !== undefined) {
     fields.push('adaptation_log = ?')
     args.push(update.adaptation_log)
+  }
+  if (update.session_id !== undefined) {
+    fields.push('session_id = ?')
+    args.push(update.session_id)
   }
   fields.push('updated_at = ?')
   args.push(update.updated_at ?? new Date().toISOString())
@@ -1049,19 +1171,22 @@ export async function buildJournalExportText(): Promise<string> {
 export async function clearAllPracticeData(): Promise<void> {
   await initDb()
   const db = await getDb()
-  await db.execAsync('DELETE FROM sessions')
-  await db.execAsync('DELETE FROM licks')
-  await db.execAsync('DELETE FROM lessons')
-  await db.execAsync('DELETE FROM jam_snapshots')
-  await db.execAsync('DELETE FROM practice_plan_completions')
-  await db.execAsync('DELETE FROM practice_plans')
-  await db.execAsync('DELETE FROM user_feedback')
-  await db.execAsync('DELETE FROM analytics_events')
-  await db.execAsync(
-    `UPDATE skill_nodes SET score = 0, sessions_count = 0, last_session_date = NULL,
-     easiness_factor = 2.5, interval_days = 1, next_review_date = NULL, sm2_repetitions = 0,
-     technique_roll_json = NULL`,
-  )
+  await db.withTransactionAsync(async () => {
+    await db.execAsync('DELETE FROM sessions')
+    await db.execAsync('DELETE FROM licks')
+    await db.execAsync('DELETE FROM lessons')
+    await db.execAsync('DELETE FROM jam_snapshots')
+    await db.execAsync('DELETE FROM practice_plan_completions')
+    await db.execAsync('DELETE FROM practice_plans')
+    await db.execAsync('DELETE FROM user_feedback')
+    await db.execAsync('DELETE FROM analytics_events')
+    await db.execAsync('DELETE FROM applied_sessions')
+    await db.execAsync(
+      `UPDATE skill_nodes SET score = 0, sessions_count = 0, last_session_date = NULL,
+       easiness_factor = 2.5, interval_days = 1, next_review_date = NULL, sm2_repetitions = 0,
+       technique_roll_json = NULL`,
+    )
+  })
 }
 
 export async function insertLickRow(input: LickInsertInput): Promise<void> {

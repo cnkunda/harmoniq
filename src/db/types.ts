@@ -1,4 +1,5 @@
 import type { AnalyticsEventType } from '@/src/analytics/types'
+import type { NoteResultLabel } from '@/src/session/noteAccuracyBeats'
 
 export type AnalyticsEventRow = {
   id: string
@@ -100,13 +101,6 @@ export type SkillNodeRow = {
   technique_roll_json?: string | null
   /** Schema version for tracking skill_nodes structure changes (commit 88). */
   schema_version?: number
-}
-
-/** Persisted slice after pure skill mutation reducer (commit 63). */
-export type SkillSessionMutationRow = {
-  id: string
-  score: number
-  technique_roll_json: string | null
 }
 
 export type ReviewSkillUpdateInput = {
@@ -226,6 +220,8 @@ export type PracticePlanRow = {
   slot_results_json: string
   /** Serialized `PlanAdaptationPayload[]`. */
   adaptation_log: string
+  /** Commit 164: latest scored session correlated with this plan. */
+  session_id?: string | null
   started_at: string
   updated_at: string
 }
@@ -236,6 +232,7 @@ export type PracticePlanStartInput = {
   current_slot_index?: number
   slot_results_json?: string
   adaptation_log?: string
+  session_id?: string | null
   started_at?: string
 }
 
@@ -244,7 +241,41 @@ export type PracticePlanStateUpdate = {
   current_slot_index?: number
   slot_results_json?: string
   adaptation_log?: string
+  session_id?: string | null
   updated_at?: string
+}
+
+/** Commit 164: a scored session that already applied mastery (replay guard). */
+export type AppliedSessionRow = {
+  session_id: string
+  applied_at: string
+  plan_id: string | null
+}
+
+/** Commit 164: one atomic, idempotent write for a scored session. */
+export type CommitScoredSessionInput = {
+  session: SessionInsertInput
+  reviewUpdates: ReviewSkillUpdateInput
+  /** Per-beat results for the technique-EMA pass. */
+  beats: NoteResultLabel[]
+  /** Lesson section (technique tags select EMA nodes). */
+  section: unknown
+  /** False when the technique-EMA kill switch is active. */
+  applyTechniqueEma: boolean
+  /** Active plan this session belongs to, if any. */
+  plan_id?: string | null
+}
+
+export type CommitScoredSessionResult = {
+  /** False when the session id was already in the ledger (no-op replay). */
+  applied: boolean
+}
+
+/** Commit 164: atomic plan finalization (history + session row + status). */
+export type FinalizePracticePlanInput = {
+  plan_id: string
+  completion: PracticePlanCompletionInsertInput
+  session: SessionInsertInput
 }
 
 export type JamSnapshotInsertInput = {

@@ -1,5 +1,8 @@
 import type {
     AnalyticsEventRow,
+    CommitScoredSessionInput,
+    CommitScoredSessionResult,
+    FinalizePracticePlanInput,
     HomeSuggestion,
     JamSnapshotInsertInput,
     JamSnapshotRow,
@@ -15,12 +18,10 @@ import type {
     PracticePlanStartInput,
     PracticePlanStateUpdate,
     PracticePlanStatus,
-    ReviewSkillUpdateInput,
     SessionArchiveRow,
     SessionInsertInput,
     SessionJournalRow,
     SkillNodeRow,
-    SkillSessionMutationRow,
     UserFeedbackInsertInput,
     UserFeedbackRow,
     UserFeedbackStats,
@@ -55,9 +56,8 @@ export interface HarmoniqDbClient {
   ): Promise<void>
   getLatestSessionWithSong(): Promise<LatestSessionSongRow | null>
   getHomeSuggestion(): Promise<HomeSuggestion>
-  applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Promise<void>
-  /** Commit 63: technique EMA + rolling history (post-Review). */
-  applySessionMutation(updates: SkillSessionMutationRow[]): Promise<void>
+  /** Commit 164: atomic + idempotent scored-session commit (session row + mastery + ledger). */
+  commitScoredSession(input: CommitScoredSessionInput): Promise<CommitScoredSessionResult>
   insertJamSnapshotRow(input: JamSnapshotInsertInput): Promise<void>
   listJamSnapshots(): Promise<JamSnapshotRow[]>
   /** Commit 160: persist the background summary result for an existing snapshot. */
@@ -70,6 +70,8 @@ export interface HarmoniqDbClient {
     },
   ): Promise<void>
   insertPracticePlanCompletionRow(input: PracticePlanCompletionInsertInput): Promise<void>
+  /** Commit 164: completion history + session row + plan status in one transaction. */
+  finalizePracticePlan(input: FinalizePracticePlanInput): Promise<void>
   listPracticePlanCompletions(): Promise<PracticePlanCompletionRow[]>
   /** Commit 162: start a plan, abandoning any older active row. */
   startActivePracticePlanRow(input: PracticePlanStartInput): Promise<void>

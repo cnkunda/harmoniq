@@ -5,6 +5,7 @@ import {
     idbClearPracticeStores,
     idbLoadEverything,
     idbPersistAnalytics,
+    idbPersistAppliedSessions,
     idbPersistFeedback,
     idbPersistJams,
     idbPersistLessons,
@@ -27,6 +28,10 @@ import {
 } from '@/src/db/schema'
 import type {
     AnalyticsEventRow,
+    AppliedSessionRow,
+    CommitScoredSessionInput,
+    CommitScoredSessionResult,
+    FinalizePracticePlanInput,
     GhostReferenceRow,
     HomeSuggestion,
     JamSnapshotInsertInput,
@@ -48,13 +53,13 @@ import type {
     SessionInsertInput,
     SessionJournalRow,
     SkillNodeRow,
-    SkillSessionMutationRow,
     UserFeedbackInsertInput,
     UserFeedbackRow,
     UserFeedbackStats,
 } from '@/src/db/types'
 import { formatJournalPlainText } from '@/src/settings/formatJournalExport'
 import { deriveSkillNodeAfterSession } from '@/src/spaced/sm2'
+import { computeSkillMutations, type NoteAccuracyBeats } from '@/src/session/skillMutator'
 import { buildFeedbackStats } from '@/src/utils/feedback'
 import type { LessonJSON, TasteProfilePayload } from '@/src/types'
 
@@ -71,6 +76,8 @@ const practicePlans: PracticePlanRow[] = []
 const userFeedback: UserFeedbackRow[] = []
 /** Newest-first (matches native `ORDER BY timestamp DESC, id DESC`). */
 const analyticsEvents: AnalyticsEventRow[] = []
+/** Commit 164: scored sessions that already applied mastery. */
+const appliedSessions: AppliedSessionRow[] = []
 
 let initPromise: Promise<void> | null = null
 
@@ -177,6 +184,8 @@ function applyHydration(h: IdbHydration): void {
   )
   analyticsEvents.length = 0
   analyticsEvents.push(...sortAnalyticsEvents(h.analyticsEvents ?? []))
+  appliedSessions.length = 0
+  appliedSessions.push(...(h.appliedSessions ?? []))
   lessonCatalog.length = 0
   lessonCatalog.push(...(h.lessons ?? []).map((row) => ({ ...row })))
 }
@@ -219,6 +228,10 @@ async function flushFeedback(): Promise<void> {
 
 async function flushAnalytics(): Promise<void> {
   await idbPersistAnalytics(getHarmoniqIdbHandle(), analyticsEvents)
+}
+
+async function flushAppliedSessions(): Promise<void> {
+  await idbPersistAppliedSessions(getHarmoniqIdbHandle(), appliedSessions)
 }
 
 function sortAnalyticsEvents(rows: AnalyticsEventRow[]): AnalyticsEventRow[] {
@@ -299,6 +312,11 @@ function sessionRowFromInput(input: SessionInsertInput): SessionArchiveRow {
 
 export async function insertSessionRow(input: SessionInsertInput): Promise<void> {
   await initDb()
+  insertSessionRowInMemory(input)
+  await flushSessions()
+}
+
+function insertSessionRowInMemory(input: SessionInsertInput): void {
   const row = sessionRowFromInput(input)
   const i = sessionLog.findIndex((x) => x.id === row.id)
   if (i >= 0) sessionLog[i] = row
@@ -311,7 +329,6 @@ export async function insertSessionRow(input: SessionInsertInput): Promise<void>
       date: input.date,
     })
   }
-  await flushSessions()
 }
 
 export async function getSessionCount(): Promise<number> {
@@ -532,22 +549,7 @@ export async function getHomeSuggestion(): Promise<HomeSuggestion> {
   return { kind: 'ready', node, song }
 }
 
-export async function applySessionMutation(updates: SkillSessionMutationRow[]): Promise<void> {
-  if (updates.length === 0) return
-  seedWebSkillNodes()
-  for (const u of updates) {
-    const row = skillNodes.get(u.id)
-    if (!row) continue
-    skillNodes.set(u.id, {
-      ...row,
-      score: u.score,
-      technique_roll_json: u.technique_roll_json,
-    })
-  }
-  await flushSkillNodes()
-}
-
-export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Promise<void> {
+function applyReviewSkillUpdatesInMemory(input: ReviewSkillUpdateInput): void {
   seedWebSkillNodes()
   for (const id of input.targeted_node_ids) {
     const row = skillNodes.get(id)
@@ -584,7 +586,84 @@ export async function applyReviewSkillUpdates(input: ReviewSkillUpdateInput): Pr
       last_session_date: u.last_session_date,
     })
   }
+}
+
+/** Technique EMA + rolling history; reads post-SM-2 rows so ordering matches Review. */
+function applyTechniqueEmaInMemory(beats: NoteAccuracyBeats, section: unknown): void {
+  seedWebSkillNodes()
+  const nodesById = new Map(
+    Array.from(skillNodes.values()).map((n) => [
+      n.id,
+      { score: n.score, technique_roll_json: n.technique_roll_json ?? null },
+    ]),
+  )
+  const updates = computeSkillMutations({ nodesById, beats, section })
+  for (const u of updates) {
+    const row = skillNodes.get(u.id)
+    if (!row) continue
+    skillNodes.set(u.id, {
+      ...row,
+      score: u.score,
+      technique_roll_json: u.technique_roll_json,
+    })
+  }
+}
+
+/**
+ * Commit 164: atomic + idempotent scored-session write.
+ * Replays with the same `session.id` are no-ops via the `applied_sessions` ledger.
+ */
+export async function commitScoredSession(
+  input: CommitScoredSessionInput,
+): Promise<CommitScoredSessionResult> {
+  await initDb()
+  seedWebSkillNodes()
+  const sessionId = input.session.id
+  if (appliedSessions.some((row) => row.session_id === sessionId)) {
+    return { applied: false }
+  }
+  insertSessionRowInMemory(input.session)
+  applyReviewSkillUpdatesInMemory(input.reviewUpdates)
+  if (input.applyTechniqueEma) {
+    applyTechniqueEmaInMemory(input.beats, input.section)
+  }
+  appliedSessions.push({
+    session_id: sessionId,
+    applied_at: new Date().toISOString(),
+    plan_id: input.plan_id ?? null,
+  })
+  if (input.plan_id) {
+    const plan = practicePlans.find((row) => row.plan_id === input.plan_id)
+    if (plan) plan.session_id = sessionId
+  }
+  await flushSessions()
   await flushSkillNodes()
+  await flushAppliedSessions()
+  if (input.plan_id) await flushPracticePlans()
+  return { applied: true }
+}
+
+/** Commit 164: completion history + session row + plan status together (best-effort on web). */
+export async function finalizePracticePlan(input: FinalizePracticePlanInput): Promise<void> {
+  await initDb()
+  const plan = practicePlans.find((row) => row.plan_id === input.plan_id)
+  if (plan?.status === 'completed') return
+  const row: PracticePlanCompletionRow = {
+    id: input.completion.id,
+    completed_at: input.completion.completed_at,
+    plan_json: input.completion.plan_json,
+  }
+  const i = planCompletions.findIndex((x) => x.id === row.id)
+  if (i >= 0) planCompletions[i] = row
+  else planCompletions.unshift(row)
+  insertSessionRowInMemory(input.session)
+  if (plan) {
+    plan.status = 'completed'
+    plan.updated_at = new Date().toISOString()
+  }
+  await flushPlanCompletions()
+  await flushSessions()
+  if (plan) await flushPracticePlans()
 }
 
 export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promise<void> {
@@ -698,6 +777,7 @@ export async function startActivePracticePlanRow(input: PracticePlanStartInput):
     plan_json: input.plan_json,
     slot_results_json: input.slot_results_json ?? '[]',
     adaptation_log: input.adaptation_log ?? '[]',
+    session_id: input.session_id ?? null,
     started_at: input.started_at ?? now,
     updated_at: now,
   }
@@ -731,6 +811,7 @@ export async function updatePracticePlanRowState(
       : {}),
     ...(update.slot_results_json !== undefined ? { slot_results_json: update.slot_results_json } : {}),
     ...(update.adaptation_log !== undefined ? { adaptation_log: update.adaptation_log } : {}),
+    ...(update.session_id !== undefined ? { session_id: update.session_id } : {}),
     updated_at: update.updated_at ?? new Date().toISOString(),
   }
   await flushPracticePlans()
@@ -780,6 +861,7 @@ export async function clearAllPracticeData(): Promise<void> {
   practicePlans.length = 0
   userFeedback.length = 0
   analyticsEvents.length = 0
+  appliedSessions.length = 0
   for (const n of DEFAULT_SKILL_NODES) {
     skillNodes.set(n.id, defaultSkillRow(n))
   }

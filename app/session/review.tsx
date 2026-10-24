@@ -24,13 +24,11 @@ import { completeSession } from '@/src/analytics/sessionTracker'
 import { isHarmoniqSkillMutationSkipped } from '@/src/config'
 import { sessionEntryHref } from '@/src/constants/sessionFlow'
 import {
-    applyReviewSkillUpdates,
-    getAllSkillNodes,
+    commitScoredSession,
     getAppPref,
     getLatestGhostReference,
     getSessionCount,
     insertLickRow,
-    insertSessionRow,
     listUserFeedbackForJob,
 } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_MOOD, PREF_MUSICAL_TOLERANCE_MODE } from '@/src/db/schema'
@@ -49,7 +47,6 @@ import {
     sessionAccuracy01FromScoreResult,
     timingStability01FromScoreResult,
 } from '@/src/session/scoreProgressSignals'
-import { computeSkillMutations } from '@/src/session/skillMutator'
 import { useDnaStore } from '@/src/stores/dnaStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
@@ -127,6 +124,7 @@ export default function ReviewScreen() {
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const section = lesson?.sections?.[sectionIndex]
   const latestTake = useSessionPlayStore((s) => s.latestTake)
+  const latestTakeId = useSessionPlayStore((s) => s.latestTakeId)
   const clearLatestTake = useSessionPlayStore((s) => s.clearLatestTake)
   const currentSession = useAppStore((s) => s.currentSession)
   const currentPlan = usePlanStore((s) => s.currentPlan)
@@ -298,52 +296,52 @@ export default function ReviewScreen() {
               bpm_drift_sample_count: cs.bpmDriftSampleCount,
             }
           : undefined
-      await insertSessionRow({
-        id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        song_title: typeof lesson?.song_title === 'string' ? lesson.song_title : null,
-        artist: typeof lesson?.artist === 'string' ? lesson.artist : null,
-        section_label:
-          section && typeof section === 'object' && typeof (section as Record<string, unknown>).label === 'string'
-            ? ((section as Record<string, unknown>).label as string)
-            : null,
-        date: new Date().toISOString(),
-        coach_review: coachReviewFromScoreResult(result),
-        pitch_accuracy: result.pitch_accuracy,
-        phrasing_score: result.phrasing_score,
-        nodes_targeted: targeted,
-        review_snapshot: JSON.stringify({ ...result, harmoniq_dna_capture }),
-        job_id: typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : null,
-        section_index: sectionIndex,
-        is_ghost_reference: false,
-        mood: ((await getAppPref(PREF_MOOD_CHECK_LAST_MOOD)) as 'focused' | 'loose' | 'tired' | 'on_fire' | null) ?? null,
+      const sessionId =
+        latestTakeId ?? globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      const beats = cs?.noteResults ?? []
+      const activePlanId = usePlanStore.getState().currentPlan?.plan_id ?? null
+      const { applied } = await commitScoredSession({
+        session: {
+          id: sessionId,
+          song_title: typeof lesson?.song_title === 'string' ? lesson.song_title : null,
+          artist: typeof lesson?.artist === 'string' ? lesson.artist : null,
+          section_label:
+            section && typeof section === 'object' && typeof (section as Record<string, unknown>).label === 'string'
+              ? ((section as Record<string, unknown>).label as string)
+              : null,
+          date: new Date().toISOString(),
+          coach_review: coachReviewFromScoreResult(result),
+          pitch_accuracy: result.pitch_accuracy,
+          phrasing_score: result.phrasing_score,
+          nodes_targeted: targeted,
+          review_snapshot: JSON.stringify({ ...result, harmoniq_dna_capture }),
+          job_id: typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : null,
+          section_index: sectionIndex,
+          is_ghost_reference: false,
+          mood: ((await getAppPref(PREF_MOOD_CHECK_LAST_MOOD)) as 'focused' | 'loose' | 'tired' | 'on_fire' | null) ?? null,
+        },
+        reviewUpdates: {
+          node_scores: result.node_scores,
+          targeted_node_ids: targeted,
+          node_confidence_map: Object.fromEntries(targeted.map((id) => [id, result.reliability?.confidence ?? 'medium'])),
+          node_reliability_map: Object.fromEntries(
+            targeted.map((id) => [id, result.reliability?.signal_quality ?? result.diagnostics?.signal_quality ?? 0.7]),
+          ),
+          reliability_flags: result.reliability?.reliability_flags ?? result.diagnostics?.reliability_flags ?? [],
+          session_accuracy01: sessionAccuracy01FromScoreResult(result),
+          session_timing_stability01: timingStability01FromScoreResult(result),
+        },
+        beats,
+        section,
+        applyTechniqueEma: !isHarmoniqSkillMutationSkipped(),
+        plan_id: activePlanId,
       })
+      if (!applied && __DEV__) {
+        console.log('[review] replayed scored session ignored', sessionId)
+      }
       completeSession()
       void useDnaStore.getState().refresh()
-      await applyReviewSkillUpdates({
-        node_scores: result.node_scores,
-        targeted_node_ids: targeted,
-        node_confidence_map: Object.fromEntries(targeted.map((id) => [id, result.reliability?.confidence ?? 'medium'])),
-        node_reliability_map: Object.fromEntries(
-          targeted.map((id) => [id, result.reliability?.signal_quality ?? result.diagnostics?.signal_quality ?? 0.7]),
-        ),
-        reliability_flags: result.reliability?.reliability_flags ?? result.diagnostics?.reliability_flags ?? [],
-        session_accuracy01: sessionAccuracy01FromScoreResult(result),
-        session_timing_stability01: timingStability01FromScoreResult(result),
-      })
-      let skillStoreRefreshed = false
-      if (!isHarmoniqSkillMutationSkipped()) {
-        const nodes = await getAllSkillNodes()
-        const nodesById = new Map(
-          nodes.map((n) => [n.id, { score: n.score, technique_roll_json: n.technique_roll_json ?? null }]),
-        )
-        const beats = useAppStore.getState().currentSession?.noteResults ?? []
-        const mutations = computeSkillMutations({ nodesById, beats, section })
-        if (mutations.length > 0) {
-          await useSkillStore.getState().applySessionMutation(mutations)
-          skillStoreRefreshed = true
-        }
-      }
-      if (!skillStoreRefreshed) await useSkillStore.getState().loadFromDb()
+      await useSkillStore.getState().loadFromDb()
       if (__DEV__) {
         const refreshed = useSkillStore.getState().nodes
         console.log(
@@ -360,7 +358,7 @@ export default function ReviewScreen() {
     } finally {
       setBusy(false)
     }
-  }, [latestTake, lesson?.artist, lesson?.song_title, lesson?.bar_timestamps, lesson?.beat_grid, lesson?.key, lesson?.tempo, section])
+  }, [latestTake, latestTakeId, lesson?.artist, lesson?.song_title, lesson?.bar_timestamps, lesson?.beat_grid, lesson?.key, lesson?.tempo, section])
 
   useEffect(() => {
     void getSessionCount().then(setSessionCount).catch(() => {})

@@ -159,6 +159,9 @@ export const PREF_ANALYTICS_OPT_OUT = 'analytics_opt_out'
 /** Commit 161: anonymous per-install id for analytics rows. */
 export const PREF_ANALYTICS_USER_ID = 'analytics_user_id'
 
+/** Commit 164: Home practice mode — `"single"` = practice a song, `"plan"` = follow a plan. */
+export const PREF_HOME_PRACTICE_MODE = 'home_practice_mode'
+
 export const COACH_VOICE_OPTIONS = ['warm', 'concise', 'technical'] as const
 export type CoachVoiceId = (typeof COACH_VOICE_OPTIONS)[number]
 
@@ -374,6 +377,24 @@ CREATE INDEX IF NOT EXISTS idx_practice_plans_status_updated ON practice_plans (
 export const ROLLBACK_V20_PRACTICE_PLANS = [
   'DROP INDEX IF EXISTS idx_practice_plans_status_updated',
   'DROP TABLE IF EXISTS practice_plans',
+] as const
+
+/** v21: active-plan session identity + replay ledger for scored sessions (Commit 164). */
+export const MIGRATION_V21_SESSION_INTEGRITY = [
+  'ALTER TABLE practice_plans ADD COLUMN session_id TEXT',
+  `CREATE TABLE IF NOT EXISTS applied_sessions (
+  session_id TEXT PRIMARY KEY NOT NULL,
+  applied_at TEXT NOT NULL,
+  plan_id TEXT
+)`,
+  'CREATE INDEX IF NOT EXISTS idx_applied_sessions_plan ON applied_sessions (plan_id)',
+] as const
+
+/** Rollback for v21: drop ledger + session_id column. */
+export const ROLLBACK_V21_SESSION_INTEGRITY = [
+  'DROP INDEX IF EXISTS idx_applied_sessions_plan',
+  'DROP TABLE IF EXISTS applied_sessions',
+  'ALTER TABLE practice_plans DROP COLUMN IF EXISTS session_id',
 ] as const
 
 export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [

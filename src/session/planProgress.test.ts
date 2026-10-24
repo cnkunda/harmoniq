@@ -3,7 +3,7 @@ import type { Router } from 'expo-router'
 
 import { toast } from '@/components/ToastConfig'
 import { adaptPracticePlan } from '@/src/api/analyze'
-import { insertPracticePlanCompletionRow, insertSessionRow, markPracticePlanStatus } from '@/src/db/client'
+import { finalizePracticePlan } from '@/src/db/client'
 import { completeSession } from '@/src/analytics/sessionTracker'
 import { saveActivePlanProgress } from '@/src/session/activePlanPersistence'
 import { completePracticePlanSlot } from '@/src/session/planProgress'
@@ -16,9 +16,7 @@ vi.mock('@/components/ToastConfig', () => ({
 }))
 vi.mock('@/src/api/analyze', () => ({ adaptPracticePlan: vi.fn() }))
 vi.mock('@/src/db/client', () => ({
-  insertPracticePlanCompletionRow: vi.fn(),
-  insertSessionRow: vi.fn(),
-  markPracticePlanStatus: vi.fn(),
+  finalizePracticePlan: vi.fn(),
 }))
 vi.mock('@/src/analytics/sessionTracker', () => ({ completeSession: vi.fn() }))
 vi.mock('@/src/session/activePlanPersistence', () => ({ saveActivePlanProgress: vi.fn() }))
@@ -207,8 +205,7 @@ describe('completePracticePlanSlot', () => {
       },
     })
 
-    expect(insertPracticePlanCompletionRow).toHaveBeenCalledTimes(1)
-    expect(markPracticePlanStatus).toHaveBeenCalledWith('plan-1', 'completed')
+    expect(finalizePracticePlan).toHaveBeenCalledTimes(1)
     expect(usePlanStore.getState().currentPlan).toBeNull()
     expect(navigateToPracticePlanSlot).not.toHaveBeenCalled()
     expect(router.replace).toHaveBeenCalledWith('/(tabs)')
@@ -221,9 +218,10 @@ describe('completePracticePlanSlot', () => {
 
     await completePracticePlanSlot({ router, deps, slotIndex: 0, performance: null })
 
-    expect(insertPracticePlanCompletionRow).toHaveBeenCalledTimes(1)
-    const insert = vi.mocked(insertPracticePlanCompletionRow).mock.calls[0]![0]
-    const completion = JSON.parse(insert.plan_json) as PracticePlanPayload & {
+    expect(finalizePracticePlan).toHaveBeenCalledTimes(1)
+    const input = vi.mocked(finalizePracticePlan).mock.calls[0]![0]
+    expect(input.plan_id).toBe('plan-1')
+    const completion = JSON.parse(input.completion.plan_json) as PracticePlanPayload & {
       slot_results: Array<Record<string, unknown>>
     }
     expect(completion.slot_results).toHaveLength(1)
@@ -233,11 +231,20 @@ describe('completePracticePlanSlot', () => {
       accuracy: null,
       timing: null,
     })
-    expect(insertSessionRow).toHaveBeenCalledTimes(1)
-    expect(markPracticePlanStatus).toHaveBeenCalledWith('plan-1', 'completed')
     expect(completeSession).toHaveBeenCalledTimes(1)
     expect(toast.success).toHaveBeenCalledWith('Practice plan complete.')
     expect(usePlanStore.getState().currentPlan).toBeNull()
     expect(router.replace).toHaveBeenCalledWith('/(tabs)')
+  })
+
+  it('does not duplicate a slot result when the same slot is completed twice', async () => {
+    const plan = makePlan()
+    usePlanStore.getState().setPlan(plan)
+
+    await completePracticePlanSlot({ router, deps, slotIndex: 0, performance: null })
+    await completePracticePlanSlot({ router, deps, slotIndex: 0, performance: null })
+
+    expect(usePlanStore.getState().slotResults).toHaveLength(1)
+    expect(usePlanStore.getState().slotResults[0]).toMatchObject({ slot_id: 'slot-a' })
   })
 })

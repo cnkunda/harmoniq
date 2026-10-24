@@ -411,7 +411,10 @@ export function usePlayCapture(tempo: number | null | undefined) {
         setPitchRunning(false)
         useSessionPlayStore.getState().setLastTakeAnchorSec(anchorPosRef.current)
         setTake(rec)
-        setLatestTake(rec)
+        setLatestTake(
+          rec,
+          globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        )
         setStatus(reason === 'silence' ? 'Auto-stopped after 5s silence' : 'Capture stopped')
         emit({
           type: 'play_along_complete',

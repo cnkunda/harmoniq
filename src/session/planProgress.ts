@@ -3,11 +3,7 @@ import type { Router } from 'expo-router'
 import { toast } from '@/components/ToastConfig'
 import { adaptPracticePlan } from '@/src/api/analyze'
 import { completeSession } from '@/src/analytics/sessionTracker'
-import {
-  insertPracticePlanCompletionRow,
-  insertSessionRow,
-  markPracticePlanStatus,
-} from '@/src/db/client'
+import { finalizePracticePlan } from '@/src/db/client'
 import { navigateToPracticePlanSlot } from '@/src/session/practicePlanNavigation'
 import { saveActivePlanProgress } from '@/src/session/activePlanPersistence'
 import { normalizePracticePlan } from '@/src/session/planNormalization'
@@ -86,30 +82,30 @@ async function finalizePlan(plan: PracticePlanPayload): Promise<void> {
     }
   }
 
-  await runStep('write completion history', () =>
-    insertPracticePlanCompletionRow({
-      id: createId(),
-      completed_at: new Date().toISOString(),
-      plan_json: JSON.stringify(completionPlan),
+  await runStep('finalize plan', () =>
+    finalizePracticePlan({
+      plan_id: plan.plan_id,
+      completion: {
+        id: createId(),
+        completed_at: new Date().toISOString(),
+        plan_json: JSON.stringify(completionPlan),
+      },
+      session: {
+        id: createId(),
+        song_title: firstSlot?.title ?? 'Practice session',
+        artist: typeof lesson?.artist === 'string' ? lesson.artist : null,
+        section_label: `${plan.slots.length}-section plan`,
+        date: new Date().toISOString(),
+        coach_review: null,
+        pitch_accuracy: null,
+        phrasing_score: null,
+        nodes_targeted: [],
+        job_id: typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : null,
+        section_index: null,
+        is_ghost_reference: false,
+      },
     }),
   )
-  await runStep('insert session row', () =>
-    insertSessionRow({
-      id: createId(),
-      song_title: firstSlot?.title ?? 'Practice session',
-      artist: typeof lesson?.artist === 'string' ? lesson.artist : null,
-      section_label: `${plan.slots.length}-section plan`,
-      date: new Date().toISOString(),
-      coach_review: null,
-      pitch_accuracy: null,
-      phrasing_score: null,
-      nodes_targeted: [],
-      job_id: typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : null,
-      section_index: null,
-      is_ghost_reference: false,
-    }),
-  )
-  await runStep('mark plan completed', () => markPracticePlanStatus(plan.plan_id, 'completed'))
 
   completeSession()
   usePlanStore.getState().setHomePreviewPlan(null)

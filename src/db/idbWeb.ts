@@ -9,6 +9,7 @@ import type { LessonJSON } from '@/src/types'
 
 import type {
     AnalyticsEventRow,
+    AppliedSessionRow,
     JamSnapshotInsertInput,
     LessonPersistRow,
     LickRow,
@@ -20,7 +21,7 @@ import type {
 } from '@/src/db/types'
 
 const DB_NAME = 'harmoniq_web_v1'
-const DB_VERSION = 7
+const DB_VERSION = 8
 
 const S_PREFS = 'app_prefs'
 const S_SESSIONS = 'sessions'
@@ -33,6 +34,7 @@ const S_LESSON = 'lesson_cache'
 const S_LESSONS = 'lessons'
 const S_FEEDBACK = 'user_feedback'
 const S_ANALYTICS = 'analytics_events'
+const S_APPLIED_SESSIONS = 'applied_sessions'
 const S_MIGRATIONS = 'schema_migrations'
 
 type PrefRow = { key: string; value: string }
@@ -96,6 +98,10 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
           const analyticsStore = db.createObjectStore(S_ANALYTICS, { keyPath: 'id' })
           analyticsStore.createIndex('timestamp', 'timestamp', { unique: false })
         }
+        if (!db.objectStoreNames.contains(S_APPLIED_SESSIONS)) {
+          const appliedStore = db.createObjectStore(S_APPLIED_SESSIONS, { keyPath: 'session_id' })
+          appliedStore.createIndex('plan_id', 'plan_id', { unique: false })
+        }
         
         // Record migration for version 4 (migration tracking system)
         if (oldVersion < 4) {
@@ -139,6 +145,17 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
           }
           if (__DEV__) {
             console.log('[db/web] Migration v7 SUCCESS')
+          }
+        }
+
+        if (oldVersion < 8) {
+          const tx = r.transaction
+          if (tx) {
+            const migrationStore = tx.objectStore(S_MIGRATIONS)
+            migrationStore.put({ version: 8, applied_at: new Date().toISOString() })
+          }
+          if (__DEV__) {
+            console.log('[db/web] Migration v8 SUCCESS')
           }
         }
       } catch (e) {
@@ -216,12 +233,13 @@ export type IdbHydration = {
   practicePlans: PracticePlanRow[]
   feedback: UserFeedbackRow[]
   analyticsEvents: AnalyticsEventRow[]
+  appliedSessions: AppliedSessionRow[]
   lesson: LessonJSON | null
   lessons: LessonPersistRow[]
 }
 
 export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> {
-  const [prefs, sessions, skillNodes, licks, jams, planCompletions, practicePlans, feedback, analyticsEvents, lessonRows, lessonCatalog] =
+  const [prefs, sessions, skillNodes, licks, jams, planCompletions, practicePlans, feedback, analyticsEvents, appliedSessions, lessonRows, lessonCatalog] =
     await Promise.all([
       getAllStore<PrefRow>(db, S_PREFS),
       getAllStore<SessionArchiveRow>(db, S_SESSIONS),
@@ -234,6 +252,7 @@ export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> 
       db.objectStoreNames.contains(S_PRACTICE_PLANS) ? getAllStore<PracticePlanRow>(db, S_PRACTICE_PLANS) : Promise.resolve([]),
       db.objectStoreNames.contains(S_FEEDBACK) ? getAllStore<UserFeedbackRow>(db, S_FEEDBACK) : Promise.resolve([]),
       db.objectStoreNames.contains(S_ANALYTICS) ? getAllStore<AnalyticsEventRow>(db, S_ANALYTICS) : Promise.resolve([]),
+      db.objectStoreNames.contains(S_APPLIED_SESSIONS) ? getAllStore<AppliedSessionRow>(db, S_APPLIED_SESSIONS) : Promise.resolve([]),
       getAllStore<LessonCacheRow>(db, S_LESSON),
       db.objectStoreNames.contains(S_LESSONS) ? getAllStore<LessonPersistRow>(db, S_LESSONS) : Promise.resolve([]),
     ])
@@ -248,6 +267,7 @@ export async function idbLoadEverything(db: IDBDatabase): Promise<IdbHydration> 
     practicePlans,
     feedback,
     analyticsEvents,
+    appliedSessions,
     lesson: latest?.lesson ?? null,
     lessons: lessonCatalog,
   }
@@ -296,6 +316,11 @@ export async function idbPersistFeedback(db: IDBDatabase | null, rows: UserFeedb
 export async function idbPersistAnalytics(db: IDBDatabase | null, rows: AnalyticsEventRow[]): Promise<void> {
   if (!db || !db.objectStoreNames.contains(S_ANALYTICS)) return
   await putAll(db, S_ANALYTICS, rows)
+}
+
+export async function idbPersistAppliedSessions(db: IDBDatabase | null, rows: AppliedSessionRow[]): Promise<void> {
+  if (!db || !db.objectStoreNames.contains(S_APPLIED_SESSIONS)) return
+  await putAll(db, S_APPLIED_SESSIONS, rows)
 }
 
 export async function idbPersistLessons(db: IDBDatabase | null, rows: LessonPersistRow[]): Promise<void> {
@@ -367,6 +392,9 @@ export async function idbClearPracticeStores(db: IDBDatabase | null): Promise<vo
   }
   if (db.objectStoreNames.contains(S_ANALYTICS)) {
     await clearStore(db, S_ANALYTICS)
+  }
+  if (db.objectStoreNames.contains(S_APPLIED_SESSIONS)) {
+    await clearStore(db, S_APPLIED_SESSIONS)
   }
   await clearStore(db, S_SKILL_NODES)
   if (db.objectStoreNames.contains(S_LESSONS)) {

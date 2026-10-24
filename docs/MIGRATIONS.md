@@ -76,12 +76,13 @@ If a migration fails:
 - V18: Add summary_status to jam_snapshots (Commit 160; web IndexedDB is schemaless, no version bump)
 - V19: Add analytics_events table + type/timestamp indexes (Commit 161)
 - V20: Add practice_plans active-plan persistence table + status/updated index (Commit 162)
+- V21: Add practice_plans.session_id + applied_sessions replay ledger (Commit 164)
 
 ## Web (IndexedDB) Migrations
 
 ### Location
 - Migration runner: `src/db/idbWeb.ts` (openHarmoniqIdb function)
-- Current version: 7
+- Current version: 8
 
 ### Version Tracking
 Migrations are tracked in the `schema_migrations` object store:
@@ -112,6 +113,7 @@ IndexedDB provides automatic rollback:
 - V5: Add user_feedback store with job_id index (Commit 159)
 - V6: Add analytics_events store with timestamp index (Commit 161)
 - V7: Add practice_plans store with status/updated index (Commit 162)
+- V8: Add applied_sessions store with plan_id index for scored-session replay guard (Commit 164)
 
 ## Data Validation
 

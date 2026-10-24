@@ -2,6 +2,7 @@ import { create } from 'zustand'
 
 import { getAppPref, setAppPref } from '@/src/db/client'
 import {
+  PREF_HOME_PRACTICE_MODE,
   PREF_LISTEN_NUDGE_DISMISSED,
   PREF_SESSION_INCLUDE_LISTEN,
   PREF_SESSION_MIC_CALIBRATION_JSON,
@@ -10,6 +11,9 @@ import {
 } from '@/src/db/schema'
 
 export type MicCalibrationProfileId = 'quiet-acoustic' | 'electric-unplugged'
+
+/** Commit 164: Home hero mode — practice one song vs follow a generated plan. */
+export type HomePracticeMode = 'single' | 'plan'
 
 export const MIC_CALIBRATION_PROFILES: MicCalibrationProfileId[] = ['quiet-acoustic', 'electric-unplugged']
 
@@ -56,12 +60,15 @@ export type SessionPrefsState = {
   includeListenStep: boolean
   /** Dismissed-date keys for the "Listen first" first-run nudge. */
   listenNudgeDismissed: Record<string, true>
+  /** Commit 164: `single` = practice a song, `plan` = follow a plan (default). */
+  homePracticeMode: HomePracticeMode
 
   hydrate: () => Promise<void>
   setSkipTuneStep: (skip: boolean) => Promise<void>
   setActiveMicProfile: (id: MicCalibrationProfileId) => Promise<void>
   setCalibrationGateForProfile: (id: MicCalibrationProfileId, gateRms: number) => Promise<void>
   setIncludeListenStep: (include: boolean) => Promise<void>
+  setHomePracticeMode: (mode: HomePracticeMode) => Promise<void>
   dismissListenNudge: () => Promise<void>
   /** Gate threshold stored for the active mic profile (after calibration); null if none. */
   getActiveNoiseGateThresholdRms: () => number | null
@@ -76,13 +83,15 @@ export const useSessionPrefsStore = create<SessionPrefsState>((set, get) => ({
   calibrationGateRmsByProfile: {},
   includeListenStep: false,
   listenNudgeDismissed: {},
+  homePracticeMode: 'plan',
 
   hydrate: async () => {
-    const [skipRaw, profileRaw, calRaw, includeRaw] = await Promise.all([
+    const [skipRaw, profileRaw, calRaw, includeRaw, modeRaw] = await Promise.all([
       getAppPref(PREF_SESSION_SKIP_TUNE),
       getAppPref(PREF_SESSION_MIC_PROFILE_ID),
       getAppPref(PREF_SESSION_MIC_CALIBRATION_JSON),
       getAppPref(PREF_SESSION_INCLUDE_LISTEN),
+      getAppPref(PREF_HOME_PRACTICE_MODE),
     ])
     const skipTuneStep = skipRaw === '1'
     const activeMicProfile =
@@ -98,6 +107,7 @@ export const useSessionPrefsStore = create<SessionPrefsState>((set, get) => ({
       calibrationGateRmsByProfile,
       includeListenStep: includeRaw === '1',
       listenNudgeDismissed,
+      homePracticeMode: modeRaw === 'single' ? 'single' : 'plan',
     })
   },
 
@@ -120,6 +130,11 @@ export const useSessionPrefsStore = create<SessionPrefsState>((set, get) => ({
   setIncludeListenStep: async (include) => {
     await setAppPref(PREF_SESSION_INCLUDE_LISTEN, include ? '1' : '0')
     set({ includeListenStep: include })
+  },
+
+  setHomePracticeMode: async (mode) => {
+    await setAppPref(PREF_HOME_PRACTICE_MODE, mode)
+    set({ homePracticeMode: mode })
   },
 
   dismissListenNudge: async () => {
