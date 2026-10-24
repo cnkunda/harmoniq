@@ -1,9 +1,50 @@
 import { getAppPref } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_SHOWN_DAY, PREF_MOOD_CHECK_SKIP } from '@/src/db/schema'
 
-/** Ordered session steps — matches `app/session/*.tsx` route segments (Commit 62 adds `tune`; Commit 92 adds musical-tolerance). */
+/**
+ * Session flow — Commit 163 rewrite: Orient-as-Hint (de-gate Listen).
+ *
+ * Every route under `app/session/` is a session step. Steps fall into two sets:
+ *
+ * - `SESSION_STEPS` — every session route, in order. Used for route recognition,
+ *   progress-bar length, and analytics. `listen` lives here as an *optional* step.
+ * - `MANDATORY_SESSION_STEPS` — the default flow a learner walks. `listen` is
+ *   excluded: it is opt-in via Settings ("Include Listen at session start") and
+ *   reachable from the Study/Play header.
+ *
+ * Phase pre-flight steps (`tune`, `musical-tolerance`, `mood-check`) are not part
+ * of the pedagogical phases (see `sessionPhases.ts`).
+ */
 export const SESSION_STEPS = ['tune', 'musical-tolerance', 'listen', 'study', 'slow', 'play', 'review'] as const
 export type SessionStep = (typeof SESSION_STEPS)[number]
+
+/** Steps a learner walks by default. `listen` is optional, not mandatory. */
+export const MANDATORY_SESSION_STEPS: readonly SessionStep[] = [
+  'tune',
+  'musical-tolerance',
+  'study',
+  'slow',
+  'play',
+  'review',
+] as const
+
+/** Steps that are opt-in rather than part of the default flow. */
+export const OPTIONAL_SESSION_STEPS: readonly SessionStep[] = ['listen'] as const
+
+/** True when `step` is part of the default flow (not an opt-in extra). */
+export function isMandatoryStep(step: SessionStep): boolean {
+  return MANDATORY_SESSION_STEPS.includes(step)
+}
+
+/** True when `step` is opt-in (e.g. `listen`). */
+export function isOptionalStep(step: SessionStep): boolean {
+  return OPTIONAL_SESSION_STEPS.includes(step)
+}
+
+/** Ordered position of a step within the *default* flow (0-based). -1 = not in flow. */
+export function mandatoryStepIndex(step: SessionStep): number {
+  return MANDATORY_SESSION_STEPS.indexOf(step)
+}
 
 export function sessionStepIndexFromPathname(pathname: string): number {
   const normalized = pathname.replace(/\/+$/, '')

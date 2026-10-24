@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
-import { Mic } from 'lucide-react-native'
+import { Headphones, Mic } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { CoachFeedbackPrompt } from '@/components/CoachFeedbackPrompt'
@@ -31,6 +31,7 @@ import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhost
 import { hitInnerThresholdCents } from '@/src/session/noteAccuracyBeats'
 import { ghostReferenceToPlaybackUri } from '@/src/session/persistGhostTake'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
+import { useOrientClip } from '@/src/session/useOrientClip'
 import { usePlayCapture } from '@/src/session/usePlayCapture'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
@@ -44,6 +45,7 @@ import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import * as FileSystem from 'expo-file-system/legacy'
 import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
+import { colors } from '@/src/constants/colors'
 
 export default function PlayScreen() {
   const lesson = useLessonStore((s) => s.lesson)
@@ -144,6 +146,13 @@ function PlayScreenInner() {
   })
 
   const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote, null, null), [keyLabel, selectedNote])
+
+  // Commit 163: orient overlay on Play (Study does the same via fretboard `?` button).
+  const orientClip = useOrientClip(lesson?.job_id ?? undefined)
+  useEffect(() => {
+    if (lesson?.job_id) void orientClip.fetchOrientClip()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson?.job_id])
 
   const pendingGhostReference = useSessionPlayStore((s) => s.pendingGhostReference)
   const setPendingGhostReference = useSessionPlayStore((s) => s.setPendingGhostReference)
@@ -279,6 +288,19 @@ function PlayScreenInner() {
         ) : null}
         <View className="gap-5">
           {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
+
+          {/* Commit 163: Listen shortcut */}
+          <AnimatedPressable
+            haptic="light"
+            onPress={() => router.push(sessionHref('listen'))}
+            className="self-start flex-row items-center gap-1.5 rounded-full border border-wood-600/45 bg-wood-800/45 px-3 py-1.5"
+            accessibilityRole="button"
+            accessibilityLabel="Open full Listen screen"
+          >
+            <Headphones size={14} color={colors.amber.accent} />
+            <Text className="font-sans-medium text-xs text-cream">Listen</Text>
+          </AnimatedPressable>
+
           {typeof __DEV__ !== 'undefined' && __DEV__ ? (
             <Text className="rounded-lg border border-dashed border-wood-600/35 bg-wood-800/40 px-3 py-2 font-mono text-xs text-muted-brown">
               noiseGateThresholdRms ({activeMicProfile}):{' '}
@@ -358,6 +380,12 @@ function PlayScreenInner() {
                     onToggleTune={toggleFretboardTuner}
                     onCalibrateTune={startCalibration}
                     tunerState={tunerState}
+                    showOrientControl
+                    orientClipUrl={orientClip.url}
+                    orientAnnotation={orientClip.annotation}
+                    orientIsPlaying={orientClip.isPlaying}
+                    onToggleOrientPlayback={orientClip.togglePlayback}
+                    orientError={orientClip.error}
                     onSelectNote={(note) => {
                       setSelectedNote(note)
                       setFretPulseKey((k) => k + 1)

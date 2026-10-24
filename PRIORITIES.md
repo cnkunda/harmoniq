@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 163–183** (149 and 151–162 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 164–183** (149, 151–162 completed → archived; **163 complete → pending commit**). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -104,31 +104,33 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 163: Orient-as-Hint (was C5)
 
-**Status:** deferred
+**Status:** complete — ready for commit
 
 **Goal:** Demote Orient from a mandatory session step to an on-demand amber overlay in Study and Play — orient content without a screen the learner must pass through.
 
-**Current State:** `SESSION_STEPS` in `src/constants/sessionFlow.ts:5` still mandates `'listen'` between `musical-tolerance` and `study`; orient content only exists on that standalone screen. Backend `POST /session/orient-clip` (`main.py:1064`) and `generate_orient_clip()` already work — only frontend routing changes. No `?` overlay, no "Skip to Study" shortcut.
+**Shipped:** `listen` is now an optional step (`MANDATORY_SESSION_STEPS` in `sessionFlow.ts` excludes it; `SESSION_STEPS` still contains it for route recognition). Default flow: tune → musical-tolerance → study → slow → play → review. Study and Play each get a "Listen" header button (routes to the standalone `listen` screen) and a `?` HelpCircle overlay on the fretboard (amber when active) that fetches the orient clip on demand via a cached `useOrientClip` hook. Backend `/session/orient-clip` now returns a server-relative path served by `/lesson-file` (was an unserveable absolute filesystem path); duplicate annotation call removed. Settings has an "Include Listen at session start" toggle (default OFF, `PREF_SESSION_INCLUDE_LISTEN`). Progress bar in `SessionChromeBar` uses `MANDATORY_SESSION_STEPS.length` (6) for the denominator.
 
-**Scope:**
-- Remove Orient (`listen` step) as a mandatory linear step in the session flow
-- Integrate orient content as a non-intrusive amber overlay in Study and Play screens:
-  - Small `?` toggle button in the toolbar (amber when active)
-  - Toggling shows/hides the orient audio clip + annotation text as a slide-down panel
-  - Panel includes play/pause for the orient WAV and the text annotation
-- Update `SESSION_STEPS` in `sessionFlow.ts`: remove `listen` from the mandatory sequence
-- Add orient data to `MusicContext` so it's available in Study/Play without a separate screen
-- Preserve the orient backend endpoint (`POST /session/orient-clip`) — only the frontend routing changes
-- Add "Skip to Study" shortcut that bypasses orient entirely
-- Keep `listen.tsx` as a standalone screen accessible from session settings for users who want the full orient experience
+**Scope shipped:**
+- `SESSION_STEPS` retains all 7 routes; new `MANDATORY_SESSION_STEPS` (6) and `OPTIONAL_SESSION_STEPS` (['listen']) in `sessionFlow.ts`
+- Home entry → `sessionEntryHrefWithMoodCheck` → tune or musical-tolerance → **study** (was listen)
+- `tune.tsx` forward button and `musical-tolerance.tsx` commit both route to study (was listen)
+- `study.tsx` and `play.tsx`: inline orient fetch replaced with `useOrientClip` hook; "Listen" header button added
+- `FretboardDiagram.tsx`: Lightbulb → HelpCircle, amber active tint, honest empty-state copy, new `orientError` prop
+- `SessionChromeBar.tsx`: progress bar denominator uses mandatory step count
+- `_layout.tsx`: phase sync imports `SESSION_STEPS` constant
+- `backend/app/lyria_clip.py`: returns `data/orient_clips/<job_id>/orient_clip.wav` (relative, served by `/lesson-file`)
+- `backend/app/main.py`: removed duplicate `generate_orient_annotation` call
+- New `src/session/useOrientClip.ts`: on-demand fetch + expo-av playback + module-level cache per job_id
+- Settings toggle: `PREF_SESSION_INCLUDE_LISTEN` + `PREF_LISTEN_NUDGE_DISMISSED` in schema, hydrated in store
 
 **Acceptance Criteria:**
 
-- [ ] Default session flow no longer mandates `listen`; Study reachable directly
-- [ ] Orient `?` overlay plays clip + shows annotation inside Study and Play
-- [ ] Backend orient-clip endpoint unchanged (non-regressed)
-- [ ] Full listen screen still reachable from session settings
-- [ ] Session flow tests + `npm run test` green
+- [x] Default session flow no longer mandates `listen`; Study reachable directly from tune/musical-tolerance/home
+- [x] Orient `?` overlay (HelpCircle) plays clip + shows annotation inside Study and Play via FretboardDiagram
+- [x] Backend orient-clip endpoint serves relative path via `/lesson-file`; no double annotation call
+- [x] Full listen screen still reachable from Study/Play header "Listen" button and Settings
+- [x] Session flow tests + `npm run test` green (555/555, including new `sessionFlow.test.ts`)
+- [x] `npm run lint` 0 errors
 
 ---
 

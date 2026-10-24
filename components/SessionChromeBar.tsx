@@ -5,7 +5,7 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { toast } from '@/components/ToastConfig'
 
 import { colors } from '@/src/constants/colors'
-import { SESSION_STEPS, sessionStepIndexFromPathname } from '@/src/constants/sessionFlow'
+import { MANDATORY_SESSION_STEPS, SESSION_STEPS, sessionStepIndexFromPathname } from '@/src/constants/sessionFlow'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { abandonActivePlan } from '@/src/session/activePlanPersistence'
 import { completePracticePlanSlot } from '@/src/session/planProgress'
@@ -36,6 +36,10 @@ export function SessionChromeBar() {
   const currentStep = pathname.replace(/\/+$/, '').split('/').pop()
   const onTuneScreen = currentStep === 'tune'
   const onReviewScreen = currentStep === 'review'
+  // Commit 163: progress bar uses the mandatory flow (listen is opt-in, not counted).
+  const mandatoryIdx = MANDATORY_SESSION_STEPS.indexOf(currentStep as (typeof MANDATORY_SESSION_STEPS)[number])
+  const progressDenom = MANDATORY_SESSION_STEPS.length
+  const progressNumer = mandatoryIdx >= 0 ? mandatoryIdx + 1 : 1
 
   const closeSessionOrHome = () => {
     router.replace('/(tabs)')
@@ -100,13 +104,13 @@ export function SessionChromeBar() {
         {showStepDots ? (
           <View
             className="flex-1 flex-row items-center justify-center px-1"
-            accessibilityLabel={active >= 0 ? `Step ${active + 1} of ${SESSION_STEPS.length}` : undefined}
+            accessibilityLabel={active >= 0 ? `Step ${progressNumer} of ${progressDenom}` : undefined}
             accessibilityRole="progressbar"
           >
             <View className="h-1.5 w-full max-w-[160px] overflow-hidden rounded-full bg-wood-700/60">
               <View
                 className="h-full rounded-full bg-amber-accent"
-                style={{ width: `${Math.max(0, Math.min(100, ((active + 1) / SESSION_STEPS.length) * 100))}%` }}
+                style={{ width: `${Math.max(0, Math.min(100, (progressNumer / progressDenom) * 100))}%` }}
               />
             </View>
           </View>

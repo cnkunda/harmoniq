@@ -65,9 +65,10 @@ import {
   PREF_COACH_VOICE,
   PREF_EXPERIENCE_LEVEL,
   PREF_METRONOME_DEFAULT_ON,
-PREF_MOOD_CHECK_SKIP,
+  PREF_MOOD_CHECK_SKIP,
   PREF_PREFER_FULL_TABS,
   PREF_PREFER_SIMPLER_TABS_LEGACY,
+  PREF_SESSION_INCLUDE_LISTEN,
   PREF_SPOTIFY_CLIENT_SESSION,
   PREF_SPOTIFY_TASTE_PROFILE_JSON,
   PREF_STANDARD_TUNING_HZ,
@@ -130,6 +131,9 @@ export default function SettingsScreen() {
   const [styleFocus, setStyleFocus] = useState('')
   const [metronomeDefaultOn, setMetronomeDefaultOn] = useState(true)
   const [skipMoodCheck, setSkipMoodCheck] = useState(false)
+  const [includeListen, setIncludeListen] = useState(false)
+  const includeListenStep = includeListen
+  const setIncludeListenStep = setIncludeListen
   const [coachVoice, setCoachVoice] = useState<CoachVoiceId>('warm')
   const [voiceCoachEnabled, setVoiceCoachEnabled] = useState(true)
   const [voiceCoachRate, setVoiceCoachRate] = useState(1)
@@ -164,6 +168,8 @@ export default function SettingsScreen() {
     setStyleFocus(style ?? '')
     setMetronomeDefaultOn(metro !== '0')
     setSkipMoodCheck(skipMood === '1')
+    const includeRaw = await getAppPref(PREF_SESSION_INCLUDE_LISTEN)
+    setIncludeListen(includeRaw === '1')
     setAnalyticsEnabled(analyticsOptOut !== '1')
     const vRaw = voice ?? ''
     setCoachVoice(isCoachVoice(vRaw) ? vRaw : 'warm')
@@ -295,6 +301,11 @@ export default function SettingsScreen() {
   const persistSkipMoodCheck = async (v: boolean) => {
     setSkipMoodCheck(v)
     await setAppPref(PREF_MOOD_CHECK_SKIP, v ? '1' : '0')
+  }
+
+  const persistIncludeListen = async (v: boolean) => {
+    setIncludeListen(v)
+    await setAppPref(PREF_SESSION_INCLUDE_LISTEN, v ? '1' : '0')
   }
 
   const persistVoice = async (v: CoachVoiceId) => {
@@ -558,6 +569,12 @@ export default function SettingsScreen() {
               label="Skip tuning & room noise before sessions"
               labelClassName="text-cream"
               surface="wood"
+            />
+            <SettingsSwitch
+              label="Include Listen at session start"
+              description="Play 30-second orient clip before study sessions"
+              value={includeListenStep}
+              onValueChange={(v) => void persistIncludeListen(v)}
             />
             <SettingsSwitch
               label="Auto-skip daily mood check"

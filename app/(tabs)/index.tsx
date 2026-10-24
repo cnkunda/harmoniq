@@ -463,7 +463,8 @@ export default function HomeScreen() {
             saveLesson(fullLesson)
             setLessonSectionIndex(0)
             const skipTune = useSessionPrefsStore.getState().skipTuneStep
-            router.replace(skipTune ? '/session/listen' : '/session/tune')
+            const href = await sessionEntryHrefWithMoodCheck(skipTune)
+            router.replace(href)
           } catch {
             toast.error('Could not open song.')
           }

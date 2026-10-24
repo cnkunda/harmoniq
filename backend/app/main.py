@@ -1146,12 +1146,8 @@ async def orient_clip(req: OrientClipRequest):
         style_label=req.style_label, technique=req.technique,
         key=req.key, bpm=req.bpm, job_id=req.job_id,
     )
-    annotation = generate_orient_annotation(
-        style_label=req.style_label, technique=req.technique,
-        key=req.key, bpm=req.bpm,
-    )
     return OrientClipResponse(
-        wav_path=clip_result["wav_path"], annotation=annotation,
+        wav_path=clip_result["wav_path"], annotation=clip_result["annotation"],
         duration=clip_result["duration"],
         used_placeholder=clip_result["used_placeholder"],
         placeholder_reason=clip_result["placeholder_reason"],

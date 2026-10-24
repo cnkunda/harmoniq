@@ -105,6 +105,12 @@ export const PREF_LAST_SOUNDFONT_PROFILE = 'last_soundfont_profile'
 
 /** Commit 62: skip `/session/tune` when `"1"`. */
 export const PREF_SESSION_SKIP_TUNE = 'session_skip_tune'
+/** Commit 163: `"1"` = include `/session/listen` at the start of each session.
+ *  `"0"` = go straight to `/session/study` (default). */
+export const PREF_SESSION_INCLUDE_LISTEN = 'session_include_listen'
+/** Commit 163: `"1"` = dismiss the "Listen to the piece before playing" first-run nudge.
+ *  Stored as `listen_nudge_dismissed_<YYYY-MM-DD>` (per-day key). */
+export const PREF_LISTEN_NUDGE_DISMISSED = 'listen_nudge_dismissed_'
 /** Commit 76: user can skip daily pre-session mood check. */
 export const PREF_MOOD_CHECK_SKIP = 'mood_check_skip'
 /** Commit 76: YYYY-MM-DD key for last day mood prompt was shown. */

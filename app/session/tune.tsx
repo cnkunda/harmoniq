@@ -67,7 +67,7 @@ export default function TuneScreen() {
 
   const forwardToListen = async () => {
     if (dontShowAgain) await setSkipTuneStep(true)
-    router.push('/session/listen')
+    router.push('/session/study')
   }
 
   useEffect(() => {

@@ -58,9 +58,8 @@ def _generate_placeholder_clip(
 ) -> dict[str, Any]:
     """Generate a silent WAV file and a context-aware annotation.
 
-    Stores the orient clip in ``data/orient_clips/<job_id>/`` instead of the
-    job directory so that an empty job dir (cleaned-up analysis artifacts) is
-    not conflated with a fully-processed job.
+    Stores the orient clip at data/orient_clips/<job_id>/orient_clip.wav
+    so that it is served via the /lesson-file endpoint (relative path).
     """
     orient_dir = get_data_dir() / "orient_clips" / job_id
     orient_dir.mkdir(parents=True, exist_ok=True)
@@ -76,8 +75,10 @@ def _generate_placeholder_clip(
         bpm=bpm,
     )
 
+    # Return a path relative to backend root, served by /lesson-file
+    rel_path = f"data/orient_clips/{job_id}/orient_clip.wav"
     return {
-        "wav_path": str(wav_path),
+        "wav_path": rel_path,
         "annotation": annotation,
         "duration": 30,
         "used_placeholder": True,

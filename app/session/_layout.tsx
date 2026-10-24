@@ -8,7 +8,7 @@ import { SessionChromeBar } from '@/components/SessionChromeBar'
 import { WoodGradient } from '@/components/WoodGradient'
 import { handleSessionLayoutUnmount, trackSessionPathname } from '@/src/analytics/sessionTracker'
 import { colors } from '@/src/constants/colors'
-import { sessionStepIndexFromPathname, type SessionStep } from '@/src/constants/sessionFlow'
+import { SESSION_STEPS, sessionStepIndexFromPathname, type SessionStep } from '@/src/constants/sessionFlow'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPhaseStore } from '@/src/stores/sessionPhaseStore'
 
@@ -27,8 +27,7 @@ export default function SessionLayout() {
   useEffect(() => {
     const stepIndex = sessionStepIndexFromPathname(pathname)
     if (stepIndex < 0) return
-    const steps: SessionStep[] = ['tune', 'musical-tolerance', 'listen', 'study', 'slow', 'play', 'review']
-    const currentStep = steps[stepIndex] as SessionStep
+    const currentStep = SESSION_STEPS[stepIndex] as SessionStep
     syncPhaseFromStep(currentStep)
   }, [pathname, syncPhaseFromStep])
 

@@ -1,4 +1,4 @@
-import { Lightbulb, Link, Music } from 'lucide-react-native'
+import { HelpCircle, Link, Music } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Platform,
@@ -87,6 +87,7 @@ type FretboardDiagramProps = {
   orientAnnotation?: string | null
   orientIsPlaying?: boolean
   onToggleOrientPlayback?: () => void
+  orientError?: string | null
   /** Warm-up / curriculum: highlight fixed cells (amber vs success rings). Finger 1-4 optional for color coding. */
   fretGuideCells?: ReadonlyArray<{ string: number; fret: number; variant: 'primary' | 'secondary'; finger?: 1 | 2 | 3 | 4 }> | null
   /** Active sequence index for animated warmup exercise highlighting */
@@ -364,6 +365,7 @@ export function FretboardDiagram({
   orientAnnotation = null,
   orientIsPlaying = false,
   onToggleOrientPlayback,
+  orientError = null,
   fretGuideCells = null,
   activeGuideIndex = null,
   chordCells: chordCellsProp = null,
@@ -775,7 +777,7 @@ export function FretboardDiagram({
               accessibilityRole="button"
               accessibilityLabel={orientPanelOpen ? 'Hide technique hint' : 'Show technique hint'}
             >
-              <Lightbulb size={16} color={colors.muted.brown} />
+              <HelpCircle size={16} color={orientPanelOpen ? colors.amber.accent : colors.muted.brown} />
             </Pressable>
           ) : null}
 
@@ -821,8 +823,12 @@ export function FretboardDiagram({
                 {orientIsPlaying ? 'Pause' : 'Play Clip'}
               </Text>
             </Pressable>
+          ) : orientError ? (
+            <Text className="mt-1 font-sans text-xs text-danger">{orientError}</Text>
           ) : (
-            <Text className="mt-1 font-sans text-xs text-muted-brown">No hint clip available</Text>
+            <Text className="mt-1 font-sans text-xs text-muted-brown">
+              No technique hint available yet — the clip is still being prepared.
+            </Text>
           )}
         </View>
       ) : null}

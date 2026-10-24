@@ -1,12 +1,12 @@
 /**
- * Session phase definitions for commit #83.
+ * Session phase definitions for commit #83 (updated by Commit 163 rewrite).
  *
- * 5-phase pedagogical model mapped to the linear session step order:
- * - Orient  (listen    — hear the target sound)
- * - Isolate (study     — break it down and understand)
- * - Refine  (slow      — slow practice to build muscle memory)
- * - Apply   (play      — play with the band)
- * - Reflect (review    — honest specific feedback)
+ * 5-phase pedagogical model. Steps map to phases as before; the only change is
+ * that the **Orient** phase is now opt-in rather than mandatory (see
+ * `sessionFlow.ts::MANDATORY_SESSION_STEPS`). A learner who has never opted in to
+ * "Include Listen at session start" walks Isolate → Refine → Apply → Reflect
+ * directly, and can still reach the full Orient experience from the Study/Play
+ * header or Settings.
  */
 
 import { type SessionStep } from "@/src/constants/sessionFlow";

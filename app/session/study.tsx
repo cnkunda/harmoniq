@@ -1,9 +1,8 @@
 import { useFocusEffect } from '@react-navigation/native'
-import { Audio } from 'expo-av'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
-import { BookOpen, X } from 'lucide-react-native'
+import { BookOpen, Headphones, X } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ChordCorrectionModal } from '@/components/ChordCorrectionModal'
@@ -21,7 +20,6 @@ import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
 import { colors } from '@/src/constants/colors'
 import { correctChord, correctSoloNote, fetchTheoryAnnotation } from '@/src/api/analyze'
-import { API_BASE_URL } from '@/src/config'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
 import { getAppPref } from '@/src/db/client'
@@ -43,6 +41,7 @@ import {
 } from '@/src/music/soloHarmony'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
+import { useOrientClip } from '@/src/session/useOrientClip'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useCorrectionStore } from '@/src/stores/correctionStore'
@@ -229,61 +228,13 @@ function StudyScreenInner() {
     })
   }, [lesson, corrections])
 
-  // Orient clip states (moved from separate orient.tsx screen)
-  const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
-  const [orientAnnotation, setOrientAnnotation] = useState<string | null>(null)
-  const [, setOrientIsLoading] = useState(false)
-  const [orientError, setOrientError] = useState<string | null>(null)
-  const [orientIsPlaying, setOrientIsPlaying] = useState(false)
-  const orientSoundRef = useRef<any>(null)
+  const orientClip = useOrientClip(lesson?.job_id ?? undefined)
 
-  // Fetch orient clip when lesson changes
+  // Fetch orient clip on mount (lazy — fires once per lesson)
   useEffect(() => {
-    const fetchOrientClip = async () => {
-      if (!lesson?.job_id) return
-
-      setOrientIsLoading(true)
-      setOrientError(null)
-
-      try {
-        const response = await fetch(`${API_BASE_URL}/session/orient-clip`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            job_id: lesson.job_id,
-            style_label: lesson.style_label,
-            technique: null,
-            key: lesson.key,
-            bpm: lesson.tempo,
-          }),
-        })
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch orient clip: ${response.statusText}`)
-        }
-
-        const data = await response.json()
-        setOrientClipUrl(data.wav_path)
-        setOrientAnnotation(data.annotation)
-      } catch (e) {
-        console.error('Failed to fetch orient clip:', e)
-        setOrientError(e instanceof Error ? e.message : 'Failed to load orient clip')
-      } finally {
-        setOrientIsLoading(false)
-      }
-    }
-
-    void fetchOrientClip()
-  }, [lesson?.job_id, lesson?.style_label, lesson?.key, lesson?.tempo])
-
-  // Cleanup orient sound on unmount
-  useEffect(() => {
-    return () => {
-      if (orientSoundRef.current) {
-        orientSoundRef.current.unloadAsync()
-      }
-    }
-  }, [])
+    if (lesson?.job_id) void orientClip.fetchOrientClip()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson?.job_id])
 
   const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
     setTick(ctx)
@@ -628,40 +579,11 @@ function StudyScreenInner() {
     })
   }, [toggleTuner])
 
-  // Orient clip playback handler
-  const handleToggleOrientPlayback = useCallback(async () => {
-    if (!orientClipUrl) return
+  // Orient clip playback handler (delegated to hook)
+  const handleToggleOrientPlayback = orientClip.togglePlayback
 
-    try {
-      if (orientIsPlaying) {
-        const sound = orientSoundRef.current
-        if (sound) {
-          await sound.pauseAsync()
-          setOrientIsPlaying(false)
-        }
-      } else {
-        if (orientSoundRef.current) {
-          await orientSoundRef.current.playAsync()
-          setOrientIsPlaying(true)
-        } else {
-          const { sound } = await (Audio as any).Sound.createAsync(
-            { uri: orientClipUrl },
-            { shouldPlay: true }
-          )
-          orientSoundRef.current = sound
-          setOrientIsPlaying(true)
-          sound.setOnPlaybackStatusUpdate((status: any) => {
-            if (status.isLoaded && status.didJustFinish) {
-              setOrientIsPlaying(false)
-            }
-          })
-        }
-      }
-    } catch (e) {
-      console.error('Orient playback error:', e)
-      toast.error('Could not play orient clip')
-    }
-  }, [orientClipUrl, orientIsPlaying])
+  // Show orient hint panel even when clip failed to load — honest empty state is fine.
+  const orientPanelVisible = Boolean(orientClip.url || orientClip.annotation || orientClip.isLoading)
 
   return (
     <SessionStepScreen
@@ -679,6 +601,18 @@ function StudyScreenInner() {
       onNext={() => router.push(sessionHref('slow'))}
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.study}</DemoTourCallout> : null}
+
+      {/* Commit 163: Listen shortcut — full-song listening is opt-in, not a mandatory step. */}
+      <AnimatedPressable
+        haptic="light"
+        onPress={() => router.push(sessionHref('listen'))}
+        className="mb-3 self-start flex-row items-center gap-1.5 rounded-full border border-wood-600/45 bg-wood-800/45 px-3 py-1.5"
+        accessibilityRole="button"
+        accessibilityLabel="Open full Listen screen"
+      >
+        <Headphones size={14} color={colors.amber.accent} />
+        <Text className="font-sans-medium text-xs text-cream">Listen</Text>
+      </AnimatedPressable>
 
       {!lesson ? (
         <EmptyState
@@ -819,11 +753,12 @@ function StudyScreenInner() {
               onToggleTune={toggleFretboardTuner}
               onCalibrateTune={startCalibration}
               tunerState={tunerState}
-              showOrientControl={!orientError}
-              orientClipUrl={orientClipUrl}
-              orientAnnotation={orientAnnotation}
-              orientIsPlaying={orientIsPlaying}
+              showOrientControl={orientPanelVisible}
+              orientClipUrl={orientClip.url}
+              orientAnnotation={orientClip.annotation}
+              orientIsPlaying={orientClip.isPlaying}
               onToggleOrientPlayback={handleToggleOrientPlayback}
+              orientError={orientClip.error}
               fretboardMode={fretboardMode}
               onFretboardModeChange={setFretboardMode}
               voicingMode={voicingMode}
