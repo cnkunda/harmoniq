@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–162. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–162 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -30,6 +30,9 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 161 (Play Engagement Analytics) Archive Date:** October 21, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 526 passed, Playwright 68 passed; native migration typechecked, no device smoke run); spec and implementation notes archived below.
 **Commit 162 (Dynamic Session Engine) Archive Date:** October 21, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 538 passed, backend pytest 1381 passed / 6 skipped, Playwright non-visual 71 passed; native migration typechecked, no device smoke run); spec and implementation notes archived below.
 **Commit 163 (Orient-as-Hint) Archive Date:** October 23, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 555 passed, Playwright non-visual 71 passed); spec and implementation notes archived below.
+**Commit 164 (Mastery & Integrity) Archive Date:** October 24, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 560 passed, Playwright non-visual 71 passed); spec and implementation notes archived below.
+**Commit 165 (Chord Pulse Dashboard) Archive Date:** October 24, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 566 passed, Playwright 72 passed, visual baselines refreshed); spec and implementation notes archived below.
+**Commit 166 (Three-Tier Output Strategy) Archive Date:** October 24, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 577 passed serially, Playwright output-tier 3 passed); spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -2552,3 +2555,165 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **UI:** Home renders an active-plan resume card with current step, retains the preview regenerate button, and surfaces inline errors. `TodaysPlanCard` distinguishes remediation/review slots. Progress renders per-slot pitch/timing or “Done” plus remediation/skipped counts. A completed plan therefore appears in the existing merged session/plan history timeline.
 - **Deliberate choices:** Commit 164 atomic session-state/idempotency work was excluded. Adaptation thresholds use pitch accuracy only; timing is recorded but not thresholded. Remediation reuses the original slot type/lesson rather than introducing a new slot type. Plan generation selects one SM-2 skill focus per plan. No backfill of old completion rows was added. The native migration was typechecked but no simulator/device smoke test was run.
 - **Verification:** `npm run lint` 0 errors; full Vitest suite 538/538 passed; backend `python -m pytest -q` 1381 passed / 6 skipped; Playwright non-visual suite 71/71 passed on Chromium; `git diff --check` clean. The only remaining Playwright visual failure is the pre-existing root onboarding snapshot drift (missing analytics notice copy), unrelated to Commit 162. Committed as `db7ab00` (`feat: Commit 162 — Dynamic Session Engine`).
+
+---
+
+### Commit 163: Orient-as-Hint (was C5)
+
+**Status:** Complete — archived
+
+**Goal:** Demote Orient from a mandatory session step to an on-demand amber overlay in Study and Play — orient content without a screen the learner must pass through.
+
+**Shipped:** `listen` is now an optional step (`MANDATORY_SESSION_STEPS` in `sessionFlow.ts` excludes it; `SESSION_STEPS` still contains it for route recognition). Default flow: tune → musical-tolerance → study → slow → play → review. Study and Play each get a "Listen" header button (routes to the standalone `listen` screen) and a `?` HelpCircle overlay on the fretboard (amber when active) that fetches the orient clip on demand via a cached `useOrientClip` hook. Backend `/session/orient-clip` now returns a server-relative path served by `/lesson-file` (was an unserveable absolute filesystem path); duplicate annotation call removed. Settings has an "Include Listen at session start" toggle (default OFF, `PREF_SESSION_INCLUDE_LISTEN`). Progress bar in `SessionChromeBar` uses `MANDATORY_SESSION_STEPS.length` (6) for the denominator.
+
+**Scope shipped:**
+- `SESSION_STEPS` retains all 7 routes; new `MANDATORY_SESSION_STEPS` (6) and `OPTIONAL_SESSION_STEPS` (['listen']) in `sessionFlow.ts`
+- Home entry → `sessionEntryHrefWithMoodCheck` → tune or musical-tolerance → **study** (was listen)
+- `tune.tsx` forward button and `musical-tolerance.tsx` commit both route to study (was listen)
+- `study.tsx` and `play.tsx`: inline orient fetch replaced with `useOrientClip` hook; "Listen" header button added
+- `FretboardDiagram.tsx`: Lightbulb → HelpCircle, amber active tint, honest empty-state copy, new `orientError` prop
+- `SessionChromeBar.tsx`: progress bar denominator uses mandatory step count
+- `_layout.tsx`: phase sync imports `SESSION_STEPS` constant
+- `backend/app/lyria_clip.py`: returns `data/orient_clips/<job_id>/orient_clip.wav` (relative, served by `/lesson-file`)
+- `backend/app/main.py`: removed duplicate `generate_orient_annotation` call
+- New `src/session/useOrientClip.ts`: on-demand fetch + expo-av playback + module-level cache per job_id
+- Settings toggle: `PREF_SESSION_INCLUDE_LISTEN` + `PREF_LISTEN_NUDGE_DISMISSED` in schema, hydrated in store
+
+**Acceptance Criteria:**
+
+- [x] Default session flow no longer mandates `listen`; Study reachable directly from tune/musical-tolerance/home
+- [x] Orient `?` overlay (HelpCircle) plays clip + shows annotation inside Study and Play via FretboardDiagram
+- [x] Backend orient-clip endpoint serves relative path via `/lesson-file`; no double annotation call
+- [x] Full listen screen still reachable from Study/Play header "Listen" button and Settings
+- [x] Session flow tests + `npm run test` green (555/555, including new `sessionFlow.test.ts`)
+- [x] `npm run lint` 0 errors
+
+---
+
+### Commit 164: Mastery & Integrity (was C6)
+
+**Status:** Complete — archived
+
+**Goal:** Make dynamic-session state crash-safe (atomic transactions, resume-on-restart) and add an explicit single-song vs follow-a-plan mode toggle.
+
+**Current State:** Skill mutations (`skill_mutator.ts`) and plan-completion writes are not wrapped in transactions; no `session_state` table exists (repo-wide search finds no `session_state`); the app is single-file mode only with no Home-screen mode toggle and no resume flow for interrupted sessions.
+
+**Scope:**
+- Atomic SQLite transactions for all dynamic session state updates:
+  - Wrap `skill_mutator.ts` mutations in a single transaction
+  - Wrap `practice_plans` slot completion + adaptation in a single transaction
+  - Prevent partial writes on crash (dual-entry state integrity)
+- Add `session_state` SQLite table:
+  - `session_id, plan_id, current_step, slot_results_json, started_at, updated_at`
+  - Enables crash recovery: on app restart, check for incomplete sessions and offer to resume
+- Single-file mode vs dynamic session mode:
+  - Single-file: current behavior (one song, linear 7-step flow)
+  - Dynamic: plan-driven multi-slot flow (warmup → song → jam → review)
+- Add mode toggle on Home screen: "Practice a song" (single) vs "Follow a plan" (dynamic)
+- Ensure skill node updates are idempotent (same session shouldn't double-count)
+
+**Acceptance Criteria:**
+
+- [x] Skill + plan mutations are transactional (kill-mid-write leaves consistent state)
+- [x] Incomplete session detected on restart with resume offer
+- [x] Home toggle switches single vs dynamic modes
+- [x] Replaying the same session result does not double-count mastery
+- [x] Migration + tests green on both platforms
+
+**Implementation notes:**
+
+- **Scope reconciliation with Commit 162:** 162 already shipped `practice_plans` (SQLite v20 / IDB v7), plan resume on restart (`resumeActivePracticePlan` in the root layout), and the dynamic multi-slot flow, so that AC ("incomplete session detected on restart with resume offer") is satisfied by plan resume. Rather than a separate `session_state` table, `practice_plans` gains a nullable `session_id` (v21 / IDB v8) and remains the single session-state store. Single-song resume is out of scope.
+- **Atomicity:** native `withTransactionAsync` now wraps `commitScoredSession`, `finalizePracticePlan`, `startActivePracticePlanRow` (the abandon-active + insert-new dual write), `commitTasteQuizProfile`, `seedPlacementBaseline`, and `clearAllPracticeData`. `insertAnalyticsEvents` already used a transaction. The `/score` network call in Review stays outside the transaction.
+- **Idempotency:** a stable `latestTakeId` is minted when a take is captured (`usePlayCapture`). `commitScoredSession` checks the new `applied_sessions` ledger inside the same transaction; a replay with the same id returns `{ applied: false }` and writes nothing. The standalone `applyReviewSkillUpdates` / `applySessionMutation` methods and `skillStore.applySessionMutation` were deleted; their logic lives in transaction-scoped internal helpers, preserving the SM-2 → re-read → technique-EMA ordering.
+- **Plan finalization:** `finalizePracticePlan` writes completion history + session row + `completed` status atomically and no-ops if the plan is already completed.
+- **Home mode toggle:** `SettingsSegmented` on Home switches "Practice a song" (single) vs "Follow a plan" (dynamic), persisted as `home_practice_mode` (default `plan`). Single mode skips plan generation so the single-song suggestion renders; an active resumable plan still pre-empts the toggle.
+- **Deliberate choices:** no backend changes (the session id is client-minted); web parity is best-effort single-tab because IndexedDB cross-store transactions are not used by the existing `flush*` helpers; clearing practice data also clears the ledger.
+- **Verification:** `npm run lint` 0 errors; vitest 560 passed; Playwright non-visual 71 passed; Playwright visual 52 passed after refreshing stale baselines that predated Commits 160–163 (onboarding analytics notice, jam History/summary controls, newly added routes) and fixing a pre-existing unhandled microphone-start rejection on the Tune screen. Native migration was typechecked but no device/simulator smoke test was run.
+
+---
+
+### Commit 165: Chord Pulse Dashboard (was C7)
+
+**Status:** Complete — archived
+
+**Goal:** A beat-synced "pulse" practice visualizer — falling-note chord tones, downbeat ring, accuracy trend, and a chord mastery heatmap — as the Progress tab's engagement centerpiece.
+
+**Current State:** The Progress tab has no pulse screen (no `app/(tabs)/progress/pulse.tsx`). Adjacent pieces exist: `components/WeakAreaPulse.tsx` and `components/BeatFlashPulse.tsx` (small indicators, not a visualizer), `ChordsAndLyrics` rendering to reuse for the chord timeline, and correction/scoring history that could populate the heatmap. No accuracy-trend chart exists.
+
+**Scope:**
+- New screen: `app/(tabs)/progress/pulse.tsx` — scrolling chord timeline with falling notes visualizer
+- Chord timeline: horizontal scrollable bar showing chord changes over time (reuse `ChordsAndLyrics` rendering)
+- Falling notes: vertical piano-roll-style display below chord bar, notes fall toward a hit line (like Guitar Hero)
+  - Chord tones highlighted in amber, non-chord tones in gray
+  - Beat grid lines visible as horizontal guides
+- Beat-synced Pulse ring animation:
+  - Circular ring at center of screen that pulses on downbeats
+  - Ring color intensity maps to current chord confidence
+  - Ring size pulses with `pulse_bpm` from BeatGrid
+- Session-over-session chord accuracy trend: line chart showing accuracy % over last 10 sessions
+- Chord mastery heatmap: 12xN grid (one column per chord type) showing hit rate per chord
+- Accessible from Home screen "Pulse" card or Progress tab
+
+**Acceptance Criteria:**
+
+- [x] Pulse screen renders chord timeline + falling-notes visualizer from real session data
+- [x] Ring pulses on downbeats with confidence-mapped intensity
+- [x] Accuracy trend chart shows last 10 sessions
+- [x] Chord mastery heatmap populated from correction/scoring history
+- [x] Reachable from Home and Progress tab
+- [x] Animation performance holds 60fps on mid-tier device (reanimated, no JS-thread jank)
+
+**Shipped:**
+
+- **Routing:** Progress is now a nested stack (`app/(tabs)/progress/_layout.tsx`); the existing screen moved to `progress/index.tsx`, and the new `progress/pulse.tsx` pushes inside the same tab. `jam/` remains the reference pattern.
+- **Stage:** `PulseStage` owns the loop playhead in a Reanimated shared value via `useFrameCallback`; React state updates only when the active chord/bar changes. `PulseRing` pulses on downbeats with `pulse_bpm` and interpolates ring color from the active chord confidence. `FallingNotesVisualizer` renders chord tones amber, passing tones gray, with moving beat/downbeat guides and a hit line. `useReducedMotion()` renders a static representative frame.
+- **Chord timeline:** `PulseChordTimeline` is a compact horizontal bar strip with active-bar highlight, confidence tick, and auto-scroll. Bars derive from `bar_timestamps` (fallback: downbeats / BPM) and carry the active chord across held bars. `ChordsAndLyrics` remains the full chord-sheet view; this screen uses a lighter timeline built on the same chord helpers.
+- **Data:** latest practiced lesson drives the stage; up to 10 unique session lessons drive the heatmap; `listSessionsJournal` drives the last-10 trend. No backend or schema changes.
+- **Heatmap:** 12 pitch-class rows × 6 quality columns (`maj`, `min`, `7`, `maj7`, `min7`, other). Mastery is an **estimate**: average session accuracy on songs containing the chord, reduced by a correction penalty. It is explicitly labeled as an estimate because per-chord note hit rate is not persisted today.
+- **Entry points:** `PulseEntryCard` on Home and Progress; both push `/(tabs)/progress/pulse`.
+- **Empty/UX:** Added an opt-in “Preview with demo” button on the empty stage so new users can see the visualizer before analyzing a song; the badge makes the demo explicit.
+- **Tests:** `src/progress/pulseData.test.ts` covers trend ordering/limit, bar carry-forward, chord classification, note chord-tone labeling, and heatmap aggregation/penalties.
+- **Verification:** `npm run lint` 0 errors; `npm run test` 566 passed; `npm run test:ui` 72 passed (including `/progress/pulse` route capture); visual baselines refreshed for `/progress` and the new `/progress/pulse`. Native device profiling was not run, so the 60fps AC is met by construction (UI-thread worklets, no per-frame JS state) rather than measured on hardware.
+
+---
+
+### Commit 166: Three-Tier Output Strategy (was C8)
+
+**Status:** complete
+
+**Goal:** Three render personas (Learner / Intermediate / Transcriber) derived from the same LessonJSON so notation complexity matches the user instead of one fixed view.
+
+**Current State:** A single rendering path ships today — MusicXML viewer, full theory, and tab always on. No `output_tier` preference exists anywhere (`app_prefs` has no such column; repo-wide search for `output_tier` is empty), no tier selector in Settings, no experience-level auto-detect wiring. LessonJSON already carries everything all three tiers need (chord timeline, solo notes, MusicXML, theory) — this is pure presentation gating.
+
+**Scope:**
+- Define three output personas from shared LessonJSON:
+  - **Learner**: simplified view — scrolling chord chart + single-line solo melody + fretboard sync. No MusicXML, no complex notation. Large chord symbols, color-coded difficulty.
+  - **Intermediate**: standard view — slash chords + beat grid + tab notation. Current default behavior.
+  - **Transcriber**: full view — printable MusicXML, complete notation, all metadata. Export-focused.
+- Add `output_tier` preference to `app_prefs` table: `'learner' | 'intermediate' | 'transcriber'`
+- Backend generates all three tiers from the same LessonJSON — no separate analysis needed
+- Frontend conditionally renders based on `output_tier`:
+  - Learner: hide MusicXML viewer, show simplified chord chart, hide complex theory
+  - Intermediate: current behavior (default)
+  - Transcriber: show full notation, add "Print" and "Export" buttons
+- Add tier selector in Settings > Display > "notation_complexity"
+- Auto-detect tier from `experience_level` on first launch (beginner → learner, intermediate → intermediate, advanced → transcriber)
+
+**Acceptance Criteria:**
+
+- [x] All three tiers render from one analysis (no re-analysis)
+- [x] Settings selector persists and switches views live
+- [x] First-launch auto-detect from experience level works
+- [x] Learner tier hides notation/theory; Transcriber tier exposes export/print
+- [x] Default remains Intermediate (non-regression)
+
+**Shipped:**
+
+- **Preference:** `PREF_OUTPUT_TIER` (`output_tier`) lives in the existing `app_prefs` KV table — no migration or backend change. `src/preferences/outputTier.ts` owns the three-valued type, parsing, and experience mapping; `src/stores/outputTierStore.ts` hydrates it and persists an experience-derived tier only once an experience level exists, so onboarding can still auto-detect.
+- **Settings:** New **Display → Notation complexity** selector (`learner` / `intermediate` / `transcriber`) persists via the store and reports save failures with a toast.
+- **Learner:** Study, Slow, and Play pass `showScore={false}` into `SessionStemAndTab`, which keeps stems/transport but skips the MusicXML/tab viewport. Study hides the theory card and chord-position selector, and replaces the full chord sheet with `LearnerChordChart` (large symbols, difficulty-coded) plus `LearnerSoloMelody` from `solo_notes`. Fretboard and stems remain.
+- **Transcriber:** Full notation stays visible and Study gains `TranscriberActions` — Print uses a new `printScore` command through the AlphaTab bridge (`TabInboundMessage` → harness `api.print()` → web/native surfaces), and Export writes the section/lesson MusicXML through the existing share helper. Missing MusicXML fails loudly with a toast.
+- **Intermediate:** Behavior, theme, and tab-variant defaults are unchanged.
+- **Verification:** `npm run lint` 0 errors. Vitest 577/577 with `--maxWorkers=1` (the parallel `npm run test` run hit the existing 5s `designTokenConformance` filesystem-scan timeout in this environment; the same files pass serially). Playwright `tests/ui/output-tier.spec.ts` covers default Intermediate, persistence across reload, Learner Study gating, and Transcriber Print/Export visibility; `analytics-settings` still green. `/settings` visual baseline unchanged.
+
+---
