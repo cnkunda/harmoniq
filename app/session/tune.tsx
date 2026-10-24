@@ -56,6 +56,7 @@ export default function TuneScreen() {
   const [noteName, setNoteName] = useState('')
   const [calibrating, setCalibrating] = useState(false)
   const [dontShowAgain, setDontShowAgain] = useState(false)
+  const [micError, setMicError] = useState<string | null>(null)
 
   const calEndAtRef = useRef(0)
   const calSamplesRef = useRef<number[]>([])
@@ -73,28 +74,39 @@ export default function TuneScreen() {
   useEffect(() => {
     let alive = true
     void (async () => {
-      await start((reading) => {
-        if (!alive) return
-        const r = typeof reading.rms === 'number' && Number.isFinite(reading.rms) ? reading.rms : 0
-        setRms(r)
-        setNoteName(reading.noteName ?? '')
-        const h = typeof reading.hz === 'number' && Number.isFinite(reading.hz) && reading.hz > 0 ? reading.hz : null
-        setHz(h)
-        if (h != null) setCents(centsFromHzToTargetMidi(h, E2_TARGET_MIDI))
-        else setCents(null)
+      try {
+        await start((reading) => {
+          if (!alive) return
+          const r = typeof reading.rms === 'number' && Number.isFinite(reading.rms) ? reading.rms : 0
+          setRms(r)
+          setNoteName(reading.noteName ?? '')
+          const h = typeof reading.hz === 'number' && Number.isFinite(reading.hz) && reading.hz > 0 ? reading.hz : null
+          setHz(h)
+          if (h != null) setCents(centsFromHzToTargetMidi(h, E2_TARGET_MIDI))
+          else setCents(null)
 
-        const endAt = calEndAtRef.current
-        if (endAt > 0 && Date.now() >= endAt) {
-          const thresh = noiseGateThresholdFromAmbientSamples(calSamplesRef.current)
-          const pid = useSessionPrefsStore.getState().activeMicProfile
-          void useSessionPrefsStore.getState().setCalibrationGateForProfile(pid, thresh)
-          calEndAtRef.current = 0
-          calSamplesRef.current = []
-          setCalibrating(false)
-        } else if (endAt > 0 && Date.now() < endAt) {
-          calSamplesRef.current.push(r)
-        }
-      })
+          const endAt = calEndAtRef.current
+          if (endAt > 0 && Date.now() >= endAt) {
+            const thresh = noiseGateThresholdFromAmbientSamples(calSamplesRef.current)
+            const pid = useSessionPrefsStore.getState().activeMicProfile
+            void useSessionPrefsStore.getState().setCalibrationGateForProfile(pid, thresh)
+            calEndAtRef.current = 0
+            calSamplesRef.current = []
+            setCalibrating(false)
+          } else if (endAt > 0 && Date.now() < endAt) {
+            calSamplesRef.current.push(r)
+          }
+        })
+      } catch (e) {
+        if (!alive) return
+        const message = e instanceof Error ? e.message : String(e)
+        console.warn('[tune] microphone start failed', message)
+        setMicError(
+          message === 'MIC_PERMISSION_DENIED'
+            ? 'Microphone access was denied. Allow mic access in your browser settings, then reopen this step.'
+            : 'Microphone unavailable. Check your input device and browser permissions.',
+        )
+      }
     })()
     return () => {
       alive = false
@@ -189,7 +201,7 @@ export default function TuneScreen() {
             <Text className="font-mono text-[10px] text-muted-brown">+50</Text>
           </View>
           <Text className="mt-2 text-center font-mono text-sm text-muted-brown">
-            {cents != null ? `${cents > 0 ? '+' : ''}${cents.toFixed(0)} cents` : 'Listening…'}
+            {micError ? 'Mic unavailable' : cents != null ? `${cents > 0 ? '+' : ''}${cents.toFixed(0)} cents` : 'Listening…'}
           </Text>
         </View>
       </View>
@@ -197,6 +209,9 @@ export default function TuneScreen() {
       <Text className="mt-6 text-center font-sans text-sm leading-relaxed text-muted-brown">
         {noteName ? `Heard: ${noteName}. ` : ''}Play the open low E string.
       </Text>
+      {micError ? (
+        <Text className="mt-3 text-center font-sans text-sm leading-relaxed text-danger">{micError}</Text>
+      ) : null}
       {tunerOk ? (
         <Text className="mt-2 text-center font-sans text-sm text-success">In range — ready to continue.</Text>
       ) : null}
