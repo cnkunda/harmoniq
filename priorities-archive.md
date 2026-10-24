@@ -29,6 +29,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 160 (Jam Mode Summary Agent) Archive Date:** October 20, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 504 passed, Playwright 64 passed, backend pytest 1366 passed / 6 skipped; CI scoring set 287 passed / 2 skipped); spec and implementation notes archived below.
 **Commit 161 (Play Engagement Analytics) Archive Date:** October 21, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 526 passed, Playwright 68 passed; native migration typechecked, no device smoke run); spec and implementation notes archived below.
 **Commit 162 (Dynamic Session Engine) Archive Date:** October 21, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 538 passed, backend pytest 1381 passed / 6 skipped, Playwright non-visual 71 passed; native migration typechecked, no device smoke run); spec and implementation notes archived below.
+**Commit 163 (Orient-as-Hint) Archive Date:** October 23, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 555 passed, Playwright non-visual 71 passed); spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
