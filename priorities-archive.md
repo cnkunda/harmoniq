@@ -1,6 +1,6 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
 > **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
@@ -33,6 +33,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 164 (Mastery & Integrity) Archive Date:** October 24, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 560 passed, Playwright non-visual 71 passed); spec and implementation notes archived below.
 **Commit 165 (Chord Pulse Dashboard) Archive Date:** October 24, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 566 passed, Playwright 72 passed, visual baselines refreshed); spec and implementation notes archived below.
 **Commit 166 (Three-Tier Output Strategy) Archive Date:** October 24, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 577 passed serially, Playwright output-tier 3 passed); spec and implementation notes archived below.
+**Commit 167 (Multi-Instrument Diagram Support) Archive Date:** October 24, 2026 — Skipped; out of scope for the guitar-focused roadmap. Spec archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -1764,7 +1765,7 @@ display, calibration (ECE), tier-aware scoring.
 | **Commit 135** | Orient-as-Hint | Promoted to PRIORITIES.md commit 163 |
 | **Commit 136** | Mastery & Integrity | Promoted to PRIORITIES.md commit 164 |
 | **Commit 137** | Chord Pulse Dashboard | Promoted to PRIORITIES.md commit 165 |
-| **Commit 138** | Multi-Instrument Diagram Support | Promoted to PRIORITIES.md commit 167 |
+| **Commit 138** | Multi-Instrument Diagram Support | Archived — skipped (guitar-focused roadmap) |
 | **Commit 139** | 6-Stem High-Fidelity Demucs | **Complete** — already shipped |
 | **Commit 140** | Real-Time Stem Mixer & Export | Promoted to PRIORITIES.md commit 172 (built as `StemMixer.tsx`; export missing) |
 | **Commit 141** | Dynamic Tempo Support | Promoted to PRIORITIES.md commit 169 (only static `bpm_override` exists) |
@@ -2021,7 +2022,7 @@ display, calibration (ECE), tier-aware scoring.
 | Commit C6: Mastery & Integrity | PRIORITIES.md commit 164 |
 | Commit C7: Chord Pulse Dashboard | PRIORITIES.md commit 165 |
 | Commit C8: Three-Tier Output Strategy | PRIORITIES.md commit 166 |
-| Commit C9: Multi-Instrument Diagram Support | PRIORITIES.md commit 167 |
+| Commit C9: Multi-Instrument Diagram Support | Archived — skipped (guitar-focused roadmap) |
 
 Full specs (Goal / Current State / Scope / Acceptance Criteria) now live in [`PRIORITIES.md`](PRIORITIES.md) Active Backlog. Current-state notes from the archive, for reference: correction store (`useCorrectionStore`) fully implemented with chord/note/voicing overrides and DB persistence; jam mode (`app/(tabs)/jam/index.tsx`) is a full single-tab experience with backing tracks, scale detection, phrase coaching, and save flow; SM-2 spaced repetition engine (`src/spaced/sm2.ts`) powers skill node mutations; practice plan sequencer (`backend/app/sequencer.py`) generates slot-based plans. Analytics infrastructure now lives in `src/analytics/` (commit 161). No three-tier output, no multi-instrument support, and no chord pulse dashboard exist.
 
@@ -2715,5 +2716,39 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **Transcriber:** Full notation stays visible and Study gains `TranscriberActions` — Print uses a new `printScore` command through the AlphaTab bridge (`TabInboundMessage` → harness `api.print()` → web/native surfaces), and Export writes the section/lesson MusicXML through the existing share helper. Missing MusicXML fails loudly with a toast.
 - **Intermediate:** Behavior, theme, and tab-variant defaults are unchanged.
 - **Verification:** `npm run lint` 0 errors. Vitest 577/577 with `--maxWorkers=1` (the parallel `npm run test` run hit the existing 5s `designTokenConformance` filesystem-scan timeout in this environment; the same files pass serially). Playwright `tests/ui/output-tier.spec.ts` covers default Intermediate, persistence across reload, Learner Study gating, and Transcriber Print/Export visibility; `analytics-settings` still green. `/settings` visual baseline unchanged.
+
+---
+
+### Commit 167: Multi-Instrument Diagram Support (was C9)
+
+**Status:** Skipped — out of scope (guitar-focused roadmap)
+
+**Goal:** Extend chord/fretboard diagrams beyond standard-tuning guitar — piano and ukulele layouts plus alternate/custom guitar tunings.
+
+**Current State:** `FretboardDiagram` and `ChordDiagram` are guitar-only with standard EADGBE baked in; `chordToFretboardCells()` / `fretboardCell.ts` assume a fixed tuning array; no instrument toggle, no `guitar_tuning` preference (repo-wide search empty), no piano/ukulele rendering anywhere.
+
+**Scope:**
+- Extend `FretboardDiagram` to support multiple instrument types:
+  - Guitar (6-string, standard tuning) — existing
+  - Piano (keyboard layout with 2-octave range)
+  - Ukulele (4-string, GCEA tuning)
+- Add instrument selector toggle in session toolbar (guitar / piano / ukulele)
+- Alternate tuning support for guitar:
+  - Preset tunings: Standard (EADGBE), Drop D (DADGBE), Open G (DGDGBD), DADGAD, Half-step down (EbAbDbGbBbEb)
+  - Custom tuning: user inputs per-string notes
+  - Tuning stored in `app_prefs` as `guitar_tuning: string[]`
+- Update `chordToFretboardCells()` and `fretboardCell.ts` to accept tuning array
+- Update chord diagram rendering (`ChordDiagram.tsx`) to show correct string/fret for ukulele
+- Piano mode: render 2-octave keyboard with highlighted notes for current chord/scale
+- Transposition engine: when tuning changes, recompute all fretboard positions
+
+**Acceptance Criteria:**
+
+- [ ] Instrument toggle switches guitar/piano/ukulele diagrams in session screens
+- [ ] All preset tunings recompute correct string/fret positions
+- [ ] Custom tuning input persists and applies
+- [ ] Ukulele chord diagrams correct for GCEA
+- [ ] Piano keyboard highlights current chord/scale
+- [ ] Music theory outputs (chords, scales) unchanged — only rendering/tuning-aware mapping
 
 ---

@@ -6,10 +6,10 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Phase 2 commits 98–148** — archived.  
 **Milestone A (MT3-Primary Pipeline)** — archived, complete.  
 **Milestone B (Fretboard Dual-Mode)** — archived, complete.  
-**Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–166 completed → archived).
+**Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–166 completed, 167 skipped → archived).
 **Milestone D (Infrastructure)** — partially implemented; remaining gaps at commits 169–172 (151 SSE progress stream completed → archived).  
 **Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
-**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149 and 151–166 completed → archived).
+**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166 completed and 167 skipped → archived).
 **Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 177–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 167–183** (149, 151–166 completed → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -92,47 +92,13 @@ Audio → Demucs 6-stem → MT3 (primary transcription)
 
 ---
 
-## Active Backlog — Commits 167–183
+## Active Backlog — Commits 168–183
 
 Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
 
 ---
 
-**Group: Engagement features — promoted from Milestone C (159–167), then left-handed parity (168)**
-
----
-
-### Commit 167: Multi-Instrument Diagram Support (was C9)
-
-**Status:** deferred
-
-**Goal:** Extend chord/fretboard diagrams beyond standard-tuning guitar — piano and ukulele layouts plus alternate/custom guitar tunings.
-
-**Current State:** `FretboardDiagram` and `ChordDiagram` are guitar-only with standard EADGBE baked in; `chordToFretboardCells()` / `fretboardCell.ts` assume a fixed tuning array; no instrument toggle, no `guitar_tuning` preference (repo-wide search empty), no piano/ukulele rendering anywhere.
-
-**Scope:**
-- Extend `FretboardDiagram` to support multiple instrument types:
-  - Guitar (6-string, standard tuning) — existing
-  - Piano (keyboard layout with 2-octave range)
-  - Ukulele (4-string, GCEA tuning)
-- Add instrument selector toggle in session toolbar (guitar / piano / ukulele)
-- Alternate tuning support for guitar:
-  - Preset tunings: Standard (EADGBE), Drop D (DADGBE), Open G (DGDGBD), DADGAD, Half-step down (EbAbDbGbBbEb)
-  - Custom tuning: user inputs per-string notes
-  - Tuning stored in `app_prefs` as `guitar_tuning: string[]`
-- Update `chordToFretboardCells()` and `fretboardCell.ts` to accept tuning array
-- Update chord diagram rendering (`ChordDiagram.tsx`) to show correct string/fret for ukulele
-- Piano mode: render 2-octave keyboard with highlighted notes for current chord/scale
-- Transposition engine: when tuning changes, recompute all fretboard positions
-
-**Acceptance Criteria:**
-
-- [ ] Instrument toggle switches guitar/piano/ukulele diagrams in session screens
-- [ ] All preset tunings recompute correct string/fret positions
-- [ ] Custom tuning input persists and applies
-- [ ] Ukulele chord diagrams correct for GCEA
-- [ ] Piano keyboard highlights current chord/scale
-- [ ] Music theory outputs (chords, scales) unchanged — only rendering/tuning-aware mapping
+**Group: Left-handed parity (168) — Milestone C features 159–167 completed or skipped → archived**
 
 ---
 
