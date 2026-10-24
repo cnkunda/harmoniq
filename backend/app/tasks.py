@@ -15,6 +15,38 @@ from app.celery_app import app
 
 logger = logging.getLogger("harmoniq.tasks")
 
+
+def _push_terminal_dlq(
+    job_id: str,
+    error: str,
+    error_code: str | None,
+    *,
+    youtube_url: str | None,
+    upload_path: str | None,
+    player_profile: dict | None,
+    focus_area: str | None,
+    retry_count: int = 0,
+) -> None:
+    """Best-effort DLQ push for a terminal pipeline failure."""
+    try:
+        from app.job_store import push_to_dlq
+
+        push_to_dlq(
+            job_id,
+            error,
+            error_code=error_code,
+            retry_count=retry_count,
+            job_data={
+                "youtube_url": youtube_url,
+                "upload_path": upload_path,
+                "player_profile": player_profile,
+                "focus_area": focus_area,
+            },
+        )
+    except Exception:
+        logger.exception("DLQ push failed job_id=%s", job_id)
+
+
 def _publish_progress(job_id: str, status: str, **payload) -> None:
     """Publish job progress to Redis pub/sub for WebSocket relay."""
     try:
@@ -72,6 +104,7 @@ def analyze_job_task(
             get_data_dir,
             get_job_dir,
         )
+        from app.separate import SeparationError  # noqa: F401 (needed for except clauses)
         from app.jobs import (
             ANALYSIS_FAILED_USER_MESSAGE,
             ANALYZE_ERROR_ANALYSIS_FAILED,
@@ -89,16 +122,21 @@ def analyze_job_task(
             _lesson_with_skeleton_coach,
             _set_coach_pending,
         )
-        from app.repository import (
-            complete_job as _repo_complete,
-            fail_job as _repo_fail,
-            update_job_progress as _repo_progress,
-        )
+        try:
+            from app.repository import (
+                complete_job as _repo_complete,
+                fail_job as _repo_fail,
+                update_job_progress as _repo_progress,
+            )
+        except Exception:
+            _repo_complete = lambda *a, **k: None
+            _repo_fail = lambda *a, **k: None
+            _repo_progress = lambda *a, **k: None
         from app.schemas import (
             PlayerProfile,
             StemRoutingHints,
         )
-        from app.separate import SeparationError, separate_song_to_stems
+        from app.separate import separate_song_to_stems
         from app.stem_quality import classify_stems_for_lesson
 
         worker_start = time.time()
@@ -131,6 +169,15 @@ def analyze_job_task(
         if wav_duration > MAX_ANALYZE_DURATION_SECONDS:
             _repo_fail(job_id, AUDIO_TOO_LONG_USER_MESSAGE, error_code=ANALYZE_ERROR_AUDIO_TOO_LONG)
             _publish_progress(job_id, "failed", error=AUDIO_TOO_LONG_USER_MESSAGE)
+            _push_terminal_dlq(
+                job_id,
+                AUDIO_TOO_LONG_USER_MESSAGE,
+                ANALYZE_ERROR_AUDIO_TOO_LONG,
+                youtube_url=youtube_url,
+                upload_path=upload_path,
+                player_profile=player_profile,
+                focus_area=focus_area,
+            )
             return None
 
         _repo_progress(job_id, progress=0.28, stage_label="Audio ready")
@@ -240,23 +287,56 @@ def analyze_job_task(
     except YouTubeUrlInvalidError:
         _repo_fail(job_id, YOUTUBE_URL_INVALID_USER_MESSAGE, error_code=ANALYZE_ERROR_YOUTUBE_INVALID)
         _publish_progress(job_id, "failed", error=YOUTUBE_URL_INVALID_USER_MESSAGE)
+        _push_terminal_dlq(
+            job_id, YOUTUBE_URL_INVALID_USER_MESSAGE, ANALYZE_ERROR_YOUTUBE_INVALID,
+            youtube_url=youtube_url, upload_path=upload_path,
+            player_profile=player_profile, focus_area=focus_area,
+        )
     except AudioTooShortError:
         _repo_fail(job_id, AUDIO_TOO_SHORT_USER_MESSAGE, error_code=ANALYZE_ERROR_AUDIO_TOO_SHORT)
         _publish_progress(job_id, "failed", error=AUDIO_TOO_SHORT_USER_MESSAGE)
+        _push_terminal_dlq(
+            job_id, AUDIO_TOO_SHORT_USER_MESSAGE, ANALYZE_ERROR_AUDIO_TOO_SHORT,
+            youtube_url=youtube_url, upload_path=upload_path,
+            player_profile=player_profile, focus_area=focus_area,
+        )
     except IngestError:
         _repo_fail(job_id, ANALYSIS_FAILED_USER_MESSAGE, error_code=ANALYZE_ERROR_INGEST_FAILED)
         _publish_progress(job_id, "failed", error=ANALYSIS_FAILED_USER_MESSAGE)
+        _push_terminal_dlq(
+            job_id, ANALYSIS_FAILED_USER_MESSAGE, ANALYZE_ERROR_INGEST_FAILED,
+            youtube_url=youtube_url, upload_path=upload_path,
+            player_profile=player_profile, focus_area=focus_area,
+        )
     except SeparationError:
         _repo_fail(job_id, STEM_SEPARATION_FAILED_USER_MESSAGE, error_code=ANALYZE_ERROR_STEM_SEPARATION_FAILED)
         _publish_progress(job_id, "failed", error=STEM_SEPARATION_FAILED_USER_MESSAGE)
+        _push_terminal_dlq(
+            job_id, STEM_SEPARATION_FAILED_USER_MESSAGE, ANALYZE_ERROR_STEM_SEPARATION_FAILED,
+            youtube_url=youtube_url, upload_path=upload_path,
+            player_profile=player_profile, focus_area=focus_area,
+        )
     except Exception as exc:
         logger.exception("task failed job_id=%s", job_id)
-        _repo_fail(job_id, ANALYSIS_FAILED_USER_MESSAGE, error_code=ANALYZE_ERROR_ANALYSIS_FAILED)
-        _publish_progress(job_id, "failed", error=ANALYSIS_FAILED_USER_MESSAGE)
+        retrying = False
         try:
             raise self.retry(exc=exc)
-        except Exception:
-            pass
+        except Exception as retry_exc:
+            from celery.exceptions import Retry
+
+            if isinstance(retry_exc, Retry):
+                retrying = True
+                raise
+            # terminal failure
+        if not retrying:
+            _repo_fail(job_id, ANALYSIS_FAILED_USER_MESSAGE, error_code=ANALYZE_ERROR_ANALYSIS_FAILED)
+            _publish_progress(job_id, "failed", error=ANALYSIS_FAILED_USER_MESSAGE)
+            _push_terminal_dlq(
+                job_id, ANALYSIS_FAILED_USER_MESSAGE, ANALYZE_ERROR_ANALYSIS_FAILED,
+                youtube_url=youtube_url, upload_path=upload_path,
+                player_profile=player_profile, focus_area=focus_area,
+                retry_count=getattr(self.request, "retries", 0),
+            )
 
     return None
 

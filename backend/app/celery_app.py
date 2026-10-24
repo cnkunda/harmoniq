@@ -16,6 +16,8 @@ app = Celery(
     backend=result_backend,
 )
 
+from kombu import Queue
+
 app.conf.update(
     task_serializer="json",
     result_serializer="json",
@@ -26,6 +28,20 @@ app.conf.update(
     task_track_started=True,
     task_ignore_result=False,
     task_store_errors_even_if_ignored=True,
+    task_time_limit=900,
+    task_soft_time_limit=600,
+    task_queues=(
+        Queue("celery", max_priority=10),
+        Queue("analyze.urgent", max_priority=10),
+        Queue("analyze.normal", max_priority=10),
+        Queue("analyze.low", max_priority=10),
+    ),
+    task_default_queue="analyze.normal",
+    task_queue_max_priority=10,
+    broker_transport_options={
+        "priority_steps": [0, 3, 6, 9],
+        "queue_order_strategy": "priority",
+    },
 )
 
 app.autodiscover_tasks(["app.tasks"], force=True)

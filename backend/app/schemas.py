@@ -300,6 +300,15 @@ class TimeSignature(BaseModel):
     denominator: int
 
 
+class TempoChange(BaseModel):
+    """One instantaneous tempo event on the beat grid (commit 169)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    time: float = Field(..., ge=0.0)
+    bpm: float = Field(..., ge=20.0, le=300.0)
+
+
 class BeatGrid(BaseModel):
     """Quantization grid from beat tracking (commit 78)."""
     model_config = ConfigDict(extra="ignore")
@@ -310,6 +319,7 @@ class BeatGrid(BaseModel):
     downbeats: list[float] = Field(default_factory=list)
     time_signature: TimeSignature
     tick_value: float
+    tempo_changes: list[TempoChange] = Field(default_factory=list)
     
 
 class StemRoutingHints(BaseModel):
@@ -606,7 +616,11 @@ class JobStatus(BaseModel):
         default=None,
         description="Partial analysis payload available while processing; null until chord inference completes and again once the terminal result replaces it.",
     )
-
+    # Commit 170: Job priority for queue dispatch (urgent/normal/low)
+    priority: str | None = Field(
+        default=None,
+        description="Queue priority level: urgent, normal, or low.",
+    )
 
 class CoachHydrationSection(BaseModel):
     index: int

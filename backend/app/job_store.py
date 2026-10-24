@@ -202,26 +202,45 @@ def set_coach_pending(job_id: str, section_count: int) -> None:
 # Dead-letter queue
 # ---------------------------------------------------------------------------
 
+_DLQ_KEY = "dlq:jobs"
+_DLQ_MAX_ENTRIES = int(os.getenv("HARMONIQ_DLQ_MAX_ENTRIES", "1000"))
 
-def push_to_dlq(job_id: str, error: str, error_code: str | None = None, retry_count: int = 0) -> None:
-    """Push a failed job to the dead-letter queue."""
+
+def push_to_dlq(
+    job_id: str,
+    error: str,
+    error_code: str | None = None,
+    retry_count: int = 0,
+    job_data: dict | None = None,
+) -> None:
+    """Push a failed job to the dead-letter queue (single implementation).
+
+    ``job_data`` carries the original request parameters so the entry can be
+    re-queued later. The list is capped to ``HARMONIQ_DLQ_MAX_ENTRIES``.
+    """
     r = get_redis()
     entry = json.dumps({
         "job_id": job_id,
         "error": error,
         "error_code": error_code,
         "retry_count": retry_count,
+        "job_data": job_data,
         "timestamp": time.time(),
+        "failed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     })
-    r.lpush("dlq:jobs", entry)
+    r.lpush(_DLQ_KEY, entry)
+    try:
+        r.ltrim(_DLQ_KEY, 0, _DLQ_MAX_ENTRIES - 1)
+    except Exception:
+        logger.debug("dlq trim failed", exc_info=True)
     r.expire(f"dlq:{job_id}", _JOB_TTL_SECONDS)
-    logger.warning("push_to_dlq job_id=%s error=%s", job_id, error)
+    logger.warning("push_to_dlq job_id=%s error=%s retry_count=%d", job_id, error, retry_count)
 
 
 def pop_from_dlq() -> dict | None:
-    """Pop the most recent entry from the dead-letter queue."""
+    """Pop the oldest entry from the dead-letter queue (FIFO)."""
     r = get_redis()
-    raw = r.rpop("dlq:jobs")
+    raw = r.rpop(_DLQ_KEY)
     if raw is None:
         return None
     return json.loads(raw)
@@ -229,14 +248,54 @@ def pop_from_dlq() -> dict | None:
 
 def dlq_length() -> int:
     """Return the number of jobs in the dead-letter queue."""
-    return get_redis().llen("dlq:jobs")
+    return get_redis().llen(_DLQ_KEY)
 
 
 def inspect_dlq(limit: int = 50) -> list[dict]:
     """Inspect the dead-letter queue without consuming entries."""
     r = get_redis()
-    raw = r.lrange("dlq:jobs", 0, limit - 1)
+    raw = r.lrange(_DLQ_KEY, 0, limit - 1)
     return [json.loads(entry) for entry in raw]
+
+
+def get_dlq_entry(index: int = 0) -> dict | None:
+    """Return a DLQ entry by index without removing it."""
+    r = get_redis()
+    length = r.llen(_DLQ_KEY)
+    if index < 0 or index >= length:
+        return None
+    raw = r.lindex(_DLQ_KEY, index)
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def requeue_from_dlq(index: int = 0) -> dict | None:
+    """Remove an entry from the DLQ by index and return it for reprocessing."""
+    r = get_redis()
+    length = r.llen(_DLQ_KEY)
+    if index < 0 or index >= length:
+        return None
+    raw = r.lindex(_DLQ_KEY, index)
+    if raw is None:
+        return None
+    r.lrem(_DLQ_KEY, 1, raw)
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def clear_dlq() -> int:
+    """Clear all entries from the dead-letter queue. Returns count removed."""
+    r = get_redis()
+    count = r.llen(_DLQ_KEY)
+    r.delete(_DLQ_KEY)
+    logger.info("dlq_cleared count=%d", count)
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +340,7 @@ def _parse_job_status(raw: dict[str, str]) -> JobStatus:
         progress=_get("progress"),
         stage_label=_get("stage_label"),
         processing_started_at=_get("processing_started_at"),
+        priority=_get("priority"),
     )
 
 

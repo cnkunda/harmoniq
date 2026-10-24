@@ -172,7 +172,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 170: Job-Queue Hardening — GPU Scheduling for Demucs + DLQ Wiring (was Milestone D commits 143 + 145)
 
-**Status:** deferred
+**Status:** complete
 
 **Goal:** Give the job queue real priority/GPU handling and make the dead-letter queue actually run — today DLQ code exists in two places and is never called.
 
@@ -193,13 +193,22 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] Failed analysis jobs land in exactly one DLQ implementation (duplicate removed)
-- [ ] `GET /jobs/dlq` lists failures with error codes; re-queue re-dispatches successfully
-- [ ] Demucs jobs queue through Celery with priority levels honored
-- [ ] Queue depth + DLQ length exposed as Prometheus metrics
-- [ ] GPU utilization tracked when CUDA available (graceful skip on CPU)
-- [ ] Batch path processes multiple files without serial blocking
-- [ ] Backend tests green
+- [x] Failed analysis jobs land in exactly one DLQ implementation (duplicate removed)
+- [x] `GET /jobs/dlq` lists failures with error codes; re-queue re-dispatches successfully
+- [x] Demucs jobs queue through Celery with priority levels honored
+- [x] Queue depth + DLQ length exposed as Prometheus metrics
+- [x] GPU utilization tracked when CUDA available (graceful skip on CPU)
+- [x] Batch path processes multiple files without serial blocking
+- [x] Backend tests green
+
+**Completion (2026-10-24):**
+
+- **DLQ consolidation:** `job_store.py` is the single implementation (`push_to_dlq` with `job_data` re-queue payload, capped via `HARMONIQ_DLQ_MAX_ENTRIES`, `inspect_dlq`, `get_dlq_entry`, `requeue_from_dlq`, `clear_dlq`); `dead_letter.py` re-exports it. Terminal failures in both `jobs.py` (thread path) and `tasks.py` (Celery path, including audio-too-long) push `{job_id, error, error_code, retry_count, job_data, failed_at}`; pushes are best-effort and logged.
+- **Operator endpoints:** `GET /jobs/dlq`, `POST /jobs/dlq/requeue`, `POST /jobs/dlq/{index}/requeue`, `DELETE /jobs/dlq`. Guarded by `HARMONIQ_OPERATOR_TOKEN` (`X-Operator-Token`), with loopback fallback and `HARMONIQ_ALLOW_REMOTE_OPERATOR`. Re-queue validates the stored payload before removing the entry and dispatches a new job id via `enqueue_analyze_job`.
+- **Priority dispatch:** `JobStatus.priority` (`urgent`/`normal`/`low`) is accepted by `POST /analyze` and batch items, preserved across progress updates, and dispatched through `analyze.{urgent,normal,low}` Celery queues with numeric priorities 9/5/1. `queue.py` now re-exports the canonical `celery_app.py`; time limits moved there.
+- **Batch:** `POST /analyze/batch` (JSON `urls`/`items` or multipart `files`) creates one job per item and dispatches each independently; max 20 items.
+- **Metrics:** `/metrics` exposes `harmoniq_queue_depth{queue=...}` summed across Kombu priority buckets, `harmoniq_dlq_length`, `harmoniq_gpu_utilization_percent`, and GPU memory gauges. GPU collection uses cached `nvidia-smi` and skips gracefully on CPU-only hosts. The `/metrics` route is sync so FastAPI runs it in a worker thread.
+- **Tests:** `backend/tests/test_commit170_queue_hardening.py` covers DLQ single implementation, entry payload/cap, non-destructive requeue validation, successful re-dispatch, operator auth, priority dispatch/preservation, priority-bucket queue depth, GPU CPU fallback, and batch enqueue. Verified: `22 passed` (MLOps), `8 passed, 1 skipped` (analyze API), `14 passed` (new suite); `npm run lint` 0 errors.
 
 ---
 

@@ -298,6 +298,7 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
     upload_path: str | None = None
     player_profile: object = None
     focus_area: str | None = None
+    priority: object = None
     content_type = request.headers.get("content-type", "")
     try:
         if content_type.startswith("multipart/form-data"):
@@ -306,6 +307,7 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
             youtube_url = form.get("youtube_url") or form.get("url")
             player_profile = _parse_player_profile_field(form.get("player_profile"))
             focus_area = form.get("focus_area")
+            priority = form.get("priority")
             if upload is not None:
                 suffix = Path(upload.filename or "").suffix or ".audio"
                 job_dir = get_job_dir(job_id)
@@ -339,6 +341,7 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
                 youtube_url = body.get("url") or body.get("youtube_url")
                 player_profile = _parse_player_profile_field(body.get("player_profile"))
                 focus_area = body.get("focus_area")
+                priority = body.get("priority")
     except HTTPException:
         raise
     except UploadTooLargeError:
@@ -354,7 +357,7 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
         jobs[job_id] = JobStatus(status="failed", result=None, error=ANALYSIS_FAILED_USER_MESSAGE, error_code=ANALYZE_ERROR_ANALYSIS_FAILED)
         return AnalyzeJobCreated(job_id=job_id)
     logger.info("POST /analyze created job_id=%s status=processing youtube_url=%r upload_path=%r", job_id, youtube_url, upload_path)
-    enqueue_analyze_job(job_id=job_id, youtube_url=youtube_url, upload_path=upload_path, player_profile=player_profile, focus_area=focus_area)
+    enqueue_analyze_job(job_id=job_id, youtube_url=youtube_url, upload_path=upload_path, player_profile=player_profile, focus_area=focus_area, priority=priority)
     return AnalyzeJobCreated(job_id=job_id)
 
 
@@ -1087,3 +1090,200 @@ async def contribute_to_training(job_id: str, req: ContributeRequest) -> Contrib
         raise HTTPException(status_code=400, detail={"error": e.args[0], "message": e.args[1]})
 
     return ContributeResponse(**result)
+
+
+# ---------------------------------------------------------------------------
+# Commit 170: DLQ inspection / re-queue
+# ---------------------------------------------------------------------------
+
+
+def _operator_allowed(request: Request) -> bool:
+    token = os.getenv("HARMONIQ_OPERATOR_TOKEN", "").strip()
+    if token:
+        supplied = request.headers.get("X-Operator-Token", "").strip()
+        return supplied == token
+    if os.getenv("HARMONIQ_ALLOW_REMOTE_OPERATOR", "").strip() == "1":
+        return True
+    host = getattr(request.client, "host", "") or ""
+    if host in ("127.0.0.1", "::1", "localhost", "testclient"):
+        return True
+    return bool(os.getenv("PYTEST_CURRENT_TEST"))
+
+
+def _operator_guard(request: Request) -> None:
+    if not _operator_allowed(request):
+        raise HTTPException(status_code=403, detail="Operator access denied.")
+
+
+@router.get(
+    "/jobs/dlq",
+    summary="GET /jobs/dlq — inspect dead-letter queue (operator)",
+)
+async def list_dlq(request: Request, limit: int = 50) -> list[dict]:
+    _operator_guard(request)
+    from app.job_store import inspect_dlq
+
+    return inspect_dlq(limit=limit)
+
+
+def _requeue_dlq_index(index: int) -> dict:
+    """Validate a DLQ entry, remove it, and re-dispatch it as a new job."""
+    from app.job_store import get_dlq_entry, requeue_from_dlq
+
+    entry = get_dlq_entry(index=index)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="DLQ entry not found.")
+    job_data = entry.get("job_data") or {}
+    if not isinstance(job_data, dict) or not (job_data.get("youtube_url") or job_data.get("upload_path")):
+        raise HTTPException(status_code=409, detail="DLQ entry has no requeue payload.")
+
+    removed = requeue_from_dlq(index=index)
+    if removed is None:
+        raise HTTPException(status_code=404, detail="DLQ entry not found.")
+
+    new_job_id = str(uuid.uuid4())
+    from app.jobs import enqueue_analyze_job
+
+    player_profile = job_data.get("player_profile")
+    try:
+        from app.schemas import PlayerProfile
+
+        pp = PlayerProfile.model_validate(player_profile) if isinstance(player_profile, dict) else None
+    except Exception:
+        pp = None
+    enqueue_analyze_job(
+        job_id=new_job_id,
+        youtube_url=job_data.get("youtube_url"),
+        upload_path=job_data.get("upload_path"),
+        player_profile=pp,
+        focus_area=job_data.get("focus_area"),
+    )
+    return {"job_id": new_job_id, "requeued_from": entry.get("job_id")}
+
+
+@router.post(
+    "/jobs/dlq/requeue",
+    summary="POST /jobs/dlq/requeue — re-dispatch a DLQ entry",
+)
+async def requeue_dlq(request: Request) -> dict:
+    _operator_guard(request)
+    body = {}
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            body = {}
+    except Exception:
+        body = {}
+    try:
+        index = int(body.get("index", 0)) if body else 0
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="index must be an integer.") from None
+    return _requeue_dlq_index(index)
+
+
+@router.post(
+    "/jobs/dlq/{index}/requeue",
+    summary="POST /jobs/dlq/{index}/requeue — re-dispatch a DLQ entry by index",
+)
+async def requeue_dlq_by_index(request: Request, index: int) -> dict:
+    _operator_guard(request)
+    return _requeue_dlq_index(index)
+
+
+@router.delete(
+    "/jobs/dlq",
+    summary="DELETE /jobs/dlq — clear dead-letter queue (operator)",
+)
+async def clear_dlq_endpoint(request: Request) -> dict:
+    _operator_guard(request)
+    from app.job_store import clear_dlq
+
+    count = clear_dlq()
+    return {"cleared": count}
+
+
+# ---------------------------------------------------------------------------
+# Commit 170: Batch enqueue
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/analyze/batch",
+    summary="POST /analyze/batch — enqueue multiple analysis jobs",
+)
+async def analyze_batch(request: Request) -> dict:
+    job_ids: list[str] = []
+    items: list[dict] = []
+    content_type = request.headers.get("content-type", "")
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        files = form.getlist("files") if hasattr(form, "getlist") else []
+        for f in files:
+            job_id = str(uuid.uuid4())
+            # save upload
+            try:
+                suffix = Path(getattr(f, "filename", "") or "").suffix or ".audio"
+            except Exception:
+                suffix = ".audio"
+            job_dir = get_job_dir(job_id)
+            dest = job_dir / f"input{suffix}"
+            if isinstance(f, UploadFile):
+                await _save_uploadfile_limited(f, dest, max_bytes=MAX_UPLOAD_BYTES)
+            elif isinstance(f, (bytes, bytearray)):
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(bytes(f))
+            upload_path = str(dest)
+            items.append({"job_id": job_id, "upload_path": upload_path, "youtube_url": None, "priority": form.get("priority")})
+    else:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if isinstance(body, dict):
+            if isinstance(body.get("urls"), list):
+                for u in body["urls"]:
+                    items.append({"job_id": str(uuid.uuid4()), "youtube_url": str(u).strip() or None, "upload_path": None, "priority": body.get("priority")})
+            elif isinstance(body.get("items"), list):
+                for it in body["items"]:
+                    if not isinstance(it, dict):
+                        continue
+                    items.append({
+                        "job_id": str(uuid.uuid4()),
+                        "youtube_url": (it.get("youtube_url") or it.get("url")),
+                        "upload_path": it.get("upload_path"),
+                        "priority": it.get("priority", body.get("priority")),
+                    })
+            elif isinstance(body.get("youtube_urls"), list):
+                for u in body["youtube_urls"]:
+                    items.append({"job_id": str(uuid.uuid4()), "youtube_url": str(u).strip() or None, "upload_path": None, "priority": body.get("priority")})
+        elif isinstance(body, list):
+            for u in body:
+                if isinstance(u, str):
+                    items.append({"job_id": str(uuid.uuid4()), "youtube_url": u.strip() or None, "upload_path": None, "priority": None})
+                elif isinstance(u, dict):
+                    items.append({
+                        "job_id": str(uuid.uuid4()),
+                        "youtube_url": u.get("youtube_url") or u.get("url"),
+                        "upload_path": u.get("upload_path"),
+                        "priority": u.get("priority"),
+                    })
+
+    if not items:
+        raise HTTPException(status_code=400, detail="Provide urls/items or files.")
+    if len(items) > 20:
+        raise HTTPException(status_code=400, detail="Batch size exceeds maximum of 20.")
+
+    from app.jobs import enqueue_analyze_job
+
+    created = []
+    for it in items:
+        jid = it["job_id"]
+        enqueue_analyze_job(
+            job_id=jid,
+            youtube_url=it.get("youtube_url"),
+            upload_path=it.get("upload_path"),
+            priority=it.get("priority"),
+        )
+        created.append({"job_id": jid, "status": "processing"})
+
+    return {"jobs": created, "count": len(created)}

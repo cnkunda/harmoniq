@@ -256,7 +256,7 @@ async def health() -> dict[str, str]:
     tags=["Observability"],
     summary="GET /metrics — Prometheus metrics endpoint",
 )
-async def metrics():
+def metrics():
     from app.metrics import metrics_response
 
     # Update Redis health gauge
@@ -266,6 +266,24 @@ async def metrics():
         redis_gauge.set(1 if ping() else 0)
     except Exception:
         logger.debug("redis health gauge update failed", exc_info=True)
+
+    # Update queue / DLQ / GPU gauges (Commit 170)
+    try:
+        from app.metrics import update_queue_metrics, update_gpu_metrics
+
+        update_queue_metrics()
+        update_gpu_metrics()
+    except Exception:
+        logger.debug("queue/gpu gauge update failed", exc_info=True)
+
+    # Update in-progress gauge from in-memory jobs
+    try:
+        from app.jobs import jobs as _jobs
+        from app.metrics import jobs_in_progress as _jip
+
+        _jip.set(sum(1 for j in _jobs.values() if getattr(j, "status", None) == "processing"))
+    except Exception:
+        logger.debug("jobs_in_progress gauge update failed", exc_info=True)
 
     # Include circuit breaker metrics
     body = metrics_response()

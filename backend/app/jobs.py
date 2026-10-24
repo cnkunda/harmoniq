@@ -73,6 +73,81 @@ jobs: dict[str, JobStatus] = {}
 coach_hydration: dict[str, CoachHydrationStatus] = {}
 chord_enrichment: dict[str, ChordEnrichmentStatus] = {}
 
+
+def _normalize_priority(value) -> str:
+    """Normalize a priority value to urgent/normal/low."""
+    if value is None:
+        return "normal"
+    if isinstance(value, bool):
+        return "normal"
+    if isinstance(value, int):
+        if value >= 8:
+            return "urgent"
+        if value <= 2:
+            return "low"
+        return "normal"
+    s = str(value).strip().lower()
+    if s in ("urgent", "high", "9"):
+        return "urgent"
+    if s in ("low", "1"):
+        return "low"
+    if s in ("normal", "medium", "5", "default"):
+        return "normal"
+    try:
+        n = int(s)
+        if n >= 8:
+            return "urgent"
+        if n <= 2:
+            return "low"
+        return "normal"
+    except ValueError:
+        return "normal"
+
+
+def _priority_to_int(priority: str) -> int:
+    return {"urgent": 9, "normal": 5, "low": 1}.get(priority, 5)
+
+
+def _priority_queue(priority: str) -> str:
+    return {"urgent": "analyze.urgent", "normal": "analyze.normal", "low": "analyze.low"}.get(priority, "analyze.normal")
+
+
+def _fail_job_and_dlq(
+    job_id: str,
+    error: str,
+    error_code: str,
+    *,
+    youtube_url: str | None = None,
+    upload_path: str | None = None,
+    player_profile=None,
+    focus_area=None,
+    retry_count: int = 0,
+) -> None:
+    """Mark a job failed, persist, and best-effort push to the DLQ."""
+    jobs[job_id] = JobStatus(status="failed", result=None, error=error, error_code=error_code)
+    _persist_job_to_db(job_id)
+    try:
+        save_job_to_disk(job_id)
+    except Exception:
+        logger.debug("save_job_to_disk failed job_id=%s", job_id, exc_info=True)
+    job_data = None
+    if youtube_url is not None or upload_path is not None:
+        pp = player_profile
+        if hasattr(pp, "model_dump"):
+            pp = pp.model_dump(exclude_none=True)
+        job_data = {
+            "youtube_url": youtube_url,
+            "upload_path": upload_path,
+            "player_profile": pp,
+            "focus_area": focus_area,
+        }
+    try:
+        from app.job_store import push_to_dlq
+
+        push_to_dlq(job_id, error, error_code=error_code, retry_count=retry_count, job_data=job_data)
+    except Exception:
+        logger.exception("DLQ push failed job_id=%s", job_id)
+
 # ---- Commit 110: Disk persistence for completed/failed jobs ----
 
 def save_job_to_disk(job_id: str) -> None:
@@ -192,6 +267,7 @@ def _set_job_processing_progress(job_id: str, progress: float, stage_label: str)
         processing_started_at=float(started),
         analysis_stage=current.analysis_stage,
         partial_result=current.partial_result,
+        priority=current.priority,
     )
     _persist_job_to_db(job_id)
 
@@ -220,6 +296,7 @@ def _set_job_analysis_stage(
         processing_started_at=float(started),
         analysis_stage=analysis_stage,
         partial_result=current.partial_result,
+        priority=current.priority,
     )
     _persist_job_to_db(job_id)
 
@@ -500,13 +577,15 @@ def _process_analyze_job(
                 MAX_ANALYZE_DURATION_SECONDS,
                 job_id,
             )
-            jobs[job_id] = JobStatus(
-                status="failed",
-                result=None,
-                error=AUDIO_TOO_LONG_USER_MESSAGE,
-                error_code=ANALYZE_ERROR_AUDIO_TOO_LONG,
+            _fail_job_and_dlq(
+                job_id,
+                AUDIO_TOO_LONG_USER_MESSAGE,
+                ANALYZE_ERROR_AUDIO_TOO_LONG,
+                youtube_url=youtube_url,
+                upload_path=upload_path,
+                player_profile=player_profile,
+                focus_area=focus_area,
             )
-            _persist_job_to_db(job_id)
             return
         
         _set_job_processing_progress(job_id, 0.28, "Audio ready")
@@ -691,55 +770,35 @@ def _process_analyze_job(
         )
     except YouTubeUrlInvalidError:
         logger.warning("worker failed job_id=%s invalid youtube_url", job_id)
-        jobs[job_id] = JobStatus(
-            status="failed",
-            result=None,
-            error=YOUTUBE_URL_INVALID_USER_MESSAGE,
-            error_code=ANALYZE_ERROR_YOUTUBE_INVALID,
+        _fail_job_and_dlq(
+            job_id, YOUTUBE_URL_INVALID_USER_MESSAGE, ANALYZE_ERROR_YOUTUBE_INVALID,
+            youtube_url=youtube_url, upload_path=upload_path, player_profile=player_profile, focus_area=focus_area,
         )
-        _persist_job_to_db(job_id)
-        save_job_to_disk(job_id)
     except AudioTooShortError:
         logger.warning("worker failed job_id=%s audio too short", job_id)
-        jobs[job_id] = JobStatus(
-            status="failed",
-            result=None,
-            error=AUDIO_TOO_SHORT_USER_MESSAGE,
-            error_code=ANALYZE_ERROR_AUDIO_TOO_SHORT,
+        _fail_job_and_dlq(
+            job_id, AUDIO_TOO_SHORT_USER_MESSAGE, ANALYZE_ERROR_AUDIO_TOO_SHORT,
+            youtube_url=youtube_url, upload_path=upload_path, player_profile=player_profile, focus_area=focus_area,
         )
-        _persist_job_to_db(job_id)
-        save_job_to_disk(job_id)
     except IngestError:
         logger.exception("worker failed job_id=%s ingest error", job_id)
-        jobs[job_id] = JobStatus(
-            status="failed",
-            result=None,
-            error=ANALYSIS_FAILED_USER_MESSAGE,
-            error_code=ANALYZE_ERROR_INGEST_FAILED,
+        _fail_job_and_dlq(
+            job_id, ANALYSIS_FAILED_USER_MESSAGE, ANALYZE_ERROR_INGEST_FAILED,
+            youtube_url=youtube_url, upload_path=upload_path, player_profile=player_profile, focus_area=focus_area,
         )
-        _persist_job_to_db(job_id)
-        save_job_to_disk(job_id)
     except SeparationError:
         logger.exception("worker failed job_id=%s stem separation error", job_id)
-        jobs[job_id] = JobStatus(
-            status="failed",
-            result=None,
-            error=STEM_SEPARATION_FAILED_USER_MESSAGE,
-            error_code=ANALYZE_ERROR_STEM_SEPARATION_FAILED,
+        _fail_job_and_dlq(
+            job_id, STEM_SEPARATION_FAILED_USER_MESSAGE, ANALYZE_ERROR_STEM_SEPARATION_FAILED,
+            youtube_url=youtube_url, upload_path=upload_path, player_profile=player_profile, focus_area=focus_area,
         )
-        _persist_job_to_db(job_id)
-        save_job_to_disk(job_id)
     except Exception:
         # Fail loudly in logs; user sees a warm, safe message.
         logger.exception("worker failed job_id=%s", job_id)
-        jobs[job_id] = JobStatus(
-            status="failed",
-            result=None,
-            error=ANALYSIS_FAILED_USER_MESSAGE,
-            error_code=ANALYZE_ERROR_ANALYSIS_FAILED,
+        _fail_job_and_dlq(
+            job_id, ANALYSIS_FAILED_USER_MESSAGE, ANALYZE_ERROR_ANALYSIS_FAILED,
+            youtube_url=youtube_url, upload_path=upload_path, player_profile=player_profile, focus_area=focus_area,
         )
-        _persist_job_to_db(job_id)
-        save_job_to_disk(job_id)
 
 
 def enqueue_analyze_job(
@@ -749,8 +808,10 @@ def enqueue_analyze_job(
     upload_path: str | None,
     player_profile: PlayerProfile | None = None,
     focus_area: CoachFocusArea | None = None,
+    priority: str | int | None = None,
 ) -> None:
     """Mark job as processing and dispatch to Celery (or fallback thread)."""
+    priority_norm = _normalize_priority(priority)
     jobs[job_id] = JobStatus(
         status="processing",
         result=None,
@@ -759,6 +820,7 @@ def enqueue_analyze_job(
         stage_label="Queued…",
         processing_started_at=time.time(),
         analysis_stage="initializing",
+        priority=priority_norm,
     )
     _persist_job_to_db(job_id)
     coach_hydration[job_id] = CoachHydrationStatus(status="pending", sections=[], fallback_reason=None)
@@ -776,14 +838,19 @@ def enqueue_analyze_job(
     # Try Celery first; fall back to daemon thread
     try:
         from app.tasks import analyze_job_task as _celery_task
-        _celery_task.delay(
-            job_id,
-            youtube_url=youtube_url,
-            upload_path=upload_path,
-            player_profile=pp_dict,
-            focus_area=focus_area,
+
+        _celery_task.apply_async(
+            args=(job_id,),
+            kwargs={
+                "youtube_url": youtube_url,
+                "upload_path": upload_path,
+                "player_profile": pp_dict,
+                "focus_area": focus_area,
+            },
+            priority=_priority_to_int(priority_norm),
+            queue=_priority_queue(priority_norm),
         )
-        logger.info("enqueue job_id=%s dispatched to Celery", job_id)
+        logger.info("enqueue job_id=%s dispatched to Celery priority=%s", job_id, priority_norm)
         return
     except Exception:
         logger.info("Celery not available for job_id=%s; falling back to thread", job_id)
