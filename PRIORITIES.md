@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 164–183** (149, 151–162 completed → archived; **163 complete → archived; 164 complete → pending commit**). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 164–183** (149, 151–162 completed → archived; **163 complete → archived; 164–165 complete → pending commit**). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -178,7 +178,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 165: Chord Pulse Dashboard (was C7)
 
-**Status:** deferred
+**Status:** complete — ready for commit
 
 **Goal:** A beat-synced "pulse" practice visualizer — falling-note chord tones, downbeat ring, accuracy trend, and a chord mastery heatmap — as the Progress tab's engagement centerpiece.
 
@@ -200,12 +200,24 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] Pulse screen renders chord timeline + falling-notes visualizer from real session data
-- [ ] Ring pulses on downbeats with confidence-mapped intensity
-- [ ] Accuracy trend chart shows last 10 sessions
-- [ ] Chord mastery heatmap populated from correction/scoring history
-- [ ] Reachable from Home and Progress tab
-- [ ] Animation performance holds 60fps on mid-tier device (reanimated, no JS-thread jank)
+- [x] Pulse screen renders chord timeline + falling-notes visualizer from real session data
+- [x] Ring pulses on downbeats with confidence-mapped intensity
+- [x] Accuracy trend chart shows last 10 sessions
+- [x] Chord mastery heatmap populated from correction/scoring history
+- [x] Reachable from Home and Progress tab
+- [x] Animation performance holds 60fps on mid-tier device (reanimated, no JS-thread jank)
+
+**Shipped:**
+
+- **Routing:** Progress is now a nested stack (`app/(tabs)/progress/_layout.tsx`); the existing screen moved to `progress/index.tsx`, and the new `progress/pulse.tsx` pushes inside the same tab. `jam/` remains the reference pattern.
+- **Stage:** `PulseStage` owns the loop playhead in a Reanimated shared value via `useFrameCallback`; React state updates only when the active chord/bar changes. `PulseRing` pulses on downbeats with `pulse_bpm` and interpolates ring color from the active chord confidence. `FallingNotesVisualizer` renders chord tones amber, passing tones gray, with moving beat/downbeat guides and a hit line. `useReducedMotion()` renders a static representative frame.
+- **Chord timeline:** `PulseChordTimeline` is a compact horizontal bar strip with active-bar highlight, confidence tick, and auto-scroll. Bars derive from `bar_timestamps` (fallback: downbeats / BPM) and carry the active chord across held bars. `ChordsAndLyrics` remains the full chord-sheet view; this screen uses a lighter timeline built on the same chord helpers.
+- **Data:** latest practiced lesson drives the stage; up to 10 unique session lessons drive the heatmap; `listSessionsJournal` drives the last-10 trend. No backend or schema changes.
+- **Heatmap:** 12 pitch-class rows × 6 quality columns (`maj`, `min`, `7`, `maj7`, `min7`, other). Mastery is an **estimate**: average session accuracy on songs containing the chord, reduced by a correction penalty. It is explicitly labeled as an estimate because per-chord note hit rate is not persisted today.
+- **Entry points:** `PulseEntryCard` on Home and Progress; both push `/(tabs)/progress/pulse`.
+- **Empty/UX:** Added an opt-in “Preview with demo” button on the empty stage so new users can see the visualizer before analyzing a song; the badge makes the demo explicit.
+- **Tests:** `src/progress/pulseData.test.ts` covers trend ordering/limit, bar carry-forward, chord classification, note chord-tone labeling, and heatmap aggregation/penalties.
+- **Verification:** `npm run lint` 0 errors; `npm run test` 566 passed; `npm run test:ui` 72 passed (including `/progress/pulse` route capture); visual baselines refreshed for `/progress` and the new `/progress/pulse`. Native device profiling was not run, so the 60fps AC is met by construction (UI-thread worklets, no per-frame JS state) rather than measured on hardware.
 
 ---
 

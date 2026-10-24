@@ -6,12 +6,13 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { CoachNote } from '@/components/CoachNote'
 import { EmptyState } from '@/components/EmptyState'
 import { LearnerContextCard } from '@/components/LearnerContextCard'
+import { PulseEntryCard } from '@/components/pulse/PulseEntryCard'
 import { RiffDNA } from '@/components/RiffDNA'
 import { SkillGraph } from '@/components/SkillGraph'
 import { WoodGradient } from '@/components/WoodGradient'
 import { summaryFromPlanCompletionRow } from '@/src/home/planCompletionSummary'
 import { BarChart3 } from 'lucide-react-native'
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 import { DEFAULT_SKILL_NODES } from '@/src/db/schema'
 import { listJamSnapshots, listPracticePlanCompletions, listSessionsJournal } from '@/src/db/client'
 import { mergeProgressTimeline, type ProgressTimelineItem } from '@/src/progress/mergeProgressTimeline'
@@ -91,6 +92,11 @@ export default function ProgressScreen() {
                 Node movement blends accuracy, timing stability, and capture confidence so low-signal takes do not cause jumps.
               </Text>
             </View>
+
+            <PulseEntryCard
+              variant="progress"
+              onPress={() => router.push('/(tabs)/progress/pulse' as Href)}
+            />
 
             <View className="mb-8">
               <LearnerContextCard skillNodes={nodes} />

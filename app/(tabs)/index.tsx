@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Svg, { Circle as SvgCircle, Line as SvgLine, Polygon as SvgPolygon } from 'react-native-svg'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { PulseEntryCard } from '@/components/pulse/PulseEntryCard'
 import { SettingsSegmented } from '@/components/settings/SettingsSegmented'
 import { WoodGradient } from '@/components/WoodGradient'
 import { RecentProgress } from '@/components/RecentProgress'
@@ -926,6 +927,11 @@ export default function HomeScreen() {
           ) : null}
 
           {suggestion && suggestion.kind !== 'cold_start' && weakPulseNode ? <WeakAreaPulse node={weakPulseNode} /> : null}
+
+          <PulseEntryCard
+            onPress={() => router.push('/(tabs)/progress/pulse' as Href)}
+          />
+
           <View className="mb-8">
             <RecentProgress sessions={sessionsLog.slice(0, 5)} lastPlanCompletion={latestPlanCompletion} />
           </View>
