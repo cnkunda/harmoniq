@@ -36,6 +36,7 @@ import { usePlayCapture } from '@/src/session/usePlayCapture'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { useSessionPlayStore } from '@/src/stores/sessionPlayStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useAppStore } from '@/src/stores/useAppStore'
@@ -83,6 +84,7 @@ function PlayScreenInner() {
   const lesson = useLessonStore((s) => s.lesson)
   const sectionIndex = useLessonStore((s) => s.lessonSectionIndex)
   const section = lesson?.sections?.[sectionIndex] as Record<string, unknown> | undefined
+  const outputTier = useOutputTierStore((s) => s.tier)
 
   const keyLabel = (lesson?.key ?? 'Unknown key').toString()
   const positionLabel =
@@ -310,6 +312,7 @@ function PlayScreenInner() {
           <SessionStemAndTab
             ref={stemTabRef}
             tabRenderPreset="light"
+            showScore={outputTier !== 'learner'}
             lessonPlaybackCardVariant="play"
             captureRecording={recording}
             playCaptureSlot={(ctx) => (

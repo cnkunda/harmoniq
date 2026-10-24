@@ -162,6 +162,9 @@ export const PREF_ANALYTICS_USER_ID = 'analytics_user_id'
 /** Commit 164: Home practice mode — `"single"` = practice a song, `"plan"` = follow a plan. */
 export const PREF_HOME_PRACTICE_MODE = 'home_practice_mode'
 
+/** Commit 166: notation presentation tier (`learner` | `intermediate` | `transcriber`). */
+export const PREF_OUTPUT_TIER = 'output_tier'
+
 export const COACH_VOICE_OPTIONS = ['warm', 'concise', 'technical'] as const
 export type CoachVoiceId = (typeof COACH_VOICE_OPTIONS)[number]
 

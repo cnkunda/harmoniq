@@ -50,6 +50,8 @@ export type SessionStemAndTabProps = {
   gp5Base64Override?: string | null
   /** When false, only the tab viewport is shown (no `ListenStemPanel`). */
   showStemPanel?: boolean
+  /** Commit 166: Learner tier hides the MusicXML/tab viewport while keeping stems and inserts. */
+  showScore?: boolean
   /** Optional stem URL when overriding GP5 or omitting lesson stems. */
   audioSrcOverride?: string | null
   transposeSemitonesOverride?: number
@@ -99,6 +101,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     tabVariant,
     gp5Base64Override,
     showStemPanel = true,
+    showScore = true,
     audioSrcOverride,
     transposeSemitonesOverride,
     onTabReady,
@@ -311,53 +314,55 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
       ) : null}
       {insertBetweenStemAndTab}
       {detailsAboveTab}
-      <View className={tabFrameClassName}>
-        {scoreUpdating ? (
-          <View
-            pointerEvents="none"
-            accessibilityLiveRegion="polite"
-            className="absolute left-3 top-3 z-10 rounded-full border border-wood-600/40 bg-wood-900/85 px-2.5 py-1"
-          >
-            <Text className="font-mono text-[10px] text-amber-accent">Updating score…</Text>
-          </View>
-        ) : null}
-        <TabViewport
-          ref={tabRef}
-          gp5Base64={gp5Base64}
-          musicXml={musicXml}
-          prerenderArtifactUrl={prerenderArtifactUrl}
-          audioSrc={audioSrc}
-          transposeSemitones={transposeSemitones}
-          soundFontProfile={soundFontProfile}
-          renderPreset={tabRenderPreset}
-          runtimeDiagnosticsEnabled={isAlphaTabRuntimeDiagEnabled()}
-          onReady={onTabReady}
-          onError={onTabError}
-          onNoteEvent={onNoteEvent}
-          onSongDetails={onTabSongDetails}
-          onSongPlayback={onTabSongPlayback}
-          onScoreSeekMs={
-            showStemPanel ? (ms) => void stemPanelRef.current?.seekTransportToSeconds(ms / 1000) : undefined
-          }
-          style={{ flex: 1, height: '100%', width: '100%' }}
-          playbackSec={tickRef.current?.positionSec ?? 0}
-          songTitle={lesson?.song_title ?? undefined}
-          songArtist={lesson?.artist ?? undefined}
-          tabVariant={tabVariant}
-          hasFull={!!tabs.full}
-          hasSkeleton={!!tabs.skeleton}
-          hasAlt={!!tabs.alt}
-          onTabVariantChange={onTabVariantChange ? (v) => {
-            void setAppPref(PREF_TAB_VARIANT, v)
-            onTabVariantChange(v)
-          } : undefined}
-          onSeekToStart={onSeekToStart ?? (() => {
-            void stemPanelRef.current?.seekTransportToSeconds(0).then(() => {
-              tabRef.current?.syncPlaybackTimelineMs(0)
-            })
-          })}
-        />
-      </View>
+      {showScore ? (
+        <View className={tabFrameClassName}>
+          {scoreUpdating ? (
+            <View
+              pointerEvents="none"
+              accessibilityLiveRegion="polite"
+              className="absolute left-3 top-3 z-10 rounded-full border border-wood-600/40 bg-wood-900/85 px-2.5 py-1"
+            >
+              <Text className="font-mono text-[10px] text-amber-accent">Updating score…</Text>
+            </View>
+          ) : null}
+          <TabViewport
+            ref={tabRef}
+            gp5Base64={gp5Base64}
+            musicXml={musicXml}
+            prerenderArtifactUrl={prerenderArtifactUrl}
+            audioSrc={audioSrc}
+            transposeSemitones={transposeSemitones}
+            soundFontProfile={soundFontProfile}
+            renderPreset={tabRenderPreset}
+            runtimeDiagnosticsEnabled={isAlphaTabRuntimeDiagEnabled()}
+            onReady={onTabReady}
+            onError={onTabError}
+            onNoteEvent={onNoteEvent}
+            onSongDetails={onTabSongDetails}
+            onSongPlayback={onTabSongPlayback}
+            onScoreSeekMs={
+              showStemPanel ? (ms) => void stemPanelRef.current?.seekTransportToSeconds(ms / 1000) : undefined
+            }
+            style={{ flex: 1, height: '100%', width: '100%' }}
+            playbackSec={tickRef.current?.positionSec ?? 0}
+            songTitle={lesson?.song_title ?? undefined}
+            songArtist={lesson?.artist ?? undefined}
+            tabVariant={tabVariant}
+            hasFull={!!tabs.full}
+            hasSkeleton={!!tabs.skeleton}
+            hasAlt={!!tabs.alt}
+            onTabVariantChange={onTabVariantChange ? (v) => {
+              void setAppPref(PREF_TAB_VARIANT, v)
+              onTabVariantChange(v)
+            } : undefined}
+            onSeekToStart={onSeekToStart ?? (() => {
+              void stemPanelRef.current?.seekTransportToSeconds(0).then(() => {
+                tabRef.current?.syncPlaybackTimelineMs(0)
+              })
+            })}
+          />
+        </View>
+      ) : null}
     </>
   )
 })

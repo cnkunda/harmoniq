@@ -223,7 +223,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 166: Three-Tier Output Strategy (was C8)
 
-**Status:** deferred
+**Status:** complete
 
 **Goal:** Three render personas (Learner / Intermediate / Transcriber) derived from the same LessonJSON so notation complexity matches the user instead of one fixed view.
 
@@ -245,11 +245,20 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] All three tiers render from one analysis (no re-analysis)
-- [ ] Settings selector persists and switches views live
-- [ ] First-launch auto-detect from experience level works
-- [ ] Learner tier hides notation/theory; Transcriber tier exposes export/print
-- [ ] Default remains Intermediate (non-regression)
+- [x] All three tiers render from one analysis (no re-analysis)
+- [x] Settings selector persists and switches views live
+- [x] First-launch auto-detect from experience level works
+- [x] Learner tier hides notation/theory; Transcriber tier exposes export/print
+- [x] Default remains Intermediate (non-regression)
+
+**Shipped:**
+
+- **Preference:** `PREF_OUTPUT_TIER` (`output_tier`) lives in the existing `app_prefs` KV table — no migration or backend change. `src/preferences/outputTier.ts` owns the three-valued type, parsing, and experience mapping; `src/stores/outputTierStore.ts` hydrates it and persists an experience-derived tier only once an experience level exists, so onboarding can still auto-detect.
+- **Settings:** New **Display → Notation complexity** selector (`learner` / `intermediate` / `transcriber`) persists via the store and reports save failures with a toast.
+- **Learner:** Study, Slow, and Play pass `showScore={false}` into `SessionStemAndTab`, which keeps stems/transport but skips the MusicXML/tab viewport. Study hides the theory card and chord-position selector, and replaces the full chord sheet with `LearnerChordChart` (large symbols, difficulty-coded) plus `LearnerSoloMelody` from `solo_notes`. Fretboard and stems remain.
+- **Transcriber:** Full notation stays visible and Study gains `TranscriberActions` — Print uses a new `printScore` command through the AlphaTab bridge (`TabInboundMessage` → harness `api.print()` → web/native surfaces), and Export writes the section/lesson MusicXML through the existing share helper. Missing MusicXML fails loudly with a toast.
+- **Intermediate:** Behavior, theme, and tab-variant defaults are unchanged.
+- **Verification:** `npm run lint` 0 errors. Vitest 577/577 with `--maxWorkers=1` (the parallel `npm run test` run hit the existing 5s `designTokenConformance` filesystem-scan timeout in this environment; the same files pass serially). Playwright `tests/ui/output-tier.spec.ts` covers default Intermediate, persistence across reload, Learner Study gating, and Transcriber Print/Export visibility; `analytics-settings` still green. `/settings` visual baseline unchanged.
 
 ---
 

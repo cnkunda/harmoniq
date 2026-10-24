@@ -12,12 +12,15 @@ import { ChordsAndLyrics } from '@/components/ChordsAndLyrics'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { EmptyState } from '@/components/EmptyState'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
+import { LearnerChordChart } from '@/components/LearnerChordChart'
+import { LearnerSoloMelody } from '@/components/LearnerSoloMelody'
 import { NoteCorrectionPanel } from '@/components/NoteCorrectionPanel'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { TheoryCard } from '@/components/TheoryCard'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
+import { TranscriberActions } from '@/components/TranscriberActions'
 import { colors } from '@/src/constants/colors'
 import { correctChord, correctSoloNote, fetchTheoryAnnotation } from '@/src/api/analyze'
 import { sessionHref } from '@/src/constants/sessionFlow'
@@ -46,6 +49,7 @@ import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useCorrectionStore } from '@/src/stores/correctionStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
 import {
   buildFretboardShareUrl,
@@ -53,7 +57,8 @@ import {
   type FretboardOverlayMode,
 } from '@/src/utils/fretboardShareState'
 import { findSoloNoteIndexForSelection } from '@/src/utils/feedback'
-import { readSectionTabPayloads } from '@/src/utils/lessonTabs'
+import { shareExportedBlob } from '@/src/utils/exportShare'
+import { readSectionMusicXml, readSectionTabPayloads } from '@/src/utils/lessonTabs'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
 
@@ -182,6 +187,10 @@ function StudyScreenInner() {
   const sessionStemRef = useRef<SessionStemAndTabHandle>(null)
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
+  const outputTier = useOutputTierStore((s) => s.tier)
+  const isLearner = outputTier === 'learner'
+  const isTranscriber = outputTier === 'transcriber'
+  const [exportBusy, setExportBusy] = useState(false)
   const [tick, setTick] = useState<PlaybackTickContext>(DEFAULT_TICK)
   const [stemRoutingOverride, setStemRoutingOverride] = useState<string | null>(null);
   const [theoryAnnotation, setTheoryAnnotation] = useState<{
@@ -252,6 +261,47 @@ function StudyScreenInner() {
 
   const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
   const soloNotesForFeedback = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? []
+
+  const exportMusicXml = useCallback(async () => {
+    const lessonXml = typeof lesson?.musicxml === 'string' ? lesson.musicxml.trim() : ''
+    const xml = readSectionMusicXml(section) ?? (lessonXml || null)
+    if (!xml) {
+      toast.error('No MusicXML is available to export for this section.')
+      return
+    }
+    setExportBusy(true)
+    try {
+      const base =
+        (lesson?.song_title ?? 'harmoniq-score')
+          .replace(/[^\w.\-()+ ]+/g, '_')
+          .slice(0, 80) || 'harmoniq-score'
+      await shareExportedBlob({
+        blob: new Blob([xml], { type: 'application/vnd.recordare.musicxml+xml' }),
+        mimeType: 'application/vnd.recordare.musicxml+xml',
+        contentDisposition: `attachment; filename="${base}.musicxml"`,
+        fallbackBase: base,
+        dialogTitle: 'Export MusicXML',
+      })
+      toast.success('MusicXML exported.')
+    } catch (e) {
+      toast.error(`Export failed: ${e instanceof Error ? e.message : 'unknown error'}`)
+    } finally {
+      setExportBusy(false)
+    }
+  }, [lesson?.musicxml, lesson?.song_title, section])
+
+  const printScore = useCallback(() => {
+    const surface = sessionStemRef.current?.getTabSurface()
+    if (!surface) {
+      toast.error('Score is not ready to print yet.')
+      return
+    }
+    try {
+      surface.printScore()
+    } catch (e) {
+      toast.error(`Print failed: ${e instanceof Error ? e.message : 'unknown error'}`)
+    }
+  }, [])
 
   // Update theory annotation based on current chord during playback
   useEffect(() => {
@@ -702,8 +752,10 @@ function StudyScreenInner() {
         ref={sessionStemRef}
         tabRenderPreset="light"
         tabVariant={variant}
+        showScore={!isLearner}
         onPlaybackTick={handleStemPlaybackTick}
         onNoteEvent={onTabNoteEvent}
+        onTabError={(message) => toast.error(`Score error: ${message}`)}
         onTabVariantChange={setVariant}
         tabFrameClassName="mt-2 min-h-[328px] w-full px-2"
         insertBetweenStemAndTab={
@@ -716,19 +768,25 @@ function StudyScreenInner() {
                   size="md"
                   positionIndex={chordPosIndex}
                 />
-                <View className="flex-1">
-                  <Text className="font-serif text-md text-cream">
-                    {theoryAnnotation.romanNumeral}
+                {isLearner ? (
+                  <Text className="flex-1 font-serif text-2xl text-amber-light">
+                    {formatChordDisplay(theoryAnnotation.chordName)}
                   </Text>
-                  <Text className="font-sans text-xs text-muted-brown">
-                    {theoryAnnotation.chordFunction}
-                  </Text>
-                  <ChordPositionSelector
-                    chordSymbol={theoryAnnotation.chordName}
-                    currentIndex={chordPosIndex}
-                    onPositionChange={setChordPosIndex}
-                  />
-                </View>
+                ) : (
+                  <View className="flex-1">
+                    <Text className="font-serif text-md text-cream">
+                      {theoryAnnotation.romanNumeral}
+                    </Text>
+                    <Text className="font-sans text-xs text-muted-brown">
+                      {theoryAnnotation.chordFunction}
+                    </Text>
+                    <ChordPositionSelector
+                      chordSymbol={theoryAnnotation.chordName}
+                      currentIndex={chordPosIndex}
+                      onPositionChange={setChordPosIndex}
+                    />
+                  </View>
+                )}
               </View>
             )}
 
@@ -780,8 +838,19 @@ function StudyScreenInner() {
               </Text>
             ) : null}
 
+            {isLearner ? (
+              <LearnerSoloMelody
+                notes={soloNotesForFeedback}
+                barTimestamps={lesson?.bar_timestamps}
+                positionSec={tick.positionSec}
+              />
+            ) : null}
+
             <View className="mt-2">
-             <ChordsAndLyrics
+              {isLearner ? (
+                <LearnerChordChart bars={barsData} currentBar={currentBar} />
+              ) : (
+                <ChordsAndLyrics
                   bars={barsData}
                   currentBar={currentBar}
                   bpm={lesson?.tempo ?? 92}
@@ -809,18 +878,27 @@ function StudyScreenInner() {
                     setChordModalChord(chord)
                     setChordModalVisible(true)
                   }}
-                   progressionLabels={progressionLabels}
-                   onProgressionTap={(label) => {
-                     toast.info(`${label.name}: ${label.description}`)
-                   }}
-                   barsPerLine={4}
-                   label={(section?.label ?? '') as string}
-                   labelConfidence={section?.label_confidence ?? null}
-                 />
+                  progressionLabels={progressionLabels}
+                  onProgressionTap={(label) => {
+                    toast.info(`${label.name}: ${label.description}`)
+                  }}
+                  barsPerLine={4}
+                  label={(section?.label ?? '') as string}
+                  labelConfidence={section?.label_confidence ?? null}
+                />
+              )}
             </View>
 
+            {isTranscriber ? (
+              <TranscriberActions
+                onPrint={printScore}
+                onExport={() => void exportMusicXml()}
+                exportBusy={exportBusy}
+              />
+            ) : null}
+
             {/* Commit 116: Theory annotation card for current chord */}
-            {theoryAnnotation && (
+            {theoryAnnotation && !isLearner && (
               <View className="mt-2 px-2">
                 <TheoryCard
                   chordName={theoryAnnotation.chordName}

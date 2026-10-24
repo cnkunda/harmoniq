@@ -27,6 +27,7 @@ import { startAnalytics } from '@/src/analytics/eventBus'
 import { hydrateVoiceCoachPrefs } from '@/src/audio/hydrateVoiceCoachPrefs'
 import { hydrateWebLessonStore, initDb } from '@/src/db/client'
 import { resumeActivePracticePlan } from '@/src/session/activePlanPersistence'
+import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 
 cssInterop(LinearGradient, { className: 'style' })
@@ -61,6 +62,7 @@ export default function RootLayout() {
         }
         await startAnalytics()
         await useSessionPrefsStore.getState().hydrate()
+        await useOutputTierStore.getState().hydrate()
         await hydrateVoiceCoachPrefs()
         if (Platform.OS === 'web') {
           await hydrateWebLessonStore()

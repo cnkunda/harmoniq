@@ -1212,6 +1212,19 @@
           return
         }
 
+        if (msg.type === 'printScore') {
+          try {
+            if (api && typeof api.print === 'function') {
+              api.print()
+            } else {
+              postOut({ type: 'error', message: 'printScore unavailable in this harness' })
+            }
+          } catch (e) {
+            postOut({ type: 'error', message: (e && e.message) ? e.message : 'printScore failed' })
+          }
+          return
+        }
+
         if (msg.type === 'setRenderPreset') {
           applyRenderPreset(msg.presetName)
           return

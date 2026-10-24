@@ -203,6 +203,9 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
               }
             }, 800)
           }),
+        printScore: () => {
+          postInbound({ type: 'printScore' })
+        },
       }),
       [postInbound],
     )

@@ -62,6 +62,7 @@ type AlphaTabApiLike = {
   tickPosition?: number
   play?: () => boolean | void
   pause?: () => void
+  print?: () => void
   settings: {
     display: {
       resources: Record<string, string | undefined>
@@ -858,6 +859,13 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           const api = apiRef.current as { score?: unknown } | null
           if (!api?.score) return null
           return extractSongMetaFromScore(api.score)
+        },
+        printScore: () => {
+          const api = apiRef.current
+          if (!api?.print) {
+            throw new Error('Printing is unavailable until the score finishes loading.')
+          }
+          api.print()
         },
       }),
       [

@@ -16,6 +16,7 @@ import {
   TASTE_QUIZ_VIBE_CARDS,
   type TasteQuizVibeId,
 } from '@/src/taste/tasteQuizSeeds'
+import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 
 type Experience = 'beginner' | 'intermediate' | 'advanced'
@@ -104,6 +105,7 @@ export default function TasteQuizScreen() {
           },
         })
         await commitTasteQuizProfile(taste, experience)
+        await useOutputTierStore.getState().hydrate()
         await loadSkills()
         toast.success('Preferences saved.')
         if (isUpdateFlow) {

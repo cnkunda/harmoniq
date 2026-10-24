@@ -33,6 +33,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         scrollMasterBarIntoView: () => {},
         smartScrollSeekToBar: () => {},
         getSongDetails: async () => null,
+        printScore: () => {},
       }),
       [],
     )

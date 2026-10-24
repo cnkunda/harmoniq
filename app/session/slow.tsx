@@ -23,6 +23,7 @@ import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useMetronomeDefaultOn } from '@/src/settings/useMetronomeDefaultOn'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
@@ -58,6 +59,7 @@ function SlowScreenInner() {
   const initialMetronomeOn = useMetronomeDefaultOn()
   const lesson = useLessonStore((s) => s.lesson)
   const lessonSectionIndex = useLessonStore((s) => s.lessonSectionIndex)
+  const outputTier = useOutputTierStore((s) => s.tier)
 
   const sections = (lesson?.sections ?? []) as Array<Record<string, unknown>>
   const section = sections[lessonSectionIndex]
@@ -183,6 +185,7 @@ function SlowScreenInner() {
 
       <SessionStemAndTab
         tabRenderPreset="light"
+        showScore={outputTier !== 'learner'}
         initialRate={0.65}
         initialMetronomeOn={initialMetronomeOn}
         autoLoopRegion={playbackLoop}

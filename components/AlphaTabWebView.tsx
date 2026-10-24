@@ -253,6 +253,9 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
               }
             }, 800)
           }),
+        printScore: () => {
+          postInbound({ type: 'printScore' })
+        },
       }),
       [postInbound],
     )

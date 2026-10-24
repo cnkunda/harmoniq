@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Database,
   Download,
+  Eye,
   Guitar,
   Link2,
   MessageSquare,
@@ -80,10 +81,12 @@ import {
   type CoachVoiceId,
 } from '@/src/db/schema'
 import type { UserFeedbackStats } from '@/src/db/types'
+import { OUTPUT_TIERS, parseOutputTier } from '@/src/preferences/outputTier'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
 import { fetchPersistAndDeriveSpotifyTaste } from '@/src/spotify/fetchPersistAndDeriveSpotify'
 import { formatSpotifySetupError } from '@/src/spotify/spotifyConnectErrors'
 import { useLessonStore } from '@/src/stores/lessonStore'
+import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useSkillStore } from '@/src/stores/skillStore'
@@ -123,6 +126,8 @@ export default function SettingsScreen() {
   const loadSkills = useSkillStore((s) => s.loadFromDb)
   const resetLesson = useLessonStore((s) => s.resetLesson)
   const clearAnnotations = useSessionAnnotationsStore((s) => s.clearAll)
+  const outputTier = useOutputTierStore((s) => s.tier)
+  const setOutputTier = useOutputTierStore((s) => s.setTier)
   const user = useSkillStore((s) => s.nodes)
   const sessionsCount = 0 // TODO: Get from store when available
 
@@ -291,6 +296,20 @@ export default function SettingsScreen() {
   const persistStyle = async () => {
     await setAppPref(PREF_STYLE_FOCUS, styleFocus.trim())
     toast.success('Style focus saved.')
+  }
+
+  const persistOutputTier = async (value: string) => {
+    const next = parseOutputTier(value)
+    if (!next) {
+      toast.error(`Unknown notation complexity: ${value}`)
+      return
+    }
+    try {
+      await setOutputTier(next)
+      toast.success(`Notation set to ${next}.`)
+    } catch (e) {
+      toast.error(`Could not save notation complexity: ${e instanceof Error ? e.message : 'unknown error'}`)
+    }
   }
 
   const persistMetronome = async (v: boolean) => {
@@ -583,6 +602,22 @@ export default function SettingsScreen() {
               onValueChange={(v) => void persistSkipMoodCheck(v)}
             />
           </View>
+        </SettingsSection>
+
+        {/* Display */}
+        <SettingsSection
+          icon={Eye}
+          title="Display"
+          description="Control how much notation and theory sessions show"
+          defaultOpen={true}
+        >
+          <SettingsSegmented
+            label="Notation complexity"
+            description="Learner shows chords and a single-line melody; Intermediate is the standard view; Transcriber adds print and MusicXML export."
+            options={OUTPUT_TIERS}
+            value={outputTier}
+            onValueChange={(value) => void persistOutputTier(value)}
+          />
         </SettingsSection>
 
         {/* Tuning Settings */}

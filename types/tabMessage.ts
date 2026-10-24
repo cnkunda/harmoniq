@@ -46,6 +46,8 @@ export type TabInboundMessage =
   | { type: "setRuntimeDiagnosticsEnabled"; enabled: boolean }
   /** Commit 61: bridge RTT probe — harness replies with `diagPong`. */
   | { type: "diagPing"; requestId: string; t0: number }
+  /** Commit 166: open the AlphaTab A4 print popup for the loaded score. */
+  | { type: "printScore" }
   /** Commit 85: SmartScroll seek to bar by timestamp (binary search on bar_timestamps). */
   | {
       type: "smartScrollSeekToBar";
@@ -141,6 +143,8 @@ export type AlphaTabSurfaceRef = {
   smartScrollSeekToBar: (positionSec: number, barTimestamps: number[]) => void;
   /** Score metadata from AlphaTab (static; may be partial if the file omits fields). */
   getSongDetails: () => Promise<SongScoreMeta | null>;
+  /** Commit 166: open a print-ready popup of the loaded score. */
+  printScore: () => void;
 };
 
 /** Harness → parent */
