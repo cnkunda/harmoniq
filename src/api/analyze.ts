@@ -4,6 +4,8 @@ import { getAppPref } from '@/src/db/client'
 import { PREF_EXPERIENCE_LEVEL, PREF_STYLE_FOCUS } from '@/src/db/schema'
 import type { SkillNodeRow } from '@/src/db/types'
 import { parseTechniqueRollJson, rollingSessionsWeak } from '@/src/session/skillMutator'
+import type { StemKey } from '@/src/constants/stems'
+import { buildStemsExportUrl } from '@/src/utils/stemExport'
 import type {
   AnalyzeJob,
   CoachHydrationStatusPayload,
@@ -127,6 +129,29 @@ export async function submitExportJob(payload: {
   return {
     blob,
     mimeType: res.headers.get('Content-Type') ?? 'application/octet-stream',
+    contentDisposition: res.headers.get('Content-Disposition'),
+  }
+}
+
+/** GET /jobs/{job_id}/stems URL for native downloads. */
+export function stemsExportUrl(jobId: string, stem?: StemKey | null): string {
+  return buildStemsExportUrl(API_BASE_URL, jobId, stem)
+}
+
+/** GET /jobs/{job_id}/stems — ZIP of all stems, or one WAV when `stem` is set. */
+export async function fetchStemExport(
+  jobId: string,
+  stem?: StemKey | null,
+): Promise<{ blob: Blob; mimeType: string; contentDisposition: string | null }> {
+  const res = await fetch(stemsExportUrl(jobId, stem))
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, parseFastApiDetail(text))
+  }
+  const blob = await res.blob()
+  return {
+    blob,
+    mimeType: res.headers.get('Content-Type') ?? (stem ? 'audio/wav' : 'application/zip'),
     contentDisposition: res.headers.get('Content-Disposition'),
   }
 }

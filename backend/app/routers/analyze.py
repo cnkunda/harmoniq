@@ -8,10 +8,14 @@ import inspect
 import json
 import logging
 import os
+import re
+import tempfile
 import uuid
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.audio_processing import AudioPreparationError, prepare_audio_input
 from app.audio_quality import AudioQualityTooLowError, require_acceptable_quality
@@ -21,9 +25,16 @@ from app.beat_grid import (
     estimate_beat_grid,
 )
 from app.chord_inference import infer_chords
-from app.demucs_engine import DemucsEngineError, build_stem_routing_hints, separate_with_demucs
+from app.demucs_engine import STEM_KEYS, DemucsEngineError, build_stem_routing_hints, separate_with_demucs
 from app.pipeline_proof import YouTubeDownloadError
-from app.ingest import AUDIO_TOO_SHORT_USER_MESSAGE, MIN_ANALYZE_DURATION_SECONDS, get_job_dir, wav_file_duration_seconds
+from app.ingest import (
+    AUDIO_TOO_SHORT_USER_MESSAGE,
+    MIN_ANALYZE_DURATION_SECONDS,
+    JobIdInvalidError,
+    get_job_dir,
+    resolve_job_dir,
+    wav_file_duration_seconds,
+)
 from app.jobs import (
     ANALYSIS_FAILED_USER_MESSAGE,
     ANALYZE_ERROR_ANALYSIS_FAILED,
@@ -74,6 +85,13 @@ logger = logging.getLogger("harmoniq.api.analyze")
 router = APIRouter(tags=["Analyze"])
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+STEM_EXPORT_MISSING_DETAIL = (
+    "Stems for this song are no longer available — they may have been cleaned up. "
+    "Re-analyze the song to export again."
+)
+STEM_EXPORT_SPOOL_MAX_BYTES = 8 * 1024 * 1024
+STEM_EXPORT_CHUNK_BYTES = 64 * 1024
 
 ALLOWED_AUDIO_MIME_TYPES = {
     "audio/mpeg",
@@ -402,6 +420,89 @@ async def analyze_coach_status(job_id: str) -> CoachHydrationStatus:
     if status is None:
         return CoachHydrationStatus(status="pending", sections=[], fallback_reason=None)
     return status
+
+
+def _stem_export_filename(job_dir: Path, suffix: str) -> str:
+    """Build an ASCII-safe download filename from the lesson title."""
+    title = "harmoniq-stems"
+    lesson_path = job_dir / "lesson.json"
+    if lesson_path.is_file():
+        try:
+            payload = json.loads(lesson_path.read_text(encoding="utf-8"))
+            candidate = payload.get("song_title") if isinstance(payload, dict) else None
+            if isinstance(candidate, str) and candidate.strip():
+                title = candidate.strip()
+        except (OSError, json.JSONDecodeError):
+            logger.warning("could not read lesson title for stem export job_dir=%s", job_dir, exc_info=True)
+    safe = re.sub(r"[^A-Za-z0-9._()+ -]+", "_", title).strip(" ._")[:80] or "harmoniq-stems"
+    return f"{safe}{suffix}"
+
+
+@router.get(
+    "/jobs/{job_id}/stems",
+    summary="GET /jobs/{job_id}/stems — export separated stems (ZIP or single WAV)",
+)
+async def export_stems(job_id: str, stem: str | None = None):
+    """Export all available stems as a ZIP, or one stem as a WAV via ``?stem=``."""
+    try:
+        job_dir = resolve_job_dir(job_id)
+    except JobIdInvalidError as exc:
+        logger.info("GET /jobs/%s/stems — invalid job_id", job_id)
+        raise HTTPException(status_code=404, detail=STEM_EXPORT_MISSING_DETAIL) from exc
+
+    stems_dir = job_dir / "stems"
+    if not job_dir.is_dir() or not stems_dir.is_dir():
+        logger.info("GET /jobs/%s/stems — job or stems dir missing job_dir=%s", job_id, job_dir)
+        raise HTTPException(status_code=404, detail=STEM_EXPORT_MISSING_DETAIL)
+
+    available = [
+        (key, stems_dir / f"{key}.wav")
+        for key in STEM_KEYS
+        if (stems_dir / f"{key}.wav").is_file()
+    ]
+    if not available:
+        logger.info("GET /jobs/%s/stems — no stem WAVs found in %s", job_id, stems_dir)
+        raise HTTPException(status_code=404, detail=STEM_EXPORT_MISSING_DETAIL)
+
+    if stem is not None:
+        if stem not in STEM_KEYS:
+            raise HTTPException(status_code=404, detail=f"Unknown stem: {stem}")
+        single_path = stems_dir / f"{stem}.wav"
+        if not single_path.is_file():
+            raise HTTPException(status_code=404, detail=STEM_EXPORT_MISSING_DETAIL)
+        logger.info("GET /jobs/%s/stems stem=%s — single WAV export", job_id, stem)
+        return FileResponse(single_path, media_type="audio/wav", filename=f"{stem}.wav")
+
+    spool = tempfile.SpooledTemporaryFile(max_size=STEM_EXPORT_SPOOL_MAX_BYTES, mode="w+b")
+    try:
+        with zipfile.ZipFile(spool, "w", zipfile.ZIP_STORED, allowZip64=True) as archive:
+            for key, path in available:
+                archive.write(path, arcname=f"{key}.wav")
+        size = spool.tell()
+        spool.seek(0)
+    except OSError as exc:
+        spool.close()
+        logger.exception("GET /jobs/%s/stems — failed to package ZIP", job_id)
+        raise HTTPException(status_code=500, detail="Could not package stems for export.") from exc
+
+    filename = _stem_export_filename(job_dir, "-stems.zip")
+
+    def _iter_zip():
+        try:
+            while True:
+                chunk = spool.read(STEM_EXPORT_CHUNK_BYTES)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            spool.close()
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Length": str(size),
+    }
+    logger.info("GET /jobs/%s/stems — ZIP export stems=%s bytes=%d", job_id, [key for key, _ in available], size)
+    return StreamingResponse(_iter_zip(), media_type="application/zip", headers=headers)
 
 
 @router.post("/transcription/analyze/{job_id}", response_model=AnalyzeTranscriptionResponse)

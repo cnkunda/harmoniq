@@ -8,6 +8,9 @@ import { BeatGridEditorPanel } from '@/components/BeatGridEditorPanel'
 import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
 import { PlayCaptureLessonCardBanner } from '@/components/play'
 import { MetronomeArcReadout } from '@/components/MetronomeArcReadout'
+import { StemExportMenu } from '@/components/StemExportMenu'
+import { toast } from '@/components/ToastConfig'
+import { ApiError, fetchStemExport, stemsExportUrl } from '@/src/api/analyze'
 import type { MetronomeSubdivision } from '@/src/audio/metronomeShared'
 import { createStemMixer } from '@/src/audio/Mixer'
 import { GHOST_MIX_LINEAR, GHOST_STEM_ID } from '@/src/audio/ghostConstants'
@@ -18,18 +21,24 @@ import { useMetronome } from '@/src/audio/useMetronome'
 import { colors } from '@/src/constants/colors'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { SESSION_PLAYBACK_CARD_CLASS } from '@/src/constants/sessionPlaybackCard'
+import { STEM_KEYS, STEM_LABELS, type StemKey } from '@/src/constants/stems'
 import { CHOICE_CHIP_BASE, CHOICE_CHIP_OFF, CHOICE_CHIP_ON, CHOICE_LABEL_MONO_OFF, CHOICE_LABEL_MONO_ON, CHOICE_LABEL_SANS_OFF, CHOICE_LABEL_SANS_ON } from '@/src/constants/uiTokens'
 import { logFirstAudioPlay } from '@/src/analytics/firstAudioPlay'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import type { LessonJSON } from '@/src/types'
+import { downloadAndShareExport, shareExportedBlob } from '@/src/utils/exportShare'
 import { parseSectionRecord, sectionSeekSeconds, stemRelPathToDefinition } from '@/src/utils/lessonAudio'
+import {
+  canExportStems,
+  exportableStemKeys,
+  stemExportFilename,
+  STEM_EXPORT_UNAVAILABLE_COPY,
+} from '@/src/utils/stemExport'
 import type { LucideIcon } from 'lucide-react-native'
-import { AudioWaveform, Drum, Guitar, KeyboardMusic, Layers, Mic, Pause, Play } from 'lucide-react-native'
+import { AudioWaveform, Drum, FileDown, Guitar, KeyboardMusic, Layers, Mic, Pause, Play } from 'lucide-react-native'
 
-const STEM_UI_ORDER = ['guitar', 'bass', 'drums', 'vocals', 'piano', 'other'] as const
-
-const STEM_ICONS: Record<(typeof STEM_UI_ORDER)[number], LucideIcon> = {
+const STEM_ICONS: Record<StemKey, LucideIcon> = {
   guitar: Guitar,
   bass: AudioWaveform,
   drums: Drum,
@@ -52,8 +61,8 @@ const METRO_SUBDIV_OPTIONS: { value: MetronomeSubdivision; label: string }[] = [
 function orderedStemIds(stems: Record<string, string>): string[] {
   const keys = Object.keys(stems)
   keys.sort((a, b) => {
-    const ia = STEM_UI_ORDER.indexOf(a as (typeof STEM_UI_ORDER)[number])
-    const ib = STEM_UI_ORDER.indexOf(b as (typeof STEM_UI_ORDER)[number])
+    const ia = STEM_KEYS.indexOf(a as StemKey)
+    const ib = STEM_KEYS.indexOf(b as StemKey)
     const sa = ia >= 0 ? ia : 99
     const sb = ib >= 0 ? ib : 99
     if (sa !== sb) return sa - sb
@@ -167,6 +176,8 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
   const [beatFlashTick, setBeatFlashTick] = useState(0)
   const [lastDownbeatFlash, setLastDownbeatFlash] = useState(true)
   const [stemMute, setStemMute] = useState<Record<string, boolean>>({})
+  const [stemExportMenuVisible, setStemExportMenuVisible] = useState(false)
+  const [stemExportBusyKey, setStemExportBusyKey] = useState<string | null>(null)
   const [loopRegion, setLoopRegion] = useState<{ startSec: number; endSec: number; label?: string } | null>(autoLoopRegion)
   /** Non-null while dragging the timeline scrubber (decouples slider from transport poll). */
   const [scrubTimelineSec, setScrubTimelineSec] = useState<number | null>(null)
@@ -529,6 +540,45 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
     })
   }
 
+  const handleStemExport = useCallback(
+    async (stem: StemKey | null) => {
+      const jobId = lesson?.job_id
+      if (!jobId || !canExportStems(jobId, lesson?.stems)) {
+        toast.error(STEM_EXPORT_UNAVAILABLE_COPY)
+        return
+      }
+      setStemExportBusyKey(stem ?? 'all')
+      try {
+        const filename = stemExportFilename(lesson?.song_title ?? 'harmoniq', stem)
+        if (Platform.OS === 'web') {
+          const { blob, mimeType, contentDisposition } = await fetchStemExport(jobId, stem)
+          await shareExportedBlob({
+            blob,
+            mimeType,
+            contentDisposition,
+            fallbackBase: stem ? `${stem}-stem` : 'harmoniq-stems',
+            dialogTitle: stem ? `Export ${STEM_LABELS[stem]} stem` : 'Export stems',
+          })
+        } else {
+          await downloadAndShareExport({
+            url: stemsExportUrl(jobId, stem),
+            filename,
+            mimeType: stem ? 'audio/wav' : 'application/zip',
+            dialogTitle: stem ? `Export ${STEM_LABELS[stem]} stem` : 'Export stems',
+          })
+        }
+        setStemExportMenuVisible(false)
+        toast.success(stem ? `${STEM_LABELS[stem]} stem exported.` : 'Stems exported.')
+      } catch (e) {
+        const message = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'unknown error'
+        toast.error(`Could not export stems: ${message}`)
+      } finally {
+        setStemExportBusyKey(null)
+      }
+    },
+    [lesson?.job_id, lesson?.song_title, lesson?.stems],
+  )
+
   const togglePlay = async () => {
     const m = mixerRef.current
     if (!m || !ready) return
@@ -621,6 +671,8 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
 
   const playLessonCard = lessonPlaybackCardVariant === 'play'
   const showPlayCaptureShell = Boolean(playLessonCard && playCaptureSlot)
+  const stemExportKeys = exportableStemKeys(lesson.stems)
+  const stemExportAvailable = canExportStems(lesson.job_id, lesson.stems)
 
   return (
     <View className="mt-3 gap-3">
@@ -913,9 +965,25 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             ) : null}
 
             <View className={sections.length > 0 ? 'border-t border-wood-600/15 pt-3' : ''}>
-              <Text className="mb-2 font-sans-medium text-sm text-wood-900">Mixer</Text>
+              <View className="mb-2 flex-row items-center justify-between gap-2">
+                <Text className="font-sans-medium text-sm text-wood-900">Mixer</Text>
+                {stemExportAvailable ? (
+                  <AnimatedPressable
+                    onPress={() => setStemExportMenuVisible(true)}
+                    disabled={stemExportBusyKey !== null}
+                    haptic="light"
+                    className="min-h-[44px] flex-row items-center gap-1.5 rounded-lg border border-wood-600/40 bg-wood-900/5 px-3 py-2 disabled:opacity-50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Export separated stems"
+                    accessibilityState={{ disabled: stemExportBusyKey !== null, busy: stemExportBusyKey !== null }}
+                  >
+                    <FileDown color={colors.amber.accent} size={16} strokeWidth={2} />
+                    <Text className="font-sans-medium text-xs text-wood-900">Export</Text>
+                  </AnimatedPressable>
+                ) : null}
+              </View>
               <View className="flex-row flex-wrap gap-x-1 gap-y-1.5">
-                {STEM_UI_ORDER.map((id) => {
+                {STEM_KEYS.map((id) => {
                   const hasStem = Boolean((lesson.stems as Record<string, string>)?.[id])
                   const Icon = STEM_ICONS[id]
                   const unmuted = hasStem && !stemMute[id]
@@ -956,6 +1024,15 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           </View>
         )}
       </View>
+
+      <StemExportMenu
+        visible={stemExportMenuVisible}
+        stems={stemExportKeys}
+        busyKey={stemExportBusyKey}
+        onClose={() => setStemExportMenuVisible(false)}
+        onExportAll={() => void handleStemExport(null)}
+        onExportStem={(stem) => void handleStemExport(stem)}
+      />
     </View>
   )
 })

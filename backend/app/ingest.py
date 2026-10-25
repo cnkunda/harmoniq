@@ -103,10 +103,15 @@ class JobIdInvalidError(ValueError):
     """Raised when job_id contains invalid characters (path traversal protection)."""
 
 
-def get_job_dir(job_id: str) -> Path:
+def resolve_job_dir(job_id: str) -> Path:
+    """Return the job directory path without creating it (read-only callers)."""
     if not _JOB_ID_RE.match(job_id):
         raise JobIdInvalidError(f"Invalid job_id: {job_id!r}")
-    job_dir = get_data_dir() / "jobs" / job_id
+    return get_data_dir() / "jobs" / job_id
+
+
+def get_job_dir(job_id: str) -> Path:
+    job_dir = resolve_job_dir(job_id)
     job_dir.mkdir(parents=True, exist_ok=True)
     return job_dir
 

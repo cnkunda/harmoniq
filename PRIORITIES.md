@@ -173,7 +173,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ### Commit 172: Stem Export from StemMixer (was Milestone D "Real-Time Stem Mixer & Export")
 
-**Status:** deferred
+**Status:** complete
 
 **Goal:** Let users export the separated stems they're already mixing — the mixer shipped, the export never did.
 
@@ -189,11 +189,20 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] ZIP download contains all non-muted stems (or single stem when selected)
-- [ ] Works on web and native save/share flows
-- [ ] Missing/evicted stems produce a clear user-facing error
-- [ ] Large songs stream without OOM
-- [ ] Tests green
+- [x] ZIP download contains all non-muted stems (or single stem when selected)
+- [x] Works on web and native save/share flows
+- [x] Missing/evicted stems produce a clear user-facing error
+- [x] Large songs stream without OOM
+- [x] Tests green
+
+**Implementation notes (Commit 172):**
+
+- **Backend** (`backend/app/routers/analyze.py`): `GET /jobs/{job_id}/stems` returns a ZIP of the available `stems/{key}.wav` files, or a single `audio/wav` when `?stem=<key>` is supplied. Unknown/evicted jobs and missing stems return `404` with the retention-aware copy. The ZIP is built into a `SpooledTemporaryFile` (8 MB memory cap → disk spill) and streamed in 64 KB chunks, so large songs do not buffer in memory. Archive entries are fixed `STEM_KEYS` names; client paths are never used.
+- **Read-only resolution** (`backend/app/ingest.py`): added `resolve_job_dir()` so the export endpoint can check job existence without `get_job_dir()` creating the directory.
+- **Frontend** (`components/ListenStemPanel.tsx`): the real session mixer (Listen/Slow/Study/Play/Warmup via `SessionStemAndTab`) now has an **Export** action in the Mixer header. `components/StemExportMenu.tsx` offers “All stems (.zip)” plus one WAV per available stem. The action is hidden for the demo lesson and `bundled://` stems.
+- **Download paths**: web uses `fetchStemExport` + the existing `shareExportedBlob` anchor download; native uses `downloadAndShareExport` (`expo-file-system` download to cache → status check → `expo-sharing` share sheet) so the ZIP never becomes a JS Blob. `shareExportedBlob` now maps `application/zip`/`audio/wav` to `.zip`/`.wav` filenames.
+- **Tests**: `backend/tests/test_stem_export.py` covers ZIP contents, single WAV, missing job/stems, invalid/missing stem, and invalid job id (7 tests, in CI). `src/utils/stemExport.test.ts` covers URL building, filename sanitization, and export eligibility (9 tests). `npm run lint` passes.
+- **Note**: the spec named `components/StemMixer.tsx`, but that component is only used on design-preview; the implementation targets the actual session mixer as agreed. No MP3 transcode and no new dependencies.
 
 ---
 

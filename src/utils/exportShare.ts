@@ -23,6 +23,8 @@ function extFromMime(mimeType: string): string {
   const m = mimeType.toLowerCase()
   if (m.includes('musicxml')) return '.musicxml'
   if (m.includes('midi')) return '.mid'
+  if (m.includes('zip')) return '.zip'
+  if (m.includes('wav')) return '.wav'
   return ''
 }
 
@@ -73,4 +75,43 @@ export async function shareExportedBlob(params: {
   const canShare = await Sharing.isAvailableAsync()
   if (!canShare) throw new Error('Share sheet unavailable on this device')
   await Sharing.shareAsync(path, { mimeType, dialogTitle })
+}
+
+async function readDownloadErrorDetail(uri: string, status: number): Promise<string> {
+  try {
+    const body = await FileSystem.readAsStringAsync(uri)
+    const parsed = JSON.parse(body) as { detail?: unknown }
+    if (typeof parsed.detail === 'string' && parsed.detail.trim()) return parsed.detail
+  } catch (e) {
+    console.warn('[exportShare] could not read export error body', e)
+  }
+  return `Export failed (HTTP ${status}).`
+}
+
+/**
+ * Download an export URL straight to the native cache and open the share sheet.
+ * Avoids buffering large exports (e.g. stem ZIPs) in JS memory.
+ */
+export async function downloadAndShareExport(params: {
+  url: string
+  filename: string
+  mimeType: string
+  dialogTitle: string
+}): Promise<void> {
+  if (Platform.OS === 'web') throw new Error('Use shareExportedBlob for web exports')
+  const dir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory
+  if (!dir) throw new Error('No writable directory for export')
+  const safeName = params.filename.replace(/[^\w.\-()+ ]+/g, '_')
+  const path = `${dir}${safeName}`
+  const result = await FileSystem.downloadAsync(params.url, path)
+  if (result.status < 200 || result.status >= 300) {
+    const detail = await readDownloadErrorDetail(result.uri, result.status)
+    await FileSystem.deleteAsync(result.uri, { idempotent: true }).catch((e) => {
+      console.warn('[exportShare] could not remove failed export file', e)
+    })
+    throw new Error(detail)
+  }
+  const canShare = await Sharing.isAvailableAsync()
+  if (!canShare) throw new Error('Share sheet unavailable on this device')
+  await Sharing.shareAsync(path, { mimeType: params.mimeType, dialogTitle: params.dialogTitle })
 }
