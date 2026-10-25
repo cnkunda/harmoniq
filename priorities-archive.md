@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, Milestone D infrastructure Commits 169–172, and the RWC-P data pipeline Commit 173. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, Milestone D infrastructure Commits 169–172, the RWC-P data pipeline Commit 173, and the lead-sheet agent Commit 177. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–170 (completed → archived) and 171–172 (active), clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–170 (completed → archived) and 171–172 (completed → archived), lead sheet agent → 177 (completed → archived), clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -39,6 +39,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 171 (Audio Fingerprinting & Quality Scoring) Archive Date:** October 25, 2026 — Complete; all 5 ACs verified (audio fingerprint 150 passed, audio quality 124 passed, commit-171 cache suite 21 passed, CI backend list green, lint 0 errors); spec and implementation notes archived below.
 **Commit 172 (Stem Export from StemMixer) Archive Date:** October 25, 2026 — Complete; all 5 ACs verified (stem export 7 passed in CI, stemExport utils 9 passed, lint 0 errors); spec and implementation notes archived below.
 **Commit 173 (RWC Music Database Pipeline) Archive Date:** October 25, 2026 — Complete; all 3 ACs verified (lint 0 errors; CI backend list 363 passed / 2 skipped; new RWC suite 26 passed); spec and implementation notes archived below.
+**Commit 177 (Lead Sheet Agent — MIDI + Lyrics → MusicXML) Archive Date:** October 25, 2026 — Complete; all 3 ACs verified (lead-sheet suite 10 passed, related MusicXML/exporter suites 72 passed, Playwright lead-sheet render passed, DTD validation passed, lint 0 errors); spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -2946,5 +2947,38 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **Docs/CI:** `AGENTS.md` dataset table + manual commands, `docs/RESEARCH.md` dataset table, and `tests/test_rwc_pipeline.py` added to `scoring-tests.yml`. CI runs only the offline unit tests; the 4.1 GB download remains a manual opt-in.
 - **Tests:** `tests/test_rwc_pipeline.py` (26 tests: label aliases, parser, CQT/npz contract, clean skip, loss-weight plumbing). CI backend list (22 files): 363 passed, 2 skipped. Full unfiltered suite not run (heavy imports); the CI list is the gate. `npm run lint`: 0 errors.
 - **License caveat:** RWC data is CC BY-NC 4.0 (research/non-commercial). Do not distribute RWC-trained weights without a separate licensing decision.
+
+---
+
+### Commit 177: Lead Sheet Agent (MIDI + Lyrics → MusicXML)
+
+**Status:** complete
+
+**Goal:** Generate a lead sheet (melody + chord symbols + lyrics) in MusicXML from a MIDI file plus raw lyrics text.
+
+**Current State:** `musicxml_builder.py` builds full scores from analysis output (chords + solo + beat grid); `LessonJSON` carries `lyrics_aligned` (schema line 441) and Whisper transcription exists from commit 8 — but there is no lead-sheet layout, no MIDI+lyrics ingestion path, and no syllable-to-note alignment routine.
+
+**Scope:**
+
+- Align MIDI melody events to lyric syllables (timing-based)
+- Merge with chord symbols (from analysis or manual input)
+- Emit MusicXML lead-sheet layout via the existing `musicxml_builder.py` primitives
+- Tests: known MIDI + lyrics fixture → valid MusicXML (DTD check already in CI)
+
+**Acceptance Criteria:**
+
+- [x] Fixture MIDI + lyrics → valid MusicXML with aligned lyric underlay
+- [x] Renders in AlphaTab web + native
+- [x] DTD validation passes
+
+**Implementation notes (Commit 177):**
+
+- **MIDI ingestion** (`backend/app/lead_sheet.py`): `pretty_midi` parses MIDI bytes and derives the beat grid from the MIDI tempo/downbeats, extending the final measure boundary past the last note. Missing final downbeats otherwise produced zero measures.
+- **Melody extraction**: defaults to the non-drum track with the highest median pitch (override with `melody_track_index`); polyphonic material collapses to the highest note at each onset. More lyric syllables than melody notes raises `LeadSheetInputError` rather than truncating.
+- **Lyrics**: `tokenize_lyrics()` splits on whitespace and explicit hyphens, producing `begin` / `middle` / `end` syllabic values through music21. No automatic syllabification was added.
+- **Builder extension** (`backend/app/musicxml_builder.py`): `build_musicxml(..., lyrics=..., layout="lead_sheet")` attaches `<lyric>` underlay only to note starts (not tie continuations) and skips full-score-only annotations (tab technicals, dynamics, chord diagrams) whose current injectors are DTD-invalid in a standalone lead sheet.
+- **Chord symbols**: optional `ChordTimeline` from analysis/manual input; no MIDI chord inference in this commit.
+- **Render gate**: `assets/musicxml-corpus/lead-sheet-lyrics.musicxml` registered in the existing hidden corpus route (`src/lib/corpusAssets.ts`, `app/(tabs)/musicxml-render-test.tsx`) plus the Playwright and Detox corpus lists. `docs/ALPHATAB_MUSICXML_LIMITATIONS.md` records that alphaTab 1.6.1 renders lyric text but ignores `syllabic`.
+- **Tests**: `backend/tests/test_lead_sheet.py` (10 tests: DTD validity, underlay/syllabics, track selection, empty lyrics, loud failure cases) plus `backend/tests/fixtures/lead-sheet/`. Verification: lead-sheet + MusicXML builder/corpus/exporter suites 82 passed; `npx vitest run --testTimeout=30000` 587 passed; Playwright `musicxml-render.spec.ts` 5 passed with new snapshot; AlphaTab Node corpus check 5/5 rendered and all 8 lyric strings present in SVG; `npm run lint` 0 errors. Detox native run not executed (no Android device attached). Full unfiltered backend pytest exceeded 20 minutes; targeted suites are the gate.
 
 ---

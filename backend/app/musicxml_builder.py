@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from fractions import Fraction
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 # Lazy load music21 for performance if not always used.
 # If music21 is not installed, this will raise an ImportError at runtime.
@@ -974,6 +974,9 @@ def build_musicxml(
     title: str = "Harmoniq Score",
     artist: str = "Harmoniq AI",
     key_signature: str | None = None, # New parameter
+    *,
+    lyrics: list[str] | None = None,
+    layout: Literal["full_score", "lead_sheet"] = "full_score",
 ) -> str:
     """
     Builds a MusicXML string from Harmoniq's internal data structures.
@@ -984,11 +987,36 @@ def build_musicxml(
         solo_notes: The SoloNotes object with individual note events.
         title: Title for the MusicXML score.
         artist: Artist for the MusicXML score.
+        key_signature: Optional key signature (e.g. "C major").
+        lyrics: Optional syllables aligned one-to-one with ``solo_notes.notes``
+            sorted by ``(start_time, pitch)``. Hyphenated tokens such as
+            ``"Hel-"`` / ``"-lo"`` become MusicXML syllabic values.
+        layout: ``"full_score"`` emits the existing tab/dynamics/chord-diagram
+            annotations. ``"lead_sheet"`` emits melody, harmony and lyric
+            underlay only, avoiding annotations that are invalid in a
+            standalone lead-sheet document.
 
     Returns:
         A string containing the MusicXML representation of the score.
     """
+    if layout not in ("full_score", "lead_sheet"):
+        raise ValueError(f"Unsupported MusicXML layout: {layout!r}")
+
     m21 = _get_music21_objects()
+
+    lyric_by_note: dict[int, str] = {}
+    if lyrics:
+        ordered_for_lyrics = sorted(solo_notes.notes, key=lambda n: (n.start_time, n.pitch))
+        if len(lyrics) > len(ordered_for_lyrics):
+            raise ValueError(
+                f"lyrics has {len(lyrics)} syllables but melody has "
+                f"{len(ordered_for_lyrics)} notes"
+            )
+        lyric_by_note = {
+            id(note): text
+            for note, text in zip(ordered_for_lyrics, lyrics)
+            if text
+        }
 
     # 1. Create a new Score object
     score = m21.stream.Score()
@@ -1060,15 +1088,16 @@ def build_musicxml(
 
     # Build pitch-to-guitar-position mapping for technical elements
     pitch_to_position: dict[tuple[int, int, int], tuple[int, int]] = {}
-    for note in solo_notes.notes:
-        try:
-            pos = midi_to_guitar_position(note.pitch)
-            step, alter, octave = _midi_to_step_alter_octave(note.pitch)
-            pitch_key = (step, alter, octave)
-            if pitch_key not in pitch_to_position:
-                pitch_to_position[pitch_key] = (pos.string, pos.fret)
-        except ValueError:
-            pass
+    if layout == "full_score":
+        for note in solo_notes.notes:
+            try:
+                pos = midi_to_guitar_position(note.pitch)
+                step, alter, octave = _midi_to_step_alter_octave(note.pitch)
+                pitch_key = (step, alter, octave)
+                if pitch_key not in pitch_to_position:
+                    pitch_to_position[pitch_key] = (pos.string, pos.fret)
+            except ValueError:
+                pass
 
     # Keep track of notes that are tied across measures
     tied_notes_queue = []
@@ -1104,7 +1133,8 @@ def build_musicxml(
                 m21_note_segment.duration = m21.duration.Duration(_ticks_to_ql(note_ticks))
 
                 # Attach guitar technical elements (string/fret) via music21-native API
-                _attach_technical_elements(m21_note_segment, original_note_obj.pitch, pitch_to_position)
+                if layout == "full_score":
+                    _attach_technical_elements(m21_note_segment, original_note_obj.pitch, pitch_to_position)
 
                 if remaining_duration_s > duration_in_this_measure_s:
                     m21_note_segment.tie = m21.tie.Tie('continue')
@@ -1150,7 +1180,12 @@ def build_musicxml(
                 m21_note_segment.duration = m21.duration.Duration(_ticks_to_ql(note_ticks))
 
                 # Attach guitar technical elements (string/fret) via music21-native API
-                _attach_technical_elements(m21_note_segment, note.pitch, pitch_to_position)
+                if layout == "full_score":
+                    _attach_technical_elements(m21_note_segment, note.pitch, pitch_to_position)
+
+                lyric_text = lyric_by_note.get(id(note))
+                if lyric_text:
+                    m21_note_segment.addLyric(lyric_text)
 
                 if note.duration > duration_in_this_measure_s:
                     m21_note_segment.tie = m21.tie.Tie('start')
@@ -1197,19 +1232,25 @@ def build_musicxml(
     # 4. Convert the score to MusicXML string
     musicxml_output = m21.musicxml.m21ToXml.GeneralObjectExporter().parse(score).decode('utf-8')
 
-    # 5. Add technical elements (string/fret) for guitar tablature
-    musicxml_output = _add_technical_elements(musicxml_output, solo_notes)
+    # 5. Commit 177: Lead-sheet mode stops here — guitar tablature, dynamics
+    # and chord diagrams are full-score annotations and their current
+    # injectors emit constructs invalid in a standalone lead-sheet document.
+    if layout == "full_score":
+        musicxml_output = _add_technical_elements(musicxml_output, solo_notes)
 
-    # 6. Commit 108: Inject comprehensive MusicXML notation elements
-    # Order matters: divisions first, then defaults, then note-level annotations
-    musicxml_output = _inject_divisions(musicxml_output)
-    musicxml_output = _inject_defaults_block(musicxml_output)
-    musicxml_output = _inject_tuplet_time_modification(musicxml_output, solo_notes, beat_grid)
-    musicxml_output = _inject_beams(musicxml_output, beat_grid)
-    musicxml_output = _inject_dynamics(musicxml_output, solo_notes, beat_grid)
-    musicxml_output = _inject_articulations(musicxml_output, solo_notes, beat_grid)
-    musicxml_output = _inject_slurs(musicxml_output, solo_notes, beat_grid)
-    musicxml_output = _inject_chord_diagrams(musicxml_output, chord_timeline, beat_grid)
+        # 6. Commit 108: Inject comprehensive MusicXML notation elements
+        # Order matters: divisions first, then defaults, then note-level annotations
+        musicxml_output = _inject_divisions(musicxml_output)
+        musicxml_output = _inject_defaults_block(musicxml_output)
+        musicxml_output = _inject_tuplet_time_modification(musicxml_output, solo_notes, beat_grid)
+        musicxml_output = _inject_beams(musicxml_output, beat_grid)
+        musicxml_output = _inject_dynamics(musicxml_output, solo_notes, beat_grid)
+        musicxml_output = _inject_articulations(musicxml_output, solo_notes, beat_grid)
+        musicxml_output = _inject_slurs(musicxml_output, solo_notes, beat_grid)
+        musicxml_output = _inject_chord_diagrams(musicxml_output, chord_timeline, beat_grid)
+    else:
+        musicxml_output = _inject_divisions(musicxml_output)
+        musicxml_output = _inject_defaults_block(musicxml_output)
 
     return musicxml_output
 

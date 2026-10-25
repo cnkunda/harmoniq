@@ -1,6 +1,12 @@
 import { Asset } from 'expo-asset'
 
-export const CORPUS_NAMES = ['irregular-5-4', 'multi-voice-staff', 'nested-tuplets', 'syncopation'] as const
+export const CORPUS_NAMES = [
+  'irregular-5-4',
+  'multi-voice-staff',
+  'nested-tuplets',
+  'syncopation',
+  'lead-sheet-lyrics',
+] as const
 export type CorpusName = (typeof CORPUS_NAMES)[number]
 
 const CORPUS_ASSETS: Record<CorpusName, number> = {
@@ -8,6 +14,7 @@ const CORPUS_ASSETS: Record<CorpusName, number> = {
   'multi-voice-staff': require('@/assets/musicxml-corpus/multi-voice-staff.musicxml'),
   'nested-tuplets': require('@/assets/musicxml-corpus/nested-tuplets.musicxml'),
   syncopation: require('@/assets/musicxml-corpus/syncopation.musicxml'),
+  'lead-sheet-lyrics': require('@/assets/musicxml-corpus/lead-sheet-lyrics.musicxml'),
 }
 
 export function isCorpusName(v: unknown): v is CorpusName {

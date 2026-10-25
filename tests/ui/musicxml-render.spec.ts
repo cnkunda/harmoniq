@@ -1,6 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
 
-const CORPUS = ['irregular-5-4', 'multi-voice-staff', 'nested-tuplets', 'syncopation'] as const
+const CORPUS = [
+  'irregular-5-4',
+  'multi-voice-staff',
+  'nested-tuplets',
+  'syncopation',
+  'lead-sheet-lyrics',
+] as const
 
 // AlphaTab DOM: `div.at-surface` contains one `svg.at-surface-svg` per
 // rendered partial (multi-page scores split into several SVGs) — assert

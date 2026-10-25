@@ -13,6 +13,7 @@ const LABELS: Record<CorpusName, string> = {
   'multi-voice-staff': 'Multi-voice staff',
   'nested-tuplets': 'Nested tuplets',
   syncopation: 'Heavy syncopation',
+  'lead-sheet-lyrics': 'Lead sheet with lyric underlay',
 }
 
 /**

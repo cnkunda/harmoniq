@@ -8,6 +8,7 @@ const CORPUS = [
   { name: "multi-voice-staff", label: "corpus-title:multi-voice-staff" },
   { name: "nested-tuplets", label: "corpus-title:nested-tuplets" },
   { name: "syncopation", label: "corpus-title:syncopation" },
+  { name: "lead-sheet-lyrics", label: "corpus-title:lead-sheet-lyrics" },
 ];
 
 describe("MusicXML corpus renders without crash (native)", () => {

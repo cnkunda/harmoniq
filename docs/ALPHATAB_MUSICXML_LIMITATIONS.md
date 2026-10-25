@@ -40,6 +40,7 @@
 | `<defaults>` page/scale | Partial | exporter emits defaults block; scale is `7/40` (0.175) to keep scores compact — layout differs from engraving tools |
 | Dynamics/articulations | Partial | exporter emits them; visual placement fidelity not baselined |
 | Tab staff (TAB clef part) | Partial | exporter emits parallel P2 part; standard tuning assumed — non-standard tunings are NOT asserted |
+| Lyrics (`<lyric>`) | Partial | `text` renders; `syllabic` is ignored by alphaTab 1.6.1, so hyphenation is not displayed. Verified with corpus `lead-sheet-lyrics` (commit 177) |
 | `<forward>` / gap elements | Partial | alphaTab models gaps as linear beat structures (see `alphaTab.d.ts` importer notes) |
 
 ### Engine-level caveats (web vs native)
