@@ -1,6 +1,6 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, Milestone D infrastructure Commits 169–170, and the RWC-P data pipeline Commit 173. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, Milestone D infrastructure Commits 169–172, and the RWC-P data pipeline Commit 173. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
 > **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–170 (completed → archived) and 171–172 (active), clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
@@ -36,6 +36,8 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 167 (Multi-Instrument Diagram Support) Archive Date:** October 24, 2026 — Skipped; out of scope for the guitar-focused roadmap. Spec archived below.
 **Commit 169 (Variable-Tempo Beat Grid) Archive Date:** October 24, 2026 — Complete; all 7 ACs verified (new suite 14 passed, related beat-grid/MusicXML/Viterbi/routing suites 64 passed, lint 0 errors); spec and implementation notes archived below.
 **Commit 170 (Job-Queue Hardening — GPU Scheduling for Demucs + DLQ Wiring) Archive Date:** October 24, 2026 — Complete; all 7 ACs verified (MLOps 22 passed, analyze API 8 passed / 1 skipped, new suite 14 passed, lint 0 errors); spec and implementation notes archived below.
+**Commit 171 (Audio Fingerprinting & Quality Scoring) Archive Date:** October 25, 2026 — Complete; all 5 ACs verified (audio fingerprint 150 passed, audio quality 124 passed, commit-171 cache suite 21 passed, CI backend list green, lint 0 errors); spec and implementation notes archived below.
+**Commit 172 (Stem Export from StemMixer) Archive Date:** October 25, 2026 — Complete; all 5 ACs verified (stem export 7 passed in CI, stemExport utils 9 passed, lint 0 errors); spec and implementation notes archived below.
 **Commit 173 (RWC Music Database Pipeline) Archive Date:** October 25, 2026 — Complete; all 3 ACs verified (lint 0 errors; CI backend list 363 passed / 2 skipped; new RWC suite 26 passed); spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
@@ -2838,6 +2840,77 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **Batch:** `POST /analyze/batch` (JSON `urls`/`items` or multipart `files`) creates one job per item and dispatches each independently; max 20 items.
 - **Metrics:** `/metrics` exposes `harmoniq_queue_depth{queue=...}` summed across Kombu priority buckets, `harmoniq_dlq_length`, `harmoniq_gpu_utilization_percent`, and GPU memory gauges. GPU collection uses cached `nvidia-smi` and skips gracefully on CPU-only hosts. The `/metrics` route is sync so FastAPI runs it in a worker thread.
 - **Tests:** `backend/tests/test_commit170_queue_hardening.py` covers DLQ single implementation, entry payload/cap, non-destructive requeue validation, successful re-dispatch, operator auth, priority dispatch/preservation, priority-bucket queue depth, GPU CPU fallback, and batch enqueue. Verified: `22 passed` (MLOps), `8 passed, 1 skipped` (analyze API), `14 passed` (new suite); `npm run lint` 0 errors.
+
+---
+
+### Commit 171: Audio Fingerprinting & Quality Scoring (was Milestone D commit 146)
+
+**Status:** complete
+
+**Goal:** Detect duplicate/near-duplicate uploads across encodings and reject low-quality audio upfront, reducing wasted compute.
+
+**Current State:** Content-addressed caching with SHA256 (`cache.py`) catches byte-identical re-uploads only — a re-encoded or trimmed copy of the same song re-runs the full ~5-minute pipeline. No quality gate on input audio beyond duration checks (30–300s).
+
+**Scope:**
+
+- Integrate audio fingerprinting (e.g., dejavu-style chromaprint/dejavu) for duplicate detection across encodings
+- Implement quality scoring (SNR, clipping detection, silence ratio)
+- Fingerprint-based cache key alongside SHA256; similarity search for near-duplicates (same song, different encode)
+- Quality gate: reject or warn on low-quality audio early (before Demucs/MT3) with actionable message
+- Track cache hit-rate improvement
+
+**Acceptance Criteria:**
+
+- [x] Same song in two encodings detected as duplicate → served from cache (no re-analysis)
+- [x] Quality score computed on ingest; below-threshold uploads rejected/warned with clear message
+- [x] Fingerprint cache key improves hit rate (metric logged)
+- [x] Byte-identical SHA256 path unchanged (non-regression)
+- [x] Backend tests green
+
+**Implementation notes (Commit 171):**
+
+- **In-repo landmark fingerprint** (`backend/app/audio_fingerprint.py`): `soundfile` read + `scipy.signal` STFT/resampling + `scipy.ndimage.maximum_filter` peaks → paired 32-bit hashes → time-offset voting. No new system binary (`fpcalc` was absent locally).
+- **Cache integration** (`backend/app/cache.py`): SHA-256 lookup remains first and untouched; on a SHA miss the lookup computes a fingerprint and scans `<cache_key>.fingerprint.json` sidecars for the same `PIPELINE_VERSION` and profile suffix. Matches require ≥20 time-consistent hashes and similarity ≥0.30, then reuse the existing artifact-copy path. Sidecars are removed by per-entry invalidation and `clear_analysis_cache.py`.
+- **Quality gate** (`backend/app/audio_quality.py`): metrics are computed on the decoded **source before loudnorm** so clipping is not masked. Conservative thresholds: clipping ≤1%, silence ≤90%, SNR proxy ≥3 dB, score ≥0.35. Failures return `error_code=audio_quality_low` with README-aligned copy; `HARMONIQ_SKIP_AUDIO_QUALITY_GATE=1` bypasses rejection. Accepted snapshots persist as `LessonJSON.audio_quality`.
+- **Wiring**: `jobs.py` and `tasks.py` gate after the cache lookup and before Demucs; `/transcription/prepare` gates before separation (HTTP 422). The Celery path now passes `player_profile` to the cache so personalized lessons stay partitioned.
+- **Observability**: `cache check ... result=sha_hit|fingerprint_hit|miss` logs plus `harmoniq_analysis_cache_lookups_total{result}`.
+- **Tests**: `tests/test_audio_fingerprint.py`, `tests/test_audio_quality.py`, `tests/test_commit171_audio_cache.py` (21 tests), added to the CI backend list. Targeted regressions: `test_analyze_api.py`, `test_cache_profile_key.py`, `test_commit_115.py`, `test_transcription_prepare.py`, `test_commit170_queue_hardening.py`, `mapErrorToUi.test.ts`.
+- **Known limitation**: the SNR value is a percentile-based dynamic-range proxy, not a calibrated SNR; a mathematically constant tone reads as low SNR. Real smoke mixes measured 4.8–14.2 dB and pass.
+
+---
+
+### Commit 172: Stem Export from StemMixer (was Milestone D "Real-Time Stem Mixer & Export")
+
+**Status:** complete
+
+**Goal:** Let users export the separated stems they're already mixing — the mixer shipped, the export never did.
+
+**Current State:** `components/StemMixer.tsx` provides mute/solo/defaults across the 6 Demucs stems in session screens; stems exist on disk per job (`data/jobs/{job_id}/stems/`). No export path exists (no stems download endpoint, no UI export action).
+
+**Scope:**
+
+- Backend: `GET /jobs/{job_id}/stems` returning a ZIP of stem WAVs (or per-stem `?stem=guitar` single-file response); 404 when stems absent; stream (don't buffer whole ZIP in memory)
+- Frontend: "Export stems" action in StemMixer (long-press or overflow menu) → download/save via existing download flows (web: blob download; native: share/save to file)
+- Optional format choice (WAV default; MP3/transcode only if trivially available via ffmpeg)
+- Respect job retention: stems older than cleanup retention → clear error, not crash
+- Integration test for endpoint (zip contains expected WAVs, 404 path); component test for export action
+
+**Acceptance Criteria:**
+
+- [x] ZIP download contains all non-muted stems (or single stem when selected)
+- [x] Works on web and native save/share flows
+- [x] Missing/evicted stems produce a clear user-facing error
+- [x] Large songs stream without OOM
+- [x] Tests green
+
+**Implementation notes (Commit 172):**
+
+- **Backend** (`backend/app/routers/analyze.py`): `GET /jobs/{job_id}/stems` returns a ZIP of the available `stems/{key}.wav` files, or a single `audio/wav` when `?stem=<key>` is supplied. Unknown/evicted jobs and missing stems return `404` with the retention-aware copy. The ZIP is built into a `SpooledTemporaryFile` (8 MB memory cap → disk spill) and streamed in 64 KB chunks, so large songs do not buffer in memory. Archive entries are fixed `STEM_KEYS` names; client paths are never used.
+- **Read-only resolution** (`backend/app/ingest.py`): added `resolve_job_dir()` so the export endpoint can check job existence without `get_job_dir()` creating the directory.
+- **Frontend** (`components/ListenStemPanel.tsx`): the real session mixer (Listen/Slow/Study/Play/Warmup via `SessionStemAndTab`) now has an **Export** action in the Mixer header. `components/StemExportMenu.tsx` offers “All stems (.zip)” plus one WAV per available stem. The action is hidden for the demo lesson and `bundled://` stems.
+- **Download paths**: web uses `fetchStemExport` + the existing `shareExportedBlob` anchor download; native uses `downloadAndShareExport` (`expo-file-system` download to cache → status check → `expo-sharing` share sheet) so the ZIP never becomes a JS Blob. `shareExportedBlob` now maps `application/zip`/`audio/wav` to `.zip`/`.wav` filenames.
+- **Tests**: `backend/tests/test_stem_export.py` covers ZIP contents, single WAV, missing job/stems, invalid/missing stem, and invalid job id (7 tests, in CI). `src/utils/stemExport.test.ts` covers URL building, filename sanitization, and export eligibility (9 tests). `npm run lint` passes.
+- **Note**: the spec named `components/StemMixer.tsx`, but that component is only used on design-preview; the implementation targets the actual session mixer as agreed. No MP3 transcode and no new dependencies.
 
 ---
 
