@@ -9,7 +9,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–166 completed, 167 skipped → archived).
 **Milestone D (Infrastructure)** — partially implemented; remaining gap at commit 172 (151 SSE progress stream, 169 variable tempo, 170 queue hardening, 171 fingerprinting/quality completed → archived).
 **Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
-**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166, 169–171 completed and 167 skipped → archived).
+**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166, 169–171, 173 completed and 167 skipped → archived).
 **Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 177–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166, 169–171 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166, 169–171, 173 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -206,30 +206,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ---
 
-**Group: Blocked / aspirational (173–180)**
-
----
-
-### Commit 173: RWC Music Database Pipeline (was 101 Phase 2)
-
-**Status:** blocked — requires free AIST Japan registration (credentials not configured)
-
-**Goal:** Add the RWC Music Database (~100 professionally annotated songs) as a conditional training-data source to widen chord-class coverage beyond GuitarSet's 33/277 classes.
-
-**Current State:** No RWC-specific code exists — only a mention in `backend/scripts/analyze_label_noise.py:247`. The archive (Commit 101 Phase 2) marked this deferred: free AIST Japan registration required, credentials never configured. The GuitarSet/EGSet12 download→parse→extract pattern (`download_guitarset.py` → `parse_guitarset.py` → `extract_guitarset_cqt.py`) is the reusable template; no downloader has been written.
-
-**Scope:**
-
-- Add RWC Music Database (~100 songs) as optional/conditional pipeline step
-- Script skips gracefully when credentials are not configured
-- Same CQT extraction + chord alignment pipeline as GuitarSet
-- Register conditional CI/manual step in the dataset pipeline docs
-
-**Acceptance Criteria:**
-
-- [ ] RWC pipeline runs conditionally when registration credentials are configured
-- [ ] Clean skip (no errors) when credentials absent
-- [ ] RWC windows merge into training data with per-source loss weighting
+**Group: Blocked / aspirational (174–180)**
 
 ---
 

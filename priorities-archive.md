@@ -1,6 +1,6 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, and Milestone D infrastructure Commits 169–170. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, Milestone D infrastructure Commits 169–170, and the RWC-P data pipeline Commit 173. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
 > **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–170 (completed → archived) and 171–172 (active), clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
@@ -36,6 +36,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 167 (Multi-Instrument Diagram Support) Archive Date:** October 24, 2026 — Skipped; out of scope for the guitar-focused roadmap. Spec archived below.
 **Commit 169 (Variable-Tempo Beat Grid) Archive Date:** October 24, 2026 — Complete; all 7 ACs verified (new suite 14 passed, related beat-grid/MusicXML/Viterbi/routing suites 64 passed, lint 0 errors); spec and implementation notes archived below.
 **Commit 170 (Job-Queue Hardening — GPU Scheduling for Demucs + DLQ Wiring) Archive Date:** October 24, 2026 — Complete; all 7 ACs verified (MLOps 22 passed, analyze API 8 passed / 1 skipped, new suite 14 passed, lint 0 errors); spec and implementation notes archived below.
+**Commit 173 (RWC Music Database Pipeline) Archive Date:** October 25, 2026 — Complete; all 3 ACs verified (lint 0 errors; CI backend list 363 passed / 2 skipped; new RWC suite 26 passed); spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -2837,5 +2838,40 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **Batch:** `POST /analyze/batch` (JSON `urls`/`items` or multipart `files`) creates one job per item and dispatches each independently; max 20 items.
 - **Metrics:** `/metrics` exposes `harmoniq_queue_depth{queue=...}` summed across Kombu priority buckets, `harmoniq_dlq_length`, `harmoniq_gpu_utilization_percent`, and GPU memory gauges. GPU collection uses cached `nvidia-smi` and skips gracefully on CPU-only hosts. The `/metrics` route is sync so FastAPI runs it in a worker thread.
 - **Tests:** `backend/tests/test_commit170_queue_hardening.py` covers DLQ single implementation, entry payload/cap, non-destructive requeue validation, successful re-dispatch, operator auth, priority dispatch/preservation, priority-bucket queue depth, GPU CPU fallback, and batch enqueue. Verified: `22 passed` (MLOps), `8 passed, 1 skipped` (analyze API), `14 passed` (new suite); `npm run lint` 0 errors.
+
+---
+
+### Commit 173: RWC Music Database Pipeline (was 101 Phase 2)
+
+**Status:** complete
+
+**Goal:** Add the RWC Music Database (~100 professionally annotated songs) as a conditional training-data source to widen chord-class coverage beyond GuitarSet's 33/277 classes.
+
+**Current State:** No RWC-specific code exists — only a mention in `backend/scripts/analyze_label_noise.py:247`. The archive (Commit 101 Phase 2) marked this deferred: free AIST Japan registration required, credentials never configured. The GuitarSet/EGSet12 download→parse→extract pattern (`download_guitarset.py` → `parse_guitarset.py` → `extract_guitarset_cqt.py`) is the reusable template; no downloader has been written.
+
+**Scope:**
+
+- Add RWC Music Database (~100 songs) as optional/conditional pipeline step
+- Script skips gracefully when credentials are not configured
+- Same CQT extraction + chord alignment pipeline as GuitarSet
+- Register conditional CI/manual step in the dataset pipeline docs
+
+**Acceptance Criteria:**
+
+- [x] RWC pipeline runs conditionally when registration credentials are configured
+- [x] Clean skip (no errors) when credentials absent
+- [x] RWC windows merge into training data with per-source loss weighting
+
+**Implementation notes (Commit 173):**
+
+- **Blocker resolved externally:** RWC 2.0 was re-released (2026-02-16) under CC BY-NC 4.0 with no AIST registration. The credential gate was replaced by an explicit license-acknowledgment gate (`HARMONIQ_RWC_LICENSE_ACK=1`), and the 4.1 GB audio download additionally requires `--download-audio`. The pipeline still skips cleanly (exit 0, instructional message) when either condition is absent.
+- **New scripts** (`backend/scripts/`): `download_rwc.py` (annotations tarball by default, optional `RWC-P.zip`, MD5 verification, license file), `parse_rwc.py` (semicolon CSV → 277-class JSON timelines), `extract_rwc_cqt.py` (WAV → `data/rwc/processed/cqt/*.npz`, all tracks `split="train"`).
+- **Label mapping:** reuses `_parse_jams_chord_label`; adds `maj6→6`, `Cb→B`, `Fb→E`. Verified against all 100 RWC-P CSVs: 164 distinct classes, 13,204 chord segments, 0 dropped labels (GuitarSet has 32 chord classes).
+- **Loss weighting:** `build_chord_tflite.py` gains `--rwc-data-dir` / `--rwc-loss-weight` (default 0.5), threaded through both `run_pipeline` and `run_qat_only`; RWC is registered as a real source. The extractor deliberately omits `loss_weight` from `.npz` so the CLI remains authoritative (the loader otherwise lets `.npz` override it).
+- **Loader fix:** `_build_recording_id` now checks key presence instead of `str(data.get(..., b""))`, which previously produced the truthy `"b''"` and collapsed every RWC track into one recording group. This also corrects grouping for other sources without `player_id`.
+- **Scope note:** training remains the existing 25-class MIREX target; RWC's 277-class richness is preserved in `.npz` for the planned 277-class model. No architecture change in this commit.
+- **Docs/CI:** `AGENTS.md` dataset table + manual commands, `docs/RESEARCH.md` dataset table, and `tests/test_rwc_pipeline.py` added to `scoring-tests.yml`. CI runs only the offline unit tests; the 4.1 GB download remains a manual opt-in.
+- **Tests:** `tests/test_rwc_pipeline.py` (26 tests: label aliases, parser, CQT/npz contract, clean skip, loss-weight plumbing). CI backend list (22 files): 363 passed, 2 skipped. Full unfiltered suite not run (heavy imports); the CI list is the gate. `npm run lint`: 0 errors.
+- **License caveat:** RWC data is CC BY-NC 4.0 (research/non-commercial). Do not distribute RWC-trained weights without a separate licensing decision.
 
 ---

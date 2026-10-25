@@ -435,6 +435,7 @@ Full 6-phase process in `docs/CODER.md` (read before implementing a commit):
 | **YouTube Crawl** | `crawl_chord_videos.py` → `extract` inline | ✅ Ready | `data/youtube_crawl` | 264 |
 | **Guitar-TECHS** | `download_guitar_techs.py` → `parse_guitar_techs.py` → `extract_guitar_techs_cqt.py` | ✅ Ready | `data/guitar_techs` | 68 |
 | **EGSet12** | `download_egset12.py` → `parse_egset12.py` → `extract_egset12_cqt.py` | ✅ Ready | `data/egset12` | 12 |
+| **RWC-P** (opt-in, CC BY-NC 4.0) | `download_rwc.py` → `parse_rwc.py` → `extract_rwc_cqt.py` | ✅ Ready | `data/rwc` | 100 |
 | **JAAH** (annotations only) | `download_jaah.py` | ⚠️ No audio | `data/annotations/jaah` | — |
 | **DAMP-VPB** | (withdrawn) | ❌ Unavailable | — | — |
 | **EGDB-PG** | `download_egdb_pg.py` (135 GB) | ⏸️ Skipped | — | — |
@@ -467,6 +468,13 @@ python scripts/download_egset12.py
 python scripts/parse_egset12.py
 python scripts/extract_egset12_cqt.py
 
+# --- RWC-P (opt-in; CC BY-NC 4.0; annotations small, audio 4.1 GB) ---
+export HARMONIQ_RWC_LICENSE_ACK=1
+python scripts/download_rwc.py                    # annotations only
+python scripts/download_rwc.py --download-audio   # + RWC-P audio (4.1 GB)
+python scripts/parse_rwc.py
+python scripts/extract_rwc_cqt.py
+
 # --- JAAH (annotations only; requires Smithsonian audio for CQT) ---
 python scripts/download_jaah.py
 python scripts/extract_jaah_cqt.py --audio-dir /path/to/smithsonian/audio   # optional
@@ -492,6 +500,8 @@ python scripts/build_chord_tflite.py \
   --youtube-data-dir data/youtube_crawl \
   --guitar-techs-data-dir data/guitar_techs \
   --egset12-data-dir data/egset12 \
+  --rwc-data-dir data/rwc \
+  --rwc-loss-weight 0.5 \
   --pseudo-data-dir data/pseudo_label \
   --empirical-matrix data/annotations/transition_matrix_empirical.npy \
   --cqt-stats-path data/cqt_stats.npz \

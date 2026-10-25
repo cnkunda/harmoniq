@@ -86,6 +86,7 @@ its specific task, sacrificing inference efficiency (2× passes) for correctness
 |---------|-----|------|--------|
 | GuitarSet | CRNN training + MT3 accuracy evaluation | ~360 excerpts | University of Surrey |
 | IDMT-SMT-Guitar | CRNN training | 129 file | Fraunhofer IDMT |
+| RWC-P (opt-in, CC BY-NC 4.0) | CRNN training (full-mix real audio) | 100 tracks / 6.7 h | AIST / RWC 2.0 |
 | Slakh2100 | MT3 pre-training (teacher model) | 2,100 tracks | MIDI-rendered |
 | 5-song smoke test | Pipeline validation | 5 recordings | Real-world (studio + live) |
 

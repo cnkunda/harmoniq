@@ -2430,12 +2430,14 @@ def _build_recording_id(data: np.lib.npyio.NpzFile, source_name: str, npz_path: 
     The identifier is prefixed with the source name to ensure uniqueness
     across datasets (e.g., 'guitarset_player_00' vs 'guitar_techs_player_P1').
     """
-    player_id = str(data.get("player_id", b"")).strip()
-    if player_id:
-        return f"{source_name}_player_{player_id}"
-    track_id = str(data.get("track_id", b"")).strip()
-    if track_id:
-        return f"{source_name}_{track_id}"
+    if "player_id" in data:
+        player_id = str(data["player_id"]).strip()
+        if player_id:
+            return f"{source_name}_player_{player_id}"
+    if "track_id" in data:
+        track_id = str(data["track_id"]).strip()
+        if track_id:
+            return f"{source_name}_{track_id}"
     # Fallback: use filename stem as a unique recording ID
     return f"{source_name}_{npz_path.stem}"
 
@@ -3460,12 +3462,14 @@ def run_pipeline(
     jaah_data_dir: str | Path | None = None,
     guitar_techs_data_dir: str | Path | None = None,
     egset12_data_dir: str | Path | None = None,
+    rwc_data_dir: str | Path | None = None,
     guitarset_loss_weight: float = 1.0,
     vst_loss_weight: float = 0.3,
     damp_loss_weight: float = 0.15,
     jaah_loss_weight: float = 1.0,
     guitar_techs_loss_weight: float = 1.0,
     egset12_loss_weight: float = 1.0,
+    rwc_loss_weight: float = 0.5,
     empirical_matrix_path: str | Path | None = None,
     temperature: float = 0.3,
     cqt_stats_path: str | Path | None = None,
@@ -3486,6 +3490,7 @@ def run_pipeline(
       - JAAH:                   1.0  (real recordings, expert annotations — audio separate)
       - Guitar-TECHS:           1.0  (real multi-player chords + techniques, MIDI ground truth)
       - EGSet12:                1.0  (real solo electric guitar, diverse styles)
+      - RWC-P:                  0.5  (real full-mix pop, manual chord annotations)
 
     Args:
         guitarset_data_dir: Path to GuitarSet CQT data directory.
@@ -3497,12 +3502,14 @@ def run_pipeline(
         jaah_data_dir: Path to JAAH CQT data directory (requires user-supplied audio).
         guitar_techs_data_dir: Path to Guitar-TECHS CQT data directory.
         egset12_data_dir: Path to EGSet12 CQT data directory.
+        rwc_data_dir: Path to RWC-P CQT data directory (opt-in, CC BY-NC 4.0).
         guitarset_loss_weight: Per-sample loss weight for GuitarSet (default 1.0).
         vst_loss_weight: Per-sample loss weight for VST synthetic (default 0.3).
         damp_loss_weight: Per-sample loss weight for DAMP-VPB (default 0.15).
         jaah_loss_weight: Per-sample loss weight for JAAH (default 1.0).
         guitar_techs_loss_weight: Per-sample loss weight for Guitar-TECHS (default 1.0).
         egset12_loss_weight: Per-sample loss weight for EGSet12 (default 1.0).
+        rwc_loss_weight: Per-sample loss weight for RWC-P (default 0.5).
         empirical_matrix_path: Path to empirical transition matrix .npy (or None).
         temperature: Temperature τ for quality re-sampling (default 0.5).
                      τ < 1.0 boosts rare chord quality sampling via MT3 formula.
@@ -3602,6 +3609,15 @@ def run_pipeline(
             has_any_real_data = True
         else:
             print(f"  [WARN] EGSet12 data dir not found: {eg_path}")
+
+    if rwc_data_dir is not None:
+        rwc_path = Path(rwc_data_dir)
+        if rwc_path.exists():
+            source_configs.append((rwc_path, "RWC-P", rwc_loss_weight))
+            real_data_dirs.append(rwc_path)
+            has_any_real_data = True
+        else:
+            print(f"  [WARN] RWC-P data dir not found: {rwc_path}")
 
     # Load user-contributed data (if available)
     _data_dir = Path(__file__).resolve().parent.parent / "data"
@@ -4488,12 +4504,14 @@ def run_qat_only(
     jaah_data_dir: str | Path | None = None,
     guitar_techs_data_dir: str | Path | None = None,
     egset12_data_dir: str | Path | None = None,
+    rwc_data_dir: str | Path | None = None,
     guitarset_loss_weight: float = 1.0,
     vst_loss_weight: float = 0.3,
     damp_loss_weight: float = 0.15,
     jaah_loss_weight: float = 1.0,
     guitar_techs_loss_weight: float = 1.0,
     egset12_loss_weight: float = 1.0,
+    rwc_loss_weight: float = 0.5,
     empirical_matrix_path: str | Path | None = None,
     temperature: float = 0.3,
     cqt_stats_path: str | Path | None = None,
@@ -4520,6 +4538,7 @@ def run_qat_only(
         ("JAAH", jaah_data_dir, jaah_loss_weight),
         ("Guitar-TECHS", guitar_techs_data_dir, guitar_techs_loss_weight),
         ("EGSet12", egset12_data_dir, egset12_loss_weight),
+        ("RWC-P", rwc_data_dir, rwc_loss_weight),
     ]:
         if path is not None:
             p = Path(path)
@@ -4875,6 +4894,14 @@ if __name__ == "__main__":
         help="Per-sample loss weight for EGSet12 (default 1.0)"
     )
     parser.add_argument(
+        "--rwc-data-dir", type=str, default=None,
+        help="Path to RWC-P CQT data directory (contains rwc/processed/cqt/); opt-in"
+    )
+    parser.add_argument(
+        "--rwc-loss-weight", type=float, default=0.5,
+        help="Per-sample loss weight for RWC-P (default 0.5)"
+    )
+    parser.add_argument(
         "--empirical-matrix", type=str, default=None,
         help="Path to empirical transition matrix .npy file"
     )
@@ -4937,12 +4964,14 @@ if __name__ == "__main__":
             jaah_data_dir=args.jaah_data_dir,
             guitar_techs_data_dir=args.guitar_techs_data_dir,
             egset12_data_dir=args.egset12_data_dir,
+            rwc_data_dir=args.rwc_data_dir,
             guitarset_loss_weight=args.guitarset_loss_weight,
             vst_loss_weight=args.vst_loss_weight,
             damp_loss_weight=args.damp_loss_weight,
             jaah_loss_weight=args.jaah_loss_weight,
             guitar_techs_loss_weight=args.guitar_techs_loss_weight,
             egset12_loss_weight=args.egset12_loss_weight,
+            rwc_loss_weight=args.rwc_loss_weight,
             empirical_matrix_path=args.empirical_matrix,
             temperature=args.temperature,
             cqt_stats_path=args.cqt_stats_path,
@@ -4972,12 +5001,14 @@ if __name__ == "__main__":
             jaah_data_dir=args.jaah_data_dir,
             guitar_techs_data_dir=args.guitar_techs_data_dir,
             egset12_data_dir=args.egset12_data_dir,
+            rwc_data_dir=args.rwc_data_dir,
             guitarset_loss_weight=args.guitarset_loss_weight,
             vst_loss_weight=args.vst_loss_weight,
             damp_loss_weight=args.damp_loss_weight,
             jaah_loss_weight=args.jaah_loss_weight,
             guitar_techs_loss_weight=args.guitar_techs_loss_weight,
             egset12_loss_weight=args.egset12_loss_weight,
+            rwc_loss_weight=args.rwc_loss_weight,
             empirical_matrix_path=args.empirical_matrix,
             temperature=args.temperature,
             cqt_stats_path=args.cqt_stats_path,
