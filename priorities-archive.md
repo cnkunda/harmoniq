@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, and Milestone D infrastructure Commits 169–170. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–172, clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–170 (completed → archived) and 171–172 (active), clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -34,6 +34,8 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 165 (Chord Pulse Dashboard) Archive Date:** October 24, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 566 passed, Playwright 72 passed, visual baselines refreshed); spec and implementation notes archived below.
 **Commit 166 (Three-Tier Output Strategy) Archive Date:** October 24, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 577 passed serially, Playwright output-tier 3 passed); spec and implementation notes archived below.
 **Commit 167 (Multi-Instrument Diagram Support) Archive Date:** October 24, 2026 — Skipped; out of scope for the guitar-focused roadmap. Spec archived below.
+**Commit 169 (Variable-Tempo Beat Grid) Archive Date:** October 24, 2026 — Complete; all 7 ACs verified (new suite 14 passed, related beat-grid/MusicXML/Viterbi/routing suites 64 passed, lint 0 errors); spec and implementation notes archived below.
+**Commit 170 (Job-Queue Hardening — GPU Scheduling for Demucs + DLQ Wiring) Archive Date:** October 24, 2026 — Complete; all 7 ACs verified (MLOps 22 passed, analyze API 8 passed / 1 skipped, new suite 14 passed, lint 0 errors); spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -2750,5 +2752,90 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - [ ] Ukulele chord diagrams correct for GCEA
 - [ ] Piano keyboard highlights current chord/scale
 - [ ] Music theory outputs (chords, scales) unchanged — only rendering/tuning-aware mapping
+
+---
+
+### Commit 169: Variable-Tempo Beat Grid (was Milestone D commit 140)
+
+**Status:** complete
+
+**Goal:** Support songs with tempo ramps, accelerandos, and live performances with variable BPM.
+
+**Current State:** Static BPM only. `_uniform_beat_grid()` uses a constant `step = 60.0 / bpm`; `bpm_override` (`beat_grid.py:93-120`) replaces the value but still generates a uniform grid — no tempo mapping. Evidence: `beat_grid.py:46-57` (`_uniform_beat_grid`), `beat_grid.py:125`.
+
+**Scope:**
+
+- Replace `_uniform_beat_grid()` with a function that accepts an array of `(time, bpm)` pairs or tempo curve
+- Use `librosa.beat.beat_track()` with estimated tempo as a reference, not an override
+- Store tempo change events in the returned schema alongside `beats` and `downbeats`
+- Support gradual tempo changes (rubato) and sudden tempo shifts
+- Maintain backward compatibility with static BPM interface (`bpm_override` keeps working)
+
+**Acceptance Criteria:**
+
+- [x] Beat grid handles variable BPM songs with tempo ramps
+- [x] Tempo curve can be provided as `(time, bpm)` array
+- [x] Grid subdivisions respect local tempo at each point
+- [x] Downbeats calculated correctly through tempo transitions
+- [x] Static BPM interface (`bpm_override`) continues to work unchanged
+- [x] Performance: variable BPM grid generation <100ms for 5-minute track
+- [x] Backend tests green (`tests/` beat-grid suites)
+
+**Implementation Notes:**
+
+- Consider tempo segment interpolation (linear vs exponential ramps)
+- Store base pulse tempo vs instantaneous tempo separately
+- UI consideration: visual indicator when tempo changes detected
+- May require updating `_subdivide_beats()` to handle non-uniform pulse spacing
+
+**Completion (2026-10-24):**
+
+- `backend/app/beat_grid.py`: `_uniform_beat_grid()` now delegates to `_beat_grid_from_tempo_curve()`, which accepts a `Sequence[(time_seconds, bpm)]` curve. Adjacent points are joined by linear ramps (rubato); duplicate timestamps create a zero-length segment so the previous tempo holds until that instant and the next applies afterwards (sudden shift). The curve is held/extended to track duration, and BPM is validated to 20–300.
+- Beat phase is integrated analytically per segment (`_beat_times_from_tempo_curve`), so pulse spacing (and therefore `_subdivide_beats()` ticks) follows the local tempo at every point. Downbeats remain derived from beat indices, so they track tempo transitions correctly. No tempo curve provided keeps the existing librosa `beat_track()` path; `bpm_override` remains the static uniform path.
+- `estimate_beat_grid()` accepts `tempo_curve` (mutually exclusive with `bpm_override`) and returns `tempo_changes` alongside `beats`/`downbeats`. The already-present `BeatGrid.tempo_changes` schema is populated with `{time, bpm}` events; `pulse_bpm`/`bpm` store the duration-weighted base pulse tempo while each event carries instantaneous tempo.
+- API wiring: `BeatGridRecomputeRequest.tempo_curve` (JSON `(time, bpm)` pairs, validator rejects it together with `bpm_override`) flows through `POST /analyze/{job_id}/beat-grid/recompute` → `enqueue_beat_grid_recompute` → Celery/thread → `_process_beat_grid_recompute` → `estimate_beat_grid`.
+- Tests: `backend/tests/test_commit169_variable_tempo.py` covers uniform compatibility, linear accelerando, sudden shift, duration extension, invalid curves, schema/event output, 4/4 downbeats across transitions, 6/8 local-tempo subdivisions, a <100 ms 5-minute variable grid benchmark, and request validation. Verified: `14 passed` (new suite), `64 passed` (beat-grid/MusicXML/Viterbi/routing suites), `npm run lint` 0 errors.
+
+---
+
+### Commit 170: Job-Queue Hardening — GPU Scheduling for Demucs + DLQ Wiring (was Milestone D commits 143 + 145)
+
+**Status:** complete
+
+**Goal:** Give the job queue real priority/GPU handling and make the dead-letter queue actually run — today DLQ code exists in two places and is never called.
+
+**Current State:** Demucs runs synchronously per job (`separate.py`) blocking the request thread for minutes; no GPU/priority/queue-depth handling exists (`queue.py` has no CUDA or priority logic). Celery dispatch exists (`jobs.py:759`) but without priority tiers. The DLQ is implemented **twice** — `app/dead_letter.py` (`push_to_dlq`/`pop_from_dlq`/`inspect_dlq`) and `job_store.py:206-235` (`dlq:{job_id}` Redis helpers) — and **neither is called from the failure path**: `jobs.py` failure handling (`_repo_fail_job`, `status="failed"`) never pushes to a DLQ, and no inspection endpoint exists.
+
+**Scope:**
+
+- **DLQ wiring (first — small, high value):**
+  - Consolidate to a single implementation (prefer `job_store.py`'s Redis helpers; delete or re-export from `dead_letter.py` — no duplicates)
+  - On terminal job failure, push `{job_id, error, error_code, retry_count}` to the DLQ from the actual fail path in `jobs.py`
+  - Add `GET /jobs/dlq` inspection endpoint (limit, auth-guarded/localhost) + re-queue action
+  - Tests: failed job lands in DLQ; re-queue re-dispatches
+- **GPU queue for Demucs:**
+  - Integrate Demucs separation with the Celery queue with priority levels (urgent, normal, low) on the job schema
+  - Queue-depth monitoring to prevent overload; GPU utilization tracking (nvidia-smi integration when CUDA present)
+  - Batch processing for multiple audio files
+  - Operator visibility: queue depth + DLQ length via existing `/metrics`
+
+**Acceptance Criteria:**
+
+- [x] Failed analysis jobs land in exactly one DLQ implementation (duplicate removed)
+- [x] `GET /jobs/dlq` lists failures with error codes; re-queue re-dispatches successfully
+- [x] Demucs jobs queue through Celery with priority levels honored
+- [x] Queue depth + DLQ length exposed as Prometheus metrics
+- [x] GPU utilization tracked when CUDA available (graceful skip on CPU)
+- [x] Batch path processes multiple files without serial blocking
+- [x] Backend tests green
+
+**Completion (2026-10-24):**
+
+- **DLQ consolidation:** `job_store.py` is the single implementation (`push_to_dlq` with `job_data` re-queue payload, capped via `HARMONIQ_DLQ_MAX_ENTRIES`, `inspect_dlq`, `get_dlq_entry`, `requeue_from_dlq`, `clear_dlq`); `dead_letter.py` re-exports it. Terminal failures in both `jobs.py` (thread path) and `tasks.py` (Celery path, including audio-too-long) push `{job_id, error, error_code, retry_count, job_data, failed_at}`; pushes are best-effort and logged.
+- **Operator endpoints:** `GET /jobs/dlq`, `POST /jobs/dlq/requeue`, `POST /jobs/dlq/{index}/requeue`, `DELETE /jobs/dlq`. Guarded by `HARMONIQ_OPERATOR_TOKEN` (`X-Operator-Token`), with loopback fallback and `HARMONIQ_ALLOW_REMOTE_OPERATOR`. Re-queue validates the stored payload before removing the entry and dispatches a new job id via `enqueue_analyze_job`.
+- **Priority dispatch:** `JobStatus.priority` (`urgent`/`normal`/`low`) is accepted by `POST /analyze` and batch items, preserved across progress updates, and dispatched through `analyze.{urgent,normal,low}` Celery queues with numeric priorities 9/5/1. `queue.py` now re-exports the canonical `celery_app.py`; time limits moved there.
+- **Batch:** `POST /analyze/batch` (JSON `urls`/`items` or multipart `files`) creates one job per item and dispatches each independently; max 20 items.
+- **Metrics:** `/metrics` exposes `harmoniq_queue_depth{queue=...}` summed across Kombu priority buckets, `harmoniq_dlq_length`, `harmoniq_gpu_utilization_percent`, and GPU memory gauges. GPU collection uses cached `nvidia-smi` and skips gracefully on CPU-only hosts. The `/metrics` route is sync so FastAPI runs it in a worker thread.
+- **Tests:** `backend/tests/test_commit170_queue_hardening.py` covers DLQ single implementation, entry payload/cap, non-destructive requeue validation, successful re-dispatch, operator auth, priority dispatch/preservation, priority-bucket queue depth, GPU CPU fallback, and batch enqueue. Verified: `22 passed` (MLOps), `8 passed, 1 skipped` (analyze API), `14 passed` (new suite); `npm run lint` 0 errors.
 
 ---

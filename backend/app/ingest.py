@@ -16,6 +16,11 @@ from pathlib import Path
 from typing import TypedDict
 from urllib.parse import parse_qs, urlparse
 
+from app.audio_quality import (
+    AudioQuality,
+    AudioQualityAnalysisError,
+    analyze_audio_quality,
+)
 from app.pipeline_proof import TARGET_SR as DEFAULT_TARGET_SR
 from app.pipeline_proof import YouTubeDownloadError, ffmpeg_normalize_wav, yt_dlp_download_wav
 from app.youtube_meta import extract_youtube_metadata
@@ -195,16 +200,18 @@ def ingest_youtube_or_upload_to_wav(
     youtube_url: str | None,
     upload_path: str | None,
     target_sr: int = DEFAULT_TARGET_SR,
-) -> tuple[Path, SourceMetadata | None]:
-    """Write normalized ``song.wav`` to the job dir.
+) -> tuple[Path, SourceMetadata | None, AudioQuality]:
+    """Write normalized ``song.wav`` to the job dir and assess source quality.
 
-    Returns ``(wav_path, source_metadata)``. For YouTube, ``source_metadata`` is set when
-    yt-dlp returns at least a title; for file uploads it is ``None``.
+    Returns ``(wav_path, source_metadata, quality)``. Quality is measured on the
+    decoded source *before* loudness normalization, so clipping is not masked
+    by the EBU R128 limiter.
     """
     job_dir = get_job_dir(job_id)
     song_wav_path = job_dir / "song.wav"
 
     source_metadata: SourceMetadata | None = None
+    quality: AudioQuality | None = None
 
     if youtube_url:
         normalized = validate_youtube_url(youtube_url)
@@ -222,6 +229,16 @@ def ingest_youtube_or_upload_to_wav(
         downloaded_wav_path: Path | None = None
         try:
             downloaded_wav_path = yt_dlp_download_wav(normalized, downloads_dir)
+            quality = analyze_audio_quality(downloaded_wav_path)
+            logger.info(
+                "audio_quality job_id=%s source=youtube score=%.3f snr_db=%.1f clipping=%.4f silence=%.3f acceptable=%s",
+                job_id,
+                quality.score,
+                quality.snr_db,
+                quality.clipping_ratio,
+                quality.silence_ratio,
+                quality.acceptable,
+            )
             logger.info("Normalizing downloaded wav for job_id=%s", job_id)
             ffmpeg_normalize_wav(
                 downloaded_wav_path,
@@ -229,6 +246,8 @@ def ingest_youtube_or_upload_to_wav(
                 sample_rate=target_sr,
                 mono=True,
             )
+        except AudioQualityAnalysisError as exc:
+            raise IngestError(f"Could not assess source audio quality: {exc}") from exc
         except YouTubeDownloadError:
             raise  # preserve timeout / user-friendly message + type
         except Exception as e:
@@ -257,12 +276,28 @@ def ingest_youtube_or_upload_to_wav(
             raise IngestError(f"Upload file must be within data directory: {upload_path}")
         if not src.exists():
             raise IngestError(f"Upload file missing on disk: {src}")
+        try:
+            quality = analyze_audio_quality(src)
+        except AudioQualityAnalysisError as exc:
+            raise IngestError(f"Could not assess source audio quality: {exc}") from exc
+        logger.info(
+            "audio_quality job_id=%s source=upload score=%.3f snr_db=%.1f clipping=%.4f silence=%.3f acceptable=%s",
+            job_id,
+            quality.score,
+            quality.snr_db,
+            quality.clipping_ratio,
+            quality.silence_ratio,
+            quality.acceptable,
+        )
         logger.info("Normalizing upload for job_id=%s from %s", job_id, src)
         ffmpeg_normalize_wav(src, song_wav_path, sample_rate=target_sr, mono=True)
     else:
         raise IngestError("No youtube_url or upload file provided")
 
+    if quality is None:
+        raise IngestError("Audio quality assessment was not produced during ingest")
+
     duration = _verify_wav_and_get_duration(song_wav_path, expected_sample_rate=target_sr, expected_channels=1)
     _require_min_analyze_duration(duration)
-    return song_wav_path, source_metadata
+    return song_wav_path, source_metadata, quality
 

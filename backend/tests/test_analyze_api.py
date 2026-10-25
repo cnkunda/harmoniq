@@ -42,6 +42,9 @@ def allow_subsecond_wavs_in_analyze_tests(monkeypatch):
     """Fixture WAVs are ~0.25s; production rejects under 30s (README / MANUAL_QA)."""
     monkeypatch.setattr("app.routers.analyze.MIN_ANALYZE_DURATION_SECONDS", 0.01)
     monkeypatch.setattr("app.ingest.MIN_ANALYZE_DURATION_SECONDS", 0.01)
+    # Commit 171 gate is covered by dedicated tests; these API fixtures are
+    # intentionally too short/tonal to satisfy the production quality gate.
+    monkeypatch.setenv("HARMONIQ_SKIP_AUDIO_QUALITY_GATE", "1")
 
 
 def _poll_until_not_processing(job_id: str, *, timeout_seconds: float = 20.0) -> dict:

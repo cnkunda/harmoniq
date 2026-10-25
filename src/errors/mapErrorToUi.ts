@@ -26,6 +26,9 @@ export const README_ERROR_COPY = {
   noInternetAnalysis:
     'You need a connection to analyze a new song. Your existing library works offline.',
   audioTooShort: 'That clip is too short to analyze. Try a full song or a longer section.',
+  /** Must match `AUDIO_QUALITY_LOW_USER_MESSAGE` in `backend/app/audio_quality.py`. */
+  audioQualityLow:
+    'That recording is too noisy or distorted to transcribe reliably. Try a cleaner take or a studio recording.',
   scoreEndpointFailure: "Couldn't score that take — tap 'Do it again' to try once more.",
   noGuitarStem:
     "Couldn't isolate a clear guitar track from this recording. Try a different version of the song.",
@@ -139,6 +142,15 @@ export function mapAnalyzeFlowError(
         variant: 'warning',
         actionKind: 'dismiss',
         actionLabel: 'Dismiss',
+      }
+    }
+    if (code === 'audio_quality_low') {
+      return {
+        message: README_ERROR_COPY.audioQualityLow,
+        variant: 'warning',
+        actionKind: 'retry',
+        actionLabel: 'Try another file',
+        detail: README_ERROR_COPY.analyzeRetryHint,
       }
     }
     if (code === 'stem_separation_failed') {

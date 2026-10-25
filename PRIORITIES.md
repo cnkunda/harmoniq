@@ -7,9 +7,9 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Milestone A (MT3-Primary Pipeline)** — archived, complete.  
 **Milestone B (Fretboard Dual-Mode)** — archived, complete.  
 **Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–166 completed, 167 skipped → archived).
-**Milestone D (Infrastructure)** — partially implemented; remaining gaps at commits 169–172 (151 SSE progress stream completed → archived).  
+**Milestone D (Infrastructure)** — partially implemented; remaining gap at commit 172 (151 SSE progress stream, 169 variable tempo, 170 queue hardening, 171 fingerprinting/quality completed → archived).
 **Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
-**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166 completed and 167 skipped → archived).
+**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166, 169–171 completed and 167 skipped → archived).
 **Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 177–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166, 169–171 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -129,92 +129,15 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ---
 
-**Group: Infrastructure gaps — remainder of Milestone D, reality-checked (169–172)**
+**Group: Infrastructure gaps — remainder of Milestone D, reality-checked (171–172)**
 
 *Already implemented and therefore not planned: Redis-backed job store (`job_store.py`), Celery dispatch (`tasks.py`/`celery_app.py`), SSE endpoint (full stack, completed as commit 151 → archived), Prometheus `/metrics` (`metrics.py`), circuit breaker (used by `model_server.py`), model server (serves MT3).*
 
 ---
 
-### Commit 169: Variable-Tempo Beat Grid (was Milestone D commit 140)
-
-**Status:** deferred
-
-**Goal:** Support songs with tempo ramps, accelerandos, and live performances with variable BPM.
-
-**Current State:** Static BPM only. `_uniform_beat_grid()` uses a constant `step = 60.0 / bpm`; `bpm_override` (`beat_grid.py:93-120`) replaces the value but still generates a uniform grid — no tempo mapping. Evidence: `beat_grid.py:46-57` (`_uniform_beat_grid`), `beat_grid.py:125`.
-
-**Scope:**
-
-- Replace `_uniform_beat_grid()` with a function that accepts an array of `(time, bpm)` pairs or tempo curve
-- Use `librosa.beat.beat_track()` with estimated tempo as a reference, not an override
-- Store tempo change events in the returned schema alongside `beats` and `downbeats`
-- Support gradual tempo changes (rubato) and sudden tempo shifts
-- Maintain backward compatibility with static BPM interface (`bpm_override` keeps working)
-
-**Acceptance Criteria:**
-
-- [ ] Beat grid handles variable BPM songs with tempo ramps
-- [ ] Tempo curve can be provided as `(time, bpm)` array
-- [ ] Grid subdivisions respect local tempo at each point
-- [ ] Downbeats calculated correctly through tempo transitions
-- [ ] Static BPM interface (`bpm_override`) continues to work unchanged
-- [ ] Performance: variable BPM grid generation <100ms for 5-minute track
-- [ ] Backend tests green (`tests/` beat-grid suites)
-
-**Implementation Notes:**
-
-- Consider tempo segment interpolation (linear vs exponential ramps)
-- Store base pulse tempo vs instantaneous tempo separately
-- UI consideration: visual indicator when tempo changes detected
-- May require updating `_subdivide_beats()` to handle non-uniform pulse spacing
-
----
-
-### Commit 170: Job-Queue Hardening — GPU Scheduling for Demucs + DLQ Wiring (was Milestone D commits 143 + 145)
-
-**Status:** complete
-
-**Goal:** Give the job queue real priority/GPU handling and make the dead-letter queue actually run — today DLQ code exists in two places and is never called.
-
-**Current State:** Demucs runs synchronously per job (`separate.py`) blocking the request thread for minutes; no GPU/priority/queue-depth handling exists (`queue.py` has no CUDA or priority logic). Celery dispatch exists (`jobs.py:759`) but without priority tiers. The DLQ is implemented **twice** — `app/dead_letter.py` (`push_to_dlq`/`pop_from_dlq`/`inspect_dlq`) and `job_store.py:206-235` (`dlq:{job_id}` Redis helpers) — and **neither is called from the failure path**: `jobs.py` failure handling (`_repo_fail_job`, `status="failed"`) never pushes to a DLQ, and no inspection endpoint exists.
-
-**Scope:**
-
-- **DLQ wiring (first — small, high value):**
-  - Consolidate to a single implementation (prefer `job_store.py`'s Redis helpers; delete or re-export from `dead_letter.py` — no duplicates)
-  - On terminal job failure, push `{job_id, error, error_code, retry_count}` to the DLQ from the actual fail path in `jobs.py`
-  - Add `GET /jobs/dlq` inspection endpoint (limit, auth-guarded/localhost) + re-queue action
-  - Tests: failed job lands in DLQ; re-queue re-dispatches
-- **GPU queue for Demucs:**
-  - Integrate Demucs separation with the Celery queue with priority levels (urgent, normal, low) on the job schema
-  - Queue-depth monitoring to prevent overload; GPU utilization tracking (nvidia-smi integration when CUDA present)
-  - Batch processing for multiple audio files
-  - Operator visibility: queue depth + DLQ length via existing `/metrics`
-
-**Acceptance Criteria:**
-
-- [x] Failed analysis jobs land in exactly one DLQ implementation (duplicate removed)
-- [x] `GET /jobs/dlq` lists failures with error codes; re-queue re-dispatches successfully
-- [x] Demucs jobs queue through Celery with priority levels honored
-- [x] Queue depth + DLQ length exposed as Prometheus metrics
-- [x] GPU utilization tracked when CUDA available (graceful skip on CPU)
-- [x] Batch path processes multiple files without serial blocking
-- [x] Backend tests green
-
-**Completion (2026-10-24):**
-
-- **DLQ consolidation:** `job_store.py` is the single implementation (`push_to_dlq` with `job_data` re-queue payload, capped via `HARMONIQ_DLQ_MAX_ENTRIES`, `inspect_dlq`, `get_dlq_entry`, `requeue_from_dlq`, `clear_dlq`); `dead_letter.py` re-exports it. Terminal failures in both `jobs.py` (thread path) and `tasks.py` (Celery path, including audio-too-long) push `{job_id, error, error_code, retry_count, job_data, failed_at}`; pushes are best-effort and logged.
-- **Operator endpoints:** `GET /jobs/dlq`, `POST /jobs/dlq/requeue`, `POST /jobs/dlq/{index}/requeue`, `DELETE /jobs/dlq`. Guarded by `HARMONIQ_OPERATOR_TOKEN` (`X-Operator-Token`), with loopback fallback and `HARMONIQ_ALLOW_REMOTE_OPERATOR`. Re-queue validates the stored payload before removing the entry and dispatches a new job id via `enqueue_analyze_job`.
-- **Priority dispatch:** `JobStatus.priority` (`urgent`/`normal`/`low`) is accepted by `POST /analyze` and batch items, preserved across progress updates, and dispatched through `analyze.{urgent,normal,low}` Celery queues with numeric priorities 9/5/1. `queue.py` now re-exports the canonical `celery_app.py`; time limits moved there.
-- **Batch:** `POST /analyze/batch` (JSON `urls`/`items` or multipart `files`) creates one job per item and dispatches each independently; max 20 items.
-- **Metrics:** `/metrics` exposes `harmoniq_queue_depth{queue=...}` summed across Kombu priority buckets, `harmoniq_dlq_length`, `harmoniq_gpu_utilization_percent`, and GPU memory gauges. GPU collection uses cached `nvidia-smi` and skips gracefully on CPU-only hosts. The `/metrics` route is sync so FastAPI runs it in a worker thread.
-- **Tests:** `backend/tests/test_commit170_queue_hardening.py` covers DLQ single implementation, entry payload/cap, non-destructive requeue validation, successful re-dispatch, operator auth, priority dispatch/preservation, priority-bucket queue depth, GPU CPU fallback, and batch enqueue. Verified: `22 passed` (MLOps), `8 passed, 1 skipped` (analyze API), `14 passed` (new suite); `npm run lint` 0 errors.
-
----
-
 ### Commit 171: Audio Fingerprinting & Quality Scoring (was Milestone D commit 146)
 
-**Status:** deferred
+**Status:** complete
 
 **Goal:** Detect duplicate/near-duplicate uploads across encodings and reject low-quality audio upfront, reducing wasted compute.
 
@@ -230,11 +153,21 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 **Acceptance Criteria:**
 
-- [ ] Same song in two encodings detected as duplicate → served from cache (no re-analysis)
-- [ ] Quality score computed on ingest; below-threshold uploads rejected/warned with clear message
-- [ ] Fingerprint cache key improves hit rate (metric logged)
-- [ ] Byte-identical SHA256 path unchanged (non-regression)
-- [ ] Backend tests green
+- [x] Same song in two encodings detected as duplicate → served from cache (no re-analysis)
+- [x] Quality score computed on ingest; below-threshold uploads rejected/warned with clear message
+- [x] Fingerprint cache key improves hit rate (metric logged)
+- [x] Byte-identical SHA256 path unchanged (non-regression)
+- [x] Backend tests green
+
+**Implementation notes (Commit 171):**
+
+- **In-repo landmark fingerprint** (`backend/app/audio_fingerprint.py`): `soundfile` read + `scipy.signal` STFT/resampling + `scipy.ndimage.maximum_filter` peaks → paired 32-bit hashes → time-offset voting. No new system binary (`fpcalc` was absent locally).
+- **Cache integration** (`backend/app/cache.py`): SHA-256 lookup remains first and untouched; on a SHA miss the lookup computes a fingerprint and scans `<cache_key>.fingerprint.json` sidecars for the same `PIPELINE_VERSION` and profile suffix. Matches require ≥20 time-consistent hashes and similarity ≥0.30, then reuse the existing artifact-copy path. Sidecars are removed by per-entry invalidation and `clear_analysis_cache.py`.
+- **Quality gate** (`backend/app/audio_quality.py`): metrics are computed on the decoded **source before loudnorm** so clipping is not masked. Conservative thresholds: clipping ≤1%, silence ≤90%, SNR proxy ≥3 dB, score ≥0.35. Failures return `error_code=audio_quality_low` with README-aligned copy; `HARMONIQ_SKIP_AUDIO_QUALITY_GATE=1` bypasses rejection. Accepted snapshots persist as `LessonJSON.audio_quality`.
+- **Wiring**: `jobs.py` and `tasks.py` gate after the cache lookup and before Demucs; `/transcription/prepare` gates before separation (HTTP 422). The Celery path now passes `player_profile` to the cache so personalized lessons stay partitioned.
+- **Observability**: `cache check ... result=sha_hit|fingerprint_hit|miss` logs plus `harmoniq_analysis_cache_lookups_total{result}`.
+- **Tests**: `tests/test_audio_fingerprint.py`, `tests/test_audio_quality.py`, `tests/test_commit171_audio_cache.py` (21 tests), added to the CI backend list. Targeted regressions: `test_analyze_api.py`, `test_cache_profile_key.py`, `test_commit_115.py`, `test_transcription_prepare.py`, `test_commit170_queue_hardening.py`, `mapErrorToUi.test.ts`.
+- **Known limitation**: the SNR value is a percentile-based dynamic-range proxy, not a calibrated SNR; a mathematically constant tone reads as low SNR. Real smoke mixes measured 4.8–14.2 dB and pass.
 
 ---
 

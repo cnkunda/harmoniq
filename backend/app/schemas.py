@@ -373,6 +373,20 @@ class BeatGridRecomputeRequest(BaseModel):
         default=None,
         description="New BPM override. Omit to keep current (librosa-estimated).",
     )
+    tempo_curve: list[tuple[float, float]] | None = Field(
+        default=None,
+        description=(
+            "Optional instantaneous tempo curve as (time_seconds, bpm) pairs. "
+            "Adjacent points form linear ramps; duplicate timestamps model a sudden shift. "
+            "Mutually exclusive with bpm_override (commit 169)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _reject_conflicting_tempo_inputs(self) -> "BeatGridRecomputeRequest":
+        if self.tempo_curve is not None and self.bpm_override is not None:
+            raise ValueError("Provide either bpm_override or tempo_curve, not both.")
+        return self
 
 
 class BeatGridRecomputeResponse(BaseModel):
@@ -509,6 +523,20 @@ class LessonSectionStub(BaseModel):
     chord_confidence: float | None = None
 
 
+class AudioQuality(BaseModel):
+    """Reference-free ingest quality snapshot (Commit 171)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    snr_db: float = Field(description="Percentile-based SNR proxy in dB (heuristic).")
+    clipping_ratio: float = Field(ge=0.0, le=1.0)
+    silence_ratio: float = Field(ge=0.0, le=1.0)
+    peak_dbfs: float
+    score: float = Field(ge=0.0, le=1.0)
+    flags: list[str] = Field(default_factory=list)
+    acceptable: bool
+
+
 class LessonJSON(BaseModel):
     """Full lesson payload returned when a job completes — see README LessonJSON schema."""
 
@@ -537,6 +565,8 @@ class LessonJSON(BaseModel):
     tabs_unavailable_reason: str | None = None
     # Commit 82: Low SNR warning for pre-emptive transcription quality warning
     low_snr_warning: bool | None = None
+    # Commit 171: Ingest-time quality snapshot (SNR proxy, clipping, silence, score)
+    audio_quality: AudioQuality | None = None
     # Full chord timeline for bar chip rendering (section-scoped timelines are for section views)
     chord_timeline: ChordTimeline | None = None
     # Commit 108: MusicXML lead sheet string (canonical render format)

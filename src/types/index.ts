@@ -429,6 +429,16 @@ export interface LessonJSON {
   instrument_confusion_per_section?: InstrumentConfusionPerSection[]
   /** Phase 2: Which pipeline tier produced this transcription: 'mt3', 'crnn', 'chroma', or null. */
   transcription_source?: string | null
+  /** Commit 171: Reference-free ingest quality snapshot (SNR proxy, clipping, silence). */
+  audio_quality?: {
+    snr_db: number
+    clipping_ratio: number
+    silence_ratio: number
+    peak_dbfs: number
+    score: number
+    flags: string[]
+    acceptable: boolean
+  } | null
   /** Commit 157: Per-note chord-tone analysis of the reference solo; null when unavailable. */
   harmonized_solo?: HarmonizedSoloNotes | null
   /** Commit 157: Per-bar dominant chord, CAGED position, and suggested scales; null when unavailable. */

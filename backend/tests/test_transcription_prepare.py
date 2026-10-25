@@ -23,6 +23,8 @@ def isolated_data_dir(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def allow_short_test_audio(monkeypatch):
     monkeypatch.setattr("app.ingest.MIN_ANALYZE_DURATION_SECONDS", 0.01)
+    # These fixtures are short constant tones; gate behavior has its own tests.
+    monkeypatch.setenv("HARMONIQ_SKIP_AUDIO_QUALITY_GATE", "1")
 
 def _write_test_wav(path: Path, *, sample_rate: int = 44100, duration_seconds: float = 1.2) -> None:
     frames = int(sample_rate * duration_seconds)

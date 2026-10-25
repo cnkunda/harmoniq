@@ -21,8 +21,13 @@ import time
 from app.analyze_audio import build_lesson_json_from_librosa
 from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
 from app.audio_processing import prepare_audio_input
-from app.cache import (invalidate_cache_for_wav, load_cached_lesson_for_wav,
-                       reuse_cached_artifacts_into_job,
+from app.audio_quality import (
+    AUDIO_QUALITY_LOW_USER_MESSAGE,
+    AudioQualityTooLowError,
+    require_acceptable_quality,
+)
+from app.cache import (invalidate_cache_key, invalidate_cache_for_wav,
+                       lookup_cached_lesson, reuse_cached_artifacts_into_job,
                        save_cached_lesson_for_wav)
 from app.chord_enrichment import enrich_chord_timeline
 from app.coach import hydrate_coach_copy_into_sections
@@ -65,6 +70,7 @@ ANALYZE_ERROR_YOUTUBE_INVALID = "youtube_invalid"
 ANALYZE_ERROR_AUDIO_TOO_SHORT = "audio_too_short"
 ANALYZE_ERROR_AUDIO_TOO_LONG = "audio_too_long"
 ANALYZE_ERROR_INGEST_FAILED = "ingest_failed"
+ANALYZE_ERROR_AUDIO_QUALITY_LOW = "audio_quality_low"
 ANALYZE_ERROR_STEM_SEPARATION_FAILED = "stem_separation_failed"
 ANALYZE_ERROR_ANALYSIS_FAILED = "analysis_failed"
 
@@ -590,9 +596,17 @@ def _process_analyze_job(
         
         _set_job_processing_progress(job_id, 0.28, "Audio ready")
         cache_check_start = time.time()
-        cached_lesson = load_cached_lesson_for_wav(wav_path_obj, player_profile=player_profile)
+        cache_lookup = lookup_cached_lesson(wav_path_obj, player_profile=player_profile)
+        cached_lesson = cache_lookup.lesson
         cache_check_elapsed = time.time() - cache_check_start
-        logger.info("cache check completed in %.2fs job_id=%s hit=%s", cache_check_elapsed, job_id, cached_lesson is not None)
+        logger.info(
+            "cache check completed in %.2fs job_id=%s result=%s similarity=%.3f matched_hashes=%d",
+            cache_check_elapsed,
+            job_id,
+            cache_lookup.kind,
+            cache_lookup.similarity,
+            cache_lookup.matched_hashes,
+        )
         
         if cached_lesson is not None:
             reuse_start = time.time()
@@ -636,7 +650,32 @@ def _process_analyze_job(
                 "cache artifacts missing for job_id=%s; invalidating cache entry and re-analyzing",
                 job_id,
             )
-            invalidate_cache_for_wav(wav_path_obj, player_profile=player_profile)
+            if cache_lookup.cache_key:
+                invalidate_cache_key(cache_lookup.cache_key)
+            else:
+                invalidate_cache_for_wav(wav_path_obj, player_profile=player_profile)
+
+        # Quality gate runs after the cache lookup so a low-quality re-upload of
+        # an already-analyzed recording can still be served from cache.
+        try:
+            require_acceptable_quality(prepared.quality)
+        except AudioQualityTooLowError:
+            logger.warning(
+                "audio quality gate rejected job_id=%s score=%s flags=%s",
+                job_id,
+                prepared.quality.score if prepared.quality else None,
+                prepared.quality.flags if prepared.quality else None,
+            )
+            _fail_job_and_dlq(
+                job_id,
+                AUDIO_QUALITY_LOW_USER_MESSAGE,
+                ANALYZE_ERROR_AUDIO_QUALITY_LOW,
+                youtube_url=youtube_url,
+                upload_path=upload_path,
+                player_profile=player_profile,
+                focus_area=focus_area,
+            )
+            return
 
         job_dir = get_job_dir(job_id)
         _set_job_analysis_stage(job_id, "stems_separating", 0.4, "Separating stems…")
@@ -731,13 +770,20 @@ def _process_analyze_job(
             )
             analyze_elapsed = time.time() - analyze_start
             logger.info("librosa analysis completed in %.2fs job_id=%s", analyze_elapsed, job_id)
+        if prepared.quality is not None:
+            result = result.model_copy(update={"audio_quality": prepared.quality})
         skeleton_start = time.time()
         skeleton_result = _lesson_with_skeleton_coach(result)
         skeleton_elapsed = time.time() - skeleton_start
         logger.info("skeleton coach preparation completed in %.2fs job_id=%s", skeleton_elapsed, job_id)
         
         cache_save_start = time.time()
-        save_cached_lesson_for_wav(wav_path_obj, skeleton_result, player_profile=player_profile)
+        save_cached_lesson_for_wav(
+            wav_path_obj,
+            skeleton_result,
+            player_profile=player_profile,
+            fingerprint=cache_lookup.fingerprint,
+        )
         cache_save_elapsed = time.time() - cache_save_start
         logger.info("lesson cache save completed in %.2fs job_id=%s", cache_save_elapsed, job_id)
         
@@ -997,6 +1043,7 @@ def _process_beat_grid_recompute(
     *,
     time_signature: str | None,
     bpm_override: float | None,
+    tempo_curve: list[tuple[float, float]] | None = None,
 ) -> None:
     """Worker: re-derive beat grid and all dependent artifacts for an existing job."""
     from app.analyze_audio import build_lesson_json_from_librosa
@@ -1030,6 +1077,7 @@ def _process_beat_grid_recompute(
             wav_path,
             time_signature=time_signature,
             bpm_override=bpm_override,
+            tempo_curve=tempo_curve,
         )
         beat_grid = BeatGrid.model_validate(beat_grid_dict)
         bar_timestamps = list(beat_grid.downbeats) if beat_grid.downbeats else [0.0]
@@ -1207,6 +1255,7 @@ def enqueue_beat_grid_recompute(
     *,
     time_signature: str | None,
     bpm_override: float | None,
+    tempo_curve: list[tuple[float, float]] | None = None,
 ) -> None:
     """Dispatch beat grid recompute to Celery (or fallback thread)."""
     _set_recompute_progress(job_id, "pending", progress=0.0, stage_label="Queued…")
@@ -1216,6 +1265,7 @@ def enqueue_beat_grid_recompute(
             job_id,
             time_signature=time_signature,
             bpm_override=bpm_override,
+            tempo_curve=tempo_curve,
         )
         logger.info("recompute job_id=%s dispatched to Celery", job_id)
         return
@@ -1224,7 +1274,12 @@ def enqueue_beat_grid_recompute(
 
     t = threading.Thread(
         target=_process_beat_grid_recompute,
-        kwargs={"job_id": job_id, "time_signature": time_signature, "bpm_override": bpm_override},
+        kwargs={
+            "job_id": job_id,
+            "time_signature": time_signature,
+            "bpm_override": bpm_override,
+            "tempo_curve": tempo_curve,
+        },
         daemon=True,
     )
     t.start()

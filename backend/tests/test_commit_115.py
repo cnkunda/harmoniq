@@ -446,8 +446,20 @@ class TestChunkPreparePipeline:
 
         wav = _write_synth_wav(tmp_path / "input.wav", duration_seconds=12.0, frequency=261)
 
+        from app.schemas import AudioQuality
+
+        quality = AudioQuality(
+            snr_db=20.0,
+            clipping_ratio=0.0,
+            silence_ratio=0.0,
+            peak_dbfs=-6.0,
+            score=0.9,
+            flags=[],
+            acceptable=True,
+        )
+
         def fake_ingest(job_id, *, youtube_url=None, upload_path=None, target_sr=44100):
-            return wav, {"song_title": "Test", "artist": "Test"}
+            return wav, {"song_title": "Test", "artist": "Test"}, quality
 
         monkeypatch.setattr("app.audio_processing.ingest_youtube_or_upload_to_wav", fake_ingest)
         monkeypatch.setattr("app.audio_processing.wav_file_duration_seconds", lambda p: 12.0)

@@ -20,6 +20,7 @@ dependencies = [
     "tenacity>=8.0.0",  # app/retry.py backoff decorators (was imported but undeclared)
     "yt-dlp>=2024.8.0",
     "librosa>=0.10.2",
+    "scipy>=1.10",  # Direct use: audio fingerprint STFT/resampling + peak filtering
     "openai-whisper>=20231117",
     "pyguitarpro>=0.10.0",
     "music21>=9.1",  # MusicXML generation (was only in requirements.txt, missing from the CI install path)

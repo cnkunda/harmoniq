@@ -14,6 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 
 from app.audio_processing import AudioPreparationError, prepare_audio_input
+from app.audio_quality import AudioQualityTooLowError, require_acceptable_quality
 from app.beat_grid import (
     BeatGridComputationError,
     dependent_artifacts_for_grid_override,
@@ -181,6 +182,7 @@ def _run_transcription_prepare_pipeline(
         youtube_url=youtube_url,
         upload_path=upload_path,
     )
+    require_acceptable_quality(prepared.quality)
     stems = separate_with_demucs(prepared.normalized_wav_path, prepared.job_dir)
     beat_grid_payload = estimate_beat_grid(
         prepared.normalized_wav_path,
@@ -279,6 +281,8 @@ async def transcription_prepare(request: Request) -> TranscriptionPrepareRespons
     except UnsupportedMimeTypeError as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from None
     except YouTubeDownloadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AudioQualityTooLowError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (AudioPreparationError, DemucsEngineError, BeatGridComputationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -484,6 +488,7 @@ async def beat_grid_recompute(job_id: str, req: BeatGridRecomputeRequest) -> Bea
         job_id,
         time_signature=req.time_signature,
         bpm_override=req.bpm_override,
+        tempo_curve=req.tempo_curve,
     )
     return BeatGridRecomputeResponse(
         job_id=job_id,

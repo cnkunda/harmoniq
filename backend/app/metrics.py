@@ -53,6 +53,12 @@ jobs_in_progress = Gauge(
     "Number of jobs currently processing",
 )
 
+analysis_cache_lookups_total = Counter(
+    "harmoniq_analysis_cache_lookups_total",
+    "Analysis cache lookups by result (Commit 171)",
+    ["result"],
+)
+
 # ---------------------------------------------------------------------------
 # Queue / DLQ metrics (Commit 170)
 # ---------------------------------------------------------------------------

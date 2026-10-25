@@ -629,6 +629,7 @@ Every error should be warm, specific, and tell the user exactly what to do next.
 | Analysis job timeout (>5 min) | "This one's taking longer than usual. We'll notify you when it's ready." | Background notification on completion |
 | No internet during analysis | "You need a connection to analyze a new song. Your existing library works offline." | Dismiss |
 | Audio too short (<30 sec) | "That clip is too short to analyze. Try a full song or a longer section." | Dismiss |
+| Audio quality too low | "That recording is too noisy or distorted to transcribe reliably. Try a cleaner take or a studio recording." | Try another file |
 | Score endpoint failure | "Couldn't score that take — tap 'Do it again' to try once more." | Retry |
 | No guitar stem detected | "Couldn't isolate a clear guitar track from this recording. Try a different version of the song." | Retry or pick different song |
 | Low transcription confidence | "This part is a rough approximation — use it as a guide, not a rule." | Continue |

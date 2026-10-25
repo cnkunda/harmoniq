@@ -20,6 +20,7 @@ from app.ingest import (
     wav_file_duration_seconds,
 )
 from app.pipeline_proof import TARGET_SR
+from app.schemas import AudioQuality
 
 # Keep chunk windows reasonably small for long recordings (memory + inspectability).
 LONG_TRACK_CHUNK_TRIGGER_SECONDS = 15 * 60
@@ -44,6 +45,7 @@ class AudioPreparationResult:
     duration_seconds: float
     chunk_paths: tuple[Path, ...] = ()
     chunk_metadata: tuple[dict[str, Any], ...] = ()
+    quality: AudioQuality | None = None
 
 def _chunk_wav_for_long_track(
     wav_path: Path,
@@ -116,7 +118,7 @@ def prepare_audio_input(
     """Normalize user input to `song.wav` and chunk only when tracks are long."""
     job_dir = get_job_dir(job_id)
     try:
-        wav_path, source_metadata = ingest_youtube_or_upload_to_wav(
+        wav_path, source_metadata, quality = ingest_youtube_or_upload_to_wav(
             job_id,
             youtube_url=youtube_url,
             upload_path=upload_path,
@@ -153,4 +155,5 @@ def prepare_audio_input(
         duration_seconds=duration,
         chunk_paths=chunk_paths,
         chunk_metadata=chunk_metadata,
+        quality=quality,
     )

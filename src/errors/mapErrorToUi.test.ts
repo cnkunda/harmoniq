@@ -118,6 +118,14 @@ describe('mapAnalyzeFlowError', () => {
     expect(m.detail).toBe(README_ERROR_COPY.analyzeRetryHint)
   })
 
+  it('maps audio_quality_low error_code to README audio quality copy', () => {
+    const m = mapAnalyzeFlowError(apiErr(500, 'unused', 'audio_quality_low'), {})
+    expect(m.message).toBe(README_ERROR_COPY.audioQualityLow)
+    expect(m.actionKind).toBe('retry')
+    expect(m.actionLabel).toBe('Try another file')
+    expect(m.detail).toBe(README_ERROR_COPY.analyzeRetryHint)
+  })
+
   it('maps no_usable_guitar_stem error_code to no-guitar README copy', () => {
     const m = mapAnalyzeFlowError(apiErr(500, 'unused', 'no_usable_guitar_stem'), {})
     expect(m.message).toBe(README_ERROR_COPY.noGuitarStem)

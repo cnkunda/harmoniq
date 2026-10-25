@@ -89,9 +89,15 @@ def analyze_job_task(
         # Import the existing pipeline functions (same logic, different transport)
         from app.analyze_audio import build_lesson_json_from_librosa
         from app.audio_processing import prepare_audio_input
+        from app.audio_quality import (
+            AUDIO_QUALITY_LOW_USER_MESSAGE,
+            AudioQualityTooLowError,
+            require_acceptable_quality,
+        )
         from app.cache import (
+            invalidate_cache_key,
             invalidate_cache_for_wav,
-            load_cached_lesson_for_wav,
+            lookup_cached_lesson,
             reuse_cached_artifacts_into_job,
             save_cached_lesson_for_wav,
         )
@@ -108,6 +114,7 @@ def analyze_job_task(
         from app.jobs import (
             ANALYSIS_FAILED_USER_MESSAGE,
             ANALYZE_ERROR_ANALYSIS_FAILED,
+            ANALYZE_ERROR_AUDIO_QUALITY_LOW,
             ANALYZE_ERROR_AUDIO_TOO_LONG,
             ANALYZE_ERROR_AUDIO_TOO_SHORT,
             ANALYZE_ERROR_INGEST_FAILED,
@@ -163,6 +170,7 @@ def analyze_job_task(
         source_metadata = prepared.source_metadata
         chunk_paths = prepared.chunk_paths
         wav_path = str(wav_path_obj)
+        profile_obj = PlayerProfile(**player_profile) if player_profile else None
 
         # Audio duration check
         wav_duration = prepared.duration_seconds
@@ -184,7 +192,15 @@ def analyze_job_task(
         _publish_progress(job_id, "processing", progress=0.28, stage_label="Audio ready")
 
         # Cache check
-        cached_lesson = load_cached_lesson_for_wav(wav_path_obj)
+        cache_lookup = lookup_cached_lesson(wav_path_obj, player_profile=profile_obj)
+        logger.info(
+            "cache check job_id=%s result=%s similarity=%.3f matched_hashes=%d",
+            job_id,
+            cache_lookup.kind,
+            cache_lookup.similarity,
+            cache_lookup.matched_hashes,
+        )
+        cached_lesson = cache_lookup.lesson
         if cached_lesson is not None:
             reused = reuse_cached_artifacts_into_job(cached_lesson, job_id=job_id)
             if reused is not None:
@@ -192,7 +208,33 @@ def analyze_job_task(
                 _publish_progress(job_id, "complete", result=reused.model_dump(exclude_none=True))
                 logger.info("task complete (cache hit) job_id=%s", job_id)
                 return reused.model_dump(exclude_none=True)
-            invalidate_cache_for_wav(wav_path_obj)
+            if cache_lookup.cache_key:
+                invalidate_cache_key(cache_lookup.cache_key)
+            else:
+                invalidate_cache_for_wav(wav_path_obj, player_profile=profile_obj)
+
+        # Quality gate runs after cache lookup; see app.jobs for rationale.
+        try:
+            require_acceptable_quality(prepared.quality)
+        except AudioQualityTooLowError:
+            logger.warning(
+                "audio quality gate rejected job_id=%s score=%s flags=%s",
+                job_id,
+                prepared.quality.score if prepared.quality else None,
+                prepared.quality.flags if prepared.quality else None,
+            )
+            _repo_fail(job_id, AUDIO_QUALITY_LOW_USER_MESSAGE, error_code=ANALYZE_ERROR_AUDIO_QUALITY_LOW)
+            _publish_progress(job_id, "failed", error=AUDIO_QUALITY_LOW_USER_MESSAGE)
+            _push_terminal_dlq(
+                job_id,
+                AUDIO_QUALITY_LOW_USER_MESSAGE,
+                ANALYZE_ERROR_AUDIO_QUALITY_LOW,
+                youtube_url=youtube_url,
+                upload_path=upload_path,
+                player_profile=player_profile,
+                focus_area=focus_area,
+            )
+            return None
 
         job_dir = get_job_dir(job_id)
 
@@ -252,7 +294,7 @@ def analyze_job_task(
                 stems=stems,
                 wav_path=wav_path,
                 source_url=youtube_url,
-                player_profile=PlayerProfile(**player_profile) if player_profile else None,
+                player_profile=profile_obj,
                 source_metadata=source_metadata,
                 stem_classification=stem_classification,
                 mix_wav_path=wav_path_obj,
@@ -264,10 +306,17 @@ def analyze_job_task(
             )
             analyze_elapsed = time.time() - analyze_start
 
+        if prepared.quality is not None:
+            result = result.model_copy(update={"audio_quality": prepared.quality})
         skeleton_result = _lesson_with_skeleton_coach(result)
 
         # Cache result
-        save_cached_lesson_for_wav(wav_path_obj, skeleton_result)
+        save_cached_lesson_for_wav(
+            wav_path_obj,
+            skeleton_result,
+            player_profile=profile_obj,
+            fingerprint=cache_lookup.fingerprint,
+        )
 
         # Complete job
         _repo_complete(job_id, skeleton_result)
@@ -381,6 +430,7 @@ def beat_grid_recompute_task(
     job_id: str,
     time_signature: str | None = None,
     bpm_override: float | None = None,
+    tempo_curve: list[tuple[float, float]] | None = None,
 ) -> None:
     """Celery task: recompute beat grid and dependent artifacts."""
     logger.info("recompute task start job_id=%s", job_id)
@@ -390,4 +440,9 @@ def beat_grid_recompute_task(
     except Exception:
         logger.warning("init_db failed job_id=%s", job_id, exc_info=True)
     from app.jobs import _process_beat_grid_recompute
-    _process_beat_grid_recompute(job_id, time_signature=time_signature, bpm_override=bpm_override)
+    _process_beat_grid_recompute(
+        job_id,
+        time_signature=time_signature,
+        bpm_override=bpm_override,
+        tempo_curve=tempo_curve,
+    )

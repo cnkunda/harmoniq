@@ -136,6 +136,32 @@ normalized audio can skip expensive separation/analysis work.
 - `PIPELINE_VERSION` currently comes from `app.cache.PIPELINE_VERSION`.
 - `audio_sha256` is computed from the normalized per-job `song.wav` bytes.
 
+### Fingerprint near-duplicate lookup (Commit 171)
+
+Byte-identical uploads still hit the SHA-256 path first and never compute a
+fingerprint. On a SHA miss, the backend computes a compact landmark fingerprint
+from the normalized WAV and compares it against fingerprint sidecars written by
+previous analyses:
+
+- Sidecars live at `data/cache/analysis/<cache_key>.fingerprint.json`.
+- A match requires the same `PIPELINE_VERSION`, the same profile suffix, at
+  least `FINGERPRINT_MIN_MATCHED_HASHES` time-offset-consistent hashes, and a
+  similarity at or above `FINGERPRINT_SIMILARITY_THRESHOLD`.
+- On a match, the existing cached lesson/artifacts are reused exactly like a
+  SHA hit. The result is logged (`cache check ... result=fingerprint_hit`) and
+  counted in `harmoniq_analysis_cache_lookups_total{result}`.
+- Sidecars are removed with their cache entry and by
+  `scripts/clear_analysis_cache.py`.
+
+### Ingest quality gate (Commit 171)
+
+Quality is measured on the decoded source before EBU R128 normalization so
+clipping is not masked by the limiter. `LessonJSON.audio_quality` records the
+SNR proxy, clipping ratio, silence ratio, score, and flags. Clearly unusable
+audio fails with `error_code=audio_quality_low`; set
+`HARMONIQ_SKIP_AUDIO_QUALITY_GATE=1` to bypass the rejection (metrics are still
+computed and logged).
+
 ### On-hit behavior
 
 When a cache entry exists for the same key:
@@ -155,6 +181,7 @@ When a cache entry exists for the same key:
 ### Disk locations (cache + reused artifacts)
 
 - Cache files: `data/cache/analysis/*.json`
+- Fingerprint sidecars: `data/cache/analysis/*.fingerprint.json`
 - Reused artifacts source paths: paths referenced in cached `lesson_json` (typically under `data/jobs/<prior_job_id>/...`)
 - Reused artifacts destination paths: `data/jobs/<new_job_id>/song.wav` and `data/jobs/<new_job_id>/stems/*.wav`
 
