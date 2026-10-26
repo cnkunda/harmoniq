@@ -3,7 +3,7 @@ import { ChevronRight, Music } from 'lucide-react-native'
 import { useState } from 'react'
 import { Text, View } from 'react-native'
 
-import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 import { colors } from '@/src/constants/colors'
 import { shouldOfferTasteQuizOnboarding } from '@/src/taste/tasteQuizGate'
@@ -52,18 +52,16 @@ export default function OnboardingWelcomeScreen() {
         <Text className="mt-4 max-w-sm self-center text-center font-sans text-xs leading-5 text-muted-light">
           We track practice patterns to improve your experience. Opt out anytime.
         </Text>
-        <AnimatedPressable haptic="light"
+        <Button
+          label={routing ? 'Continue…' : 'Continue'}
+          haptic="light"
           onPress={onContinue}
           disabled={routing}
-          className="mt-10 w-full flex-row items-center justify-center gap-2 rounded-lg bg-amber-accent px-4 py-3.5 disabled:opacity-60"
-          accessibilityRole="button"
+          icon={routing ? undefined : <ChevronRight color={colors.wood[900]} size={20} strokeWidth={2} />}
           accessibilityLabel="Continue to microphone permission"
-        >
-          <Text className="text-center font-sans-medium text-wood-900">
-            {routing ? 'Continue…' : 'Continue'}
-          </Text>
-          {routing ? null : <ChevronRight color={colors.wood[900]} size={20} strokeWidth={2} />}
-        </AnimatedPressable>
+          fullWidth
+          className="mt-10"
+        />
       </View>
     </OnboardingScreenShell>
   )

@@ -18,6 +18,7 @@ import { NoteCorrectionPanel } from '@/components/NoteCorrectionPanel'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
 import { TheoryCard } from '@/components/TheoryCard'
+import { Pill } from '@/components/Pill'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
 import { TranscriberActions } from '@/components/TranscriberActions'
@@ -653,16 +654,15 @@ function StudyScreenInner() {
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.study}</DemoTourCallout> : null}
 
       {/* Commit 163: Listen shortcut — full-song listening is opt-in, not a mandatory step. */}
-      <AnimatedPressable
-        haptic="light"
+      <Pill
         onPress={() => router.push(sessionHref('listen'))}
-        className="mb-3 self-start flex-row items-center gap-1.5 rounded-full border border-wood-600/45 bg-wood-800/45 px-3 py-1.5"
-        accessibilityRole="button"
         accessibilityLabel="Open full Listen screen"
+        icon={<Headphones size={14} color={colors.amber.accent} />}
+        textClassName="text-cream"
+        className="mb-3 self-start"
       >
-        <Headphones size={14} color={colors.amber.accent} />
-        <Text className="font-sans-medium text-xs text-cream">Listen</Text>
-      </AnimatedPressable>
+        Listen
+      </Pill>
 
       {!lesson ? (
         <EmptyState

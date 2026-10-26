@@ -31,8 +31,16 @@ import {
 } from 'react-native-svg'
 
 import { spring } from '@/src/constants/animations'
+import { Pill } from '@/components/Pill'
 import { colors } from '@/src/constants/colors'
-import { SECTION_EYEBROW_CLASS } from '@/src/constants/uiTokens'
+import {
+  CHOICE_CHIP_BASE,
+  CHOICE_CHIP_OFF,
+  CHOICE_CHIP_ON,
+  CHOICE_LABEL_SANS_OFF,
+  CHOICE_LABEL_SANS_ON,
+  SECTION_EYEBROW_CLASS,
+} from '@/src/constants/uiTokens'
 import {
   NUM_FRETS,
   OPEN_MIDI_BY_ROW,
@@ -611,14 +619,14 @@ export function FretboardDiagram({
           <View className="flex-row items-baseline gap-2">
             <Text className="font-sans text-base font-semibold text-wood-900">{keyLabel}</Text>
             {capoText ? (
-              <View className="rounded-full border border-amber-accent/25 bg-amber-accent/10 px-2 py-0.5">
-                <Text className="text-[10px] font-medium text-amber-accent/70">{capoText}</Text>
-              </View>
+              <Pill variant="light" size="xs" className="px-2 py-0.5">
+                <Text className="text-[10px] font-medium text-amber-accent/80">{capoText}</Text>
+              </Pill>
             ) : null}
             {voicingLabel ? (
-              <View className="rounded-full border border-wood-600/30 bg-wood-900/10 px-2 py-0.5">
-                <Text className="text-[9px] font-mono text-amber-accent/60">{voicingLabel}</Text>
-              </View>
+              <Pill variant="light" size="xs" className="px-2 py-0.5">
+                <Text className="text-[9px] font-mono text-amber-accent/70">{voicingLabel}</Text>
+              </Pill>
             ) : null}
           </View>
         </View>
@@ -635,14 +643,14 @@ export function FretboardDiagram({
                   key={mode}
                   onPress={() => onFretboardModeChange(mode)}
                   className={`rounded-full px-4 py-1.5 ${
-                    fretboardMode === mode ? 'bg-amber-accent/20' : ''
+                    fretboardMode === mode ? 'bg-amber-accent' : ''
                   }`}
                   accessibilityRole="button"
                   accessibilityLabel={label}
                   accessibilityState={{ selected: fretboardMode === mode }}
                 >
                   <Text className={`font-sans text-xs ${
-                    fretboardMode === mode ? 'text-amber-accent font-medium' : 'text-muted-brown'
+                    fretboardMode === mode ? 'text-wood-900 font-medium' : 'text-muted-brown'
                   }`}>{label}</Text>
                 </Pressable>
               ))}
@@ -670,14 +678,12 @@ export function FretboardDiagram({
                 <Pressable
                   key={mode}
                   onPress={() => onVoicingModeChange(mode)}
-                  className={`rounded-full border px-3 py-1.5 ${
-                    voicingMode === mode ? 'border-success bg-success/20' : 'border-wood-600/45 bg-cream-dark/50'
-                  }`}
+                  className={`${CHOICE_CHIP_BASE} ${voicingMode === mode ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF}`}
                   accessibilityRole="button"
                   accessibilityLabel={label}
                   accessibilityState={{ selected: voicingMode === mode }}
                 >
-                  <Text className={`font-sans text-[11px] ${voicingMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
+                  <Text className={voicingMode === mode ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>{label}</Text>
                 </Pressable>
               ))}
             </>
@@ -698,14 +704,14 @@ export function FretboardDiagram({
                     key={mode}
                     onPress={() => onHarmonicContextModeChange(mode)}
                     className={`rounded-full px-4 py-1.5 ${
-                      harmonicContextMode === mode ? 'bg-amber-accent/20' : ''
+                      harmonicContextMode === mode ? 'bg-amber-accent' : ''
                     }`}
                     accessibilityRole="button"
                     accessibilityLabel={label}
                     accessibilityState={{ selected: harmonicContextMode === mode }}
                   >
                     <Text className={`font-sans text-xs ${
-                      harmonicContextMode === mode ? 'text-amber-accent font-medium' : 'text-muted-brown'
+                      harmonicContextMode === mode ? 'text-wood-900 font-medium' : 'text-muted-brown'
                     }`}>{label}</Text>
                   </Pressable>
                 ))}
@@ -728,14 +734,12 @@ export function FretboardDiagram({
                   key={mode}
                   onPress={() => onOverlayModeChange?.(mode)}
                   disabled={!onOverlayModeChange}
-                  className={`rounded-full border px-3 py-1.5 ${
-                    overlayMode === mode ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'
-                  } ${onOverlayModeChange ? '' : 'opacity-50'}`}
+                  className={`${CHOICE_CHIP_BASE} ${overlayMode === mode ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${onOverlayModeChange ? '' : 'opacity-50'}`}
                   accessibilityRole="button"
                   accessibilityLabel={label}
                   accessibilityState={{ selected: overlayMode === mode }}
                 >
-                  <Text className={`font-sans text-[11px] ${overlayMode === mode ? 'text-wood-900' : 'text-muted-brown'}`}>{label}</Text>
+                  <Text className={overlayMode === mode ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>{label}</Text>
                 </Pressable>
               ))}
             </>
@@ -744,12 +748,12 @@ export function FretboardDiagram({
           {showPitchLadderControl ? (
             <Pressable
               onPress={() => setPitchLadderOpen((o) => !o)}
-              className={`rounded-full border px-3 py-1.5 ${pitchLadderOpen ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/50'}`}
+              className={`${CHOICE_CHIP_BASE} ${pitchLadderOpen ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF}`}
               accessibilityRole="button"
               accessibilityLabel="Show example pitch ladder"
               accessibilityState={{ selected: pitchLadderOpen }}
             >
-              <Text className={`font-sans text-[11px] ${pitchLadderOpen ? 'text-wood-900' : 'text-muted-brown'}`}>Example</Text>
+              <Text className={pitchLadderOpen ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>Example</Text>
             </Pressable>
           ) : null}
 

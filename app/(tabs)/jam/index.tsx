@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { History } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { JamSummaryModal, type JamSummaryStatus } from '@/components/JamSummaryModal'
@@ -310,6 +311,10 @@ export default function JamScreen() {
     },
     [syncJamTabFromPlaybackStatus],
   )
+
+  const onJamTabError = useCallback((msg: string) => {
+    toast.error(msg)
+  }, [])
 
   const onJamTabReady = useCallback(() => {
     setJamTabReady(true)
@@ -795,16 +800,15 @@ export default function JamScreen() {
                   </Text>
                 ) : null}
               </View>
-              <AnimatedPressable
-                onPress={() => router.push('/(tabs)/jam/history' as Href)}
+              <Button
+                label="History"
+                variant="secondary"
+                size="sm"
+                icon={<History color={colors.amber.light} size={16} />}
                 haptic="light"
-                className="min-h-[44px] flex-row items-center gap-1.5 rounded-xl border border-wood-600/50 px-3"
-                accessibilityRole="button"
+                onPress={() => router.push('/(tabs)/jam/history' as Href)}
                 accessibilityLabel="Open jam history"
-              >
-                <History color={colors.amber.light} size={16} />
-                <Text className="font-sans-medium text-xs text-cream">History</Text>
-              </AnimatedPressable>
+              />
             </View>
 
             <View className="mt-3 rounded-xl border border-wood-700/45 bg-wood-800/40 px-3 py-2.5">
@@ -812,46 +816,24 @@ export default function JamScreen() {
                 Summary style
               </Text>
               <View className="mt-2 flex-row gap-2">
-                <AnimatedPressable
+                <Button
+                  label="Encouraging coach"
+                  variant={personaChoice === 'encouraging' ? 'primary' : 'secondary'}
+                  size="sm"
+                  haptic="light"
                   onPress={() => changePersona('encouraging')}
-                  haptic="light"
-                  className={`flex-1 rounded-lg border px-3 py-2 ${
-                    personaChoice === 'encouraging'
-                      ? 'border-amber-accent/50 bg-amber-accent/10'
-                      : 'border-wood-700/60'
-                  }`}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: personaChoice === 'encouraging' }}
                   accessibilityLabel="Encouraging coach summary style"
-                >
-                  <Text
-                    className={`text-center font-sans-medium text-xs ${
-                      personaChoice === 'encouraging' ? 'text-amber-light' : 'text-cream/80'
-                    }`}
-                  >
-                    Encouraging coach
-                  </Text>
-                </AnimatedPressable>
-                <AnimatedPressable
-                  onPress={() => changePersona('technical')}
+                  containerClassName="flex-1"
+                />
+                <Button
+                  label="Technical analyst"
+                  variant={personaChoice === 'technical' ? 'primary' : 'secondary'}
+                  size="sm"
                   haptic="light"
-                  className={`flex-1 rounded-lg border px-3 py-2 ${
-                    personaChoice === 'technical'
-                      ? 'border-amber-accent/50 bg-amber-accent/10'
-                      : 'border-wood-700/60'
-                  }`}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: personaChoice === 'technical' }}
+                  onPress={() => changePersona('technical')}
                   accessibilityLabel="Technical analyst summary style"
-                >
-                  <Text
-                    className={`text-center font-sans-medium text-xs ${
-                      personaChoice === 'technical' ? 'text-amber-light' : 'text-cream/80'
-                    }`}
-                  >
-                    Technical analyst
-                  </Text>
-                </AnimatedPressable>
+                  containerClassName="flex-1"
+                />
               </View>
             </View>
           </View>
@@ -1156,8 +1138,10 @@ export default function JamScreen() {
                     audioSrc={jamTabExternalAudioSrc}
                     renderPreset="study"
                     runtimeDiagnosticsEnabled={false}
+                    songTitle="Jam reference"
+                    songArtist={classicTrackDef.label}
                     onReady={onJamTabReady}
-                    onError={(msg) => toast.error(msg)}
+                    onError={onJamTabError}
                     style={{ flex: 1, height: '100%', width: '100%' }}
                   />
                 </View>
@@ -1167,33 +1151,32 @@ export default function JamScreen() {
 
           <View className="gap-2 pb-4">
             {isJamming ? (
-              <AnimatedPressable
+              <Button
+                label={busy ? 'Saving…' : 'Stop & Save'}
+                variant="secondary"
+                haptic="medium"
                 onPress={() => void stopAndSave()}
-                haptic="medium"
                 disabled={busy}
-                className="items-center rounded-xl border border-wood-600 bg-wood-700 py-4 disabled:opacity-50"
-              >
-                <Text className="font-sans-medium text-cream">{busy ? 'Saving…' : 'Stop & Save'}</Text>
-              </AnimatedPressable>
+                loading={busy}
+                fullWidth
+              />
             ) : (
-              <AnimatedPressable
-                onPress={() => void attemptStartJam()}
+              <Button
+                label={busy ? 'Starting…' : 'Start Jamming'}
                 haptic="medium"
+                onPress={() => void attemptStartJam()}
                 disabled={busy}
-                className="items-center rounded-xl bg-amber-accent py-4 disabled:opacity-50"
-              >
-                <Text className="font-sans-medium text-base text-wood-900">
-                  {busy ? 'Starting…' : 'Start Jamming'}
-                </Text>
-              </AnimatedPressable>
+                loading={busy}
+                fullWidth
+              />
             )}
-            <AnimatedPressable
-              onPress={() => router.back()}
+            <Button
+              label="Back"
+              variant="secondary"
               haptic="light"
-              className="items-center rounded-xl border border-wood-600/50 py-3"
-            >
-              <Text className="font-sans-medium text-sm text-cream">Back</Text>
-            </AnimatedPressable>
+              onPress={() => router.back()}
+              fullWidth
+            />
           </View>
         </ScrollView>
       </SafeAreaView>

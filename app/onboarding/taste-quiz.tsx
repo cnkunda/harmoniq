@@ -4,11 +4,11 @@ import { useCallback, useMemo, useState } from 'react'
 import { ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 import { toast } from '@/components/ToastConfig'
 import { deriveTasteProfile } from '@/src/api/analyze'
 import { colors } from '@/src/constants/colors'
-import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
 import { ONBOARDING_STEP_WITH_QUIZ, ONBOARDING_WITH_QUIZ_TOTAL } from '@/src/constants/onboardingSteps'
 import { commitTasteQuizProfile } from '@/src/db/client'
 import {
@@ -205,19 +205,14 @@ export default function TasteQuizScreen() {
               })}
             </View>
           </ScrollView>
-          <AnimatedPressable
+          <Button
+            label="Next"
             onPress={goNext}
             disabled={!canNextStep0}
-            className={`mt-6 w-full rounded-xl px-4 py-3 ${canNextStep0 ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
-            accessibilityRole="button"
             accessibilityLabel="Continue to vibe step"
-          >
-            <Text
-              className={`text-center font-sans-medium ${canNextStep0 ? 'text-wood-900' : 'text-muted-light'}`}
-            >
-              Next
-            </Text>
-          </AnimatedPressable>
+            fullWidth
+            className="mt-6"
+          />
         </View>
       ) : null}
 
@@ -251,18 +246,13 @@ export default function TasteQuizScreen() {
               )
             })}
           </View>
-          <AnimatedPressable
+          <Button
+            label="Next"
             onPress={goNext}
             disabled={!canNextStep1}
-            className={`mt-8 w-full rounded-xl px-4 py-3 ${canNextStep1 ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
-            accessibilityRole="button"
-          >
-            <Text
-              className={`text-center font-sans-medium ${canNextStep1 ? 'text-wood-900' : 'text-muted-light'}`}
-            >
-              Next
-            </Text>
-          </AnimatedPressable>
+            fullWidth
+            className="mt-8"
+          />
         </View>
       ) : null}
 
@@ -296,19 +286,15 @@ export default function TasteQuizScreen() {
               )
             })}
           </View>
-          <AnimatedPressable
+          <Button
+            label={busy ? 'Saving…' : 'Save and continue'}
             onPress={submit}
             disabled={!canSubmit || busy}
-            className={`mt-8 w-full rounded-xl px-4 py-3 ${canSubmit && !busy ? 'bg-amber-accent' : 'bg-wood-700'}`}
-            accessibilityRole="button"
+            loading={busy}
             accessibilityLabel="Save preferences and continue"
-          >
-            <Text
-              className={`text-center font-sans-medium ${canSubmit && !busy ? 'text-wood-900' : 'text-muted-light'}`}
-            >
-              {busy ? 'Saving…' : 'Save and continue'}
-            </Text>
-          </AnimatedPressable>
+            fullWidth
+            className="mt-8"
+          />
         </View>
       ) : null}
     </OnboardingScreenShell>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Platform, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 import { TabViewport } from '@/components/TabViewport'
@@ -241,32 +241,31 @@ export default function OnboardingPhraseScreen() {
         </View>
 
         <View className="mt-6 w-full gap-3">
-          <AnimatedPressable haptic="light"
+          <Button
+            label={refPlaying ? 'Pause reference' : 'Play reference'}
+            variant="secondary"
+            haptic="light"
             onPress={() => void toggleReference()}
             disabled={!soundReady}
-            className="w-full rounded-xl border border-wood-600/50 bg-wood-800/80 px-4 py-3 disabled:opacity-50"
-            accessibilityRole="button"
-          >
-            <Text className="text-center font-sans-medium text-cream">
-              {refPlaying ? 'Pause reference' : 'Play reference'}
-            </Text>
-          </AnimatedPressable>
-          <AnimatedPressable haptic="light"
+            fullWidth
+          />
+          <Button
+            label={recording ? 'Recording…' : 'Record take'}
+            haptic="light"
             onPress={() => void startRecord()}
             disabled={recording || busy}
-            className="w-full rounded-xl bg-amber-accent px-4 py-3 disabled:opacity-50"
-            accessibilityRole="button"
-          >
-            <Text className="text-center font-sans-medium text-wood-900">{recording ? 'Recording…' : 'Record take'}</Text>
-          </AnimatedPressable>
-          <AnimatedPressable haptic="light"
+            loading={recording}
+            fullWidth
+          />
+          <Button
+            label={busy ? 'Scoring…' : 'Stop & score'}
+            variant="secondary"
+            haptic="light"
             onPress={() => void stopAndScore()}
             disabled={!recording || busy}
-            className="w-full rounded-xl border border-amber-accent/60 px-4 py-3 disabled:opacity-50"
-            accessibilityRole="button"
-          >
-            <Text className="text-center font-sans-medium text-amber-light">{busy ? 'Scoring…' : 'Stop & score'}</Text>
-          </AnimatedPressable>
+            loading={busy}
+            fullWidth
+          />
         </View>
 
         {phraseError ? (

@@ -4,9 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 
-import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
-import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
 import { ONBOARDING_STEP_WITHOUT_QUIZ, ONBOARDING_WITHOUT_QUIZ_TOTAL } from '@/src/constants/onboardingSteps'
 
 export default function OnboardingMicScreen() {
@@ -83,53 +82,51 @@ export default function OnboardingMicScreen() {
             <Text className="mt-2 text-center font-sans text-xs text-muted-brown">
               Enable the mic in system settings, then tap Refresh below.
             </Text>
-            <AnimatedPressable haptic="light"
+            <Button
+              label="Open Settings"
+              variant="secondary"
+              size="sm"
+              haptic="light"
               onPress={openSettings}
-              className="mt-3 self-center rounded-md border border-amber-accent/50 px-3 py-2"
-              accessibilityRole="button"
               accessibilityLabel="Open system settings"
-            >
-              <Text className="font-sans-medium text-sm text-amber-light">Open Settings</Text>
-            </AnimatedPressable>
+              className="mt-3 self-center"
+            />
           </View>
         ) : null}
 
         <View className="mt-8 w-full gap-3">
-          <AnimatedPressable haptic="light"
+          <Button
+            label={status === 'granted' ? 'Microphone ready' : busy ? 'Requesting…' : 'Allow microphone'}
+            haptic="light"
             onPress={() => void request()}
             disabled={busy || status === 'granted'}
-            className={`rounded-xl px-4 py-3 ${status === 'granted' || busy ? DISABLED_BTN_CLASS : 'bg-amber-accent'}`}
-            accessibilityRole="button"
-          >
-            <Text
-              className={`text-center font-sans-medium ${status === 'granted' || busy ? 'text-muted-brown' : 'text-wood-900'}`}
-            >
-              {status === 'granted' ? 'Microphone ready' : busy ? 'Requesting…' : 'Allow microphone'}
-            </Text>
-          </AnimatedPressable>
+            loading={busy}
+            fullWidth
+          />
           {Platform.OS !== 'web' ? (
-            <AnimatedPressable haptic="light"
+            <Button
+              label="Refresh status"
+              variant="secondary"
+              haptic="light"
               onPress={() => void refresh()}
-              className="rounded-xl border border-wood-600/50 px-4 py-3"
-              accessibilityRole="button"
-            >
-              <Text className="text-center font-sans-medium text-cream">Refresh status</Text>
-            </AnimatedPressable>
+              fullWidth
+            />
           ) : null}
         </View>
 
-        <AnimatedPressable haptic="light"
-          onPress={() => router.push({ pathname: '/onboarding/phrase/[index]', params: { index: '0', quizTaken: hasQuiz ? '1' : undefined } })}
+        <Button
+          label="Next: placement phrases"
+          haptic="light"
+          onPress={() =>
+            router.push({
+              pathname: '/onboarding/phrase/[index]',
+              params: { index: '0', quizTaken: hasQuiz ? '1' : undefined },
+            })
+          }
           disabled={status !== 'granted'}
-          className={`mt-10 w-full rounded-xl border px-4 py-3 ${status === 'granted' ? 'border-amber-accent/60 bg-wood-800/80' : `${DISABLED_BTN_CLASS} border-transparent`}`}
-          accessibilityRole="button"
-        >
-          <Text
-            className={`text-center font-sans-medium ${status === 'granted' ? 'text-amber-light' : 'text-muted-brown'}`}
-          >
-            Next: placement phrases
-          </Text>
-        </AnimatedPressable>
+          fullWidth
+          className="mt-10"
+        />
       </View>
     </OnboardingScreenShell>
   )

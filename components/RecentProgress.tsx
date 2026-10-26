@@ -8,7 +8,7 @@ import Svg, { Polyline } from 'react-native-svg'
 import { toast } from '@/components/ToastConfig'
 import { colors } from '@/src/constants/colors'
 import { getLessonByJobId } from '@/src/db/client'
-import type { PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
+import type { SessionJournalRow } from '@/src/db/types'
 import { sessionOverallAccuracy } from '@/src/home/sessionAccuracy'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
@@ -59,7 +59,6 @@ export function RecentProgress({
   sessions,
 }: {
   sessions: readonly SessionJournalRow[]
-  lastPlanCompletion?: PracticePlanCompletionRow | null
 }) {
   const router = useRouter()
   const saveLesson = useLessonStore((s) => s.saveLesson)
@@ -73,7 +72,7 @@ export function RecentProgress({
       .filter((v): v is number => v != null && Number.isFinite(v))
   }, [sessions])
 
-  // Total session count for progress messaging (includes plan completions without accuracy)
+  // Total session count for the list/empty state.
   const totalSessions = sessions.length
 
   const polyline = useMemo(() => {
@@ -114,10 +113,6 @@ export function RecentProgress({
 
   const showChart = points.length >= 2
 
-  const completedCountMessage = totalSessions > 0
-    ? `You've completed ${totalSessions} session${totalSessions === 1 ? '' : 's'}.`
-    : null
-
   return (
     <View className="mb-2">
       <Text className="mb-2 font-sans-medium text-sm uppercase tracking-wider text-muted-brown">
@@ -144,16 +139,7 @@ export function RecentProgress({
             ))}
           </View>
         </Animated.View>
-      ) : (
-        <View>
-          {completedCountMessage ? (
-            <Text className="font-sans text-sm text-muted-brown mb-1">{completedCountMessage}</Text>
-          ) : null}
-          <Text className="font-sans text-sm text-muted-brown">
-            Finish at least two sessions with review scores to see your accuracy trend here.
-          </Text>
-        </View>
-      )}
+      ) : null}
 
       {totalSessions > 0 ? (
         <View className="gap-2">
@@ -181,11 +167,6 @@ export function RecentProgress({
         </Text>
       )}
 
-      {/* {planNote ? (
-        <Text className="mt-2 font-sans text-xs text-muted-brown">
-          Latest plan wrap-up: {planNote}.
-        </Text>
-      ) : null} */}
     </View>
   )
 }

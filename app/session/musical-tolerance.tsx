@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { colors } from '@/src/constants/colors'
 import { setAppPref } from '@/src/db/client'
 import { PREF_MUSICAL_TOLERANCE_MODE } from '@/src/db/schema'
@@ -80,15 +81,16 @@ export default function MusicalToleranceScreen() {
             )
           })}
         </View>
-        <AnimatedPressable
+        <Button
+          label="Skip (default: Technique)"
+          variant="ghost"
+          size="sm"
           disabled={busy}
           onPress={() => void commitAndGo('technique')}
-          className="mt-4 rounded-lg border border-dashed border-wood-600/40 bg-wood-700/20 px-4 py-3 active:opacity-90 disabled:opacity-50"
-          accessibilityRole="button"
           accessibilityLabel="Skip and use default technique mode"
-        >
-          <Text className="font-sans text-xs text-muted-brown">Skip (default: Technique)</Text>
-        </AnimatedPressable>
+          labelProps={{ className: 'text-muted-brown' }}
+          className="mt-4 self-start"
+        />
       </View>
     </View>
   )

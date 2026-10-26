@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { colors } from '@/src/constants/colors'
 import { getAppPref, setAppPref } from '@/src/db/client'
 import { sessionEntryHref } from '@/src/constants/sessionFlow'
@@ -92,16 +93,16 @@ export default function MoodCheckScreen() {
             )
           })}
         </View>
-        <AnimatedPressable
+        <Button
+          label="Skip"
+          variant="ghost"
+          size="sm"
           haptic="light"
           disabled={busy}
           onPress={() => void commitAndGo(null)}
-          className="mt-5 self-start rounded-lg border border-wood-600/40 bg-wood-700/30 px-4 py-2.5 disabled:opacity-50"
-          accessibilityRole="button"
           accessibilityLabel="Skip mood check"
-        >
-          <Text className="font-sans-medium text-sm text-cream">Skip</Text>
-        </AnimatedPressable>
+          className="mt-5 self-start"
+        />
       </View>
     </View>
   )

@@ -13,7 +13,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { DiscoverPanel } from '@/components/DiscoverPanel'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { getDiscoveryRecommendations } from '@/src/api/discovery'
@@ -376,16 +376,14 @@ export default function DiscoverScreen() {
               thumbColor={followAlong ? colors.cream : colors.wood[600]}
             />
           </View>
-          <AnimatedPressable
-            onPress={() => void listenOnSpotify()}
+          <Button
+            label="Listen on Spotify"
+            icon={<Headphones size={16} color={colors.wood[900]} />}
             haptic="medium"
-            className="mt-4 rounded-lg bg-amber-accent/90 px-5 py-3.5"
-          >
-            <View className="flex-row items-center justify-center gap-2">
-              <Headphones size={16} color={colors.wood[900]} />
-              <Text className="text-center font-sans-medium text-sm text-wood-900">Listen on Spotify</Text>
-            </View>
-          </AnimatedPressable>
+            onPress={() => void listenOnSpotify()}
+            fullWidth
+            className="mt-4"
+          />
           <Text className="mt-2 font-sans text-[11px] text-cream/60">
             This opens Spotify search for the selected song. Harmoniq never starts/stops Spotify playback.
           </Text>

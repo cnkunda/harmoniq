@@ -1,6 +1,15 @@
-import { ActivityIndicator, Text, type TextProps } from 'react-native'
+import type { ReactNode } from 'react'
+import { ActivityIndicator, Text, View, type TextProps } from 'react-native'
 
 import { AnimatedPressable, type AnimatedPressableProps } from '@/components/AnimatedPressable'
+import {
+  BTN_BASE,
+  BTN_DANGER,
+  BTN_GHOST,
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  BTN_SM_BASE,
+} from '@/src/constants/buttonStyles'
 import { colors } from '@/src/constants/colors'
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -10,16 +19,19 @@ export interface ButtonProps extends Omit<AnimatedPressableProps, 'children'> {
   variant?: ButtonVariant
   size?: ButtonSize
   label: string
+  icon?: ReactNode
   loading?: boolean
   labelProps?: TextProps
   fullWidth?: boolean
+  /** Layout classes for the outer wrapper (e.g. flex-1 in a row). */
+  containerClassName?: string
 }
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: 'bg-amber-accent shadow-soft-wood',
-  secondary: 'border border-wood-600 bg-wood-800',
-  ghost: 'border border-wood-600/50 bg-transparent',
-  danger: 'border border-danger/45 bg-wood-900/60',
+  primary: BTN_PRIMARY,
+  secondary: BTN_SECONDARY,
+  ghost: BTN_GHOST,
+  danger: BTN_DANGER,
 }
 
 const VARIANT_TEXT: Record<ButtonVariant, string> = {
@@ -30,9 +42,9 @@ const VARIANT_TEXT: Record<ButtonVariant, string> = {
 }
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
-  sm: 'min-h-[40px] px-4 py-2 rounded-lg',
-  md: 'min-h-[48px] px-6 py-3 rounded-xl',
-  lg: 'min-h-[52px] px-8 py-3.5 rounded-xl',
+  sm: BTN_SM_BASE,
+  md: BTN_BASE,
+  lg: `${BTN_BASE} min-h-[52px] px-8 py-3.5`,
 }
 
 const SIZE_TEXT: Record<ButtonSize, string> = {
@@ -45,35 +57,53 @@ export function Button({
   variant = 'primary',
   size = 'md',
   label,
+  icon,
   loading = false,
   disabled,
   labelProps,
   fullWidth = false,
+  containerClassName,
   className = '',
   ...props
 }: ButtonProps) {
   const isDisabled = Boolean(disabled || loading)
-  const widthClass = fullWidth ? 'w-full self-stretch' : ''
-  return (
+  const showDisabledStyles = Boolean(disabled) && !loading
+  const surfaceClass = showDisabledStyles
+    ? 'border border-transparent bg-wood-700 opacity-60'
+    : `${VARIANT_CLASSES[variant]} ${isDisabled ? 'opacity-90' : 'active:opacity-95'}`
+  const inner = (
     <AnimatedPressable
       {...props}
       disabled={isDisabled}
-      className={`items-center justify-center ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${widthClass} ${isDisabled ? 'opacity-40' : 'active:opacity-95'} ${className}`}
+      className={`${SIZE_CLASSES[size]} ${surfaceClass} ${className}`}
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: loading }}
     >
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? colors.wood[900] : colors.cream} size="small" />
       ) : (
-        <Text
-          {...labelProps}
-          className={`text-center font-sans-medium ${SIZE_TEXT[size]} ${VARIANT_TEXT[variant]} ${labelProps?.className ?? ''}`}
-        >
-          {label}
-        </Text>
+        <>
+          {icon}
+          <Text
+            {...labelProps}
+            className={`text-center font-sans-medium ${SIZE_TEXT[size]} ${
+              showDisabledStyles ? 'text-muted-brown' : VARIANT_TEXT[variant]
+            } ${labelProps?.className ?? ''}`}
+          >
+            {label}
+          </Text>
+        </>
       )}
     </AnimatedPressable>
   )
+
+  if (containerClassName) {
+    return <View className={containerClassName}>{inner}</View>
+  }
+  if (fullWidth) {
+    return <View className="w-full self-stretch">{inner}</View>
+  }
+  return inner
 }
 
 export function PrimaryButton(props: Omit<ButtonProps, 'variant'>) {

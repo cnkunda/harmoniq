@@ -164,6 +164,8 @@ function SlowScreenInner() {
           subtext="Start from the Home tab to add and analyze a song."
         />
       ) : null}
+      {lesson ? (
+        <>
       {playbackLoop ? (
         <View className="rounded-lg border border-wood-600/45 bg-wood-800/40 px-3 py-2">
           <Text className="font-sans text-xs text-cream">
@@ -245,6 +247,8 @@ function SlowScreenInner() {
         visible={noteModalOpen}
         onClose={() => setNoteModalOpen(false)}
       />
+        </>
+      ) : null}
     </SessionStepScreen>
   )
 }

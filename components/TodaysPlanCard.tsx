@@ -1,15 +1,17 @@
-import { RefreshCw } from 'lucide-react-native'
-import { ActivityIndicator, Text, View } from 'react-native'
+import { RefreshCw, RotateCcw } from 'lucide-react-native'
+import { useState } from 'react'
+import { Text, View } from 'react-native'
 import Animated, { FadeInDown } from 'react-native-reanimated'
 
-import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { colors } from '@/src/constants/colors'
 import type { DrillSlotPayload, PracticePlanPayload } from '@/src/types'
 
 function stepLabel(slot: DrillSlotPayload): string {
   if (slot.slot_type === 'free_jam') return 'Free jam'
-  if (slot.slot_type === 'warmup') return 'Warmup'
+  if (slot.slot_type === 'warmup') return 'Warm-up'
   if (slot.slot_type === 'technique') {
     const f = (slot.technique_focus ?? 'technique').replace(/_/g, ' ')
     const capitalized = f.charAt(0).toUpperCase() + f.slice(1)
@@ -110,6 +112,7 @@ export function TodaysPlanCard({
   mode = 'preview',
   onRegenerate,
   regenerateBusy,
+  onReset,
 }: {
   plan: PracticePlanPayload
   sessionMinutes: number
@@ -120,8 +123,23 @@ export function TodaysPlanCard({
   mode?: 'preview' | 'resume'
   onRegenerate?: () => void
   regenerateBusy?: boolean
+  onReset?: () => Promise<void>
 }) {
   const isResume = mode === 'resume'
+  const [resetConfirmVisible, setResetConfirmVisible] = useState(false)
+  const [resetBusy, setResetBusy] = useState(false)
+
+  const handleConfirmReset = async () => {
+    if (!onReset) return
+    setResetBusy(true)
+    try {
+      await onReset()
+    } finally {
+      setResetBusy(false)
+      setResetConfirmVisible(false)
+    }
+  }
+
   return (
     <Animated.View entering={FadeInDown.duration(380).delay(40)}>
       <View className="mb-4 flex-row items-start justify-between gap-3">
@@ -135,24 +153,25 @@ export function TodaysPlanCard({
               : `${plan.slots.length} steps · guided path`}
           </Text>
         </View>
-        {!isResume && onRegenerate ? (
-          <AnimatedPressable
+        {isResume && onReset ? (
+          <Button
+            label="Reset"
+            variant="danger"
+            size="sm"
+            icon={<RotateCcw color={colors.danger} size={14} strokeWidth={2} />}
+            onPress={() => setResetConfirmVisible(true)}
+            accessibilityLabel="Reset this practice session"
+          />
+        ) : !isResume && onRegenerate ? (
+          <Button
+            label={regenerateBusy ? 'Updating…' : 'Regenerate'}
+            variant="secondary"
+            size="sm"
+            loading={regenerateBusy}
+            icon={<RefreshCw color={colors.cream} size={14} strokeWidth={2} />}
             onPress={onRegenerate}
-            disabled={regenerateBusy}
-            haptic="light"
-            className="flex-row items-center gap-1.5 rounded-lg border border-wood-600/60 px-3 py-2 disabled:opacity-50"
-            accessibilityRole="button"
             accessibilityLabel="Regenerate practice plan"
-          >
-            {regenerateBusy ? (
-              <ActivityIndicator color={colors.amber.light} size="small" />
-            ) : (
-              <RefreshCw color={colors.amber.light} size={14} strokeWidth={2} />
-            )}
-            <Text className="font-sans-medium text-xs text-amber-light">
-              {regenerateBusy ? 'Updating…' : 'Regenerate'}
-            </Text>
-          </AnimatedPressable>
+          />
         ) : null}
       </View>
 
@@ -171,19 +190,26 @@ export function TodaysPlanCard({
 
       {errorText ? <Text className="mb-3 font-sans text-sm text-danger">{errorText}</Text> : null}
 
-      <AnimatedPressable
+      <Button
+        label={busy ? (isResume ? 'Resuming…' : 'Starting…') : isResume ? 'Resume session' : 'Start session'}
+        variant="primary"
+        size="lg"
+        loading={busy}
         onPress={onStart}
-        disabled={busy}
-        haptic="medium"
-        className="flex-row items-center justify-center gap-2 self-stretch rounded-xl bg-amber-accent px-8 py-3.5 shadow-md disabled:opacity-50 sm:self-start"
-        accessibilityRole="button"
         accessibilityLabel={isResume ? "Resume today's practice session" : "Start today's practice session"}
-      >
-        {busy ? <ActivityIndicator color={colors.wood[900]} /> : null}
-        <Text className="font-sans-medium text-base text-wood-900">
-          {busy ? (isResume ? 'Resuming…' : 'Starting…') : isResume ? 'Resume session' : 'Start session'}
-        </Text>
-      </AnimatedPressable>
+        containerClassName="self-stretch sm:self-start"
+      />
+
+      <ConfirmDialog
+        visible={resetConfirmVisible}
+        title="Reset this session?"
+        message="This clears the current plan progress and generates a fresh plan. This cannot be undone."
+        confirmLabel="Reset session"
+        destructive
+        busy={resetBusy}
+        onConfirm={() => void handleConfirmReset()}
+        onCancel={() => setResetConfirmVisible(false)}
+      />
     </Animated.View>
   )
 }

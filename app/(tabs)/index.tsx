@@ -1,6 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { useRouter, type Href } from 'expo-router'
 import {
+  Activity,
   ChevronRight,
   Clock,
   Headphones,
@@ -18,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Svg, { Circle as SvgCircle, Line as SvgLine, Polygon as SvgPolygon } from 'react-native-svg'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
-import { PulseEntryCard } from '@/components/pulse/PulseEntryCard'
+import { Pill } from '@/components/Pill'
 import { SettingsSegmented } from '@/components/settings/SettingsSegmented'
 import { WoodGradient } from '@/components/WoodGradient'
 import { RecentProgress } from '@/components/RecentProgress'
@@ -41,11 +42,10 @@ import {
   getLessonByJobId,
   getLickById,
   listLessonsJournal,
-  listPracticePlanCompletions,
   listSessionsJournal,
 } from '@/src/db/client'
 import { PREF_MOOD_CHECK_LAST_MOOD, PREF_SPOTIFY_TASTE_PROFILE_JSON, PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
-import type { HomeSuggestion, LessonListRow, PracticePlanCompletionRow, SessionJournalRow } from '@/src/db/types'
+import type { HomeSuggestion, LessonListRow, SessionJournalRow } from '@/src/db/types'
 import { startDemoSession } from '@/src/demo/startDemoSession'
 import {
   dismissDailyLick,
@@ -55,7 +55,11 @@ import {
   type DailyLick,
 } from '@/src/home/dailyLick'
 import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
-import { resumeActivePracticePlan, startActivePracticePlan } from '@/src/session/activePlanPersistence'
+import {
+  abandonActivePlan,
+  resumeActivePracticePlan,
+  startActivePracticePlan,
+} from '@/src/session/activePlanPersistence'
 import { normalizePracticePlan } from '@/src/session/planNormalization'
 import {
   resumePracticePlanFromHome,
@@ -227,7 +231,6 @@ export default function HomeScreen() {
   const [suggestion, setSuggestion] = useState<HomeSuggestion | null>(null)
   const [sessionsLog, setSessionsLog] = useState<SessionJournalRow[]>([])
   const [lessons, setLessons] = useState<LessonListRow[]>([])
-  const [latestPlanCompletion, setLatestPlanCompletion] = useState<PracticePlanCompletionRow | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [drillLatestError, setDrillLatestError] = useState<string | null>(null)
   const [dailyLick, setDailyLick] = useState<DailyLick | null>(null)
@@ -274,14 +277,12 @@ export default function HomeScreen() {
       getAllSkillNodes(),
       getAppPref(PREF_TASTE_PROFILE_JSON),
       getAppPref(PREF_SPOTIFY_TASTE_PROFILE_JSON),
-      listPracticePlanCompletions(),
       getActivePracticePlanRow(),
     ])
-      .then(async ([homeSuggestion, sessions, lessons, skillRows, tasteRaw, spotifyRaw, planCompletions, activePlanRow]) => {
+      .then(async ([homeSuggestion, sessions, lessons, skillRows, tasteRaw, spotifyRaw, activePlanRow]) => {
         setSuggestion(homeSuggestion)
         setSessionsLog(sessions)
         setLessons(lessons)
-        setLatestPlanCompletion(planCompletions[0] ?? null)
         setLoadError(false)
         setSpotifyLinked(spotifyTasteLooksPresent(spotifyRaw))
 
@@ -303,7 +304,7 @@ export default function HomeScreen() {
           setDailyLickDismissed(true)
         }
 
-        if (activePlanRow) {
+        if (activePlanRow && homePracticeMode === 'plan') {
           const inMemory = usePlanStore.getState().currentPlan
           const activePlan =
             inMemory?.plan_id === activePlanRow.plan_id
@@ -386,7 +387,6 @@ export default function HomeScreen() {
         console.error('[home] refresh failed', e)
         setLoadError(true)
         setSessionsLog([])
-        setLatestPlanCompletion(null)
         setPracticePlanLoading(false)
         setSpotifyLinked(false)
         if (options?.keepPreviewOnError) {
@@ -592,6 +592,22 @@ export default function HomeScreen() {
     void refresh({ keepPreviewOnError: true }).finally(() => setRegenerateBusy(false))
   }, [regenerateBusy, practicePlanMode, refresh])
 
+  const onResetPracticePlan = useCallback(async () => {
+    const planId = usePlanStore.getState().currentPlan?.plan_id ?? practicePlan?.plan_id
+    if (!planId) return
+    setPracticePlanStartError(null)
+    try {
+      await abandonActivePlan(planId)
+      usePlanStore.getState().setHomePreviewPlan(null)
+      setPracticePlan(null)
+      setPracticePlanMode('preview')
+      await refresh()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not reset this session.')
+      throw e
+    }
+  }, [practicePlan?.plan_id, refresh])
+
   const displayedPlanSlotIndex =
     practicePlanMode === 'resume'
       ? Math.min(planSlotIndex, Math.max(0, (practicePlan?.slots.length ?? 1) - 1))
@@ -611,7 +627,7 @@ export default function HomeScreen() {
             <Text className="font-sans text-base text-muted-brown">Ready to play?</Text>
           </View>
 
-          {suggestion != null && suggestion.kind !== 'cold_start' && practicePlanMode !== 'resume' ? (
+          {suggestion != null && suggestion.kind !== 'cold_start' ? (
             <View className="mb-4">
               <SettingsSegmented
                 label="Practice mode"
@@ -656,6 +672,7 @@ export default function HomeScreen() {
                   busy={planStartBusy}
                   errorText={practicePlanStartError}
                   mode="resume"
+                  onReset={onResetPracticePlan}
                 />
               ) : suggestion.kind === 'cold_start' ? (
                 <View className="w-full max-w-md self-center">
@@ -825,7 +842,7 @@ export default function HomeScreen() {
                     accessibilityLabel="Practice latest saved lick"
                   >
                     <Play color={colors.wood[900]} size={20} fill={colors.wood[900]} strokeWidth={0} />
-                    <Text className="font-sans-medium text-base text-wood-900">Start Session</Text>
+                    <Text className="font-sans-medium text-base text-wood-900">Start session</Text>
                   </AnimatedPressable>
                 </>
               ) : (
@@ -887,18 +904,11 @@ export default function HomeScreen() {
                   </Text>
                   <DailyLickFretboard cells={dailyLick.pattern.fretboardCells} caption={dailyLick.pattern.caption} />
                   <View className="flex-row flex-wrap items-center gap-2">
-                    <View className="flex-row items-center gap-2 rounded-full border border-hairline bg-wood-800/55 px-2.5 py-1">
+                    <Pill className="px-2.5 py-1">
                       <DifficultyDots level={dailyLick.pattern.difficulty} />
-                    </View>
+                    </Pill>
                     {dailyLick.pattern.techniqueTags.map((tag) => (
-                      <View
-                        key={tag}
-                        className="rounded-full border border-hairline bg-wood-700/40 px-2.5 py-1"
-                      >
-                        <Text className="font-sans text-xs text-muted-brown">
-                          {tag.replace(/_/g, ' ')}
-                        </Text>
-                      </View>
+                      <Pill key={tag}>{tag.replace(/_/g, ' ')}</Pill>
                     ))}
                   </View>
                 </View>
@@ -928,12 +938,8 @@ export default function HomeScreen() {
 
           {suggestion && suggestion.kind !== 'cold_start' && weakPulseNode ? <WeakAreaPulse node={weakPulseNode} /> : null}
 
-          <PulseEntryCard
-            onPress={() => router.push('/(tabs)/progress/pulse' as Href)}
-          />
-
           <View className="mb-8">
-            <RecentProgress sessions={sessionsLog.slice(0, 5)} lastPlanCompletion={latestPlanCompletion} />
+            <RecentProgress sessions={sessionsLog.slice(0, 5)} />
           </View>
 
           <View className="flex-col gap-8">
@@ -967,25 +973,25 @@ export default function HomeScreen() {
                <View className="flex-row flex-wrap gap-3">
                   <AnimatedPressable
                     onPress={goAnalyze}
-                    className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    className="min-h-[128px] min-w-[148px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
                     accessibilityRole="button"
                     accessibilityLabel="Add a song"
                   >
                     <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
                       <Plus color={colors.amber.light} size={22} strokeWidth={2} />
                     </View>
-                    <Text className="text-center font-sans-medium text-sm text-cream">Add Song</Text>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Add a song</Text>
                   </AnimatedPressable>
                   <AnimatedPressable
                     onPress={goLibrary}
-                    className="min-h-[128px] min-w-[148] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    className="min-h-[128px] min-w-[148px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
                     accessibilityRole="button"
                     accessibilityLabel="Open library"
                   >
                     <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
                       <LibraryIcon color={colors.amber.light} size={22} strokeWidth={2} />
                     </View>
-                    <Text className="text-center font-sans-medium text-sm text-cream">Open Library</Text>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Open library</Text>
                   </AnimatedPressable>
                   <AnimatedPressable
                     onPress={goListening}
@@ -1008,6 +1014,17 @@ export default function HomeScreen() {
                       <Music color={colors.amber.light} size={22} strokeWidth={2} />
                     </View>
                     <Text className="text-center font-sans-medium text-sm text-cream">Scales</Text>
+                  </AnimatedPressable>
+                  <AnimatedPressable
+                    onPress={() => router.push('/(tabs)/progress/pulse' as Href)}
+                    className="min-h-[128px] min-w-[148px] flex-1 items-center justify-center gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 px-4 py-5 active:bg-wood-700/50"
+                    accessibilityRole="button"
+                    accessibilityLabel="Open Chord Pulse"
+                  >
+                    <View className="h-12 w-12 items-center justify-center rounded-full bg-wood-700">
+                      <Activity color={colors.amber.light} size={22} strokeWidth={2} />
+                    </View>
+                    <Text className="text-center font-sans-medium text-sm text-cream">Chord Pulse</Text>
                   </AnimatedPressable>
                 </View>
             </View>

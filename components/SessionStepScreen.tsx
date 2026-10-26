@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { ScrollView, Text, View } from 'react-native'
 
-import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 
 export interface SessionStepScreenProps {
   title: string
@@ -19,7 +19,7 @@ export interface SessionStepScreenProps {
   showNext: boolean
   nextLabel?: string
   onNext: () => void
-  /** Optional NativeWind classes for the fixed footer row (warm-up and other custom steps). */
+  /** Optional NativeWind classes for the fixed footer row. */
   footerContainerClassName?: string
   backButtonClassName?: string
   nextButtonClassName?: string
@@ -42,9 +42,9 @@ export function SessionStepScreen({
   backButtonClassName,
   nextButtonClassName,
 }: SessionStepScreenProps) {
-  const footerRow = footerContainerClassName ?? 'flex-row gap-3 border-t border-wood-600/30 bg-wood-800/60 px-6 pb-8 pt-4'
-  const backClass = backButtonClassName ?? 'flex-1 rounded-xl border border-wood-600/55 bg-wood-700/40 px-6 py-3'
-  const nextClass = nextButtonClassName ?? 'flex-1 rounded-xl bg-amber-accent/90 px-6 py-3'
+  const footerRow =
+    footerContainerClassName ??
+    'flex-row gap-3 border-t border-wood-600/30 bg-wood-800/60 px-6 pb-8 pt-4'
 
   return (
     <View className="flex-1">
@@ -79,26 +79,28 @@ export function SessionStepScreen({
 
       {hideFooter ? null : (
         <View className={footerRow}>
-           {showBack ? (
-             <AnimatedPressable
-               onPress={onBack}
-               className={backClass}
-               accessibilityRole="button"
-             >
-               <Text className="text-center font-sans-medium text-cream">{backLabel}</Text>
-             </AnimatedPressable>
+          {showBack ? (
+            <Button
+              label={backLabel}
+              variant="secondary"
+              onPress={onBack}
+              accessibilityLabel={backLabel}
+              containerClassName="flex-1"
+              className={backButtonClassName ?? ''}
+            />
           ) : (
             <View className="flex-1" />
           )}
-            {showNext ? (
-              <AnimatedPressable
-                onPress={onNext}
-                className={`${nextClass} flex-nowrap items-center`}
-                accessibilityRole="button"
-              >
-                 <Text className="text-center font-sans-medium text-wood-900 whitespace-nowrap">{nextLabel}</Text>
-              </AnimatedPressable>
-           ) : null}
+          {showNext ? (
+            <Button
+              label={nextLabel}
+              variant="primary"
+              onPress={onNext}
+              accessibilityLabel={nextLabel}
+              containerClassName="flex-1"
+              className={nextButtonClassName ?? ''}
+            />
+          ) : null}
         </View>
       )}
     </View>

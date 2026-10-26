@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Text, View } from 'react-native'
 
 import { AnimatedPressable } from './AnimatedPressable'
+import { Pill } from './Pill'
 
 export interface TheoryCardProps {
   chordName: string
@@ -59,9 +60,7 @@ export function TheoryCard({
           <View className="flex-1">
             <View className="flex-row items-center gap-2">
               <Text className="font-serif text-lg text-cream">{chordName}</Text>
-              <View className="rounded-full border border-amber-accent bg-wood-900 px-2 py-0.5">
-                <Text className="font-sans-medium text-[10px] text-amber-light">{romanNumeral}</Text>
-              </View>
+              <Pill variant="accent" size="xs">{romanNumeral}</Pill>
             </View>
             <Text className="font-sans text-xs text-muted-light mt-0.5">{chordFunction}</Text>
           </View>

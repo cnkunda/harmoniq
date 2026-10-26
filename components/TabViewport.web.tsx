@@ -74,7 +74,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
     const textColor = isLight ? 'text-wood-900' : 'text-cream'
     const mutedTextColor = isLight ? 'text-wood-600' : 'text-muted-light'
     const pillBase = isLight ? 'border-wood-600/30 bg-cream-dark/40' : 'border-wood-600/35 bg-transparent'
-    const pillActiveBase = 'border-amber-accent bg-amber-accent/10'
+    const pillActiveBase = 'border-amber-accent bg-amber-accent'
 
     const displayTitle = songTitle || songMeta?.title
     const displayArtist = songArtist || songMeta?.artist
@@ -134,7 +134,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
                   className={`rounded-full border px-2.5 py-1 ${showLyrics ? pillActiveBase : pillBase}`}
                   accessibilityRole="button"
                 >
-                  <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${showLyrics ? 'text-amber-accent' : mutedTextColor}`}>Lyrics</Text>
+                  <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${showLyrics ? 'text-wood-900' : mutedTextColor}`}>Lyrics</Text>
                 </AnimatedPressable>
               )}
               {onSeekToStart && (

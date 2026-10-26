@@ -3,7 +3,7 @@ import { Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
 
-import { AnimatedPressable } from './AnimatedPressable'
+import { Button } from './Button'
 import type { ChordToneStatus } from '@/src/music/noteSelectionDetail'
 import { colors } from '@/src/constants/colors'
 
@@ -111,15 +111,14 @@ export function NoteDetailCard({
             <Text className="font-sans-medium text-[11px] uppercase tracking-wide text-amber-light">Selected note</Text>
           </View>
           {onDismiss ? (
-            <AnimatedPressable
+            <Button
+              label="Done"
+              variant="secondary"
+              size="sm"
               haptic="light"
               onPress={handleDismiss}
-              className="rounded-lg border border-wood-600 bg-wood-900 px-2.5 py-1.5"
-              accessibilityRole="button"
               accessibilityLabel="Dismiss note detail"
-            >
-              <Text className="font-sans text-xs text-cream">Done</Text>
-            </AnimatedPressable>
+            />
           ) : null}
         </View>
 
@@ -167,26 +166,24 @@ export function NoteDetailCard({
         {onReportIncorrect || onCorrectNote ? (
           <View className="mt-4 flex-row flex-wrap gap-2">
             {onCorrectNote ? (
-              <AnimatedPressable
+              <Button
+                label="Correct note"
+                variant="secondary"
+                size="sm"
                 haptic="light"
                 onPress={onCorrectNote}
-                className="rounded-full border border-amber-accent/60 bg-amber-accent/10 px-3 py-2"
-                accessibilityRole="button"
                 accessibilityLabel="Correct this note"
-              >
-                <Text className="font-sans-medium text-xs text-amber-light">Correct note</Text>
-              </AnimatedPressable>
+              />
             ) : null}
             {onReportIncorrect ? (
-              <AnimatedPressable
+              <Button
+                label="Report incorrect"
+                variant="danger"
+                size="sm"
                 haptic="light"
                 onPress={onReportIncorrect}
-                className="rounded-full border border-danger/45 bg-danger/10 px-3 py-2"
-                accessibilityRole="button"
                 accessibilityLabel="Report this note as incorrect"
-              >
-                <Text className="font-sans-medium text-xs text-danger">Report incorrect</Text>
-              </AnimatedPressable>
+              />
             ) : null}
           </View>
         ) : null}

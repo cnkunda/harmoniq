@@ -1,6 +1,14 @@
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { Text, View } from 'react-native'
 
+import {
+  CHOICE_CHIP_BASE,
+  CHOICE_CHIP_OFF,
+  CHOICE_CHIP_ON,
+  CHOICE_LABEL_SANS_OFF,
+  CHOICE_LABEL_SANS_ON,
+} from '@/src/constants/uiTokens'
+
 interface SettingsChipsProps {
   label: string
   description?: string
@@ -24,19 +32,11 @@ export function SettingsChips({ label, description, options, value, onValueChang
               key={option}
               onPress={() => onValueChange(option)}
               haptic="light"
-              className={`rounded-full border px-3 py-1.5 ${
-                isSelected
-                  ? 'border-amber-accent bg-amber-accent/20'
-                  : 'border-wood-600/50 bg-wood-900/40'
-              }`}
+              className={`${CHOICE_CHIP_BASE} ${isSelected ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF}`}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
             >
-              <Text
-                className={`font-sans text-xs capitalize ${
-                  isSelected ? 'text-amber-light' : 'text-cream'
-                }`}
-              >
+              <Text className={`capitalize ${isSelected ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}`}>
                 {option}
               </Text>
             </AnimatedPressable>

@@ -1,7 +1,11 @@
 import { usePathname, useRouter } from 'expo-router'
 import { ArrowRight, X } from 'lucide-react-native'
-import { Alert, Text, View } from 'react-native'
+import { useState } from 'react'
+import { Text, View } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { Pill } from '@/components/Pill'
 import { toast } from '@/components/ToastConfig'
 
 import { colors } from '@/src/constants/colors'
@@ -11,6 +15,7 @@ import { abandonActivePlan } from '@/src/session/activePlanPersistence'
 import { completePracticePlanSlot } from '@/src/session/planProgress'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
+import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 
 const BRAND_MIN = 80
 const ACTION_MIN = 80
@@ -22,12 +27,15 @@ const ACTION_MIN = 80
 export function SessionChromeBar() {
   const pathname = usePathname()
   const router = useRouter()
-  const plan = usePlanStore((s) => s.currentPlan)
+  const storePlan = usePlanStore((s) => s.currentPlan)
+  const homePracticeMode = useSessionPrefsStore((s) => s.homePracticeMode)
+  const plan = homePracticeMode === 'plan' ? storePlan : null
   const idx = usePlanStore((s) => s.currentSlotIndex)
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const lessonJobId = useLessonStore((s) => s.lesson?.job_id)
   const isDemoLesson = lessonJobId === DEMO_LESSON_JOB_ID
+  const [confirmAction, setConfirmAction] = useState<'leave' | 'end' | null>(null)
 
   if (!pathname.includes('/session/')) return null
 
@@ -46,23 +54,20 @@ export function SessionChromeBar() {
   }
 
   const handleClose = () => {
-    console.log('[SessionChromeBar] handleClose called, active=', active)
     if (active >= 2) {
-      Alert.alert(
-        'Leave lesson?',
-        'Your progress in this lesson will be saved.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Leave', style: 'destructive', onPress: () => {
-            console.log('[SessionChromeBar] Leave pressed')
-            closeSessionOrHome()
-          } },
-        ]
-      )
+      setConfirmAction('leave')
     } else {
-      console.log('[SessionChromeBar] closeSessionOrHome called directly')
       closeSessionOrHome()
     }
+  }
+
+  const handleConfirmAction = () => {
+    if (confirmAction === 'leave') {
+      closeSessionOrHome()
+    } else if (confirmAction === 'end' && plan) {
+      void abandonActivePlan(plan.plan_id).then(closeSessionOrHome)
+    }
+    setConfirmAction(null)
   }
   const slot = plan?.slots?.[idx]
   const slots = plan?.slots
@@ -94,9 +99,9 @@ export function SessionChromeBar() {
               <Text className="font-serif text-lg text-cream">Harmoniq</Text>
             </AnimatedPressable>
             {isDemoLesson ? (
-              <View className="rounded-full border border-amber-accent/50 bg-amber-accent/10 px-2 py-0.5">
-                <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-amber-accent">Demo</Text>
-              </View>
+              <Pill variant="accent" size="xs" textClassName="uppercase tracking-wider">
+                Demo
+              </Pill>
             ) : null}
           </View>
         </View>
@@ -132,46 +137,43 @@ export function SessionChromeBar() {
                 <X color={colors.cream} size={20} strokeWidth={2} />
               </AnimatedPressable>
               {hasPlan && hasNext && !onReviewScreen ? (
-                <AnimatedPressable
+                <Button
+                  label="Next section"
+                  variant="ghost"
+                  size="sm"
                   haptic="light"
                   onPress={goNextSection}
-                  accessibilityRole="button"
                   accessibilityLabel="Go to next section in practice plan"
-                  hitSlop={10}
-                  className="flex-row items-center gap-0.5"
-                >
-                  <Text className="font-sans-medium text-xs text-muted-brown">Next section</Text>
-                  <ArrowRight color={colors.muted.brown} size={14} style={{ marginTop: 2 }} />
-                </AnimatedPressable>
+                  icon={<ArrowRight color={colors.cream} size={14} strokeWidth={2} />}
+                  className="px-2"
+                />
               ) : null}
             </View>
           ) : (
             <View className="flex-row items-center gap-2">
               {hasPlan ? (
                 onReviewScreen ? null : hasNext ? (
-                  <AnimatedPressable
+                  <Button
+                    label="Next section"
+                    variant="ghost"
+                    size="sm"
                     haptic="light"
                     onPress={goNextSection}
-                    accessibilityRole="button"
                     accessibilityLabel="Go to next section in practice plan"
-                    hitSlop={10}
-                    className="flex-row items-center gap-0.5"
-                  >
-                    <Text className="font-sans-medium text-sm text-cream">Next section</Text>
-                    <ArrowRight color={colors.cream} size={16} style={{ marginTop: 2 }} />
-                  </AnimatedPressable>
+                    icon={<ArrowRight color={colors.cream} size={14} strokeWidth={2} />}
+                    className="px-2"
+                  />
                 ) : (
-                  <AnimatedPressable
+                  <Button
+                    label="End plan"
+                    variant="ghost"
+                    size="sm"
                     haptic="light"
-                    onPress={() => {
-                      if (plan) void abandonActivePlan(plan.plan_id)
-                    }}
-                    accessibilityRole="button"
+                    onPress={() => setConfirmAction('end')}
                     accessibilityLabel="End practice plan"
-                    hitSlop={10}
-                  >
-                    <Text className="font-sans-medium text-sm text-cream text-right">End plan</Text>
-                  </AnimatedPressable>
+                    labelProps={{ className: 'text-danger' }}
+                    className="px-2"
+                  />
                 )
               ) : null}
                <AnimatedPressable
@@ -194,6 +196,20 @@ export function SessionChromeBar() {
           Plan · {idx + 1}/{slots.length}: {slot?.title ?? '—'}
         </Text>
       ) : null}
+
+      <ConfirmDialog
+        visible={confirmAction != null}
+        title={confirmAction === 'end' ? 'End this practice plan?' : 'Leave this lesson?'}
+        message={
+          confirmAction === 'end'
+            ? 'The active plan will be cleared and you will return home. Completed results stay in your history.'
+            : 'Your progress in this lesson is saved.'
+        }
+        confirmLabel={confirmAction === 'end' ? 'End plan' : 'Leave'}
+        destructive
+        onConfirm={handleConfirmAction}
+        onCancel={() => setConfirmAction(null)}
+      />
     </View>
   )
 }

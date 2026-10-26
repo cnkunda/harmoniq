@@ -2,6 +2,7 @@ import { Modal, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { NoteDetailCard } from '@/components/NoteDetailCard'
+import { Pill } from '@/components/Pill'
 import type { NoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 
 type SessionNoteDetailModalProps = {
@@ -41,11 +42,11 @@ export function SessionNoteDetailModal({
             <View className="w-full max-w-lg self-center rounded-3xl border border-wood-600/70 bg-wood-900 p-4">
               {currentChordVoicing ? (
                 <View className="mb-3 flex-row items-center gap-3">
-                  <View className="rounded-full border border-wood-600/50 px-2.5 py-1">
+                  <Pill variant="neutral" size="xs" className="px-2.5 py-1">
                     <Text className="font-mono text-[10px] text-amber-accent/70">
                       {currentChordVoicing}
                     </Text>
-                  </View>
+                  </Pill>
                 </View>
               ) : null}
               <NoteDetailCard

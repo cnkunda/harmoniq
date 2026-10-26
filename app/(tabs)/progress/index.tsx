@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { CoachNote } from '@/components/CoachNote'
 import { EmptyState } from '@/components/EmptyState'
 import { LearnerContextCard } from '@/components/LearnerContextCard'
+import { Pill } from '@/components/Pill'
 import { PulseEntryCard } from '@/components/pulse/PulseEntryCard'
 import { RiffDNA } from '@/components/RiffDNA'
 import { SkillGraph } from '@/components/SkillGraph'
@@ -146,9 +147,7 @@ export default function ProgressScreen() {
                           className="rounded-xl border border-wood-700/50 bg-wood-800/40 p-5 transition-colors"
                         >
                           <View className="mb-2 flex-row flex-wrap items-center gap-2">
-                            <Text className="rounded-full bg-amber-accent/15 px-2.5 py-0.5 font-sans-medium text-[11px] text-amber-light">
-                              Review
-                            </Text>
+                            <Pill variant="accent" size="xs">Review</Pill>
                           </View>
                           <View className="mb-3 flex-row items-start justify-between">
                             <View className="flex-1 pr-3">
@@ -197,9 +196,7 @@ export default function ProgressScreen() {
                           className="rounded-xl border border-wood-700/50 bg-wood-800/40 p-5 transition-colors"
                         >
                           <View className="mb-2 flex-row flex-wrap items-center gap-2">
-                            <Text className="rounded-full bg-cream/10 px-2.5 py-0.5 font-sans-medium text-[11px] text-cream/90">
-                              Jam
-                            </Text>
+                            <Pill variant="neutral" size="xs" textClassName="text-cream">Jam</Pill>
                           </View>
                           <View className="mb-3 flex-row items-start justify-between">
                             <View className="flex-1 pr-3">
@@ -271,9 +268,7 @@ export default function ProgressScreen() {
                         className="rounded-xl border border-wood-700/50 bg-wood-800/40 p-5 transition-colors"
                       >
                         <View className="mb-2 flex-row flex-wrap items-center gap-2">
-                          <Text className="rounded-full bg-amber-accent/25 px-2.5 py-0.5 font-sans-medium text-[11px] text-wood-900">
-                            Plan
-                          </Text>
+                          <Pill variant="accent" size="xs">Plan</Pill>
                         </View>
                         <View className="mb-3 flex-row items-start justify-between">
                           <View className="flex-1 pr-3">

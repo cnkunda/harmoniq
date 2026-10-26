@@ -3,6 +3,7 @@ import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, u
 import { Text, View } from 'react-native'
 
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
+import { Pill } from '@/components/Pill'
 import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptureTypes'
 import { TabViewport } from '@/components/TabViewport'
 import { useResolvedSoundFontProfile } from '@/src/audio/useResolvedSoundFontProfile'
@@ -317,13 +318,13 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
       {showScore ? (
         <View className={tabFrameClassName}>
           {scoreUpdating ? (
-            <View
-              pointerEvents="none"
-              accessibilityLiveRegion="polite"
-              className="absolute left-3 top-3 z-10 rounded-full border border-wood-600/40 bg-wood-900/85 px-2.5 py-1"
+            <Pill
+              variant="neutral"
+              size="xs"
+              className="absolute left-3 top-3 z-10 px-2.5 py-1"
             >
               <Text className="font-mono text-[10px] text-amber-accent">Updating score…</Text>
-            </View>
+            </Pill>
           ) : null}
           <TabViewport
             ref={tabRef}

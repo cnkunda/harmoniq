@@ -13,6 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { AudioDropzone } from '@/components/AudioDropzone'
+import { Button } from '@/components/Button'
+import { Pill } from '@/components/Pill'
 import { ChordChartPreview } from '@/components/ChordChartPreview'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { TabViewport } from '@/components/TabViewport'
@@ -28,7 +30,13 @@ import {
 } from '@/src/api/analyze'
 import { getRevealPhase, shouldShowPreview, type RevealPhase } from '@/src/addSong/progressiveReveal'
 import { searchTabs, type TabSearchHit } from '@/src/api/tabs'
-import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
+import {
+  CHOICE_CHIP_BASE,
+  CHOICE_CHIP_OFF,
+  CHOICE_CHIP_ON,
+  CHOICE_LABEL_SANS_OFF,
+  CHOICE_LABEL_SANS_ON,
+} from '@/src/constants/uiTokens'
 import { colors } from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import { getAppPref } from '@/src/db/client'
@@ -363,11 +371,9 @@ export default function AddSongScreen() {
                   return (
                     <View key={opt.id} className={isSearch ? 'items-center' : undefined}>
                       {isSearch ? (
-                        <View className="mb-1 rounded-full bg-wood-700 px-2 py-0.5">
-                          <Text className="font-sans-medium text-[10px] uppercase tracking-wide text-amber-light">
-                            Preview
-                          </Text>
-                        </View>
+                        <Pill variant="neutral" size="xs" textClassName="uppercase tracking-wide" className="mb-1">
+                          Preview
+                        </Pill>
                       ) : null}
                       <AnimatedPressable haptic="none"
                         onPress={() => setImportTab(opt.id)}
@@ -375,11 +381,9 @@ export default function AddSongScreen() {
                         accessibilityRole="tab"
                         accessibilityState={{ selected, disabled: pillsDisabled }}
                         accessibilityLabel={isSearch ? `${opt.label}, preview catalog` : opt.label}
-                        className={`min-h-[44px] justify-center rounded-full px-5 ${selected ? 'bg-amber-accent/12 border border-amber-accent/25' : 'border border-wood-600/70 bg-wood-900/30'} ${pillsDisabled ? 'opacity-50' : ''}`}
+                        className={`${CHOICE_CHIP_BASE} ${selected ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} ${pillsDisabled ? 'opacity-50' : ''}`}
                       >
-                        <Text
-                          className={`text-center font-sans-medium text-sm ${selected ? 'text-amber-accent' : 'text-muted-brown'}`}
-                        >
+                        <Text className={selected ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>
                           {opt.label}
                         </Text>
                       </AnimatedPressable>
@@ -410,7 +414,10 @@ export default function AddSongScreen() {
                         <Text className="font-sans-medium text-cream">{pendingUploadFilename}</Text>
                       </Text>
                     ) : null}
-                    <AnimatedPressable haptic="light"
+                    <Button
+                      label="Analyze file"
+                      icon={<Upload size={18} color={canAnalyzePendingFile ? colors.wood[900] : colors.muted.brown} />}
+                      haptic="light"
                       onPress={() => {
                         if (!pendingUploadFile || uiState === 'analyzing') return
                         void runAnalyze({
@@ -419,21 +426,9 @@ export default function AddSongScreen() {
                         })
                       }}
                       disabled={!canAnalyzePendingFile}
-                      className={`min-h-[52px] justify-center rounded-xl px-5 py-3 ${canAnalyzePendingFile ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
-                      accessibilityRole="button"
+                      fullWidth
                       accessibilityLabel="Analyze selected audio file"
-                    >
-                      <View className="flex-row items-center justify-center gap-2">
-                        {canAnalyzePendingFile ? (
-                          <Upload size={18} color={colors.wood[900]} />
-                        ) : null}
-                        <Text
-                          className={`text-center font-sans-medium text-base ${canAnalyzePendingFile ? 'text-wood-900' : ''}`}
-                        >
-                          Analyze file
-                        </Text>
-                      </View>
-                    </AnimatedPressable>
+                    />
                   </View>
                 ) : null}
 
@@ -456,24 +451,15 @@ export default function AddSongScreen() {
                       editable={uiState !== 'analyzing'}
                       className="min-h-[48px] rounded-xl border border-wood-500/80 bg-wood-900/40 px-4 py-3 font-sans text-sm text-cream"
                     />
-                    <AnimatedPressable haptic="light"
+                    <Button
+                      label="Analyze URL"
+                      icon={<Music size={18} color={canStartFromUrl ? colors.wood[900] : colors.muted.brown} />}
+                      haptic="light"
                       onPress={() => void runAnalyze({ youtube_url: url.trim() })}
                       disabled={!canStartFromUrl}
-                      className={`min-h-[52px] justify-center rounded-xl px-5 py-3 ${canStartFromUrl ? 'bg-amber-accent' : DISABLED_BTN_CLASS}`}
-                      accessibilityRole="button"
+                      fullWidth
                       accessibilityLabel="Analyze YouTube URL"
-                    >
-                      <View className="flex-row items-center justify-center gap-2">
-                        {canStartFromUrl ? (
-                          <Music size={18} color={colors.wood[900]} />
-                        ) : null}
-                        <Text
-                          className={`text-center font-sans-medium text-base ${canStartFromUrl ? 'text-wood-900' : ''}`}
-                        >
-                          Analyze URL
-                        </Text>
-                      </View>
-                    </AnimatedPressable>
+                    />
                   </View>
                 ) : null}
 

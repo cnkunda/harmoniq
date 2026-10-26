@@ -12,6 +12,13 @@ import { ApiError, submitExportJob } from '@/src/api/analyze'
 import { colors } from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import {
+  CHOICE_CHIP_BASE,
+  CHOICE_CHIP_OFF,
+  CHOICE_CHIP_ON,
+  CHOICE_LABEL_SANS_OFF,
+  CHOICE_LABEL_SANS_ON,
+} from '@/src/constants/uiTokens'
+import {
     clearAllPracticeData,
     deleteLessonByJobId,
     deleteLickById,
@@ -333,38 +340,40 @@ export default function LibraryScreen() {
               </Text>
             </View>
 
-            <View className="mb-6 flex-row rounded-2xl border border-wood-600/50 bg-transparent p-1.5 shadow-sm shadow-black/20">
+            <View className="mb-6 flex-row rounded-full border border-wood-600/50 bg-wood-900/40 p-1">
               <View className="flex-1">
-                <AnimatedPressable haptic="light"
+                <AnimatedPressable
+                  haptic="light"
                   onPress={() => setLibraryTab('lessons')}
-                  className={`rounded-xl py-2.5 ${
-                    libraryTab === 'lessons'
-                      ? 'bg-amber-light shadow-inner-wood'
-                      : 'bg-transparent'
+                  className={`rounded-full py-2.5 ${
+                    libraryTab === 'lessons' ? 'bg-amber-accent' : ''
                   }`}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: libraryTab === 'lessons' }}
                 >
                   <Text
-                    className={`text-center font-sans-medium text-sm ${libraryTab === 'lessons' ? 'text-wood-900' : 'text-muted-brown'}`}
+                    className={`text-center font-sans-medium text-sm ${
+                      libraryTab === 'lessons' ? 'text-wood-900' : 'text-muted-brown'
+                    }`}
                   >
                     Songs
                   </Text>
                 </AnimatedPressable>
               </View>
               <View className="flex-1">
-                <AnimatedPressable haptic="light"
+                <AnimatedPressable
+                  haptic="light"
                   onPress={() => setLibraryTab('licks')}
-                  className={`rounded-xl py-2.5 ${
-                    libraryTab === 'licks'
-                      ? 'bg-amber-light shadow-inner-wood'
-                      : 'bg-transparent'
+                  className={`rounded-full py-2.5 ${
+                    libraryTab === 'licks' ? 'bg-amber-accent' : ''
                   }`}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: libraryTab === 'licks' }}
                 >
                   <Text
-                    className={`text-center font-sans-medium text-sm ${libraryTab === 'licks' ? 'text-wood-900' : 'text-muted-brown'}`}
+                    className={`text-center font-sans-medium text-sm ${
+                      libraryTab === 'licks' ? 'text-wood-900' : 'text-muted-brown'
+                    }`}
                   >
                     Licks
                   </Text>
@@ -405,14 +414,15 @@ export default function LibraryScreen() {
                 <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wide text-amber-light">Song filter</Text>
                 <View className="mb-4 flex-row flex-wrap gap-2">
                   {songOptions.map((s) => (
-                    <AnimatedPressable haptic="light"
+                    <AnimatedPressable
+                      haptic="light"
                       key={`song-${s}`}
                       onPress={() => setSongFilter(s)}
-                      className={`rounded-full border px-3 py-1.5 ${
-                        songFilter === s ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/45 bg-cream-dark/35'
-                      }`}
+                      className={`${CHOICE_CHIP_BASE} ${songFilter === s ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: songFilter === s }}
                     >
-                      <Text className={`font-sans text-xs ${songFilter === s ? 'text-wood-900' : 'text-muted-brown'}`}>
+                      <Text className={songFilter === s ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>
                         {s === 'all' ? 'All songs' : s}
                       </Text>
                     </AnimatedPressable>
@@ -424,16 +434,15 @@ export default function LibraryScreen() {
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
                   {techniqueOptions.map((t) => (
-                    <AnimatedPressable haptic="light"
+                    <AnimatedPressable
+                      haptic="light"
                       key={`tech-${t}`}
                       onPress={() => setTechniqueFilter(t)}
-                      className={`rounded-full border px-3 py-1.5 ${
-                        techniqueFilter === t
-                          ? 'border-amber-accent bg-amber-accent/20'
-                          : 'border-wood-600/45 bg-cream-dark/35'
-                      }`}
+                      className={`${CHOICE_CHIP_BASE} ${techniqueFilter === t ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: techniqueFilter === t }}
                     >
-                      <Text className={`font-sans text-xs ${techniqueFilter === t ? 'text-wood-900' : 'text-muted-brown'}`}>
+                      <Text className={techniqueFilter === t ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}>
                         {t === 'all' ? 'All techniques' : t}
                       </Text>
                     </AnimatedPressable>
@@ -554,7 +563,8 @@ export default function LibraryScreen() {
                       {[-2, -1, 0, 1, 2].map((n) => {
                         const selected = (transposeById[lick.id] ?? 0) === n
                         return (
-                          <AnimatedPressable haptic="light"
+                          <AnimatedPressable
+                            haptic="light"
                             key={`${lick.id}-tp-${n}`}
                             onPress={() =>
                               setTransposeById((prev) => ({
@@ -562,9 +572,11 @@ export default function LibraryScreen() {
                                 [lick.id]: n,
                               }))
                             }
-                            className={`rounded-full border px-2.5 py-1 ${
-                              selected ? 'border-amber-accent bg-amber-accent/25' : 'border-wood-600/45 bg-cream-dark/35'
+                            className={`${CHOICE_CHIP_BASE} px-2.5 py-1 ${
+                              selected ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF
                             }`}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected }}
                           >
                             <Text className={`font-mono text-[11px] ${selected ? 'text-wood-900' : 'text-muted-brown'}`}>
                               {n > 0 ? `+${n}` : n}

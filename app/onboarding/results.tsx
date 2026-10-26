@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 import { toast } from '@/components/ToastConfig'
@@ -190,15 +191,13 @@ export default function OnboardingResultsScreen() {
             Complete the three placement phrases to see your skill baseline, coach note, and song
             recommendations on this screen.
           </Text>
-          <AnimatedPressable
+          <Button
+            label="Start placement phrases"
             haptic="light"
             onPress={() => router.replace('/onboarding/phrase/0')}
-            className="mt-4 rounded-xl bg-amber-accent px-8 py-3.5"
-            accessibilityRole="button"
             accessibilityLabel="Start placement phrases"
-          >
-            <Text className="font-sans-medium text-wood-900">Start placement phrases</Text>
-          </AnimatedPressable>
+            className="mt-4"
+          />
         </View>
       </OnboardingScreenShell>
     )
@@ -323,56 +322,51 @@ export default function OnboardingResultsScreen() {
         <View className="mt-8 gap-3">
           {analysisState === 'idle' && (
             <>
-              <AnimatedPressable haptic="light"
+              <Button
+                label="Analyze & start session"
+                haptic="light"
                 onPress={analyzeAndContinue}
                 disabled={suggestions.length === 0}
-                className="w-full rounded-xl bg-amber-accent px-4 py-3 disabled:opacity-50"
-                accessibilityRole="button"
                 accessibilityLabel="Analyze selected songs and start session"
-              >
-                <Text className="text-center font-sans-medium text-wood-900">
-                  Analyze &amp; start session
-                </Text>
-              </AnimatedPressable>
-              <AnimatedPressable haptic="light"
+                fullWidth
+              />
+              <Button
+                label="Skip for now"
+                variant="secondary"
+                haptic="light"
                 onPress={startSession}
-                className="w-full rounded-xl border border-wood-600/50 px-4 py-3"
-                accessibilityRole="button"
                 accessibilityLabel="Skip song analysis and go to home"
-              >
-                <Text className="text-center font-sans-medium text-cream">Skip for now</Text>
-              </AnimatedPressable>
+                fullWidth
+              />
             </>
           )}
 
           {analysisState === 'done' && (
-            <AnimatedPressable haptic="light"
+            <Button
+              label="Enter Harmoniq"
+              haptic="light"
               onPress={finish}
-              className="w-full rounded-xl bg-amber-accent px-4 py-3"
-              accessibilityRole="button"
               accessibilityLabel="Go to home"
-            >
-              <Text className="text-center font-sans-medium text-wood-900">Enter Harmoniq</Text>
-            </AnimatedPressable>
+              fullWidth
+            />
           )}
 
           {analysisState === 'error' && (
             <>
-              <AnimatedPressable haptic="light"
+              <Button
+                label="Enter Harmoniq"
+                haptic="light"
                 onPress={finish}
-                className="w-full rounded-xl bg-amber-accent px-4 py-3"
-                accessibilityRole="button"
                 accessibilityLabel="Go to home"
-              >
-                <Text className="text-center font-sans-medium text-wood-900">Enter Harmoniq</Text>
-              </AnimatedPressable>
-              <AnimatedPressable haptic="light"
+                fullWidth
+              />
+              <Button
+                label="Try again"
+                variant="secondary"
+                haptic="light"
                 onPress={() => setAnalysisState('idle')}
-                className="w-full rounded-xl border border-wood-600/50 px-4 py-3"
-                accessibilityRole="button"
-              >
-                <Text className="text-center font-sans-medium text-cream">Try again</Text>
-              </AnimatedPressable>
+                fullWidth
+              />
             </>
           )}
         </View>

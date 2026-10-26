@@ -35,3 +35,22 @@ export const DISABLED_OPACITY = 'opacity-50'
 /** Standard card shell for session playback surfaces. */
 export const SESSION_CARD_CLASS =
   'rounded-xl border border-wood-600/40 bg-cream-dark/45 px-3.5 py-3'
+
+/**
+ * Non-interactive pill tokens (status labels, tags, metadata).
+ * Interactive choice chips live above as `CHOICE_CHIP_*`.
+ */
+export const PILL_BASE = 'flex-row items-center gap-1.5 rounded-full border px-2.5 py-1'
+export const PILL_NEUTRAL = 'border-hairline bg-wood-800/55'
+export const PILL_ACCENT = 'border-amber-accent/45 bg-amber-accent/15'
+export const PILL_SUCCESS = 'border-success/45 bg-success/15'
+export const PILL_DANGER = 'border-danger/45 bg-danger/10'
+export const PILL_LIGHT = 'border-wood-600/30 bg-cream-dark/50'
+
+export const PILL_LABEL = 'font-sans-medium text-[11px]'
+export const PILL_LABEL_XS = 'font-sans-medium text-[10px]'
+export const PILL_TEXT_NEUTRAL = 'text-muted-brown'
+export const PILL_TEXT_ACCENT = 'text-amber-light'
+export const PILL_TEXT_SUCCESS = 'text-success'
+export const PILL_TEXT_DANGER = 'text-danger'
+export const PILL_TEXT_LIGHT = 'text-wood-900'

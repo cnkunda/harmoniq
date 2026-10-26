@@ -9,6 +9,7 @@ import { AccuracyTrendChart } from '@/components/pulse/AccuracyTrendChart'
 import { ChordMasteryHeatmap } from '@/components/pulse/ChordMasteryHeatmap'
 import { PulseStage } from '@/components/pulse/PulseStage'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { toast } from '@/components/ToastConfig'
 import { WoodGradient } from '@/components/WoodGradient'
 import { colors } from '@/src/constants/colors'
@@ -142,15 +143,15 @@ export default function PulseScreen() {
               <View className="rounded-2xl border border-danger/40 bg-danger/10 px-6 py-6">
                 <Text className="font-serif text-xl text-cream">Chord Pulse could not load</Text>
                 <Text className="mt-2 font-sans text-sm leading-6 text-muted-light">{loadError}</Text>
-                <AnimatedPressable
-                  onPress={refresh}
+                <Button
+                  label="Try again"
+                  variant="secondary"
+                  size="sm"
                   haptic="light"
-                  accessibilityRole="button"
+                  onPress={refresh}
                   accessibilityLabel="Retry loading Chord Pulse"
-                  className="mt-4 self-start rounded-full border border-amber-accent/50 bg-amber-accent/15 px-4 py-2"
-                >
-                  <Text className="font-sans-medium text-sm text-amber-light">Try again</Text>
-                </AnimatedPressable>
+                  className="mt-4 self-start"
+                />
               </View>
             ) : (
               <>

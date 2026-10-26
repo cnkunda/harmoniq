@@ -9,7 +9,8 @@ import {
   useSharedValue,
 } from 'react-native-reanimated'
 
-import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
+import { Pill } from '@/components/Pill'
 import { FallingNotesVisualizer } from '@/components/pulse/FallingNotesVisualizer'
 import { PulseChordTimeline } from '@/components/pulse/PulseChordTimeline'
 import { PulseRing } from '@/components/pulse/PulseRing'
@@ -107,15 +108,15 @@ export function PulseStage({ stage, trackTitle, isDemoPreview = false, onPreview
           notes and ring animate from that real transcript.
         </Text>
         {onPreviewDemo ? (
-          <AnimatedPressable
-            onPress={onPreviewDemo}
+          <Button
+            label="Preview with demo"
+            variant="secondary"
+            size="sm"
             haptic="light"
-            accessibilityRole="button"
+            onPress={onPreviewDemo}
             accessibilityLabel="Preview Chord Pulse with the demo lesson"
-            className="mt-5 self-start rounded-full border border-amber-accent/50 bg-amber-accent/15 px-4 py-2 active:bg-amber-accent/25"
-          >
-            <Text className="font-sans-medium text-sm text-amber-light">Preview with demo</Text>
-          </AnimatedPressable>
+            className="mt-5 self-start"
+          />
         ) : null}
       </View>
     )
@@ -132,9 +133,9 @@ export function PulseStage({ stage, trackTitle, isDemoPreview = false, onPreview
             {trackTitle?.trim() || 'Latest practice'}
           </Text>
           {isDemoPreview ? (
-            <Text className="rounded-full bg-amber-accent/15 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-amber-light">
+            <Pill variant="accent" size="xs" textClassName="font-mono uppercase tracking-wider">
               Demo
-            </Text>
+            </Pill>
           ) : null}
         </View>
         <Text className="font-mono text-[10px] text-muted-light/70">

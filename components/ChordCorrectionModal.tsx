@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal, ScrollView, View, Text } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { ChordDiagram } from '@/components/ChordDiagram'
 import {
   CHOICE_CHIP_BASE,
@@ -144,39 +145,27 @@ export function ChordCorrectionModal({
             {/* Actions */}
             <View className="flex-row flex-wrap items-center justify-end gap-2">
               {onMarkWrong ? (
-                <AnimatedPressable
-                  onPress={handleMarkWrong}
+                <Button
+                  label="Report incorrect"
+                  variant="danger"
+                  size="sm"
                   haptic="light"
-                  className="rounded-full border border-danger/45 bg-danger/10 px-4 py-2"
-                  accessibilityRole="button"
+                  onPress={handleMarkWrong}
                   accessibilityLabel="Report this chord as incorrect"
-                >
-                  <Text className="font-sans-medium text-sm text-danger">Report incorrect</Text>
-                </AnimatedPressable>
+                />
               ) : null}
-              <AnimatedPressable
+              <Button
+                label="Cancel"
+                variant="secondary"
+                size="sm"
                 onPress={onClose}
-                className="rounded-full border border-wood-600/40 bg-wood-900/10 px-4 py-2"
-              >
-                <Text className="font-sans-medium text-sm text-muted-brown">Cancel</Text>
-              </AnimatedPressable>
-              <AnimatedPressable
+              />
+              <Button
+                label="Confirm"
+                size="sm"
                 onPress={handleConfirm}
                 disabled={selected === currentChord}
-                className={`rounded-full border px-4 py-2 ${
-                  selected === currentChord
-                    ? 'border-wood-600/40 bg-wood-900/10 opacity-50'
-                    : 'border-amber-accent bg-amber-accent'
-                }`}
-              >
-                <Text
-                  className={`font-sans-medium text-sm ${
-                    selected === currentChord ? 'text-muted-brown' : 'text-wood-900'
-                  }`}
-                >
-                  Confirm
-                </Text>
-              </AnimatedPressable>
+              />
             </View>
           </View>
         </View>

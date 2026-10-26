@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { CorrectionHistoryPanel } from '@/components/CorrectionHistoryPanel'
 import { ChordDiagram } from '@/components/ChordDiagram'
 import { ChordPositionSelector } from '@/components/ChordPositionSelector'
@@ -663,46 +664,47 @@ export default function ReviewScreen() {
       ) : null}
 
       <View className="mt-3 flex-row flex-wrap items-center gap-2">
-        <AnimatedPressable haptic="light"
+        <Button
+          label={busy ? 'Scoring…' : 'Run score'}
+          size="sm"
+          loading={busy}
+          haptic="light"
           onPress={() => void runScore()}
-          disabled={busy}
-          className="rounded-xl bg-amber-accent/90 px-5 py-2.5 disabled:opacity-50"
-          accessibilityRole="button"
-        >
-          <Text className="font-sans-medium text-wood-900">{busy ? 'Scoring…' : 'Run score'}</Text>
-        </AnimatedPressable>
-        <AnimatedPressable
+        />
+        <Button
+          label="Export MIDI"
+          variant="secondary"
+          size="sm"
           onPress={() => void exportMidi()}
-          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5"
-          accessibilityRole="button"
-        >
-          <Text className="font-sans-medium text-cream">Export MIDI</Text>
-        </AnimatedPressable>
-        <AnimatedPressable
+        />
+        <Button
+          label="Export MusicXML"
+          variant="secondary"
+          size="sm"
           onPress={() => void exportMusicXml()}
-          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5"
-          accessibilityRole="button"
-        >
-          <Text className="font-sans-medium text-cream">Export MusicXML</Text>
-        </AnimatedPressable>
-        <AnimatedPressable haptic="light"
+        />
+        <Button
+          label={savingLick ? 'Saving…' : 'Save to Library'}
+          variant="secondary"
+          size="sm"
+          haptic="light"
           onPress={() => void saveLick()}
           disabled={savingLick}
-          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5 disabled:opacity-50"
-          accessibilityRole="button"
-        >
-          <Text className="font-sans-medium text-cream">{savingLick ? 'Saving…' : 'Save to Library'}</Text>
-        </AnimatedPressable>
-        <AnimatedPressable haptic="light"
+        />
+        <Button
+          label="Open Library"
+          variant="secondary"
+          size="sm"
+          haptic="light"
           onPress={() => router.push('/library')}
-          className="rounded-xl border border-wood-600/45 bg-wood-700/40 px-4 py-2.5"
-          accessibilityRole="button"
-        >
-          <Text className="font-sans-medium text-cream">Open Library</Text>
-        </AnimatedPressable>
+        />
       </View>
 
-      <Text className="mt-2 font-mono text-[11px] text-muted-brown">{exportState}</Text>
+      {exportState !== 'Idle' ? (
+        <Text className="mt-2 font-mono text-[11px] text-muted-brown" accessibilityLiveRegion="polite">
+          {exportState}
+        </Text>
+      ) : null}
 
       {reviewError ? (
         <ErrorBanner

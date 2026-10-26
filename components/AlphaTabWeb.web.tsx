@@ -246,6 +246,10 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const isPlayingRef = useRef(false)
     const onNoteEventRef = useRef(onNoteEvent)
     onNoteEventRef.current = onNoteEvent
+    const onErrorRef = useRef(onError)
+    onErrorRef.current = onError
+    const onReadyRef = useRef(onReady)
+    onReadyRef.current = onReady
     const onScoreSeekMsRef = useRef(onScoreSeekMs)
     onScoreSeekMsRef.current = onScoreSeekMs
     const readOnlyFollowModeRef = useRef(readOnlyFollowMode)
@@ -1208,7 +1212,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
                 : String(err)
             const msg = m || 'AlphaTab error'
             setEngineError(msg)
-            onError?.(msg)
+            onErrorRef.current?.(msg)
           })
 
           const midiPlayed = api.player?.midiEventsPlayed ?? api.midiEventsPlayed
@@ -1266,7 +1270,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             }
             if (!readyPostedRef.current) {
               readyPostedRef.current = true
-              onReady?.()
+              onReadyRef.current?.()
             }
             setTabFullyPainted(true)
           })
@@ -1281,7 +1285,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
           if (!cancelled) {
             const msg = e instanceof Error ? e.message : 'AlphaTab init failed'
             setBootError(msg)
-            onError?.(msg)
+            onErrorRef.current?.(msg)
           }
         }
       }
@@ -1338,8 +1342,6 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       emitSongPlaybackMaybe,
       layoutLoopBracket,
       mounted,
-      onError,
-      onReady,
       reloadKey,
       themeKey,
       transposeSemitones,
@@ -1361,9 +1363,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Invalid MusicXML payload'
         setEngineError(msg)
-        onError?.(msg)
+        onErrorRef.current?.(msg)
       }
-    }, [engineReady, musicXml, onError, resetSongMetaRefs])
+    }, [engineReady, musicXml, resetSongMetaRefs])
 
     useEffect(() => {
       if (!engineReady) return
@@ -1382,9 +1384,9 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Invalid GP5 payload'
         setEngineError(msg)
-        onError?.(msg)
+        onErrorRef.current?.(msg)
       }
-    }, [engineReady, gp5Base64, musicXml, onError, resetSongMetaRefs])
+    }, [engineReady, gp5Base64, musicXml, resetSongMetaRefs])
 
     useEffect(() => {
       if (!engineReady) return

@@ -1,5 +1,6 @@
 import { Text, View } from 'react-native'
 
+import { Pill } from '@/components/Pill'
 import { colors } from '@/src/constants/colors'
 import { AudioWaveform, Mic } from 'lucide-react-native'
 
@@ -36,21 +37,19 @@ export function PlayCaptureLessonCardBanner({
       <View className="flex-row items-center gap-2.5">
         <AudioWaveform size={18} color={colors.amber.accent} strokeWidth={1.75} />
         <Text className="min-w-0 flex-1 font-sans-medium text-xs text-wood-900">Backing track</Text>
-        <View
-          className={`rounded-full border px-2 py-0.5 ${
-            playing && ready && !loading
-              ? 'border-amber-accent/50 bg-amber-accent/15'
-              : 'border-wood-600/35 bg-cream-dark/40'
-          }`}
+        <Pill
+          variant={playing && ready && !loading ? 'accent' : 'light'}
+          size="xs"
+          className="px-2 py-0.5"
         >
           <Text
             className={`font-mono text-[10px] font-medium ${
-              playing && ready && !loading ? 'text-wood-900' : 'text-wood-600'
+              playing && ready && !loading ? 'text-amber-accent' : 'text-wood-600'
             }`}
           >
             {backing}
           </Text>
-        </View>
+        </Pill>
       </View>
 
       <View className="my-2.5 h-px bg-wood-600/15" />
@@ -62,17 +61,13 @@ export function PlayCaptureLessonCardBanner({
           {recording ? (
             <View className="h-2 w-2 rounded-full bg-danger" accessibilityLabel="Recording indicator" />
           ) : null}
-          <View
-            className={`rounded-full border px-2 py-0.5 ${
-              recording ? 'border-danger/40 bg-danger/10' : 'border-wood-600/35 bg-cream-dark/40'
-            }`}
-          >
+          <Pill variant={recording ? 'danger' : 'light'} size="xs" className="px-2 py-0.5">
             <Text
               className={`font-mono text-[10px] font-medium ${recording ? 'text-danger' : 'text-wood-600'}`}
             >
               {recording ? 'Recording' : 'Idle'}
             </Text>
-          </View>
+          </Pill>
         </View>
       </View>
     </View>

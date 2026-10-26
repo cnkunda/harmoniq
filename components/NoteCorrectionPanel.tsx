@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal, View, Text } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import {
   CHOICE_CHIP_BASE,
   CHOICE_CHIP_OFF,
@@ -200,35 +201,17 @@ export function NoteCorrectionPanel({
             {/* Actions */}
             <View className="flex-row flex-wrap items-center justify-end gap-2">
               {onReportWrong ? (
-                <AnimatedPressable
-                  onPress={handleReportWrong}
+                <Button
+                  label="Report incorrect"
+                  variant="danger"
+                  size="sm"
                   haptic="light"
-                  className="rounded-full border border-danger/45 bg-danger/10 px-4 py-2"
-                  accessibilityRole="button"
+                  onPress={handleReportWrong}
                   accessibilityLabel="Report this note as incorrect"
-                >
-                  <Text className="font-sans-medium text-sm text-danger">Report incorrect</Text>
-                </AnimatedPressable>
+                />
               ) : null}
-              <AnimatedPressable
-                onPress={onClose}
-                className="rounded-full border border-wood-600/40 bg-wood-900/10 px-4 py-2"
-              >
-                <Text className="font-sans-medium text-sm text-muted-brown">Cancel</Text>
-              </AnimatedPressable>
-              <AnimatedPressable
-                onPress={handleConfirm}
-                disabled={!hasChanges}
-                className={`rounded-full border px-4 py-2 ${
-                  !hasChanges
-                    ? 'border-wood-600/40 bg-wood-900/10 opacity-50'
-                    : 'border-amber-accent bg-amber-accent'
-                }`}
-              >
-                <Text className={`font-sans-medium text-sm ${!hasChanges ? 'text-muted-brown' : 'text-wood-900'}`}>
-                  Confirm
-                </Text>
-              </AnimatedPressable>
+              <Button label="Cancel" variant="secondary" size="sm" onPress={onClose} />
+              <Button label="Confirm" size="sm" onPress={handleConfirm} disabled={!hasChanges} />
             </View>
           </View>
         </View>

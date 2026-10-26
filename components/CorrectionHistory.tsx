@@ -1,6 +1,7 @@
 import { View, Text } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { SECTION_EYEBROW_CLASS } from '@/src/constants/uiTokens'
 import { formatChordDisplay } from '@/src/music/chordVoicing'
 import { useCorrectionStore } from '@/src/stores/correctionStore'
@@ -66,12 +67,13 @@ export function CorrectionHistory({ jobId, onRevert }: CorrectionHistoryProps) {
               <Text className="font-sans text-xs text-cream">{item.label}</Text>
               <Text className="text-[10px] text-muted-brown">{item.detail}</Text>
             </View>
-            <AnimatedPressable
+            <Button
+              label="Revert"
+              variant="ghost"
+              size="sm"
               onPress={() => onRevert(item.id)}
-              className="rounded-full border border-wood-600/40 bg-wood-900/10 px-2 py-1"
-            >
-              <Text className="font-sans text-[10px] text-amber-accent">Revert</Text>
-            </AnimatedPressable>
+              labelProps={{ className: 'text-amber-accent' }}
+            />
           </View>
         ))}
       </View>

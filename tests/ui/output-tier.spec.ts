@@ -57,20 +57,20 @@ test("notation complexity defaults to Intermediate and persists changes", async 
   const transcriber = page.getByRole("button", { name: "transcriber", exact: true });
 
   await expect(intermediate).toBeVisible({ timeout: 15_000 });
-  await expect(intermediate).toHaveClass(/border-amber-accent/);
+  await expect(intermediate).toHaveClass(/bg-amber-accent/);
   expect(await readOutputTierPref(page)).toBeNull();
 
   await learner.click();
-  await expect(learner).toHaveClass(/border-amber-accent/);
+  await expect(learner).toHaveClass(/bg-amber-accent/);
   await expect(page.getByText("Notation set to learner.")).toBeVisible();
   expect(await readOutputTierPref(page)).toBe("learner");
 
   await page.reload();
   await expect(learner).toBeVisible({ timeout: 15_000 });
-  await expect(learner).toHaveClass(/border-amber-accent/);
+  await expect(learner).toHaveClass(/bg-amber-accent/);
 
   await transcriber.click();
-  await expect(transcriber).toHaveClass(/border-amber-accent/);
+  await expect(transcriber).toHaveClass(/bg-amber-accent/);
   await expect
     .poll(async () => readOutputTierPref(page))
     .toBe("transcriber");
@@ -86,7 +86,7 @@ test("Learner tier shows the simplified Study view without theory", async ({ pag
   await page.goto("/settings");
   await page.getByRole("button", { name: "learner", exact: true }).click();
   await expect(page.getByRole("button", { name: "learner", exact: true })).toHaveClass(
-    /border-amber-accent/,
+    /bg-amber-accent/,
   );
   await seedPrefs(page, {
     onboarding_complete: "1",
@@ -112,7 +112,7 @@ test("Transcriber tier exposes Print and MusicXML export in Study", async ({ pag
   await page.goto("/settings");
   await page.getByRole("button", { name: "transcriber", exact: true }).click();
   await expect(page.getByRole("button", { name: "transcriber", exact: true })).toHaveClass(
-    /border-amber-accent/,
+    /bg-amber-accent/,
   );
   await seedPrefs(page, {
     onboarding_complete: "1",

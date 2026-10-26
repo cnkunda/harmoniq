@@ -17,6 +17,7 @@ import { GhostPlayerControl } from '@/components/GhostPlayerControl'
 import { PlayCaptureCard, PlayStemRowScoringCard } from '@/components/play'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
+import { Pill } from '@/components/Pill'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { speak, stop as stopVoiceCoach } from '@/src/audio/voiceCoach'
 import { sessionHref } from '@/src/constants/sessionFlow'
@@ -288,20 +289,20 @@ function PlayScreenInner() {
             subtext="Start from the Home tab to add and analyze a song."
           />
         ) : null}
+        {lesson ? (
         <View className="gap-5">
           {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.play}</DemoTourCallout> : null}
 
           {/* Commit 163: Listen shortcut */}
-          <AnimatedPressable
-            haptic="light"
+          <Pill
             onPress={() => router.push(sessionHref('listen'))}
-            className="self-start flex-row items-center gap-1.5 rounded-full border border-wood-600/45 bg-wood-800/45 px-3 py-1.5"
-            accessibilityRole="button"
             accessibilityLabel="Open full Listen screen"
+            icon={<Headphones size={14} color={colors.amber.accent} />}
+            textClassName="text-cream"
+            className="self-start"
           >
-            <Headphones size={14} color={colors.amber.accent} />
-            <Text className="font-sans-medium text-xs text-cream">Listen</Text>
-          </AnimatedPressable>
+            Listen
+          </Pill>
 
           {typeof __DEV__ !== 'undefined' && __DEV__ ? (
             <Text className="rounded-lg border border-dashed border-wood-600/35 bg-wood-800/40 px-3 py-2 font-mono text-xs text-muted-brown">
@@ -474,6 +475,7 @@ function PlayScreenInner() {
           </Text>
         ) : null}
       </View>
+        ) : null}
     </SessionStepScreen>
   )
 }

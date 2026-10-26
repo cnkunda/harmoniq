@@ -4,13 +4,16 @@
  */
 import Slider from '@react-native-community/slider'
 import { useRouter } from 'expo-router'
+import { Flame } from 'lucide-react-native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, useWindowDimensions, View } from 'react-native'
 
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 
-import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
+import { EmptyState } from '@/components/EmptyState'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
+import { Pill } from '@/components/Pill'
 import { PitchIndicator } from '@/components/PitchIndicator'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab, type SessionStemAndTabHandle } from '@/components/SessionStemAndTab'
@@ -41,20 +44,6 @@ function formatClock(totalSec: number): string {
 
 function formatTechniqueTag(tag: string): string {
   return tag.replace(/_/g, ' ')
-}
-
-function Pill({ children, emphasis }: { children: string; emphasis?: boolean }) {
-  return (
-    <View
-      className={`rounded-full border px-2.5 py-1 ${
-        emphasis ? 'border-amber-accent/45 bg-amber-accent/20' : 'border-wood-600/25 bg-wood-700/40'
-      }`}
-    >
-      <Text className={`font-sans text-xs ${emphasis ? 'font-sans-medium text-cream' : 'text-muted-brown'}`}>
-        {children}
-      </Text>
-    </View>
-  )
 }
 
 export default function WarmupScreen() {
@@ -119,12 +108,6 @@ function WarmupScreenInner() {
     setNoteModalOpen(false)
     setActiveGuideIndex(null)
   }, [exerciseIndex])
-
-  useEffect(() => {
-    if (!exercises.length) {
-      router.replace('/session/slow')
-    }
-  }, [exercises.length, router])
 
   const exerciseSignature = exercises.map((e) => `${e.name}:${e.duration_seconds}`).join('|')
 
@@ -248,10 +231,6 @@ function WarmupScreenInner() {
     void toggleTuner().catch(() => {})
   }
 
-  if (!exercises.length) {
-    return null
-  }
-
   // Drive MusicProvider position from stem playback ticks
   const handleStemPlaybackTick = useCallback((ctx: PlaybackTickContext) => {
     musicActions.setPosition(ctx.positionSec * 1000)
@@ -263,6 +242,32 @@ function WarmupScreenInner() {
     musicActions.setPosition(0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  if (!exercises.length) {
+    const leaveWarmup = () => {
+      if (router.canGoBack()) router.back()
+      else router.replace('/(tabs)')
+    }
+    return (
+      <SessionStepScreen
+        title="Session warm-up"
+        subtitle="Short moves before the rest of your plan."
+        showBack
+        backLabel="Back"
+        onBack={leaveWarmup}
+        showNext={false}
+        onNext={() => {}}
+      >
+        <EmptyState
+          Icon={Flame}
+          heading="Warm-up unavailable"
+          subtext="This plan does not include a warm-up for the current step. You can continue to the Slow step."
+          ctaLabel="Continue to Slow"
+          onCta={() => router.replace('/session/slow')}
+        />
+      </SessionStepScreen>
+    )
+  }
 
   const gp5 = ex?.tab_snippet_gp5_base64?.trim() || null
   const nextEx = !completed && exerciseIndex < exercises.length - 1 ? exercises[exerciseIndex + 1] : null
@@ -279,12 +284,9 @@ function WarmupScreenInner() {
       showBack
       backLabel={exerciseIndex > 0 ? 'Previous exercise' : 'Back'}
       onBack={goPrevExercise}
-       showNext={completed}
-        nextLabel="Next section"
-       onNext={goNextSection}
-       footerContainerClassName="flex-row gap-3 border-t border-wood-600/30 bg-wood-800/60 px-6 pb-8 pt-4"
-       backButtonClassName="flex-1 rounded-xl border border-wood-600/45 bg-wood-700/40 py-3"
-       nextButtonClassName="flex-1 rounded-xl border border-amber-accent/55 bg-amber-accent/35 py-3 whitespace-nowrap"
+      showNext={completed}
+      nextLabel="Next section"
+      onNext={goNextSection}
     >
       <View className={`mt-1 ${colClass}`}>
         <View className={leftColClass}>
@@ -319,24 +321,25 @@ function WarmupScreenInner() {
           </View>
 
           {!completed && !warmupStarted ? (
-            <AnimatedPressable haptic="light"
+            <Button
+              label="Start exercise"
+              haptic="light"
               onPress={() => setWarmupStarted(true)}
-              className="mt-6 w-full rounded-xl bg-amber-accent/90 py-3"
-              accessibilityRole="button"
               accessibilityLabel="Start warm-up exercise timer"
-            >
-              <Text className="text-center font-sans-medium text-wood-900">Start exercise</Text>
-            </AnimatedPressable>
+              fullWidth
+              className="mt-6"
+            />
           ) : null}
           {!completed && warmupStarted ? (
-            <AnimatedPressable haptic="light"
+            <Button
+              label="Stop exercise"
+              variant="secondary"
+              haptic="light"
               onPress={stopExercise}
-              className="mt-6 w-full rounded-xl border-2 border-wood-600/45 bg-wood-700/40 py-3"
-              accessibilityRole="button"
               accessibilityLabel="Stop warm-up exercise timer"
-            >
-              <Text className="text-center font-sans-medium text-cream">Stop exercise</Text>
-            </AnimatedPressable>
+              fullWidth
+              className="mt-6"
+            />
           ) : null}
         </View>
 
@@ -347,22 +350,23 @@ function WarmupScreenInner() {
                 Exercise {completed ? exercises.length : exerciseIndex + 1} of {exercises.length}
               </Text>
               {!completed ? (
-                <View className="flex-row items-center gap-1.5 rounded-full border border-amber-accent/40 bg-amber-accent/10 px-2.5 py-1">
-                  <View className="h-1.5 w-1.5 rounded-full bg-amber-accent" />
-                  <Text className="font-sans-medium text-xs text-cream">
-                    {warmupStarted ? 'Active' : 'Ready'}
-                  </Text>
-                </View>
+                <Pill
+                  variant="accent"
+                  icon={<View className="h-1.5 w-1.5 rounded-full bg-amber-accent" />}
+                  textClassName="text-cream"
+                >
+                  {warmupStarted ? 'Active' : 'Ready'}
+                </Pill>
               ) : (
-                <Text className="font-sans-medium text-xs text-muted-brown">Done</Text>
+                <Pill variant="neutral">Done</Pill>
               )}
             </View>
 
             <Text className="mt-3 font-serif text-2xl text-cream">{ex?.name ?? '—'}</Text>
 
             <View className="mt-3 flex-row flex-wrap gap-2">
-              <Pill emphasis>{`${formatClock(ex?.duration_seconds ?? 0)} duration`}</Pill>
-              <Pill emphasis>{`${targetBpm} BPM target`}</Pill>
+              <Pill variant="accent">{`${formatClock(ex?.duration_seconds ?? 0)} duration`}</Pill>
+              <Pill variant="accent">{`${targetBpm} BPM target`}</Pill>
               <Pill>{ex ? formatTechniqueTag(ex.technique_tag) : '—'}</Pill>
             </View>
 
@@ -404,22 +408,24 @@ function WarmupScreenInner() {
 
             {!completed ? (
               <View className="mt-5 flex-row flex-wrap gap-2">
-                <AnimatedPressable haptic="light"
+                <Button
+                  label="Skip exercise"
+                  variant="secondary"
+                  size="sm"
+                  haptic="light"
                   onPress={skipExercise}
-                  className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-wood-700/40 py-3"
-                  accessibilityRole="button"
                   accessibilityLabel="Skip to next warm-up exercise"
-                >
-                  <Text className="text-center font-sans-medium text-sm text-cream">Skip exercise</Text>
-                </AnimatedPressable>
-                <AnimatedPressable haptic="light"
+                  containerClassName="min-w-[140px] flex-1"
+                />
+                <Button
+                  label="Skip warm-up"
+                  variant="secondary"
+                  size="sm"
+                  haptic="light"
                   onPress={goNextSection}
-                  className="min-w-[140px] flex-1 rounded-xl border border-wood-600/40 bg-wood-700/40 py-3"
-                  accessibilityRole="button"
                   accessibilityLabel="Skip entire warm-up"
-                >
-                  <Text className="text-center font-sans-medium text-sm text-cream">Skip warm-up</Text>
-                </AnimatedPressable>
+                  containerClassName="min-w-[140px] flex-1"
+                />
               </View>
             ) : null}
           </View>

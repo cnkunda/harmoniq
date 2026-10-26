@@ -30,6 +30,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { FormCheckbox } from '@/components/FormCheckbox'
 import {
   SettingsCard,
@@ -616,6 +617,7 @@ export default function SettingsScreen() {
             description="Learner shows chords and a single-line melody; Intermediate is the standard view; Transcriber adds print and MusicXML export."
             options={OUTPUT_TIERS}
             value={outputTier}
+            capitalizeOptions
             onValueChange={(value) => void persistOutputTier(value)}
           />
         </SettingsSection>
@@ -635,14 +637,13 @@ export default function SettingsScreen() {
             className="rounded-lg border border-wood-600/50 bg-ivory/95 px-3 py-2 font-mono text-sm text-wood-900"
             placeholder="440"
           />
-          <AnimatedPressable
-            onPress={() => void persistTuning()}
+          <Button
+            label="Save tuning"
+            size="sm"
             haptic="light"
-            className="mt-3 self-start rounded-lg bg-amber-accent/90 px-4 py-2"
-            accessibilityRole="button"
-          >
-            <Text className="font-sans-medium text-sm text-wood-900">Save tuning</Text>
-          </AnimatedPressable>
+            onPress={() => void persistTuning()}
+            className="mt-3 self-start"
+          />
         </SettingsSection>
 
         {/* Style Focus */}
@@ -714,6 +715,7 @@ export default function SettingsScreen() {
             description="Where supported by the platform"
             options={['default', 'female', 'male'] as const}
             value={voiceCoachGender}
+            capitalizeOptions
             onValueChange={(g) => void persistVoiceCoachGender(g as VoiceGenderPref)}
           />
           <View className="mt-4 border-t border-wood-600/35 pt-4">
@@ -753,16 +755,14 @@ export default function SettingsScreen() {
               <Text className="mt-2 font-sans text-sm text-muted-light">No style preferences saved yet</Text>
             )}
           </View>
-          <AnimatedPressable
-            onPress={() => router.push('/onboarding/taste-quiz?update=1')}
+          <Button
+            label="Update preferences"
+            icon={<ChevronRight color={colors.wood[900]} size={18} strokeWidth={2} />}
             haptic="medium"
-            className="flex-row items-center justify-center gap-2 rounded-lg bg-amber-accent/90 px-4 py-3"
-            accessibilityRole="button"
+            onPress={() => router.push('/onboarding/taste-quiz?update=1')}
             accessibilityLabel="Update music preferences with style quiz"
-          >
-            <ChevronRight color={colors.wood[900]} size={18} strokeWidth={2} />
-            <Text className="font-sans-medium text-sm text-wood-900">Update preferences</Text>
-          </AnimatedPressable>
+            fullWidth
+          />
         </SettingsSection>
 
         {/* Spotify */}
@@ -787,22 +787,21 @@ export default function SettingsScreen() {
               )}
           </View>
           <View className="flex-row gap-2">
-            <AnimatedPressable
-              onPress={connectSpotify}
+            <Button
+              label="Connect"
+              size="sm"
               haptic="medium"
-              className="flex-1 rounded-lg bg-amber-accent/90 px-4 py-2.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-center font-sans-medium text-sm text-wood-900">Connect</Text>
-            </AnimatedPressable>
-            <AnimatedPressable
-              onPress={disconnectSpotify}
+              onPress={connectSpotify}
+              containerClassName="flex-1"
+            />
+            <Button
+              label="Disconnect"
+              variant="secondary"
+              size="sm"
               haptic="light"
-              className="flex-1 rounded-lg border border-wood-600/50 bg-wood-900/40 px-4 py-2.5"
-              accessibilityRole="button"
-            >
-              <Text className="text-center font-sans-medium text-sm text-cream">Disconnect</Text>
-            </AnimatedPressable>
+              onPress={disconnectSpotify}
+              containerClassName="flex-1"
+            />
           </View>
         </SettingsSection>
 

@@ -4,13 +4,21 @@ import { Platform, Text, View } from 'react-native'
 import Svg, { Circle, G } from 'react-native-svg'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { Button } from '@/components/Button'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { FormCheckbox } from '@/components/FormCheckbox'
+import { Pill } from '@/components/Pill'
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { noiseGateThresholdFromAmbientSamples } from '@/src/audio/noiseGate'
-import { DISABLED_BTN_CLASS } from '@/src/constants/buttonStyles'
 import { colors } from '@/src/constants/colors'
 import { SESSION_PLAYBACK_CARD_CLASS } from '@/src/constants/sessionPlaybackCard'
+import {
+  CHOICE_CHIP_BASE,
+  CHOICE_CHIP_OFF,
+  CHOICE_CHIP_ON,
+  CHOICE_LABEL_SANS_ON,
+  SECTION_EYEBROW_CLASS,
+} from '@/src/constants/uiTokens'
 import { IN_TUNE_CENTS } from '@/src/constants/tuner'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
@@ -28,7 +36,6 @@ const TUNER_RING_STROKE = 7
 const TUNER_RING_C = 2 * Math.PI * TUNER_RING_R
 const CENTS_UI_CLAMP = 50
 
-const SECTION_EYEBROW_CLASS = 'font-sans-medium text-xs uppercase tracking-wide text-amber-accent'
 
 function centsFromHzToTargetMidi(hz: number, targetMidi: number): number {
   const midiFloat = 69 + 12 * Math.log2(hz / 440)
@@ -230,13 +237,11 @@ export default function TuneScreen() {
                 key={id}
                 haptic="light"
                 onPress={() => void setActiveMicProfile(id)}
-                className={`rounded-xl border px-3 py-2 ${
-                  selected ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/35 bg-wood-700/30'
-                }`}
+                className={`${CHOICE_CHIP_BASE} ${selected ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF}`}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
               >
-                <Text className={`text-sm ${selected ? 'font-sans-medium text-cream' : 'font-sans text-muted-brown'}`}>
+                <Text className={`${selected ? CHOICE_LABEL_SANS_ON : 'font-sans text-xs text-muted-brown'}`}>
                   {micProfileLabel(id)}
                 </Text>
               </AnimatedPressable>
@@ -248,31 +253,27 @@ export default function TuneScreen() {
       <View className={SESSION_PLAYBACK_CARD_CLASS}>
         <View className="flex-row items-center justify-between gap-2">
           <Text className="font-sans-medium text-sm text-cream">Room noise gate</Text>
-          <View
-            className={`rounded-full px-2.5 py-1 ${gateCalibrated ? 'bg-success/20' : 'bg-wood-600/15'}`}
+          <Pill
+            variant={gateCalibrated ? 'success' : 'neutral'}
+            size="xs"
+            textClassName="uppercase tracking-wide"
           >
-            <Text
-              className={`font-sans-medium text-[11px] uppercase tracking-wide ${gateCalibrated ? 'text-success' : 'text-muted-brown'}`}
-            >
-              {gateCalibrated ? 'Calibrated' : 'Not calibrated'}
-            </Text>
-          </View>
+            {gateCalibrated ? 'Calibrated' : 'Not calibrated'}
+          </Pill>
         </View>
         <Text className="mt-4 font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown">
           RMS gate threshold
         </Text>
         <Text className="mt-1 font-mono text-base text-cream">{gateDisplay}</Text>
-        <AnimatedPressable
+        <Button
+          label={calibrating ? 'Measuring…' : 'Measure (3 sec)'}
+          variant="secondary"
           haptic="light"
           onPress={beginCalibration}
           disabled={calibrating || !hydrated}
-          className={`mt-4 rounded-xl border border-wood-600/55 bg-wood-700/40 py-3 ${calibrating ? 'opacity-50' : ''}`}
-          accessibilityRole="button"
-        >
-          <Text className="text-center font-sans-medium text-sm text-cream">
-            {calibrating ? 'Measuring…' : 'Measure (3 sec)'}
-          </Text>
-        </AnimatedPressable>
+          fullWidth
+          className="mt-4"
+        />
       </View>
 
       <View className={SESSION_PLAYBACK_CARD_CLASS}>
@@ -284,22 +285,22 @@ export default function TuneScreen() {
       </View>
 
       <View className="gap-3 pt-1">
-        <AnimatedPressable
+        <Button
+          label="Tune first, then continue"
+          variant="primary"
           haptic="medium"
           onPress={() => void forwardToListen()}
           disabled={!canContinue}
-          className={`rounded-xl py-3 ${canContinue ? 'bg-amber-accent/90' : DISABLED_BTN_CLASS}`}
-          accessibilityRole="button"
-        >
-          <Text
-            className={`text-center font-sans-medium text-sm ${canContinue ? 'text-wood-900' : ''}`}
-          >
-            Tune first, then continue
-          </Text>
-        </AnimatedPressable>
-        <AnimatedPressable haptic="light" onPress={() => void forwardToListen()} accessibilityRole="button">
-          <Text className="text-center font-sans text-sm text-muted-brown underline">Skip for now</Text>
-        </AnimatedPressable>
+          fullWidth
+        />
+        <Button
+          label="Skip for now"
+          variant="ghost"
+          size="sm"
+          haptic="light"
+          onPress={() => void forwardToListen()}
+          labelProps={{ className: 'text-muted-brown underline' }}
+        />
       </View>
     </View>
   )
