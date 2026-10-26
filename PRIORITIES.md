@@ -9,8 +9,8 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–166 completed, 167 skipped → archived).
 **Milestone D (Infrastructure)** — complete; 151 SSE progress stream, 169 variable tempo, 170 queue hardening, 171 fingerprinting/quality, 172 stem export completed → archived.
 **Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
-**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166, 169–173, 177 completed and 167 skipped → archived).
-**Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 178–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
+**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166, 169–173, 177–178 completed and 167 skipped → archived).
+**Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 179–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
 
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166, 169–173, 177 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166, 169–173, 177–178 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -129,7 +129,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ---
 
-**Group: Blocked / aspirational (174–176, 178–180)**
+**Group: Blocked / aspirational (174–176, 179–180)**
 
 ---
 
@@ -209,43 +209,6 @@ Shared encoder (CQT → Conv → BiLSTM, ~200K params)
 - [ ] Side-by-side teacher comparison documented with numbers
 - [ ] Go/no-go decision recorded (with instrument-confusion deltas)
 - [ ] If go: student retrained on HT-MT3 labels with measured improvement
-
----
-
-### Commit 178: Zero-Latency Pitch Detection (C++/JSI Bridge)
-
-**Status:** aspirational
-
-**Goal:** Sub-frame pitch detection on native via a C++ JSI module for real-time tuner/tracking without JS-thread latency.
-
-**Current State:** Native pitch goes through `usePitchStream`'s JS-side processing (react-native-audio-api path); no C++/JSI module, CMake config, or autocorrelation/YIN implementation exists in the repo. Web path already uses `getUserMedia` + AudioWorklet. Aspirational, not started.
-
-**Scope:**
-
-- C++ autocorrelation/YIN implementation compiled via CMake into the dev build
-- JSI bridge exposing `start()/getPitchHz()/stop()` with no async hop
-- Replace `usePitchStream` native path behind a flag; benchmark vs current
-- Web path unchanged (getUserMedia + AudioWorklet)
-
-**Acceptance Criteria:**
-
-- [ ] Native pitch round-trip <30ms (vs current baseline, measured)
-- [ ] Existing tuner/play flows work with the flag on
-- [ ] Dev-build instructions in AGENTS.md
-
-**Implementation Notes (Oct 25, 2026):** Shipped behind `EXPO_PUBLIC_HARMONIQ_PITCH_JSI=1` (default off).
-`modules/pitch-detector` is a local autolinked package with a C++ YIN core (2048-sample sliding window,
-worker thread, CMNDF + parabolic interpolation), a JSI `__harmoniqPitch` bridge
-(`start/processPcm/getPitchHz/getRms/getPeakAbs/stop`), an Android `TurboModuleWithJSIBindings`, and an iOS
-`RCTTurboModuleWithJSIBindings` provider. `pitchStream.native.ts` keeps the existing `AudioRecorder` capture,
-feeds 1024-sample buffers (≈23 ms update interval) to the bridge, and falls back to the JS estimator with a
-warning when the module is absent. Web is unchanged.
-
-Verification: `npm run lint` 0 errors; C++ sources pass NDK clang `-fsyntax-only` (C++20); Expo autolinking
-resolves the package for Android (pure C++ + cxx module) and iOS (podspec). Device measurement and flow smoke
-tests remain outstanding: no device is attached, iOS cannot be built on Windows, and this machine's Gradle
-transform cache fails before the app's CMake step (`Could not move temporary workspace`). Keep the flag off
-until a dev build and Android latency run confirm the <30 ms update interval and tuner/play flows.
 
 ---
 
@@ -414,4 +377,4 @@ until a dev build and Android latency run confirm the <30 ms update interval and
 
 The pipeline currently relies on MT3 (JAX, CPU, ~5 min per song) as the primary transcriber. With GPU access, Phase 3 executes commits 174–176 in order.
 
-**Aspirational (further out):** zero-latency pitch detection (commit 178), virtual mentor agent (commit 179), evaluation set expansion (commit 180). The lead-sheet agent shipped as commit 177 → archived. Dynamic backing track generation (MRT2) already shipped — see `backend/app/jam_backing.py`.
+**Aspirational (further out):** virtual mentor agent (commit 179), evaluation set expansion (commit 180). The lead-sheet agent shipped as commit 177 and zero-latency pitch detection as commit 178 → archived. Dynamic backing track generation (MRT2) already shipped — see `backend/app/jam_backing.py`.

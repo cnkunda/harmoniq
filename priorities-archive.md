@@ -1,6 +1,6 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, Milestone D infrastructure Commits 169–172, the RWC-P data pipeline Commit 173, and the lead-sheet agent Commit 177. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, Milestone D infrastructure Commits 169–172, the RWC-P data pipeline Commit 173, the lead-sheet agent Commit 177, and the zero-latency pitch detector Commit 178. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
 > **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–170 (completed → archived) and 171–172 (completed → archived), lead sheet agent → 177 (completed → archived), clean-clone verification fixes → 181–182, native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
@@ -40,6 +40,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 172 (Stem Export from StemMixer) Archive Date:** October 25, 2026 — Complete; all 5 ACs verified (stem export 7 passed in CI, stemExport utils 9 passed, lint 0 errors); spec and implementation notes archived below.
 **Commit 173 (RWC Music Database Pipeline) Archive Date:** October 25, 2026 — Complete; all 3 ACs verified (lint 0 errors; CI backend list 363 passed / 2 skipped; new RWC suite 26 passed); spec and implementation notes archived below.
 **Commit 177 (Lead Sheet Agent — MIDI + Lyrics → MusicXML) Archive Date:** October 25, 2026 — Complete; all 3 ACs verified (lead-sheet suite 10 passed, related MusicXML/exporter suites 72 passed, Playwright lead-sheet render passed, DTD validation passed, lint 0 errors); spec and implementation notes archived below.
+**Commit 178 (Zero-Latency Pitch Detection — C++/JSI Bridge) Archive Date:** October 25, 2026 — Implementation landed behind `EXPO_PUBLIC_HARMONIQ_PITCH_JSI`; AC1/AC2 await Android device verification (no device attached; local Gradle transform cache blocked the native build before CMake). Spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -2982,3 +2983,36 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **Tests**: `backend/tests/test_lead_sheet.py` (10 tests: DTD validity, underlay/syllabics, track selection, empty lyrics, loud failure cases) plus `backend/tests/fixtures/lead-sheet/`. Verification: lead-sheet + MusicXML builder/corpus/exporter suites 82 passed; `npx vitest run --testTimeout=30000` 587 passed; Playwright `musicxml-render.spec.ts` 5 passed with new snapshot; AlphaTab Node corpus check 5/5 rendered and all 8 lyric strings present in SVG; `npm run lint` 0 errors. Detox native run not executed (no Android device attached). Full unfiltered backend pytest exceeded 20 minutes; targeted suites are the gate.
 
 ---
+
+### Commit 178: Zero-Latency Pitch Detection (C++/JSI Bridge)
+
+**Status:** implemented behind flag — native device verification pending
+
+**Goal:** Sub-frame pitch detection on native via a C++ JSI module for real-time tuner/tracking without JS-thread latency.
+
+**Current State (at spec time):** Native pitch went through `usePitchStream`'s JS-side processing (react-native-audio-api path); no C++/JSI module, CMake config, or autocorrelation/YIN implementation existed in the repo. Web path already used `getUserMedia` + AudioWorklet. Aspirational, not started.
+
+**Scope:**
+
+- C++ autocorrelation/YIN implementation compiled via CMake into the dev build
+- JSI bridge exposing `start()/getPitchHz()/stop()` with no async hop
+- Replace `usePitchStream` native path behind a flag; benchmark vs current
+- Web path unchanged (getUserMedia + AudioWorklet)
+
+**Acceptance Criteria:**
+
+- [ ] Native pitch round-trip <30ms (vs current baseline, measured) — pending Android device measurement; dev-only p50/p95 logging added
+- [ ] Existing tuner/play flows work with the flag on — pending device smoke test
+- [x] Dev-build instructions in AGENTS.md
+
+**Implementation notes (Commit 178):**
+
+- **Native package** (`modules/pitch-detector`): local autolinked C++ package. `cpp/PitchDetectorJsi.{h,cpp}` implements YIN/CMNDF with a 2048-sample sliding window, 70–1000 Hz range, 0.15 threshold, parabolic interpolation, RMS gate 0.003, and a dedicated worker thread fed through a 4096-sample ring buffer. All working buffers are preallocated; `processPcm` only copies the incoming 1024 samples.
+- **JSI bridge**: installs `globalThis.__harmoniqPitch` with `start`, `processPcm(Float32Array, sampleRate)`, `getPitchHz`, `getRms`, `getPeakAbs`, and `stop`. No async hop for the pitch value; the typed array is read in place from its `ArrayBuffer`.
+- **Android registration**: pure-C++ TurboModule (`PitchDetectorModule`) implementing `TurboModuleWithJSIBindings`; `react-native.config.js` declares the cxx module keys. Autolinking also expects a `react_codegen_<libraryName>` target and a `<libraryName>.h`, so the package ships a tiny stub CMake target/header and a no-op `HarmoniqPitchDetector_ModuleProvider` Java-path shim.
+- **iOS registration**: `HarmoniqPitchDetector.podspec` + `HarmoniqPitchDetector.mm` (ObjC++ `RCTBridgeModule` with `getTurboModule:` and `installJSIBindingsWithRuntime:callInvoker:`).
+- **Capture integration** (`src/pitch/pitchStream.native.ts`): keeps the existing `react-native-audio-api` `AudioRecorder` (permissions, session, concurrent Play recording). With the flag on it requests 1024-sample buffers (≈23 ms update interval), feeds the bridge, emits `PitchReading` only when a pitch exists, and falls back to the JS autocorrelation estimator with an explicit warning if the module/global is absent. Flag off preserves the existing 2048-sample JS path.
+- **Flag/docs**: `EXPO_PUBLIC_HARMONIQ_PITCH_JSI=1` (build-time; documented in `.env.example`). `AGENTS.md` now lists `npx expo run:android` / `npx expo run:ios` prerequisites (Android SDK/NDK/CMake, Xcode/CocoaPods) and the native package note. `README.md` mic section updated.
+- **Measurement**: dev-only rolling p50/p95 update-interval log (`[PitchStream.native] jsi update interval …`) after 60 emissions.
+- **Verification**: `npm run lint` 0 errors; `npm run test` 583 passed / 4 pre-existing `designTokenConformance` timeouts; C++ core and Android module pass NDK clang `-fsyntax-only` (C++20, `-Wall -Wextra`); Expo autolinking resolves the package on Android (pure C++ + cxx module) and iOS (podspec). Native build on this Windows host failed before the app's CMake step in the Gradle transform cache (`Could not move temporary workspace`); no device attached; iOS not built. Keep the flag off until a dev build and Android run confirm the update interval and tuner/play flows.
+
