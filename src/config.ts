@@ -24,3 +24,9 @@ export function isHarmoniqSkillMutationSkipped(): boolean {
     process.env.EXPO_PUBLIC_HARMONIQ_SKIP_SKILL_MUTATION === '1' || process.env.HARMONIQ_SKIP_SKILL_MUTATION === '1'
   )
 }
+
+/** Commit 178: use the C++/JSI YIN detector on native. Requires a development build. */
+export function isPitchJsiEnabled(): boolean {
+  if (typeof process === 'undefined' || !process.env) return false
+  return process.env.EXPO_PUBLIC_HARMONIQ_PITCH_JSI === '1'
+}

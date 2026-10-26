@@ -53,6 +53,7 @@
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.10",
+    "harmoniq-pitch-detector": "file:modules/pitch-detector",
     "lucide-react-native": "^0.544.0",
     "nativewind": "^4.1.23",
     "onnxruntime-web": "^1.24.3",

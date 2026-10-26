@@ -24,8 +24,12 @@ MT3-primary transcription with confidence-gated CRNN fallback and chroma last re
 ```bash
 # Frontend
 npm install
-npx expo start               # native (iOS/Android)
-expo start --web              # browser
+npx expo start               # JS bundle only (Expo Go cannot load native mic/pitch)
+expo start --web             # browser
+
+# Native development build (required for microphone, react-native-audio-api, and the C++/JSI pitch detector)
+npx expo run:android         # needs Android SDK + NDK + CMake + emulator/device
+npx expo run:ios             # macOS only: Xcode + CocoaPods; run `cd ios && pod install` after native changes
 
 # Backend (Python 3.11+, from backend/)
 python -m venv .venv-wsl && source .venv-wsl/bin/activate
@@ -40,6 +44,11 @@ python scripts/download_mt3_checkpoint.py
 pip install -e ".[mrt2]"
 mrt models init && mrt models download mrt2_small
 ```
+
+> **Native pitch detector (Commit 178):** `modules/pitch-detector` is a local autolinked C++/JSI package. Enable it with
+> `EXPO_PUBLIC_HARMONIQ_PITCH_JSI=1` (build-time; restart Metro) and rebuild the dev app. Without a dev build the
+> module is absent and `pitchStream.native.ts` logs a warning and falls back to the JS estimator. Android builds via
+> the NDK/CMake generated from `react-native.config.js`; iOS registers through `HarmoniqPitchDetector.podspec`.
 
 | Command | What it does |
 |---------|-------------|

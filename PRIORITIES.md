@@ -233,6 +233,20 @@ Shared encoder (CQT → Conv → BiLSTM, ~200K params)
 - [ ] Existing tuner/play flows work with the flag on
 - [ ] Dev-build instructions in AGENTS.md
 
+**Implementation Notes (Oct 25, 2026):** Shipped behind `EXPO_PUBLIC_HARMONIQ_PITCH_JSI=1` (default off).
+`modules/pitch-detector` is a local autolinked package with a C++ YIN core (2048-sample sliding window,
+worker thread, CMNDF + parabolic interpolation), a JSI `__harmoniqPitch` bridge
+(`start/processPcm/getPitchHz/getRms/getPeakAbs/stop`), an Android `TurboModuleWithJSIBindings`, and an iOS
+`RCTTurboModuleWithJSIBindings` provider. `pitchStream.native.ts` keeps the existing `AudioRecorder` capture,
+feeds 1024-sample buffers (≈23 ms update interval) to the bridge, and falls back to the JS estimator with a
+warning when the module is absent. Web is unchanged.
+
+Verification: `npm run lint` 0 errors; C++ sources pass NDK clang `-fsyntax-only` (C++20); Expo autolinking
+resolves the package for Android (pure C++ + cxx module) and iOS (podspec). Device measurement and flow smoke
+tests remain outstanding: no device is attached, iOS cannot be built on Windows, and this machine's Gradle
+transform cache fails before the app's CMake step (`Could not move temporary workspace`). Keep the flag off
+until a dev build and Android latency run confirm the <30 ms update interval and tuner/play flows.
+
 ---
 
 ### Commit 179: Virtual Mentor Agent (Long-Term Skill Trajectory)
