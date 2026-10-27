@@ -1,5 +1,6 @@
 import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
 import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
+import { dedupeLessonRows, lessonRowFields, lessonShouldReplace } from '@/src/db/lessonIdentity'
 import {
     getHarmoniqIdbHandle,
     idbClearPracticeStores,
@@ -268,6 +269,12 @@ export async function initDb(): Promise<void> {
               })
               await flushLessons()
             }
+          }
+          const { kept, removedJobIds } = dedupeLessonRows(lessonCatalog)
+          if (removedJobIds.length > 0) {
+            lessonCatalog.length = 0
+            lessonCatalog.push(...kept)
+            await flushLessons()
           }
         }
       } catch (e) {
@@ -915,6 +922,21 @@ export async function upsertLessonFromAnalysis(lesson: LessonJSON): Promise<void
   seedWebSkillNodes()
   const sectionCount = Array.isArray(lesson.sections) ? lesson.sections.length : 0
   const now = new Date().toISOString()
+
+  // Re-analysing the same song produces a new job_id — replace the old row
+  // instead of keeping a duplicate library entry.
+  const incoming = {
+    source_url: lesson.source_url,
+    song_title: lesson.song_title,
+    artist: lesson.artist,
+  }
+  for (let j = lessonCatalog.length - 1; j >= 0; j -= 1) {
+    const existing = lessonCatalog[j]!
+    if (existing.job_id !== id && lessonShouldReplace(lessonRowFields(existing), incoming)) {
+      lessonCatalog.splice(j, 1)
+    }
+  }
+
   const i = lessonCatalog.findIndex((x) => x.job_id === id)
   const row: LessonPersistRow = {
     job_id: id,

@@ -626,7 +626,7 @@ Every error should be warm, specific, and tell the user exactly what to do next.
 | Mic permission denied | "Harmoniq needs to hear you play. Here's how to turn on mic access." | Deep-link to device Settings |
 | YouTube URL invalid | "That URL didn't work — make sure it's a full YouTube link and try again." | Retry input |
 | Analysis job failed | "Something went wrong processing that song. Try a studio recording — live versions sometimes have unusual audio." | Retry button |
-| Analysis job timeout (>5 min) | "This one's taking longer than usual. We'll notify you when it's ready." | Background notification on completion |
+| Analysis job timeout (>5 min) | "This one's taking longer than usual. We'll notify you when it's ready." | Opens Library tracking; toast on completion |
 | No internet during analysis | "You need a connection to analyze a new song. Your existing library works offline." | Dismiss |
 | Audio too short (<30 sec) | "That clip is too short to analyze. Try a full song or a longer section." | Dismiss |
 | Audio quality too low | "That recording is too noisy or distorted to transcribe reliably. Try a cleaner take or a studio recording." | Try another file |

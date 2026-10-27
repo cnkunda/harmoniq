@@ -15,7 +15,7 @@ import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import { cssInterop } from 'nativewind'
 import { useEffect } from 'react'
-import { Platform, View } from 'react-native'
+import { AppState, Platform, View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 
@@ -23,10 +23,12 @@ import { NoiseOverlay } from '@/components/NoiseOverlay'
 import Toast from 'react-native-toast-message'
 
 import { toastConfig } from '@/components/ToastConfig'
+import { isActiveTrackedJob } from '@/src/analysis/trackedAnalysisJobs'
 import { startAnalytics } from '@/src/analytics/eventBus'
 import { hydrateVoiceCoachPrefs } from '@/src/audio/hydrateVoiceCoachPrefs'
 import { hydrateWebLessonStore, initDb } from '@/src/db/client'
 import { resumeActivePracticePlan } from '@/src/session/activePlanPersistence'
+import { useAnalysisJobsStore } from '@/src/stores/analysisJobsStore'
 import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 
@@ -71,6 +73,40 @@ export default function RootLayout() {
         console.error('[db] init failed', e)
       }
     })()
+  }, [])
+
+  useEffect(() => {
+    if (!loaded) return
+    void (async () => {
+      try {
+        await useAnalysisJobsStore.getState().hydrate()
+        await useAnalysisJobsStore.getState().refresh()
+      } catch (refreshError) {
+        console.log('[analysisJobs] startup refresh failed', refreshError)
+      }
+    })()
+  }, [loaded])
+
+  useEffect(() => {
+    const refreshTrackedJobs = () => {
+      void useAnalysisJobsStore
+        .getState()
+        .refresh()
+        .catch((refreshError) => console.log('[analysisJobs] watcher refresh failed', refreshError))
+    }
+    const sync = () => {
+      if (AppState.currentState !== 'active') return
+      if (!useAnalysisJobsStore.getState().jobs.some(isActiveTrackedJob)) return
+      refreshTrackedJobs()
+    }
+    const id = setInterval(sync, 20_000)
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshTrackedJobs()
+    })
+    return () => {
+      clearInterval(id)
+      subscription.remove()
+    }
   }, [])
 
   if (!loaded) {

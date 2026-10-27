@@ -9,8 +9,8 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–166 completed, 167 skipped → archived).
 **Milestone D (Infrastructure)** — complete; 151 SSE progress stream, 169 variable tempo, 170 queue hardening, 171 fingerprinting/quality, 172 stem export completed → archived.
 **Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
-**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166, 169–173, 177–178 completed and 167 skipped → archived).
-**Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 179–180; verification fixes 181–182 sit in the active backlog, not Phase 3).
+**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166, 169–173, 177–179 completed and 167 skipped → archived).
+**Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 180; verification fixes 181–182 sit in the active backlog, not Phase 3).
 
 ---
 
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166, 169–173, 177–178 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166, 169–173, 177–179 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -129,7 +129,7 @@ Each commit below is a self-contained spec (Goal / Current State / Scope / Accep
 
 ---
 
-**Group: Blocked / aspirational (174–176, 179–180)**
+**Group: Blocked / aspirational (174–176, 180)**
 
 ---
 
@@ -209,29 +209,6 @@ Shared encoder (CQT → Conv → BiLSTM, ~200K params)
 - [ ] Side-by-side teacher comparison documented with numbers
 - [ ] Go/no-go decision recorded (with instrument-confusion deltas)
 - [ ] If go: student retrained on HT-MT3 labels with measured improvement
-
----
-
-### Commit 179: Virtual Mentor Agent (Long-Term Skill Trajectory)
-
-**Status:** aspirational
-
-**Goal:** A mentor persona that reasons over months of skill-node history, journal, and corrections to propose long-term direction (repertoire choices, plateau diagnosis, next milestones).
-
-**Current State:** The raw material exists — skill nodes mutated from session accuracy (commit 63), Riff DNA playing fingerprint (commit 74), correction history (`useCorrectionStore`), and practice-plan history — but nothing aggregates them into a long-term trajectory, and no mentor UI or Claude trajectory prompt exists. Aspirational, not started.
-
-**Scope:**
-
-- Data layer: query skill nodes + session journal + DNA into a compact trajectory summary
-- Claude-powered mentor with monthly cadence (on-demand too); output stored as mentor notes
-- UI: "Mentor" section in Progress with trajectory chart + proposed next month
-- Guardrails: never edits plans automatically — proposals only
-
-**Acceptance Criteria:**
-
-- [ ] Mentor summary generated from real ≥30-day history (or synthetic fixture)
-- [ ] Proposals rendered with trajectory context; no auto-mutation of plans
-- [ ] Failure/absence degrades to empty state, no crashes
 
 ---
 
@@ -377,4 +354,4 @@ Shared encoder (CQT → Conv → BiLSTM, ~200K params)
 
 The pipeline currently relies on MT3 (JAX, CPU, ~5 min per song) as the primary transcriber. With GPU access, Phase 3 executes commits 174–176 in order.
 
-**Aspirational (further out):** virtual mentor agent (commit 179), evaluation set expansion (commit 180). The lead-sheet agent shipped as commit 177 and zero-latency pitch detection as commit 178 → archived. Dynamic backing track generation (MRT2) already shipped — see `backend/app/jam_backing.py`.
+**Aspirational (further out):** evaluation set expansion (commit 180). The virtual mentor agent shipped as commit 179, the lead-sheet agent as commit 177, and zero-latency pitch detection as commit 178 → archived. Dynamic backing track generation (MRT2) already shipped — see `backend/app/jam_backing.py`.

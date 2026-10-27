@@ -1,13 +1,17 @@
 import { useFocusEffect } from '@react-navigation/native'
 import { useRouter, type Href } from 'expo-router'
 import { Filter, Music, Search, Sparkles } from 'lucide-react-native'
-import { useCallback, useMemo, useState } from 'react'
-import { Alert, Platform, ScrollView, Text, TextInput, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, Platform, ScrollView, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { EmptyState } from '@/components/EmptyState'
 import { WoodGradient } from '@/components/WoodGradient'
+import {
+  isActiveTrackedJob,
+  trackedAnalysisStatusLabel,
+} from '@/src/analysis/trackedAnalysisJobs'
 import { ApiError, submitExportJob } from '@/src/api/analyze'
 import { colors } from '@/src/constants/colors'
 import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
@@ -29,6 +33,7 @@ import {
 import type { LessonListRow, LickRow } from '@/src/db/types'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { getDemoLesson } from '@/src/demo/demoLesson'
+import { useAnalysisJobsStore } from '@/src/stores/analysisJobsStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
@@ -54,6 +59,17 @@ function relativeDateLabel(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+function elapsedLabel(iso: string, nowMs: number): string {
+  const startedMs = Date.parse(iso)
+  if (!Number.isFinite(startedMs)) return ''
+  const seconds = Math.max(0, Math.floor((nowMs - startedMs) / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ${minutes % 60}m`
+}
+
 export default function LibraryScreen() {
   const router = useRouter()
   const saveLesson = useLessonStore((s) => s.saveLesson)
@@ -69,6 +85,12 @@ export default function LibraryScreen() {
   const [techniqueFilter, setTechniqueFilter] = useState<string>('all')
   const [transposeById, setTransposeById] = useState<Record<string, number>>({})
   const [exportBusyJobId, setExportBusyJobId] = useState<string | null>(null)
+  const trackedJobs = useAnalysisJobsStore((s) => s.jobs)
+  const refreshTrackedJobs = useAnalysisJobsStore((s) => s.refresh)
+  const dismissTrackedJob = useAnalysisJobsStore((s) => s.dismiss)
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  const trackedCountRef = useRef(trackedJobs.length)
+  const hasTrackedJobs = trackedJobs.length > 0
 
   const refresh = useCallback(() => {
     setLoadError(null)
@@ -83,8 +105,23 @@ export default function LibraryScreen() {
   useFocusEffect(
     useCallback(() => {
       refresh()
-    }, [refresh]),
+      void refreshTrackedJobs().catch((e) =>
+        console.log('[library] analysis refresh failed', e),
+      )
+    }, [refresh, refreshTrackedJobs]),
   )
+
+  useEffect(() => {
+    if (!trackedJobs.some(isActiveTrackedJob)) return
+    const id = setInterval(() => setNowTick(Date.now()), 5000)
+    return () => clearInterval(id)
+  }, [trackedJobs])
+
+  useEffect(() => {
+    const previous = trackedCountRef.current
+    trackedCountRef.current = trackedJobs.length
+    if (trackedJobs.length < previous) refresh()
+  }, [trackedJobs.length, refresh])
 
   const exportLessonMidi = useCallback(async (row: LessonListRow) => {
     setLoadError(null)
@@ -457,16 +494,100 @@ export default function LibraryScreen() {
               </View>
             ) : null}
 
+            {libraryTab === 'lessons' && hasTrackedJobs ? (
+              <View className="mb-8">
+                <View className="mb-3 flex-row items-center justify-between gap-3">
+                  <Text className="font-sans-medium text-sm uppercase tracking-wider text-muted-brown">
+                    Analyses
+                  </Text>
+                  <AnimatedPressable
+                    haptic="light"
+                    onPress={() => {
+                      void refreshTrackedJobs()
+                        .then(() => refresh())
+                        .catch((e) => console.log('[library] analysis refresh failed', e))
+                    }}
+                    className="rounded-lg border border-wood-600/50 bg-wood-800/50 px-3 py-1.5"
+                    accessibilityRole="button"
+                    accessibilityLabel="Refresh analysis progress"
+                  >
+                    <Text className="font-sans-medium text-xs text-amber-light">Refresh</Text>
+                  </AnimatedPressable>
+                </View>
+                <View className="gap-3">
+                  {trackedJobs.map((job) => {
+                    const active = isActiveTrackedJob(job)
+                    const pct = job.progress != null ? Math.round(job.progress * 100) : null
+                    const elapsed = elapsedLabel(job.submittedAt, nowTick)
+                    return (
+                      <View
+                        key={job.jobId}
+                        className="rounded-xl border border-wood-700/50 bg-wood-800/40 p-4"
+                      >
+                        <View className="flex-row items-start justify-between gap-3">
+                          <View className="flex-1 pr-2">
+                            <Text className="font-serif text-lg text-cream" numberOfLines={1}>
+                              {job.title}
+                            </Text>
+                            <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                              {trackedAnalysisStatusLabel(job)}
+                              {active && pct != null ? ` · ${pct}%` : ''}
+                              {elapsed ? ` · ${elapsed}` : ''}
+                            </Text>
+                            {job.stageLabel ? (
+                              <Text className="mt-1 font-sans text-xs text-cream/70" numberOfLines={1}>
+                                {job.stageLabel}
+                              </Text>
+                            ) : null}
+                          </View>
+                          {active ? (
+                            <ActivityIndicator color={colors.amber.accent} />
+                          ) : (
+                            <AnimatedPressable
+                              haptic="light"
+                              onPress={() => void dismissTrackedJob(job.jobId)}
+                              className="rounded-lg border border-danger/45 bg-wood-900/50 px-3 py-2"
+                              accessibilityRole="button"
+                              accessibilityLabel="Dismiss failed analysis"
+                            >
+                              <Text className="font-sans-medium text-xs text-danger">Dismiss</Text>
+                            </AnimatedPressable>
+                          )}
+                        </View>
+                        {active ? (
+                          <View className="mt-3 h-1.5 overflow-hidden rounded-full bg-wood-900/70">
+                            <View
+                              style={{
+                                width: `${pct ?? 8}%`,
+                                height: '100%',
+                                borderRadius: 9999,
+                                backgroundColor: colors.amber.accent,
+                              }}
+                            />
+                          </View>
+                        ) : null}
+                        {job.error ? (
+                          <Text className="mt-2 font-sans text-xs leading-5 text-danger">{job.error}</Text>
+                        ) : null}
+                      </View>
+                    )
+                  })}
+                </View>
+              </View>
+            ) : null}
+
             {libraryTab === 'lessons' ? (
               emptyLessons ? (
                 lessons.length === 0 ? (
-                  <EmptyState
-                    Icon={Music}
-                    heading="No songs yet"
-                    subtext="Add one from Analyze to start building your library."
-                    ctaLabel="Add a song"
-                    onCta={() => router.push('/add-song')}
-                  />
+                  hasTrackedJobs ? null : (
+                    <EmptyState
+                      Icon={Music}
+                      heading="No songs yet"
+                      subtext="Add one from Analyze to start building your library."
+                      ctaLabel="Add a song"
+                      onCta={() => router.push('/add-song')}
+                    />
+                  )
                 ) : (
                   <EmptyState
                     Icon={Search}

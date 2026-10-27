@@ -375,6 +375,8 @@ export interface LessonJSON {
   job_id?: string | null
   song_title?: string | null
   artist?: string | null
+  /** Original YouTube/source URL when known — used to dedupe re-analyses. */
+  source_url?: string | null
   style_label?: string | null
   key?: string | null
   key_confidence?: number | null

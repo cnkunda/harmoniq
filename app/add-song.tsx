@@ -42,9 +42,10 @@ import { sessionEntryHrefWithMoodCheck } from '@/src/constants/sessionFlow'
 import { getAppPref } from '@/src/db/client'
 import { PREF_TASTE_PROFILE_JSON } from '@/src/db/schema'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
-import { mapAnalyzeFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
+import { README_ERROR_COPY, mapAnalyzeFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { getNextFocusArea } from '@/src/session'
+import { useAnalysisJobsStore } from '@/src/stores/analysisJobsStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { useSkillStore } from '@/src/stores/skillStore'
@@ -69,6 +70,8 @@ export default function AddSongScreen() {
   const router = useRouter()
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const lesson = useLessonStore((s) => s.lesson)
+  const trackAnalysisJob = useAnalysisJobsStore((s) => s.track)
+  const applyAnalysisJobStatus = useAnalysisJobsStore((s) => s.applyStatus)
   const skillNodes = useSkillStore((s) => s.nodes)
   const loadSkillNodes = useSkillStore((s) => s.loadFromDb)
   const [url, setUrl] = useState('')
@@ -204,6 +207,17 @@ export default function AddSongScreen() {
         const jobId = await submitAnalyzeJob(
           player_profile != null ? { ...input, player_profile, focus_area } : { ...input, focus_area },
         )
+        const uploadName = typeof input.filename === 'string' && input.filename.trim() ? input.filename.trim() : 'Uploaded track'
+        try {
+          await trackAnalysisJob({
+            jobId,
+            sourceKind: input.file ? 'upload' : 'youtube',
+            sourceRef: input.file ? uploadName : (input.youtube_url?.trim() ?? null),
+            title: input.file ? uploadName.replace(/\.[^.]+$/, '').trim() || 'Uploaded track' : 'YouTube analysis',
+          })
+        } catch (trackError) {
+          console.log('[add-song] could not track analysis job', trackError)
+        }
         if (!aliveRef.current) return
         if (input.file) {
           setPendingUploadFile(null)
@@ -214,6 +228,9 @@ export default function AddSongScreen() {
           jobId,
           (job: AnalyzeJob) => {
             if (!aliveRef.current) return
+            void applyAnalysisJobStatus(jobId, job).catch((e) =>
+              console.log('[add-song] analysis status update failed', e),
+            )
             if (
               typeof job.processing_started_at === 'number' &&
               Number.isFinite(job.processing_started_at) &&
@@ -290,12 +307,14 @@ export default function AddSongScreen() {
         cancelRef.current = null
       }
     },
-    [checkOpacity, checkScale, progressWidth, saveLesson, skillNodes],
+    [applyAnalysisJobStatus, checkOpacity, checkScale, progressWidth, saveLesson, skillNodes, trackAnalysisJob],
   )
 
   const onClose = () => {
+    const wasAnalyzing = uiState === 'analyzing'
     aliveRef.current = false
     cancelInFlight()
+    if (wasAnalyzing) toast.info('Analysis continues in the background. Track it in Library.')
     if (router.canGoBack()) router.back()
     else router.replace('/')
   }
@@ -323,6 +342,8 @@ export default function AddSongScreen() {
     Platform.OS === 'web'
       ? 'Paste a YouTube URL, search the catalog, or upload an audio file.'
       : 'Paste a YouTube URL or search the catalog. File upload is available on web.'
+
+  const analyzeTimedOut = analyzeError?.message === README_ERROR_COPY.analysisJobTimeout
 
   const pillsDisabled = uiState === 'analyzing'
 
@@ -605,8 +626,9 @@ export default function AddSongScreen() {
                     </Text>
                   </View>
                   <Text className="text-center font-sans text-[11px] leading-4 text-muted-brown">
-                    Usually 1–4 minutes. The bar fills when the practice server reports real stages — long separation
-                    or transcription steps can take a few minutes without moving the percentage.
+                    Usually 1–4 minutes. You can leave this screen — analysis keeps running and stays visible in
+                    Library. Long separation or transcription steps can take a few minutes without moving the
+                    percentage.
                   </Text>
                 </View>
               )
@@ -727,6 +749,7 @@ export default function AddSongScreen() {
               onContinue: () => {
                 setAnalyzeError(null)
                 setUiState('idle')
+                if (analyzeTimedOut) router.push('/library')
               },
             })}
           />

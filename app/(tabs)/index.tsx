@@ -19,8 +19,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import Svg, { Circle as SvgCircle, Line as SvgLine, Polygon as SvgPolygon } from 'react-native-svg'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
+import { PracticeModeTabs } from '@/components/home/PracticeModeTabs'
+import { SongPickerCard } from '@/components/home/SongPickerCard'
 import { Pill } from '@/components/Pill'
-import { SettingsSegmented } from '@/components/settings/SettingsSegmented'
 import { WoodGradient } from '@/components/WoodGradient'
 import { RecentProgress } from '@/components/RecentProgress'
 import { toast } from '@/components/ToastConfig'
@@ -54,6 +55,7 @@ import {
   persistDailyLick,
   type DailyLick,
 } from '@/src/home/dailyLick'
+import { buildSongPickerSources } from '@/src/home/songPickerItems'
 import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
 import {
   abandonActivePlan,
@@ -246,6 +248,9 @@ export default function HomeScreen() {
   const [spotifyBusy, setSpotifyBusy] = useState(false)
   const [, setTasteSongHints] = useState<string[]>([])
   const [spotifyLinked, setSpotifyLinked] = useState(false)
+  const [selectedSongJobId, setSelectedSongJobId] = useState<string | null>(null)
+  const [songStartBusy, setSongStartBusy] = useState(false)
+  const [songStartError, setSongStartError] = useState<string | null>(null)
 
   const skillNodes = useSkillStore((s) => s.nodes)
   const loadSkills = useSkillStore((s) => s.loadFromDb)
@@ -264,6 +269,79 @@ export default function HomeScreen() {
     if (a !== b) return 0
     return Math.min(planSlotIndex, currentPlan.slots.length - 1)
   }, [practicePlan, currentPlan, planSlotIndex])
+
+  const songPickerSongs = useMemo(() => {
+    const suggestedTitle =
+      suggestion && suggestion.kind !== 'cold_start' && suggestion.kind !== 'library_saved'
+        ? suggestion.song.song_title ?? null
+        : null
+    return buildSongPickerSources({ lessons, sessions: sessionsLog, suggestedTitle }).map((song) => {
+      const sectionLabel = `${song.sectionCount} section${song.sectionCount === 1 ? '' : 's'}`
+      return {
+        jobId: song.jobId,
+        title: song.title,
+        meta: song.lastPlayedDate
+          ? `Last played ${relativeDateLabel(song.lastPlayedDate)}${
+              song.accuracy != null ? ` · ${Math.round(song.accuracy * 100)}%` : ''
+            }`
+          : `${sectionLabel} · Not practiced yet`,
+        rightMeta: sectionLabel,
+      }
+    })
+  }, [lessons, sessionsLog, suggestion])
+
+  const defaultSongJobId = songPickerSongs[0]?.jobId ?? null
+
+  const selectedSong =
+    songPickerSongs.find((song) => song.jobId === selectedSongJobId) ??
+    songPickerSongs.find((song) => song.jobId === defaultSongJobId) ??
+    null
+
+  const songFocusHint = useMemo(() => {
+    if (!suggestion || suggestion.kind === 'cold_start' || suggestion.kind === 'library_saved') return null
+    if (suggestion.kind === 'ready') {
+      const label = suggestion.node.label?.trim() || suggestion.node.id.replace(/_/g, ' ')
+      return `Suggested focus: ${label}`
+    }
+    return suggestion.song.section_label?.trim()
+      ? `Continue with ${suggestion.song.section_label.trim()}`
+      : 'Continue where you left off.'
+  }, [suggestion])
+
+  const openLessonRow = useCallback(
+    async (jobId: string, title: string | null): Promise<string | null> => {
+      try {
+        const fullLesson = await getLessonByJobId(jobId)
+        if (!fullLesson) {
+          return `${title?.trim() || 'Song'} not found. Try opening from Library.`
+        }
+        saveLesson(fullLesson)
+        setLessonSectionIndex(0)
+        const skipTune = useSessionPrefsStore.getState().skipTuneStep
+        const href = await sessionEntryHrefWithMoodCheck(skipTune)
+        router.replace(href)
+        return null
+      } catch (error) {
+        console.warn('[home] could not open song', error)
+        return 'Could not open song.'
+      }
+    },
+    [router, saveLesson, setLessonSectionIndex],
+  )
+
+  const onStartSelectedSong = useCallback(() => {
+    if (!selectedSong || songStartBusy) return
+    setSongStartError(null)
+    setSongStartBusy(true)
+    void openLessonRow(selectedSong.jobId, selectedSong.title)
+      .then((error) => {
+        if (error) {
+          setSongStartError(error)
+          toast.error(error)
+        }
+      })
+      .finally(() => setSongStartBusy(false))
+  }, [openLessonRow, selectedSong, songStartBusy])
 
   const refresh = useCallback((options?: { keepPreviewOnError?: boolean }) => {
     setLoadError(false)
@@ -320,7 +398,7 @@ export default function HomeScreen() {
 
         setPracticePlanMode('preview')
 
-        if (homeSuggestion?.kind === 'cold_start') {
+        if (homeSuggestion?.kind === 'cold_start' && lessons.length === 0) {
           setPracticePlan(null)
           setPracticePlanLoading(false)
           return
@@ -464,26 +542,15 @@ export default function HomeScreen() {
         title: lessonRow.song_title,
         focus: lessonRow.artist?.trim() ? `${lessonRow.artist} · ${lessonRow.section_count} section${lessonRow.section_count !== 1 ? 's' : ''}` : `${lessonRow.section_count} section${lessonRow.section_count !== 1 ? 's' : ''}`,
         dateLabel: relativeDateLabel(lessonRow.analyzed_at),
-        open: async () => {
-          try {
-            const fullLesson = await getLessonByJobId(lessonRow.job_id)
-            if (!fullLesson) {
-              toast.error('Song not found. Try opening from Library.')
-              return
-            }
-            saveLesson(fullLesson)
-            setLessonSectionIndex(0)
-            const skipTune = useSessionPrefsStore.getState().skipTuneStep
-            const href = await sessionEntryHrefWithMoodCheck(skipTune)
-            router.replace(href)
-          } catch {
-            toast.error('Could not open song.')
-          }
+        open: () => {
+          void openLessonRow(lessonRow.job_id, lessonRow.song_title).then((error) => {
+            if (error) toast.error(error)
+          })
         },
       })
     }
     return out
-  }, [lessons, router, saveLesson, setLessonSectionIndex])
+  }, [lessons, openLessonRow])
 
   const startDailyLick = useCallback(async () => {
     if (!dailyLick) return
@@ -627,17 +694,13 @@ export default function HomeScreen() {
             <Text className="font-sans text-base text-muted-brown">Ready to play?</Text>
           </View>
 
-          {suggestion != null && suggestion.kind !== 'cold_start' ? (
-            <View className="mb-4">
-              <SettingsSegmented
-                label="Practice mode"
-                options={['Practice a song', 'Follow a plan']}
-                value={homePracticeMode === 'single' ? 'Practice a song' : 'Follow a plan'}
-                onValueChange={(value) => {
-                  void setHomePracticeMode(value === 'Practice a song' ? 'single' : 'plan')
-                }}
-              />
-            </View>
+          {suggestion != null && (suggestion.kind !== 'cold_start' || lessons.length > 0) ? (
+            <PracticeModeTabs
+              mode={homePracticeMode}
+              onChange={(mode) => {
+                void setHomePracticeMode(mode)
+              }}
+            />
           ) : null}
 
           <WoodGradient
@@ -663,7 +726,10 @@ export default function HomeScreen() {
                 ) : (
                   <Text className="font-sans text-sm text-cream">Loading suggestion…</Text>
                 )
-              ) : practicePlanMode === 'resume' && !practicePlanLoading && practicePlan?.slots?.length ? (
+              ) : homePracticeMode === 'plan' &&
+                practicePlanMode === 'resume' &&
+                !practicePlanLoading &&
+                practicePlan?.slots?.length ? (
                 <TodaysPlanCard
                   plan={practicePlan}
                   sessionMinutes={recommendedMinutes}
@@ -674,7 +740,7 @@ export default function HomeScreen() {
                   mode="resume"
                   onReset={onResetPracticePlan}
                 />
-              ) : suggestion.kind === 'cold_start' ? (
+              ) : suggestion.kind === 'cold_start' && lessons.length === 0 ? (
                 <View className="w-full max-w-md self-center">
                   {/* Matches onboarding welcome: icon, headline scale, readable measure */}
                   <View className="items-center">
@@ -760,9 +826,9 @@ export default function HomeScreen() {
                     </View>
                   </View>
                 </View>
-              ) : practicePlanLoading ? (
+              ) : homePracticeMode === 'plan' && practicePlanLoading ? (
                 <TodaysPlanCardLoading />
-              ) : practicePlan?.slots?.length ? (
+              ) : homePracticeMode === 'plan' && practicePlan?.slots?.length ? (
                 <TodaysPlanCard
                   plan={practicePlan}
                   sessionMinutes={recommendedMinutes}
@@ -773,6 +839,18 @@ export default function HomeScreen() {
                   mode="preview"
                   onRegenerate={onRegeneratePracticePlan}
                   regenerateBusy={regenerateBusy}
+                />
+              ) : (homePracticeMode === 'single' || suggestion.kind === 'cold_start') &&
+                songPickerSongs.length > 0 ? (
+                <SongPickerCard
+                  songs={songPickerSongs}
+                  selectedJobId={selectedSong?.jobId ?? null}
+                  focusHint={songFocusHint}
+                  busy={songStartBusy}
+                  errorText={songStartError}
+                  onSelect={setSelectedSongJobId}
+                  onStart={onStartSelectedSong}
+                  onAddSong={goAnalyze}
                 />
               ) : suggestion.kind === 'active_lesson' ? (
                 <>
@@ -845,7 +923,7 @@ export default function HomeScreen() {
                     <Text className="font-sans-medium text-base text-wood-900">Start session</Text>
                   </AnimatedPressable>
                 </>
-              ) : (
+              ) : suggestion.kind === 'ready' ? (
                 <>
                   <View className="mb-6 flex-row items-start justify-between">
                     <View className="flex-1 pr-3">
@@ -882,11 +960,14 @@ export default function HomeScreen() {
                     <Text className="font-sans-medium text-base text-wood-900">Start session</Text>
                   </AnimatedPressable>
                 </>
-              )}
+              ) : null}
             </View>
           </WoodGradient>
 
-          {dailyLick && !dailyLickDismissed && suggestion && suggestion.kind !== 'cold_start' ? (
+          {dailyLick &&
+          !dailyLickDismissed &&
+          suggestion &&
+          (suggestion.kind !== 'cold_start' || lessons.length > 0) ? (
             <View className="relative mb-6 overflow-hidden rounded-2xl border border-hairline bg-wood-800/40">
               <AnimatedPressable
                 onPress={() => void startDailyLick()}

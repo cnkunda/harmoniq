@@ -161,9 +161,14 @@ export const PREF_ANALYTICS_USER_ID = 'analytics_user_id'
 
 /** Commit 164: Home practice mode — `"single"` = practice a song, `"plan"` = follow a plan. */
 export const PREF_HOME_PRACTICE_MODE = 'home_practice_mode'
+/** Commit 179: latest mentor note + attempt metadata (JSON). */
+export const PREF_MENTOR_STATE_JSON = 'mentor_state_json'
 
 /** Commit 166: notation presentation tier (`learner` | `intermediate` | `transcriber`). */
 export const PREF_OUTPUT_TIER = 'output_tier'
+
+/** Device-local analyze jobs that should be re-checked after leaving Add Song or restarting. */
+export const PREF_ANALYSIS_JOBS_JSON = 'analysis_jobs_json'
 
 export const COACH_VOICE_OPTIONS = ['warm', 'concise', 'technical'] as const
 export type CoachVoiceId = (typeof COACH_VOICE_OPTIONS)[number]

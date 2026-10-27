@@ -15,7 +15,7 @@ def get_database_url_sync() -> str:
     url = os.getenv("DATABASE_URL_SYNC", "").strip()
     if url:
         return url
-    return "postgresql://harmoniq:harmoniq_dev@localhost:5432/harmoniq"
+    return "postgresql+psycopg2://harmoniq:harmoniq_dev@localhost:5432/harmoniq"
 
 def init_db() -> None:
     global _engine, _session_maker

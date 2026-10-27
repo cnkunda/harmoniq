@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { CoachNote } from '@/components/CoachNote'
 import { EmptyState } from '@/components/EmptyState'
 import { LearnerContextCard } from '@/components/LearnerContextCard'
+import { MentorSection } from '@/components/mentor/MentorSection'
 import { Pill } from '@/components/Pill'
 import { PulseEntryCard } from '@/components/pulse/PulseEntryCard'
 import { RiffDNA } from '@/components/RiffDNA'
@@ -98,6 +99,8 @@ export default function ProgressScreen() {
               variant="progress"
               onPress={() => router.push('/(tabs)/progress/pulse' as Href)}
             />
+
+            <MentorSection />
 
             <View className="mb-8">
               <LearnerContextCard skillNodes={nodes} />

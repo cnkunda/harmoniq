@@ -391,6 +391,15 @@ async def analyze(request: Request) -> AnalyzeJobCreated:
 async def analyze_status(job_id: str) -> JobStatus:
     job = jobs.get(job_id)
     if job is None:
+        try:
+            from app.repository import get_job as _repo_get_job
+
+            job = _repo_get_job(job_id)
+        except Exception:
+            logger.debug("GET /analyze/%s — database lookup failed", job_id, exc_info=True)
+        if job is not None:
+            jobs[job_id] = job
+    if job is None:
         logger.info("GET /analyze/%s — job not yet in store, returning queued", job_id)
         return JobStatus(status="queued", result=None, error=None, error_code=None)
     logger.info("GET /analyze/%s status=%s", job_id, job.status)

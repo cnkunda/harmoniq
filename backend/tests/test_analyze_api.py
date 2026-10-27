@@ -286,6 +286,21 @@ def test_get_analyze_unknown_job_returns_queued():
     assert body["error"] is None
 
 
+def test_get_analyze_falls_back_to_database(monkeypatch):
+    """After a backend restart, status polling should recover jobs from the DB."""
+    from app.schemas import JobStatus
+
+    stored = JobStatus(status="complete", result=None, error=None)
+    monkeypatch.setattr("app.repository.get_job", lambda job_id: stored)
+    job_id = "00000000-0000-0000-0000-000000000001"
+
+    r = client.get(f"/analyze/{job_id}")
+
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "complete"
+    assert jobs[job_id].status == "complete"
+
+
 def test_analysis_cache_hit_skips_expensive_steps(monkeypatch, tmp_path):
     from app import jobs as jobs_mod
     from app.stem_quality import StemClassification

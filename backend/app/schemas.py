@@ -545,6 +545,8 @@ class LessonJSON(BaseModel):
     job_id: str | None = None
     song_title: str | None = None
     artist: str | None = None
+    # Original YouTube/source URL when known — used client-side to dedupe re-analyses.
+    source_url: str | None = None
     style_label: str | None = None
     key: str | None = None
     key_confidence: float | None = None
@@ -1496,3 +1498,154 @@ class SpotifyPlaylistItems(BaseModel):
     previous: str | None = None
     total: int = 0
     items: list[dict[str, Any]] = Field(default_factory=list)
+
+# ---------------------------------------------------------------------------
+# Commit 179: Virtual Mentor Agent
+# ---------------------------------------------------------------------------
+
+MentorMode = Literal["single", "plan"]
+MentorConfidence = Literal["low", "medium", "high"]
+
+
+class MentorHistorySummary(BaseModel):
+    """Compact evidence counts for the mentor prompt and UI."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    days: int = Field(ge=0)
+    session_count: int = Field(ge=0)
+    jam_count: int = Field(ge=0)
+    plan_count: int = Field(ge=0)
+    correction_count: int = Field(ge=0)
+    confidence: MentorConfidence = "low"
+
+
+class MentorAccuracyPoint(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    date: str
+    accuracy: float = Field(ge=0.0, le=1.0)
+
+
+class MentorSkillDelta(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    label: str
+    prior: float = Field(ge=0.0, le=1.0)
+    recent: float = Field(ge=0.0, le=1.0)
+    delta: float
+
+
+class MentorWeakNode(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    label: str
+    score: float = Field(ge=0.0, le=1.0)
+
+
+class MentorGoalContext(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    experience_level: str | None = None
+    style_focus: str | None = None
+    style_label: str | None = None
+    technique_affinity: list[str] = Field(default_factory=list)
+    song_candidates: list[str] = Field(default_factory=list)
+
+
+class MentorDnaSummary(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    timing_feel: str = "centered"
+    top_pitch_classes: list[str] = Field(default_factory=list)
+    top_positions: list[str] = Field(default_factory=list)
+    technique_frequency: dict[str, int] = Field(default_factory=dict)
+
+
+class MentorCorrectionSummary(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    total: int = Field(default=0, ge=0)
+    by_type: dict[str, int] = Field(default_factory=dict)
+    most_corrected_chords: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MentorPlanSummary(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    slot_count: int = Field(default=0, ge=0)
+    slot_types: list[str] = Field(default_factory=list)
+    target_skills: list[str] = Field(default_factory=list)
+    remediation_count: int = Field(default=0, ge=0)
+    skip_count: int = Field(default=0, ge=0)
+    avg_slot_accuracy: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class MentorLibrarySong(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    job_id: str
+    title: str
+    artist: str | None = None
+    style_label: str | None = None
+    tempo: float | None = None
+    techniques: list[str] = Field(default_factory=list)
+
+
+class MentorTrajectoryRequest(BaseModel):
+    """Client-built compact trajectory — the only history Claude sees."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    mode: MentorMode = "plan"
+    generated_at: str | None = None
+    history: MentorHistorySummary
+    accuracy_points: list[MentorAccuracyPoint] = Field(default_factory=list)
+    skill_deltas: list[MentorSkillDelta] = Field(default_factory=list)
+    weak_nodes: list[MentorWeakNode] = Field(default_factory=list)
+    goals: MentorGoalContext = Field(default_factory=MentorGoalContext)
+    dna: MentorDnaSummary = Field(default_factory=MentorDnaSummary)
+    corrections: MentorCorrectionSummary = Field(default_factory=MentorCorrectionSummary)
+    plan: MentorPlanSummary | None = None
+    library_songs: list[MentorLibrarySong] = Field(default_factory=list)
+    taste_song_candidates: list[str] = Field(default_factory=list)
+
+
+class MentorNextMonthItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = Field(min_length=1, max_length=120)
+    why: str = Field(min_length=1, max_length=400)
+    skill_focus: str = Field(min_length=1, max_length=80)
+    mode: MentorMode
+
+
+class MentorSongSuggestion(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = Field(min_length=1, max_length=160)
+    artist: str | None = Field(default=None, max_length=160)
+    reason: str = Field(min_length=1, max_length=400)
+    source: Literal["library", "taste"]
+
+
+class MentorNote(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    headline: str = Field(min_length=1, max_length=120)
+    trajectory_summary: str = Field(min_length=1, max_length=1200)
+    confidence: MentorConfidence
+    plateau_diagnosis: str | None = Field(default=None, max_length=800)
+    next_month: list[MentorNextMonthItem] = Field(default_factory=list, max_length=3)
+    next_songs: list[MentorSongSuggestion] = Field(default_factory=list, max_length=3)
+    plan_guidance: str | None = Field(default=None, max_length=1200)
+    generated_at: str
+    model: str
+
+
+class MentorTrajectoryResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    note: MentorNote

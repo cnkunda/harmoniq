@@ -93,3 +93,36 @@ Completed commits moved from `PRIORITIES.md`.
 - `backend/app/analyze_audio.py` — pipeline integration
 - `src/types/soloHarmony.ts` — frontend type mirrors *(deleted as orphan in commit `5505726`; to be recreated by PRIORITIES.md commit 157)*
 - `backend/tests/test_solo_harmony_analyzer.py` — 50 tests, all passing
+
+---
+
+## Commit 179: Virtual Mentor Agent (Long-Term Skill Trajectory)
+
+**Goal:** A mentor persona that reasons over months of skill-node history, journal, and corrections to propose long-term direction (repertoire choices, plateau diagnosis, next milestones).
+
+**Shipped:** The raw material (skill nodes, Riff DNA, corrections, and plan history) now feeds a compact trajectory. Claude writes a monthly mentor note; Progress renders the Mentor section; Home’s song mode lists recent songs with last-played/progress and a song-specific start action.
+
+**Scope:**
+
+- Data layer: query skill nodes + session journal + DNA into a compact trajectory summary
+- Claude-powered mentor with monthly cadence (on-demand too); output stored as mentor notes
+- UI: "Mentor" section in Progress with trajectory chart + proposed next month
+- Guardrails: never edits plans automatically — proposals only
+
+**Acceptance Criteria:**
+
+- [x] Mentor summary generated from real ≥30-day history (or synthetic fixture)
+- [x] Proposals rendered with trajectory context; no auto-mutation of plans
+- [x] Failure/absence degrades to empty state, no crashes
+
+**Completion (2026-10-26):** Implemented.
+
+- Client trajectory builder: `src/progress/mentorTrajectory.ts` (≥30-day eligibility, accuracy points, skill deltas, plan/correction/DNA/goal context).
+- Monthly note orchestration: `src/progress/mentorNote.ts` (30-day cadence, 6h failure throttle, local `app_prefs` persistence).
+- Claude endpoint: `POST /mentor/trajectory` (`backend/app/mentor.py`, `backend/app/routers/mentor.py`) with song/skill allowlist validation and `HARMONIQ_SKIP_MENTOR`.
+- Progress “Mentor” section: `components/mentor/MentorSection.tsx` — trajectory chart, next songs, plan guidance, proposed next month; proposals only.
+- Home practice-mode tabs + song picker: `components/home/PracticeModeTabs.tsx`, `components/home/SongPickerCard.tsx`, `src/home/songPickerItems.ts` — “Practice a song” now lists recent songs with last-played/progress, suggested-song-first ordering, and a song-specific start button; library-bearing cold-start users now enter the main card/tabs.
+- Tests: `src/progress/mentorTrajectory.test.ts`, `src/progress/mentorNote.test.ts`, `src/home/songPickerItems.test.ts`, `backend/tests/test_mentor.py`.
+- Acceptance: ✅ ≥30-day/synthetic trajectory; ✅ proposals rendered without plan mutation; ✅ empty/error states.
+- Deviations: notes stored in `app_prefs` (no migration); song suggestions limited to library + taste-quiz candidates; Mentor UI is Progress-only.
+- Verification: `npm run lint` 0 errors; full Vitest 599 passed / 1 timeout (`designTokenConformance`; passes with `--testTimeout=30000`); targeted backend 43 passed; Progress and Home routes rendered in Playwright captures. Full backend suite is blocked by pre-existing long-running dataset/QAT tests in WSL.

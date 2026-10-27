@@ -22,6 +22,9 @@ from __future__ import annotations
 
 import logging
 import math
+import json
+import tempfile
+import zipfile
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -227,6 +230,52 @@ def _smooth_chords(events: list[ChordEvent]) -> list[ChordEvent]:
 # Model loading: Keras (primary) → TFLite (mobile) → Chroma (fallback)
 # ---------------------------------------------------------------------------
 
+def _keras_config_compat_copy(path: Path) -> Path | None:
+    """Return a temp .keras copy with ``InputLayer.optional`` removed.
+
+    The archived model was saved by a tf_keras version that emitted an
+    ``optional`` InputLayer config key which the installed tf_keras 2.20
+    rejects. Stripping just that key lets the weights load unchanged.
+    """
+    try:
+        with zipfile.ZipFile(path) as zin:
+            config_raw = zin.read("config.json")
+            config = json.loads(config_raw)
+            changed = False
+
+            def _strip_optional(node) -> None:
+                nonlocal changed
+                if isinstance(node, dict):
+                    if node.get("class_name") == "InputLayer" and isinstance(node.get("config"), dict):
+                        if "optional" in node["config"]:
+                            node["config"].pop("optional", None)
+                            changed = True
+                    for value in node.values():
+                        _strip_optional(value)
+                elif isinstance(node, list):
+                    for value in node:
+                        _strip_optional(value)
+
+            _strip_optional(config)
+            if not changed:
+                return None
+
+            with tempfile.NamedTemporaryFile(suffix=".keras", delete=False) as tmp:
+                tmp_path = Path(tmp.name)
+            try:
+                with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout:
+                    for item in zin.infolist():
+                        data = json.dumps(config).encode() if item.filename == "config.json" else zin.read(item.filename)
+                        zout.writestr(item, data)
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                raise
+            return tmp_path
+    except Exception:
+        logger.debug("Keras config compatibility patch skipped", exc_info=True)
+        return None
+
+
 @lru_cache(maxsize=1)
 def _get_keras_model():
     """Load the full Keras CRNN model for Python backend inference.
@@ -253,27 +302,12 @@ def _get_keras_model():
         def get_config(self):
             return super().get_config()
 
+    patched_path = _keras_config_compat_copy(_KERAS_PATH)
+    load_path = patched_path or _KERAS_PATH
     try:
-        model = tf.keras.models.load_model(
-            str(_KERAS_PATH),
-            custom_objects={
-                "_circular_cqt_pad": _circular_cqt_pad,
-                "CircularCqtPad": _CircularPadImpl,
-                "Custom>CircularCqtPad": _CircularPadImpl,
-            },
-            safe_mode=False,
-        )
-        logger.info("Chord model loaded via Keras (%s)", _KERAS_PATH.name)
-        return model
-    except Exception as keras_err:
-        logger.warning("Keras loading failed with TF_USE_LEGACY_KERAS=1: %s", keras_err)
-        logger.info("Retrying with TF_USE_LEGACY_KERAS=0 (native Keras 3.x)")
-        _os.environ["TF_USE_LEGACY_KERAS"] = "0"
         try:
-            import importlib
-            importlib.reload(tf.keras)
             model = tf.keras.models.load_model(
-                str(_KERAS_PATH),
+                str(load_path),
                 custom_objects={
                     "_circular_cqt_pad": _circular_cqt_pad,
                     "CircularCqtPad": _CircularPadImpl,
@@ -281,14 +315,39 @@ def _get_keras_model():
                 },
                 safe_mode=False,
             )
-            logger.info("Chord model loaded via Keras 3.x (%s)", _KERAS_PATH.name)
+            logger.info(
+                "Chord model loaded via Keras (%s%s)",
+                _KERAS_PATH.name,
+                ", config-patched" if patched_path else "",
+            )
             return model
-        except Exception as keras3_err:
-            logger.warning("Keras 3.x loading also failed: %s", keras3_err)
-            raise RuntimeError(
-                f"Failed to load Keras model at {_KERAS_PATH}: "
-                f"legacy={keras_err}, native={keras3_err}"
-            ) from keras_err
+        except Exception as keras_err:
+            logger.warning("Keras loading failed with TF_USE_LEGACY_KERAS=1: %s", keras_err)
+            logger.info("Retrying with TF_USE_LEGACY_KERAS=0 (native Keras 3.x)")
+            _os.environ["TF_USE_LEGACY_KERAS"] = "0"
+            try:
+                import importlib
+                importlib.reload(tf.keras)
+                model = tf.keras.models.load_model(
+                    str(load_path),
+                    custom_objects={
+                        "_circular_cqt_pad": _circular_cqt_pad,
+                        "CircularCqtPad": _CircularPadImpl,
+                        "Custom>CircularCqtPad": _CircularPadImpl,
+                    },
+                    safe_mode=False,
+                )
+                logger.info("Chord model loaded via Keras 3.x (%s)", _KERAS_PATH.name)
+                return model
+            except Exception as keras3_err:
+                logger.warning("Keras 3.x loading also failed: %s", keras3_err)
+                raise RuntimeError(
+                    f"Failed to load Keras model at {_KERAS_PATH}: "
+                    f"legacy={keras_err}, native={keras3_err}"
+                ) from keras_err
+    finally:
+        if patched_path is not None:
+            patched_path.unlink(missing_ok=True)
 
 
 @lru_cache(maxsize=1)

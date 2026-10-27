@@ -161,10 +161,11 @@ def test_priority_is_preserved_across_progress_updates():
     assert jobs_mod.jobs[job_id].priority == "urgent"
 
 
-def test_priority_dispatch_uses_queue_and_numeric_priority():
+def test_priority_dispatch_uses_queue_and_numeric_priority(monkeypatch):
     pytest.importorskip("celery")
     from app import jobs as jobs_mod
 
+    monkeypatch.delenv("HARMONIQ_SKIP_CELERY", raising=False)
     mock_task = MagicMock()
     with patch("app.tasks.analyze_job_task", mock_task):
         jobs_mod.enqueue_analyze_job(
@@ -178,6 +179,38 @@ def test_priority_dispatch_uses_queue_and_numeric_priority():
     assert kwargs["priority"] == 9
     assert kwargs["queue"] == "analyze.urgent"
     assert jobs_mod.jobs["job-dispatch"].priority == "urgent"
+
+
+def test_skip_celery_env_uses_thread_dispatch(monkeypatch):
+    pytest.importorskip("celery")
+    from app import jobs as jobs_mod
+
+    monkeypatch.setenv("HARMONIQ_SKIP_CELERY", "1")
+    captured: dict = {}
+
+    class FakeThread:
+        def __init__(self, target=None, kwargs=None, daemon=None):
+            captured["target"] = target
+            captured["kwargs"] = kwargs
+
+        def start(self):
+            captured["started"] = True
+
+    monkeypatch.setattr(jobs_mod.threading, "Thread", FakeThread)
+
+    mock_task = MagicMock()
+    monkeypatch.setattr("app.tasks.analyze_job_task", mock_task, raising=False)
+
+    jobs_mod.enqueue_analyze_job(
+        "job-skip-celery",
+        youtube_url="https://example.com",
+        upload_path=None,
+    )
+
+    mock_task.apply_async.assert_not_called()
+    assert captured["started"] is True
+    assert captured["target"] is jobs_mod._process_analyze_job
+    assert captured["kwargs"]["job_id"] == "job-skip-celery"
 
 
 # ---------------------------------------------------------------------------

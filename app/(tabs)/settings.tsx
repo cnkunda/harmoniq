@@ -86,6 +86,7 @@ import { OUTPUT_TIERS, parseOutputTier } from '@/src/preferences/outputTier'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
 import { fetchPersistAndDeriveSpotifyTaste } from '@/src/spotify/fetchPersistAndDeriveSpotify'
 import { formatSpotifySetupError } from '@/src/spotify/spotifyConnectErrors'
+import { useAnalysisJobsStore } from '@/src/stores/analysisJobsStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
@@ -441,6 +442,7 @@ export default function SettingsScreen() {
       try {
         clearAnalyticsQueue()
         await clearAllPracticeData()
+        await useAnalysisJobsStore.getState().clearAll()
         clearAnalyticsQueue()
         setAnalyticsEventCount(0)
         resetLesson()

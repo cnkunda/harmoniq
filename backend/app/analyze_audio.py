@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -52,6 +53,11 @@ logger = logging.getLogger("harmoniq.analyze_audio")
 logger.setLevel(logging.INFO)
 
 TABS_UNAVAILABLE_NO_GUITAR = "no_isolated_guitar"
+
+
+def _mt3_enabled() -> bool:
+    """Return False when local dev opts out of MT3 (HARMONIQ_SKIP_MT3=1)."""
+    return os.getenv("HARMONIQ_SKIP_MT3", "").strip() != "1"
 
 def _filter_chord_timeline_by_section(
     chord_timeline: ChordTimeline,
@@ -196,6 +202,7 @@ def _fallback_lesson(
         job_id=job_id,
         song_title=song_title,
         artist=artist,
+        source_url=source_url,
         style_label=style.style_label,
         key="G major",
         key_confidence=0.99,
@@ -295,8 +302,12 @@ def build_lesson_json_from_librosa(
     # Uses the fallback chain: MT3 → CRNN TFLite → Chroma matching.
     # When MT3 is unavailable or confidence is low, falls back gracefully.
     # ===
+    use_mt3 = _mt3_enabled()
     if on_stage:
-        on_stage("mt3_inferring", 0.60, "Transcribing with MT3…")
+        if use_mt3:
+            on_stage("mt3_inferring", 0.65, "Transcribing with MT3…")
+        else:
+            on_stage("chords_inferring", 0.65, "Transcribing (fallback)…")
 
     # Resolve the best available audio source for transcription
     chord_mix_path = mix_wav_path if (mix_wav_path and mix_wav_path.is_file()) else guitar_stem_path
@@ -368,7 +379,7 @@ def build_lesson_json_from_librosa(
         mt3_result = transcribe_with_fallback(
             chord_mix_path,
             beat_grid,
-            use_mt3=True,
+            use_mt3=use_mt3,
         )
         chord_timeline = mt3_result.chord_timeline
         solo_notes = mt3_result.solo_notes
@@ -392,7 +403,7 @@ def build_lesson_json_from_librosa(
     if chord_timeline is None or len(chord_timeline.events) == 0:
         logger.info("MT3 produced no chords for job_id=%s; running CRNN fallback", job_id)
         if on_stage:
-            on_stage("chords_inferring", 0.65, "Inferring chords (fallback)…")
+            on_stage("chords_inferring", 0.70, "Inferring chords (fallback)…")
 
         stem_conf = stem_classification.stem_confidence if stem_classification else 1.0
         use_dual_path = (
@@ -844,6 +855,7 @@ def build_lesson_json_from_librosa(
         job_id=job_id,
         song_title=song_title,
         artist=artist,
+        source_url=source_url,
         style_label=style.style_label,
         key=summary.key_name,
         key_confidence=summary.key_confidence,

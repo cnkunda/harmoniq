@@ -36,6 +36,7 @@ from app.routers.discovery import router as discovery_router
 from app.routers.taste import router as taste_router
 from app.routers.curriculum import router as curriculum_router
 from app.routers.mt3 import router as mt3_router
+from app.routers.mentor import router as mentor_router
 from app.routers.ws import router as ws_router
 from app.schemas import (
     JamBackingRequest,
@@ -106,7 +107,7 @@ async def lifespan(application: FastAPI):
         await asyncio.to_thread(_init_db)
         logger.info("Database initialized")
     except Exception:
-        logger.warning("Database not available — running without persistence")
+        logger.warning("Database not available — running without persistence", exc_info=True)
 
     # Load existing jobs from database (survives restarts)
     try:
@@ -127,21 +128,24 @@ async def lifespan(application: FastAPI):
         logger.exception("Failed to load jobs from disk on startup")
 
     # Commit A1.1: warm-start MT3 model server on boot (non-blocking if unavailable)
-    try:
-        from app.mt3.model_server import Mt3ModelServer
+    if os.getenv("HARMONIQ_SKIP_MT3", "").strip() == "1":
+        logger.info("MT3 warm-start skipped (HARMONIQ_SKIP_MT3=1)")
+    else:
+        try:
+            from app.mt3.model_server import Mt3ModelServer
 
-        mt3_server = Mt3ModelServer()
-        mt3_loaded = await asyncio.to_thread(mt3_server.warm_start)
-        if mt3_loaded:
-            logger.info("MT3 model warm-started successfully")
-        else:
-            load_err = mt3_server.load_error()
-            logger.info(
-                "MT3 model not loaded at startup%s — will use CRNN fallback",
-                f" ({load_err})" if load_err else "",
-            )
-    except Exception:
-        logger.exception("Failed to warm-start MT3 model — will use CRNN fallback")
+            mt3_server = Mt3ModelServer()
+            mt3_loaded = await asyncio.to_thread(mt3_server.warm_start)
+            if mt3_loaded:
+                logger.info("MT3 model warm-started successfully")
+            else:
+                load_err = mt3_server.load_error()
+                logger.info(
+                    "MT3 model not loaded at startup%s — will use CRNN fallback",
+                    f" ({load_err})" if load_err else "",
+                )
+        except Exception:
+            logger.exception("Failed to warm-start MT3 model — will use CRNN fallback")
     yield
 
 
@@ -221,6 +225,7 @@ app.include_router(discovery_router)
 app.include_router(taste_router)
 app.include_router(curriculum_router)
 app.include_router(mt3_router)
+app.include_router(mentor_router)
 app.include_router(ws_router)
 
 

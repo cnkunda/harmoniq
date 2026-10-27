@@ -92,8 +92,8 @@ export function mapAnalyzeFlowError(
     return {
       message: README_ERROR_COPY.analysisJobTimeout,
       variant: 'info',
-      actionKind: 'dismiss',
-      actionLabel: 'Dismiss',
+      actionKind: 'continue',
+      actionLabel: 'View progress',
     }
   }
 

@@ -231,3 +231,14 @@ def test_solo_micro_note_filtering(monkeypatch, fine_beat_grid):
     assert solo.notes[1].pitch == 64
     # At 120 BPM with tick_value=0.25, one tick = (60/120)*0.25 = 0.125s
     assert solo.notes[1].duration == 0.125
+
+
+def test_mt3_enabled_env_flag(monkeypatch):
+    """HARMONIQ_SKIP_MT3=1 bypasses the CPU-heavy MT3 tier."""
+    from app.analyze_audio import _mt3_enabled
+
+    monkeypatch.delenv("HARMONIQ_SKIP_MT3", raising=False)
+    assert _mt3_enabled() is True
+
+    monkeypatch.setenv("HARMONIQ_SKIP_MT3", "1")
+    assert _mt3_enabled() is False

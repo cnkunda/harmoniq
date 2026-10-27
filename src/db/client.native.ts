@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite'
 
 import { tryHomeSuggestionFromLesson } from '@/src/db/homeSuggestionFromLesson'
 import { tryLibraryHomeSuggestion } from '@/src/db/homeSuggestionFromLicks'
+import { dedupeLessonRows, lessonRowFields, lessonShouldReplace } from '@/src/db/lessonIdentity'
 import { logMigration, validateSessionsPreservation, validateSkillNodesPreservation } from '@/src/db/migrations'
 import {
     DB_NAME,
@@ -89,6 +90,7 @@ type DbHandle = Awaited<ReturnType<typeof SQLite.openDatabaseAsync>>
 
 let dbPromise: Promise<DbHandle> | null = null
 let migrationPromise: Promise<void> | null = null
+let lessonsDeduped = false
 
 async function getDb(): Promise<DbHandle> {
   if (!dbPromise) dbPromise = SQLite.openDatabaseAsync(DB_NAME)
@@ -422,9 +424,32 @@ async function applyMigrations(): Promise<void> {
   }
 }
 
+async function dedupeLessonsInDb(): Promise<void> {
+  const db = await getDb()
+  const rows = await db.getAllAsync<{
+    job_id: string
+    song_title: string | null
+    artist: string | null
+    analyzed_at: string
+    lesson_json: string
+  }>('SELECT job_id, song_title, artist, analyzed_at, lesson_json FROM lessons')
+  const { removedJobIds } = dedupeLessonRows(rows ?? [])
+  if (removedJobIds.length === 0) return
+  const placeholders = removedJobIds.map(() => '?').join(', ')
+  await db.runAsync(`DELETE FROM lessons WHERE job_id IN (${placeholders})`, ...removedJobIds)
+}
+
 export async function initDb(): Promise<void> {
   if (!migrationPromise) migrationPromise = applyMigrations()
   await migrationPromise
+  if (!lessonsDeduped) {
+    lessonsDeduped = true
+    try {
+      await dedupeLessonsInDb()
+    } catch (e) {
+      if (__DEV__) console.warn('[db/native] lesson dedupe failed', e)
+    }
+  }
 }
 
 export async function insertSessionRow(input: SessionInsertInput): Promise<void> {
@@ -1296,6 +1321,29 @@ export async function upsertLessonFromAnalysis(lesson: LessonJSON): Promise<void
   const db = await getDb()
   const sectionCount = Array.isArray(lesson.sections) ? lesson.sections.length : 0
   const analyzedAt = new Date().toISOString()
+
+  // Re-analysing the same song produces a new job_id — replace the old row
+  // instead of keeping a duplicate library entry.
+  const incoming = {
+    source_url: lesson.source_url,
+    song_title: lesson.song_title,
+    artist: lesson.artist,
+  }
+  const existing = await db.getAllAsync<{
+    job_id: string
+    song_title: string | null
+    artist: string | null
+    analyzed_at: string
+    lesson_json: string
+  }>('SELECT job_id, song_title, artist, analyzed_at, lesson_json FROM lessons')
+  const duplicateIds = (existing ?? [])
+    .filter((row) => row.job_id !== id && lessonShouldReplace(lessonRowFields(row), incoming))
+    .map((row) => row.job_id)
+  if (duplicateIds.length > 0) {
+    const placeholders = duplicateIds.map(() => '?').join(', ')
+    await db.runAsync(`DELETE FROM lessons WHERE job_id IN (${placeholders})`, ...duplicateIds)
+  }
+
   await db.runAsync(
     `INSERT INTO lessons (job_id, lesson_json, song_title, artist, analyzed_at, section_count)
      VALUES (?, ?, ?, ?, ?, ?)

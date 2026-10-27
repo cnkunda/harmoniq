@@ -52,13 +52,13 @@ describe('mapScoreFlowError', () => {
 })
 
 describe('mapAnalyzeFlowError', () => {
-  it('maps elapsed wall time over 5 min to analysis job timeout (Dismiss)', () => {
+  it('maps elapsed wall time over 5 min to analysis job timeout (View progress)', () => {
     const m = mapAnalyzeFlowError(apiErr(408, 'Analysis still running'), {
       elapsedMs: 5 * 60 * 1000 + 1,
     })
     expect(m.message).toBe(README_ERROR_COPY.analysisJobTimeout)
-    expect(m.actionKind).toBe('dismiss')
-    expect(m.actionLabel).toBe('Dismiss')
+    expect(m.actionKind).toBe('continue')
+    expect(m.actionLabel).toBe('View progress')
   })
 
   it('maps short audio body', () => {

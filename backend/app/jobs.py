@@ -118,6 +118,11 @@ def _priority_queue(priority: str) -> str:
     return {"urgent": "analyze.urgent", "normal": "analyze.normal", "low": "analyze.low"}.get(priority, "analyze.normal")
 
 
+def _celery_dispatch_enabled() -> bool:
+    """Return False when local dev opts out of Celery (HARMONIQ_SKIP_CELERY=1)."""
+    return os.getenv("HARMONIQ_SKIP_CELERY", "").strip() != "1"
+
+
 def _fail_job_and_dlq(
     job_id: str,
     error: str,
@@ -519,6 +524,7 @@ def _stub_lesson(
         job_id=job_id,
         song_title=song_title,
         artist=artist,
+        source_url=source_url,
         style_label="general",
         key="G major",
         key_confidence=0.99,
@@ -882,24 +888,27 @@ def enqueue_analyze_job(
     pp_dict = player_profile.model_dump(exclude_none=True) if player_profile else None
 
     # Try Celery first; fall back to daemon thread
-    try:
-        from app.tasks import analyze_job_task as _celery_task
+    if _celery_dispatch_enabled():
+        try:
+            from app.tasks import analyze_job_task as _celery_task
 
-        _celery_task.apply_async(
-            args=(job_id,),
-            kwargs={
-                "youtube_url": youtube_url,
-                "upload_path": upload_path,
-                "player_profile": pp_dict,
-                "focus_area": focus_area,
-            },
-            priority=_priority_to_int(priority_norm),
-            queue=_priority_queue(priority_norm),
-        )
-        logger.info("enqueue job_id=%s dispatched to Celery priority=%s", job_id, priority_norm)
-        return
-    except Exception:
-        logger.info("Celery not available for job_id=%s; falling back to thread", job_id)
+            _celery_task.apply_async(
+                args=(job_id,),
+                kwargs={
+                    "youtube_url": youtube_url,
+                    "upload_path": upload_path,
+                    "player_profile": pp_dict,
+                    "focus_area": focus_area,
+                },
+                priority=_priority_to_int(priority_norm),
+                queue=_priority_queue(priority_norm),
+            )
+            logger.info("enqueue job_id=%s dispatched to Celery priority=%s", job_id, priority_norm)
+            return
+        except Exception:
+            logger.info("Celery not available for job_id=%s; falling back to thread", job_id)
+    else:
+        logger.info("Celery dispatch skipped (HARMONIQ_SKIP_CELERY=1) job_id=%s; using thread", job_id)
 
     t = threading.Thread(
         target=_process_analyze_job,
@@ -1259,18 +1268,21 @@ def enqueue_beat_grid_recompute(
 ) -> None:
     """Dispatch beat grid recompute to Celery (or fallback thread)."""
     _set_recompute_progress(job_id, "pending", progress=0.0, stage_label="Queued…")
-    try:
-        from app.tasks import beat_grid_recompute_task as _celery_task
-        _celery_task.delay(
-            job_id,
-            time_signature=time_signature,
-            bpm_override=bpm_override,
-            tempo_curve=tempo_curve,
-        )
-        logger.info("recompute job_id=%s dispatched to Celery", job_id)
-        return
-    except Exception:
-        logger.info("Celery not available for recompute job_id=%s; falling back to thread", job_id)
+    if _celery_dispatch_enabled():
+        try:
+            from app.tasks import beat_grid_recompute_task as _celery_task
+            _celery_task.delay(
+                job_id,
+                time_signature=time_signature,
+                bpm_override=bpm_override,
+                tempo_curve=tempo_curve,
+            )
+            logger.info("recompute job_id=%s dispatched to Celery", job_id)
+            return
+        except Exception:
+            logger.info("Celery not available for recompute job_id=%s; falling back to thread", job_id)
+    else:
+        logger.info("Celery dispatch skipped (HARMONIQ_SKIP_CELERY=1) recompute job_id=%s; using thread", job_id)
 
     t = threading.Thread(
         target=_process_beat_grid_recompute,
