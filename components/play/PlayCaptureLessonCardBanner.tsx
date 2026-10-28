@@ -30,21 +30,21 @@ export function PlayCaptureLessonCardBanner({
 
   return (
     <View
-      className="mt-3 rounded-lg border border-wood-600/25 bg-wood-900/5 px-3 py-2.5"
+      className="mt-3 rounded-lg border border-wood-600/25 bg-wood-900/40 px-3 py-2.5"
       accessible
       accessibilityLabel={`Backing track ${backing}. Microphone ${mic}.`}
     >
       <View className="flex-row items-center gap-2.5">
         <AudioWaveform size={18} color={colors.amber.accent} strokeWidth={1.75} />
-        <Text className="min-w-0 flex-1 font-sans-medium text-xs text-wood-900">Backing track</Text>
+        <Text className="min-w-0 flex-1 font-sans-medium text-xs text-cream">Backing track</Text>
         <Pill
-          variant={playing && ready && !loading ? 'accent' : 'light'}
+          variant={playing && ready && !loading ? 'accent' : 'neutral'}
           size="xs"
           className="px-2 py-0.5"
         >
           <Text
             className={`font-mono text-[10px] font-medium ${
-              playing && ready && !loading ? 'text-amber-accent' : 'text-wood-600'
+              playing && ready && !loading ? 'text-amber-accent' : 'text-muted-light'
             }`}
           >
             {backing}
@@ -56,14 +56,14 @@ export function PlayCaptureLessonCardBanner({
 
       <View className="flex-row items-center gap-2.5">
         <Mic size={18} color={recording ? colors.danger : colors.muted.light} strokeWidth={1.75} />
-        <Text className="min-w-0 flex-1 font-sans-medium text-xs text-wood-900">Your guitar (mic)</Text>
+        <Text className="min-w-0 flex-1 font-sans-medium text-xs text-cream">Your guitar (mic)</Text>
         <View className="flex-row items-center gap-1.5">
           {recording ? (
             <View className="h-2 w-2 rounded-full bg-danger" accessibilityLabel="Recording indicator" />
           ) : null}
-          <Pill variant={recording ? 'danger' : 'light'} size="xs" className="px-2 py-0.5">
+          <Pill variant={recording ? 'danger' : 'neutral'} size="xs" className="px-2 py-0.5">
             <Text
-              className={`font-mono text-[10px] font-medium ${recording ? 'text-danger' : 'text-wood-600'}`}
+              className={`font-mono text-[10px] font-medium ${recording ? 'text-danger' : 'text-muted-light'}`}
             >
               {recording ? 'Recording' : 'Idle'}
             </Text>

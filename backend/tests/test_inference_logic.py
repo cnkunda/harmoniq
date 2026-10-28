@@ -242,3 +242,51 @@ def test_mt3_enabled_env_flag(monkeypatch):
 
     monkeypatch.setenv("HARMONIQ_SKIP_MT3", "1")
     assert _mt3_enabled() is False
+
+def test_neural_confidence_gate_helpers():
+    from app.chord_inference import (
+        _neural_mean_confidence,
+        _neural_model_too_uncertain,
+    )
+
+    flat = [
+        {"confidence": 0.04, "chord": "C:maj"},
+        {"confidence": 0.05, "chord": "G:maj"},
+    ]
+    peaked = [
+        {"confidence": 0.75, "chord": "C:maj"},
+        {"confidence": 0.80, "chord": "G:maj"},
+    ]
+
+    assert _neural_mean_confidence(flat) < 0.1
+    assert _neural_model_too_uncertain(flat)
+    assert not _neural_model_too_uncertain(peaked)
+
+
+def test_low_confidence_crnn_falls_through_to_chroma(monkeypatch):
+    from app import chord_inference
+
+    def flat_keras(y, sr):
+        probs = np.ones(25, dtype=np.float32) / 25.0
+        return [
+            {"time": 0.0, "chord": "C:maj", "confidence": 0.04, "probs": probs},
+            {"time": 0.1, "chord": "C:maj", "confidence": 0.04, "probs": probs},
+        ]
+
+    def chroma(y, sr):
+        probs = np.zeros(25, dtype=np.float32)
+        probs[7] = 1.0
+        return [{"time": 0.0, "chord": "G:maj", "confidence": 1.0, "probs": probs}]
+
+    monkeypatch.setattr(chord_inference, "_run_keras_raw", flat_keras)
+    monkeypatch.setattr(
+        chord_inference,
+        "_run_tflite_raw",
+        lambda y, sr: (_ for _ in ()).throw(RuntimeError("no tflite")),
+    )
+    monkeypatch.setattr(chord_inference, "_run_chroma_raw", chroma)
+
+    frames = chord_inference._run_inference(np.zeros(100, dtype=np.float32), 44100)
+
+    assert frames[0]["chord"] == "G:maj"
+    assert chord_inference.get_last_inference_tier() == "chroma"

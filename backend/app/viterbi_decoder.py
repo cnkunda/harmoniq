@@ -90,30 +90,26 @@ class ViterbiChordDecoder:
         psi = np.zeros((T, N), dtype=np.int32)
 
         # --- Initialization (t=0) ---
-        delta[0] = self._apply_duration_penalty(
-            emission_log_probs[0].copy(),
-            duration_beats[0] if duration_beats is not None else 1.0,
-            duration_penalty_weight,
-            state_idx=None,
-        )
+        delta[0] = emission_log_probs[0].copy()
 
         # --- Forward pass ---
         for t in range(1, T):
             # Vectorized: scores[i,j] = delta[t-1,i] + trans_log[i,j]
             scores = delta[t - 1][:, None] + self.transition_log_probs
 
+            # Durations shorter than one beat discourage *changes* into a new
+            # chord. A uniform emission offset cannot do this because Viterbi
+            # compares states at the same time step.
+            dur = duration_beats[t] if duration_beats is not None else 1.0
+            if dur < 1.0:
+                scores = self._apply_duration_change_penalty(
+                    scores, dur, duration_penalty_weight
+                )
+
             # Best predecessor for each state j
             psi[t] = np.argmax(scores, axis=0)
             delta[t] = np.max(scores, axis=0)
-
-            # Apply emission + duration penalty
-            dur = duration_beats[t] if duration_beats is not None else 1.0
-            delta[t] += self._apply_duration_penalty(
-                emission_log_probs[t].copy(),
-                dur,
-                duration_penalty_weight,
-                state_idx=None,  # full vector penalty
-            )
+            delta[t] += emission_log_probs[t]
 
             # Numerical stability guard
             max_delta = np.max(delta[t])
@@ -140,40 +136,34 @@ class ViterbiChordDecoder:
 
         return optimal_path, path_log_probs
 
-    def _apply_duration_penalty(
+    def _apply_duration_change_penalty(
         self,
-        emission_lp: np.ndarray,
+        scores: np.ndarray,
         duration: float,
         penalty_weight: float,
-        state_idx: int | None = None,
     ) -> np.ndarray:
-        """Apply duration-aware penalty to emission log-probabilities.
+        """Penalize chord changes into sub-beat slots.
 
-        Sub-beat chords (duration < 1.0) are penalized unless they are
-        dominant-type chords that naturally resolve quickly.
+        Args:
+            scores: Shape [vocab_size, vocab_size] transition scores where rows
+                are previous states and columns are next states.
+            duration: Duration of the destination step in beats.
+            penalty_weight: Lambda for sub-beat penalty strength.
+
+        Returns:
+            Scores with off-diagonal transitions penalized.
         """
-        if duration >= 1.0:
-            return emission_lp
+        if duration >= 1.0 or penalty_weight <= 0.0:
+            return scores
 
         base_penalty = penalty_weight * (1.0 - duration)
+        penalty = np.full_like(scores, base_penalty)
+        np.fill_diagonal(penalty, 0.0)
 
-        if self._dominant_mask is None:
-            if state_idx is not None:
-                emission_lp[state_idx] -= base_penalty
-            else:
-                emission_lp -= base_penalty
-            return emission_lp
+        if self._dominant_mask is not None:
+            penalty[:, self._dominant_mask] *= 0.5
 
-        if state_idx is not None:
-            if self._dominant_mask[state_idx]:
-                emission_lp[state_idx] -= base_penalty * 0.5
-            else:
-                emission_lp[state_idx] -= base_penalty
-        else:
-            emission_lp -= base_penalty
-            emission_lp[self._dominant_mask] += base_penalty * 0.5
-
-        return emission_lp
+        return scores - penalty
 
 
 def probs_to_log_probs(probs: np.ndarray, floor: float = _LOG_FLOOR) -> np.ndarray:

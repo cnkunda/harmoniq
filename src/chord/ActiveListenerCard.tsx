@@ -113,6 +113,11 @@ export function ActiveListenerCard() {
           ]}
         />
         <Text className="font-serif text-4xl text-cream">{chordLabel}</Text>
+        {!isListening && !currentChord ? (
+          <Text className="mt-1 font-sans text-xs text-muted-brown">
+            Tap Start Listening and play a chord.
+          </Text>
+        ) : null}
         {currentChord && !isWarming && (
           <Text className="mt-1 font-sans text-xs text-muted-brown">
             confidence: {Math.round(currentChord.confidence * 100)}%

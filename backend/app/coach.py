@@ -13,6 +13,13 @@ from typing import Any
 
 from anthropic import Anthropic
 
+from app.circuit_breaker import (
+    CircuitBreakerError,
+    anthropic_auth_blocked,
+    is_auth_error,
+    note_anthropic_auth_failure,
+    note_anthropic_auth_success,
+)
 from app.confidence_thresholds import hedge_tier
 from app.schemas import CoachFocusArea, HarmonizedSoloNotes, LessonSectionStub, MoodState, PlayerProfile
 
@@ -547,6 +554,8 @@ def _call_claude_streaming(
 ) -> str:
 
     start_time = time.perf_counter()
+    if anthropic_auth_blocked():
+        raise CircuitBreakerError("Anthropic API key was rejected; skipping call during cooldown")
     client = Anthropic(api_key=api_key, timeout=timeout_seconds)
     chunks: list[str] = []
     first_chunk_time: float | None = None
@@ -581,9 +590,13 @@ def _call_claude_streaming(
                 max_tokens,
                 model_id,
             )
+            note_anthropic_auth_success()
             return "".join(chunks).strip()
         except Exception as exc:
             last_error = exc
+            if is_auth_error(exc):
+                note_anthropic_auth_failure()
+                raise
             error_name = getattr(exc, "__class__", type(exc)).__name__
             # Only retry on 404 (model not found) — other errors are definitive
             if "404" not in str(exc) and error_name != "NotFoundError":

@@ -73,37 +73,37 @@ export function PlayCaptureCard({
   const micDot = recording ? colors.danger : status.startsWith('Capture error') ? colors.danger : colors.success
 
   const rowWrap =
-    'flex-row items-center justify-between gap-2 border border-wood-600/35 bg-cream-dark/40 px-3 py-2'
+    'flex-row items-center justify-between gap-2 border border-wood-600/35 bg-wood-900/40 px-3 py-2'
 
   return (
     <View className="gap-3">
       <Text className="font-sans-medium text-[10px] uppercase tracking-[0.12em] text-amber-accent">
         PLAY CAPTURE
       </Text>
-      <Text className="font-sans-medium text-sm leading-snug text-wood-900" numberOfLines={2}>
+      <Text className="font-sans-medium text-sm leading-snug text-cream" numberOfLines={2}>
         {songTitle}
       </Text>
-      <Text className="font-sans text-xs text-wood-600">{sectionLine}</Text>
+      <Text className="font-sans text-xs text-muted-light">{sectionLine}</Text>
 
       <View className={rowWrap}>
         <View className="min-w-0 flex-1 flex-row items-center gap-2">
           <AudioWaveform size={16} color={colors.amber.accent} strokeWidth={1.75} />
-          <Text className="font-sans-medium text-xs text-wood-900">Backing track</Text>
+          <Text className="font-sans-medium text-xs text-cream">Backing track</Text>
         </View>
         <View className="flex-row items-center gap-1.5">
           <Circle size={8} fill={backingDot} color={backingDot} />
-          <Text className="font-mono text-[11px] text-wood-900">{backing}</Text>
+          <Text className="font-mono text-[11px] text-cream">{backing}</Text>
         </View>
       </View>
 
       <View className={rowWrap}>
         <View className="min-w-0 flex-1 flex-row items-center gap-2">
           <Mic size={16} color={recording ? colors.danger : colors.muted.light} strokeWidth={1.75} />
-          <Text className="font-sans-medium text-xs text-wood-900">Your guitar (mic)</Text>
+          <Text className="font-sans-medium text-xs text-cream">Your guitar (mic)</Text>
         </View>
         <View className="flex-row items-center gap-1.5">
           <Circle size={8} fill={micDot} color={micDot} />
-          <Text className={`font-mono text-[11px] ${recording ? 'text-danger' : 'text-wood-900'}`}>
+          <Text className={`font-mono text-[11px] ${recording ? 'text-danger' : 'text-cream'}`}>
             {mic}
           </Text>
         </View>
@@ -125,16 +125,16 @@ export function PlayCaptureCard({
             {recording ? 'Finish capture' : 'Start capture'}
           </Text>
         </AnimatedPressable>
-        <Text className="shrink-0 font-mono text-sm tabular-nums text-wood-900">
+        <Text className="shrink-0 font-mono text-sm tabular-nums text-cream">
           {formatMmSs(elapsedMs)}
         </Text>
       </View>
 
       {autostopTriggered ? (
-        <Text className="font-sans text-xs text-wood-600">Auto-end triggered after 5 seconds of silence.</Text>
+        <Text className="font-sans text-xs text-muted-light">Auto-end triggered after 5 seconds of silence.</Text>
       ) : null}
       {take ? (
-        <Text className="font-sans text-xs text-wood-900">
+        <Text className="font-sans text-xs text-cream">
           Recorded take: {(take.durationMs / 1000).toFixed(1)}s, {take.audioBytes.length} bytes ({take.mimeType})
         </Text>
       ) : null}

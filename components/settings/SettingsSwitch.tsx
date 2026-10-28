@@ -1,5 +1,6 @@
-import { Switch, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
+import { ThemedSwitch } from '@/components/ThemedSwitch'
 import { colors } from '@/src/constants/colors'
 
 interface SettingsSwitchProps {
@@ -18,7 +19,7 @@ export function SettingsSwitch({ label, description, value, onValueChange }: Set
           <Text className="mt-1 font-sans text-[11px] text-muted-light leading-relaxed">{description}</Text>
         )}
       </View>
-      <Switch
+      <ThemedSwitch
         value={value}
         onValueChange={onValueChange}
         accessibilityLabel={label}

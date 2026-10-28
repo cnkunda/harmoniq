@@ -12,6 +12,7 @@ from app.chord_transitions import (
     _CHORD_TO_IDX,
     _ROOTS,
     apply_key_constraint,
+    apply_persistence_prior,
     build_transition_matrix,
     get_diatonic_indices,
     get_transition_matrix,
@@ -36,13 +37,35 @@ class TestTransitionMatrixShape:
         assert np.all(matrix >= 0)
 
 
+class TestPersistencePrior:
+    def test_self_transition_beats_every_off_diagonal(self):
+        matrix = build_transition_matrix()
+        off = matrix.copy()
+        np.fill_diagonal(off, 0.0)
+        assert np.all(np.diag(matrix) > off.max(axis=1))
+
+    def test_loaded_matrix_has_persistence_prior(self):
+        matrix = get_transition_matrix()
+        off = matrix.copy()
+        np.fill_diagonal(off, 0.0)
+        assert np.all(np.diag(matrix) > off.max(axis=1))
+
+    def test_upgrades_a_flat_diagonal(self):
+        base = np.full((25, 25), 1.0 / 25.0, dtype=np.float32)
+        upgraded = apply_persistence_prior(base)
+        off = upgraded.copy()
+        np.fill_diagonal(off, 0.0)
+        assert np.all(np.diag(upgraded) > off.max(axis=1))
+        np.testing.assert_allclose(upgraded.sum(axis=1), 1.0, atol=1e-5)
+
+
 class TestRootIntervalWeights:
-    def test_unison_is_competitive(self):
+    def test_unison_beats_fifth(self):
         matrix = build_transition_matrix()
         c_idx = _CHORD_TO_IDX["C:maj"]
         unison_prob = matrix[c_idx, c_idx]
         fifth_prob = matrix[c_idx, _CHORD_TO_IDX["G:maj"]]
-        assert unison_prob > fifth_prob * 0.5
+        assert unison_prob > fifth_prob
 
     def test_perfect_fifth_is_strong(self):
         matrix = build_transition_matrix()

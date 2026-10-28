@@ -1,4 +1,4 @@
-import { AlertTriangle, X } from 'lucide-react-native'
+import { AlertTriangle, Info, X } from 'lucide-react-native'
 import { useState } from 'react'
 import { Text, View } from 'react-native'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
@@ -25,14 +25,14 @@ const STYLES: Record<
 > = {
   warning: {
     bg: 'bg-amber-accent/12',
-    border: 'border-amber-accent/30',
-    text: 'text-wood-900',
+    border: 'border-amber-accent/35',
+    text: 'text-cream',
     iconColor: colors.amber.accent,
   },
   error: {
-    bg: 'bg-danger/10',
-    border: 'border-danger/30',
-    text: 'text-wood-900',
+    bg: 'bg-danger/12',
+    border: 'border-danger/35',
+    text: 'text-cream',
     iconColor: colors.danger,
   },
   info: {
@@ -55,12 +55,13 @@ export function ErrorBanner({
   const [dismissed, setDismissed] = useState(false)
   const s = STYLES[variant]
   if (dismissed) return null
+  const BannerIcon = variant === 'info' ? Info : AlertTriangle
 
   return (
     <View
       className={`flex-row items-start gap-3 rounded-xl border px-4 py-3 ${s.bg} ${s.border} ${className}`}
     >
-      <AlertTriangle color={s.iconColor} size={16} strokeWidth={2} style={{ marginTop: 2 }} />
+      <BannerIcon color={s.iconColor} size={16} strokeWidth={2} style={{ marginTop: 2 }} />
       <View className="min-w-0 flex-1">
         <Text className={`font-sans text-sm leading-relaxed ${s.text}`}>{message}</Text>
         {detail ? (

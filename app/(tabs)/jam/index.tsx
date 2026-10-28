@@ -53,6 +53,7 @@ import { usePitchStream } from '@/src/pitch/usePitchStream'
 import { completePracticePlanSlot } from '@/src/session/planProgress'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useDnaStore } from '@/src/stores/dnaStore'
+import { useTabContentInset } from '@/src/layout/useTabContentInset'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { usePlanStore } from '@/src/stores/planStore'
 import {
@@ -75,6 +76,7 @@ function confidenceFromMatchScore(score: number): InferenceConfidence {
 }
 
 export default function JamScreen() {
+  const tabInset = useTabContentInset()
   const router = useRouter()
   const { start: startPitch, stop: stopPitch } = usePitchStream()
 
@@ -781,7 +783,7 @@ export default function JamScreen() {
       <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
         <ScrollView
           className="flex-1 px-5"
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: tabInset }}
           showsVerticalScrollIndicator={false}
         >
           <View className="mt-3 mb-2">

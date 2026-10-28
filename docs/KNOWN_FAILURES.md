@@ -18,6 +18,7 @@ Last updated: October 2026
 | Scenario | Symptom | Root Cause | Workaround |
 |----------|---------|------------|------------|
 | Non-guitar instrument (piano, synth) | >80% frames predict N (no chord) — quality gate triggers | Model only trained on guitar CQT (GuitarSet, IDMT, etc.) | Correct behavior — falls through to chroma |
+| Out-of-distribution mix | Mean top-class confidence < 0.20 — near-uniform CRNN output | Model has no usable signal for this audio | Correct behavior — `_neural_model_too_uncertain()` falls through to chroma |
 | Alternate tuning (Drop D, Open G) | Lower confidence on voiced chords | Training data uses standard tuning primarily | Tuning metadata passed to pipeline helps |
 | Heavy distortion / overdrive | Chord classification degrades | Harmonic distortion changes chroma profile | Use clean or amp-simulated signal |
 | Complex jazz harmony (altered dominants, upper extensions) | Model predicts simpler chord (maj/min) instead of extended | 277-class vocabulary trained with class imbalance | Chroma fallback may be better for extensions |
@@ -55,7 +56,7 @@ Last updated: October 2026
 
 These behaviors are intentional but may look like bugs:
 
-- **CRNN predicts N on unfamiliar audio.** The quality gate checks this and routes to chroma. It is correct, not broken.
+- **CRNN predicts N or near-uniform probabilities on unfamiliar audio.** The quality gates check both the N ratio and mean top-class confidence and route to chroma. It is correct, not broken.
 - **MT3 returns empty for guitar-less songs.** Branch A still gives chords (from full mix). Branch B is empty. This is correct — no guitar was detected.
 - **Pipeline is slow on first run.** Downloads model checkpoints on first invocation. Subsequent runs use cached models.
 - **Chromat.chord() may not match MT3 results for the same song.** They use different methods and may disagree. The system reports which method produced each result.

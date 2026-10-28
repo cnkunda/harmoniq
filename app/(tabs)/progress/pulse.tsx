@@ -21,6 +21,7 @@ import {
 } from '@/src/db/client'
 import type { SessionJournalRow, UserFeedbackRow } from '@/src/db/types'
 import { getDemoLesson } from '@/src/demo/demoLesson'
+import { useTabContentInset } from '@/src/layout/useTabContentInset'
 import {
   buildAccuracyTrend,
   buildChordMastery,
@@ -30,6 +31,7 @@ import {
 import type { LessonJSON } from '@/src/types'
 
 export default function PulseScreen() {
+  const tabInset = useTabContentInset()
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -110,7 +112,7 @@ export default function PulseScreen() {
       <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={{ paddingBottom: tabInset }}
           showsVerticalScrollIndicator={false}
         >
           <View className="w-full max-w-4xl self-center px-6 pb-8 pt-4">

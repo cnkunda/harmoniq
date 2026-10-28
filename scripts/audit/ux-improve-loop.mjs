@@ -64,7 +64,7 @@ function runPlaywrightCapture() {
   execSync("npx playwright test --config=playwright.config.ts tests/ui/route-capture.spec.ts", {
     cwd: ROOT_DIR,
     stdio: "inherit",
-    timeout: 300_000,
+    timeout: 600_000,
   });
 }
 
@@ -72,7 +72,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function execPython(args, timeout = 60_000) {
+function execPython(args, timeout = 180_000) {
   return execSync(`${pythonCmd()} ${args}`, { encoding: "utf-8", timeout });
 }
 
@@ -85,7 +85,7 @@ async function analyzeScreenshot(screenshotPath) {
     const imgPath = IS_WINDOWS ? toWslPath(absPath) : absPath;
     const description = execPython(
       `"${VISION_PROXY}" "${imgPath}"`,
-      60_000,
+      180_000,
     ).trim();
     // Rate limit: 2s between vision API calls
     await sleep(2000);

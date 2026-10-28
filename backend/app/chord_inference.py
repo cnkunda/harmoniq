@@ -76,6 +76,7 @@ from app.cqt_constants import (
     CHROMA_BINS as _CHROMA_BINS,
     FEATURE_DIM as _FEATURE_DIM,
 )
+from app.key_detection import estimate_key_from_chroma
 _BATCH_CHUNK = 512
 
 # Track which inference tier the last _run_inference call used.
@@ -197,6 +198,8 @@ TIE_THRESHOLD = 0.15
 SUBDIVISION_RATIO = 0.65
 MIN_HALF_BEAT_DURATION = 0.3  # seconds — skip split for beats shorter than this
 N_CONFIDENCE_THRESHOLD = 0.2  # Default to N when model confidence is below this
+_MIN_NEURAL_MEAN_CONFIDENCE = 0.20  # Reject near-uniform CRNN output
+_KEY_CONSTRAINT_MIN_CONFIDENCE = 0.60  # Require a clear KS winner before constraining
 
 
 def _get_segment_db(y_segment: np.ndarray) -> float:
@@ -695,8 +698,8 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
     """Run chord inference using the best available model.
 
     Chain: Keras → TFLite → Chroma template matching.
-    Falls through to chroma when the neural model produces mostly N (no-chord)
-    predictions, which indicates the model has low confidence for this audio.
+    Falls through when the neural model produces mostly N (no-chord) or when
+    its mean top-class probability is too low to be meaningful.
     """
     global _last_inference_tier
 
@@ -706,6 +709,12 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
         logger.info("Chord inference: %d frames (Keras CRNN)", len(raw_frames))
         if _neural_model_too_noisy(raw_frames):
             logger.warning("CRNN model predicts >80%% N chords; falling through to TFLite")
+        elif _neural_model_too_uncertain(raw_frames):
+            logger.warning(
+                "CRNN mean confidence %.3f below %.2f; falling through to TFLite",
+                _neural_mean_confidence(raw_frames),
+                _MIN_NEURAL_MEAN_CONFIDENCE,
+            )
         else:
             return raw_frames
     except Exception as exc:
@@ -715,9 +724,16 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
         raw_frames = _run_tflite_raw(y, sr)
         _last_inference_tier = "crnn"
         logger.info("Chord inference: %d frames (TFLite CRNN)", len(raw_frames))
-        if not _neural_model_too_noisy(raw_frames):
+        if _neural_model_too_noisy(raw_frames):
+            logger.warning("TFLite model predicts >80%% N chords; falling back to chroma")
+        elif _neural_model_too_uncertain(raw_frames):
+            logger.warning(
+                "TFLite mean confidence %.3f below %.2f; falling back to chroma",
+                _neural_mean_confidence(raw_frames),
+                _MIN_NEURAL_MEAN_CONFIDENCE,
+            )
+        else:
             return raw_frames
-        logger.warning("TFLite model predicts >80%% N chords; falling back to chroma")
     except Exception as exc:
         logger.warning("TFLite inference unavailable: %s", exc)
 
@@ -725,6 +741,37 @@ def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
     raw_frames = _run_chroma_raw(y, sr)
     logger.warning("Falling back to chroma template matching (%d frames)", len(raw_frames))
     return raw_frames
+
+
+def _neural_mean_confidence(raw_frames: list[dict]) -> float:
+    """Return the mean top-class probability across raw neural frames."""
+    if not raw_frames:
+        return 0.0
+    confidences = [float(f.get("confidence", 0.0)) for f in raw_frames]
+    return float(np.mean(confidences))
+
+
+def _neural_model_too_uncertain(
+    raw_frames: list[dict],
+    min_mean_confidence: float = _MIN_NEURAL_MEAN_CONFIDENCE,
+) -> bool:
+    """Check if the neural model's outputs are too flat to trust.
+
+    A 25-class model with near-uniform output (mean top probability close to
+    1/25) has no usable signal. Treat it like the no-chord quality gate and
+    let the chroma fallback run.
+    """
+    if not raw_frames:
+        return True
+    mean_conf = _neural_mean_confidence(raw_frames)
+    if mean_conf < min_mean_confidence:
+        logger.info(
+            "Model mean top-class confidence %.3f below %.2f — quality gate triggered",
+            mean_conf,
+            min_mean_confidence,
+        )
+        return True
+    return False
 
 
 def _neural_model_too_noisy(raw_frames: list[dict], n_threshold: float = 0.80) -> bool:
@@ -934,39 +981,19 @@ def _split_half_beat(beat_data: dict) -> list[dict]:
 
 
 def _estimate_key_from_audio(y: np.ndarray, sr: int) -> tuple[int, str, float]:
-    """Estimate musical key using Krumhansl-Schmuckler correlation.
+    """Estimate musical key using normalized Krumhansl-Schmuckler correlation.
 
     Returns:
         (key_root_0_11, mode_str, confidence_float)
     """
     import librosa
 
-    KS_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
-    KS_MINOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
-
     try:
         chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
         chroma_mean = chroma.mean(axis=1)
+        return estimate_key_from_chroma(chroma_mean)
     except Exception:
         return 0, "major", 0.0
-
-    chroma_list = chroma_mean.tolist()
-    if len(chroma_list) != 12:
-        return 0, "major", 0.0
-
-    best_corr = -math.inf
-    best: tuple[int, str] = (0, "major")
-
-    for mode, profile in [("major", KS_MAJOR), ("minor", KS_MINOR)]:
-        for shift in range(12):
-            rotated = profile[shift:] + profile[:shift]
-            c = sum(a * b for a, b in zip(chroma_list, rotated))
-            if c > best_corr:
-                best_corr = c
-                best = (shift, mode)
-
-    confidence = min(best_corr / 50.0, 1.0)
-    return best[0], best[1], confidence
 
 
 # ---------------------------------------------------------------------------
@@ -1181,11 +1208,10 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid, *, detect_bass: bool = F
 
         base_matrix = get_transition_matrix()
 
-        # Chroma-based key detection routinely returns 0.35-0.4 on real songs.
-        # Lowered threshold from 0.6 to 0.3 so key constraint activates more
-        # often — even a weak key signal is better than none for restricting
-        # the 277-class transition space.
-        if key_conf >= 0.3:
+        # A weak or spurious key estimate is worse than no constraint: it can
+        # penalize the correct chords while leaving only the wrong ones
+        # reachable. Only constrain when the Pearson winner is clear.
+        if key_conf >= _KEY_CONSTRAINT_MIN_CONFIDENCE:
             trans_matrix = apply_key_constraint(base_matrix, key_root, key_mode)
         else:
             trans_matrix = base_matrix

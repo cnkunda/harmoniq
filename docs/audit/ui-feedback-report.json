@@ -1,283 +1,614 @@
 {
-  "generatedAt": "2026-10-25T09:44:13.871Z",
+  "generatedAt": "2026-10-27T22:30:46.957Z",
   "routesAnalyzed": 30,
-  "totalUiGapsFound": 0,
+  "totalUiGapsFound": 14,
   "note": "Cosmetic-only fixes. Never change functionality or business logic.",
   "summary": {
     "error": 0,
-    "warning": 0,
-    "info": 0
+    "warning": 12,
+    "info": 1
   },
-  "allGapsByRoute": [],
+  "allGapsByRoute": [
+    {
+      "route": "/",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/jam",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/jam-practice",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/jam/history",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/library",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/listening",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/musicxml-render-test",
+      "gaps": [
+        {
+          "severity": "info",
+          "issue": "Loading state",
+          "keywords": [
+            "loading",
+            "spinner",
+            "skeleton"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/onboarding/results",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/progress/pulse",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/scale-explorer",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Typography",
+          "keywords": [
+            "font",
+            "typography",
+            "typeface"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/session/play",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/session/slow",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Contrast / readability",
+          "keywords": [
+            "contrast",
+            "readability",
+            "hard to read"
+          ]
+        },
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/session/tune",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Typography",
+          "keywords": [
+            "font",
+            "typography",
+            "typeface"
+          ]
+        }
+      ]
+    }
+  ],
   "routes": [
     {
       "route": "/",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/root/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a music streaming app. The app is open to the \"Good afternoon, Nkunda\" section, and it has a menu bar with various options such as \"Add a song\", \"Play a song\", and \"Study music\". The app also has a \"Library\" tab, and it has a \"Play\" button on the right side. The background of the screen is black, and the app has a light brown color scheme."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:14:56.888Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:00:55.116Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
     },
     {
       "route": "/add-song",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__add-song/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a music streaming app. The app is open, and the user interface is dark, suggesting that the app is not currently active. The app has a menu bar with options for adding songs, changing songs, and other features. The app also has a search bar, which can be used to search for specific songs or artists. The app is designed with a clean and simple layout, with a focus on the user experience."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:15:58.927Z",
+      "analyzedAt": "2026-10-27T22:02:20.797Z",
       "gaps": []
     },
     {
       "route": "/discover",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__discover/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a music streaming app, specifically a library of songs. The app is open, and the main focus is on the \"Library\" tab. The app has a dark brown background, and the title \"Library\" is prominently displayed at the top. The app also has a search bar, a \"Start Listening\" button, and a \"Library\" tab with a list of songs. The app has a clean and simple design, with a focus on functionality and ease of use."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:17:00.960Z",
+      "analyzedAt": "2026-10-27T22:03:30.755Z",
       "gaps": []
     },
     {
       "route": "/jam",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__jam/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a music streaming app. The app is titled \"Music Mode\" and is open to a page with a list of songs. The screen is divided into two columns, with the left column containing the title of the app and the right column displaying the names of the songs. The app is in a dark brown color scheme, and the background of the screen is a light brown color. The layout of the app is simple and straightforward, with the main focus being on the list of songs."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:18:02.998Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:04:22.591Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
     },
     {
       "route": "/jam-practice",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__jam-practice/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen with a message box on the left side and a dark brown background on the right side. The message box has a white border and a black background, and it contains a message that reads \"This phrase has matching loop.\" The background is a dark brown color, and the message box is positioned in the center of the image."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:19:05.017Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:05:13.171Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
     },
     {
       "route": "/jam/history",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__jam__history/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a website's desktop background. The background is a dark brown color, and the website's title \"JAM HISTORY\" is displayed in white text at the top. Below the title, there is a list of icons, including a music note icon, a music note icon, and a music note icon. The website's layout appears to be simple and clean, with a minimalistic design that focuses on the content and navigation."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:20:07.037Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:06:14.489Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
     },
     {
       "route": "/library",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__library/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a library page. The library page is open, and it has a search bar at the top, allowing users to search for songs. The search bar is currently empty, suggesting that no songs are currently in the library. The library page also has a menu bar at the bottom, which has a few icons, including \"Library\" and \"Analyze\". The background of the library page is a dark brown color, and the text on the page is in a lighter shade of brown."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:21:09.058Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:07:27.965Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
     },
     {
       "route": "/listening",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__listening/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a music streaming app, specifically a library of songs. The app is open and displays a menu with various options, including \"Library\", \"Start Listening\", and \"Library Study\". The app also has a search bar and a \"Match Your Library\" feature. The background of the app is a dark brown color, and the app is set against a light brown background. The app is designed with a clean and simple layout, with the main focus on the user interface and the functionality of the app."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:22:11.090Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:07:50.409Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
     },
     {
       "route": "/musicxml-render-test",
       "viewport": {
-        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a window with a dark brown background. The window has a gray border and is titled \"Library\" with a white title bar. The window contains a list of options, including \"Library\" and \"Music\", and a \"Playback\" button. The window also has a \"Playback\" menu bar with options such as \"Volume\", \"Volume Control\", and \"Volume Down\". The window is set against a light brown background, and the image is in portrait orientation."
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen with a dark brown background. The screen displays a text box with the message \"Loading sounds...\" and a list of options, including \"Volume\", \"Volume Control\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \"Volume Down\", \"Volume Up\", \""
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:22:54.787Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:09:23.190Z",
+      "gaps": [
+        {
+          "severity": "info",
+          "issue": "Loading state",
+          "keywords": [
+            "loading",
+            "spinner",
+            "skeleton"
+          ]
+        }
+      ]
     },
     {
       "route": "/onboarding",
       "viewport": {
-        "description": "[viewport.png]\n\nThe image shows a screenshot of a website's layout, with a dark brown background and a light brown border. The website appears to be a music streaming platform, as indicated by the presence of a music note icon. The main content of the website is a navigation bar with a \"First time here\" button, and a text box that reads \"Let's find out what you're interested in.!\" and \"There are many features to choose from, and a quick baseline for your listening experience.\" The website also includes a \"We track what you listen to\" button, suggesting that the platform is designed to provide personalized recommendations based on the user's listening habits."
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a website. The website has a dark brown background with a white header and footer. The main content of the website is in white text, and there is a small image of a music note in the top left corner. The website appears to be a music streaming platform, and it has a navigation bar with a \"First time here\" button. The layout and design of the website seem to be simple and straightforward, with a clean and professional appearance."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:23:40.081Z",
+      "analyzedAt": "2026-10-27T22:10:32.859Z",
       "gaps": []
     },
     {
       "route": "/onboarding/mic",
       "viewport": {
-        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a webpage. The webpage is titled \"MUSICPHONE\" and has a dark brown background with a light brown border. The text on the webpage is in a darker shade of brown, and the website's URL is displayed in a lighter shade of brown. The image also contains a few other elements, such as a small logo and a navigation bar."
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a page titled \"Microphone\". The page has a brown background and features a yellow header and footer. The main content of the page is a form that asks the user to enter their name and email address. The form also includes a button that says \"Next\" and a button that says \"No\". The text on the page is in a simple, conversational style, and the layout is straightforward, with the header and footer providing a clear separation between the main content and the form.\n\nThe image does not contain any visible text or other objects, and the overall layout and design of the page are consistent with a typical computer screen."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:24:35.234Z",
+      "analyzedAt": "2026-10-27T22:11:31.360Z",
       "gaps": []
     },
     {
       "route": "/onboarding/phrase/0",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__onboarding__phrase__0/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a word processing document titled \"Phrase 1 - Steady Pocket\". The document is open and ready to be edited, with a blank page at the top and a blank page at the bottom. The document is titled \"Phrase 1 - Steady Pocket\" and is titled \"Play reference\". The document is titled \"Record take\" and is titled \"Record score\". The document is titled \"Play reference\" and is titled \"Play reference\". The document is titled \"Play reference\" and is titled \"Play reference\". The document is titled \"Play reference\" and is titled \"Play reference\". The document is titled \"Play reference\" and is titled \"Play reference\". The document is titled \"Play reference\" and is titled \"Play reference\". The document is titled \"Play reference\" and is titled \"Play reference\". The document is titled \"Play reference\" and is titled \"Play reference\". The document is titled \"Play reference\" and is titled \"Play reference\". The document is titled \"Play reference\" and is titled \"Play reference\"."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:25:37.261Z",
+      "analyzedAt": "2026-10-27T22:13:03.382Z",
       "gaps": []
     },
     {
       "route": "/onboarding/results",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__onboarding__results/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a webpage with a dark brown background. The main subject of the image is a button located in the top left corner, which is white in color. The button is accompanied by a text box that reads \"Your baseline will appear here\". The text box is positioned in the center of the image, and it contains a list of recommendations for the user to follow. The recommendations include \"Compile your baseline\" and \"Start placement phrases\". The layout of the image is simple and straightforward, with the button and text box being the main focus."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:26:39.291Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:14:22.355Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
     },
     {
       "route": "/onboarding/taste-quiz",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__onboarding__taste-quiz/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a music streaming app's search bar. The search bar is filled with a list of names of artists, including \"Bo King\", \"Dance Queen\", \"Bobby V\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \"Bobby\", \""
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:27:41.337Z",
+      "analyzedAt": "2026-10-27T22:15:55.299Z",
       "gaps": []
     },
     {
       "route": "/progress",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__progress/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a website's progress bar, which is a rectangular shape with a brown background. The progress bar is divided into three sections, each representing a different stage of a task. The first section is at the top, the middle section is at the bottom, and the third section is at the bottom. The progress bar is filled with text and numbers, indicating the progress of the task. The website appears to be a music streaming platform, as indicated by the presence of a music player icon in the top left corner."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:28:43.428Z",
+      "analyzedAt": "2026-10-27T22:16:52.590Z",
       "gaps": []
     },
     {
       "route": "/progress/pulse",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__progress__pulse/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a music app that displays a chord progression chart. The chart is divided into different sections, each representing a different chord. The chart is color-coded, with each color representing a different chord. The app also provides a progress bar, which shows the progress of the user's practice session. The app has a simple and clean design, with a brown background and white text. The app is designed for a casual user, making it easy to navigate and understand."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:29:45.472Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:17:49.465Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
     },
     {
       "route": "/review-archive/demo-session",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__review-archive__demo-session/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a music studio page on a computer screen. The page is titled \"Session replay\" and has a brown background with white text. The main content of the page is a list of sessions, with each session labeled with a score. The page also includes a section for reviewing the sessions, which is titled \"Back to Journal\". The layout of the page is simple and straightforward, with a clear and organized design."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:30:47.517Z",
+      "analyzedAt": "2026-10-27T22:19:18.724Z",
       "gaps": []
     },
     {
       "route": "/scale-explorer",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__scale-explorer/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a music player page, likely for a music streaming service. The page displays a list of songs, with the title \"Scale Explorer\" prominently displayed at the top. The page also includes a drop-down menu with various options, such as \"Chords\", \"Frets\", and \"Rests\". The layout of the page is simple and clean, with a light brown background and a darker brown border. The text on the page is in a standard font, and the overall design is minimalistic and straightforward."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:31:49.549Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:20:09.531Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Typography",
+          "keywords": [
+            "font",
+            "typography",
+            "typeface"
+          ]
+        }
+      ]
     },
     {
       "route": "/session/listen",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__listen/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a music listening app. The app is open to a page titled \"Listen\" with a list of songs and a button labeled \"Next Study\". The screen is black with a white border, and the app is set against a brown background. The app is titled \"Great Pitch\" and is designed for listening to music."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:32:51.583Z",
+      "analyzedAt": "2026-10-27T22:21:19.859Z",
       "gaps": []
     },
     {
       "route": "/session/mood-check",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__mood-check/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a page titled \"How are you feeling today?\". The page has a dark brown background and features a list of four options for focusing on the day, including \"Focus\", \"Focus\", \"Focus\", and \"Focus\". The options are presented in a simple, easy-to-read format, with the focus on the day clearly displayed.\n\nThe screenshot is taken from a top-down perspective, providing a clear view of the options and their descriptions. The layout is straightforward, with the options neatly organized and presented in a clear, easy-to-understand manner."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:33:53.606Z",
+      "analyzedAt": "2026-10-27T22:22:31.309Z",
       "gaps": []
     },
     {
       "route": "/session/musical-tolerance",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__musical-tolerance/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a computer screen displaying a page with a dark brown background. The main focus of the image is a computer screen with a menu bar at the top, which has three options: \"Choose your scoring mode\", \"Expressive\", and \"Tune\". The screen also has a \"Tune\" option, which is a music scoring mode. The screen is titled \"Tune\", and the text \"Expressive\" is displayed, indicating that the user can choose between different scoring modes. The screen also has a \"Tune\" option, which is a music scoring mode."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:34:55.632Z",
+      "analyzedAt": "2026-10-27T22:23:46.396Z",
       "gaps": []
     },
     {
       "route": "/session/play",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__play/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a music learning app, specifically a guitar learning app. The app is open and displays a page with a guitar learning guide. The guide is titled \"Play\" and provides instructions on how to play the guitar. The app is designed with a simple and clean layout, with a focus on providing clear instructions and a user-friendly interface. The app is displayed on a computer screen, and the background is a dark brown color."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:35:57.652Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:24:51.804Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
     },
     {
       "route": "/session/review",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__review/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a music library page. The page is titled \"Library\" and has a list of songs, with a rating system for each song. The screen also has a \"Review\" tab, and a \"Back\" button is visible. The image is in black and white, and the layout is simple and straightforward."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:36:59.688Z",
+      "analyzedAt": "2026-10-27T22:25:43.999Z",
       "gaps": []
     },
     {
       "route": "/session/slow",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__slow/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a music production software interface. The interface is predominantly black and white, with a brown border. The main focus of the image is a screen that displays a list of options, including \"Slow\", \"Next Play\", and \"Back\". The options are arranged in a linear fashion, with the \"Next Play\" option being the most prominent. The interface also includes a progress bar, which is currently empty. The background of the image is a light brown color, providing a contrast to the black and white elements of the interface."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:38:01.716Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:26:42.136Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Contrast / readability",
+          "keywords": [
+            "contrast",
+            "readability",
+            "hard to read"
+          ]
+        },
+        {
+          "severity": "warning",
+          "issue": "Color mismatch",
+          "keywords": [
+            "color",
+            "palette",
+            "tone"
+          ]
+        }
+      ]
     },
     {
       "route": "/session/study",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__study/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a music learning app, specifically a guitar learning app. The app is designed for beginners and is focused on teaching them how to play the guitar. The app is open and ready to use, with a user interface that is easy to navigate. The app is designed to help users learn the basics of playing the guitar, such as strumming, finger placement, and chord progressions. The app also includes a study mode, which allows users to learn at their own pace and track their progress. The app is designed to be user-friendly and accessible, making it an ideal tool for beginners who want to learn how to play the guitar."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:39:03.743Z",
+      "analyzedAt": "2026-10-27T22:27:44.367Z",
       "gaps": []
     },
     {
       "route": "/session/tune",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__tune/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a music player page on a computer screen. The page displays a menu bar with options for playing music, adjusting volume, and changing the music. The background of the page is black, and the text is written in a white font. The layout of the page is simple and straightforward, with the main focus being on the music player and its various functions."
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:40:05.767Z",
-      "gaps": []
+      "analyzedAt": "2026-10-27T22:29:03.101Z",
+      "gaps": [
+        {
+          "severity": "warning",
+          "issue": "Typography",
+          "keywords": [
+            "font",
+            "typography",
+            "typeface"
+          ]
+        }
+      ]
     },
     {
       "route": "/session/warmup",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__session__warmup/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a session warm-up screen. The screen is black with a brown border, and it is divided into two sections. The left section contains a yellow button with the text \"Session warm-up\" and a small image of a flame. The right section has a gray background with a white text box that reads \"This session does not include a warm-up for current step. You continue to the next step. You can continue to the next step by pressing the button below the flame.\" The screen also has a small image of a flame and a button with the text \"Continue to the next step.\""
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:41:07.792Z",
+      "analyzedAt": "2026-10-27T22:30:40.729Z",
       "gaps": []
     },
     {
       "route": "/settings",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__settings/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "error": "Command failed: wsl.exe python3 \"/home/kunda/vision-tool/vision_proxy.py\" \"/mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__settings/viewport.png\""
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:42:09.815Z",
+      "analyzedAt": "2026-10-27T22:30:42.810Z",
       "gaps": []
     },
     {
       "route": "/settings/analytics",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__settings__analytics/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "error": "Command failed: wsl.exe python3 \"/home/kunda/vision-tool/vision_proxy.py\" \"/mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__settings__analytics/viewport.png\""
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:43:11.839Z",
+      "analyzedAt": "2026-10-27T22:30:44.897Z",
       "gaps": []
     },
     {
       "route": "/settings/feedback",
       "viewport": {
-        "error": "SEARCH: File exists at /mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__settings__feedback/viewport.png\nKEYS: Cloudflare ✗  Azure AI Foundry ✗  Groq ✗  HuggingFace ✓  Mistral AI ✗  Fireworks AI ✗  Zhipu AI ✗  Google Gemini ✓  OpenRouter ✓  OpenAI ✗  Anthropic ✗  Together AI ✗  DeepInfra ✗  Cohere ✗  xAI ✗\nKEYS: Skipped 22/31 backends (missing API key)\nKEYS: 9 backends available"
+        "error": "Command failed: wsl.exe python3 \"/home/kunda/vision-tool/vision_proxy.py\" \"/mnt/c/workspace/harmoniq/artifacts/playwright/screenshots/__settings__feedback/viewport.png\""
       },
       "states": {},
-      "analyzedAt": "2026-10-25T09:44:13.871Z",
+      "analyzedAt": "2026-10-27T22:30:46.957Z",
       "gaps": []
     }
   ],

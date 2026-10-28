@@ -7,6 +7,7 @@ protection to prevent cascading failures when upstream services are down.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from enum import Enum
 from typing import Any, Callable
@@ -139,6 +140,49 @@ class CircuitBreaker:
             "failure_threshold": self.failure_threshold,
             "recovery_timeout": self.recovery_timeout,
         }
+
+
+# ---------------------------------------------------------------------------
+# Anthropic authentication failure guard
+# ---------------------------------------------------------------------------
+
+#: A rejected API key will not become valid during a request burst. Stop
+#: spending latency (and log volume) on further calls for this cooldown.
+_AUTH_FAILURE_COOLDOWN_SECONDS = 300.0
+_auth_lock = threading.Lock()
+_anthropic_auth_failed_until = 0.0
+
+
+def is_auth_error(exc: BaseException) -> bool:
+    """Return True when *exc* represents an invalid or rejected API key."""
+    status_code = getattr(exc, "status_code", None)
+    if status_code == 401:
+        return True
+    return exc.__class__.__name__ == "AuthenticationError"
+
+
+def anthropic_auth_blocked() -> bool:
+    """Return True while the process is in the post-401 cooldown window."""
+    with _auth_lock:
+        return time.time() < _anthropic_auth_failed_until
+
+
+def note_anthropic_auth_failure() -> None:
+    """Record an authentication failure and start the cooldown window."""
+    global _anthropic_auth_failed_until
+    with _auth_lock:
+        _anthropic_auth_failed_until = time.time() + _AUTH_FAILURE_COOLDOWN_SECONDS
+    logger.warning(
+        "circuit_breaker name=anthropic auth_failed; suppressing LLM calls for %.0fs",
+        _AUTH_FAILURE_COOLDOWN_SECONDS,
+    )
+
+
+def note_anthropic_auth_success() -> None:
+    """Clear the cooldown after a successful authenticated call."""
+    global _anthropic_auth_failed_until
+    with _auth_lock:
+        _anthropic_auth_failed_until = 0.0
 
 
 # ---------------------------------------------------------------------------

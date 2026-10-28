@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Platform,
   ScrollView,
-  Switch,
   Text,
   useWindowDimensions,
   View,
@@ -16,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/Button'
 import { DiscoverPanel } from '@/components/DiscoverPanel'
 import { ErrorBanner } from '@/components/ErrorBanner'
+import { ThemedSwitch } from '@/components/ThemedSwitch'
 import { getDiscoveryRecommendations } from '@/src/api/discovery'
 import {
   createSpotifyPlaybackBridge,
@@ -25,6 +25,7 @@ import {
 import { ActiveListenerCard } from '@/src/chord/ActiveListenerCard'
 import { colors } from '@/src/constants/colors'
 import { getAppPref, getLessonByJobId, listLessonsJournal, listSessionsJournal } from '@/src/db/client'
+import { useTabContentInset } from '@/src/layout/useTabContentInset'
 import { PREF_SPOTIFY_CLIENT_SESSION } from '@/src/db/schema'
 import type { LessonListRow } from '@/src/db/types'
 import { useSkillStore } from '@/src/stores/skillStore'
@@ -46,6 +47,7 @@ function spotifyBannerProps(error: SpotifyPlaybackBridgeError): { message: strin
 
 export default function DiscoverScreen() {
   const router = useRouter()
+  const tabInset = useTabContentInset()
   const { width } = useWindowDimensions()
   const twoCol = width >= 640
   const tabRef = useRef<AlphaTabSurfaceRef>(null)
@@ -271,7 +273,7 @@ export default function DiscoverScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
-      <ScrollView className="flex-1 px-5 py-4" contentContainerStyle={{ paddingBottom: 36 }}>
+      <ScrollView className="flex-1 px-5 py-4" contentContainerStyle={{ paddingBottom: tabInset }}>
         <Text className="font-serif text-3xl text-cream">Discover</Text>
         <Text className="mt-1 font-sans text-sm text-cream/80">
           Song recommendations and your library — play along with Spotify while tabs follow in real time.
@@ -368,7 +370,7 @@ export default function DiscoverScreen() {
                 Sync tab cursor to Spotify playback position.
               </Text>
             </View>
-            <Switch
+            <ThemedSwitch
               value={followAlong}
               onValueChange={setFollowAlong}
               disabled={playbackSkipped}

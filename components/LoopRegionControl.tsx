@@ -35,14 +35,14 @@ export function LoopRegionControl({ barCount, value, onChange, disabled }: LoopR
   }
 
   return (
-    <View className="mt-4 rounded-xl border border-wood-600/20 bg-cream p-3 shadow-sm">
-      <Text className="font-sans-medium text-sm text-wood-900">Loop region</Text>
-      <Text className="mt-1 font-sans text-xs text-wood-600">
+    <View className="mt-4 rounded-xl border border-wood-700/50 bg-wood-800/60 p-3 shadow-soft-wood">
+      <Text className="font-sans-medium text-sm text-cream">Loop region</Text>
+      <Text className="mt-1 font-sans text-xs text-muted-light">
         Handles snap to bar boundaries; playback loops exactly on bar timestamps.
       </Text>
 
       <View className="mt-3 min-h-[44px] justify-center py-1">
-        <Text className="font-sans text-xs text-wood-900">Start bar</Text>
+        <Text className="font-sans text-xs text-cream">Start bar</Text>
         <Slider
           minimumValue={0}
           maximumValue={maxStart}
@@ -58,7 +58,7 @@ export function LoopRegionControl({ barCount, value, onChange, disabled }: LoopR
       </View>
 
       <View className="mt-2 min-h-[44px] justify-center py-1">
-        <Text className="font-sans text-xs text-wood-900">End bar (exclusive)</Text>
+        <Text className="font-sans text-xs text-cream">End bar (exclusive)</Text>
         <Slider
           minimumValue={clamped.startBarIndex + 1}
           maximumValue={barCount}
@@ -73,7 +73,7 @@ export function LoopRegionControl({ barCount, value, onChange, disabled }: LoopR
         />
       </View>
 
-      <Text className="mt-2 font-mono text-[11px] text-wood-600">
+      <Text className="mt-2 font-mono text-[11px] text-muted-light">
         Bars {clamped.startBarIndex + 1}–{clamped.endBarIndexExclusive} ({span} bar{span === 1 ? '' : 's'})
       </Text>
     </View>

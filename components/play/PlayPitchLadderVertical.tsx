@@ -70,7 +70,7 @@ export function PlayPitchLadderVertical({
       ? midiToScientificPitchName(nextTargetMidi)
       : null
 
-  const mutedTextTone = embedded ? 'text-muted-light' : 'text-wood-600'
+  const mutedTextTone = 'text-muted-light'
   let statusTitle = 'Waiting…'
   let statusSub = 'Play to see pitch feedback'
   let statusTone = mutedTextTone
@@ -100,7 +100,7 @@ export function PlayPitchLadderVertical({
         .join(' ')
         .trim()
     : [
-        'relative w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-wood-600/45 bg-cream-dark/55 p-3 md:max-w-md md:self-start',
+        'relative w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-wood-600/45 bg-wood-800/60 p-3 md:max-w-md md:self-start',
         className ?? '',
       ]
         .join(' ')
@@ -133,7 +133,7 @@ export function PlayPitchLadderVertical({
           <Text className="shrink font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
             Live pitch vs target
           </Text>
-          <Text className={`font-mono text-sm ${isActive && cents != null ? 'text-wood-900' : mutedTextTone}`}>
+          <Text className={`font-mono text-sm ${isActive && cents != null ? 'text-cream' : mutedTextTone}`}>
             {isActive && cents != null && Number.isFinite(cents)
               ? `${cents >= 0 ? '+' : ''}${Math.round(cents)}¢`
               : '—'}
@@ -149,7 +149,7 @@ export function PlayPitchLadderVertical({
       >
         <View
           style={embedded ? { width: TRACK_W } : { width: TRACK_W, height: TRACK_H }}
-          className="shrink-0 self-stretch overflow-hidden rounded-lg border border-wood-600/35 bg-wood-900/10"
+          className="shrink-0 self-stretch overflow-hidden rounded-lg border border-wood-600/35 bg-wood-900/40"
         >
           <View
             className="absolute left-0 right-0 bg-success/15"
@@ -167,7 +167,7 @@ export function PlayPitchLadderVertical({
           ) : null}
         </View>
         <View className="min-w-0 flex-1 justify-center py-0.5">
-          <Text className={`font-mono text-[11px] ${embedded ? 'text-cream' : 'text-wood-900'}`}>Target · {targetSci}</Text>
+          <Text className={`font-mono text-[11px] ${embedded ? 'text-cream' : 'text-cream'}`}>Target · {targetSci}</Text>
           {nextSci ? (
             <Text className={`mt-0.5 font-mono text-[10px] ${mutedTextTone}`}>Was · {nextSci}</Text>
           ) : null}

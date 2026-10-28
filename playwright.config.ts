@@ -3,6 +3,10 @@ import { defineConfig, devices } from "@playwright/test";
 const port = Number(process.env.PLAYWRIGHT_PORT ?? "8081");
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${port}`;
 const useWebServer = process.env.PLAYWRIGHT_USE_WEBSERVER !== "0";
+const viewport =
+  process.env.UX_AUDIT_VIEWPORT === "mobile"
+    ? { width: 390, height: 844 }
+    : { width: 1440, height: 900 };
 
 export default defineConfig({
   testDir: "./tests/ui",
@@ -27,7 +31,7 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    viewport: { width: 1440, height: 900 },
+    viewport,
     navigationTimeout: 60_000,
     actionTimeout: 20_000,
   },

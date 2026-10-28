@@ -208,7 +208,6 @@ export default function TasteQuizScreen() {
           <Button
             label="Next"
             onPress={goNext}
-            disabled={!canNextStep0}
             accessibilityLabel="Continue to vibe step"
             fullWidth
             className="mt-6"
@@ -249,7 +248,6 @@ export default function TasteQuizScreen() {
           <Button
             label="Next"
             onPress={goNext}
-            disabled={!canNextStep1}
             fullWidth
             className="mt-8"
           />

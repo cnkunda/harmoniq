@@ -121,7 +121,7 @@ First run takes ~3 min (Expo cold start). Subsequent runs reuse the server.
 
 Detailed step-by-step workflow in `.opencode/instructions/UX_IMPROVE_LOOP.md`.
 
-**CI** (`.github/workflows/scoring-tests.yml`): runs frontend `vitest run` + backend pytest on 12 specific test files. Triggered on push to `main`/`master` and on all PRs.
+**CI** (`.github/workflows/scoring-tests.yml`): runs frontend `vitest run` + backend pytest on a selected list of scoring/chord/Viterbi/key-detection tests (see the workflow file). Triggered on push to `main`/`master` and on all PRs.
 
 ---
 
@@ -241,8 +241,10 @@ Shared contract: `HarmoniqDbClient` interface in `src/db/harmoniqDbClient.ts`. P
 - **Primary transcription engine — two-branch architecture:**
   - **Branch A (chords, instrument-agnostic):** full mix or harmonic-bed submix → aggregate pitch/chroma representation (MT3 Flat granularity or dedicated chroma extractor) → template matching against `CHORD_INTERVALS`. Chord confidence reflects chroma clarity + template match quality, decoupled from guitar-stem separation.
   - **Branch B (solo, leakage-hardened):** guitar stem (Demucs) as soft prior + full mix as parallel feature → MT3-style token decoder conditioned on fixed guitar-program embedding, with MR-MT3 memory retention (previous-segment token context), prior token sampling, and token shuffling → post-hoc guitar-program token filter → melodic line with per-note confidence and per-section `leakage_risk` (0.0–1.0).
-- **Fallback chain**: Branch A (chords): MT3 → CRNN TFLite on full mix → Chroma template matching. Branch B (solo): MT3 → Basic Pitch on guitar stem. The quality gate (`_neural_model_too_noisy()`) at line 541 bypasses the CRNN result when >80% of frames predict N (no-chord), falling through to chroma.
-- **Basic Pitch caching**: `basic_pitch_predict_events()` in `pipeline_proof.py` caches results by audio path to avoid duplicate 60s+ inference between solo note extraction and tab generation.
+- **Fallback chain**: Branch A (chords): MT3 → CRNN TFLite on full mix → Chroma template matching. Branch B (solo): MT3 → Basic Pitch on guitar stem. Two quality gates bypass the CRNN result: `_neural_model_too_noisy()` when >80% of frames predict N (no-chord), and `_neural_model_too_uncertain()` when mean top-class confidence is below 0.20 (near-uniform output), both falling through to chroma.
+- **Key detection**: `app/key_detection.py` is the single source of truth — normalized Krumhansl-Schmuckler (Pearson correlation, tonic rotated to index 0). The same estimate feeds the lesson key and the key-constrained Viterbi matrix. The constraint activates only when the correlation is `>= 0.60`; weak/spurious winners use the unconstrained matrix. Never use raw profile dot products or the old mirrored rotation.
+- **Viterbi transitions**: `apply_persistence_prior()` guarantees each row's self-transition exceeds every off-diagonal transition. Sub-beat duration penalties are applied to off-diagonal transitions; they are not uniform emission offsets.
+- **Basic Pitch caching**: `basic_pitch_predict_events()` in `pipeline_proof.py` caches results by audio path **and canonicalized model key** so `infer_solo()` (explicit default model) and tab generation (`model_path=None`) share one 60s+ inference pass.
 - **On-device path**: CRNN TFLite model powers Live Mic Mode (<120ms latency) for chord detection. Long-term targets: (1) framewise chord student — non-autoregressive piano-roll model distilled from Branch A's output; (2) guitar-vocabulary token solo student — autoregressive model distilled from Branch B's program-conditioned output, structurally incapable of leaking non-guitar notes.
 - **Custom model training** (`build_chord_tflite.py`): preserved for Phase 3 distillation. MT3 pseudo-labels will train two smaller student models (framewise chord + guitar-vocabulary solo).
 - `torch==2.5.1` / `torchaudio==2.5.1` pinned — do not upgrade without testing Demucs.
@@ -550,6 +552,7 @@ Both datasets derive chord labels from MIDI note data rather than explicit chord
 - **Env var prefixes**: Frontend uses `EXPO_PUBLIC_HARMONIQ_SKIP_*`, backend uses `HARMONIQ_SKIP_*`. Mixing them up = silent no-op.
 - **Ghost recording paths**: Native stores recordings on disk; web stores inline base64. Test assertions must account for both.
 - **MT3 / JAX**: MT3 requires JAX for GPU inference. The CRNN TFLite fallback activates automatically when JAX/TPU is unavailable. basic-pitch / TensorFlow is no longer a primary pipeline dependency (was the solo inference engine before MT3).
+- **Anthropic 401**: `circuit_breaker.py` records an invalid/rejected API key and suppresses coach/enrichment calls for 300s. Chord enrichment reports `status="skipped"`, `fallback_reason="api_key_rejected"` — never `complete` with zero corrections on an auth failure.
 - **CSS grid**: Not available in React Native. Use `flex-row flex-wrap` instead.
 - **WSL networking**: Use LAN IP (`192.168.x.x`) in both `EXPO_PUBLIC_API_URL` and `HARMONIQ_CORS_ORIGINS` so physical devices can reach the backend.
 - **Starter song**: "Gravity" by John Mayer (G major pentatonic) — the default if no song is added.

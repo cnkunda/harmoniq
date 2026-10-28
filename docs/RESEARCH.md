@@ -50,7 +50,7 @@ Audio → Demucs htdemucs_6s → 6 stems (guitar, bass, drums, vocals, piano, ot
 |------|-------|------------|---------|---------|
 | 1 (Primary) | MT3 (T5-small, JAX) | Dependencies installed, audio < 5 min | ~5 min on CPU | Best — multi-instrument aware |
 | 2 (Fallback) | CRNN (TF/TFLite) | MT3 unavailable or confidence < 0.7 | < 1s | Limited — 34.7% real acc., quality-gated |
-| 3 (Tertiary) | Chroma template (librosa) | CRNN >80% N predictions | < 100ms | Basic — major/minor only |
+| 3 (Tertiary) | Chroma template (librosa) | CRNN >80% N predictions **or mean top-class confidence < 0.20** | < 100ms | Basic — major/minor only |
 | 4 (Reported) | Confidence ≤ threshold | All tiers produce output with low confidence | — | Output shown with explicit "uncertain" marker |
 
 ### Two-Branch Rationale

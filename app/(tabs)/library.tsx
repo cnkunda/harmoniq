@@ -23,7 +23,6 @@ import {
   CHOICE_LABEL_SANS_ON,
 } from '@/src/constants/uiTokens'
 import {
-    clearAllPracticeData,
     deleteLessonByJobId,
     deleteLickById,
     getLessonByJobId,
@@ -33,9 +32,9 @@ import {
 import type { LessonListRow, LickRow } from '@/src/db/types'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { getDemoLesson } from '@/src/demo/demoLesson'
+import { useTabContentInset } from '@/src/layout/useTabContentInset'
 import { useAnalysisJobsStore } from '@/src/stores/analysisJobsStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
-import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 import { shareExportedBlob } from '@/src/utils/exportShare'
 import { lessonFromSavedLick } from '@/src/utils/lessonFromSavedLick'
@@ -72,6 +71,7 @@ function elapsedLabel(iso: string, nowMs: number): string {
 
 export default function LibraryScreen() {
   const router = useRouter()
+  const tabInset = useTabContentInset()
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const resetLesson = useLessonStore((s) => s.resetLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
@@ -261,12 +261,6 @@ export default function LibraryScreen() {
         return next
       })
       const rows = await getLicks()
-      if (rows.length === 0) {
-        await clearAllPracticeData()
-        useLessonStore.getState().resetLesson()
-        useSessionAnnotationsStore.getState().clearAll()
-        setLessons([])
-      }
       setLicks(rows)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Could not remove lick.')
@@ -365,7 +359,7 @@ export default function LibraryScreen() {
       <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ paddingBottom: 28 }}
+          contentContainerStyle={{ paddingBottom: tabInset }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

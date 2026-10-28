@@ -56,6 +56,7 @@ import {
   buildJournalExportText,
   clearAllPracticeData,
   getAppPref,
+  getSessionCount,
   getUserFeedbackStats,
   initDb,
   listAnalyticsEvents,
@@ -82,6 +83,7 @@ import {
   type CoachVoiceId,
 } from '@/src/db/schema'
 import type { UserFeedbackStats } from '@/src/db/types'
+import { useTabContentInset } from '@/src/layout/useTabContentInset'
 import { OUTPUT_TIERS, parseOutputTier } from '@/src/preferences/outputTier'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
 import { fetchPersistAndDeriveSpotifyTaste } from '@/src/spotify/fetchPersistAndDeriveSpotify'
@@ -123,6 +125,7 @@ function parseStoredSpotifyProfile(raw: string | null): SpotifyTasteProfile | nu
 
 export default function SettingsScreen() {
   const router = useRouter()
+  const tabInset = useTabContentInset()
   const skipTuneStep = useSessionPrefsStore((s) => s.skipTuneStep)
   const setSkipTuneStep = useSessionPrefsStore((s) => s.setSkipTuneStep)
   const loadSkills = useSkillStore((s) => s.loadFromDb)
@@ -131,7 +134,7 @@ export default function SettingsScreen() {
   const outputTier = useOutputTierStore((s) => s.tier)
   const setOutputTier = useOutputTierStore((s) => s.setTier)
   const user = useSkillStore((s) => s.nodes)
-  const sessionsCount = 0 // TODO: Get from store when available
+  const [sessionsCount, setSessionsCount] = useState(0)
 
   const [preferFullTabs, setPreferFullTabs] = useState(false)
   const [tuningHz, setTuningHz] = useState('440')
@@ -156,6 +159,8 @@ export default function SettingsScreen() {
 
   const loadPrefs = useCallback(async () => {
     await initDb()
+    await loadSkills()
+    setSessionsCount(await getSessionCount())
     const [full, legacyFull, hz, style, metro, skipMood, voice, tasteJson, derivedTasteRaw, expSaved, analyticsOptOut] =
       await Promise.all([
         getAppPref(PREF_PREFER_FULL_TABS),
@@ -190,7 +195,7 @@ export default function SettingsScreen() {
     setVoiceCoachEnabled(vc.enabled)
     setVoiceCoachRate(vc.rate)
     setVoiceCoachGender(vc.gender)
-  }, [])
+  }, [loadSkills])
 
   useFocusEffect(
     useCallback(() => {
@@ -497,7 +502,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
-      <ScrollView className="flex-1 px-6 py-6" contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView className="flex-1 px-6 py-6" contentContainerStyle={{ paddingBottom: tabInset }}>
         {/* Header */}
         <View className="mb-6">
           <Text className="font-serif text-3xl text-cream">Settings</Text>
@@ -636,8 +641,9 @@ export default function SettingsScreen() {
             value={tuningHz}
             onChangeText={setTuningHz}
             keyboardType="decimal-pad"
-            className="rounded-lg border border-wood-600/50 bg-ivory/95 px-3 py-2 font-mono text-sm text-wood-900"
+            className="rounded-lg border border-wood-600/50 bg-wood-900/60 px-3 py-2 font-mono text-sm text-cream"
             placeholder="440"
+            placeholderTextColor={colors.muted.brown}
           />
           <Button
             label="Save tuning"
@@ -661,16 +667,17 @@ export default function SettingsScreen() {
           <TextInput
             value={styleFocus}
             onChangeText={setStyleFocus}
-            className="rounded-lg border border-wood-600/50 bg-ivory/95 px-3 py-2 font-sans text-sm text-wood-900"
+            className="rounded-lg border border-wood-600/50 bg-wood-900/60 px-3 py-2 font-sans text-sm text-cream"
             placeholder="e.g. slow blues phrasing"
+            placeholderTextColor={colors.muted.brown}
           />
           <AnimatedPressable
             onPress={() => void persistStyle()}
             haptic="light"
-            className="mt-3 self-start rounded-lg border border-wood-600/45 bg-cream-dark/45 px-4 py-2"
+            className="mt-3 self-start rounded-lg border border-wood-600/50 bg-wood-700/60 px-4 py-2"
             accessibilityRole="button"
           >
-            <Text className="font-sans-medium text-sm text-wood-900">Save style focus</Text>
+            <Text className="font-sans-medium text-sm text-cream">Save style focus</Text>
           </AnimatedPressable>
         </SettingsSection>
 

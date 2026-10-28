@@ -54,7 +54,7 @@ export function SessionStepScreen({
           flexGrow: 1,
           paddingHorizontal: 24,
           paddingTop: 8,
-          paddingBottom: 16,
+          paddingBottom: hideFooter ? 16 : 104,
         }}
         keyboardShouldPersistTaps="handled"
         nestedScrollEnabled

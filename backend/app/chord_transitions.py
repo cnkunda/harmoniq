@@ -30,7 +30,7 @@ _CHORD_TO_IDX: dict[str, int] = {chord: i for i, chord in enumerate(CHORD_VOCAB)
 
 # Root interval weights (semitone distance → prior weight)
 _ROOT_INTERVAL_WEIGHTS = {
-    0: 1.8,   # unison / sustain
+    0: 3.0,   # unison / sustain
     1: 0.3,   # minor 2nd (chromatic)
     2: 1.5,   # major 2nd (stepwise)
     3: 1.2,   # minor 3rd (mediant)
@@ -43,6 +43,10 @@ _ROOT_INTERVAL_WEIGHTS = {
     10: 1.2,  # minor 7th
     11: 0.3,  # major 7th (chromatic)
 }
+
+#: Minimum ratio between a row's self-transition and its strongest off-diagonal.
+#: Prevents the decoder from inventing chord changes when emissions are flat.
+_SELF_TRANSITION_FLOOR_FACTOR = 1.25
 
 # Dominant chord qualities (tend to resolve) — mapped to MIREX maj
 _DOMINANT_QUALITIES: set[str] = set()  # empty in 25-class vocab; dominance from root intervals only
@@ -122,6 +126,39 @@ def _no_chord_weight(i: int, j: int) -> float:
     return 1.0
 
 
+def apply_persistence_prior(
+    matrix: np.ndarray,
+    factor: float = _SELF_TRANSITION_FLOOR_FACTOR,
+) -> np.ndarray:
+    """Ensure self-transition probability beats every off-diagonal transition.
+
+    A chord HMM must not prefer changing chords over staying on the same chord
+    when the emission distribution is flat. Rows whose diagonal already wins
+    are left unchanged; otherwise the diagonal is raised to ``factor`` times
+    the strongest off-diagonal and the remaining mass is rescaled.
+    """
+    m = np.asarray(matrix, dtype=np.float64).copy()
+    off = m.copy()
+    np.fill_diagonal(off, 0.0)
+    targets = np.minimum(0.98, off.max(axis=1) * factor)
+
+    for i in range(m.shape[0]):
+        if m[i, i] >= targets[i]:
+            continue
+        off_sum = float(off[i].sum())
+        if off_sum <= 0.0:
+            continue
+        new_off_sum = 1.0 - float(targets[i])
+        if new_off_sum < 0.0:
+            continue
+        m[i, :] *= new_off_sum / off_sum
+        m[i, i] = targets[i]
+
+    row_sums = m.sum(axis=1, keepdims=True)
+    row_sums = np.where(row_sums == 0.0, 1.0, row_sums)
+    return (m / row_sums).astype(np.float32)
+
+
 def build_transition_matrix(source: str = "synthetic") -> np.ndarray:
     """Build a 25x25 row-stochastic transition probability matrix.
 
@@ -159,6 +196,7 @@ def build_transition_matrix(source: str = "synthetic") -> np.ndarray:
     row_sums = scores.sum(axis=1, keepdims=True)
     row_sums = np.where(row_sums == 0, 1.0, row_sums)
     matrix = scores / row_sums
+    matrix = apply_persistence_prior(matrix)
 
     logger.info(
         "Built synthetic transition matrix %dx%d (source=%s)", n, n, source
@@ -189,9 +227,13 @@ def load_transition_matrix(path: Path | None = None) -> np.ndarray:
         # handle open for the process lifetime, which blocks replacing or
         # deleting the cache file on Windows (WinError 32).
         matrix = np.load(str(target))
+        with_prior = apply_persistence_prior(matrix)
+        if not np.allclose(matrix, with_prior, atol=1e-6):
+            logger.info("Upgrading cached transition matrix with persistence prior")
+            save_transition_matrix(with_prior, target)
         logger.info("Loaded cached transition matrix from %s", target)
-        _TRANSITION_MATRIX = matrix
-        return matrix
+        _TRANSITION_MATRIX = with_prior
+        return with_prior
 
     logger.info("Cache miss — building transition matrix")
     matrix = build_transition_matrix()

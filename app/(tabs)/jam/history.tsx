@@ -15,6 +15,7 @@ import { initDb, listJamSnapshots } from '@/src/db/client'
 import type { JamSnapshotRow } from '@/src/db/types'
 import { buildJamPracticeHref, resolveJamPracticeTrack } from '@/src/jam/jamPracticeTrack'
 import { parseStoredPhrases, retryJamSummary } from '@/src/jam/jamSummaryRunner'
+import { useTabContentInset } from '@/src/layout/useTabContentInset'
 
 type SelectedSummary = {
   row: JamSnapshotRow
@@ -78,6 +79,7 @@ function buildSelected(row: JamSnapshotRow): SelectedSummary {
 
 export default function JamHistoryScreen() {
   const router = useRouter()
+  const tabInset = useTabContentInset()
   const [rows, setRows] = useState<JamSnapshotRow[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<SelectedSummary | null>(null)
@@ -196,7 +198,7 @@ export default function JamHistoryScreen() {
             </Text>
           </View>
         ) : (
-          <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingTop: 16, paddingBottom: 24 }}>
+          <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingTop: 16, paddingBottom: tabInset }}>
             <View className="gap-3">
               {rows.map((row) => {
                 const bundle = parseBundle(row.summary_bundle_json)

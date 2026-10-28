@@ -19,6 +19,7 @@ import { DEFAULT_SKILL_NODES } from '@/src/db/schema'
 import { listJamSnapshots, listPracticePlanCompletions, listSessionsJournal } from '@/src/db/client'
 import { mergeProgressTimeline, type ProgressTimelineItem } from '@/src/progress/mergeProgressTimeline'
 import { useDnaStore } from '@/src/stores/dnaStore'
+import { useTabContentInset } from '@/src/layout/useTabContentInset'
 import { useSkillStore } from '@/src/stores/skillStore'
 import type { JamSummaryBundle } from '@/src/api/jam'
 
@@ -41,6 +42,7 @@ function focusLabel(sectionLabel: string | null): string {
 }
 
 export default function ProgressScreen() {
+  const tabInset = useTabContentInset()
   const router = useRouter()
   const loadSkills = useSkillStore((s) => s.loadFromDb)
   const nodes = useSkillStore((s) => s.nodes)
@@ -85,7 +87,7 @@ export default function ProgressScreen() {
   return (
     <WoodGradient className="flex-1">
       <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: tabInset }} showsVerticalScrollIndicator={false}>
           <View className="w-full max-w-4xl self-center px-6 pb-8 pt-4">
             <View className="mb-8 mt-4">
               <Text className="mb-2 font-serif text-3xl text-cream">Your Progress</Text>

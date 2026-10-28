@@ -37,14 +37,14 @@ export function GhostPlayerControl({
       : 'Enable to mix your saved ghost take at 20% under the backing track while recording.'
 
   return (
-    <View className="rounded-xl border border-wood-600/20 bg-cream px-3 py-2 shadow-sm">
-      <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-wood-600">
+    <View className="rounded-xl border border-wood-700/50 bg-wood-800/60 px-3 py-2 shadow-soft-wood">
+      <Text className="mb-2 font-sans-medium text-[10px] uppercase tracking-[0.12em] text-muted-light">
         Ghost player
       </Text>
       <View className="flex-row items-center justify-between gap-3">
         <View className="min-w-0 flex-1 flex-row items-center gap-2">
           <Ghost size={18} color={colors.amber.accent} strokeWidth={2} />
-          <Text className="font-sans-medium text-sm text-wood-900">Play with ghost</Text>
+          <Text className="font-sans-medium text-sm text-cream">Play with ghost</Text>
         </View>
         <AnimatedPressable
           accessibilityRole="switch"
@@ -53,16 +53,16 @@ export function GhostPlayerControl({
           onPress={() => {
             if (!disabled) onTogglePlayWithGhost(!playWithGhost)
           }}
-          className={`rounded-full px-3 py-1.5 ${disabled ? 'bg-wood-600/20' : playWithGhost ? 'bg-amber-accent' : 'border border-wood-600/25 bg-white'}`}
+          className={`rounded-full px-3 py-1.5 ${disabled ? 'bg-wood-600/20' : playWithGhost ? 'bg-amber-accent' : 'border border-wood-600/25 bg-wood-800'}`}
         >
           <Text
-            className={`font-sans-medium text-xs ${disabled ? 'text-wood-600' : playWithGhost ? 'text-wood-900' : 'text-wood-600'}`}
+            className={`font-sans-medium text-xs ${disabled ? 'text-muted-light' : playWithGhost ? 'text-cream' : 'text-muted-light'}`}
           >
             {disabled ? 'Off' : playWithGhost ? 'On' : 'Off'}
           </Text>
         </AnimatedPressable>
       </View>
-      <Text className="mt-2 font-sans text-[11px] leading-snug text-wood-600">{subtitle}</Text>
+      <Text className="mt-2 font-sans text-[11px] leading-snug text-muted-light">{subtitle}</Text>
     </View>
   )
 }

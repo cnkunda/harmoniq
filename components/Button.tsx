@@ -5,6 +5,8 @@ import { AnimatedPressable, type AnimatedPressableProps } from '@/components/Ani
 import {
   BTN_BASE,
   BTN_DANGER,
+  BTN_DISABLED,
+  BTN_DISABLED_TEXT,
   BTN_GHOST,
   BTN_PRIMARY,
   BTN_SECONDARY,
@@ -69,7 +71,7 @@ export function Button({
   const isDisabled = Boolean(disabled || loading)
   const showDisabledStyles = Boolean(disabled) && !loading
   const surfaceClass = showDisabledStyles
-    ? 'border border-transparent bg-wood-700 opacity-60'
+    ? BTN_DISABLED
     : `${VARIANT_CLASSES[variant]} ${isDisabled ? 'opacity-90' : 'active:opacity-95'}`
   const inner = (
     <AnimatedPressable
@@ -87,7 +89,7 @@ export function Button({
           <Text
             {...labelProps}
             className={`text-center font-sans-medium ${SIZE_TEXT[size]} ${
-              showDisabledStyles ? 'text-muted-brown' : VARIANT_TEXT[variant]
+              showDisabledStyles ? BTN_DISABLED_TEXT : VARIANT_TEXT[variant]
             } ${labelProps?.className ?? ''}`}
           >
             {label}

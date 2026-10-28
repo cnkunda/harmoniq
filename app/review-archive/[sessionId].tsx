@@ -7,9 +7,22 @@ import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { PhrasingVisualizerStub, ScoreSummaryCard } from '@/components/ReviewSessionPanel'
 import { WaveformPlaybackActions } from '@/components/WaveformPlaybackActions'
+import { WoodGradient } from '@/components/WoodGradient'
 import { getSessionById } from '@/src/db/client'
 import type { SessionArchiveRow } from '@/src/db/types'
 import { parseScoreSnapshot } from '@/src/utils/parseScoreSnapshot'
+
+function formatSessionDate(raw: string): string {
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return raw
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 export default function ReviewArchiveScreen() {
   const router = useRouter()
@@ -51,10 +64,11 @@ export default function ReviewArchiveScreen() {
     (row?.waveform_ref_path?.length ?? 0) > 0
 
   return (
-    <SafeAreaView className="flex-1 bg-ivory" edges={['top', 'left', 'right']}>
-      <ScrollView className="flex-1 px-5 py-4" contentContainerStyle={{ paddingBottom: 32 }}>
-        <Text className="font-serif text-2xl text-wood-900">Session replay</Text>
-        <Text className="mt-1 font-sans text-sm leading-6 text-wood-600">Read-only review from your journal.</Text>
+    <WoodGradient variant="background" className="flex-1">
+      <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
+        <ScrollView className="flex-1 px-5 py-4" contentContainerStyle={{ paddingBottom: 40 }}>
+          <Text className="font-serif text-2xl text-cream">Session replay</Text>
+          <Text className="mt-1 font-sans text-sm leading-6 text-muted-light">Read-only review from your journal.</Text>
 
         <AnimatedPressable haptic="light"
           onPress={() => router.back()}
@@ -80,16 +94,16 @@ export default function ReviewArchiveScreen() {
           />
         ) : row ? (
           <>
-            <View className="mt-6 rounded-xl border border-wood-600/45 bg-cream-dark/40 px-3 py-3">
-              <Text className="font-sans-medium text-sm text-wood-900">
+            <View className="mt-6 rounded-xl border border-wood-700/50 bg-wood-800/60 px-3 py-3">
+              <Text className="font-sans-medium text-sm text-cream">
                 {[row.song_title, row.artist].filter(Boolean).join(' · ') || 'Practice session'}
               </Text>
               {row.section_label ? (
-                <Text className="mt-1 font-sans text-xs text-wood-600">Section: {row.section_label}</Text>
+                <Text className="mt-1 font-sans text-xs text-muted-light">Section: {row.section_label}</Text>
               ) : null}
-              <Text className="mt-1 font-mono text-[11px] text-wood-600">{row.date}</Text>
+              <Text className="mt-1 font-mono text-[11px] text-muted-light">{formatSessionDate(row.date)}</Text>
               {row.coach_review ? (
-                <Text className="mt-3 font-sans text-sm leading-6 text-wood-900">{row.coach_review}</Text>
+                <Text className="mt-3 font-sans text-sm leading-6 text-cream/85">{row.coach_review}</Text>
               ) : null}
             </View>
 
@@ -107,8 +121,8 @@ export default function ReviewArchiveScreen() {
             {score ? (
               <ScoreSummaryCard score={score} />
             ) : (
-              <View className="mt-4 rounded-lg border border-wood-600/40 bg-wood-800/10 px-3 py-3">
-                <Text className="font-sans text-sm text-wood-600">
+              <View className="mt-4 rounded-lg border border-wood-700/50 bg-wood-800/40 px-3 py-3">
+                <Text className="font-sans text-sm text-muted-light">
                   No score snapshot for this session. Newer sessions save full review data automatically after you run
                   score.
                 </Text>
@@ -116,7 +130,8 @@ export default function ReviewArchiveScreen() {
             )}
           </>
         ) : null}
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </WoodGradient>
   )
 }

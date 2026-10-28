@@ -18,6 +18,10 @@ export const BTN_GHOST = 'border border-wood-600/35 bg-transparent active:bg-woo
 
 export const BTN_DANGER = 'border border-danger/50 bg-danger/10 active:bg-danger/20'
 
+/** Disabled buttons stay legible while clearly inactive. */
+export const BTN_DISABLED = 'border border-wood-600/40 bg-wood-800/70'
+export const BTN_DISABLED_TEXT = 'text-muted-light'
+
 /** Compact size for inline action rows (review exports, modal actions). */
 export const BTN_SM_BASE =
   'min-h-[36px] flex-row items-center justify-center gap-1.5 rounded-lg px-3.5 py-2'

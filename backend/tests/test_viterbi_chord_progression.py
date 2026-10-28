@@ -99,7 +99,9 @@ class TestIIVIPProgression:
         ]
         t = 0.0
         for chord, num_beats in chord_sequence:
-            for _ in range(num_beats):
+            # Frames are 0.1s apart and the beat grid is 0.5s, so each beat
+            # needs five frames to actually span four beats per chord.
+            for _ in range(num_beats * 5):
                 frames.append(_make_mock_frame(t, chord, 0.75))
                 t += 0.1
 

@@ -22,6 +22,12 @@ from typing import Any, Sequence
 
 import numpy as np
 
+from app.key_detection import (
+    PITCH_NAMES,
+    estimate_key_from_chroma,
+    estimate_key_literal,
+)
+
 logger = logging.getLogger("harmoniq.pipeline_proof")
 
 # --- Constants aligned with README / PRIORITIES --------------------------------
@@ -53,38 +59,6 @@ def _run_subprocess_checked(cmd: list[str], *, what: str, timeout: int | None = 
     if not out:
         out = f"(no stderr/stdout, exit {p.returncode})"
     raise RuntimeError(f"{what} failed (exit {p.returncode}): {out}") from None
-
-
-# Krumhansl–Schmuckler major / minor key profiles (C rotated in estimator)
-_KS_MAJOR = [
-    6.35,
-    2.23,
-    3.48,
-    2.33,
-    4.38,
-    4.09,
-    2.52,
-    5.19,
-    2.39,
-    3.66,
-    2.29,
-    2.88,
-]
-_KS_MINOR = [
-    6.33,
-    2.68,
-    3.52,
-    5.38,
-    2.60,
-    3.53,
-    2.54,
-    4.75,
-    3.98,
-    2.69,
-    3.34,
-    3.17,
-]
-_PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
 def ffmpeg_normalize_command(
@@ -593,27 +567,6 @@ def _detect_pre_chorus(segments: list[dict[str, Any]]) -> None:
             curr["label_confidence"] = 0.70
 
 
-def estimate_key_literal(chroma_mean: Sequence[float]) -> tuple[str, str]:
-    """Return (key_name e.g. 'G', mode 'major'|'minor') using KS correlation."""
-    chroma = list(chroma_mean)
-    if len(chroma) != 12:
-        raise ValueError("chroma_mean must have length 12")
-
-    best_corr = -math.inf
-    best: tuple[int, str] = (0, "major")
-
-    for mode, profile in [("major", _KS_MAJOR), ("minor", _KS_MINOR)]:
-        for shift in range(12):
-            rotated = profile[shift:] + profile[:shift]
-            c = sum(a * b for a, b in zip(chroma, rotated))
-            if c > best_corr:
-                best_corr = c
-                best = (shift, mode)
-
-    root = _PITCH_NAMES[best[0]]
-    return root, best[1]
-
-
 def librosa_summarize(audio_path: Path) -> LibrosaSummary:
     """
     Extract lightweight structure features from an audio file.
@@ -656,11 +609,12 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
     # librosa feature extraction assumes enough signal length. If chroma fails, we still
     # return tempo/beat info.
     chroma = None
+    key_confidence = 0.0
     try:
         chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length)
         chroma_mean = chroma.mean(axis=1)
-        root, mode = estimate_key_literal(chroma_mean)
-        key_name = f"{root} {mode}"
+        root_idx, mode, key_confidence = estimate_key_from_chroma(chroma_mean)
+        key_name = f"{PITCH_NAMES[root_idx]} {mode}"
     except Exception:
         mode = "major"
         key_name = "C major"
@@ -777,7 +731,6 @@ def librosa_summarize(audio_path: Path) -> LibrosaSummary:
 
     # Placeholder confidence values (heuristic thresholds for basic sanity).
     tempo_confidence = 0.9 if 40.0 <= tempo_bpm <= 200.0 else 0.6
-    key_confidence = 0.85
 
     return LibrosaSummary(
         duration_s=duration,
@@ -810,6 +763,23 @@ class NoteEvent:
 _BASIC_PITCH_CACHE: dict[str, list[NoteEvent]] = {}
 
 
+def _canonical_basic_pitch_model_key(model_path: Path | None) -> str:
+    """Return a stable cache-key component for the Basic Pitch model.
+
+    ``infer_solo`` passes the resolved default model path, while tab generation
+    passes ``None``. Both refer to the same model, so canonicalizing ``None`` to
+    the package default prevents a second full inference pass.
+    """
+    if model_path is not None:
+        return str(model_path)
+    try:
+        from basic_pitch import ICASSP_2022_MODEL_PATH
+
+        return str(ICASSP_2022_MODEL_PATH)
+    except ImportError:
+        return "default"
+
+
 def basic_pitch_predict_events(
     audio_path: Path,
     *,
@@ -825,7 +795,8 @@ def basic_pitch_predict_events(
     Requires ``pip install -e ".[basicpitch]"`` (see ``pyproject.toml``). On some
     platforms Python/TensorFlow wheels are not available — the notebook documents this.
     """
-    cache_key = f"{audio_path}::{midi_tempo}::{model_path}"
+    model_key = _canonical_basic_pitch_model_key(model_path)
+    cache_key = f"{audio_path}::{midi_tempo}::{model_key}"
     cached = _BASIC_PITCH_CACHE.get(cache_key)
     if cached is not None:
         logger.info("Reusing cached Basic Pitch result for %s", audio_path)

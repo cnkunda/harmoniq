@@ -281,6 +281,8 @@ export default function TuneScreen() {
           checked={dontShowAgain}
           onCheckedChange={setDontShowAgain}
           label="Don't show this again — skip this step when I start future sessions."
+          labelClassName="text-cream"
+          surface="wood"
         />
       </View>
 

@@ -22,6 +22,13 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from app.chord_vocab import ROOT_NOTES
+from app.circuit_breaker import (
+    CircuitBreakerError,
+    anthropic_auth_blocked,
+    is_auth_error,
+    note_anthropic_auth_failure,
+    note_anthropic_auth_success,
+)
 from app.schemas import ChordEvent
 
 logger = logging.getLogger("harmoniq.chord_enrichment")
@@ -314,6 +321,9 @@ def _call_claude_enrichment(
     if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("HARMONIQ_ENABLE_ENRICHMENT_IN_TESTS") != "1":
         return None
 
+    if anthropic_auth_blocked():
+        raise CircuitBreakerError("Anthropic API key was rejected; skipping enrichment during cooldown")
+
     try:
         # Lazy import anthropic to avoid hard dependency at module load time
         global _Anthropic
@@ -332,6 +342,7 @@ def _call_claude_enrichment(
         )
 
         text = response.content[0].text if response.content else ""
+        note_anthropic_auth_success()
 
         # Extract JSON array from response
         json_match = re.search(r"\[.*\]", text, re.DOTALL)
@@ -346,7 +357,10 @@ def _call_claude_enrichment(
 
         return parsed
 
-    except Exception:
+    except Exception as exc:
+        if is_auth_error(exc):
+            note_anthropic_auth_failure()
+            raise
         logger.exception("LLM enrichment call failed")
         return None
 

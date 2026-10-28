@@ -30,6 +30,7 @@ from app.cache import (invalidate_cache_key, invalidate_cache_for_wav,
                        lookup_cached_lesson, reuse_cached_artifacts_into_job,
                        save_cached_lesson_for_wav)
 from app.chord_enrichment import enrich_chord_timeline
+from app.circuit_breaker import CircuitBreakerError, is_auth_error
 from app.coach import hydrate_coach_copy_into_sections
 from app.demucs_engine import DemucsEngineError, build_stem_routing_hints
 from app.ingest import (
@@ -461,7 +462,18 @@ def _enrich_chord_timeline_job(
             metrics.get("corrected_events", 0),
             len(enriched_events),
         )
-    except Exception:
+    except Exception as exc:
+        if is_auth_error(exc) or isinstance(exc, CircuitBreakerError):
+            logger.warning(
+                "chord_enrichment skipped job_id=%s reason=api_key_rejected",
+                job_id,
+            )
+            chord_enrichment[job_id] = ChordEnrichmentStatus(
+                status="skipped",
+                fallback_reason="api_key_rejected",
+            )
+            _persist_enrichment_to_db(job_id)
+            return
         logger.exception("chord_enrichment failed job_id=%s", job_id)
         chord_enrichment[job_id] = ChordEnrichmentStatus(
             status="skipped",

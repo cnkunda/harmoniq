@@ -27,8 +27,8 @@ export function PlayCaptureControls({
   return (
     <View className={embedded ? 'gap-2' : 'gap-3'}>
       {/* {Platform.OS === 'web' ? (
-        <View className="rounded-xl border border-wood-600/40 bg-cream-dark/50 px-3 py-2.5">
-          <Text className="font-sans text-xs text-wood-900">
+        <View className="rounded-xl border border-wood-600/40 bg-wood-800/60 px-3 py-2.5">
+          <Text className="font-sans text-xs text-cream">
             Web: allow the microphone and use headphones to cut bleed. Mic capture needs HTTPS or localhost.
           </Text>
         </View>
@@ -44,16 +44,16 @@ export function PlayCaptureControls({
             {recording ? 'Finish capture' : embedded ? 'Start capture' : 'Start play capture'}
           </Text>
         </AnimatedPressable>
-        <Text className={`flex-1 text-wood-600 ${embedded ? 'font-mono text-[10px]' : 'font-mono text-[11px]'}`}>
+        <Text className={`flex-1 text-muted-light ${embedded ? 'font-mono text-[10px]' : 'font-mono text-[11px]'}`}>
           {status}
         </Text>
       </View>
 
       {autostopTriggered ? (
-        <Text className="font-sans text-xs text-wood-600">Auto-end triggered after 5 seconds of silence.</Text>
+        <Text className="font-sans text-xs text-muted-light">Auto-end triggered after 5 seconds of silence.</Text>
       ) : null}
       {take ? (
-        <Text className="font-sans text-xs text-wood-900">
+        <Text className="font-sans text-xs text-cream">
           Recorded take: {(take.durationMs / 1000).toFixed(1)}s, {take.audioBytes.length} bytes ({take.mimeType})
         </Text>
       ) : null}

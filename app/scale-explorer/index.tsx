@@ -204,7 +204,7 @@ export default function ScaleExplorerScreen() {
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 112 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

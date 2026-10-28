@@ -1,7 +1,7 @@
 import Slider from '@react-native-community/slider'
 import { useIsFocused } from '@react-navigation/native'
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode } from 'react'
-import { Platform, ScrollView, Switch, Text, View } from 'react-native'
+import { Platform, ScrollView, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { BeatGridEditorPanel } from '@/components/BeatGridEditorPanel'
@@ -9,6 +9,7 @@ import type { PlayLessonCaptureContext } from '@/components/play/playLessonCaptu
 import { PlayCaptureLessonCardBanner } from '@/components/play'
 import { MetronomeArcReadout } from '@/components/MetronomeArcReadout'
 import { StemExportMenu } from '@/components/StemExportMenu'
+import { ThemedSwitch } from '@/components/ThemedSwitch'
 import { toast } from '@/components/ToastConfig'
 import { ApiError, fetchStemExport, stemsExportUrl } from '@/src/api/analyze'
 import type { MetronomeSubdivision } from '@/src/audio/metronomeShared'
@@ -684,15 +685,15 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
 
       {loopRegion ? (
         <View className="rounded-xl border border-amber-accent/35 bg-amber-accent/10 px-3 py-2">
-          <Text className="font-sans text-xs text-wood-900">
+          <Text className="font-sans text-xs text-cream">
             Loop active: {loopRegion.label ?? 'target bar'} ({fmt(loopRegion.startSec)} - {fmt(loopRegion.endSec)})
           </Text>
            <AnimatedPressable
              onPress={() => setLoopRegion(null)}
-             className="mt-2 self-start rounded-md border border-wood-600/45 bg-cream-dark/50 px-2.5 py-1.5"
+             className="mt-2 self-start rounded-md border border-wood-600/45 bg-wood-700/60 px-2.5 py-1.5"
              accessibilityRole="button"
            >
-             <Text className="font-sans text-xs text-wood-900">Clear loop</Text>
+             <Text className="font-sans text-xs text-cream">Clear loop</Text>
            </AnimatedPressable>
         </View>
       ) : null}
@@ -720,7 +721,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                 </Text>
               ) : null}
               <Text
-                className={`font-sans-medium text-wood-900 ${playLessonCard ? 'mt-2 text-sm' : 'text-base'}`}
+                className={`font-sans-medium text-cream ${playLessonCard ? 'mt-2 text-sm' : 'text-base'}`}
                 numberOfLines={playLessonCard ? 2 : undefined}
               >
                 {songTitle}
@@ -740,7 +741,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
               ) : null}
 
               {lessonCardInsert != null ? (
-                <View className="mt-3 border-t border-wood-600/15 pt-3">{lessonCardInsert}</View>
+                <View className="mt-3 border-t border-wood-600/30 pt-3">{lessonCardInsert}</View>
               ) : null}
             </>
           )}
@@ -768,7 +769,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             </View>
             <View className="min-w-0 flex-1 justify-center">
               <View className="mb-1.5 flex-row items-baseline justify-between gap-3 pl-px pr-px">
-                <Text className="font-mono text-[13px] leading-none tracking-tight text-wood-900">
+                <Text className="font-mono text-[13px] leading-none tracking-tight text-cream">
                   {loading ? '…' : ready ? fmt(scrubTimelineSec ?? positionSec) : '—'}
                 </Text>
                 <Text className="font-mono text-[13px] leading-none tracking-tight text-muted-brown">
@@ -797,9 +798,9 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
           </View>
 
           {!playLessonCard ? (
-            <View className="mt-3 border-t border-wood-600/15 pt-3">
+            <View className="mt-3 border-t border-wood-600/30 pt-3">
               <View className="mb-2 flex-row items-baseline justify-between gap-3">
-                <Text className="font-sans-medium text-sm text-wood-900">Speed</Text>
+                <Text className="font-sans-medium text-sm text-cream">Speed</Text>
                 <Text className="font-mono text-[13px] tabular-nums tracking-tight text-muted-brown">
                   {rate.toFixed(1)}×
                 </Text>
@@ -839,7 +840,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
         <View className={playbackCardClass}>
           <View className="mb-2 shrink-0 flex-row items-center justify-between gap-2">
             <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">Metronome</Text>
-            <Switch
+            <ThemedSwitch
               value={metronomeOn}
               onValueChange={setMetronomeOn}
               disabled={!ready || loading}
@@ -860,12 +861,12 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             />
           </View>
 
-          <View className="mt-2 shrink-0 border-t border-wood-600/15 pt-3">
+          <View className="mt-2 shrink-0 border-t border-wood-600/30 pt-3">
             <View className="mb-3 flex-row items-baseline justify-center gap-1.5">
-              <Text className="font-serif text-3xl leading-none text-wood-900 tabular-nums">{effectiveMetroBpm}</Text>
+              <Text className="font-serif text-3xl leading-none text-cream tabular-nums">{effectiveMetroBpm}</Text>
               <Text className="pb-1 font-sans text-sm text-muted-brown">BPM</Text>
             </View>
-            <Text className="mb-2 font-sans-medium text-sm text-wood-900">Subdivide</Text>
+            <Text className="mb-2 font-sans-medium text-sm text-cream">Subdivide</Text>
             <View className="flex-row flex-wrap gap-1.5">
               {METRO_SUBDIV_OPTIONS.map((opt) => {
                 const active = metroSubdivision === opt.value
@@ -923,13 +924,13 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
               if (!body) return null
               return (
                 <View className="mb-3 rounded-lg border border-danger/35 bg-danger/10 px-3 py-2">
-                  <Text className="font-sans text-base leading-snug text-wood-900">{body}</Text>
+                  <Text className="font-sans text-base leading-snug text-cream">{body}</Text>
                 </View>
               )
             })()}
             {sections.length > 0 ? (
               <View className="mb-3">
-                <Text className="mb-2 font-sans-medium text-sm text-wood-900">Sections</Text>
+                <Text className="mb-2 font-sans-medium text-sm text-cream">Sections</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
                   <View className="flex-row flex-wrap gap-1.5 pb-1">
                     {sections.map((raw, i) => {
@@ -964,21 +965,21 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
               </View>
             ) : null}
 
-            <View className={sections.length > 0 ? 'border-t border-wood-600/15 pt-3' : ''}>
+            <View className={sections.length > 0 ? 'border-t border-wood-600/30 pt-3' : ''}>
               <View className="mb-2 flex-row items-center justify-between gap-2">
-                <Text className="font-sans-medium text-sm text-wood-900">Mixer</Text>
+                <Text className="font-sans-medium text-sm text-cream">Mixer</Text>
                 {stemExportAvailable ? (
                   <AnimatedPressable
                     onPress={() => setStemExportMenuVisible(true)}
                     disabled={stemExportBusyKey !== null}
                     haptic="light"
-                    className="min-h-[44px] flex-row items-center gap-1.5 rounded-lg border border-wood-600/40 bg-wood-900/5 px-3 py-2 disabled:opacity-50"
+                    className="min-h-[44px] flex-row items-center gap-1.5 rounded-lg border border-wood-600/40 bg-wood-900/40 px-3 py-2 disabled:opacity-50"
                     accessibilityRole="button"
                     accessibilityLabel="Export separated stems"
                     accessibilityState={{ disabled: stemExportBusyKey !== null, busy: stemExportBusyKey !== null }}
                   >
                     <FileDown color={colors.amber.accent} size={16} strokeWidth={2} />
-                    <Text className="font-sans-medium text-xs text-wood-900">Export</Text>
+                    <Text className="font-sans-medium text-xs text-cream">Export</Text>
                   </AnimatedPressable>
                 ) : null}
               </View>
@@ -1000,10 +1001,10 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                        accessibilityState={{ disabled }}
                        className={`w-[32%] max-w-[32%] shrink-0 items-center rounded-lg border px-1.5 py-1.5 ${
                          !hasStem
-                           ? 'border-wood-600/25 bg-cream-dark/20 opacity-45'
+                           ? 'border-wood-600/25 bg-wood-800/40 opacity-45'
                            : unmuted
-                             ? 'border-amber-accent bg-ivory/60'
-                             : 'border-wood-600/40 bg-wood-900/5'
+                             ? 'border-amber-accent bg-amber-accent/20'
+                             : 'border-wood-600/40 bg-wood-900/40'
                        } ${tileBusy ? 'opacity-45' : ''}`}
                      >
                        <Icon
@@ -1012,7 +1013,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                          strokeWidth={1.75}
                        />
                        <Text
-                         className={`mt-1 font-sans text-[10px] leading-tight ${unmuted && hasStem ? 'font-sans-medium text-wood-900' : 'text-muted-brown'}`}
+                         className={`mt-1 font-sans text-[10px] leading-tight ${unmuted && hasStem ? 'font-sans-medium text-cream' : 'text-muted-brown'}`}
                        >
                          {label}
                        </Text>

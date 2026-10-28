@@ -612,27 +612,27 @@ export function FretboardDiagram({
     : 0
 
   return (
-    <View className="mt-3 rounded-xl border border-wood-600/45 bg-cream-dark/45 p-3">
+    <View className="mt-3 rounded-xl border border-wood-700/50 bg-wood-800/60 p-3">
       <View className="flex-row items-start justify-between gap-5">
         <View className="gap-1" style={{ minWidth: 130 }}>
           <Text className={SECTION_EYEBROW_CLASS}>Position map</Text>
           <View className="flex-row items-baseline gap-2">
-            <Text className="font-sans text-base font-semibold text-wood-900">{keyLabel}</Text>
+            <Text className="font-sans text-base font-semibold text-cream">{keyLabel}</Text>
             {capoText ? (
-              <Pill variant="light" size="xs" className="px-2 py-0.5">
-                <Text className="text-[10px] font-medium text-amber-accent/80">{capoText}</Text>
+              <Pill variant="accent" size="xs" className="px-2 py-0.5">
+                <Text className="text-[10px] font-medium text-amber-light">{capoText}</Text>
               </Pill>
             ) : null}
             {voicingLabel ? (
-              <Pill variant="light" size="xs" className="px-2 py-0.5">
-                <Text className="text-[9px] font-mono text-amber-accent/70">{voicingLabel}</Text>
+              <Pill variant="accent" size="xs" className="px-2 py-0.5">
+                <Text className="text-[9px] font-mono text-amber-light">{voicingLabel}</Text>
               </Pill>
             ) : null}
           </View>
         </View>
         <View className="flex-1 flex-row flex-wrap items-center justify-end gap-1.5">
           {onFretboardModeChange && (
-            <View className="flex-row rounded-full border border-wood-600/45 bg-cream-dark/30 p-0.5 gap-[2px]">
+            <View className="flex-row rounded-full border border-wood-600/40 bg-wood-900/50 p-0.5 gap-[2px]">
               {([
                 { mode: 'auto' as const, label: 'Auto' },
                 { mode: 'chords' as const, label: 'Chord' },
@@ -660,11 +660,11 @@ export function FretboardDiagram({
           {tuneActive && onCalibrateTune ? (
             <Pressable
               onPress={onCalibrateTune}
-              className="rounded-full border border-wood-600/45 bg-cream-dark/50 px-3 py-1.5"
+              className="rounded-full border border-wood-600/40 bg-wood-700/60 px-3 py-1.5"
               accessibilityRole="button"
               accessibilityLabel="Calibrate tuner noise floor"
             >
-              <Text className="font-mono text-[10px] text-wood-900">{tuneCalibrating ? 'Cal…' : 'Cal'}</Text>
+              <Text className="font-mono text-[10px] text-cream">{tuneCalibrating ? 'Cal…' : 'Cal'}</Text>
             </Pressable>
           ) : null}
 
@@ -694,7 +694,7 @@ export function FretboardDiagram({
               {!!onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both') ? (
                 <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
               ) : null}
-              <View className="flex-row rounded-full border border-wood-600/45 bg-cream-dark/30 p-0.5 gap-[2px]">
+              <View className="flex-row rounded-full border border-wood-600/40 bg-wood-900/50 p-0.5 gap-[2px]">
                 {([
                   { mode: 'key_context' as const, label: 'Key' },
                   { mode: 'chord_only' as const, label: 'Chord' },
@@ -799,8 +799,8 @@ export function FretboardDiagram({
         </View>
       </View>
       {tuneActive && tunerState ? (
-        <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
-          <Text className="font-mono text-xs text-wood-900">
+        <View className="mt-2 rounded-lg border border-wood-700/50 bg-wood-900/50 px-2.5 py-2">
+          <Text className="font-mono text-xs text-cream">
             {tunerState.noteName || '—'} · {typeof tunerState.cents === 'number' ? `${Math.round(tunerState.cents)}¢` : '—'} ·{' '}
             {tunerState.hz != null ? `${tunerState.hz.toFixed(1)} Hz` : 'no pitch'}
           </Text>
@@ -811,7 +811,7 @@ export function FretboardDiagram({
       ) : null}
 
       {orientPanelOpen && showOrientControl ? (
-        <View className="mt-2 rounded-lg border border-wood-600/35 bg-ivory/35 px-2.5 py-2">
+        <View className="mt-2 rounded-lg border border-wood-700/50 bg-wood-900/50 px-2.5 py-2">
           <Text className={SECTION_EYEBROW_CLASS}>Technique Hint</Text>
           {orientAnnotation ? (
             <Text className="mt-1 font-sans text-xs text-muted-brown">{orientAnnotation}</Text>
@@ -819,11 +819,11 @@ export function FretboardDiagram({
           {orientClipUrl ? (
             <Pressable
               onPress={onToggleOrientPlayback}
-              className="mt-2 rounded-md border border-wood-600/50 bg-cream-dark items-center justify-center py-2"
+              className="mt-2 rounded-md border border-wood-600/50 bg-wood-700 items-center justify-center py-2"
               accessibilityRole="button"
               accessibilityLabel={orientIsPlaying ? 'Pause technique clip' : 'Play technique clip'}
             >
-              <Text className="font-sans-medium text-xs text-wood-900">
+              <Text className="font-sans-medium text-xs text-cream">
                 {orientIsPlaying ? 'Pause' : 'Play Clip'}
               </Text>
             </Pressable>

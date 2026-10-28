@@ -216,3 +216,40 @@ class TestViterbiWithChordVocab:
 
         assert len(path) == 3
         assert np.all(path >= 0) and np.all(path < vocab_size)
+
+
+class TestViterbiPersistence:
+    def test_flat_emissions_do_not_invent_chord_changes(self):
+        from app.chord_transitions import apply_key_constraint, build_transition_matrix
+
+        matrix = apply_key_constraint(build_transition_matrix(), key_root=7, key_mode="major")
+        decoder = ViterbiChordDecoder(
+            probs_to_log_probs(matrix),
+            vocab_size=25,
+            chord_vocab=CHORD_VOCAB,
+        )
+        emissions = np.ones((24, 25), dtype=np.float32) / 25.0
+        path, _ = decoder.decode(
+            probs_to_log_probs(emissions),
+            duration_beats=np.ones(24, dtype=np.float32),
+        )
+        assert np.sum(np.diff(path) != 0) == 0
+
+    def test_sub_beat_change_penalty_biases_toward_persistence(self):
+        trans = np.array([[0.4, 0.6], [0.6, 0.4]], dtype=np.float32)
+        emissions = np.ones((2, 2), dtype=np.float32) / 2.0
+        decoder = ViterbiChordDecoder(np.log(trans), vocab_size=2)
+
+        no_penalty, _ = decoder.decode(
+            probs_to_log_probs(emissions),
+            duration_beats=np.array([1.0, 1.0]),
+            duration_penalty_weight=2.0,
+        )
+        with_penalty, _ = decoder.decode(
+            probs_to_log_probs(emissions),
+            duration_beats=np.array([1.0, 0.1]),
+            duration_penalty_weight=2.0,
+        )
+
+        assert no_penalty[0] != no_penalty[1]
+        assert with_penalty[0] == with_penalty[1]

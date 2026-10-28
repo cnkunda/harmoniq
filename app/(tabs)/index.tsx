@@ -57,6 +57,7 @@ import {
 } from '@/src/home/dailyLick'
 import { buildSongPickerSources } from '@/src/home/songPickerItems'
 import { pickWeakAreaPulseNode } from '@/src/home/weakAreaPulseLogic'
+import { useTabContentInset } from '@/src/layout/useTabContentInset'
 import {
   abandonActivePlan,
   resumeActivePracticePlan,
@@ -227,6 +228,7 @@ function DifficultyDots({ level }: { level: number }) {
 
 export default function HomeScreen() {
   const router = useRouter()
+  const tabInset = useTabContentInset()
   const displayName = 'Nkunda' // TODO(auth): Replace with signed-in profile name.
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
@@ -684,7 +686,7 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-wood-900" edges={['top', 'left', 'right']}>
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: tabInset }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

@@ -193,7 +193,7 @@ export function ChordsAndLyrics({
   }, [progressionLabels])
 
   return (
-    <View className="mt-3 rounded-xl border border-wood-600/40 bg-cream-dark/45 p-4">
+    <View className="mt-3 rounded-xl border border-wood-700/50 bg-wood-800/60 p-4">
       {/* Header */}
       <View className="flex-row items-center justify-between mb-3">
         <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
@@ -219,7 +219,7 @@ export function ChordsAndLyrics({
       <View className="h-px bg-wood-600/10 mb-3" />
 
       {/* Toolbar: Key, Shapes, Auto-scroll */}
-      <View className="flex-row items-center justify-between rounded-lg border border-wood-600/25 bg-wood-900/5 p-2 mb-4">
+      <View className="flex-row items-center justify-between rounded-lg border border-wood-600/40 bg-wood-900/40 p-2 mb-4">
         <ToolControl
           label="Key"
           value={transpose === 0 ? '0' : `${transpose > 0 ? '+' : ''}${transpose}`}
@@ -233,7 +233,7 @@ export function ChordsAndLyrics({
           className={`flex-row items-center gap-1 rounded-md border px-2 py-1 ${
             showShapes
               ? 'border-amber-accent/30 bg-amber-accent/10'
-              : 'border-wood-600/25 bg-wood-900/5'
+              : 'border-wood-600/40 bg-wood-900/40'
           }`}
         >
           <Guitar size={10} color={showShapes ? colors.amber.light : colors.muted.brown} />
@@ -252,7 +252,7 @@ export function ChordsAndLyrics({
           className={`flex-row items-center gap-1 rounded-md border px-2 py-1 ${
             autoScroll
               ? 'border-amber-accent/30 bg-amber-accent/10'
-              : 'border-wood-600/25 bg-wood-900/5'
+              : 'border-wood-600/40 bg-wood-900/40'
           }`}
         >
           {autoScroll ? (
@@ -356,7 +356,7 @@ export function ChordsAndLyrics({
                         {/* Lyrics */}
                         <Text
                           className={`font-serif text-sm leading-snug text-left ${
-                            isActive ? 'text-wood-900' : 'text-muted-brown'
+                            isActive ? 'text-cream' : 'text-muted-brown'
                           }`}
                         >
                           {bar.text ?? ' '}
@@ -440,7 +440,7 @@ export function ChordsAndLyrics({
                             {bar.text ? (
                               <Text
                                 className={`font-serif text-sm leading-snug text-center ${
-                                  isActive ? 'text-wood-900' : 'text-muted-brown'
+                                  isActive ? 'text-cream' : 'text-muted-brown'
                                 }`}
                               >
                                 {bar.text}
@@ -538,7 +538,7 @@ function ToolControl({
       <Text className="font-mono text-[9px] uppercase tracking-wider text-muted-brown">
         {label}
       </Text>
-      <View className="flex-row items-center rounded-md border border-wood-600/25 bg-wood-900/5">
+      <View className="flex-row items-center rounded-md border border-wood-600/40 bg-wood-900/40">
         <AnimatedPressable
           haptic="none"
           onPress={onDecrement}
@@ -546,7 +546,7 @@ function ToolControl({
         >
           <Minus size={10} color={colors.muted.brown} />
         </AnimatedPressable>
-        <Text className="font-mono text-[10px] text-wood-900 w-8 text-center tabular-nums">
+        <Text className="font-mono text-[10px] text-cream w-8 text-center tabular-nums">
           {value}
         </Text>
         <AnimatedPressable
