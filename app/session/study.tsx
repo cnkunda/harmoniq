@@ -2,7 +2,7 @@ import { useFocusEffect } from '@react-navigation/native'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
-import { BookOpen, Headphones, X } from 'lucide-react-native'
+import { BookOpen, Ear, Headphones, X } from 'lucide-react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ChordCorrectionModal } from '@/components/ChordCorrectionModal'
@@ -43,6 +43,8 @@ import {
   parseHarmonizedSolo,
   parsePerBarAnalysis,
 } from '@/src/music/soloHarmony'
+import { performanceRoleLabel, performanceStyleLabel, resolveFretboardMode } from '@/src/session/performanceFocus'
+import { CHECK_BY_EAR_CUE, sectionNeedsCheckByEar } from '@/src/session/transcriptionConfidence'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useOrientClip } from '@/src/session/useOrientClip'
@@ -60,6 +62,7 @@ import {
 import { findSoloNoteIndexForSelection } from '@/src/utils/feedback'
 import { shareExportedBlob } from '@/src/utils/exportShare'
 import { readSectionMusicXml, readSectionTabPayloads } from '@/src/utils/lessonTabs'
+import type { PerformanceProfile } from '@/src/types'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
 
@@ -129,7 +132,11 @@ interface LessonSectionWithMusic extends Record<string, unknown> {
   confidence?: number | null;
   transcription_metadata?: TranscriptionValidationMetadata | null;
   /** Commit 119: label confidence (0-1) */
-  label_confidence?: number | null;
+  label_confidence?: number | null
+  /** Commit 156/184: per-section heuristic transcription confidence (0-1). */
+  chord_confidence?: number | null
+  /** Commit 156/184: per-section instrument confusion (0-1); null = unknown. */
+  instrument_confusion?: number | null
 }
 
 
@@ -261,7 +268,17 @@ function StudyScreenInner() {
   }, [])
 
   const section = lesson?.sections?.[lessonSectionIndex] as LessonSectionWithMusic | undefined
+  const showSectionCheckCue = sectionNeedsCheckByEar(section)
   const soloNotesForFeedback = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? []
+  const performanceProfile = (section?.performance_profile ?? lesson?.performance_profile ?? null) as PerformanceProfile | null
+  const effectiveFretboardMode = resolveFretboardMode(fretboardMode, performanceProfile)
+  const autoFretboardMode = resolveFretboardMode('auto', performanceProfile)
+  const autoFretboardLabel = [
+    performanceRoleLabel(performanceProfile),
+    performanceStyleLabel(performanceProfile),
+  ]
+    .filter((label): label is string => Boolean(label))
+    .join(' · ') || null
 
   const exportMusicXml = useCallback(async () => {
     const lessonXml = typeof lesson?.musicxml === 'string' ? lesson.musicxml.trim() : ''
@@ -664,6 +681,19 @@ function StudyScreenInner() {
         Listen
       </Pill>
 
+      {showSectionCheckCue ? (
+        <View
+          testID="study-check-by-ear-cue"
+          accessible
+          accessibilityRole="text"
+          accessibilityLabel={CHECK_BY_EAR_CUE}
+          className="mx-4 mb-3 flex-row items-center gap-2 rounded-xl border border-amber-accent/40 bg-amber-accent/10 px-3 py-2"
+        >
+          <Ear size={14} color={colors.amber.accent} />
+          <Text className="flex-1 font-sans text-xs text-cream">{CHECK_BY_EAR_CUE}</Text>
+        </View>
+      ) : null}
+
       {!lesson ? (
         <EmptyState
           Icon={BookOpen}
@@ -687,7 +717,7 @@ function StudyScreenInner() {
             </AnimatedPressable>
           </View>
           <Text className="mb-3 font-sans text-sm text-cream">
-            We're {Math.round((lesson?.transcription_confidence ?? 1.0) * 100)}% sure about this transcription.
+            We can't be fully sure about this transcription.
             {'\n'}
             This part is a rough approximation — use it as a guide, not a rule.
           </Text>
@@ -819,6 +849,8 @@ function StudyScreenInner() {
               orientError={orientClip.error}
               fretboardMode={fretboardMode}
               onFretboardModeChange={setFretboardMode}
+              autoMode={autoFretboardMode}
+              autoModeLabel={autoFretboardLabel}
               voicingMode={voicingMode}
               onVoicingModeChange={setVoicingMode}
               scalePitchClasses={scalePitchClasses}
@@ -838,7 +870,7 @@ function StudyScreenInner() {
               </Text>
             ) : null}
 
-            {isLearner ? (
+            {isLearner && (effectiveFretboardMode === 'solo' || effectiveFretboardMode === 'both') ? (
               <LearnerSoloMelody
                 notes={soloNotesForFeedback}
                 barTimestamps={lesson?.bar_timestamps}
@@ -847,9 +879,9 @@ function StudyScreenInner() {
             ) : null}
 
             <View className="mt-2">
-              {isLearner ? (
+              {isLearner && (effectiveFretboardMode === 'chords' || effectiveFretboardMode === 'both') ? (
                 <LearnerChordChart bars={barsData} currentBar={currentBar} />
-              ) : (
+              ) : isLearner ? null : (
                 <ChordsAndLyrics
                   bars={barsData}
                   currentBar={currentBar}

@@ -137,11 +137,50 @@ Never describe it as "% likely correct" in code, schemas, or docs.
   `transcription_source` (mt3/crnn/chroma) as an input, so CRNN/chroma-tier
   results can score as high as MT3 results.
 
-**Calibration plan:** assemble a small labeled chord set; plot a reliability
-diagram of binned score vs. empirical chord correctness; report Expected
-Calibration Error; if the model exposes logits consider temperature scaling,
-otherwise isotonic regression or Platt scaling. Only after ECE is measured
-may the score be described probabilistically.
+**Calibration measurement (Commit 184):** the heuristic is **severely
+overconfident** on a small GuitarSet test subset. Measured with:
+
+```bash
+cd backend && source .venv-wsl/bin/activate
+python scripts/measure_confidence_ece.py --limit 3 --out data/evaluation/ece_mt3.json
+```
+
+Tracks: `05_BN1-129-Eb_comp`, `05_BN1-147-Gb_comp`, `05_BN2-131-B_comp`
+(player 05 test split). 134 decoded events covering 70.8 s. Overall chord
+accuracy **0.090**, mean confidence **0.834**, **ECE 0.7441** (10 equal-width
+bins, duration-weighted). Non-empty bins:
+
+| Bin | Events | Duration (s) | Avg confidence | Accuracy | Gap |
+|-----|--------|--------------|----------------|----------|-----|
+| 0.4–0.5 | 2 | 0.95 | 0.400 | 0.000 | 0.400 |
+| 0.5–0.6 | 35 | 19.18 | 0.549 | 0.000 | 0.549 |
+| 0.7–0.8 | 12 | 5.36 | 0.750 | 0.000 | 0.750 |
+| 0.8–0.9 | 12 | 5.90 | 0.800 | 0.378 | 0.422 |
+| 0.9–1.0 | 73 | 39.45 | 1.000 | 0.105 | 0.895 |
+
+**Caveats and follow-ups:**
+
+- `ChordEvent.confidence` on the MT3 path is template **coverage**, not a
+  calibrated model probability. Coverage ignores extra pitches, so a wrong
+  chord with a complete template still scores high.
+- The local MT3 + chord-decoder result is far below the ≥80% GuitarSet target
+  in `tests/test_guitarset_mt3_accuracy.py`. That test currently skips because
+  it looks for `data/guitarset/audio/` (the audio lives under
+  `raw/audio_mono-mix/`) and maps 277-class labels through the 25-class vocab;
+  it has not been validating the claim. Treat the model/decoder accuracy as a
+  separate blocker before interpreting ECE as a pure calibration problem.
+- Three tracks are a directional sample, not a precise estimate. The CRNN
+  fallback was not used here: the local Keras checkpoint scored ~4% accuracy
+  on the precomputed test windows, and the TFLite file needs a Flex delegate
+  that is not installed.
+- **No scaling was applied.** Raw confidence fields and the 0.5/0.75 band
+  thresholds are unchanged; the UI renders wording only. Isotonic/Platt
+  scaling needs a larger, trustworthy calibration set (isotonic is prone to
+  overfitting on small samples).
+- Reproduce with `backend/scripts/measure_confidence_ece.py`; the binning/ECE
+  math is in `backend/app/confidence_calibration.py` and covered by
+  `backend/tests/test_confidence_ece.py`. Do not describe the score as a
+  probability or a percentage.
 
 ## Instrument Confusion & Coach Hedging (Commit 156)
 

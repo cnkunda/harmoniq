@@ -30,6 +30,7 @@ import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
 import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhostTake'
 import { hitInnerThresholdCents } from '@/src/session/noteAccuracyBeats'
+import { performanceRoleLabel, performanceStyleLabel, resolveFretboardMode } from '@/src/session/performanceFocus'
 import { ghostReferenceToPlaybackUri } from '@/src/session/persistGhostTake'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useOrientClip } from '@/src/session/useOrientClip'
@@ -44,6 +45,7 @@ import { useAppStore } from '@/src/stores/useAppStore'
 import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
+import type { PerformanceProfile } from '@/src/types'
 import type { NoteEventMessage } from '@/types/tabMessage'
 import * as FileSystem from 'expo-file-system/legacy'
 import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
@@ -77,6 +79,7 @@ function PlayScreenInner() {
   const musicActions = useMusicActions()
   const musicState = useMusicState()
   const [chordPosIndex, setChordPosIndex] = useState(0)
+  const [fretboardMode, setFretboardMode] = useState<'auto' | 'chords' | 'solo' | 'both'>('auto')
   useEffect(() => {
     setChordPosIndex(0)
   }, [musicState?.currentChord])
@@ -93,6 +96,9 @@ function PlayScreenInner() {
       ? section.primary_position
       : 'Tap a note to infer position'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
+  const performanceProfile = (section?.performance_profile ?? lesson?.performance_profile ?? null) as PerformanceProfile | null
+  const autoFretboardMode = resolveFretboardMode('auto', performanceProfile)
+  const autoFretboardLabel = [performanceRoleLabel(performanceProfile), performanceStyleLabel(performanceProfile)].filter(Boolean).join(' · ') || null
   const adaptedCentsTolerance = useAppStore(
     (s) => s.currentSession?.adaptedCentsTolerance ?? CENTS_TOLERANCE,
   )
@@ -384,6 +390,10 @@ function PlayScreenInner() {
                     onToggleTune={toggleFretboardTuner}
                     onCalibrateTune={startCalibration}
                     tunerState={tunerState}
+                    fretboardMode={fretboardMode}
+                    onFretboardModeChange={setFretboardMode}
+                    autoMode={autoFretboardMode}
+                    autoModeLabel={autoFretboardLabel}
                     showOrientControl
                     orientClipUrl={orientClip.url}
                     orientAnnotation={orientClip.annotation}

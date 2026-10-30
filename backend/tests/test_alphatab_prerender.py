@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import base64
+import shutil
+from pathlib import Path
 
 import pytest
-import shutil
 
 from app.alphatab_prerender import (
     enrich_lesson_with_prerender_hints,
@@ -15,6 +16,26 @@ from app.alphatab_prerender import (
     score_sha256_from_musicxml,
 )
 from app.schemas import LessonJSON
+
+_ALPHATAB_PACKAGE_JSON = (
+    Path(__file__).resolve().parent.parent
+    / "node_modules"
+    / "@coderline"
+    / "alphatab"
+    / "package.json"
+)
+
+
+def _node_bridge_skip_reason() -> str | None:
+    """Return why the AlphaTab Node bridge cannot run, or None when available."""
+    if shutil.which("node") is None:
+        return "node binary not available"
+    if not _ALPHATAB_PACKAGE_JSON.is_file():
+        return (
+            "backend/node_modules/@coderline/alphatab not installed "
+            "— run `cd backend && npm install`"
+        )
+    return None
 
 
 def test_score_sha_deterministic():
@@ -71,11 +92,12 @@ def test_node_bridge_smoke_if_available(tmp_path):
     from app.alphatab_prerender import _node_script_path, _run_node_prerender
     from app.pipeline_proof import NoteEvent, build_gp5_from_note_events
 
-    if shutil.which("node") is None:
-        return
+    reason = _node_bridge_skip_reason()
+    if reason:
+        pytest.skip(reason)
     script = _node_script_path()
     if not script.is_file():
-        return
+        pytest.skip(f"AlphaTab bridge script missing at {script}")
 
     gp5_path = tmp_path / "tiny.gp5"
     build_gp5_from_note_events(
@@ -94,11 +116,12 @@ def test_node_bridge_musicxml_smoke_if_available():
     """Commit 107: Node + AlphaTab renders MusicXML input (primary prerender path)."""
     from app.alphatab_prerender import _node_script_path, _run_node_prerender
 
-    if shutil.which("node") is None:
-        return
+    reason = _node_bridge_skip_reason()
+    if reason:
+        pytest.skip(reason)
     script = _node_script_path()
     if not script.is_file():
-        return
+        pytest.skip(f"AlphaTab bridge script missing at {script}")
 
     xml = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">

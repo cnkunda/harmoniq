@@ -107,6 +107,10 @@ type FretboardDiagramProps = {
   pitchLadderDefaultExpanded?: boolean
   fretboardMode?: 'auto' | 'chords' | 'solo' | 'both'
   onFretboardModeChange?: (mode: 'auto' | 'chords' | 'solo' | 'both') => void
+  /** When `fretboardMode` is `auto`, use this section-resolved mode. */
+  autoMode?: 'chords' | 'solo' | 'both'
+  /** Optional short label shown beside the mode switch (e.g. "Auto · Rhythm"). */
+  autoModeLabel?: string | null
   voicingMode?: 'full' | 'compact'
   onVoicingModeChange?: (mode: 'full' | 'compact') => void
   /** Commit B2: Harmonic context overlay mode. */
@@ -382,6 +386,8 @@ export function FretboardDiagram({
   pitchLadderDefaultExpanded,
   fretboardMode,
   onFretboardModeChange,
+  autoMode = 'both',
+  autoModeLabel = null,
   voicingMode,
   onVoicingModeChange,
   harmonicContextMode = 'chord_only',
@@ -497,19 +503,16 @@ export function FretboardDiagram({
     return []
   }, [musicState?.activeNotes])
 
+  // Auto resolves to the section's detected role; a manual choice always wins.
+  const effectiveMode: 'chords' | 'solo' | 'both' =
+    !fretboardMode || fretboardMode === 'auto' ? autoMode : fretboardMode
+
   // Display mode filtering for SVG rendering
-  const showChords = useMemo(() => {
-    if (!fretboardMode || fretboardMode === 'auto' || fretboardMode === 'both' || fretboardMode === 'chords') return true
-    return false
-  }, [fretboardMode])
+  const showChords = effectiveMode === 'chords' || effectiveMode === 'both'
+  const showSoloNotes = effectiveMode === 'solo' || effectiveMode === 'both'
 
-  const showSoloNotes = useMemo(() => {
-    if (!fretboardMode || fretboardMode === 'auto' || fretboardMode === 'both' || fretboardMode === 'solo') return true
-    return false
-  }, [fretboardMode])
-
-  // Commit B1: Enhanced dual-view modes (auto / both) get modified visuals
-  const isEnhancedView = fretboardMode === 'auto' || fretboardMode === 'both'
+  // Commit B1: dual-view gets modified visuals
+  const isEnhancedView = effectiveMode === 'both'
 
   const chordPcSet = useMemo(() => {
     if (!chordCells?.length || !musicState?.currentChord || musicState.currentChord === 'N') return new Set<number>()
@@ -657,6 +660,15 @@ export function FretboardDiagram({
             </View>
           )}
 
+          {fretboardMode === 'auto' && autoModeLabel ? (
+            <Text
+              className="font-mono text-[10px] text-amber-light"
+              accessibilityLabel={`Auto focus ${autoModeLabel}`}
+            >
+              {autoModeLabel}
+            </Text>
+          ) : null}
+
           {tuneActive && onCalibrateTune ? (
             <Pressable
               onPress={onCalibrateTune}
@@ -668,7 +680,7 @@ export function FretboardDiagram({
             </Pressable>
           ) : null}
 
-          {onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both') && (
+          {onVoicingModeChange && (effectiveMode === 'chords' || effectiveMode === 'both') && (
             <>
               <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
               {([
@@ -691,7 +703,7 @@ export function FretboardDiagram({
 
           {onHarmonicContextModeChange && (
             <>
-              {!!onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both') ? (
+              {!!onVoicingModeChange && (effectiveMode === 'chords' || effectiveMode === 'both') ? (
                 <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
               ) : null}
               <View className="flex-row rounded-full border border-wood-600/40 bg-wood-900/50 p-0.5 gap-[2px]">
@@ -721,7 +733,7 @@ export function FretboardDiagram({
 
           {showOverlayControls && (
             <>
-              {(!!onVoicingModeChange && (fretboardMode === 'chords' || fretboardMode === 'both'))
+              {(!!onVoicingModeChange && (effectiveMode === 'chords' || effectiveMode === 'both'))
                 || !!onHarmonicContextModeChange ? (
                 <View className="mx-0.5 h-3 w-px bg-wood-600/35" />
               ) : null}

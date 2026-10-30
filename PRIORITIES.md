@@ -9,8 +9,8 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–166 completed, 167 skipped → archived).
 **Milestone D (Infrastructure)** — complete; 151 SSE progress stream, 169 variable tempo, 170 queue hardening, 171 fingerprinting/quality, 172 stem export completed → archived.
 **Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
-**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166, 169–173, 177–179 completed and 167 skipped → archived).
-**Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 180; verification fixes 181–182 sit in the active backlog, not Phase 3).
+**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166, 169–173, 177–179, 181 completed and 167 skipped → archived; 184 completed → archived).
+**Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 180; verification fix 182 sits in the active backlog, not Phase 3).
 
 ---
 
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166, 169–173, 177–179 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166, 169–173, 177–179, 181 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -237,54 +237,6 @@ Shared encoder (CQT → Conv → BiLSTM, ~200K params)
 
 ---
 
-**Group: Clean-clone verification fixes — Commit 149 follow-ups (181–182)**
-
----
-
-### Commit 181: CI env-toggle × unit-test conflicts (8 tests)
-
-**Status:** ready
-
-**Goal:** Make the 8 currently-failing tests pass under the exact `ci.yml` env set (`HARMONIQ_SKIP_*`).
-
-**Current State:** Full `python -m pytest -q` with ci.yml's 12 `HARMONIQ_SKIP_*` env vars fails 8 tests that assume an un-toggled route: `tests/test_spotify_playback.py` (4 — route returns 503 under `HARMONIQ_SKIP_SPOTIFY_PLAYBACK=1`), `tests/test_style_detect.py` (2) + `tests/test_analyze_audio_style.py` (1) (`HARMONIQ_SKIP_STYLE_DETECT=1` forces 'general'), `tests/test_curriculum.py` (1) (`HARMONIQ_SKIP_CURRICULUM=1` → 503). All of these pass without the env vars — verified in the Commit 149 clean clone: 10 passed across those 4 files. Deterministic environment-coupling, not flaky.
-
-**Scope:**
-
-- Decide per test: make the test toggle-aware (`pytest.skip` or expect 503 when the matching `HARMONIQ_SKIP_*` is set) or unset the toggle inside the test
-- Do not weaken the routes' toggle behavior — tests must follow the env contract
-- Re-run the full suite under the ci.yml env set; expect failures drop 11 → 3 (remaining = commit 182)
-
-**Acceptance Criteria:**
-
-- [ ] Full pytest under ci.yml's `HARMONIQ_SKIP_*` env set: the 8 env-coupled failures resolved
-- [ ] Each of the 8 tests still validates its original behavior when its toggle is unset
-- [ ] No route behavior changed (503 / forced-'general' semantics preserved)
-
----
-
-### Commit 182: AlphaTab optional-dep guard on clean clones (3 tests)
-
-**Status:** ready
-
-**Goal:** The 3 AlphaTab node-bridge tests skip (not fail) when `backend/node_modules/@coderline/alphatab` is absent.
-
-**Current State:** On a clean clone, `tests/test_alphatab_prerender.py` (2 tests) and `tests/test_musicxml_corpus.py` (1 test) fail with `ERR_MODULE_NOT_FOUND`: their guard checks `shutil.which("node")` but not whether the npm package `@coderline/alphatab` is installed under `backend/node_modules`. In the working repo (node_modules present) all 3 pass — verified in the Commit 149 clean-clone session. CI runners install frontend deps at the repo root (`npm ci`), not under `backend/`, so these tests would fail on a runner too.
-
-**Scope:**
-
-- Extend each test's availability guard to also probe `backend/node_modules/@coderline/alphatab` (or a shared helper)
-- `pytest.skip` with a clear reason when absent; keep running when present
-- Document `cd backend && npm install` for MusicXML corpus rendering only if a doc already references that workflow
-
-**Acceptance Criteria:**
-
-- [ ] Clean clone (no `backend/node_modules`): the 3 tests skip cleanly under full pytest
-- [ ] With `backend/node_modules` installed: all 3 still run and pass
-- [ ] Full ci.yml-env suite failures drop from 11 to 0
-
----
-
 **Group: Native Detox environment — Commit 155 follow-up (183)**
 
 ---
@@ -311,40 +263,6 @@ Shared encoder (CQT → Conv → BiLSTM, ~200K params)
 - [ ] `npm run test:mobile` green on Android emulator (smoke incl. ChordDiagram visibility + dimensions; musicxml corpus suite)
 - [ ] Emulator prerequisites documented (AVD, env override, Metro flags)
 - [ ] No app-code behavior changed on web (web bundle still builds; `npm run test:ui` unaffected)
-
----
-
-### Commit 184: Confidence-Band UI Display + ECE Calibration (Commit 156 follow-up)
-
-**Status:** ready
-
-**Goal:** Surface Commit 156's confidence outputs to the user in plain language, then measure whether the heuristic score is actually calibrated — without ever implying false precision.
-
-**Current State:** Commit 156 shipped the data; two of three consumers exist, but with gaps:
-- **Song/confusion display — exists but is gated dead on the primary path.** `components/InstrumentConfusionIndicator.tsx` (`InstrumentConfusionBadge` + `PerSectionConfusionBars`) is wired into `app/session/review.tsx`, but the render gate keys off the song-level `LessonJSON.instrument_confusion`, which only the CRNN dual-path branch sets — MT3-primary jobs (the primary path) leave it `null`, so the badge and per-section bars never render. Commit 156's per-section MT3 proxy data is therefore invisible until the gate also considers `instrument_confusion_per_section`. The badge also renders a raw percentage ("Instrument confusion: 42%"), which the heuristic score cannot support.
-- **`confidence_band` + per-section `chord_confidence` / `leakage_risk` — zero consumers.** Populated on every analysis job and typed in `src/types/index.ts` (optional fields), read by nothing under `src/` / `app/`. Verified by grep 2026-10-14.
-- **Coach-side hedging — done (Commit 156):** tiers ≥ 0.3 / ≥ 0.6 plus a deterministic appended-caveat backstop, unit-tested end-to-end. This commit only surfaces the equivalent learner-facing wording and the calibration measurement.
-
-**Scope:**
-
-- Confidence band display (plain-language wording, per [`docs/EVALUATION.md`](docs/EVALUATION.md) Commit 156 section):
-  - Review/summary surface: one chip or line ("Good match", "Some fuzziness", "Rough transcription") driven by `confidence_band`; `null` renders nothing (unknown ≠ low)
-  - Study/score surface: per-section cue when `sections[].chord_confidence` is low or `sections[].instrument_confusion` ≥ 0.3 (e.g. "check this part by ear" — same wording as the coach hedge, single source)
-  - Never render the raw 0–1 number, never a percentage, never the word "probability" — the score is a hand-tuned heuristic (ECE unmeasured). Applies to `InstrumentConfusionIndicator` too: replace its `"Instrument confusion: 42%"` percentage with Low/Moderate/High wording (thresholds in `backend/app/confidence_thresholds.py`, mirrored in TS)
-- Confusion display gate: extend `app/session/review.tsx` render condition so per-section data (Commit 156's MT3 proxy) shows even when the song-level `instrument_confusion` is `null`
-- Graceful absence: older jobs without `confidence_band` / per-section fields degrade silently (all new fields are optional)
-- Unit tests for band → wording mapping + null/absence paths; Playwright structural test for the chip on the review route
-- Calibration measurement (no model changes): assemble a small labeled chord set (GuitarSet annotations already parsed in `backend/data`), bin predicted confidence, plot predicted vs empirical chord accuracy, report Expected Calibration Error in [`docs/EVALUATION.md`](docs/EVALUATION.md)
-  - If ECE is poor: temperature/isotonic/Platt scaling behind `confidence_band` only (keep the raw field untouched), and only then consider numeric UI
-
-**Acceptance Criteria:**
-
-- [ ] `confidence_band` visible with plain-language wording on the review/summary surface; absent (`null`) renders nothing
-- [ ] Low-confidence / high-confusion sections show a "check by ear" cue in Study, consistent with the coach hedge wording
-- [ ] Confusion badge/bars render on MT3-primary jobs (render gate no longer keyed to the dual-path-only song-level value)
-- [ ] No raw score/percentage/probability language anywhere in the UI (incl. `InstrumentConfusionIndicator`)
-- [ ] Unit + structural tests green; `npm run lint` + `npm run test` green
-- [ ] ECE of the heuristic confidence measured on the labeled set and reported in `docs/EVALUATION.md`
 
 ---
 

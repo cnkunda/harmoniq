@@ -20,13 +20,33 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
 from lxml import etree
 
 CORPUS_DIR = Path(__file__).resolve().parent / "fixtures" / "musicxml-corpus"
 DTD_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "musicxml-dtd" / "musicxml31-partwise-combined.dtd"
 CHECK_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "alphatab_corpus_check.mjs"
+ALPHATAB_PACKAGE_JSON = (
+    Path(__file__).resolve().parent.parent
+    / "node_modules"
+    / "@coderline"
+    / "alphatab"
+    / "package.json"
+)
 
 MIN_CORPUS_SIZE = 20
+
+
+def _node_bridge_skip_reason() -> str | None:
+    """Return why the AlphaTab Node bridge cannot run, or None when available."""
+    if shutil.which("node") is None:
+        return "node binary not available"
+    if not ALPHATAB_PACKAGE_JSON.is_file():
+        return (
+            "backend/node_modules/@coderline/alphatab not installed "
+            "— run `cd backend && npm install`"
+        )
+    return None
 
 
 def _corpus_files() -> list[Path]:
@@ -72,10 +92,11 @@ def test_corpus_renders_without_crash_via_alphatab():
     """Run the Node + AlphaTab corpus check (same engine as web and native)."""
     files = _corpus_files()
     assert files, "corpus directory is empty"
-    if shutil.which("node") is None:
-        return
+    reason = _node_bridge_skip_reason()
+    if reason:
+        pytest.skip(reason)
     if not CHECK_SCRIPT.is_file():
-        return
+        pytest.skip(f"AlphaTab corpus check script missing at {CHECK_SCRIPT}")
     proc = subprocess.run(
         ["node", str(CHECK_SCRIPT)],
         input=json.dumps({"corpusDir": str(CORPUS_DIR)}).encode("utf-8"),

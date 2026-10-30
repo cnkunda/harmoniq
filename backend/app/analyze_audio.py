@@ -45,6 +45,8 @@ from app.transcription_confidence import (
     vocals_coverage_confidence,
 )
 from app.mt3 import transcribe_with_fallback
+from app.mt3.schemas import Mt3EventStream
+from app.playing_style_detect import build_performance_profiles
 from app.solo_inference import infer_solo
 from app.solo_harmony_analyzer import SoloHarmonizer
 from app.section_refinement import refine_section_boundaries
@@ -297,6 +299,7 @@ def build_lesson_json_from_librosa(
     chord_timeline: ChordTimeline | None = None
     solo_notes: SoloNotes | None = None
     transcription_source: str | None = None
+    mt3_event_stream: Mt3EventStream | None = None
 
     # === Phase 2, Milestone A: MT3-Primary transcription ===
     # Uses the fallback chain: MT3 → CRNN TFLite → Chroma matching.
@@ -384,6 +387,7 @@ def build_lesson_json_from_librosa(
         chord_timeline = mt3_result.chord_timeline
         solo_notes = mt3_result.solo_notes
         transcription_source = mt3_result.source
+        mt3_event_stream = mt3_result.mt3_events
 
         logger.info(
             "MT3 fallback chain for job_id=%s source=%s confidence=%.2f "
@@ -683,6 +687,32 @@ def build_lesson_json_from_librosa(
         
         sections[i] = LessonSectionStub(**section_dict)
 
+    # Adaptive guitar display: per-section playing texture + part role from the
+    # transcription artifacts. Heuristic only; the UI treats these as hints.
+    song_performance = None
+    try:
+        _, song_performance = build_performance_profiles(
+            sections,
+            chord_timeline=chord_timeline,
+            solo_notes=solo_notes,
+            mt3_events=mt3_event_stream,
+            beat_grid=beat_grid,
+            onset_novelty=summary.onset_novelty,
+            rms_curve=summary.rms_curve,
+            spectral_centroid=summary.spectral_centroid,
+            times=summary.times,
+            song_duration_s=summary.duration_s,
+        )
+        logger.info(
+            "performance profiles job_id=%s summary=%s/%s confidence=%.2f",
+            job_id,
+            song_performance.playing_style,
+            song_performance.part_role,
+            song_performance.confidence,
+        )
+    except Exception:
+        logger.exception("performance profile detection failed for job_id=%s", job_id)
+
     # Commit 156: composite transcription confidence replaces the vocals-only
     # value (user decision — instrumentals now score from chord confidence
     # instead of the ~0.1 vocals floor; see docs/EVALUATION.md). The score is
@@ -884,6 +914,7 @@ def build_lesson_json_from_librosa(
         harmonized_solo=harmonized_solo,
         per_bar_analysis=per_bar_analysis,
         transcription_source=transcription_source,
+        performance_profile=song_performance,
         **stem_fields,
     )
 

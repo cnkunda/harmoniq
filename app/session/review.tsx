@@ -39,8 +39,10 @@ import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import type { MappedUiError } from '@/src/errors/mapErrorToUi'
 import { mapScoreFlowError, toErrorBannerProps } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
+import { colors } from '@/src/constants/colors'
 import { parseHarmonizedSolo } from '@/src/music/soloHarmony'
 import { coachReviewFromScoreResult } from '@/src/session/coachReviewFromScoreResult'
+import { confidenceBandLabel } from '@/src/session/transcriptionConfidence'
 import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhostTake'
 import { abandonActivePlan } from '@/src/session/activePlanPersistence'
 import { completePracticePlanSlot, slotPerformanceFromScoreResult } from '@/src/session/planProgress'
@@ -124,6 +126,16 @@ export default function ReviewScreen() {
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const section = lesson?.sections?.[sectionIndex]
+  const confidenceLabel = confidenceBandLabel(lesson?.confidence_band)
+  const hasSongConfusion =
+    lesson?.instrument_confusion !== null && lesson?.instrument_confusion !== undefined
+  const hasSectionConfusion = (lesson?.instrument_confusion_per_section?.length ?? 0) > 0
+  const confidenceDotColor =
+    lesson?.confidence_band === 'high'
+      ? colors.success
+      : lesson?.confidence_band === 'medium'
+        ? colors.amber.accent
+        : colors.danger
   const latestTake = useSessionPlayStore((s) => s.latestTake)
   const latestTakeId = useSessionPlayStore((s) => s.latestTakeId)
   const clearLatestTake = useSessionPlayStore((s) => s.clearLatestTake)
@@ -599,6 +611,18 @@ export default function ReviewScreen() {
       onNext={finish}
     >
       {isDemo ? <DemoTourCallout>{DEMO_TOUR_CALLOUT.review}</DemoTourCallout> : null}
+      {confidenceLabel ? (
+        <View
+          testID="confidence-band-chip"
+          accessible
+          accessibilityRole="text"
+          accessibilityLabel={`Transcription confidence: ${confidenceLabel}`}
+          className="mt-3 flex-row items-center gap-2 self-start rounded-full border border-wood-600/35 bg-wood-800/40 px-3 py-1.5"
+        >
+          <View className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: confidenceDotColor }} />
+          <Text className="font-sans text-xs text-cream">{confidenceLabel}</Text>
+        </View>
+      ) : null}
       <PhrasingWaveformVisualizer score={score} ghostRow={ghostRowForViz} />
 
       {uniqueChords.length > 0 && (
@@ -629,15 +653,19 @@ export default function ReviewScreen() {
 
       {harmonizedSolo ? <SoloHarmonySummaryCard harmonized={harmonizedSolo} /> : null}
 
-      {lesson?.instrument_confusion !== null && lesson?.instrument_confusion !== undefined ? (
+      {hasSongConfusion || hasSectionConfusion ? (
         <View className="mt-3">
-          <InstrumentConfusionBadge confusion={lesson.instrument_confusion} />
-          <View className="mt-2">
-            <PerSectionConfusionBars
-              sections={lesson.instrument_confusion_per_section}
-              currentSectionIndex={sectionIndex}
-            />
-          </View>
+          {hasSongConfusion ? (
+            <InstrumentConfusionBadge confusion={lesson?.instrument_confusion ?? null} />
+          ) : null}
+          {hasSectionConfusion ? (
+            <View className={hasSongConfusion ? 'mt-2' : ''}>
+              <PerSectionConfusionBars
+                sections={lesson?.instrument_confusion_per_section}
+                currentSectionIndex={sectionIndex}
+              />
+            </View>
+          ) : null}
         </View>
       ) : null}
 

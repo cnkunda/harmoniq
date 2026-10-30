@@ -19,13 +19,15 @@ def _summary(*, bpm: float, duration_s: float = 30.0, n_seg: int = 2) -> Librosa
     )
 
 
-def test_infer_style_uptempo_label():
+def test_infer_style_uptempo_label(monkeypatch):
+    monkeypatch.delenv("HARMONIQ_SKIP_STYLE_DETECT", raising=False)
     r = infer_style_from_librosa_summary(_summary(bpm=150.0))
     assert "uptempo" in r.style_label.lower()
     assert r.technique_hints
 
 
-def test_infer_style_slow_ballad():
+def test_infer_style_slow_ballad(monkeypatch):
+    monkeypatch.delenv("HARMONIQ_SKIP_STYLE_DETECT", raising=False)
     r = infer_style_from_librosa_summary(_summary(bpm=72.0))
     assert "ballad" in r.style_label.lower() or "slow" in r.style_label.lower()
 

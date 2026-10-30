@@ -323,6 +323,33 @@ export interface SoloNotes {
   notes: SoloNote[]
 }
 
+export type PerformancePlayingStyle =
+  | 'strummed'
+  | 'fingerpicked_arpeggiated'
+  | 'picked'
+  | 'muted'
+  | 'mixed'
+  | 'unknown'
+
+export type PerformancePartRole =
+  | 'rhythm'
+  | 'lead_solo'
+  | 'riff'
+  | 'chord_melody'
+  | 'mixed'
+  | 'unknown'
+
+/** Section-level guitar performance hints from the backend heuristic detector. */
+export interface PerformanceProfile {
+  playing_style: PerformancePlayingStyle
+  part_role: PerformancePartRole
+  technique_tags: string[]
+  /** Hand-tuned heuristic score; not a calibrated probability. */
+  confidence: number
+  source: 'heuristic' | 'classifier' | 'user_override'
+  evidence?: Record<string, number>
+}
+
 export interface LessonSection {
   label?: string | null
   confidence?: number | null
@@ -357,6 +384,10 @@ export interface LessonSection {
   leakage_risk?: number | null
   /** Commit 156: per-section chord transcription confidence (heuristic). */
   chord_confidence?: number | null
+  /** Adaptive guitar display hints (playing texture + part role). */
+  performance_profile?: PerformanceProfile | null
+  /** Flat technique tags for curriculum/skill consumers. */
+  technique_tags?: string[]
   [key: string]: unknown
 }
 
@@ -445,6 +476,8 @@ export interface LessonJSON {
   harmonized_solo?: HarmonizedSoloNotes | null
   /** Commit 157: Per-bar dominant chord, CAGED position, and suggested scales; null when unavailable. */
   per_bar_analysis?: BarScope[] | null
+  /** Duration-weighted summary of section performance profiles. */
+  performance_profile?: PerformanceProfile | null
 }
 
 // ---- Commit 110: Correction types ----

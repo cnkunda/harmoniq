@@ -20,7 +20,8 @@ def _lesson(job_id: str, *, style: str, techniques: list[str], title: str) -> Le
     )
 
 
-def test_curriculum_ranks_bending_blues_first():
+def test_curriculum_ranks_bending_blues_first(monkeypatch):
+    monkeypatch.delenv("HARMONIQ_SKIP_CURRICULUM", raising=False)
     jobs.clear()
     try:
         jobs["job_blues_bend"] = JobStatus(

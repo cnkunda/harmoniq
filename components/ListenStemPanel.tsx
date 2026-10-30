@@ -20,6 +20,7 @@ import { useGhostStemSidecar } from '@/src/audio/useGhostStemSidecar'
 import { useLoopAudio } from '@/src/audio/useLoopAudio'
 import { useMetronome } from '@/src/audio/useMetronome'
 import { colors } from '@/src/constants/colors'
+import { performanceRoleLabel, performanceStyleLabel } from '@/src/session/performanceFocus'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { SESSION_PLAYBACK_CARD_CLASS } from '@/src/constants/sessionPlaybackCard'
 import { STEM_KEYS, STEM_LABELS, type StemKey } from '@/src/constants/stems'
@@ -27,7 +28,7 @@ import { CHOICE_CHIP_BASE, CHOICE_CHIP_OFF, CHOICE_CHIP_ON, CHOICE_LABEL_MONO_OF
 import { logFirstAudioPlay } from '@/src/analytics/firstAudioPlay'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { useLessonStore } from '@/src/stores/lessonStore'
-import type { LessonJSON } from '@/src/types'
+import type { LessonJSON, PerformanceProfile } from '@/src/types'
 import { downloadAndShareExport, shareExportedBlob } from '@/src/utils/exportShare'
 import { parseSectionRecord, sectionSeekSeconds, stemRelPathToDefinition } from '@/src/utils/lessonAudio'
 import {
@@ -657,9 +658,17 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       ? parseSectionRecord(sections[lessonSectionIndex] as Record<string, unknown>).labelConfidence
       : null
 
+  const currentSection = sections[lessonSectionIndex] as Record<string, unknown> | undefined
+  const performanceProfile = (currentSection?.performance_profile ?? lesson.performance_profile ?? null) as PerformanceProfile | null
+  const performanceLine = [
+    performanceRoleLabel(performanceProfile),
+    performanceStyleLabel(performanceProfile),
+  ]
+    .filter(Boolean)
+    .join(' · ')
   const sectionLine =
     sections.length > 0
-      ? `Section ${sectionDisplay} of ${sections.length}${currentSectionLabel ? `: ${currentSectionLabel}` : ''}`
+      ? `Section ${sectionDisplay} of ${sections.length}${currentSectionLabel ? `: ${currentSectionLabel}` : ''}${performanceLine ? ` · ${performanceLine}` : ''}`
       : `Section ${sectionDisplay} of ${sectionTotal}`
 
   const playbackCardClass = SESSION_PLAYBACK_CARD_CLASS

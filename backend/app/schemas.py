@@ -491,6 +491,44 @@ class SectionConfusionScore(BaseModel):
     disagreement_count: int = 0
 
 
+PerformancePlayingStyle = Literal[
+    "strummed",
+    "fingerpicked_arpeggiated",
+    "picked",
+    "muted",
+    "mixed",
+    "unknown",
+]
+
+PerformancePartRole = Literal[
+    "rhythm",
+    "lead_solo",
+    "riff",
+    "chord_melody",
+    "mixed",
+    "unknown",
+]
+
+PerformanceProfileSource = Literal["heuristic", "classifier", "user_override"]
+
+
+class PerformanceProfile(BaseModel):
+    """Section-level guitar performance hints for adaptive display.
+
+    Detected from transcription events (not from genre metadata). ``confidence``
+    is a hand-tuned heuristic score, not a calibrated probability.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    playing_style: PerformancePlayingStyle = "unknown"
+    part_role: PerformancePartRole = "unknown"
+    technique_tags: list[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    source: PerformanceProfileSource = "heuristic"
+    evidence: dict[str, float] = Field(default_factory=dict)
+
+
 class LessonSectionStub(BaseModel):
     """One teachable slice of the song — expand per README LessonJSON.sections."""
 
@@ -521,6 +559,10 @@ class LessonSectionStub(BaseModel):
     leakage_risk: float | None = None
     # Commit 156: per-section chord transcription confidence (heuristic).
     chord_confidence: float | None = None
+    # Adaptive guitar display: playing texture + part role for this section.
+    performance_profile: PerformanceProfile | None = None
+    # Flat compatibility field for curriculum/skill consumers (README §sections).
+    technique_tags: list[str] = Field(default_factory=list)
 
 
 class AudioQuality(BaseModel):
@@ -597,6 +639,8 @@ class LessonJSON(BaseModel):
         default=None,
         description="Which pipeline tier produced this transcription: 'mt3', 'crnn', 'chroma', or None",
     )
+    # Duration-weighted summary of section performance profiles.
+    performance_profile: PerformanceProfile | None = None
 
 
 class PartialAnalysisResult(BaseModel):

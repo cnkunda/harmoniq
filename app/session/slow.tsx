@@ -18,6 +18,7 @@ import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { barRangeToSeconds } from '@/src/music/barLoopBounds'
 import { capoSuggestion } from '@/src/music/capoSuggestion'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
+import { performanceRoleLabel, performanceStyleLabel, resolveFretboardMode } from '@/src/session/performanceFocus'
 import { deriveSlowLoopRegion } from '@/src/session/slowLoopRegion'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
@@ -27,6 +28,7 @@ import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/MusicContext'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
+import type { PerformanceProfile } from '@/src/types'
 import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 
 export default function SlowScreen() {
@@ -71,6 +73,9 @@ function SlowScreenInner() {
       ? section.primary_position
       : 'Tap a note to infer position'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
+  const performanceProfile = (section?.performance_profile ?? lesson?.performance_profile ?? null) as PerformanceProfile | null
+  const autoFretboardMode = resolveFretboardMode('auto', performanceProfile)
+  const autoFretboardLabel = [performanceRoleLabel(performanceProfile), performanceStyleLabel(performanceProfile)].filter(Boolean).join(' · ') || null
   const beatSec = lesson?.tempo && lesson.tempo > 0 ? 60 / lesson.tempo : 0.5
 
   const derived = useMemo(
@@ -86,6 +91,7 @@ function SlowScreenInner() {
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
   const musicState = useMusicState()
   const [chordPosIndex, setChordPosIndex] = useState(0)
+  const [fretboardMode, setFretboardMode] = useState<'auto' | 'chords' | 'solo' | 'both'>('auto')
   useEffect(() => {
     setChordPosIndex(0)
   }, [musicState?.currentChord])
@@ -226,6 +232,10 @@ function SlowScreenInner() {
               onToggleTune={toggleFretboardTuner}
               onCalibrateTune={startCalibration}
               tunerState={tunerState}
+              fretboardMode={fretboardMode}
+              onFretboardModeChange={setFretboardMode}
+              autoMode={autoFretboardMode}
+              autoModeLabel={autoFretboardLabel}
               onSelectNote={(note) => {
                 setSelectedNote(note)
                 setFretPulseKey((k) => k + 1)

@@ -6,6 +6,7 @@ from app.pipeline_proof import LibrosaSummary
 
 
 def test_build_lesson_json_includes_style_label(monkeypatch, tmp_path):
+    monkeypatch.delenv("HARMONIQ_SKIP_STYLE_DETECT", raising=False)
     summary = LibrosaSummary(
         duration_s=30.0,
         tempo_bpm=150.0,

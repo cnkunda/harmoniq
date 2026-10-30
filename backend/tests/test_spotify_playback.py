@@ -7,7 +7,9 @@ from app.schemas import SpotifyPlaybackState
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.delenv("HARMONIQ_SKIP_SPOTIFY", raising=False)
+    monkeypatch.delenv("HARMONIQ_SKIP_SPOTIFY_PLAYBACK", raising=False)
     from app.main import app
 
     return TestClient(app)
