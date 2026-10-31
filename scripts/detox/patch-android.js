@@ -2,7 +2,7 @@
 // `android/` is a gitignored prebuild output, so `detox:build:android` runs this
 // after (re)generating the project. Idempotent: each block is detected by its
 // functional line, so re-runs and already-patched projects are no-ops.
-const { readFileSync, writeFileSync } = require("node:fs");
+const { existsSync, mkdirSync, readFileSync, writeFileSync } = require("node:fs");
 const path = require("node:path");
 
 const ANDROID_DIR = path.resolve(process.cwd(), "android");
@@ -128,5 +128,56 @@ allprojects {
 `;
   return c.replace('apply plugin: "expo-root-project"', block + '\napply plugin: "expo-root-project"');
 });
+
+// 4. DetoxTest.java — JUnit entry point. `expo prebuild` does not create it.
+const detoxTestDir = path.join(
+  ANDROID_DIR,
+  "app",
+  "src",
+  "androidTest",
+  "java",
+  "com",
+  "harmoniq",
+  "app"
+);
+const detoxTestFile = path.join(detoxTestDir, "DetoxTest.java");
+if (!existsSync(detoxTestFile)) {
+  mkdirSync(detoxTestDir, { recursive: true });
+  writeFileSync(
+    detoxTestFile,
+    `package com.harmoniq.app;
+
+import com.wix.detox.Detox;
+import com.wix.detox.config.DetoxConfig;
+
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.filters.LargeTest;
+import androidx.test.rule.ActivityTestRule;
+
+@RunWith(AndroidJUnit4.class)
+@LargeTest
+public class DetoxTest {
+    @Rule
+    public ActivityTestRule<MainActivity> mActivityRule =
+        new ActivityTestRule<>(MainActivity.class, false, false);
+
+    @Test
+    public void runDetoxTests() {
+        DetoxConfig detoxConfig = new DetoxConfig();
+        detoxConfig.idlePolicyConfig.masterTimeoutSec = 90;
+        detoxConfig.idlePolicyConfig.idleResourceTimeoutSec = 60;
+        detoxConfig.rnContextLoadTimeoutSec = 180;
+        Detox.runTests(mActivityRule, detoxConfig);
+    }
+}
+`
+  );
+  console.log("[detox-patch] wrote app/src/androidTest/java/com/harmoniq/app/DetoxTest.java");
+  changed++;
+}
 
 console.log(changed > 0 ? `[detox-patch] ${changed} file(s) patched.` : "[detox-patch] android/ already fully wired — no changes.");

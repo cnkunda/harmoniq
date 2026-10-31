@@ -117,22 +117,22 @@ needed and no fallback-as-default switch was flipped.
 | Rare fallback | `C:add11` | DB miss (`getChordPositions` → null, proven in `src/music/chordDbAdapter.test.ts`) → algorithmic (major intervals) | Renders dots without finger numbers, as designed |
 | Flat name | `Bb:maj` (direct hit); `Db:maj` → enharmonic `C#` branch; `A#:maj` → `Bb` branch | `ENHARMONIC_MAP` in `chordDbAdapter.ts` | All resolve; `Bb` renders with barre |
 
-**Native status: environment-blocked, not component-blocked.**
+**Native status: Android verified via Detox (Commit 183); iOS still unverified.**
+- Android: `npm run test:mobile` → **7/7 passed** on the `Pixel_7` AVD (API 34,
+  x86_64). The smoke suite covers the boot screenshot and the ChordDiagram
+  matrix (visible + sane dimensions); the MusicXML corpus suite covers 5 files.
+- The previous Metro/Hermes blocker is resolved: `onnxruntime-web` and the
+  `.onnx` model asset are now isolated behind a web-only platform module
+  (`src/chord/onnxFallback.web.ts`; native is `onnxFallback.native.ts`), so the
+  native bundle no longer resolves `ort.bundle.min.mjs` or embeds the `.onnx`
+  asset. `onnxruntime-web` remains a web-asset dependency only.
+- Emulator/dev-build prerequisites and the Windows Gradle transform-cache
+  workaround live in [`docs/E2E_DEMO.md`](E2E_DEMO.md#native-detox-android).
 - iOS: impossible on this Windows machine (no Simulator) — unverified.
-- Android: emulator boots (`Pixel_7` AVD; note the Detox default
-  `Pixel_7_API_34` does not exist here, use `DETOX_ANDROID_AVD=Pixel_7`) and the
-  prebuilt dev APK installs, but **no Detox suite can boot the app**: Metro
-  cannot build the Android dev bundle because `onnxruntime-web/dist/
-  ort.bundle.min.mjs` uses a dynamic `import(/*…*/)` comment form that Metro's
-  parser rejects. Reproduced on clean `main` (changes stashed) — pre-existing,
-  unrelated to this commit; the one bundle that did download then failed Hermes
-  compilation on-device (`'}' expected at end of object literal`). The new
-  Detox assertion (`tests/mobile/smoke.e2e.js`, `by.id("chord-diagram")`
-  visible + sane non-zero dimensions) is therefore committed but **not yet
-  green**; same component is exercised deterministically via the design-preview
-  matrix instead of the study screen because study/slow/play only render a
-  diagram when a live theory annotation exists.
-- Ancillary environment notes: stale npm `.bin/.*` temp symlinks crash
-  Metro's `FallbackWatcher` with `EACCES` (deleted 18 repo-wide, safe — real
-  bins exist alongside); Expo CLI needs `--offline` here (version-check fetch
-  crashes startup).
+- The design-preview ChordDiagram matrix was moved to the top of that hidden
+  dev screen for the deterministic Detox assertion; the same component is still
+  exercised on web via the design-preview matrix.
+- Ancillary environment notes: stale npm `.bin/.*` temp symlinks can crash
+  Metro's `FallbackWatcher` with `EACCES` (remove the dot entries; real bins
+  exist alongside); Expo CLI needs `--offline` / `EXPO_OFFLINE=1` in
+  sandboxed networks.

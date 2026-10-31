@@ -9,7 +9,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 **Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–166 completed, 167 skipped → archived).
 **Milestone D (Infrastructure)** — complete; 151 SSE progress stream, 169 variable tempo, 170 queue hardening, 171 fingerprinting/quality, 172 stem export completed → archived.
 **Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
-**Active backlog** — numbered commits **150–183** below (one commit = one spec; 149, 151–166, 169–173, 177–179, 181 completed and 167 skipped → archived; 184 completed → archived).
+**Active backlog** — numbered commits **150–180** below (one commit = one spec; 149, 151–166, 169–173, 177–179, 181, 183 completed and 167 skipped → archived; 184 completed → archived).
 **Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 180; verification fix 182 sits in the active backlog, not Phase 3).
 
 ---
@@ -18,7 +18,7 @@ Research project + demo app for Automatic Music Transcription (AMT), focused on 
 
 | | |
 | ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–183** (149, 151–166, 169–173, 177–179, 181 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
+| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–180** (149, 151–166, 169–173, 177–179, 181, 183, 184 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
 | **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 | **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
@@ -234,35 +234,6 @@ Shared encoder (CQT → Conv → BiLSTM, ~200K params)
 - [ ] All new songs produce complete LessonJSON (no crashes) — pass/warn/fail recorded
 - [ ] EVALUATION.md summary table updated with revised verdict counts
 - [ ] Failure modes for new categories documented in KNOWN_FAILURES.md
-
----
-
-**Group: Native Detox environment — Commit 155 follow-up (183)**
-
----
-
-### Commit 183: Native Detox Environment — onnxruntime-web Bundling + Emulator Prerequisites
-
-**Status:** ready (user chose backlog-first; run when native verification is needed)
-
-**Goal:** Make `npm run test:mobile` (`android.emu.debug`, Detox 20.x) green on the Android emulator, unblocking the Commit 155 ChordDiagram smoke assertion and all future on-device gates.
-
-**Current State:** No Detox suite can boot the app (verified 2026-10-14 during Commit 155; reproduced on clean `main` with changes stashed — pre-existing, unrelated to any feature commit). Metro cannot build the Android dev bundle: `node_modules/onnxruntime-web/dist/ort.bundle.min.mjs` line 11 uses a dynamic `import(/*webpackIgnore:true*/ /*@vite-ignore*/…)` comment form that Metro's parser rejects (`Invalid call … at line 11`). The one bundle that did download then failed Hermes compilation on-device (`'}' expected at end of object literal`). Emulator itself boots (`Pixel_7` AVD; the Detox default `Pixel_7_API_34` does not exist — `DETOX_ANDROID_AVD=Pixel_7` override required), the prebuilt dev APK installs, and Metro serves over `adb reverse tcp:8081`. Ancillary environment findings: stale npm `.bin/.*` temp symlinks crash Metro's `FallbackWatcher` with `EACCES` (deleted 18 repo-wide during Commit 155 — recurs on every `npm install`); Expo CLI needs `--offline` in sandboxed networks; the emulator has no external network (8.8.8.8 100% loss; host 10.0.2.2 reachable). Full evidence in [`docs/ALPHATAB_LIMITATIONS.md`](docs/ALPHATAB_LIMITATIONS.md) ("Commit 155" section).
-
-**Scope:**
-
-- Keep `onnxruntime-web` out of the native bundle (platform-split import, `Platform.OS` guard, Metro `resolver.blockList`, or lazy `require` — whichever is minimal): it is a web-only dependency and must never enter the Android dev graph
-- Verify the Android dev bundle builds cleanly AND compiles on-device (Hermes) via a Metro bundle fetch before touching Detox
-- Do NOT touch `tests/mobile/musicxml-render.e2e.js` (out of scope for the env fix; it must simply go green again as a side effect)
-- Document the emulator prerequisites (AVD name + `DETOX_ANDROID_AVD`, Expo dev build vs Expo Go, `adb reverse`, `--offline`, `.bin` dotfile cleanup) where the Detox docs live; do not invent new scripts if `npm run detox:build:android` + `npm run test:mobile` suffice
-- Re-run the full `npm run test:mobile`, including the Commit 155 `chord-diagram` smoke assertion
-
-**Acceptance Criteria:**
-
-- [ ] Metro builds the Android dev bundle with zero transform errors; bundle compiles on-device (no Hermes errors in logcat)
-- [ ] `npm run test:mobile` green on Android emulator (smoke incl. ChordDiagram visibility + dimensions; musicxml corpus suite)
-- [ ] Emulator prerequisites documented (AVD, env override, Metro flags)
-- [ ] No app-code behavior changed on web (web bundle still builds; `npm run test:ui` unaffected)
 
 ---
 

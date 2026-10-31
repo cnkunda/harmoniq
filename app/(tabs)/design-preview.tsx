@@ -507,20 +507,20 @@ export default function DesignPreviewScreen() {
   return (
     <WoodGradient variant="background" className="flex-1">
       <SafeAreaView className="flex-1" edges={['top', 'left', 'right']}>
-        <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
+        <ScrollView testID="design-preview-scroll" className="flex-1" keyboardShouldPersistTaps="handled">
           <View className="px-4 pb-10 pt-2">
             <Text className="mb-1 font-serif text-2xl text-cream">Design preview</Text>
             <Text className="mb-6 font-sans text-sm text-muted-light">
               Design tokens, env and backing tracks, shared feedback layer, and component stubs (Phase 0).
             </Text>
 
+            <ChordDiagramMatrixSection />
+
             <AlphaTabRuntimeDiagDevSection />
             <FeedbackLayerDevSection />
             <PitchWorkletDevSection />
             <StemMixerDevSection />
             <BackingTrackDevSection />
-
-            <ChordDiagramMatrixSection />
 
             <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wider text-amber-light">
               Wood scale

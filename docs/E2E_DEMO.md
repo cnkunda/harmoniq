@@ -325,6 +325,42 @@ All Phase 1 commit acceptance criteria (commits 1-97) are exercised by the above
 | 109 | Beat Grid Editor | Beat grid editor (timeline, BPM, time sig, recompute) |
 | 110 | Correction Editor | Chord/note/voicing correction + persistence + history |
 
+## Native Detox (Android)
+
+Run this after a native dependency change or before a release that touches the mobile shell.
+
+**Prerequisites**
+
+- Android SDK + NDK + CMake installed; `ANDROID_HOME` set; Java 17 on `PATH`.
+- A `Pixel_7` AVD (API 34, x86_64). The Detox default `Pixel_7_API_34` may not exist — use `DETOX_ANDROID_AVD=Pixel_7`.
+- A development build, not Expo Go (TFLite and `react-native-audio-api` are native modules).
+
+**Build and run**
+
+```bash
+npm run detox:build:android
+DETOX_ANDROID_AVD=Pixel_7 ANDROID_SDK_ROOT="$ANDROID_HOME" npm run test:mobile
+```
+
+`detox:build:android` runs `scripts/detox/patch-android.js`, which wires the Detox test runner and generates `android/app/src/androidTest/java/com/harmoniq/app/DetoxTest.java` in the gitignored prebuild output. The debug APK embeds the JS bundle (`debuggableVariants = []`), so `test:mobile` does not need Metro at launch.
+
+**Manual Metro/dev workflow (optional)**
+
+```bash
+npx expo start --offline
+adb reverse tcp:8081 tcp:8081
+```
+
+Use `EXPO_OFFLINE=1` when the CLI cannot reach Expo's servers.
+
+**Known Windows environment workarounds**
+
+- If Metro's `FallbackWatcher` logs `EACCES`, remove stale `node_modules/**/.bin/.*` dot entries (real binaries are the non-dot entries). They can recur after `npm install`.
+- If Gradle fails with `Could not move temporary workspace … to immutable location`, this is the known Windows transform-cache/antivirus file-lock issue ([Gradle #31438](https://github.com/gradle/gradle/issues/31438)). Pause the scanner or exclude `.gradle` and the project directory; locally, renaming a temporary transform directory to its hash target and retrying gets the build through.
+- `Pixel_7` is a Google APIs Play Store image. If Detox is flaky, create an AOSP AVD (Detox's recommendation).
+
+**Verified:** `npm run test:mobile` → 7/7 passed on `Pixel_7` (smoke boot + ChordDiagram matrix; 5 MusicXML corpus files).
+
 ## Known Limitations
 
 - **Analysis timeout (>5 min)**: No push notification infrastructure. Jobs taking >5 min will timeout with a manual Retry button. Push notifications are deferred to post-Phase 1.

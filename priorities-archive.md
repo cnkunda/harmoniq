@@ -44,6 +44,7 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 181 (CI env-toggle × unit-test conflicts — 8 tests) Archive Date:** October 27, 2026 — Complete; all 3 ACs verified (10 target tests green under the full `ci.yml` env set, dedicated toggle tests green, no route changes, lint 0 errors); spec and implementation notes archived below.
 **Commit 182 (AlphaTab optional-dep guard on clean clones — 3 tests) Archive Date:** October 28, 2026 — Complete; all 3 ACs verified (12 passed with deps installed; 9 passed / 3 skipped with `backend/node_modules` moved aside; ci.yml-env target set 22 passed; lint 0 errors); spec and implementation notes archived below.
 **Commit 184 (Confidence-Band UI Display + ECE Calibration) Archive Date:** October 29, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 654 passed, backend ECE/156 suites 22 passed, Playwright non-visual 78 passed); ECE 0.7441 measured on 3 GuitarSet tracks; no scaling applied; spec and implementation notes archived below.
+**Commit 183 (Native Detox Environment — onnxruntime-web Bundling + Emulator Prerequisites) Archive Date:** October 31, 2026 — Complete; all 4 ACs verified (lint 0 errors, vitest 654 passed, Playwright 78 passed, Detox 7/7 on `Pixel_7`); native bundle has no `onnxruntime-web`/`.onnx`; spec and implementation notes archived below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -3123,3 +3124,37 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **Verification:** `npm run lint` 0 errors; `npm run test` 654 passed; backend ECE + Commit 156 suites 22 passed; Playwright non-visual 78 passed (including the new `tests/ui/review-confidence-band.spec.ts`).
 - **UX observation (out of scope):** when a section is low-confidence, Study shows both the new thin cue and the existing "Transcription Uncertainty" card; the two messages are complementary but visually repetitive on small screens. A future pass could merge them.
 
+---
+
+### Commit 183: Native Detox Environment — onnxruntime-web Bundling + Emulator Prerequisites
+
+**Status:** complete (archived October 31, 2026)
+
+**Goal:** Make `npm run test:mobile` (`android.emu.debug`, Detox 20.x) green on the Android emulator, unblocking the Commit 155 ChordDiagram smoke assertion and all future on-device gates.
+
+**Current State:** No Detox suite can boot the app (verified 2026-10-14 during Commit 155; reproduced on clean `main` with changes stashed — pre-existing, unrelated to any feature commit). Metro cannot build the Android dev bundle: `node_modules/onnxruntime-web/dist/ort.bundle.min.mjs` line 11 uses a dynamic `import(/*webpackIgnore:true*/ /*@vite-ignore*/…)` comment form that Metro's parser rejects (`Invalid call … at line 11`). The one bundle that did download then failed Hermes compilation on-device (`'}' expected at end of object literal`). Emulator itself boots (`Pixel_7` AVD; the Detox default `Pixel_7_API_34` does not exist — `DETOX_ANDROID_AVD=Pixel_7` override required), the prebuilt dev APK installs, and Metro serves over `adb reverse tcp:8081`. Ancillary environment findings: stale npm `.bin/.*` temp symlinks crash Metro's `FallbackWatcher` with `EACCES` (deleted 18 repo-wide during Commit 155 — recurs on every `npm install`); Expo CLI needs `--offline` in sandboxed networks; the emulator has no external network (8.8.8.8 100% loss; host 10.0.2.2 reachable). Full evidence in [`docs/ALPHATAB_LIMITATIONS.md`](docs/ALPHATAB_LIMITATIONS.md) ("Commit 155" section).
+
+**Scope:**
+
+- Keep `onnxruntime-web` out of the native bundle (platform-split import, `Platform.OS` guard, Metro `resolver.blockList`, or lazy `require` — whichever is minimal): it is a web-only dependency and must never enter the Android dev graph
+- Verify the Android dev bundle builds cleanly AND compiles on-device (Hermes) via a Metro bundle fetch before touching Detox
+- Do NOT touch `tests/mobile/musicxml-render.e2e.js` (out of scope for the env fix; it must simply go green again as a side effect)
+- Document the emulator prerequisites (AVD name + `DETOX_ANDROID_AVD`, Expo dev build vs Expo Go, `adb reverse`, `--offline`, `.bin` dotfile cleanup) where the Detox docs live; do not invent new scripts if `npm run detox:build:android` + `npm run test:mobile` suffice
+- Re-run the full `npm run test:mobile`, including the Commit 155 `chord-diagram` smoke assertion
+
+**Acceptance Criteria:**
+
+- [x] Metro builds the Android dev bundle with zero transform errors; bundle compiles on-device (no Hermes errors in logcat)
+- [x] `npm run test:mobile` green on Android emulator (smoke incl. ChordDiagram visibility + dimensions; musicxml corpus suite)
+- [x] Emulator prerequisites documented (AVD, env override, Metro flags)
+- [x] No app-code behavior changed on web (web bundle still builds; `npm run test:ui` unaffected)
+
+**Implementation notes (Commit 183):**
+
+- **Native bundle isolation:** added `src/chord/onnxFallback.web.ts` (script-tag ORT loader + `.onnx` session) and `onnxFallback.native.ts` (throws: ONNX is web-only), with `onnxFallback.ts` as the TypeScript stub. `useChordDetector.ts` now calls `loadOnnxModel()`; the only `onnxruntime-web` reference left is in the web module. The `.onnx` asset no longer enters the Android Metro graph, which also fixed `mergeDebugResources` duplicate `raw/assets_models_chord_model` (`.onnx` + `.tflite`).
+- **Dependency corrections required for the build:** pinned `babel-preset-expo` to `~54.0.11` (the root had 56.x; Expo 54/RN 0.81 produced Hermes `private properties are not supported` on `DOMRectReadOnly`) and `react-native-nitro-modules` to `~0.35.10` (0.2.0 lacked `com.margelo.nitro.core`, breaking `react-native-fast-tflite` Kotlin).
+- **Detox wiring:** `scripts/detox/patch-android.js` now generates `android/app/src/androidTest/java/com/harmoniq/app/DetoxTest.java` (the test APK previously had no Detox entry class). Updated both Detox tests to the Detox 20 `device.openURL({ url })` API; the smoke test scrolls the design-preview ScrollView to the top and asserts by `ChordDiagram` accessibility label because the matrix moved to the top of that hidden dev screen. The smoke suite no longer wipes app data, so it reuses the DB initialized by the MusicXML suite and avoids the cold-start expo-sqlite hang.
+- **Scope deviation:** `tests/mobile/musicxml-render.e2e.js` was touched only to change the `openURL` argument shape; assertions/content are unchanged. Without that API fix it could not go green on Detox 20, contrary to the spec's "side effect" assumption.
+- **Environment workaround:** the local Gradle build repeatedly hit `Could not move temporary workspace … to immutable location` (Sophos/Windows transform-cache locking, Gradle #31438). The build was completed by renaming temporary transform dirs to their hash targets between attempts; documented in `docs/E2E_DEMO.md` for future runs. No project script was added for this.
+- **Verification:** `npm run lint` 0 errors; `npm run test` 654 passed; `npm run test:ui` 78 passed; `npm run test:mobile` 7/7 passed on `Pixel_7`; manual Android Metro bundle + `hermesc` compile passed; native bundle/source map contain no `ort.bundle.min.mjs` and no `.onnx` asset.
+- **Docs:** `docs/E2E_DEMO.md` → "Native Detox (Android)" prerequisites; `docs/ALPHATAB_LIMITATIONS.md` Commit 155 native status updated to verified.

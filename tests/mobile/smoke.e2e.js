@@ -1,12 +1,11 @@
-const { by, device, element, expect } = require("detox");
+const { by, device, element, expect, waitFor } = require("detox");
 
 describe("Harmoniq mobile smoke flow", () => {
+  // Keep app data: on a cold install expo-sqlite can stall the first JS boot
+  // past Detox's ready timeout. The MusicXML suite runs first and warms the DB;
+  // this suite only needs the shell and the design-preview route.
   beforeAll(async () => {
-    await device.launchApp({ newInstance: true, delete: true });
-  });
-
-  beforeEach(async () => {
-    await device.reloadReactNative();
+    await device.launchApp({ newInstance: true });
   });
 
   it("boots and captures launch screenshot", async () => {
@@ -23,9 +22,15 @@ describe("Harmoniq mobile smoke flow", () => {
   // render when a live theory annotation exists, so assert against the
   // deterministic design-preview matrix (same component, session sizes).
   it("shows ChordDiagram matrix with sane dimensions", async () => {
-    await device.openURL("harmoniq://design-preview");
+    await device.openURL({ url: "harmoniq://design-preview" });
 
-    const diagram = element(by.id("chord-diagram")).atIndex(0);
+    await waitFor(element(by.id("design-preview-scroll")))
+      .toExist()
+      .withTimeout(60_000);
+    await element(by.id("design-preview-scroll")).scrollTo("top");
+
+    const diagram = element(by.label("Chord diagram: G")).atIndex(0);
+    await waitFor(diagram).toBeVisible().withTimeout(60_000);
     await expect(diagram).toBeVisible();
 
     const attrs = await diagram.getAttributes();

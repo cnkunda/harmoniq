@@ -18,7 +18,7 @@ describe("MusicXML corpus renders without crash (native)", () => {
 
   for (const { name, label } of CORPUS) {
     it(`renders corpus file: ${name}`, async () => {
-      await device.openURL(`harmoniq://musicxml-render-test?file=${name}`);
+      await device.openURL({ url: `harmoniq://musicxml-render-test?file=${name}` });
 
       await waitFor(element(by.label(label)))
         .toBeVisible()
