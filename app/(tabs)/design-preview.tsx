@@ -9,6 +9,7 @@ import { ChordDiagram } from '@/components/ChordDiagram'
 import { CoachNote } from '@/components/CoachNote'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorBanner } from '@/components/ErrorBanner'
+import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { LickCard } from '@/components/LickCard'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 import { PitchIndicator } from '@/components/PitchIndicator'
@@ -65,6 +66,45 @@ function ChordDiagramMatrixSection() {
       <View className="mt-4 flex-row flex-wrap gap-4">
         <ChordDiagram name="G:maj" size="sm" />
         <ChordDiagram name="F:maj" size="sm" />
+      </View>
+    </View>
+  )
+}
+
+/** Commit 168 — deterministic fretboard mirror matrix (right vs left). */
+function FretboardMirrorSection() {
+  return (
+    <View className="mb-6 rounded-xl border border-wood-600/60 bg-wood-900/40 p-4" testID="fretboard-mirror-section">
+      <Text className="mb-1 font-sans-medium text-xs uppercase tracking-wider text-amber-light">
+        Fretboard mirror (Commit 168)
+      </Text>
+      <Text className="mb-3 font-sans text-xs text-muted-light">
+        Left-handed mode keeps high E on top and moves the nut to the right edge.
+      </Text>
+      <FretboardDiagram
+        hand="right"
+        keyLabel="Right-handed"
+        positionLabel="Open position"
+        capoText=""
+        scalePitchClasses={[0, 2, 4, 5, 7, 9, 11]}
+        selectedNote={{ string: 1, fret: 3 }}
+        overlayMode="note_names"
+        harmonicContextMode="key_context"
+      />
+      <FretboardDiagram
+        hand="left"
+        keyLabel="Left-handed"
+        positionLabel="Open position"
+        capoText=""
+        scalePitchClasses={[0, 2, 4, 5, 7, 9, 11]}
+        selectedNote={{ string: 1, fret: 3 }}
+        overlayMode="note_names"
+        harmonicContextMode="key_context"
+      />
+      <Text className="mb-2 mt-4 font-sans text-xs text-muted-light">Chord box mirror</Text>
+      <View className="flex-row flex-wrap gap-4" testID="chord-mirror-pair">
+        <ChordDiagram name="G:maj" size="md" hand="right" />
+        <ChordDiagram name="G:maj" size="md" hand="left" />
       </View>
     </View>
   )
@@ -515,6 +555,7 @@ export default function DesignPreviewScreen() {
             </Text>
 
             <ChordDiagramMatrixSection />
+            <FretboardMirrorSection />
 
             <AlphaTabRuntimeDiagDevSection />
             <FeedbackLayerDevSection />

@@ -29,6 +29,7 @@ import { hydrateVoiceCoachPrefs } from '@/src/audio/hydrateVoiceCoachPrefs'
 import { hydrateWebLessonStore, initDb } from '@/src/db/client'
 import { resumeActivePracticePlan } from '@/src/session/activePlanPersistence'
 import { useAnalysisJobsStore } from '@/src/stores/analysisJobsStore'
+import { useGuitarHandStore } from '@/src/stores/guitarHandStore'
 import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { useSessionPrefsStore } from '@/src/stores/sessionPrefsStore'
 
@@ -65,6 +66,7 @@ export default function RootLayout() {
         await startAnalytics()
         await useSessionPrefsStore.getState().hydrate()
         await useOutputTierStore.getState().hydrate()
+        await useGuitarHandStore.getState().hydrate()
         await hydrateVoiceCoachPrefs()
         if (Platform.OS === 'web') {
           await hydrateWebLessonStore()

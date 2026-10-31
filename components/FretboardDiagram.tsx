@@ -47,7 +47,15 @@ import {
   inferMidiFromNoteSelection,
   resolveFretCell,
 } from '@/src/music/fretboardCell'
+import {
+  fretCellCenterX,
+  fretCellSpan,
+  fretWireX as mirroredFretWireX,
+  type FretboardXLayout,
+} from '@/src/music/diagramMirror'
 import { pitchClassLabelFromMidi } from '@/src/music/noteNames'
+import type { GuitarHand } from '@/src/preferences/guitarHand'
+import { useGuitarHandStore } from '@/src/stores/guitarHandStore'
 import type { FretboardTunerState } from '@/src/session/useFretboardTuner'
 import type { FretboardOverlayMode } from '@/src/utils/fretboardShareState'
 import { useMusicState } from '@/src/context/MusicContext'
@@ -121,6 +129,8 @@ type FretboardDiagramProps = {
   voicingLabel?: string
   /** Real-time playback cursor position (string index 0-5). Shows subtle highlight during playback. */
   playbackCursorStringIndex?: number | null
+  /** Commit 168: override the persisted playing hand (used by deterministic previews). */
+  hand?: GuitarHand
 }
 
 const FINGER_COLORS: Record<number, { fill: string; border: string }> = {
@@ -154,20 +164,25 @@ const BOARD_T = 36
 const BOARD_B = 234
 const BOARD_H = BOARD_B - BOARD_T
 const NUT_W = 8
-const FRET_START_X = MARGIN_L + NUT_W
-const COL_W = (SVG_W - MARGIN_R - FRET_START_X) / 12
+
+/** Commit 168: hand-aware horizontal geometry. */
+const FRETBOARD_X_LAYOUT: FretboardXLayout = {
+  boardLeft: MARGIN_L,
+  boardRight: SVG_W - MARGIN_R,
+  nutWidth: NUT_W,
+  fretCount: NUM_FRETS,
+}
 
 function stringY(i: number): number {
   return BOARD_T + BOARD_H * (i + 0.5) / 6
 }
 
-function fretCenterX(f: number): number {
-  if (f === 0) return MARGIN_L + NUT_W / 2
-  return FRET_START_X + COL_W * (f - 0.5)
+function fretCenterX(f: number, hand: GuitarHand): number {
+  return fretCellCenterX(f, hand, FRETBOARD_X_LAYOUT)
 }
 
-function fretWireX(f: number): number {
-  return FRET_START_X + COL_W * f
+function fretWireX(f: number, hand: GuitarHand): number {
+  return mirroredFretWireX(f, hand, FRETBOARD_X_LAYOUT)
 }
 
 function fretInlayKind(fret: number, stringIdx: number): 'single' | 'doubleUpper' | 'doubleLower' | null {
@@ -392,10 +407,14 @@ export function FretboardDiagram({
   onVoicingModeChange,
   harmonicContextMode = 'chord_only',
   onHarmonicContextModeChange,
+  hand: handProp,
 }: FretboardDiagramProps) {
   const [pitchLadderOpen, setPitchLadderOpen] = useState(() => pitchLadderDefaultExpanded ?? true)
   const [orientPanelOpen, setOrientPanelOpen] = useState(false)
   const [svgSize, setSvgSize] = useState({ w: 0, h: 0 })
+
+  const storedHand = useGuitarHandStore((s) => s.hand)
+  const hand: GuitarHand = handProp ?? storedHand
 
   // MusicContext integration (optional – graceful fallback if no provider in tree)
   let musicState: { currentChord: string | null; activeNotes: Array<{ string: number; fret: number; midi?: number }> } | null = null
@@ -583,21 +602,16 @@ export function FretboardDiagram({
     }> = []
     for (let si = 0; si < 6; si++) {
       for (let f = 0; f <= NUM_FRETS; f++) {
-        let sx: number, ex: number
-        if (f === 0) {
-          sx = MARGIN_L
-          ex = FRET_START_X + COL_W
-        } else {
-          sx = FRET_START_X + COL_W * (f - 1)
-          ex = FRET_START_X + COL_W * f
-        }
+        const span = fretCellSpan(f, hand, FRETBOARD_X_LAYOUT)
+        const sx = span.start
+        const ex = span.end
         const sy = stringY(si) - BOARD_H / 12
         const ey = stringY(si) + BOARD_H / 12
         cells.push({ stringIdx: si, fret: f, sx, sy, ex, ey })
       }
     }
     return cells
-  }, [])
+  }, [hand])
 
   const feedbackRingColor = lastCellResult
     ? lastCellResult.result === 'hit'
@@ -608,7 +622,7 @@ export function FretboardDiagram({
     : null
 
   const feedbackX = lastCellResult
-    ? fretCenterX(lastCellResult.fret)
+    ? fretCenterX(lastCellResult.fret, hand)
     : 0
   const feedbackY = lastCellResult
     ? stringY(lastCellResult.row)
@@ -860,6 +874,7 @@ export function FretboardDiagram({
 
       {/* SVG Fretboard */}
       <View
+        testID="fretboard-diagram"
         onLayout={onSvgLayout}
         className="mt-3 overflow-hidden rounded-lg"
         style={{ width: '100%', height: svgSize.h || 200 }}
@@ -886,7 +901,7 @@ export function FretboardDiagram({
 
             {/* Fret numbers (O for nut, 1-12 for frets) */}
             <SvgText
-              x={fretCenterX(0)}
+              x={fretCenterX(0, hand)}
               y={26}
               textAnchor="middle"
               fill={colors.muted.brown}
@@ -898,7 +913,7 @@ export function FretboardDiagram({
             {Array.from({ length: 12 }).map((_, i) => (
               <SvgText
                 key={`fn-${i}`}
-                x={fretCenterX(i + 1)}
+                x={fretCenterX(i + 1, hand)}
                 y={26}
                 textAnchor="middle"
                 fill={colors.muted.brown}
@@ -913,9 +928,9 @@ export function FretboardDiagram({
             {OPEN_STRING_NOTE_LETTERS.map((label, i) => (
               <SvgText
                 key={`os-${i}`}
-                x={MARGIN_L - 6}
+                x={hand === 'left' ? FRETBOARD_X_LAYOUT.boardRight + 6 : MARGIN_L - 6}
                 y={stringY(i) + 4}
-                textAnchor="end"
+                textAnchor={hand === 'left' ? 'start' : 'end'}
                 fill={colors.amber.accent}
                 fontSize={11}
                 fontWeight="600"
@@ -926,7 +941,7 @@ export function FretboardDiagram({
 
             {/* Nut (ivory) */}
             <SvgRect
-              x={MARGIN_L}
+              x={fretCellSpan(0, hand, FRETBOARD_X_LAYOUT).start}
               y={BOARD_T}
               width={NUT_W}
               height={BOARD_H}
@@ -940,9 +955,9 @@ export function FretboardDiagram({
             {Array.from({ length: 12 }).map((_, i) => (
               <Line
                 key={`fw-${i}`}
-                x1={fretWireX(i + 1)}
+                x1={fretWireX(i + 1, hand)}
                 y1={BOARD_T - 4}
-                x2={fretWireX(i + 1)}
+                x2={fretWireX(i + 1, hand)}
                 y2={BOARD_B + 4}
                 stroke={colors.muted.brown}
                 strokeWidth={1.2}
@@ -955,7 +970,7 @@ export function FretboardDiagram({
               Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
                 const inlay = fretInlayKind(col, si)
                 if (!inlay) return null
-                const cx = fretCenterX(col)
+                const cx = fretCenterX(col, hand)
                 const cy = stringY(si)
                 if (inlay === 'single') {
                   return (
@@ -1023,7 +1038,7 @@ export function FretboardDiagram({
                 return (
                   <Circle
                     key={`sc-${si}-${col}`}
-                    cx={fretCenterX(col === 0 ? 0 : col)}
+                    cx={fretCenterX(col === 0 ? 0 : col, hand)}
                     cy={stringY(si)}
                     r={7}
                     fill={colors.success}
@@ -1049,7 +1064,7 @@ export function FretboardDiagram({
                 return (
                   <Circle
                     key={`ch-${idx}`}
-                    cx={fretCenterX(col)}
+                    cx={fretCenterX(col, hand)}
                     cy={stringY(si)}
                     r={isRoot ? 7 : 5}
                     fill={colors.amber.accent}
@@ -1060,7 +1075,7 @@ export function FretboardDiagram({
               return (
                 <Circle
                   key={`ch-${idx}`}
-                  cx={fretCenterX(col)}
+                  cx={fretCenterX(col, hand)}
                   cy={stringY(si)}
                   r={isRoot ? 8 : 6}
                   fill={isRoot ? colors.amber.accent : colors.amber.light}
@@ -1076,7 +1091,7 @@ export function FretboardDiagram({
               const si = note.string - 1
               const col = note.fret
               if (si < 0 || si > 5) return null
-              const cx = fretCenterX(col)
+              const cx = fretCenterX(col, hand)
               const cy = stringY(si)
               const pitchLabel = note.midi ? pitchClassLabelFromMidi(note.midi) : ''
               if (isEnhancedView) {
@@ -1154,7 +1169,7 @@ export function FretboardDiagram({
               return (
                 <G key={`gm-${idx}`}>
                   <Circle
-                    cx={fretCenterX(col)}
+                    cx={fretCenterX(col, hand)}
                     cy={stringY(si)}
                     r={ringR}
                     fill={fc.fill + '30'}
@@ -1163,7 +1178,7 @@ export function FretboardDiagram({
                     opacity={isActive ? 0.9 : 0.5}
                   />
                   <SvgText
-                    x={fretCenterX(col)}
+                    x={fretCenterX(col, hand)}
                     y={stringY(si) + 3.5}
                     textAnchor="middle"
                     fill={colors.wood[900]}
@@ -1186,7 +1201,7 @@ export function FretboardDiagram({
                   return (
                     <SvgText
                       key={`ol-${si}-${col}`}
-                      x={fretCenterX(col)}
+                      x={fretCenterX(col, hand)}
                       y={stringY(si) + 3}
                       textAnchor="middle"
                       fill={colors.muted.brown}
@@ -1221,7 +1236,7 @@ export function FretboardDiagram({
           <View
             style={{
               position: 'absolute',
-              left: (fretCenterX(cell.fret) / SVG_W) * svgSize.w - 14,
+              left: (fretCenterX(cell.fret, hand) / SVG_W) * svgSize.w - 14,
               top: (stringY(cell.row) / SVG_H) * svgSize.h - 14,
             }}
             pointerEvents="none"
@@ -1244,7 +1259,7 @@ export function FretboardDiagram({
               key={`gm-anim-${idx}`}
               style={{
                 position: 'absolute',
-                left: (fretCenterX(col) / SVG_W) * svgSize.w - 14,
+                left: (fretCenterX(col, hand) / SVG_W) * svgSize.w - 14,
                 top: (stringY(si) / SVG_H) * svgSize.h - 14,
               }}
               pointerEvents="none"
@@ -1268,7 +1283,7 @@ export function FretboardDiagram({
           >
             {Array.from({ length: 6 }).map((_, si) =>
               Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
-                const cxFrac = fretCenterX(col) / SVG_W
+                const cxFrac = fretCenterX(col, hand) / SVG_W
                 const cyFrac = stringY(si) / SVG_H
                 const left = (cxFrac * svgSize.w) - 22
                 const top = (cyFrac * svgSize.h) - 22

@@ -418,8 +418,11 @@ Full 6-phase process in `docs/CODER.md` (read before implementing a commit):
 
 | File | Why |
 |------|-----|
-| `PRIORITIES.md` | Full engineering roadmap with commit-level specs |
+| `PRIORITIES.md` | Active research roadmap and commit-level specs |
+| `docs/COMMIT_TEMPLATE.md` | Canonical spec template for new roadmap commits |
+| `priorities-archive.md` | Completed and superseded specs (historical reference) |
 | `docs/CODER.md` | Commit implementation workflow (6-phase process) |
+| `docs/screenshots/README.md` | README screenshot inventory and regeneration command |
 | `docs/E2E_DEMO.md` | End-to-end walkthrough with checkpoints |
 | `docs/MIGRATIONS.md` | Database migration strategy and version history |
 | `README.md` | Product spec, backend pipeline, DB schema, 5-step loop |

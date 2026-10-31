@@ -1,8 +1,8 @@
 # Harmoniq — Engineering Roadmap Archive
 
-This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, Milestone D infrastructure Commits 169–172, the RWC-P data pipeline Commit 173, the lead-sheet agent Commit 177, and the zero-latency pitch detector Commit 178. Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
+This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phase 2 chord model data pipeline + production hardening work (commits 98-148), archived during ongoing development, plus the Phase 2 release-gate Commit 149, the completed carry-over fixes (commits 151–155), and engagement Commits 159–166 plus the skipped Commit 167, Milestone D infrastructure Commits 169–172, the RWC-P data pipeline Commit 173, the lead-sheet agent Commit 177, the zero-latency pitch detector Commit 178, the left-handed parity Commit 168, and the GPU-blocked AMT research programme (commits 174–176 and 180), which was consolidated into the new AMT Research Program (Commit 1). Phase 2 has been restructured around MT3 as the primary transcription engine (see [`PRIORITIES.md`](PRIORITIES.md)). Commits 122-148 are archived as **superseded** — the product-focused sub-commits have been migrated to the new Phase 2 milestones; the custom-model-specific work is preserved as reference for Phase 3 distillation.
 
-> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–183). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168, RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–170 (completed → archived) and 171–172 (completed → archived), lead sheet agent → 177 (completed → archived), clean-clone verification fixes → 181 (completed → archived) and 182 (completed → archived), native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
+> **Deferred work moved (roadmap restructure):** every unchecked acceptance criterion, follow-up, and deferred milestone formerly in this file now lives as a numbered commit in [`PRIORITIES.md`](PRIORITIES.md) (commit numbers 150–184). This archive keeps only one-line pointers below. New pointers: left-handed mode → 168 (completed → archived), GPU AMT research → merged into Commit 1 (174–176, 180), RWC dataset → 173, Milestone C1–C4 → 159–162 (completed → archived), Milestone C5–C9 → 163–167, Milestone D gaps → 169–170 (completed → archived) and 171–172 (completed → archived), lead sheet agent → 177 (completed → archived), clean-clone verification fixes → 181 (completed → archived) and 182 (completed → archived), native Detox env → 183. Later: commits 151–155 (SSE progress stream, progressive reveal, MusicXML re-fetch, design-token conformance, ChordDiagram native verification), commits 159–166 (user feedback & manual overrides, jam summary agent, play engagement analytics, dynamic session engine, orient-as-hint, mastery & integrity, chord pulse dashboard, three-tier output strategy), and commit 149 (Phase 2 release-gate verification) were completed and archived back into this file — full specs at the bottom.
 
 **Phase 1 Archive Date:** May 14, 2026
 **Phase 2 (Commits 98-103) Archive Date:** May 26, 2026
@@ -45,6 +45,11 @@ This file contains completed work from Phase 0, Phase 1 (commits 1-97), and Phas
 **Commit 182 (AlphaTab optional-dep guard on clean clones — 3 tests) Archive Date:** October 28, 2026 — Complete; all 3 ACs verified (12 passed with deps installed; 9 passed / 3 skipped with `backend/node_modules` moved aside; ci.yml-env target set 22 passed; lint 0 errors); spec and implementation notes archived below.
 **Commit 184 (Confidence-Band UI Display + ECE Calibration) Archive Date:** October 29, 2026 — Complete; all 6 ACs verified (lint 0 errors, vitest 654 passed, backend ECE/156 suites 22 passed, Playwright non-visual 78 passed); ECE 0.7441 measured on 3 GuitarSet tracks; no scaling applied; spec and implementation notes archived below.
 **Commit 183 (Native Detox Environment — onnxruntime-web Bundling + Emulator Prerequisites) Archive Date:** October 31, 2026 — Complete; all 4 ACs verified (lint 0 errors, vitest 654 passed, Playwright 78 passed, Detox 7/7 on `Pixel_7`); native bundle has no `onnxruntime-web`/`.onnx`; spec and implementation notes archived below.
+**Commit 168 (Left-Handed Mode Fretboard Parity) Archive Date:** October 31, 2026 — Complete; all 5 ACs verified (lint 0 errors, vitest 81 files / 661 passed, Playwright visual 54/54, both-orientation snapshots, persisted pref); Detox snapshot test added but not executed (no emulator attached); spec and implementation notes archived below.
+**Commit 174 (Phase 3.1 — Retrain CRNN on MT3 Pseudo-Labels) Archive Date:** October 31, 2026 — Superseded; merged into PRIORITIES.md Commit 1 (AMT Research Program), Workstreams W1/W3. Spec preserved below.
+**Commit 175 (Phase 3.2 — Two-Head Student Distillation) Archive Date:** October 31, 2026 — Superseded; merged into PRIORITIES.md Commit 1, Workstream W3. Spec preserved below.
+**Commit 176 (Phase 3.3 — HT-MT3 Exploration) Archive Date:** October 31, 2026 — Superseded; merged into PRIORITIES.md Commit 1, Workstream W2. Spec preserved below.
+**Commit 180 (Evaluation Set Expansion) Archive Date:** October 31, 2026 — Superseded; merged into PRIORITIES.md Commit 1, Workstream W0. Spec preserved below.
 **Commit 149 (Phase 2 Release-Gate Verification & Roadmap Sync) Archive Date:** October 20, 2026 — Complete; all 7 ACs verified (lint 0 errors, vitest 490 passed, backend pytest 1342 passed / 6 skipped; Part 2 published to harmoniq.ai/blog); spec and release-gate ledger archived below.
 
 ---
@@ -3158,3 +3163,145 @@ Merged ledger of the former R1/R2/R3 commit-spec ACs (deleted by restructure com
 - **Environment workaround:** the local Gradle build repeatedly hit `Could not move temporary workspace … to immutable location` (Sophos/Windows transform-cache locking, Gradle #31438). The build was completed by renaming temporary transform dirs to their hash targets between attempts; documented in `docs/E2E_DEMO.md` for future runs. No project script was added for this.
 - **Verification:** `npm run lint` 0 errors; `npm run test` 654 passed; `npm run test:ui` 78 passed; `npm run test:mobile` 7/7 passed on `Pixel_7`; manual Android Metro bundle + `hermesc` compile passed; native bundle/source map contain no `ort.bundle.min.mjs` and no `.onnx` asset.
 - **Docs:** `docs/E2E_DEMO.md` → "Native Detox (Android)" prerequisites; `docs/ALPHATAB_LIMITATIONS.md` Commit 155 native status updated to verified.
+
+---
+
+### Commit 168: Left-Handed Mode Fretboard Parity (was Phase 1 commit 64, skipped)
+
+**Status:** complete (archived October 31, 2026)
+
+**Goal:** Full left-handed parity for fretboard and diagram rendering — the one Phase 1 feature explicitly skipped with zero code in the repo.
+
+**Current State:** Commit 64 was marked *skipped* in Phase 1. Repo-wide search finds no left-handed handling: `FretboardDiagram` renders strings high-E-at-top/right-handed only, `ChordDiagram` chord boxes assume right-handed orientation, and no `guitar_hand` preference exists.
+
+**Scope:**
+
+- Add `guitar_hand: 'right' | 'left'` preference (default `right`) in `app_prefs` + Settings UI (Display section)
+- Mirror `FretboardDiagram` under left mode: string row order reversed, fret numbering mirrored, scale-degree/label overlays re-anchored; cell mapping helper unit-tested both orientations
+- Mirror `ChordDiagram` chord-box rendering (vertical string order flipped, base-fret indicator side swapped)
+- Mirror fretboard tap→note mapping (`onNoteTap`, `allCellsForMidi` resolution) so taps land on the visually mirrored cell
+- Check `ScaleExplorer`, `Jam`, and warmup fretboard surfaces for the same mirror requirement
+- Visual regression snapshots for left-handed mode (Playwright + Detox)
+
+**Acceptance Criteria:**
+
+- [x] Left-handed pref mirrors fretboard + chord diagram on study/slow/play/warmup/scale-explorer/jam
+- [x] Tap targets match mirrored visuals (correct note on tap)
+- [x] Preference persists across restarts; right-handed default unchanged (visual snapshots non-regressed)
+- [x] Unit tests for mirrored cell mapping; visual snapshots for both orientations
+- [x] `npm run lint` + `npm run test` + `npm run test:visual` green
+
+**Implementation notes (Commit 168):**
+
+- Added `guitar_hand` (`right` | `left`, default `right`) as `PREF_GUITAR_HAND` in `src/db/schema.ts`, parsed by `src/preferences/guitarHand.ts`, persisted through `src/stores/guitarHandStore.ts`, and hydrated in `app/_layout.tsx`. No DB migration required (`app_prefs` is key/value).
+- **Mirror convention deviation:** scope text said "string row order reversed"; the implementation uses a **horizontal mirror only** (user decision + industry convention): nut moves to the right, fret numbers count right-to-left, high E stays on top. Reversing rows would be a 180° rotation and would also require inverting the fret-12 inlay offsets. String/fret/pitch data is untouched.
+- New pure helpers in `src/music/diagramMirror.ts` (`fretCellSpan`, `fretCellCenterX`, `fretWireX`, `chordStringDisplayIndex`) drive every X coordinate: nut, wires, fret numbers, open-string labels, inlays, scale/chord/active-note layers, feedback ring, guide markers, SVG hit rects, native 44px overlays, and animated overlays. Taps keep passing logical `string`/`fret`, so the selected note is unchanged; `allCellsForMidi` / `resolveFretCell` were deliberately left untouched.
+- `FretboardDiagram` and `ChordDiagram` read the Zustand store and also accept an optional `hand` override for deterministic previews. `ChordDiagram` flips string columns and swaps the base-fret indicator side.
+- Added a right/left `FretboardDiagram` + chord-box matrix to `design-preview` (`fretboard-mirror-section`, `fretboard-diagram` testIDs) for native visual parity.
+- Tests: `src/music/diagramMirror.test.ts` (7 cases); `tests/ui/left-handed-fretboard.spec.ts` (settings persistence across reload + `@visual` both-orientation fretboard and chord-box snapshots); Detox smoke now screenshots both hands.
+- **Verification (2026-10-31):** `npm run lint` 0 errors; `npm run test` 81 files / 661 passing; `npm run test:visual` 54/54 passing; new snapshots `fretboard-right.png` / `fretboard-left.png` / `chord-right.png` / `chord-left.png`; `/settings` route baseline unchanged (viewport-only capture, new row below fold). `npm run test:ui` 78 passed after one pre-existing `analytics-settings` timeout passed on isolated re-run.
+- **Detox caveat:** the mobile smoke test was updated to assert and screenshot both orientations but was **not executed** in this environment (no emulator/device attached). Native persistence and 44px tap targets remain device-verification items.
+
+---
+
+### Commit 174: Phase 3.1 — Retrain CRNN on MT3 Pseudo-Labels (blocked: GPU)
+
+**Status:** superseded (archived October 31, 2026) — merged into PRIORITIES.md Commit 1 (AMT Research Program).
+
+**Goal:** Close the 34.7% → 70%+ synthetic-to-real gap by training the CRNN student on MT3-generated pseudo-labels for real guitar recordings.
+
+**Current State:** CRNN real-world accuracy is 34.7% (v1.0.5); MT3 scores >80% (MIREX-25) as teacher. The pseudo-label tooling already exists: `python scripts/pseudo_label_generate.py --audio-dir <dir>` (`data/pseudo_label` ready, 1 file), and the full training pipeline (`build_chord_tflite.py`, temperature sampling, QAT) is preserved. What's missing is GPU time for thousands of labels + training runs.
+
+**Scope:**
+
+- Generate MT3 pseudo-labels at scale for real guitar audio (target ≥1,000 tracks; use available licensed audio + user-feedback exports from commit 159 when available)
+- Train CRNN on pseudo-labeled real data mixed with synthetic (domain-gap mixing via `cqt_stats.npz` pattern)
+- Evaluate on GuitarSet held-out test; promote via `scripts/promote_model.py` gatekeeper (only if metrics beat active)
+- Document results in [`docs/RESEARCH.md`](docs/RESEARCH.md) + training log
+
+**Acceptance Criteria:**
+
+- [ ] ≥1,000 real tracks pseudo-labeled by MT3
+- [ ] Retrained CRNN ≥70% GuitarSet root accuracy (or documented ceiling + analysis)
+- [ ] Promotion gated by `promote_model.py` (no force)
+- [ ] Inference latency unchanged (<100ms/frame on-device benchmark still passes)
+
+---
+
+### Commit 175: Phase 3.2 — Two-Head Student Distillation (blocked: GPU)
+
+**Status:** superseded (archived October 31, 2026) — merged into PRIORITIES.md Commit 1 (AMT Research Program).
+
+**Goal:** Replace the separate CRNN + chroma fallback with a single shared-encoder model distilled from MT3: one chord head, one guitar-vocabulary solo head.
+
+**Current State:** The fallback chain is still two separate engines (CRNN TFLite chords → chroma; Basic Pitch/CRNN solo) with no shared encoder. MT3 teacher outputs are already produced by the primary pipeline (Branch A/B outputs in `LessonJSON`), and the training tooling (`build_chord_tflite.py`, temperature sampling, QAT) is preserved — but no two-head student exists and no distillation dataset has been assembled. Blocked on GPU.
+
+**Target architecture:**
+
+```
+Shared encoder (CQT → Conv → BiLSTM, ~200K params)
+    ├── Chord head (classifier, 277 classes, frame-level)
+    └── Solo head (autoregressive token decoder, guitar vocabulary)
+```
+
+**Scope:**
+
+- Distill from MT3 teacher outputs (chord sequences + filtered solo token streams from Branch A/B)
+- Guitar-vocabulary solo head structurally incapable of emitting non-guitar notes
+- Evaluate against current fallback chain on the 5-song set + GuitarSet
+- Swap into the fallback orchestrator behind a feature flag; keep chroma as last resort
+
+**Acceptance Criteria:**
+
+- [ ] Single model produces both chord frames and solo tokens
+- [ ] Accuracy ≥ current MT3→CRNN chain on the 5-song eval (no regression)
+- [ ] Model size + latency suitable for server-side serving (and path to on-device noted)
+- [ ] Feature-flagged rollout with instant fallback to existing chain
+
+---
+
+### Commit 176: Phase 3.3 — HT-MT3 Exploration (blocked: GPU)
+
+**Status:** superseded (archived October 31, 2026) — merged into PRIORITIES.md Commit 1 (AMT Research Program).
+
+**Goal:** Evaluate Headed and Tailed MT3 (per-instrument decoder heads) as a higher-quality teacher for pseudo-labels and distillation.
+
+**Current State:** Only standard MT3 (T5-small checkpoint via `scripts/download_mt3_checkpoint.py`) is integrated; no HT-MT3 code, weights, or upstream wiring exists. The instrument-confusion metric that the comparison needs is computed but not yet surfaced (`instrument_confusion` at `analyze_audio.py:406`, unwired to coach — commit 156). Blocked on GPU + upstream availability.
+
+**Scope:**
+
+- Acquire/build HT-MT3 teacher (check upstream availability)
+- Run side-by-side pseudo-label quality vs standard MT3 on a 50-track sample (measure instrument-confusion rate — infrastructure from commit 156 supplies the metric)
+- If better: regenerate pseudo-labels with HT-MT3 and retrain student (feeds 174/175)
+- Document decision + results in [`docs/RESEARCH.md`](docs/RESEARCH.md)
+
+**Acceptance Criteria:**
+
+- [ ] Side-by-side teacher comparison documented with numbers
+- [ ] Go/no-go decision recorded (with instrument-confusion deltas)
+- [ ] If go: student retrained on HT-MT3 labels with measured improvement
+
+---
+
+### Commit 180: Evaluation Set Expansion
+
+**Status:** superseded (archived October 31, 2026) — merged into PRIORITIES.md Commit 1 (AMT Research Program).
+
+**Goal:** Broaden the evaluation set per [`docs/EVALUATION.md`](docs/EVALUATION.md) "Next Steps" so conclusions generalize beyond blues/pop studio guitar.
+
+**Current State:** [`docs/EVALUATION.md`](docs/EVALUATION.md) documents exactly 5 songs (3 pass / 1 warn / 1 fail — the improv-blues self-recording fails on gain staging/reverb), and [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) records failure modes for those 5. No out-of-distribution, jazz-harmony, or fair live-recording cases are covered yet; GPU timing has not been captured.
+
+**Scope:**
+
+- Re-record test #4 (improv blues) with proper gain staging and minimal room reverb — replaces the current ❌ Fail with a fair signal
+- Add a clean kora/mbira recording to test out-of-distribution behavior (expected: quality gate → chroma; documents graceful degradation)
+- Add a song with extended jazz harmony to stress-test the 277-class vocabulary
+- Capture pipeline timing with GPU (when available — coordinate with 174) to document speedup factor
+- Update [`docs/EVALUATION.md`](docs/EVALUATION.md) with the expanded table + revised pass/warn/fail summary
+
+**Acceptance Criteria:**
+
+- [ ] Test set ≥7 songs covering studio / live / self-recorded / OOD / jazz-harmony
+- [ ] All new songs produce complete LessonJSON (no crashes) — pass/warn/fail recorded
+- [ ] EVALUATION.md summary table updated with revised verdict counts
+- [ ] Failure modes for new categories documented in KNOWN_FAILURES.md

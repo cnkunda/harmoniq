@@ -6,6 +6,24 @@
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="Harmoniq home screen with today's practice suggestion" width="820" />
+</p>
+
+| Study | Play |
+|:---:|:---:|
+| <img src="docs/screenshots/study.png" alt="Study screen with fretboard, chord diagram, and chords" width="410" /> | <img src="docs/screenshots/play.png" alt="Play screen with microphone capture and pitch scoring" width="410" /> |
+
+| Scale Explorer | Progress |
+|:---:|:---:|
+| <img src="docs/screenshots/scale-explorer.png" alt="Scale Explorer with a CAGED fretboard position" width="410" /> | <img src="docs/screenshots/progress.png" alt="Progress screen with mentor guidance and coach summary" width="410" /> |
+
+*Captured from the Expo web build using the offline demo lesson. See [`docs/screenshots/README.md`](docs/screenshots/README.md) for the regeneration command.*
+
+---
+
 ## Research Abstract
 
 Harmoniq is an open-source reference implementation of a four-tier AMT pipeline
@@ -18,8 +36,7 @@ predictions) and **chroma template matching** as the last resort.
 (instrument-specific). Each branch reports per-note and per-chord confidence,
 enabling honest uncertainty display rather than silent failure.
 
-**Status:** Working pipeline, CPU-only. See [`PRIORITIES.md`](PRIORITIES.md) for
-roadmap and [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) for limitations.
+**Status:** Working pipeline, CPU-only. Active work is **Commit 1 — Harmoniq AMT Research Program** (Stage 0 CPU-ready; W1–W4 GPU-gated), followed by **Commit 2 — Part 3 blog post**. See [`PRIORITIES.md`](PRIORITIES.md) for the roadmap and [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) for limitations.
 
 **Quick start:**
 
@@ -43,7 +60,9 @@ npm install && npx expo start --web
 **Related docs:** [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 [`docs/EVALUATION.md`](docs/EVALUATION.md) |
-[`PRIORITIES.md`](PRIORITIES.md)
+[`PRIORITIES.md`](PRIORITIES.md) |
+[`docs/COMMIT_TEMPLATE.md`](docs/COMMIT_TEMPLATE.md) |
+[`priorities-archive.md`](priorities-archive.md)
 
 ---
 
@@ -61,15 +80,15 @@ The target player: intermediate guitarist drawn to John Mayer, Tommy Emmanuel, a
 
 **Warm, analog, handcrafted.** The app should feel like a well-worn guitar workshop — wood grain textures, amber and cream tones, slightly imperfect edges, warm lighting. Think: a beautifully aged Les Paul in a room with good lamps. Nothing sterile. Nothing neon. Nothing that looks like a SaaS dashboard.
 
-**Color palette:**
-- Background: deep walnut `#1C1208` to warm espresso `#2B1D0E`
-- Surface cards: `#3D2B1A` with subtle grain texture overlay
-- Primary accent: warm amber `#D4860A`
-- Secondary accent: aged cream `#F0DEB4`
-- Text primary: `#F5EDDC`
-- Text secondary: `#A08060`
-- Danger/miss: muted terracotta `#C0522A`
-- Success/hit: warm sage `#7A9E6A`
+**Color palette** (single source of truth: [`src/constants/colors.ts`](src/constants/colors.ts)):
+- Background: deepest walnut `#1b120e` to surface `#2a1c15`
+- Surface cards: `#3a271b`
+- Primary accent: brass `#dba25e`
+- Secondary accent: warm amber `#E8B86D`
+- Text primary: cream `#f3e7d6`
+- Text secondary: muted brown `#b39a86`
+- Danger/miss: terracotta `#C17B5F`
+- Success/hit: sage `#7A9B6D`
 
 **Typography:**
 - Display / headings: `Playfair Display` (serif, evocative of music notation and vintage print)
@@ -78,9 +97,9 @@ The target player: intermediate guitarist drawn to John Mayer, Tommy Emmanuel, a
 
 **Texture:** Apply a subtle paper/grain overlay across all backgrounds using a low-opacity noise SVG or PNG. Cards should have slight inner shadows and soft borders, not sharp drop shadows.
 
-**Animations:** Slow, intentional. Waveforms pulse gently. Transitions use `Animated` with ease-in-out curves. Nothing bouncy or gamified. The feel is "jazz club lighting," not "mobile game."
+**Animations:** Slow, intentional. Waveforms pulse gently. Transitions use `react-native-reanimated` with shared spring/timing presets. Nothing bouncy or gamified. The feel is "jazz club lighting," not "mobile game."
 
-**Icons:** Phosphor Icons (warm, slightly rounded, not Material or Heroicons). Custom SVG illustrations for key moments (placement session complete, lick saved, etc.).
+**Icons:** `lucide-react-native` (warm, slightly rounded, consistent across native and web). Custom SVG illustrations for key moments (placement session complete, lick saved, etc.).
 
 ---
 
@@ -88,7 +107,7 @@ The target player: intermediate guitarist drawn to John Mayer, Tommy Emmanuel, a
 
 ### Engineering roadmap
 
-Implementation order, phase groupings, and acceptance criteria live in **`PRIORITIES.md`**. **Phase 0** (Expo scaffold, design tokens, harness, env, shared UI feedback, typed analyze client) is complete; **Phase 1** onward is active work.
+Implementation order, phase groupings, and acceptance criteria live in **`PRIORITIES.md`**. The active roadmap is research-first: **Commit 1 — Harmoniq AMT Research Program** and **Commit 2 — Part 3 blog post**. Completed phases and superseded specs live in [`priorities-archive.md`](priorities-archive.md); new specs follow [`docs/COMMIT_TEMPLATE.md`](docs/COMMIT_TEMPLATE.md).
 
 **Cold start / release:** [docs/E2E_DEMO.md](docs/E2E_DEMO.md) walks a new machine from backend + app env through a full session and includes a v1 go/no-go checklist.
 
@@ -256,7 +275,7 @@ CREATE TABLE jam_snapshots (
 - Add a new song → URL/upload input
 - Jam Mode → passive listening screen
 
-**Bottom nav:** Home | Library | Progress | Settings
+**Bottom nav:** Home | Library | Progress | Jam | Discover | Settings
 
 ---
 

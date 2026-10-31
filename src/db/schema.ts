@@ -167,6 +167,9 @@ export const PREF_MENTOR_STATE_JSON = 'mentor_state_json'
 /** Commit 166: notation presentation tier (`learner` | `intermediate` | `transcriber`). */
 export const PREF_OUTPUT_TIER = 'output_tier'
 
+/** Commit 168: playing hand for diagram mirroring (`right` | `left`). */
+export const PREF_GUITAR_HAND = 'guitar_hand'
+
 /** Device-local analyze jobs that should be re-checked after leaving Add Song or restarting. */
 export const PREF_ANALYSIS_JOBS_JSON = 'analysis_jobs_json'
 

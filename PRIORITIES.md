@@ -1,246 +1,269 @@
-# Harmoniq — Engineering Roadmap
+# Harmoniq — AMT Research Roadmap
 
-Research project + demo app for Automatic Music Transcription (AMT), focused on guitar. Start here for the plan; see [`README.md`](README.md) for the build spec.
+Harmoniq is a research project and demo app for **Automatic Music Transcription (AMT)**, focused on guitar. This file is the active work plan. Completed work lives in [`priorities-archive.md`](priorities-archive.md); every new spec follows [`docs/COMMIT_TEMPLATE.md`](docs/COMMIT_TEMPLATE.md).
 
-**Phase 0 (0.1–0.6)** — **complete**. **Phase 1 (commits 1–97)** — **complete**.  
-**Phase 2 commits 98–148** — archived.  
-**Milestone A (MT3-Primary Pipeline)** — archived, complete.  
-**Milestone B (Fretboard Dual-Mode)** — archived, complete.  
-**Milestone C (Engagement & Retention)** — promoted into the active backlog (commits 159–167; 159–166 completed, 167 skipped → archived).
-**Milestone D (Infrastructure)** — complete; 151 SSE progress stream, 169 variable tempo, 170 queue hardening, 171 fingerprinting/quality, 172 stem export completed → archived.
-**Current Phase 2** — Pipeline validation & publication close-out (commit 150; 149 completed → archived).  
-**Active backlog** — numbered commits **150–180** below (one commit = one spec; 149, 151–166, 169–173, 177–179, 181, 183 completed and 167 skipped → archived; 184 completed → archived).
-**Phase 3** — Planned, blocked on GPU (commits 174–176; aspirational 180; verification fix 182 sits in the active backlog, not Phase 3).
+The immediate research question is no longer “can the pipeline transcribe a song?” — it can, with documented failure modes. The question is whether the pipeline can become a **measured, reproducible guitar-AMT system** whose teacher/student choices, evaluation protocol, and tablature output are defensible against the current research landscape.
 
 ---
 
 ## At a glance
 
 | | |
-| ------------------ | -------------------------------------------------------------------- |
-| **Roadmap status** | **Phase 2 close-out (150), then backlog 168–180** (149, 151–166, 169–173, 177–179, 181, 183, 184 completed → archived; 167 skipped → archived). Phase 3 blocked on GPU (174–176). |
-| **Research doc** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
+| --- | --- |
+| **Active research** | **Commit 1 — Harmoniq AMT Research Program** (Stage 0 CPU-ready; W1–W4 GPU-gated) |
+| **Publication** | **Commit 2 — Part 3 Blog Post — The Meta-Layer** (deferred until Commit 1 produces results) |
+| **Archive** | [`priorities-archive.md`](priorities-archive.md) (completed and superseded work) |
+| **Spec template** | [`docs/COMMIT_TEMPLATE.md`](docs/COMMIT_TEMPLATE.md) |
+| **Research framework** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
+| **Evaluation results** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
 | **Known failures** | [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
-| **Evaluation** | [`docs/EVALUATION.md`](docs/EVALUATION.md) |
-| **E2E / release** | [`docs/E2E_DEMO.md`](docs/E2E_DEMO.md) |
-| **Manual QA** | [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) |
-| **Blog** | [`docs/blog/why-harmoniq-part-2.md`](docs/blog/why-harmoniq-part-2.md) |
-| **Archive** | [`priorities-archive.md`](priorities-archive.md) (completed work only; deferred work was promoted here in Sep 2026) |
+| **Implementation workflow** | [`docs/CODER.md`](docs/CODER.md) |
 
 ---
 
-## PHASE 2: Pipeline Validation & Publication — Commit 150 (149 archived)
+## Research context
 
-**Status:** In Progress — Commit 149 complete (7/7 release-gate ACs); Commit 150 (Part 3) ready
-
-**What this phase is:**
-- Validate the MT3-primary + CRNN-fallback pipeline on a real song set (done — see [`docs/EVALUATION.md`](docs/EVALUATION.md))
-- Document known failure modes and evaluation results (done — see [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md))
-- Publish Part 2 and Part 3 blog posts (Part 2 published to harmoniq.ai/blog October 2026; Part 3 = commit 150)
-- Verify everything works from a clean clone and sync the roadmap to reality (commit 149 — complete, see [`priorities-archive.md`](priorities-archive.md))
-
-**What this phase is not:**
-- New feature development (engagement features start at commit 159)
-- Custom model training (requires GPU — see Phase 3)
-- On-device optimization (the existing on-device active listener beta is separate)
-
-### Strategic Context
-
-The pipeline uses a four-tier fallback architecture:
+The current pipeline is a four-tier fallback chain:
 
 ```
-Audio → Demucs 6-stem → MT3 (primary transcription)
-                              ↓
-                         CRNN TFLite (fallback — chord only)
-                              │  quality gate: >80% N → chroma
-                              ↓
-                         Chroma template matching (last resort)
-                              ↓
-                         LessonJSON with per-tier confidence scores
+Audio → Demucs 6-stem → two-branch transcription
+                          ├── Branch A (chords): full mix / harmonic bed → MT3 → CRNN → chroma
+                          └── Branch B (solo):   guitar stem + full mix → MT3 (program-filtered)
+                          ↓
+                    MusicXML → LessonJSON → practice UI
 ```
 
-**Two-branch structure:**
-- **Branch A (chords, instrument-agnostic):** full mix or harmonic-bed submix → aggregate pitch/chroma → template matching → chord timeline
-- **Branch B (solo, guitar-conditioned):** guitar stem (Demucs) as soft prior + full mix as parallel feature → MT3 program-filtered solo decoder → solo notes
+What is already true:
 
-**Why the CRNN is kept:** It serves as a confidence-aware fallback. At 34.7% real-world accuracy, it correctly identifies out-of-distribution audio (>80% N predictions) and defers to chroma matching. This is not a bug — it is correct behavior for a well-designed fallback. The quality gate (`_neural_model_too_noisy()` in `chord_inference.py`) prevents the system from presenting garbage output.
+- MT3 is the primary transcriber; the CRNN and chroma paths are confidence-gated fallbacks.
+- Two-branch routing is implemented: chords from the full mix, solo from the guitar stem.
+- Evaluation exists but is small: 5 songs, 3 pass / 1 warn / 1 fail, chord-focused.
+- CRNN real-world accuracy is **34.7%**; MT3 is the teacher at >80% MIREX-25 on GuitarSet.
+- CPU latency is roughly **5 minutes per song**.
+- Confidence is a hand-tuned heuristic; the Commit 184 measurement found **ECE 0.7441** on 3 GuitarSet tracks — severe overconfidence. Raw percentages are deliberately not shown in the UI.
+- The research community has moved past vanilla MT3: the 2025 AI4Musicians challenge was won by YourMT3+/MusicFM-based systems (F1 ≈ 0.60 vs MT3 ≈ 0.39), and guitar-specific tablature work now treats string/fret assignment as a separate learned task.
 
-**What we'd do with a GPU:** Retrain the CRNN on MT3-generated pseudo-labels to close the synthetic-to-real gap (commit 174).
-
----
-
-### Commit 150: Part 3 Blog Post — The Meta-Layer (was R4)
-
-**Status:** ready
-
-**Goal:** Write and publish Part 3 of the Harmoniq blog series: building an AI product with AI assistance — the recursive loop of planning, implementing, reviewing, and deciding when to push through a plateau versus change approach.
-
-**Current State:** Part 2 is published at harmoniq.ai/blog (owner-confirmed live October 20, 2026) and lives in-repo at `docs/blog/why-harmoniq-part-2.md`; it promises Part 3 at its conclusion: *"Part 3 will be about the meta-layer of this project: building an AI product with AI assistance, and what that recursive loop taught me about learning, building, and when to push through a plateau versus when to find a different path."* No Part 3 draft exists.
-
-**Scope:**
-
-- Draft `docs/blog/why-harmoniq-part-3.md` covering: the agent-driven development workflow (roadmap → spec → commit → review), what the merge/code-review passes surfaced (dead code, stale roadmaps), honest lessons on process vs. velocity
-- Include concrete examples from this repo (evaluation results, fallback architecture honesty)
-- Publish to harmoniq.ai/blog
-- Link Part 3 from Part 2's closing paragraph, README, and [`docs/blog/`](docs/blog/) index
-
-**Acceptance Criteria:**
-
-- [ ] Part 3 published to harmoniq.ai/blog
-- [ ] Part 2, README, and docs cross-link to Part 3
-- [ ] Post includes real metrics/results from the repo (no placeholder claims)
+This program exists to close the gap between “working demo” and “credible, measured AMT research.”
 
 ---
 
-## Active Backlog — Commits 168–183
+## How this roadmap works
 
-Each commit below is a self-contained spec (Goal / Current State / Scope / Acceptance Criteria). Recommended execution order is numeric. Status labels: **ready** (can start now), **deferred** (planned, lower priority), **blocked** (external dependency), **aspirational** (far-future).
-
----
-
-**Group: Left-handed parity (168) — Milestone C features 159–167 completed or skipped → archived**
-
----
-
-### Commit 168: Left-Handed Mode Fretboard Parity (was Phase 1 commit 64, skipped)
-
-**Status:** ready
-
-**Goal:** Full left-handed parity for fretboard and diagram rendering — the one Phase 1 feature explicitly skipped with zero code in the repo.
-
-**Current State:** Commit 64 was marked *skipped* in Phase 1. Repo-wide search finds no left-handed handling: `FretboardDiagram` renders strings high-E-at-top/right-handed only, `ChordDiagram` chord boxes assume right-handed orientation, and no `guitar_hand` preference exists.
-
-**Scope:**
-
-- Add `guitar_hand: 'right' | 'left'` preference (default `right`) in `app_prefs` + Settings UI (Display section)
-- Mirror `FretboardDiagram` under left mode: string row order reversed, fret numbering mirrored, scale-degree/label overlays re-anchored; cell mapping helper unit-tested both orientations
-- Mirror `ChordDiagram` chord-box rendering (vertical string order flipped, base-fret indicator side swapped)
-- Mirror fretboard tap→note mapping (`onNoteTap`, `allCellsForMidi` resolution) so taps land on the visually mirrored cell
-- Check `ScaleExplorer`, `Jam`, and warmup fretboard surfaces for the same mirror requirement
-- Visual regression snapshots for left-handed mode (Playwright + Detox)
-
-**Acceptance Criteria:**
-
-- [ ] Left-handed pref mirrors fretboard + chord diagram on study/slow/play/warmup/scale-explorer/jam
-- [ ] Tap targets match mirrored visuals (correct note on tap)
-- [ ] Preference persists across restarts; right-handed default unchanged (visual snapshots non-regressed)
-- [ ] Unit tests for mirrored cell mapping; visual snapshots for both orientations
-- [ ] `npm run lint` + `npm run test` + `npm run test:visual` green
+- **One commit = one spec.** Do not combine unrelated work.
+- Every spec follows [`docs/COMMIT_TEMPLATE.md`](docs/COMMIT_TEMPLATE.md): status, evidence, goal, research questions, current state, prior art, scope, workstreams, acceptance criteria, verification, risks, references.
+- **Acceptance criteria are gates.** A criterion that cannot be verified by a command, artifact, or documented decision is not a criterion.
+- **Archive on completion.** Move the full spec to [`priorities-archive.md`](priorities-archive.md) with a completion date and verification summary.
+- **Renumbering is allowed.** Active-roadmap numbers are local; archived commits keep their original numbers for traceability.
+- **Superseded work stays traceable.** The original spec is preserved in the archive with a pointer to its replacement.
 
 ---
 
-**Group: Blocked / aspirational (174–176, 180)**
+## Commit 1 — Harmoniq AMT Research Program
 
----
+**Status:** blocked — GPU for W1–W4; **Stage 0 (W0, W5, W6) is ready now**
+**Priority:** P0
+**Depends on:** archived 174, 175, 176, 180; existing MT3/CRNN/chroma pipeline; GuitarSet, IDMT-SMT-Guitar, RWC-P, and pseudo-label tooling; GPU access for W1–W4.
+**Evidence:** [`docs/RESEARCH.md`](docs/RESEARCH.md), [`docs/EVALUATION.md`](docs/EVALUATION.md), [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md); CRNN 34.7%; 5-song eval; ~5 min/song CPU; ECE 0.7441 (3 tracks).
 
-### Commit 174: Phase 3.1 — Retrain CRNN on MT3 Pseudo-Labels (blocked: GPU)
+### Goal
 
-**Status:** blocked — GPU access
+Turn the existing fallback-chain demo into a reproducible guitar-AMT research system: a challenge-grade evaluation harness, a SOTA-informed teacher/student pipeline, and a tablature-assignment track that is measured rather than heuristic.
 
-**Goal:** Close the 34.7% → 70%+ synthetic-to-real gap by training the CRNN student on MT3-generated pseudo-labels for real guitar recordings.
+### Research questions
 
-**Current State:** CRNN real-world accuracy is 34.7% (v1.0.5); MT3 scores >80% (MIREX-25) as teacher. The pseudo-label tooling already exists: `python scripts/pseudo_label_generate.py --audio-dir <dir>` (`data/pseudo_label` ready, 1 file), and the full training pipeline (`build_chord_tflite.py`, temperature sampling, QAT) is preserved. What's missing is GPU time for thousands of labels + training runs.
+1. Can a guitar-conditioned student match or beat the current MT3→CRNN→chroma chain on chord and solo metrics while fitting a <100 ms/frame on-device budget?
+2. Does pseudo-labeling real guitar audio with MT3 (or a stronger teacher) close the CRNN’s 34.7% → ≥70% synthetic-to-real gap?
+3. Which teacher minimizes instrument leakage and confusion for the guitar solo branch: standard MT3, HT-MT3, or a YourMT3+/MusicFM-style model?
+4. Can a single shared encoder with separate chord and guitar-vocabulary solo heads replace the separate CRNN/chroma fallbacks without regression?
+5. Does a learned string/fret assignment with playability constraints beat the current `allCellsForMidi` heuristic on tablature usability?
+6. What is the calibrated confidence (ECE) of the full pipeline, and which confidence gate should be the release gate?
+7. What evaluation protocol — instrument ID, pitch, onset, offset, dynamics, polyphony strata, runtime — should replace the current 5-song verdict?
 
-**Scope:**
+### Current state
 
-- Generate MT3 pseudo-labels at scale for real guitar audio (target ≥1,000 tracks; use available licensed audio + user-feedback exports from commit 159 when available)
-- Train CRNN on pseudo-labeled real data mixed with synthetic (domain-gap mixing via `cqt_stats.npz` pattern)
-- Evaluate on GuitarSet held-out test; promote via `scripts/promote_model.py` gatekeeper (only if metrics beat active)
-- Document results in [`docs/RESEARCH.md`](docs/RESEARCH.md) + training log
+**Exists:**
 
-**Acceptance Criteria:**
+- Demucs 6-stem separation, MT3 teacher path, two-branch chord/solo routing.
+- CRNN TFLite fallback with noise/uncertainty gates, chroma last resort.
+- GuitarSet/IDMT/RWC-P CQT pipelines, pseudo-label generation, `build_chord_tflite.py`, `promote_model.py`.
+- A 5-song evaluation and a documented failure catalogue.
+- Confidence-band UI and an ECE measurement script (Commit 184).
 
-- [ ] ≥1,000 real tracks pseudo-labeled by MT3
-- [ ] Retrained CRNN ≥70% GuitarSet root accuracy (or documented ceiling + analysis)
-- [ ] Promotion gated by `promote_model.py` (no force)
-- [ ] Inference latency unchanged (<100ms/frame on-device benchmark still passes)
+**Missing / weak:**
 
----
+- Evaluation is too small and chord-focused; no instrument-ID, onset/offset, dynamics, polyphony-stratified, or runtime scoring.
+- The CRNN domain gap is unresolved; pseudo-labels exist only as tooling, not at scale.
+- No two-head student; the fallback chain remains two separate engines.
+- HT-MT3 was never evaluated; newer SOTA teachers were not considered.
+- String/fret assignment is a heuristic (`allCellsForMidi`); no playability or tuning/capo model.
+- Confidence is not calibrated; the ECE is measured but the release gate is not defined.
 
-### Commit 175: Phase 3.2 — Two-Head Student Distillation (blocked: GPU)
+**Consolidates:** Commit 174 (pseudo-label retraining), 175 (two-head distillation), 176 (HT-MT3), 180 (evaluation-set expansion). Full original specs are preserved in the archive as superseded.
 
-**Status:** blocked — GPU access
+### Prior art and transferable ideas
 
-**Goal:** Replace the separate CRNN + chroma fallback with a single shared-encoder model distilled from MT3: one chord head, one guitar-vocabulary solo head.
+External signals were reviewed on **2026-10-31**. The detailed synthesis belongs in [`docs/RESEARCH.md`](docs/RESEARCH.md); this table records only decisions.
 
-**Current State:** The fallback chain is still two separate engines (CRNN TFLite chords → chroma; Basic Pitch/CRNN solo) with no shared encoder. MT3 teacher outputs are already produced by the primary pipeline (Branch A/B outputs in `LessonJSON`), and the training tooling (`build_chord_tflite.py`, temperature sampling, QAT) is preserved — but no two-head student exists and no distillation dataset has been assembled. Blocked on GPU.
+| Source | Signal | What to borrow | What to avoid |
+| --- | --- | --- | --- |
+| Songscription | Instrument-specific isolation, multi-format output, editor-assisted cleanup, lead sheets and difficulty arrangements | Instrument-focused modes; MIDI/MusicXML/Guitar Pro exports; editable corrections | Marketing accuracy claims; opaque “AI assistant” edits without a confidence trail |
+| Klang.io | Instrument-specific models, rhythm quantization, downbeat/beat tracking, recording-quality prediction, DAW/API delivery, guitar-technique transcription | Rhythm quantization as an explicit stage; recording-quality gate; quantized/unquantized MIDI; Guitar Pro export | Treating source separation or note detection as the whole transcription problem |
+| AI4Musicians 2025 challenge | Scoring covers instrument ID, pitch, onset, offset, and dynamics; MT3 baseline; polyphony is the dominant failure mode | Challenge-style harness; instrument-ID penalty; polyphony strata; runtime reporting | Benchmarking only on a handful of curated songs |
+| Spotify AMT overview | AMT = multipitch estimation + onset/offset + instrument recognition + beat/rhythm + expressive timing/dynamics + score typesetting | Evaluate the full notation-level stack, not just chord labels | Reducing AMT to frame-level pitch accuracy |
+| arXiv 2406.15249 survey | Frame → note → stream → notation hierarchy; onset+frames and onset+velocity designs; pitch/time augmentation; 50 ms onset tolerance | Onset-aware losses; augmentation; explicit metric definitions; real-time CNN student path | Overfitting to piano-only MAESTRO assumptions |
+| YourMT3+ / MIROS | Hierarchical time-frequency attention, mixture of experts, multi-channel decoding for partial labels, cross-stem augmentation, MusicFM self-supervised encoder | Teacher candidate; cross-stem augmentation; multi-channel partial-label training | Assuming a bigger model alone closes data scarcity |
+| Fretting-Transformer / TART / HeavyCNN | String/fret ambiguity is a learned translation task; tuning/capo conditioning; joint string-activity prediction; playability constraints | W4 tablature track; tuning/capo tokens; string-activity auxiliary head; playability metrics | Ignoring physical playability in favor of pitch-only accuracy |
 
-**Target architecture:**
+### Scope
 
+**In:**
+
+- A unified evaluation harness with challenge-style metrics and reproducible manifests.
+- Expanded evaluation corpus (studio, live, home, OOD, jazz harmony).
+- Large-scale pseudo-labeling and dataset hygiene.
+- Teacher comparison and selection (MT3 / HT-MT3 / YourMT3+-class / MusicFM-class).
+- Two-head student distillation with a guitar-vocabulary solo head.
+- Learned string/fret assignment and playability-aware tablature.
+- Confidence calibration, recording-quality gating, and a feature-flagged rollout.
+- Research write-up and reproducibility package.
+
+**Out:**
+
+- New instruments beyond guitar.
+- Real-time on-device inference beyond the student latency target.
+- Commercial deployment, billing, or marketplace features.
+- Rewriting the practice UI or session flow.
+- Downloading or redistributing datasets without a licence audit.
+
+### Workstreams and gates
+
+| ID | Workstream | Deliverable | Gate |
+| --- | --- | --- | --- |
+| **W0** | Evaluation harness & reproducibility | New `scripts/eval_amt.py` (or an extension of existing eval tooling) producing a machine-readable report; ≥7-song manifest; challenge-style metrics; MT3/CRNN/chroma/full-pipeline baselines; fixed splits; per-instrument-count strata; latency and ECE | **G0:** harness reproduces the current 5-song verdicts and emits one report that can be diffed across commits |
+| **W1** | Data engine | ≥1,000 real tracks pseudo-labeled with confidence filtering; dataset card; licence audit; cross-stem augmentation; multi-channel partial-label decoding (or a documented rejection) | **G1:** ≥1,000 tracks labeled; held-out split uncontaminated; one command reproduces the manifest |
+| **W2** | Teacher selection | Side-by-side MT3 vs HT-MT3 vs YourMT3+/MusicFM on a 50-track sample; instrument-confusion/leakage deltas; chord/solo metrics; latency | **G2:** documented go/no-go and a chosen teacher (or ensemble) for W3 |
+| **W3** | Two-head student | Shared encoder; chord head (277-class frame-level); guitar-vocabulary solo head (autoregressive token); QAT/INT8 student; feature flag with instant fallback | **G3:** ≥70% GuitarSet root accuracy or a documented ceiling; no regression on the 5-song eval; <100 ms/frame |
+| **W4** | Guitar tablature intelligence | String/fret assignment (Fretting-Transformer-style); tuning/capo conditioning; playability constraints; string-activity auxiliary head; technique-label prototype; metrics for pitch accuracy, tab accuracy, and playability | **G4:** measurable improvement over `allCellsForMidi` on a GuitarSet/DadaGP subset, or an explicit no-go |
+| **W5** | Calibration & honest productization | ECE report; recording-quality predictor; confidence gate; fallback orchestration behind a flag; export formats; no raw percentages in UI | **G5:** ECE reported; rollback tested; user-facing wording matches the calibration evidence |
+| **W6** | Research write-up | RESEARCH/EVALUATION/KNOWN_FAILURES updates; dataset card; reproducibility commands; publication inputs | **G6:** a clean checkout reproduces the headline numbers with the documented commands |
+
+### Acceptance criteria
+
+- [ ] **W0 / G0:** evaluation manifest covers ≥7 songs (studio, live, re-recorded home blues with proper gain staging, kora/mbira OOD, jazz harmony); the harness reproduces the current 5-song verdicts.
+- [ ] **W0 metrics:** instrument ID, pitch, onset/offset F1 at 50 ms, dynamics, overlap, runtime, and confidence ECE are reported; results are stratified by instrument count.
+- [ ] **W0 baselines:** MT3, CRNN, chroma, and the full fallback chain are compared on the same manifest.
+- [ ] **W1 / G1:** ≥1,000 real tracks are pseudo-labeled with confidence filtering; a dataset card and licence audit are committed; the held-out split is uncontaminated.
+- [ ] **W1 augmentation:** cross-stem augmentation and multi-channel partial-label decoding are implemented or explicitly rejected with evidence.
+- [ ] **W2 / G2:** a 50-track teacher comparison is documented with instrument-confusion/leakage deltas and a go/no-go decision.
+- [ ] **W3 / G3:** one model produces both chord frames and guitar-vocabulary solo tokens; ≥70% GuitarSet root accuracy or a documented ceiling; no regression on the 5-song eval; <100 ms/frame.
+- [ ] **W3 rollout:** the student ships behind a feature flag with instant fallback to the existing chain.
+- [ ] **W4 / G4:** string/fret assignment beats the `allCellsForMidi` heuristic on pitch accuracy, tab accuracy, or playability — or is documented as a no-go; tuning/capo conditioning is evaluated.
+- [ ] **W5 / G5:** confidence ECE is measured on the expanded set; the recording-quality gate is evaluated; no raw confidence percentages appear in the UI; rollback is verified.
+- [ ] **W6 / G6:** `docs/RESEARCH.md`, `docs/EVALUATION.md`, and `docs/KNOWN_FAILURES.md` match the measured results; a clean checkout reproduces them.
+- [ ] `npm run lint` and `npm run test` pass; backend pytest passes for touched areas.
+- [ ] No regression in chord/solo output, right/left-handed diagrams, export formats, or the runtime fallback chain.
+
+### Verification
+
+```bash
+# Frontend health (run after any touched TS/TSX)
+npm run lint
+npm run test
+
+# Backend health (from backend/)
+python -m pytest -q
+
+# Evaluation harness (new in W0; exact path finalized there)
+python scripts/eval_amt.py --manifest data/eval/manifest.json --report docs/audit/amt-eval.json
+
+# Pseudo-label generation (existing tool)
+python scripts/pseudo_label_generate.py --audio-dir <dir>
+
+# Latency benchmark (existing on-device / CRNN benchmark command)
 ```
-Shared encoder (CQT → Conv → BiLSTM, ~200K params)
-    ├── Chord head (classifier, 277 classes, frame-level)
-    └── Solo head (autoregressive token decoder, guitar vocabulary)
-```
 
-**Scope:**
+Artifacts: evaluation report JSON + Markdown, dataset card, teacher-comparison table, student benchmark table, ECE report, and the updated research docs.
 
-- Distill from MT3 teacher outputs (chord sequences + filtered solo token streams from Branch A/B)
-- Guitar-vocabulary solo head structurally incapable of emitting non-guitar notes
-- Evaluate against current fallback chain on the 5-song set + GuitarSet
-- Swap into the fallback orchestrator behind a feature flag; keep chroma as last resort
+### Risks and mitigations
 
-**Acceptance Criteria:**
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| No GPU or insufficient GPU budget | High | Blocks W1–W4 | Execute W0/W5/W6 on CPU now; rent GPU time or use a hosted notebook only for the gated runs |
+| Pseudo-label confirmation bias | Medium | Student learns teacher errors | Hold out real labels; human spot-check a stratified sample; compare against GuitarSet ground truth |
+| Dataset licensing (RWC-P is non-commercial) | Medium | Cannot redistribute training data | Licence audit; keep restricted data out of the public release; document provenance |
+| Instrument leakage / polyphony | High | Solo branch accuracy collapses in dense mixes | Instrument-ID head, leakage metric, polyphony-stratified evaluation |
+| Tab playability vs pitch accuracy | Medium | Playable but wrong tabs, or correct but unplayable | Joint playability constraints; report both metrics; human review on a small set |
+| Evaluation overfitting | Medium | Headline gains do not generalize | Fixed holdout, separate challenge-style test, document ceilings |
+| Scope creep into product work | Medium | Research commit never closes | W5 is limited to calibration/gating/export; UI work stays out |
 
-- [ ] Single model produces both chord frames and solo tokens
-- [ ] Accuracy ≥ current MT3→CRNN chain on the 5-song eval (no regression)
-- [ ] Model size + latency suitable for server-side serving (and path to on-device noted)
-- [ ] Feature-flagged rollout with instant fallback to existing chain
+### Open questions and assumptions
 
----
+- 🛑 **GPU access and budget:** W1–W4 cannot start without a concrete GPU provider/timeline. Stage 0 proceeds regardless.
+- 🛑 **Teacher licences:** confirm availability and licence terms for HT-MT3, YourMT3+, and MusicFM weights before W2.
+- ⚠️ **W4 delivery:** if GPU time is constrained, W4 may be documented as a no-go and split into a follow-up; the gate must still be recorded.
+- ⚠️ **Target venue:** ISMIR 2027 late-breaking demo is a stretch goal; no submission is committed here.
+- ⚠️ **Dataset release:** RWC-P audio remains opt-in and non-commercial; public reproducibility uses labels/scripts, not restricted audio.
 
-### Commit 176: Phase 3.3 — HT-MT3 Exploration (blocked: GPU)
+### References
 
-**Status:** blocked — GPU access; upstream model availability
-
-**Goal:** Evaluate Headed and Tailed MT3 (per-instrument decoder heads) as a higher-quality teacher for pseudo-labels and distillation.
-
-**Current State:** Only standard MT3 (T5-small checkpoint via `scripts/download_mt3_checkpoint.py`) is integrated; no HT-MT3 code, weights, or upstream wiring exists. The instrument-confusion metric that the comparison needs is computed but not yet surfaced (`instrument_confusion` at `analyze_audio.py:406`, unwired to coach — commit 156). Blocked on GPU + upstream availability.
-
-**Scope:**
-
-- Acquire/build HT-MT3 teacher (check upstream availability)
-- Run side-by-side pseudo-label quality vs standard MT3 on a 50-track sample (measure instrument-confusion rate — infrastructure from commit 156 supplies the metric)
-- If better: regenerate pseudo-labels with HT-MT3 and retrain student (feeds 174/175)
-- Document decision + results in [`docs/RESEARCH.md`](docs/RESEARCH.md)
-
-**Acceptance Criteria:**
-
-- [ ] Side-by-side teacher comparison documented with numbers
-- [ ] Go/no-go decision recorded (with instrument-confusion deltas)
-- [ ] If go: student retrained on HT-MT3 labels with measured improvement
+- https://www.songscription.ai/ (accessed 2026-10-31) — instrument-specific transcription, multi-format export, editor-assisted cleanup.
+- https://www.ai4musicians.org/research/amt (accessed 2026-10-31) — systematic AMT review, competition, interpretable-model direction.
+- https://www.ai4musicians.org/transcription (accessed 2026-10-31) — 2025 challenge protocol: instrument ID, pitch, onset, offset, dynamics, runtime.
+- https://klang.io/ (accessed 2026-10-31) — instrument-specific apps, quantized/unquantized MIDI, Guitar Pro, DAW/API delivery.
+- https://klang.io/about-us/research/ (accessed 2026-10-31) — rhythm quantization, recording-quality prediction, guitar-technique and tablature research.
+- https://research.atspotify.com/publications/automatic-music-transcription-an-overview (accessed 2026-10-31) — AMT subtasks and the notation-level framing.
+- https://arxiv.org/abs/2406.15249 (accessed 2026-10-31) — frame/note/stream/notation hierarchy, onset+frames, augmentation, evaluation metrics.
+- https://arxiv.org/abs/2407.04822 (accessed 2026-10-31) — YourMT3+: hierarchical attention, MoE, multi-channel decoding, cross-stem augmentation.
+- https://arxiv.org/abs/2506.14223 (accessed 2026-10-31) — Fretting-Transformer: MIDI-to-tablature string/fret assignment with tuning/capo conditioning.
+- https://arxiv.org/html/2510.02597 (accessed 2026-10-31) — TART: technique-aware audio-to-tab pipeline and playability-aware assignment.
 
 ---
 
-### Commit 180: Evaluation Set Expansion
+## Commit 2 — Part 3 Blog Post — The Meta-Layer
 
-**Status:** ready
+**Status:** deferred — after Commit 1 produces results
+**Priority:** P1
+**Depends on:** Part 2 published; Commit 1 results for concrete metrics
+**Evidence:** [`docs/blog/why-harmoniq-part-2.md`](docs/blog/why-harmoniq-part-2.md) closing paragraph.
 
-**Goal:** Broaden the evaluation set per [`docs/EVALUATION.md`](docs/EVALUATION.md) "Next Steps" so conclusions generalize beyond blues/pop studio guitar.
+### Goal
 
-**Current State:** [`docs/EVALUATION.md`](docs/EVALUATION.md) documents exactly 5 songs (3 pass / 1 warn / 1 fail — the improv-blues self-recording fails on gain staging/reverb), and [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) records failure modes for those 5. No out-of-distribution, jazz-harmony, or fair live-recording cases are covered yet; GPU timing has not been captured.
+Write and publish Part 3 of the Harmoniq blog series: building an AI product with AI assistance — the recursive loop of planning, implementing, reviewing, and deciding when to push through a plateau versus change approach.
 
-**Scope:**
+### Current state
 
-- Re-record test #4 (improv blues) with proper gain staging and minimal room reverb — replaces the current ❌ Fail with a fair signal
-- Add a clean kora/mbira recording to test out-of-distribution behavior (expected: quality gate → chroma; documents graceful degradation)
-- Add a song with extended jazz harmony to stress-test the 277-class vocabulary
-- Capture pipeline timing with GPU (when available — coordinate with 174) to document speedup factor
-- Update [`docs/EVALUATION.md`](docs/EVALUATION.md) with the expanded table + revised pass/warn/fail summary
+Part 2 is published at harmoniq.ai/blog (owner-confirmed live October 20, 2026) and lives in-repo at [`docs/blog/why-harmoniq-part-2.md`](docs/blog/why-harmoniq-part-2.md). It promises Part 3 at its conclusion:
 
-**Acceptance Criteria:**
+> “Part 3 will be about the meta-layer of this project: building an AI product with AI assistance, and what that recursive loop taught me about learning, building, and when to push through a plateau versus when to find a different path.”
 
-- [ ] Test set ≥7 songs covering studio / live / self-recorded / OOD / jazz-harmony
-- [ ] All new songs produce complete LessonJSON (no crashes) — pass/warn/fail recorded
-- [ ] EVALUATION.md summary table updated with revised verdict counts
-- [ ] Failure modes for new categories documented in KNOWN_FAILURES.md
+No Part 3 draft exists. Moving it after Commit 1 means the post can cite measured AMT research results rather than only process anecdotes.
+
+### Scope
+
+- Draft `docs/blog/why-harmoniq-part-3.md` covering the agent-driven workflow (roadmap → spec → commit → review), what the merge/code-review passes surfaced (dead code, stale roadmaps), and honest lessons on process vs. velocity.
+- Include concrete examples from this repo: evaluation results, fallback-architecture honesty, and the AMT research programme.
+- Publish to harmoniq.ai/blog.
+- Link Part 3 from Part 2’s closing paragraph, README, and the [`docs/blog/`](docs/blog/) index.
+
+### Acceptance criteria
+
+- [ ] Part 3 published to harmoniq.ai/blog.
+- [ ] Part 2, README, and docs cross-link to Part 3.
+- [ ] Post includes real metrics/results from the repo (no placeholder claims).
 
 ---
 
-## PHASE 3: Custom Model Distillation (Planned — Commits 174–176)
+## Completed foundation
 
-**Status:** Blocked on GPU access — see commits 174 (retrain on pseudo-labels), 175 (two-head distillation), 176 (HT-MT3 teacher).
+Completed work is archived; do not re-open it unless a regression is found, in which case create a new commit rather than editing history.
 
-The pipeline currently relies on MT3 (JAX, CPU, ~5 min per song) as the primary transcriber. With GPU access, Phase 3 executes commits 174–176 in order.
+| Track | Commits | Status |
+| --- | --- | --- |
+| Phase 0 / Phase 1 foundation | 0.1–97 | Archived |
+| Phase 2 chord pipeline + MT3-primary migration | 98–155 | Archived |
+| Engagement and product features | 159–168 | Archived |
+| Infrastructure (tempo, queues, fingerprinting, stem export) | 169–173 | Archived |
+| Agents and pitch detection | 177–179 | Archived |
+| Verification, calibration, and native environment | 181–184 | Archived |
 
-**Aspirational (further out):** evaluation set expansion (commit 180). The virtual mentor agent shipped as commit 179, the lead-sheet agent as commit 177, and zero-latency pitch detection as commit 178 → archived. Dynamic backing track generation (MRT2) already shipped — see `backend/app/jam_backing.py`.
+See [`priorities-archive.md`](priorities-archive.md) for the full specs, implementation notes, and verification records.

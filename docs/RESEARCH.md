@@ -92,11 +92,11 @@ its specific task, sacrificing inference efficiency (2× passes) for correctness
 
 ### Evaluation Protocol
 
-See [`docs/EVALUATION.md`](docs/EVALUATION.md) for current results.
+See [`EVALUATION.md`](EVALUATION.md) for current results.
 
 ## Known Limitations
 
-See [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) for the full catalog.
+See [`KNOWN_FAILURES.md`](KNOWN_FAILURES.md) for the full catalog.
 
 Key structural limitations:
 
@@ -111,19 +111,24 @@ Key structural limitations:
 
 ## Next Steps (if GPU Becomes Available)
 
+The active plan is [`PRIORITIES.md` Commit 1 — Harmoniq AMT Research Program](../PRIORITIES.md).
+It consolidates the former pseudo-label retraining, two-head distillation, HT-MT3, and
+evaluation-expansion workstreams, and adds a challenge-style evaluation harness and a
+tablature string/fret-assignment track. The core GPU work remains:
+
 1. **Pseudo-label retraining:** Run MT3 on all available guitar audio → generate
    pseudo-labels → retrain CRNN → evaluate accuracy improvement.
 2. **Two-head student distillation:** Train a shared-encoder model with chord + solo
    heads, distilled from MT3 teacher. Target: match MT3 accuracy at 10× smaller size.
-3. **HT-MT3 evaluation:** If the HT-MT3 checkpoint can be loaded on GPU, evaluate
-   whether per-instrument decoder heads reduce instrument confusion for the solo branch.
+3. **Teacher selection:** Compare MT3, HT-MT3, and newer YourMT3+/MusicFM-class teachers
+   on instrument-confusion and leakage before committing to a distillation teacher.
 
 ## Publication Targets
 
 | Output | Target | Status |
 |--------|--------|--------|
 | Part 2 blog post (pipeline walkthrough) | harmoniq.ai/blog | Published (October 2026) |
-| Part 3 blog post (meta-layer) | harmoniq.ai/blog | Planned |
+| Part 3 blog post (meta-layer) | harmoniq.ai/blog | Planned — after the AMT Research Program (Commit 2) |
 | Open-source release | github.com/cnkunda/harmoniq | Published |
 | ISMIR 2027 Late-Breaking Demo | ISMIR 2027 | Stretch goal |
 

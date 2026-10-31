@@ -49,5 +49,32 @@ describe("Harmoniq mobile smoke flow", () => {
 
     await device.takeScreenshot("chord-diagram-matrix");
   });
+
+  // Commit 168 — left-handed mirror parity. The deterministic design-preview
+  // matrix renders both hands from explicit props, so no pref seeding is needed.
+  it("renders right- and left-handed fretboards", async () => {
+    await device.openURL({ url: "harmoniq://design-preview" });
+
+    await waitFor(element(by.id("design-preview-scroll")))
+      .toExist()
+      .withTimeout(60_000);
+    await element(by.id("design-preview-scroll")).scrollTo("top");
+
+    await waitFor(element(by.id("fretboard-mirror-section")))
+      .toExist()
+      .withTimeout(60_000);
+
+    await element(by.id("design-preview-scroll")).scroll(300, "down");
+    await waitFor(element(by.id("fretboard-diagram")).atIndex(0))
+      .toBeVisible()
+      .withTimeout(60_000);
+    await device.takeScreenshot("fretboard-right-hand");
+
+    await element(by.id("design-preview-scroll")).scroll(350, "down");
+    await waitFor(element(by.id("fretboard-diagram")).atIndex(1))
+      .toBeVisible()
+      .withTimeout(60_000);
+    await device.takeScreenshot("fretboard-left-hand");
+  });
 });
 

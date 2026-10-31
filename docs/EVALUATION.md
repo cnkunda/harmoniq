@@ -99,6 +99,8 @@ The current smoke test set consists of 5 recordings:
 
 ## Next Steps for Re-evaluation
 
+These items are now tracked as Workstream W0 in [`PRIORITIES.md` Commit 1 — Harmoniq AMT Research Program](../PRIORITIES.md).
+
 When re-running this evaluation after pipeline changes:
 
 1. Re-record test #4 with proper gain staging and minimal room reverb

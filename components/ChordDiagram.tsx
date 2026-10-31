@@ -3,6 +3,7 @@ import { Text, View } from 'react-native'
 import { Circle, Line, Svg, Text as SvgText } from 'react-native-svg'
 
 import { colors } from '@/src/constants/colors'
+import { chordStringDisplayIndex } from '@/src/music/diagramMirror'
 import {
   type ChordDbPosition,
   getChordPositionAtIndex,
@@ -13,6 +14,8 @@ import {
   noteToPitchClass,
   parseChordSymbol,
 } from '@/src/music/chordVoicing'
+import type { GuitarHand } from '@/src/preferences/guitarHand'
+import { useGuitarHandStore } from '@/src/stores/guitarHandStore'
 
 type Size = 'sm' | 'md' | 'lg'
 
@@ -35,6 +38,8 @@ interface ChordDiagramProps {
   positionIndex?: number
   showFingerNumbers?: boolean
   showChordName?: boolean
+  /** Commit 168: override the persisted playing hand (used by deterministic previews). */
+  hand?: GuitarHand
 }
 
 interface Dot {
@@ -59,6 +64,7 @@ function buildDotsFromChordsDb(
   position: ChordDbPosition,
   cfg: ReturnType<typeof getSizeConfig>,
   rootPc: number,
+  hand: GuitarHand,
 ): { dots: Dot[]; barres: BarreInfo[] } {
   const revFrets = [...position.frets].reverse()
   const revFingers = [...position.fingers].reverse()
@@ -77,7 +83,7 @@ function buildDotsFromChordsDb(
 
     if (f === -1) {
       dots.push({
-        x: cfg.padX + si * cfg.cellW,
+        x: cfg.padX + chordStringDisplayIndex(si, hand, STRING_COUNT) * cfg.cellW,
         y: cfg.padY - cfg.cellH * 0.3,
         isOpen: false,
         isMuted: true,
@@ -94,7 +100,7 @@ function buildDotsFromChordsDb(
       const midi = revMidi[si]
       const pc = midi != null ? ((Math.round(midi) % 12) + 12) % 12 : -1
       dots.push({
-        x: cfg.padX + si * cfg.cellW,
+        x: cfg.padX + chordStringDisplayIndex(si, hand, STRING_COUNT) * cfg.cellW,
         y: cfg.padY - cfg.cellH * 0.3,
         isOpen: true,
         isMuted: false,
@@ -114,7 +120,7 @@ function buildDotsFromChordsDb(
     const pc = midi != null ? ((Math.round(midi) % 12) + 12) % 12 : -1
 
     dots.push({
-      x: cfg.padX + si * cfg.cellW,
+      x: cfg.padX + chordStringDisplayIndex(si, hand, STRING_COUNT) * cfg.cellW,
       y: dotY,
       isOpen: false,
       isMuted: false,
@@ -145,6 +151,7 @@ function buildDotsFromChordsDb(
 function buildDotsFromAlgorithmic(
   name: string,
   cfg: ReturnType<typeof getSizeConfig>,
+  hand: GuitarHand,
 ): { dots: Dot[]; barres: BarreInfo[] } {
   const cells = chordToFretboardCells(name, 'compact', 'open')
   const dots: Dot[] = []
@@ -167,7 +174,7 @@ function buildDotsFromAlgorithmic(
 
     if (!pos || pos.fret === -1) {
       dots.push({
-        x: cfg.padX + si * cfg.cellW,
+        x: cfg.padX + chordStringDisplayIndex(si, hand, STRING_COUNT) * cfg.cellW,
         y: cfg.padY - cfg.cellH * 0.3,
         isOpen: false, isMuted: true,
         finger: 0, actualFret: -1,
@@ -179,7 +186,7 @@ function buildDotsFromAlgorithmic(
 
     if (pos.fret === 0) {
       dots.push({
-        x: cfg.padX + si * cfg.cellW,
+        x: cfg.padX + chordStringDisplayIndex(si, hand, STRING_COUNT) * cfg.cellW,
         y: cfg.padY - cfg.cellH * 0.3,
         isOpen: true, isMuted: false,
         finger: 0, actualFret: 0,
@@ -191,7 +198,7 @@ function buildDotsFromAlgorithmic(
 
     const f = Math.max(1, pos.fret)
     dots.push({
-      x: cfg.padX + si * cfg.cellW,
+      x: cfg.padX + chordStringDisplayIndex(si, hand, STRING_COUNT) * cfg.cellW,
       y: cfg.padY + (f - 1) * cfg.cellH + cfg.cellH / 2,
       isOpen: false, isMuted: false,
       finger: 0, actualFret: f,
@@ -214,8 +221,11 @@ export function ChordDiagram({
   positionIndex = 0,
   showFingerNumbers = true,
   showChordName = true,
+  hand: handProp,
 }: ChordDiagramProps) {
   const cfg = getSizeConfig(size)
+  const storedHand = useGuitarHandStore((s) => s.hand)
+  const hand: GuitarHand = handProp ?? storedHand
 
   const svgW = cfg.padX * 2 + cfg.cellW * (STRING_COUNT - 1)
   const svgH = cfg.padY * 2 + cfg.cellH * FRET_COUNT + cfg.cellH * 0.5
@@ -231,11 +241,11 @@ export function ChordDiagram({
 
     const pos = getChordPositionAtIndex(name, positionIndex)
     if (pos) {
-      return { ...buildDotsFromChordsDb(pos, cfg, rootPc), baseFret: pos.baseFret }
+      return { ...buildDotsFromChordsDb(pos, cfg, rootPc, hand), baseFret: pos.baseFret }
     }
 
-    return { ...buildDotsFromAlgorithmic(name, cfg), baseFret: 1 }
-  }, [name, positionIndex, cfg, rootPc])
+    return { ...buildDotsFromAlgorithmic(name, cfg, hand), baseFret: 1 }
+  }, [name, positionIndex, cfg, rootPc, hand])
 
   const displayName = formatChordDisplay(name)
 
@@ -278,11 +288,15 @@ export function ChordDiagram({
         {/* Base fret label */}
         {baseFret > 1 && (
           <SvgText
-            x={cfg.padX - cfg.cellW * 0.15}
+            x={
+              hand === 'left'
+                ? cfg.padX + (STRING_COUNT - 1) * cfg.cellW + cfg.cellW * 0.15
+                : cfg.padX - cfg.cellW * 0.15
+            }
             y={cfg.padY + cfg.cellH * 1.2}
             fontSize={cfg.markerSize}
             fill={colors.wood[500]}
-            textAnchor="end"
+            textAnchor={hand === 'left' ? 'start' : 'end'}
           >
             {baseFret === 1 ? '' : ` ${String.fromCharCode(8543 + baseFret)}`}
           </SvgText>

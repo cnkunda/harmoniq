@@ -84,11 +84,13 @@ import {
 } from '@/src/db/schema'
 import type { UserFeedbackStats } from '@/src/db/types'
 import { useTabContentInset } from '@/src/layout/useTabContentInset'
+import { GUITAR_HANDS, parseGuitarHand } from '@/src/preferences/guitarHand'
 import { OUTPUT_TIERS, parseOutputTier } from '@/src/preferences/outputTier'
 import { runSpotifyConnect } from '@/src/spotify/connectSpotify'
 import { fetchPersistAndDeriveSpotifyTaste } from '@/src/spotify/fetchPersistAndDeriveSpotify'
 import { formatSpotifySetupError } from '@/src/spotify/spotifyConnectErrors'
 import { useAnalysisJobsStore } from '@/src/stores/analysisJobsStore'
+import { useGuitarHandStore } from '@/src/stores/guitarHandStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
 import { useOutputTierStore } from '@/src/stores/outputTierStore'
 import { useSessionAnnotationsStore } from '@/src/stores/sessionAnnotationsStore'
@@ -133,6 +135,8 @@ export default function SettingsScreen() {
   const clearAnnotations = useSessionAnnotationsStore((s) => s.clearAll)
   const outputTier = useOutputTierStore((s) => s.tier)
   const setOutputTier = useOutputTierStore((s) => s.setTier)
+  const guitarHand = useGuitarHandStore((s) => s.hand)
+  const setGuitarHand = useGuitarHandStore((s) => s.setHand)
   const user = useSkillStore((s) => s.nodes)
   const [sessionsCount, setSessionsCount] = useState(0)
 
@@ -316,6 +320,20 @@ export default function SettingsScreen() {
       toast.success(`Notation set to ${next}.`)
     } catch (e) {
       toast.error(`Could not save notation complexity: ${e instanceof Error ? e.message : 'unknown error'}`)
+    }
+  }
+
+  const persistGuitarHand = async (value: string) => {
+    const next = parseGuitarHand(value)
+    if (!next) {
+      toast.error(`Unknown playing hand: ${value}`)
+      return
+    }
+    try {
+      await setGuitarHand(next)
+      toast.success(`Playing hand set to ${next}.`)
+    } catch (e) {
+      toast.error(`Could not save playing hand: ${e instanceof Error ? e.message : 'unknown error'}`)
     }
   }
 
@@ -627,6 +645,16 @@ export default function SettingsScreen() {
             capitalizeOptions
             onValueChange={(value) => void persistOutputTier(value)}
           />
+          <View className="mt-4 border-t border-wood-600/35 pt-4">
+            <SettingsSegmented
+              label="Playing hand"
+              description="Mirror fretboards and chord diagrams for left-handed playing."
+              options={GUITAR_HANDS}
+              value={guitarHand}
+              capitalizeOptions
+              onValueChange={(value) => void persistGuitarHand(value)}
+            />
+          </View>
         </SettingsSection>
 
         {/* Tuning Settings */}
