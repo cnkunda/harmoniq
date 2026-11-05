@@ -76,7 +76,7 @@ export function ChordStrip({ chordEvents, barTimestamps, onChordTap }: ChordStri
               >
                 {isNoChord ? '—' : formatChordDisplay(bc.chord)}
               </Text>
-              <Text className="text-[9px] text-muted-brown/50">
+              <Text className="font-mono text-[9px] text-muted-light">
                 {bc.bar + 1}
               </Text>
             </AnimatedPressable>

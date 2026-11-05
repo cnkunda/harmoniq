@@ -1437,7 +1437,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       >
         {(bootError || engineError) && (
           <View className="border-b border-amber-accent/30 bg-amber-accent/10 px-3 py-2">
-            <Text className="font-sans text-xs text-wood-900">{bootError ?? engineError}</Text>
+            <Text className="font-sans text-xs text-amber-light">{bootError ?? engineError}</Text>
              <AnimatedPressable onPress={onRetry} className="mt-2 self-start" accessibilityRole="button">
                <Text className="font-sans-medium text-xs text-amber-accent underline">Retry</Text>
              </AnimatedPressable>
@@ -1528,7 +1528,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
-            <Text className="text-center font-sans text-[11px] text-muted-brown">
+            <Text className="text-center font-sans text-[11px] text-wood-700">
               {
                 "Score isn't available for this song yet. Try analyzing a song or another tab variant."
               }

@@ -69,7 +69,7 @@ export function PulseChordTimeline({ bars, activeIndex }: PulseChordTimelineProp
                   >
                     {bar.display}
                   </Text>
-                  <Text className="font-mono text-[9px] text-muted-light/70">{bar.roman ?? ''}</Text>
+                  <Text className="font-mono text-[9px] text-muted-light/85">{bar.roman ?? ''}</Text>
                 </View>
                 <View className="mt-1 flex-row items-center gap-1">
                   <View
@@ -84,7 +84,7 @@ export function PulseChordTimeline({ bars, activeIndex }: PulseChordTimelineProp
                       }}
                     />
                   </View>
-                  <Text className="font-mono text-[9px] text-muted-light/70">
+                  <Text className="font-mono text-[9px] text-muted-light/85">
                     {Math.round(bar.confidence * 100)}
                   </Text>
                 </View>

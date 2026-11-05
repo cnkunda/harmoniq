@@ -637,7 +637,7 @@ export function FretboardDiagram({
             <Text className="font-sans text-base font-semibold text-cream">{keyLabel}</Text>
             {capoText ? (
               <Pill variant="accent" size="xs" className="px-2 py-0.5">
-                <Text className="text-[10px] font-medium text-amber-light">{capoText}</Text>
+                <Text className="font-sans-medium text-[10px] text-amber-light">{capoText}</Text>
               </Pill>
             ) : null}
             {voicingLabel ? (
@@ -1329,13 +1329,13 @@ export function FretboardDiagram({
                 {chordName}
               </Text>
               {chordFullName ? (
-                <Text className="text-[11px] uppercase tracking-widest text-amber-accent/60 font-medium">
+                <Text className="font-sans-medium text-[11px] uppercase tracking-widest text-amber-accent/85">
                   {chordFullName}
                 </Text>
               ) : null}
             </View>
             <View className="px-4 border-r border-wood-600/20">
-              <Text className="text-[9px] uppercase tracking-wider text-amber-accent/50 mb-0.5">
+              <Text className="font-sans-medium text-[9px] uppercase tracking-wider text-amber-accent/85 mb-0.5">
                 Notes
               </Text>
               <View className="flex-row items-center gap-1.5">
@@ -1344,14 +1344,14 @@ export function FretboardDiagram({
                     {idx > 0 && (
                       <View className="h-1 w-1 rounded-full bg-amber-accent/30" />
                     )}
-                    <Text className="text-sm font-medium text-amber-accent">{note}</Text>
+                    <Text className="font-sans-medium text-sm text-amber-accent">{note}</Text>
                   </View>
                 ))}
               </View>
             </View>
             {chordExtensions.length > 0 ? (
               <View className="flex-1 pl-4">
-                <Text className="text-[9px] uppercase tracking-wider text-amber-accent/50 mb-1">
+                <Text className="font-sans-medium text-[9px] uppercase tracking-wider text-amber-accent/85 mb-1">
                   Extended harmony
                 </Text>
                 <View className="flex-row flex-wrap gap-1.5">
@@ -1360,7 +1360,7 @@ export function FretboardDiagram({
                       key={ext}
                       className="rounded-full border border-wood-600/30 px-2 py-0.5"
                     >
-                      <Text className="text-[10px] font-medium text-amber-accent/70">
+                      <Text className="font-sans-medium text-[10px] text-amber-accent/85">
                         {ext}
                       </Text>
                     </View>

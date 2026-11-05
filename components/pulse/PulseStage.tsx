@@ -138,7 +138,7 @@ export function PulseStage({ stage, trackTitle, isDemoPreview = false, onPreview
             </Pill>
           ) : null}
         </View>
-        <Text className="font-mono text-[10px] text-muted-light/70">
+        <Text className="font-mono text-[10px] text-muted-light/85">
           {Math.round(stage.windowSec)}s loop
         </Text>
       </View>

@@ -5,8 +5,8 @@ import type { ScoreResult } from '@/src/types'
 /** Placeholder phrasing strip — shared by live Review and archived replay (PRIORITIES §35). */
 export function PhrasingVisualizerStub() {
   return (
-    <View className="mt-3 rounded-lg border border-wood-600/45 bg-cream-dark/40 px-3 py-3">
-      <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+    <View className="mt-3 rounded-lg border border-wood-600/45 bg-cream-dark/65 px-3 py-3">
+      <Text className="font-sans-medium text-xs uppercase tracking-wide text-wood-700">
         Phrasing visualizer (stub)
       </Text>
       <View className="mt-2 h-28 w-full overflow-hidden rounded-md border border-wood-600/45 bg-ivory">
@@ -19,7 +19,7 @@ export function PhrasingVisualizerStub() {
         <View className="absolute left-2 right-4 top-14 h-1 rounded-full bg-amber-accent/85" />
         <View className="absolute left-4 right-10 top-22 h-1 rounded-full bg-danger/70" />
       </View>
-      <Text className="mt-2 font-sans text-[11px] text-muted-brown">
+      <Text className="mt-2 font-sans text-[11px] text-wood-700">
         Terracotta = your take, amber = reference guide. Beat lines are static until the live phrasing overlay is wired up.
       </Text>
     </View>

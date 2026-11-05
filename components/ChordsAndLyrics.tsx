@@ -201,7 +201,7 @@ export function ChordsAndLyrics({
         </Text>
 
         <View className="flex-row items-center gap-3">
-          <Text className="font-mono text-[10px] text-muted-brown/70 tabular-nums">
+          <Text className="font-mono text-[10px] text-muted-brown/85 tabular-nums">
             Bar {activeBar + 1}/{bars.length}
           </Text>
         </View>
@@ -273,7 +273,7 @@ export function ChordsAndLyrics({
        {/* Section label (if provided) */}
        {label && (
          <View className="mb-2 flex-row items-center gap-1.5">
-           <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/60">
+           <Text className="font-sans-medium text-[10px] uppercase tracking-wider text-muted-brown/85">
              [{label}]
            </Text>
            {labelConfidence != null && labelConfidence < 0.6 && (

@@ -91,13 +91,13 @@ function StepRow({
           {label}
         </Text>
         <Text
-          className={`font-sans text-xs ${isCurrent ? 'text-muted-brown' : 'text-muted2'}`}
+          className="font-sans text-xs text-muted-brown"
           numberOfLines={1}
         >
           {sub}
         </Text>
       </View>
-      <Text className="font-mono text-xs text-muted2">{duration}</Text>
+      <Text className="font-mono text-xs text-muted-brown">{duration}</Text>
     </View>
   )
 }

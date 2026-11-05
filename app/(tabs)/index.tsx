@@ -208,7 +208,7 @@ function DailyLickFretboard({ cells, caption: captionProp }: { cells: readonly F
           </React.Fragment>
         ))}
       </Svg>
-      <Text className="mt-1 text-center font-mono text-[10px] text-muted2">{displayCaption}</Text>
+      <Text className="mt-1 text-center font-mono text-[10px] text-muted-brown">{displayCaption}</Text>
     </View>
   )
 }

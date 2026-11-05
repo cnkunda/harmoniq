@@ -619,7 +619,7 @@ export default function LibraryScreen() {
                           accessibilityRole="button"
                           accessibilityLabel="Export song MIDI"
                         >
-                          <Text className="text-center font-sans-medium text-sm text-wood-900">
+                          <Text className="text-center font-sans-medium text-sm text-cream">
                             {exportBusyJobId === row.job_id ? 'Exporting…' : 'Export MIDI'}
                           </Text>
                         </AnimatedPressable>

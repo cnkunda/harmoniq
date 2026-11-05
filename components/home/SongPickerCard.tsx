@@ -74,7 +74,7 @@ export function SongPickerCard({
                 <Text className="font-sans-medium text-[17px] text-cream" numberOfLines={1}>
                   {song.title}
                 </Text>
-                <Text className="font-sans text-sm text-muted-brown" numberOfLines={1}>
+                <Text className="font-sans text-sm text-muted-light" numberOfLines={1}>
                   {song.meta}
                 </Text>
               </View>

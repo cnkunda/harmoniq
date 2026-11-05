@@ -85,9 +85,9 @@ export function AccuracyTrendChart({ points }: AccuracyTrendChartProps) {
 
       <View className="flex-row">
         <View className="mr-2 justify-between" style={{ height: CHART_HEIGHT, paddingTop: TOP_PAD - 5, paddingBottom: BOTTOM_PAD - 5 }}>
-          <Text className="font-mono text-[9px] text-muted-light/70">100%</Text>
-          <Text className="font-mono text-[9px] text-muted-light/70">50%</Text>
-          <Text className="font-mono text-[9px] text-muted-light/70">0%</Text>
+          <Text className="font-mono text-[9px] text-muted-light/85">100%</Text>
+          <Text className="font-mono text-[9px] text-muted-light/85">50%</Text>
+          <Text className="font-mono text-[9px] text-muted-light/85">0%</Text>
         </View>
         <View className="flex-1" onLayout={onLayout}>
           {width > 0 && geometry ? (
@@ -148,7 +148,7 @@ export function AccuracyTrendChart({ points }: AccuracyTrendChartProps) {
 
       <View className="ml-8 mt-1 flex-row justify-between">
         <Text className="font-sans text-[10px] text-muted-light/75">{points[0]!.label}</Text>
-        <Text className="font-sans text-[10px] text-muted-light/60">
+          <Text className="font-sans text-[10px] text-muted-light/85">
           {points.length} session{points.length === 1 ? '' : 's'}
         </Text>
         <Text className="font-sans text-[10px] text-muted-light/75">

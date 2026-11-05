@@ -9,28 +9,14 @@ import {
   type ChordMasteryHeatmap as ChordMasteryHeatmapData,
 } from '@/src/progress/pulseData'
 
-function parseHex(hex: string): [number, number, number] {
-  const trimmed = hex.replace('#', '')
-  return [
-    Number.parseInt(trimmed.slice(0, 2), 16),
-    Number.parseInt(trimmed.slice(2, 4), 16),
-    Number.parseInt(trimmed.slice(4, 6), 16),
-  ]
-}
-
-function mixHex(from: string, to: string, t: number): string {
-  const a = parseHex(from)
-  const b = parseHex(to)
-  const clamped = Math.min(1, Math.max(0, t))
-  const channels = a.map((value, index) => Math.round(value + (b[index]! - value) * clamped))
-  return `#${channels.map((value) => value.toString(16).padStart(2, '0')).join('')}`
-}
-
+// Discrete palette steps (danger → amber → success) instead of runtime color
+// mixing: interpolated hexes are off-palette and fail the design-token check.
 function masteryColor(mastery: number | null): string {
   if (mastery == null) return `${colors.wood[700]}66`
-  return mastery < 0.5
-    ? mixHex(colors.danger, colors.amber.accent, mastery / 0.5)
-    : mixHex(colors.amber.accent, colors.success, (mastery - 0.5) / 0.5)
+  if (mastery < 0.25) return colors.danger
+  if (mastery < 0.5) return colors.amber.accent
+  if (mastery < 0.75) return colors.amber.light
+  return colors.success
 }
 
 export interface ChordMasteryHeatmapProps {
@@ -53,7 +39,7 @@ export function ChordMasteryHeatmap({ heatmap }: ChordMasteryHeatmapProps) {
         <Text className="font-sans text-xs uppercase tracking-wider text-muted-light">
           Chord mastery
         </Text>
-        <Text className="font-sans text-[10px] text-muted-light/70">
+        <Text className="font-sans text-[10px] text-muted-light/85">
           {practiceTotal} chord passes · {correctionTotal} correction{correctionTotal === 1 ? '' : 's'}
         </Text>
       </View>
@@ -106,7 +92,7 @@ export function ChordMasteryHeatmap({ heatmap }: ChordMasteryHeatmapProps) {
 
       <View className="mt-3 flex-row items-center justify-between">
         <View className="flex-row items-center gap-1.5">
-          <Text className="font-sans text-[10px] text-muted-light/65">Less</Text>
+          <Text className="font-sans text-[10px] text-muted-light/85">Less</Text>
           {[0.1, 0.3, 0.5, 0.7, 0.9].map((value) => (
             <View
               key={value}
@@ -114,14 +100,14 @@ export function ChordMasteryHeatmap({ heatmap }: ChordMasteryHeatmapProps) {
               style={{ backgroundColor: masteryColor(value) }}
             />
           ))}
-          <Text className="font-sans text-[10px] text-muted-light/65">More</Text>
+          <Text className="font-sans text-[10px] text-muted-light/85">More</Text>
         </View>
-        <Text className="font-sans text-[10px] text-muted-light/55">
+        <Text className="font-sans text-[10px] text-muted-light/85">
           {heatmap.sessionCount} session{heatmap.sessionCount === 1 ? '' : 's'} sampled
         </Text>
       </View>
 
-      <Text className="mt-3 font-sans text-[10px] leading-4 text-muted-light/55">
+      <Text className="mt-3 font-sans text-[10px] leading-4 text-muted-light/85">
         Estimated from session accuracy on songs that contain each chord, then reduced by chord
         corrections. Not a note-by-note hit rate.
       </Text>
