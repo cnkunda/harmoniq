@@ -62,8 +62,9 @@ mrt models init && mrt models download mrt2_small
 | `npm run audit:inventory` | Generate screen/component inventory |
 | `npm run audit:platform` | Generate platform health audit |
 | `npm run audit:ui` | Playwright route capture + vision-tool analysis -> UI/UX gap report |
-| `npm run ux:improve` | Full UX improvement loop: capture → analyze → flag gaps |
-| `npm run ux:verify` | Re-analyze existing screenshots (skip capture, just re-check) |
+| `npm run ux:improve` | Full UX improvement loop: capture → deterministic checks + vision analysis → flag gaps |
+| `npm run ux:verify` | Post-fix verification: fresh capture + full re-analysis |
+| `node scripts/audit/ux-improve-loop.mjs --waive "<route>::<slug>" --reason "..."` | Persist a gap waiver (false positives stay suppressed) |
 | `python -m pytest -q` | All backend tests (from `backend/`) |
 | `python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py` | Chord model tests |
 | `python -m pytest -q tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py` | Viterbi decoding tests |
@@ -97,17 +98,20 @@ Python/vision-tool runs in WSL — the scripts auto-detect Windows and call `wsl
 ### Workflow
 
 ```
-npm run ux:improve  →  capture screenshots  →  analyze via vision-tool  →  flag gaps
+npm run ux:improve  →  capture + deterministic DOM checks + vision analysis  →  flag gaps
       ↓
-agent reads report → fixes code → re-runs → verify → loop until clean
+agent reads report → fixes code (cosmetic only) or waives false positives →  npm run ux:verify
+      ↓                                                          (fresh capture + full re-analysis)
+loop until isComplete: true (max 5 iterations)
 ```
 
 1. **Start Expo web** in one terminal: `npm run web` (or `CI=1 npx expo start --web --port 8081`)
-2. **Run loop** in another terminal: `npm run ux:improve` — captures all routes, analyzes via vision-tool, writes `docs/audit/ui-feedback-report.json`
-3. Agent reads `allGapsByRoute` — each gap has `severity` (error/warning/info) and `issue` type
-4. For each error/warning gap, agent inspects the route's source file and applies a targeted fix
-5. Run `npm run ux:verify` to re-analyze existing screenshots (no new capture)
+2. **Run loop** in another terminal: `npm run ux:improve` — seeds app state (no backend needed), captures all routes, runs deterministic DOM checks + moondream vision analysis, writes `docs/audit/ui-feedback-report.json` (schema v2)
+3. Agent reads `allGapsByRoute` — each gap has a stable `id` (`<route>::<slug>`), `severity`, `source` (deterministic gaps are DOM-measured and authoritative; vision gaps are advisory), `evidence`, and `suggestedFix`
+4. For each error/warning gap, agent inspects the route's source file and applies the suggested fix with existing design tokens. False positives / accepted design decisions are waived ONCE: `node scripts/audit/ux-improve-loop.mjs --waive "<route>::<slug>" --reason "..."` (persisted in `docs/audit/ux-waivers.json`)
+5. Run `npm run ux:verify` — fresh capture + full re-analysis (the old no-recapture verify could never confirm a code fix)
 6. Loop up to 5 iterations until `isComplete: true`
+7. Optionally build a UX Triage page in the Paper "Harmoniq Design System" file for visual review (see `.opencode/instructions/UX_IMPROVE_LOOP.md`)
 
 ### One-shot (no pre-started server)
 
