@@ -6,7 +6,7 @@
   "note": "Cosmetic-only fixes. Never change functionality or business logic. Deterministic gaps are DOM-measured and authoritative; vision gaps are advisory.",
   "summary": {
     "error": 0,
-    "warning": 12,
+    "warning": 18,
     "info": 0
   },
   "waiversApplied": [],
@@ -1107,5 +1107,6 @@
     "typography": "PlayfairDisplay (headings), DMSans (body), JetBrainsMono (mono)",
     "components": "AnimatedPressable, NoiseOverlay, WoodGradient, lucide-react-native",
     "animation": "react-native-reanimated, spring/timing presets in src/constants/animations.ts"
-  }
+  },
+  "isComplete": false
 }

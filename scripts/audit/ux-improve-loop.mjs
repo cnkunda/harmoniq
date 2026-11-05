@@ -358,16 +358,17 @@ async function buildReport(entries, waivers) {
     routeAnalyses.push({ ...analysis, gaps });
   }
 
+  const flatGaps = allGaps.flatMap((r) => r.gaps);
   return {
     schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     routesAnalyzed: entries.length,
-    totalUiGapsFound: allGaps.reduce((n, r) => n + r.gaps.length, 0),
+    totalUiGapsFound: flatGaps.length,
     note: "Cosmetic-only fixes. Never change functionality or business logic. Deterministic gaps are DOM-measured and authoritative; vision gaps are advisory.",
     summary: {
-      error: allGaps.filter((r) => r.gaps.some((g) => g.severity === "error")).length,
-      warning: allGaps.filter((r) => r.gaps.some((g) => g.severity === "warning")).length,
-      info: allGaps.filter((r) => r.gaps.some((g) => g.severity === "info")).length,
+      error: flatGaps.filter((g) => g.severity === "error").length,
+      warning: flatGaps.filter((g) => g.severity === "warning").length,
+      info: flatGaps.filter((g) => g.severity === "info").length,
     },
     waiversApplied,
     vision: { parseFailures: visionParseFailures, errors: visionErrors },
@@ -533,20 +534,12 @@ Output:
   const waivers = loadWaivers();
   const prevGapIds = previousGapIds();
   const report = await buildReport(entries, waivers);
-  const reportPath = writeReport(report);
 
   const currentGapIds = new Set(
     report.allGapsByRoute.flatMap((r) => r.gaps.map((g) => g.id)),
   );
   const resolvedGapIds = Array.from(prevGapIds).filter((id) => !currentGapIds.has(id));
   const newGapIds = Array.from(currentGapIds).filter((id) => !prevGapIds.has(id));
-
-  const state = loadState();
-  state.iteration += 1;
-  state.lastReportPath = reportPath;
-  state.resolvedGapIds = resolvedGapIds;
-  state.newGapIds = newGapIds;
-  state.remainingGapIds = Array.from(currentGapIds);
 
   const errorRoutes = report.allGapsByRoute.filter((r) => r.gaps.some((g) => g.severity === "error"));
   const warningRoutes = report.allGapsByRoute.filter(
@@ -570,6 +563,17 @@ Output:
     try { unlinkSync(FIXED_MARKER); } catch {}
   }
 
+  // Persist completion in the report itself — agents and archival checks read
+  // `isComplete` from ui-feedback-report.json (Commit 158 precedent).
+  report.isComplete = isComplete;
+  const reportPath = writeReport(report);
+
+  const state = loadState();
+  state.iteration += 1;
+  state.lastReportPath = reportPath;
+  state.resolvedGapIds = resolvedGapIds;
+  state.newGapIds = newGapIds;
+  state.remainingGapIds = Array.from(currentGapIds);
   saveState(state);
 
   console.log(JSON.stringify({
