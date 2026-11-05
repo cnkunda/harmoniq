@@ -1,27 +1,10 @@
 {
-  "iteration": 16,
+  "iteration": 18,
   "fixedGapIds": [],
   "lastReportPath": "C:\\workspace\\harmoniq\\docs\\audit\\ui-feedback-report.json",
-  "resolvedGapIds": [],
+  "resolvedGapIds": [
+    "/onboarding/phrase/0::contrast"
+  ],
   "newGapIds": [],
-  "remainingGapIds": [
-    "/::layout-overflow",
-    "/::contrast",
-    "/add-song::layout-overflow",
-    "/discover::contrast",
-    "/library::contrast",
-    "/listening::contrast",
-    "/onboarding/phrase/0::contrast",
-    "/progress::layout-overflow",
-    "/progress/pulse::color-mismatch",
-    "/progress/pulse::contrast",
-    "/session/listen::typography",
-    "/session/listen::contrast",
-    "/session/play::typography",
-    "/session/play::contrast",
-    "/session/slow::typography",
-    "/session/slow::contrast",
-    "/session/study::typography",
-    "/session/study::contrast"
-  ]
+  "remainingGapIds": []
 }

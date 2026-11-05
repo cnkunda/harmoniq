@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-05T01:20:53.448Z",
+  "generatedAt": "2026-11-05T12:36:03.077Z",
   "routesAnalyzed": 30,
-  "totalUiGapsFound": 18,
+  "totalUiGapsFound": 0,
   "note": "Cosmetic-only fixes. Never change functionality or business logic. Deterministic gaps are DOM-measured and authoritative; vision gaps are advisory.",
   "summary": {
     "error": 0,
-    "warning": 18,
+    "warning": 0,
     "info": 0
   },
   "waiversApplied": [],
@@ -14,362 +14,19 @@
     "parseFailures": 0,
     "errors": 0
   },
-  "allGapsByRoute": [
-    {
-      "route": "/",
-      "gaps": [
-        {
-          "id": "/::layout-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[element-overflow] <div.relative.mb-6.overflow-hidden> \"Pick a songRecent songs \" overflows horizontally (scrollWidth 926 > clientWidth 846, overflow-x hidden)"
-          ],
-          "suggestedFix": {
-            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
-            "allowed": "container/layout props only"
-          }
-        },
-        {
-          "id": "/::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(138, 115, 98 on 27, 18, 14) — ratio 4.13:1, needs 4.5:1 — 1 element(s) — e.g. <div.mt-1.text-center.font-mono> \"Play in finger order: Mi\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/add-song",
-      "gaps": [
-        {
-          "id": "/add-song::layout-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[element-overflow] <div.relative.w-full.max-w-2xl> \"Add SongPaste a YouTube \" overflows horizontally (scrollWidth 752 > clientWidth 672, overflow-x visible)"
-          ],
-          "suggestedFix": {
-            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
-            "allowed": "container/layout props only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/discover",
-      "gaps": [
-        {
-          "id": "/discover::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(27, 18, 14 on 27, 18, 14) — ratio 1.00:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans-medium.text-sm> \"Start Listening\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/library",
-      "gaps": [
-        {
-          "id": "/library::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(27, 18, 14 on 34.5, 23, 17.5) — ratio 1.05:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans-medium.text-sm> \"Export MIDI\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/listening",
-      "gaps": [
-        {
-          "id": "/listening::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(27, 18, 14 on 27, 18, 14) — ratio 1.00:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans-medium.text-sm> \"Start Listening\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/onboarding/phrase/0",
-      "gaps": [
-        {
-          "id": "/onboarding/phrase/0::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(27, 18, 14 on 27, 18, 14) — ratio 1.00:1, needs 4.5:1 — 1 element(s) — e.g. <div.font-sans.text-xs.text-wood-900> \"Invalid typed array leng\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/progress",
-      "gaps": [
-        {
-          "id": "/progress::layout-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[element-overflow] <div.h-12.w-12.items-center> overflows horizontally (scrollWidth 52 > clientWidth 46, overflow-x visible)"
-          ],
-          "suggestedFix": {
-            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
-            "allowed": "container/layout props only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/progress/pulse",
-      "gaps": [
-        {
-          "id": "/progress/pulse::color-mismatch",
-          "issue": "Color mismatch",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[off-palette-color] Off-palette background 169, 158, 102 on 3 element(s) — e.g. <div.h-5.flex-1.rounded-[3px]> (+2 more)",
-            "[off-palette-color] Off-palette background 198, 131, 95 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>",
-            "[off-palette-color] Off-palette background 209, 146, 94 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>",
-            "[off-palette-color] Off-palette background 180, 159, 100 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>",
-            "[off-palette-color] Off-palette background 141, 156, 106 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>"
-          ],
-          "suggestedFix": {
-            "approach": "Replace the off-palette color with the nearest token from src/constants/colors.ts or tailwind.config.js.",
-            "allowed": "token swap only"
-          }
-        },
-        {
-          "id": "/progress/pulse::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(184, 169, 154 on 34.5, 23, 17.5) — ratio 4.40:1, needs 4.5:1 — 14 element(s) — e.g. <div.font-mono.text-[10px].text-muted-light/70> \"11s loop\", <div.font-mono.text-[9px].text-muted-light/70> \"94\", <div.font-mono.text-[9px].text-muted-light/70> \"90\" (+11 more)"
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/session/listen",
-      "gaps": [
-        {
-          "id": "/session/listen::typography",
-          "issue": "Typography",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[font-family] Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 4 element(s) — e.g. <div.text-[9px].text-muted-brown/50> \"1\", <div.text-[9px].text-muted-brown/50> \"2\", <div.text-[9px].text-muted-brown/50> \"3\" (+1 more)"
-          ],
-          "suggestedFix": {
-            "approach": "Use font-serif / font-sans / font-sans-medium / font-mono classes (PlayfairDisplay, DMSans, JetBrainsMono).",
-            "allowed": "font class swap only"
-          }
-        },
-        {
-          "id": "/session/listen::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(179, 154, 134 on 34.5, 23, 17.5) — ratio 2.61:1, needs 4.5:1 — 4 element(s) — e.g. <div.text-[9px].text-muted-brown/50> \"1\", <div.text-[9px].text-muted-brown/50> \"2\", <div.text-[9px].text-muted-brown/50> \"3\" (+1 more)"
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/session/play",
-      "gaps": [
-        {
-          "id": "/session/play::typography",
-          "issue": "Typography",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[font-family] Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 1 element(s) — e.g. <div.text-[10px].font-medium.text-amber-light> \"Capo suggestion: no capo\""
-          ],
-          "suggestedFix": {
-            "approach": "Use font-serif / font-sans / font-sans-medium / font-mono classes (PlayfairDisplay, DMSans, JetBrainsMono).",
-            "allowed": "font class swap only"
-          }
-        },
-        {
-          "id": "/session/play::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(243, 231, 214 on 245, 240, 232) — ratio 1.08:1, needs 4.5:1 — 1 element(s) — e.g. <div.mb-2.font-sans.text-[11px]> \"Loading instrument sound\"",
-            "[contrast] Text rgb(179, 154, 134 on 245, 240, 232) — ratio 2.35:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans.text-[11px]> \"Score isn't available fo\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/session/slow",
-      "gaps": [
-        {
-          "id": "/session/slow::typography",
-          "issue": "Typography",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[font-family] Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 1 element(s) — e.g. <div.text-[10px].font-medium.text-amber-light> \"Capo suggestion: no capo\""
-          ],
-          "suggestedFix": {
-            "approach": "Use font-serif / font-sans / font-sans-medium / font-mono classes (PlayfairDisplay, DMSans, JetBrainsMono).",
-            "allowed": "font class swap only"
-          }
-        },
-        {
-          "id": "/session/slow::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(243, 231, 214 on 245, 240, 232) — ratio 1.08:1, needs 4.5:1 — 1 element(s) — e.g. <div.mb-2.font-sans.text-[11px]> \"Loading instrument sound\"",
-            "[contrast] Text rgb(179, 154, 134 on 245, 240, 232) — ratio 2.35:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans.text-[11px]> \"Score isn't available fo\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/session/study",
-      "gaps": [
-        {
-          "id": "/session/study::typography",
-          "issue": "Typography",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[font-family] Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 1 element(s) — e.g. <div.text-[10px].font-medium.text-amber-light> \"Capo suggestion: no capo\""
-          ],
-          "suggestedFix": {
-            "approach": "Use font-serif / font-sans / font-sans-medium / font-mono classes (PlayfairDisplay, DMSans, JetBrainsMono).",
-            "allowed": "font class swap only"
-          }
-        },
-        {
-          "id": "/session/study::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(179, 154, 134 on 34.5, 23, 17.5) — ratio 3.88:1, needs 4.5:1 — 2 element(s) — e.g. <div.font-mono.text-[10px].text-muted-brown/70> \"Bar 1/4\", <div.font-sans-medium.text-[10px].uppercase> \"[Intro]\"",
-            "[contrast] Text rgb(243, 231, 214 on 245, 240, 232) — ratio 1.08:1, needs 4.5:1 — 1 element(s) — e.g. <div.mb-2.font-sans.text-[11px]> \"Loading instrument sound\"",
-            "[contrast] Text rgb(179, 154, 134 on 245, 240, 232) — ratio 2.35:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans.text-[11px]> \"Score isn't available fo\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    }
-  ],
+  "allGapsByRoute": [],
   "routes": [
     {
       "route": "/",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music streaming app with a dark brown and cream theme. The app is titled \"Good afternoon, Nkunda\" and has a \"Good afternoon\" message at the top. The app has a menu bar with options for \"Good afternoon, Nkunda\" and \"Practice a song.\" The app also has a \"Practice a song\" button, which is currently not visible in the screenshot.",
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music streaming app called \"Good Morning, Nkunda\". The app is open and ready to play, with a menu bar at the top of the screen. The app has a dark brown and cream theme, which complements the dark brown background. The app features a \"Good Morning\" message at the top, and a \"Ready to Play\" message at the bottom. The app also has a \"Library\" section, where users can find and add new songs to their library. The app has a \"Practice a Song\" feature, which allows users to record a song and listen to it later. The app also has a \"Play\" button, which can be used to start playing a song. The app has a \"Library\" section, where users can find and add new songs to their library. The app also has a \"Library\" section, where users can find and add new songs to their library. The app has a \"Library\" section, where users can find and add new songs to their library. The app has a \"",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [
-        {
-          "check": "element-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "detail": "<div.relative.mb-6.overflow-hidden> \"Pick a songRecent songs \" overflows horizontally (scrollWidth 926 > clientWidth 846, overflow-x hidden)"
-        },
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(138, 115, 98 on 27, 18, 14) — ratio 4.13:1, needs 4.5:1 — 1 element(s) — e.g. <div.mt-1.text-center.font-mono> \"Play in finger order: Mi\""
-        }
-      ],
-      "analyzedAt": "2026-11-05T00:24:58.068Z",
-      "gaps": [
-        {
-          "id": "/::layout-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[element-overflow] <div.relative.mb-6.overflow-hidden> \"Pick a songRecent songs \" overflows horizontally (scrollWidth 926 > clientWidth 846, overflow-x hidden)"
-          ],
-          "suggestedFix": {
-            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
-            "allowed": "container/layout props only"
-          }
-        },
-        {
-          "id": "/::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(138, 115, 98 on 27, 18, 14) — ratio 4.13:1, needs 4.5:1 — 1 element(s) — e.g. <div.mt-1.text-center.font-mono> \"Play in finger order: Mi\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:16:53.165Z",
+      "gaps": []
     },
     {
       "route": "/add-song",
@@ -379,30 +36,9 @@
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [
-        {
-          "check": "element-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "detail": "<div.relative.w-full.max-w-2xl> \"Add SongPaste a YouTube \" overflows horizontally (scrollWidth 752 > clientWidth 672, overflow-x visible)"
-        }
-      ],
-      "analyzedAt": "2026-11-05T00:26:47.802Z",
-      "gaps": [
-        {
-          "id": "/add-song::layout-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[element-overflow] <div.relative.w-full.max-w-2xl> \"Add SongPaste a YouTube \" overflows horizontally (scrollWidth 752 > clientWidth 672, overflow-x visible)"
-          ],
-          "suggestedFix": {
-            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
-            "allowed": "container/layout props only"
-          }
-        }
-      ]
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:17:56.527Z",
+      "gaps": []
     },
     {
       "route": "/discover",
@@ -412,30 +48,9 @@
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(27, 18, 14 on 27, 18, 14) — ratio 1.00:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans-medium.text-sm> \"Start Listening\""
-        }
-      ],
-      "analyzedAt": "2026-11-05T00:28:08.842Z",
-      "gaps": [
-        {
-          "id": "/discover::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(27, 18, 14 on 27, 18, 14) — ratio 1.00:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans-medium.text-sm> \"Start Listening\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:19:00.851Z",
+      "gaps": []
     },
     {
       "route": "/jam",
@@ -446,7 +61,7 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T00:29:34.652Z",
+      "analyzedAt": "2026-11-05T12:19:56.739Z",
       "gaps": []
     },
     {
@@ -458,7 +73,7 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T00:30:47.640Z",
+      "analyzedAt": "2026-11-05T12:20:29.628Z",
       "gaps": []
     },
     {
@@ -470,41 +85,20 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T00:32:29.258Z",
+      "analyzedAt": "2026-11-05T12:21:03.433Z",
       "gaps": []
     },
     {
       "route": "/library",
       "viewport": {
-        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a library page. The library page is open and has a dark brown background with white text. The text on the page is in a serif font, and it appears to be a music library page. The library page has a search bar, and it is filled with various songs. The library page also has a \"Quick Play\" button, which is located at the bottom of the page. The library page is well-organized, and the layout is clean and easy to navigate.",
+        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a library page. The library page is open, and it appears to be a music streaming app. The screen is dark, which contrasts with the light brown background. The library page is filled with various options, including songs, albums, and playlists. The app is designed to help users find and listen to music, and it is currently open and ready to use.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(27, 18, 14 on 34.5, 23, 17.5) — ratio 1.05:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans-medium.text-sm> \"Export MIDI\""
-        }
-      ],
-      "analyzedAt": "2026-11-05T00:36:18.687Z",
-      "gaps": [
-        {
-          "id": "/library::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(27, 18, 14 on 34.5, 23, 17.5) — ratio 1.05:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans-medium.text-sm> \"Export MIDI\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:21:49.068Z",
+      "gaps": []
     },
     {
       "route": "/listening",
@@ -514,53 +108,32 @@
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(27, 18, 14 on 27, 18, 14) — ratio 1.00:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans-medium.text-sm> \"Start Listening\""
-        }
-      ],
-      "analyzedAt": "2026-11-05T00:37:51.829Z",
-      "gaps": [
-        {
-          "id": "/listening::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(27, 18, 14 on 27, 18, 14) — ratio 1.00:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans-medium.text-sm> \"Start Listening\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:22:18.463Z",
+      "gaps": []
     },
     {
       "route": "/musicxml-render-test",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a dark brown and cream theme. The screen displays a window with a list of options, including a \"Playing music\" button, a \"Volume\" button, and a \"Volume control\" button. The options are arranged in a row, and the text is displayed in a clear and legible manner. The screen is not filled with any errors or issues, and the overall appearance is professional and well-organized.",
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a dark brown and cream theme. The screen displays a music sheet with a few notes and symbols, and it appears to be a music composition software. The screen also has a few icons, including a music note icon, a music sheet icon, and a music composition icon. The icons are located in the upper right corner of the screen. The screen is well-organized, with the music sheet and icons placed in a clear and accessible manner.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T00:43:53.941Z",
+      "analyzedAt": "2026-11-05T12:23:15.315Z",
       "gaps": []
     },
     {
       "route": "/onboarding",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a dark brown and cream theme. The screen is divided into two columns, with the left column containing a message that reads \"First time here. Let's find out what you're interested in.\" The right column has a navigation bar with a button labeled \"Next\" and a button labeled \"Back\" at the top.\n\nThe screen also shows a map, which is a common feature in many applications. The map appears to be a simple line graph, possibly representing a location or a series of data points. The overall layout of the screen is well-organized, with the navigation bar and the map clearly visible.",
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a dark brown and cream theme. The screen is divided into two columns, with the left column containing a message and the right column showing a map. The message is titled \"First time here\" and is written in white text. The map is titled \"Let's find out what you're interested in\" and is written in black text.\n\nThere are no errors or issues visible in the screenshot, and the overall layout appears to be well-organized.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T00:49:56.011Z",
+      "analyzedAt": "2026-11-05T12:23:49.548Z",
       "gaps": []
     },
     {
@@ -572,41 +145,20 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T00:54:23.460Z",
+      "analyzedAt": "2026-11-05T12:24:22.254Z",
       "gaps": []
     },
     {
       "route": "/onboarding/phrase/0",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a dark brown and cream theme. The screen displays a word processing document titled \"Phrase 1 - Steady Pocket\" with a \"Play\" button and a \"Record Take\" button. The document is open, and the screen is turned on. The document appears to be a simple word processing document, possibly a music score or lyrics, with a few lines of text.\n\nThere are no errors or issues visible in the screenshot, and the document is open and ready to be edited or played.",
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a word processing document open. The document appears to be a music score, and it is titled \"Piece 1 - Steady Pocket\". The document is titled \"Play reference\" and is displayed in a simple font. The document is titled \"Record take\" and is displayed in a larger font. The document is titled \"Play reference\" and is displayed in a smaller font. The document is titled \"Play reference\" and is displayed in a larger font. The document is titled \"Play reference\" and is displayed in a smaller font. The document is titled \"Play reference\" and is displayed in a larger font. The document is titled \"Play reference\" and is displayed in a smaller font. The document is titled \"Play reference\" and is displayed in a larger font. The document is titled \"Play reference\" and is displayed in a smaller font. The document is titled \"Play reference\" and is displayed in a larger font. The document is titled \"Play reference\" and is displayed in a smaller font. The document is titled \"Play reference\"",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(27, 18, 14 on 27, 18, 14) — ratio 1.00:1, needs 4.5:1 — 1 element(s) — e.g. <div.font-sans.text-xs.text-wood-900> \"Invalid typed array leng\""
-        }
-      ],
-      "analyzedAt": "2026-11-05T00:57:03.962Z",
-      "gaps": [
-        {
-          "id": "/onboarding/phrase/0::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(27, 18, 14 on 27, 18, 14) — ratio 1.00:1, needs 4.5:1 — 1 element(s) — e.g. <div.font-sans.text-xs.text-wood-900> \"Invalid typed array leng\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:25:05.113Z",
+      "gaps": []
     },
     {
       "route": "/onboarding/results",
@@ -617,7 +169,7 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T00:59:41.130Z",
+      "analyzedAt": "2026-11-05T12:25:47.742Z",
       "gaps": []
     },
     {
@@ -629,132 +181,43 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:01:21.450Z",
+      "analyzedAt": "2026-11-05T12:26:23.342Z",
       "gaps": []
     },
     {
       "route": "/progress",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a page on a computer screen displaying a progress bar and a list of instructions. The progress bar is located in the top left corner of the screen, and the instructions are displayed in the center of the screen. The screen is set against a dark brown background, and the text is written in a cream color. The instructions appear to be in a darker shade of brown, which contrasts with the lighter background. The layout of the instructions seems to be well-organized, with each step clearly outlined.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [
-        {
-          "check": "element-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "detail": "<div.h-12.w-12.items-center> overflows horizontally (scrollWidth 52 > clientWidth 46, overflow-x visible)"
-        }
-      ],
-      "analyzedAt": "2026-11-05T01:03:14.770Z",
-      "gaps": [
-        {
-          "id": "/progress::layout-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[element-overflow] <div.h-12.w-12.items-center> overflows horizontally (scrollWidth 52 > clientWidth 46, overflow-x visible)"
-          ],
-          "suggestedFix": {
-            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
-            "allowed": "container/layout props only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/progress/pulse",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music app with a dark brown and cream theme. The app is designed to help users learn how to play the guitar, and it features a chart that displays the user's progress in learning the guitar. The chart shows the user's progress in terms of the number of hours spent practicing and the number of songs learned.\n\nThe app has a clean and simple design, with a white background and a brown border. The chart displays the user's progress in a clear and organized manner, allowing the user to easily track their improvement over time. The app also includes a progress bar that shows the user how many hours they have spent practicing and how many songs they have learned.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [
-        {
-          "check": "off-palette-color",
-          "issue": "Color mismatch",
-          "severity": "warning",
-          "detail": "Off-palette background 169, 158, 102 on 3 element(s) — e.g. <div.h-5.flex-1.rounded-[3px]> (+2 more)"
-        },
-        {
-          "check": "off-palette-color",
-          "issue": "Color mismatch",
-          "severity": "warning",
-          "detail": "Off-palette background 198, 131, 95 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>"
-        },
-        {
-          "check": "off-palette-color",
-          "issue": "Color mismatch",
-          "severity": "warning",
-          "detail": "Off-palette background 209, 146, 94 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>"
-        },
-        {
-          "check": "off-palette-color",
-          "issue": "Color mismatch",
-          "severity": "warning",
-          "detail": "Off-palette background 180, 159, 100 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>"
-        },
-        {
-          "check": "off-palette-color",
-          "issue": "Color mismatch",
-          "severity": "warning",
-          "detail": "Off-palette background 141, 156, 106 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>"
-        },
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(184, 169, 154 on 34.5, 23, 17.5) — ratio 4.40:1, needs 4.5:1 — 14 element(s) — e.g. <div.font-mono.text-[10px].text-muted-light/70> \"11s loop\", <div.font-mono.text-[9px].text-muted-light/70> \"94\", <div.font-mono.text-[9px].text-muted-light/70> \"90\" (+11 more)"
-        }
-      ],
-      "analyzedAt": "2026-11-05T01:04:44.070Z",
-      "gaps": [
-        {
-          "id": "/progress/pulse::color-mismatch",
-          "issue": "Color mismatch",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[off-palette-color] Off-palette background 169, 158, 102 on 3 element(s) — e.g. <div.h-5.flex-1.rounded-[3px]> (+2 more)",
-            "[off-palette-color] Off-palette background 198, 131, 95 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>",
-            "[off-palette-color] Off-palette background 209, 146, 94 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>",
-            "[off-palette-color] Off-palette background 180, 159, 100 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>",
-            "[off-palette-color] Off-palette background 141, 156, 106 on 1 element(s) — e.g. <div.h-3.w-4.rounded-[2px]>"
-          ],
-          "suggestedFix": {
-            "approach": "Replace the off-palette color with the nearest token from src/constants/colors.ts or tailwind.config.js.",
-            "allowed": "token swap only"
-          }
-        },
-        {
-          "id": "/progress/pulse::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(184, 169, 154 on 34.5, 23, 17.5) — ratio 4.40:1, needs 4.5:1 — 14 element(s) — e.g. <div.font-mono.text-[10px].text-muted-light/70> \"11s loop\", <div.font-mono.text-[9px].text-muted-light/70> \"94\", <div.font-mono.text-[9px].text-muted-light/70> \"90\" (+11 more)"
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/review-archive/demo-session",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a page with a dark brown and cream theme. The page is titled \"Session replay\" and has a list of scores for a music session. The scores are displayed in a grid format, with each score accompanied by a score summary. The page also includes a section for users to rate the session and a section for users to read a review of the session. The layout and design of the page are well-organized, making it easy for users to navigate and understand the content.",
+        "description": "[viewport.png]\n\nThe screenshot shows a page on a computer screen displaying a progress bar and a list of instructions. The progress bar is located in the top left corner of the screen, and the instructions are displayed in the center of the screen. The screen is dark brown, and the text is written in a cream color. The instructions include a list of things to do, such as watching a video, and a list of things to avoid, such as watching a video while eating. The instructions are organized in a clear and easy-to-read manner, and the progress bar indicates the current progress of the task.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:06:06.092Z",
+      "analyzedAt": "2026-11-05T12:26:59.462Z",
+      "gaps": []
+    },
+    {
+      "route": "/progress/pulse",
+      "viewport": {
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a chord pulse app. The app is open and ready to use, with a dark brown and cream theme. The app is designed to help users learn and practice chords, and it provides a progress bar to track their practice sessions. The app also includes a timer, which can be used to measure the duration of each practice session.\n\nThe app is currently open and ready to use, with the progress bar showing that the user has practiced for 1 hour and 30 minutes. The app also displays the user's name and the time they started practicing. The app is designed to help users learn and practice chords, and it provides a timer to track their practice sessions.",
+        "verdict": "pass",
+        "defects": []
+      },
+      "states": {},
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:27:37.796Z",
+      "gaps": []
+    },
+    {
+      "route": "/review-archive/demo-session",
+      "viewport": {
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a page from a music software, likely a music composition or editing software. The page is titled \"Back Journal\" and has a rating system for the user's review. The software is designed to help musicians create and edit music, and it is currently in use. The screen is dark, which may make it difficult to read the text. The software is open and ready for use, and the user can easily navigate through the interface to provide feedback on the software.",
+        "verdict": "pass",
+        "defects": []
+      },
+      "states": {},
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:28:12.330Z",
       "gaps": []
     },
     {
@@ -766,60 +229,20 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:07:18.283Z",
+      "analyzedAt": "2026-11-05T12:28:44.022Z",
       "gaps": []
     },
     {
       "route": "/session/listen",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a music app open, displaying a page with a list of songs and a button labeled \"Next Study\". The screen is black, and the app is set against a dark brown background. The app appears to be a music streaming app, and it is currently open to a page with a list of songs. The app is designed to help users listen to and learn music, and it is currently in the \"Next Study\" mode, indicating that the user is in the process of selecting a song to listen to.",
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a music app open, displaying a page titled \"Class\" and a \"Next Study\" button. The app is designed to help users learn music by providing a structured learning experience. The screen is dark, which contrasts with the light brown background, making it easy to read the text. The app appears to be well-organized and user-friendly, with clear instructions and a clean layout.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [
-        {
-          "check": "font-family",
-          "issue": "Typography",
-          "severity": "warning",
-          "detail": "Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 4 element(s) — e.g. <div.text-[9px].text-muted-brown/50> \"1\", <div.text-[9px].text-muted-brown/50> \"2\", <div.text-[9px].text-muted-brown/50> \"3\" (+1 more)"
-        },
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(179, 154, 134 on 34.5, 23, 17.5) — ratio 2.61:1, needs 4.5:1 — 4 element(s) — e.g. <div.text-[9px].text-muted-brown/50> \"1\", <div.text-[9px].text-muted-brown/50> \"2\", <div.text-[9px].text-muted-brown/50> \"3\" (+1 more)"
-        }
-      ],
-      "analyzedAt": "2026-11-05T01:08:36.810Z",
-      "gaps": [
-        {
-          "id": "/session/listen::typography",
-          "issue": "Typography",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[font-family] Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 4 element(s) — e.g. <div.text-[9px].text-muted-brown/50> \"1\", <div.text-[9px].text-muted-brown/50> \"2\", <div.text-[9px].text-muted-brown/50> \"3\" (+1 more)"
-          ],
-          "suggestedFix": {
-            "approach": "Use font-serif / font-sans / font-sans-medium / font-mono classes (PlayfairDisplay, DMSans, JetBrainsMono).",
-            "allowed": "font class swap only"
-          }
-        },
-        {
-          "id": "/session/listen::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(179, 154, 134 on 34.5, 23, 17.5) — ratio 2.61:1, needs 4.5:1 — 4 element(s) — e.g. <div.text-[9px].text-muted-brown/50> \"1\", <div.text-[9px].text-muted-brown/50> \"2\", <div.text-[9px].text-muted-brown/50> \"3\" (+1 more)"
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:29:18.679Z",
+      "gaps": []
     },
     {
       "route": "/session/mood-check",
@@ -830,7 +253,7 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:09:49.961Z",
+      "analyzedAt": "2026-11-05T12:29:53.771Z",
       "gaps": []
     },
     {
@@ -842,204 +265,56 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:10:56.936Z",
+      "analyzedAt": "2026-11-05T12:30:28.207Z",
       "gaps": []
     },
     {
       "route": "/session/play",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a tab on a computer screen displaying a music app. The app is titled \"Play\" and is open to a page with a grid of notes. The grid is filled with musical notes, and there is a button labeled \"Back\" at the bottom of the screen. The app is set against a dark brown and cream theme, which is consistent with the overall design. The app appears to be functioning correctly, and there are no visible issues or problems.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [
-        {
-          "check": "font-family",
-          "issue": "Typography",
-          "severity": "warning",
-          "detail": "Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 1 element(s) — e.g. <div.text-[10px].font-medium.text-amber-light> \"Capo suggestion: no capo\""
-        },
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(243, 231, 214 on 245, 240, 232) — ratio 1.08:1, needs 4.5:1 — 1 element(s) — e.g. <div.mb-2.font-sans.text-[11px]> \"Loading instrument sound\""
-        },
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(179, 154, 134 on 245, 240, 232) — ratio 2.35:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans.text-[11px]> \"Score isn't available fo\""
-        }
-      ],
-      "analyzedAt": "2026-11-05T01:12:11.171Z",
-      "gaps": [
-        {
-          "id": "/session/play::typography",
-          "issue": "Typography",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[font-family] Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 1 element(s) — e.g. <div.text-[10px].font-medium.text-amber-light> \"Capo suggestion: no capo\""
-          ],
-          "suggestedFix": {
-            "approach": "Use font-serif / font-sans / font-sans-medium / font-mono classes (PlayfairDisplay, DMSans, JetBrainsMono).",
-            "allowed": "font class swap only"
-          }
-        },
-        {
-          "id": "/session/play::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(243, 231, 214 on 245, 240, 232) — ratio 1.08:1, needs 4.5:1 — 1 element(s) — e.g. <div.mb-2.font-sans.text-[11px]> \"Loading instrument sound\"",
-            "[contrast] Text rgb(179, 154, 134 on 245, 240, 232) — ratio 2.35:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans.text-[11px]> \"Score isn't available fo\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
-    },
-    {
-      "route": "/session/review",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music library page. The screen is divided into two columns, with the left column being the header and the right column being the footer. The header contains a list of options, and the footer has a list of instructions. The screen also has a rating system, which is a part of the music library. The rating system is displayed in a rating scale, and it is currently set to \"Needs Improvement.\" The screen also has a warning message, which is displayed in a yellow box.",
+        "description": "[viewport.png]\n\nThe screenshot shows a tab on a computer screen displaying a music app. The app is titled \"Play\" and is open to a page with a grid of notes. The grid is filled with musical notes, and the app is designed to help users learn and practice playing the guitar. The app is displayed on a dark brown and cream theme, which complements the musical notes on the screen. The app appears to be well-organized and easy to navigate, making it a valuable tool for guitar enthusiasts.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:13:33.840Z",
+      "analyzedAt": "2026-11-05T12:31:02.793Z",
+      "gaps": []
+    },
+    {
+      "route": "/session/review",
+      "viewport": {
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music library page. The screen is divided into two columns, with the left column being the header and the right column being the footer. The header contains a list of options, and the footer has a message indicating that the music library is ready to run.\n\nThe left column has a list of options, including \"Run Score\", \"Run Score\", \"Run Score - Score\", and \"Run Score - Score - Score\". The right column has a message that reads \"Library ready to run\". The screen is set against a dark brown background, and the overall layout appears to be well-organized and easy to navigate.",
+        "verdict": "pass",
+        "defects": []
+      },
+      "states": {},
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:31:42.049Z",
       "gaps": []
     },
     {
       "route": "/session/slow",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a music production software interface with a music production screen. The interface is dark brown and cream in color, and it displays a music production screen with a progress bar and a list of options. The progress bar shows that the music production process is currently in the slow phase. The interface also has a button labeled \"Next Play\" and a button labeled \"Back\" for navigation. The interface is well-organized and easy to use, providing a user-friendly experience for the user.",
+        "description": "[viewport.png]\n\nThe screenshot shows a music production software interface with a music production screen. The interface is dark brown and cream in color, and it displays a music production screen with a progress bar and a list of options. The progress bar shows that the music production process is in the slow mode. The interface also has a music production screen that displays a list of options, including a \"Back\" button and a \"Next Play\" button. The interface is well-organized and easy to navigate, making it a suitable platform for music production and creativity.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [
-        {
-          "check": "font-family",
-          "issue": "Typography",
-          "severity": "warning",
-          "detail": "Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 1 element(s) — e.g. <div.text-[10px].font-medium.text-amber-light> \"Capo suggestion: no capo\""
-        },
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(243, 231, 214 on 245, 240, 232) — ratio 1.08:1, needs 4.5:1 — 1 element(s) — e.g. <div.mb-2.font-sans.text-[11px]> \"Loading instrument sound\""
-        },
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(179, 154, 134 on 245, 240, 232) — ratio 2.35:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans.text-[11px]> \"Score isn't available fo\""
-        }
-      ],
-      "analyzedAt": "2026-11-05T01:14:46.903Z",
-      "gaps": [
-        {
-          "id": "/session/slow::typography",
-          "issue": "Typography",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[font-family] Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 1 element(s) — e.g. <div.text-[10px].font-medium.text-amber-light> \"Capo suggestion: no capo\""
-          ],
-          "suggestedFix": {
-            "approach": "Use font-serif / font-sans / font-sans-medium / font-mono classes (PlayfairDisplay, DMSans, JetBrainsMono).",
-            "allowed": "font class swap only"
-          }
-        },
-        {
-          "id": "/session/slow::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(243, 231, 214 on 245, 240, 232) — ratio 1.08:1, needs 4.5:1 — 1 element(s) — e.g. <div.mb-2.font-sans.text-[11px]> \"Loading instrument sound\"",
-            "[contrast] Text rgb(179, 154, 134 on 245, 240, 232) — ratio 2.35:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans.text-[11px]> \"Score isn't available fo\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:32:20.928Z",
+      "gaps": []
     },
     {
       "route": "/session/study",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music learning app. The app is designed for beginners and is focused on teaching them how to play guitar. The screen is divided into multiple columns, each containing a different lesson or tutorial. The app is in a dark brown and cream color scheme, which complements the overall theme. The app appears to be well-organized and easy to navigate, making it a suitable choice for those looking to learn guitar.",
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music learning app. The app is designed for beginners and is focused on teaching them how to play the guitar. The screen is divided into multiple columns, each containing a different lesson or tutorial. The app is designed to help users learn the basics of playing the guitar, such as finger placement and strumming techniques. The app also provides a study mode for users to learn at their own pace and a practice mode for users to practice their skills. The app is designed to be user-friendly and accessible to beginners, making it an ideal tool for learning to play the guitar.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [
-        {
-          "check": "font-family",
-          "issue": "Typography",
-          "severity": "warning",
-          "detail": "Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 1 element(s) — e.g. <div.text-[10px].font-medium.text-amber-light> \"Capo suggestion: no capo\""
-        },
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(179, 154, 134 on 34.5, 23, 17.5) — ratio 3.88:1, needs 4.5:1 — 2 element(s) — e.g. <div.font-mono.text-[10px].text-muted-brown/70> \"Bar 1/4\", <div.font-sans-medium.text-[10px].uppercase> \"[Intro]\""
-        },
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(243, 231, 214 on 245, 240, 232) — ratio 1.08:1, needs 4.5:1 — 1 element(s) — e.g. <div.mb-2.font-sans.text-[11px]> \"Loading instrument sound\""
-        },
-        {
-          "check": "contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "detail": "Text rgb(179, 154, 134 on 245, 240, 232) — ratio 2.35:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans.text-[11px]> \"Score isn't available fo\""
-        }
-      ],
-      "analyzedAt": "2026-11-05T01:15:56.391Z",
-      "gaps": [
-        {
-          "id": "/session/study::typography",
-          "issue": "Typography",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[font-family] Font family \"-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif\" on 1 element(s) — e.g. <div.text-[10px].font-medium.text-amber-light> \"Capo suggestion: no capo\""
-          ],
-          "suggestedFix": {
-            "approach": "Use font-serif / font-sans / font-sans-medium / font-mono classes (PlayfairDisplay, DMSans, JetBrainsMono).",
-            "allowed": "font class swap only"
-          }
-        },
-        {
-          "id": "/session/study::contrast",
-          "issue": "Contrast / readability",
-          "severity": "warning",
-          "source": "deterministic",
-          "evidence": [
-            "[contrast] Text rgb(179, 154, 134 on 34.5, 23, 17.5) — ratio 3.88:1, needs 4.5:1 — 2 element(s) — e.g. <div.font-mono.text-[10px].text-muted-brown/70> \"Bar 1/4\", <div.font-sans-medium.text-[10px].uppercase> \"[Intro]\"",
-            "[contrast] Text rgb(243, 231, 214 on 245, 240, 232) — ratio 1.08:1, needs 4.5:1 — 1 element(s) — e.g. <div.mb-2.font-sans.text-[11px]> \"Loading instrument sound\"",
-            "[contrast] Text rgb(179, 154, 134 on 245, 240, 232) — ratio 2.35:1, needs 4.5:1 — 1 element(s) — e.g. <div.text-center.font-sans.text-[11px]> \"Score isn't available fo\""
-          ],
-          "suggestedFix": {
-            "approach": "Swap to a higher-contrast token — e.g. muted.cream or ivory instead of muted2 for secondary text on wood.900.",
-            "allowed": "color tokens from src/constants/colors.ts only"
-          }
-        }
-      ]
+      "deterministicFindings": [],
+      "analyzedAt": "2026-11-05T12:33:00.956Z",
+      "gaps": []
     },
     {
       "route": "/session/tune",
@@ -1050,7 +325,7 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:17:10.224Z",
+      "analyzedAt": "2026-11-05T12:33:38.047Z",
       "gaps": []
     },
     {
@@ -1062,7 +337,7 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:18:04.063Z",
+      "analyzedAt": "2026-11-05T12:34:18.459Z",
       "gaps": []
     },
     {
@@ -1074,7 +349,7 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:19:01.644Z",
+      "analyzedAt": "2026-11-05T12:34:52.935Z",
       "gaps": []
     },
     {
@@ -1086,7 +361,7 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:19:56.608Z",
+      "analyzedAt": "2026-11-05T12:35:26.668Z",
       "gaps": []
     },
     {
@@ -1098,7 +373,7 @@
       },
       "states": {},
       "deterministicFindings": [],
-      "analyzedAt": "2026-11-05T01:20:53.447Z",
+      "analyzedAt": "2026-11-05T12:36:03.077Z",
       "gaps": []
     }
   ],
@@ -1108,5 +383,5 @@
     "components": "AnimatedPressable, NoiseOverlay, WoodGradient, lucide-react-native",
     "animation": "react-native-reanimated, spring/timing presets in src/constants/animations.ts"
   },
-  "isComplete": false
+  "isComplete": true
 }
