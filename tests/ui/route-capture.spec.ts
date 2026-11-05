@@ -11,6 +11,9 @@ const routes = loadRouteDefinitions();
 const captureResults: Awaited<ReturnType<typeof captureRouteArtifacts>>[] = [];
 
 test.describe.configure({ mode: "serial" });
+// Route crawl with full renders (AlphaTab scores, waveforms) — heavy routes
+// run close to the default 30s budget.
+test.setTimeout(120_000);
 
 test.beforeEach(async ({ page }) => {
   if (process.env.UX_AUDIT_SEED !== "1") return;

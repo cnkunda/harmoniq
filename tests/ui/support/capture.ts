@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import type { RouteDefinition, UiState } from "../../routes";
+import { runVisualChecks, type DeterministicFinding } from "./visualChecks";
 
 type CaptureResult = {
   route: string;
@@ -9,6 +10,7 @@ type CaptureResult = {
   fullPageScreenshot: string;
   viewportScreenshot: string;
   stateScreenshots: Partial<Record<UiState, string>>;
+  deterministicFindings: DeterministicFinding[];
 };
 
 function slugifyRoute(routePath: string): string {
@@ -70,12 +72,15 @@ export async function captureRouteArtifacts(page: Page, route: RouteDefinition):
     stateScreenshots[state] = screenshotPath;
   }
 
+  const deterministicFindings = await runVisualChecks(page);
+
   return {
     route: routePath,
     directory: outputDir,
     fullPageScreenshot,
     viewportScreenshot,
     stateScreenshots,
+    deterministicFindings,
   };
 }
 
