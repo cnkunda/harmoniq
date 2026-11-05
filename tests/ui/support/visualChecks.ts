@@ -194,6 +194,19 @@ export async function runVisualChecks(page: Page): Promise<DeterministicFinding[
         .filter(Boolean)
         .join(" ");
 
+    // scrollWidth counts absolutely-positioned decorative children (ambient
+    // glows, animated ripples) that are meant to bleed. Only flag when a
+    // non-absolute child actually spills past the border box — that is real
+    // layout overflow (text/rows sticking out or clipped by overflow-hidden).
+    const hasFlowOverflow = (el: Element): boolean => {
+      const rect = el.getBoundingClientRect();
+      return Array.from(el.children).some((child) => {
+        if (window.getComputedStyle(child).position === "absolute") return false;
+        const r = child.getBoundingClientRect();
+        return r.right > rect.right + 4 || r.left < rect.left - 4;
+      });
+    };
+
     const luminance = (c: [number, number, number]): number => {
       const f = (x: number): number => {
         const v = x / 255;
@@ -233,21 +246,31 @@ export async function runVisualChecks(page: Page): Promise<DeterministicFinding[
       return avg;
     };
 
-    // wood.900 fallback: app-wide page background when no opaque ancestor is
-    // found (RNW's internal root defaults to #f2f2f2 which is NOT the visual bg).
+    // True visual background = full ancestor composite: every semi-transparent
+    // layer between the element and an opaque base must be composited (skipping
+    // alpha<0.95 layers reported false "invisible text" positives on buttons
+    // like bg-amber-accent/90). Wood gradients average their stops — good
+    // enough for WCAG estimation on the app's dark wood gradients.
     const opaqueBg = (el: Element): Rgba => {
+      const layers: Rgba[] = [];
       let node: Element | null = el;
       while (node) {
         if (!isFrameworkChrome(node)) {
           const cs = window.getComputedStyle(node);
           const fromImage = bgFromImage(cs.backgroundImage);
-          if (fromImage && fromImage[3] >= 0.95) return fromImage;
+          if (fromImage) layers.push(fromImage);
           const c = parseCssColor(cs.backgroundColor);
-          if (c && c[3] >= 0.95) return c;
+          if (c && c[3] > 0) layers.push(c);
         }
         node = node.parentElement;
       }
-      return [27, 18, 14, 1];
+      // layers are leaf→root; fold root-first so each layer composites over
+      // everything below it. wood.900 is the app-wide fallback base.
+      let acc: Rgba = [27, 18, 14, 1];
+      for (let i = layers.length - 1; i >= 0; i -= 1) {
+        acc = blend(layers[i], acc);
+      }
+      return acc;
     };
 
     const bump = (map: Map<string, Group>, key: string, example: string) => {
@@ -301,7 +324,8 @@ export async function runVisualChecks(page: Page): Promise<DeterministicFinding[
         el.scrollWidth > el.clientWidth + 4 &&
         el.clientWidth > 0 &&
         cs.overflowX !== "auto" &&
-        cs.overflowX !== "scroll"
+        cs.overflowX !== "scroll" &&
+        hasFlowOverflow(el)
       ) {
         add(
           "element-overflow",

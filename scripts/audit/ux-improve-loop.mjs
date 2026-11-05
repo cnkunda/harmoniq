@@ -159,7 +159,10 @@ function runPlaywrightCapture() {
   execSync("npx playwright test --config=playwright.config.ts tests/ui/route-capture.spec.ts", {
     cwd: ROOT_DIR,
     stdio: "inherit",
-    timeout: 600_000,
+    // 30min: the 30-route serial crawl takes ~17min on a loaded machine
+    // (AlphaTab mounts + onboarding audio), so a 10min ceiling killed the
+    // loop mid-capture and orphaned Playwright.
+    timeout: 1_800_000,
     env: { ...process.env, UX_AUDIT_SEED: "1" },
   });
 }

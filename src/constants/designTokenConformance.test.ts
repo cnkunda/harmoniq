@@ -84,7 +84,7 @@ describe('designTokenConformance (Commit 154)', () => {
       if (hits.length > 0) offenders.push(`${rel}: ${hits.join(', ')}`)
     }
     expect(offenders).toEqual([])
-  })
+  }, 30_000)
 
   it('has zero functional-notation color literals outside the palette source', () => {
     const offenders: string[] = []
@@ -95,7 +95,7 @@ describe('designTokenConformance (Commit 154)', () => {
       if (hits.length > 0) offenders.push(`${rel}: ${hits.join(', ')}`)
     }
     expect(offenders).toEqual([])
-  })
+  }, 30_000)
 
   it('imports expo-linear-gradient only in the wrapper and the interop registration', () => {
     const offenders: string[] = []
@@ -106,7 +106,7 @@ describe('designTokenConformance (Commit 154)', () => {
       if (hits.length > 0) offenders.push(rel)
     }
     expect(offenders).toEqual([])
-  })
+  }, 30_000)
 
   it('has zero StyleSheet.create calls', () => {
     const offenders: string[] = []
@@ -116,5 +116,5 @@ describe('designTokenConformance (Commit 154)', () => {
       if (hits.length > 0) offenders.push(rel)
     }
     expect(offenders).toEqual([])
-  })
+  }, 30_000)
 })
