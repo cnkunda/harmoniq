@@ -1,0 +1,21 @@
+#!/bin/sh
+# Pre-commit UX guard: runs the UI/UX improve loop's fast mode. Only the
+# routes affected by the staged/working-tree changes are captured and checked
+# (deterministic DOM checks; no vision). A dev server must be running on :8081 —
+# if none is up, the guard skips so commits are never blocked by infra.
+# Bypass: git commit --no-verify
+
+# Only guard commits that touch UI-relevant files.
+PATTERN='^(app|components|modules|src)/.*\.(tsx?|jsx?)$'
+if ! git diff --name-only HEAD 2>/dev/null | grep -Eq "$PATTERN" && ! git diff --cached --name-only 2>/dev/null | grep -Eq "$PATTERN"; then
+  exit 0
+fi
+
+# No running Expo server -> don't block (guard needs a live web bundle).
+if ! node -e "require('http').get('http://127.0.0.1:8081', r => process.exit(0)).on('error', () => process.exit(1))" > /dev/null 2>&1; then
+  echo "[ux-guard] No Expo web server on :8081 — skipping (run 'npm run web' to enable the guard)."
+  exit 0
+fi
+
+echo "[ux-guard] Running UI checks on changed routes (this may take a few minutes)..."
+node scripts/audit/ux-improve-loop.mjs --guard

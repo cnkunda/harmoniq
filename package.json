@@ -25,7 +25,8 @@
     "audit:platform": "node scripts/audit/generate-platform-audit.mjs",
     "audit:ui": "node scripts/audit/audit-ui-feedback.mjs",
     "ux:improve": "node scripts/audit/ux-improve-loop.mjs --skip-server",
-    "ux:verify": "node scripts/audit/ux-improve-loop.mjs --verify"
+    "ux:verify": "node scripts/audit/ux-improve-loop.mjs --verify",
+    "ux:guard": "node scripts/audit/ux-improve-loop.mjs --guard"
   },
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",

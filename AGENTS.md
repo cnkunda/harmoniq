@@ -64,6 +64,7 @@ mrt models init && mrt models download mrt2_small
 | `npm run audit:ui` | Playwright route capture + vision-tool analysis -> UI/UX gap report |
 | `npm run ux:improve` | Full UX improvement loop: capture → deterministic checks + vision analysis → flag gaps |
 | `npm run ux:verify` | Post-fix verification: fresh capture + full re-analysis |
+| `npm run ux:guard` | Pre-commit guard: deterministic checks on **changed routes only** (no vision); exit 1 = actionable gaps |
 | `node scripts/audit/ux-improve-loop.mjs --waive "<route>::<slug>" --reason "..."` | Persist a gap waiver (false positives stay suppressed) |
 | `python -m pytest -q` | All backend tests (from `backend/`) |
 | `python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py` | Chord model tests |
@@ -104,6 +105,13 @@ agent reads report → fixes code (cosmetic only) or waives false positives → 
       ↓                                                          (fresh capture + full re-analysis)
 loop until isComplete: true (max 5 iterations)
 ```
+
+For commits: `npm run ux:guard` before `git commit` (fast — checks only the routes your diff affects).
+A pre-commit hook realizes this automatically while `.githooks` is active
+(`git config core.hooksPath .githooks`, already enabled on this clone; hook skips when no Expo server is running).
+
+This loop is also available as an agent skill: `.claude/skills/ux-improve-loop/SKILL.md`
+(open Agent Skills format — discovered by opencode and Claude Code alike).
 
 1. **Start Expo web** in one terminal: `npm run web` (or `CI=1 npx expo start --web --port 8081`)
 2. **Run loop** in another terminal: `npm run ux:improve` — seeds app state (no backend needed), captures all routes, runs deterministic DOM checks + moondream vision analysis, writes `docs/audit/ui-feedback-report.json` (schema v2)

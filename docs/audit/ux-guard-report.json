@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 2,
+  "mode": "guard",
+  "generatedAt": "2026-11-06T17:45:30.682Z",
+  "routesAnalyzed": 30,
+  "totalUiGapsFound": 0,
+  "note": "Pre-commit guard: deterministic DOM checks only (no vision analysis). Full-loop results live in ui-feedback-report.json.",
+  "allGapsByRoute": [],
+  "routes": [
+    {
+      "route": "/",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/add-song",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/discover",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/jam",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/jam-practice",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/jam/history",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/library",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/listening",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/musicxml-render-test",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/onboarding",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/onboarding/mic",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/onboarding/phrase/0",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/onboarding/results",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/onboarding/taste-quiz",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/progress",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/progress/pulse",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/review-archive/demo-session",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/scale-explorer",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/session/listen",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/session/mood-check",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/session/musical-tolerance",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/session/play",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/session/review",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/session/slow",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/session/study",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/session/tune",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/session/warmup",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/settings",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/settings/analytics",
+      "gaps": [],
+      "deterministicFindings": []
+    },
+    {
+      "route": "/settings/feedback",
+      "gaps": [],
+      "deterministicFindings": []
+    }
+  ]
+}
