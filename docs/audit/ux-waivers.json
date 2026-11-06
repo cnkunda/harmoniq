@@ -1,0 +1,12 @@
+{
+  "waivers": {
+    "/library::layout-overflow": {
+      "reason": "Vision-only advisory: moondream misreads the dark-theme library screenshot (screen",
+      "waivedAt": "2026-11-06T19:31:03.588Z"
+    },
+    "/session/tune::alignment": {
+      "reason": "Vision-only advisory: moondream cannot resolve the faint tuner needle/score rendering (screen",
+      "waivedAt": "2026-11-06T19:31:12.130Z"
+    }
+  }
+}

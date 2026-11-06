@@ -1,9 +1,10 @@
 {
-  "iteration": 18,
+  "iteration": 20,
   "fixedGapIds": [],
   "lastReportPath": "C:\\workspace\\harmoniq\\docs\\audit\\ui-feedback-report.json",
   "resolvedGapIds": [
-    "/onboarding/phrase/0::contrast"
+    "/library::layout-overflow",
+    "/session/tune::alignment"
   ],
   "newGapIds": [],
   "remainingGapIds": []
