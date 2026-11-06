@@ -72,7 +72,7 @@ export function PerSectionConfusionBars({
             className={`flex-row items-center py-1.5 ${isCurrent ? 'opacity-100' : 'opacity-60'}`}
           >
             <Text
-              className={`font-sans text-[11px] ${isCurrent ? 'text-cream' : 'text-muted-brown'} w-20 shrink`}
+              className={`font-sans text-xs ${isCurrent ? 'text-cream' : 'text-muted-brown'} w-20 shrink`}
               numberOfLines={1}
             >
               {sec.label}

@@ -314,6 +314,7 @@ export function ChordsAndLyrics({
                           {onChordTap ? (
                             <AnimatedPressable
                               haptic="light"
+                              className="px-2 py-1.5"
                               onPress={(e) => {
                                 e.stopPropagation()
                                 onChordTap(globalBarIdx, bar.chord)

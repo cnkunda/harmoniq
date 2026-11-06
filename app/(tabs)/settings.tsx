@@ -577,7 +577,7 @@ export default function SettingsScreen() {
             <MessageSquare color={colors.amber.accent} size={20} strokeWidth={2} />
             <View className="flex-1">
               <Text className="font-sans-medium text-sm text-cream">Feedback & corrections</Text>
-              <Text className="mt-0.5 font-sans text-[11px] text-muted-light">
+              <Text className="mt-0.5 font-sans text-xs text-muted-light">
                 {feedbackStats && feedbackStats.total > 0
                   ? `${feedbackStats.total} report${feedbackStats.total === 1 ? '' : 's'}${
                       feedbackStats.most_corrected_chords[0]
@@ -815,7 +815,7 @@ export default function SettingsScreen() {
             </Text>
             {spotifyProfile !== null &&
               (spotifyProfile.top_artists.length > 0 || spotifyProfile.top_genres.length > 0) && (
-                <Text className="mt-2 font-sans text-[11px] leading-4 text-muted-light" numberOfLines={4}>
+                <Text className="mt-2 font-sans text-xs leading-4 text-muted-light" numberOfLines={4}>
                   {spotifyProfile.top_artists.slice(0, 5).join(' · ')}
                   {spotifyProfile.top_genres.length > 0
                     ? `\n${spotifyProfile.top_genres.slice(0, 6).join(', ')}`
@@ -905,7 +905,7 @@ export default function SettingsScreen() {
             <BarChart3 color={colors.amber.accent} size={20} strokeWidth={2} />
             <View className="flex-1">
               <Text className="font-sans-medium text-sm text-cream">Practice insights</Text>
-              <Text className="mt-0.5 font-sans text-[11px] text-muted-light">
+              <Text className="mt-0.5 font-sans text-xs text-muted-light">
                 Session consistency, practice time, and top songs
               </Text>
             </View>
@@ -924,7 +924,7 @@ export default function SettingsScreen() {
               {analyticsExportBusy ? 'Preparing export…' : 'Export my data'}
             </Text>
           </AnimatedPressable>
-          <Text className="mt-2 font-sans text-[11px] text-muted-light">
+          <Text className="mt-2 font-sans text-xs text-muted-light">
             {analyticsEventCount === 0
               ? 'No local analytics events yet. Events appear after you practice.'
               : `${analyticsEventCount} local event${analyticsEventCount === 1 ? '' : 's'} stored on this device.`}

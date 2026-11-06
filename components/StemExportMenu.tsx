@@ -108,7 +108,7 @@ function ExportRow({ label, detail, Icon, busy, disabled, onPress }: ExportRowPr
       )}
       <View className="flex-1">
         <Text className="font-sans-medium text-sm text-cream">{label}</Text>
-        <Text className="font-sans text-[11px] text-muted-brown">{detail}</Text>
+        <Text className="font-sans text-xs text-muted-brown">{detail}</Text>
       </View>
     </AnimatedPressable>
   )

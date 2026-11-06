@@ -756,7 +756,7 @@ export default function HomeScreen() {
                   </View>
 
                   <View className="mt-8 w-full">
-                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
+                    <Text className="mb-3 font-sans-medium text-xs uppercase tracking-wider text-muted-brown">
                       Get started
                     </Text>
                     <View className="gap-3">
@@ -787,7 +787,7 @@ export default function HomeScreen() {
                   </View>
 
                   <View className="mt-7 w-full border-t border-wood-600/45 pt-5">
-                    <Text className="mb-3 font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
+                    <Text className="mb-3 font-sans-medium text-xs uppercase tracking-wider text-muted-brown">
                       More ways to begin
                     </Text>
                      <View className="gap-2">
@@ -978,7 +978,7 @@ export default function HomeScreen() {
                 accessibilityLabel="Start daily lick"
               >
                 <View className="p-5">
-                  <Text className="mb-1 font-sans-medium text-[11px] uppercase tracking-wider text-amber-accent/80">
+                  <Text className="mb-1 font-sans-medium text-xs uppercase tracking-wider text-amber-accent/80">
                     Daily Lick
                   </Text>
                   <Text className="mb-2 font-serif text-xl text-cream">{dailyLick.name}</Text>
@@ -1042,9 +1042,9 @@ export default function HomeScreen() {
                      >
                        <View className="flex-1 pr-2">
                          <Text className="font-sans-medium text-[15px] text-cream">{item.title}</Text>
-                         <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{item.focus}</Text>
+                         <Text className="mt-0.5 font-sans text-xs text-muted-brown">{item.focus}</Text>
                        </View>
-                       <Text className="font-sans text-[11px] text-muted-brown">{item.dateLabel}</Text>
+                       <Text className="font-sans text-xs text-muted-brown">{item.dateLabel}</Text>
                      </AnimatedPressable>
                   ))
                 )}

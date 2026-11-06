@@ -422,7 +422,7 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
         />
         {!soundFontReady ? (
           <View className="absolute left-3 right-3 top-3 rounded-lg border border-wood-600/45 bg-wood-800/70 p-3">
-            <Text className="mb-2 font-sans text-[11px] text-cream">Loading instrument sounds...</Text>
+            <Text className="mb-2 font-sans text-xs text-cream">Loading instrument sounds...</Text>
             <LoadingSkeleton height={10} borderRadius={6} />
           </View>
         ) : null}
@@ -431,7 +431,7 @@ export const ScoreViewer = forwardRef<AlphaTabSurfaceRef, ScoreViewerProps>(
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
-            <Text className="text-center font-sans text-[11px] text-wood-600">
+            <Text className="text-center font-sans text-xs text-wood-600">
               MusicXML score not available for this song yet.
             </Text>
           </View>

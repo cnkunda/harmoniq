@@ -101,6 +101,13 @@ export async function runVisualChecks(page: Page): Promise<DeterministicFinding[
     const offPalette = new Map<string, Group>();
     const fontIssues = new Map<string, Group>();
     const contrastIssues = new Map<string, ContrastGroup>();
+    const purpleGradients = new Map<string, Group>();
+    const bigPadding = new Map<string, Group>();
+    const floating = new Map<string, Group>();
+    const smallTapTargets = new Map<string, Group>();
+    const tinyText = new Map<string, Group>();
+    const keyboardRisk = new Map<string, Group>();
+    const rawErrorText: string[] = [];
 
     const add = (
       check: string,
@@ -207,6 +214,71 @@ export async function runVisualChecks(page: Page): Promise<DeterministicFinding[
       });
     };
 
+    // ---- Vibecode-tell helpers -------------------------------------------
+    const isInteractive = (el: Element): boolean => {
+      const tag = el.tagName.toLowerCase();
+      if (tag === "button" || tag === "a") return true;
+      const role = el.getAttribute("role");
+      return role === "button" || role === "link" || role === "tab" || role === "switch" || role === "checkbox";
+    };
+
+    const accessibleName = (el: Element): string =>
+      `${el.getAttribute("aria-label") || ""} ${el.textContent || ""}`.trim().replace(/\s+/g, " ");
+
+    const isTextEntry = (el: Element): boolean => {
+      const tag = el.tagName.toLowerCase();
+      if (tag === "textarea") return true;
+      if (tag !== "input") return false;
+      const type = (el.getAttribute("type") || "text").toLowerCase();
+      return !["checkbox", "radio", "button", "submit", "reset", "hidden", "file", "range", "color"].includes(type);
+    };
+
+    const hasScrollableAncestor = (el: Element): boolean => {
+      let node: Element | null = el.parentElement;
+      while (node) {
+        const s = window.getComputedStyle(node);
+        if ((s.overflowY === "auto" || s.overflowY === "scroll") && node.scrollHeight > node.clientHeight + 4) {
+          return true;
+        }
+        node = node.parentElement;
+      }
+      return document.documentElement.scrollHeight > window.innerHeight + 4;
+    };
+
+    // Purple/magenta hues are the classic AI-generated-app tell. Palette
+    // tokens (e.g. chromatic #9B7DB5) stay allowed; only off-palette purple
+    // gradients/fills are flagged.
+    const isPurple = (c: Rgba): boolean => {
+      const r = c[0] / 255;
+      const g = c[1] / 255;
+      const b = c[2] / 255;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const d = max - min;
+      if (d < 0.08) return false;
+      const l = (max + min) / 2;
+      if (l < 0.12 || l > 0.85) return false;
+      const s = d / (1 - Math.abs(2 * l - 1));
+      if (s < 0.25) return false;
+      let h: number;
+      if (max === r) h = ((g - b) / d) % 6;
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h *= 60;
+      if (h < 0) h += 360;
+      return h >= 250 && h <= 320;
+    };
+
+    const purpleStops = (image: string): string[] => {
+      if (!image || image === "none") return [];
+      const hits: string[] = [];
+      for (const m of image.matchAll(/#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)/g)) {
+        const c = parseCssColor(m[0]);
+        if (c && c[3] > 0 && isPurple(c) && !inPalette(c)) hits.push(m[0]);
+      }
+      return hits;
+    };
+
     const luminance = (c: [number, number, number]): number => {
       const f = (x: number): number => {
         const v = x / 255;
@@ -291,8 +363,12 @@ export async function runVisualChecks(page: Page): Promise<DeterministicFinding[
       );
     }
 
+    const RAW_ERROR_RE =
+      /TypeError|ReferenceError|SyntaxError|is not a function|is not defined|Cannot read propert|undefined is not|Uncaught|Invalid typed array|Failed to fetch|NetworkError|\[object Object\]|\bNaN\b|HTTP 5\d\d|HTTP 4\d\d|stack trace|at \w+ \(http/;
+
     let visibleTextLength = 0;
     let visibleImageCount = 0;
+    let interactiveCount = 0;
 
     for (const el of Array.from(document.querySelectorAll("*"))) {
       const cs = window.getComputedStyle(el);
@@ -339,7 +415,9 @@ export async function runVisualChecks(page: Page): Promise<DeterministicFinding[
       if (directText) {
         visibleTextLength += directText.length;
 
-        if (!allowedFontRe.test(cs.fontFamily)) {
+        // Pure emoji/symbol glyphs render with the platform emoji font —
+        // no design font applies to them.
+        if (/[A-Za-z0-9]/.test(directText) && !allowedFontRe.test(cs.fontFamily)) {
           bump(fontIssues, cs.fontFamily, label(el));
         }
 
@@ -381,6 +459,62 @@ export async function runVisualChecks(page: Page): Promise<DeterministicFinding[
           bump(offPalette, `border ${borderColor.slice(0, 3).join(", ")}`, label(el));
         }
       }
+
+      // ---- Vibecode-tell checks -----------------------------------------
+      const stops = purpleStops(cs.backgroundImage);
+      if (stops.length > 0) {
+        bump(purpleGradients, stops.join(" → "), label(el));
+      }
+
+      const maxPad = Math.max(
+        parseFloat(cs.paddingTop) || 0,
+        parseFloat(cs.paddingBottom) || 0,
+        parseFloat(cs.paddingLeft) || 0,
+        parseFloat(cs.paddingRight) || 0,
+      );
+      if (maxPad >= 64 && directText) {
+        bump(bigPadding, `${Math.round(maxPad)}px`, label(el));
+      }
+
+      if (cs.position === "fixed") {
+        const vw = document.documentElement.clientWidth || window.innerWidth;
+        const vh = window.innerHeight;
+        const anchored = rect.top <= 24 || rect.left <= 24 || rect.right >= vw - 24 || rect.bottom >= vh - 24;
+        const areaRatio = (rect.width * rect.height) / Math.max(1, vw * vh);
+        if (!anchored && areaRatio > 0.03) {
+          bump(floating, `${Math.round(rect.width)}x${Math.round(rect.height)}`, label(el));
+        }
+      }
+
+      const interactive = isInteractive(el);
+      if (interactive) {
+        interactiveCount += 1;
+        const name = accessibleName(el);
+        if (
+          name.length > 0 &&
+          cs.display !== "inline" &&
+          (rect.width < 28 || rect.height < 28) &&
+          rect.width * rect.height < 2400
+        ) {
+          bump(smallTapTargets, `${Math.round(rect.width)}x${Math.round(rect.height)}`, label(el));
+        }
+      }
+
+      if (isTextEntry(el) && !hasScrollableAncestor(el) && rect.bottom > window.innerHeight * 0.55) {
+        bump(keyboardRisk, el.tagName.toLowerCase(), label(el));
+      }
+
+      if (directText) {
+        const size = parseFloat(cs.fontSize) || 16;
+        // Mono text is compact technical chrome (keyboard legends, tabular
+        // numbers) by design; the readability tell targets prose.
+        if (size < 12 && directText.length >= 40 && !/mono/i.test(cs.fontFamily)) {
+          bump(tinyText, `${Math.round(size)}px`, `${label(el)} (${directText.length} chars)`);
+        }
+        if (RAW_ERROR_RE.test(directText)) {
+          rawErrorText.push(directText.replace(/\s+/g, " ").slice(0, 120));
+        }
+      }
     }
 
     if (visibleTextLength === 0 && visibleImageCount === 0) {
@@ -389,6 +523,13 @@ export async function runVisualChecks(page: Page): Promise<DeterministicFinding[
         "Broken / blank screen",
         "error",
         "No visible text or images in the DOM — possible runtime error or blank render",
+      );
+    } else if (visibleTextLength < 20 && visibleImageCount === 0 && interactiveCount === 0) {
+      add(
+        "empty-screen",
+        "Empty screen",
+        "warning",
+        `Only ${visibleTextLength} characters of visible text and no interactive controls — likely an unfinished or empty state`,
       );
     }
 
@@ -422,6 +563,82 @@ export async function runVisualChecks(page: Page): Promise<DeterministicFinding[
     flush(contrastIssues, "contrast", "Contrast / readability", (key, g) =>
       `Text rgb(${key}) — ratio ${(g as ContrastGroup).ratio.toFixed(2)}:1, needs ${(g as ContrastGroup).threshold}:1 — ${g.count} element(s)`,
     );
+    flush(purpleGradients, "purple-gradient", "Purple gradient", (key, g) =>
+      `Off-palette purple gradient stop(s) ${key} on ${g.count} element(s)`,
+    );
+    flush(bigPadding, "excessive-padding", "Excessive padding", (key, g) =>
+      `${key} padding on ${g.count} element(s)`,
+    );
+    flush(floating, "floating-element", "Floating elements", (key, g) =>
+      `Detached fixed-position element ${key} (${g.count})`,
+    );
+    flush(smallTapTargets, "small-tap-target", "Tap target too small", (key, g) =>
+      `${key} tap target on ${g.count} control(s)`,
+    );
+    flush(tinyText, "tiny-text", "Text too small", (key, g) =>
+      `${key} body text on ${g.count} element(s)`,
+    );
+    flush(keyboardRisk, "keyboard-overlap", "Keyboard overlap", (key, g) =>
+      `${key} input without a scrollable ancestor (${g.count})`,
+    );
+    if (rawErrorText.length > 0) {
+      add(
+        "raw-error-text",
+        "Raw error text",
+        "error",
+        `Raw error copy visible to the user — e.g. ${rawErrorText.slice(0, 2).join(" | ")}`,
+      );
+    }
+
+    // Text-scaling probe: grow every direct-text element to 150% and verify the
+    // layout still holds. Catches fixed-height / clipped containers that break
+    // when the user raises the system font size. Always reverted.
+    const scaleTargets: HTMLElement[] = [];
+    for (const el of Array.from(document.querySelectorAll<HTMLElement>("*"))) {
+      if (el instanceof SVGElement) continue;
+      const hasDirectText = Array.from(el.childNodes).some(
+        (n) => n.nodeType === 3 && (n.textContent || "").trim().length > 0,
+      );
+      if (hasDirectText) scaleTargets.push(el);
+    }
+    const savedSizes = scaleTargets.map((el) => el.style.fontSize);
+    const baseOverflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+    try {
+      for (const el of scaleTargets) {
+        const fs = parseFloat(window.getComputedStyle(el).fontSize);
+        if (!Number.isNaN(fs)) el.style.fontSize = `${fs * 1.5}px`;
+      }
+      void document.body.offsetHeight;
+      const scaledOverflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+      const clipped: string[] = [];
+      for (const el of scaleTargets) {
+        const s = window.getComputedStyle(el);
+        if (s.textOverflow === "ellipsis" || s.getPropertyValue("-webkit-line-clamp") !== "none") continue;
+        const clippedX = s.overflowX === "hidden" && el.scrollWidth > el.clientWidth + 4;
+        const clippedY = s.overflowY === "hidden" && el.scrollHeight > el.clientHeight + 4;
+        if (clippedX || clippedY) clipped.push(label(el));
+      }
+      if (scaledOverflow > baseOverflow + 4) {
+        add(
+          "text-scaling",
+          "Text scaling breakage",
+          "warning",
+          `At 150% text size the page overflows horizontally by ${scaledOverflow}px (was ${baseOverflow}px)`,
+        );
+      }
+      if (clipped.length > 0) {
+        add(
+          "text-scaling",
+          "Text scaling breakage",
+          "warning",
+          `At 150% text size ${clipped.length} clipped text container(s) — e.g. ${clipped.slice(0, 3).join(", ")}`,
+        );
+      }
+    } finally {
+      scaleTargets.forEach((el, i) => {
+        el.style.fontSize = savedSizes[i];
+      });
+    }
 
     return out;
   }, palette);

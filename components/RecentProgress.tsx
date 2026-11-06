@@ -133,7 +133,7 @@ export function RecentProgress({
           </Svg>
           <View className="mt-1 flex-row justify-between px-1">
             {points.map((p, i) => (
-              <Text key={`${i}-${p}`} className="font-sans text-[11px] text-muted-brown">
+              <Text key={`${i}-${p}`} className="font-sans text-xs text-muted-brown">
                 {(p * 100).toFixed(0)}%
               </Text>
             ))}
@@ -155,9 +155,9 @@ export function RecentProgress({
             >
               <View className="flex-1 pr-2">
                 <Text className="font-sans-medium text-[15px] text-cream">{sessionCardTitle(s)}</Text>
-                <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">{sessionCardSubtitle(s)}</Text>
+                <Text className="mt-0.5 font-sans text-xs text-muted-brown">{sessionCardSubtitle(s)}</Text>
               </View>
-              <Text className="font-sans text-[11px] text-muted-brown">{relativeDateLabel(s.date)}</Text>
+              <Text className="font-sans text-xs text-muted-brown">{relativeDateLabel(s.date)}</Text>
             </AnimatedPressable>
           ))}
         </View>

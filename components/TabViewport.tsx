@@ -90,7 +90,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
           key={v}
           haptic="none"
           onPress={() => onTabVariantChange?.(v)}
-          className={`rounded-full border px-2.5 py-1 ${active ? pillActiveBase : pillBase}`}
+          className={`rounded-full border px-2.5 py-1.5 ${active ? pillActiveBase : pillBase}`}
           accessibilityRole="button"
         >
           <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${active ? 'text-wood-900' : mutedTextColor}`}>{label}</Text>
@@ -111,7 +111,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
                 </Text>
               )}
               {displayArtist && (
-                <Text className={`font-sans text-[11px] leading-tight ${mutedTextColor}`} numberOfLines={1}>
+                <Text className={`font-sans text-xs leading-tight ${mutedTextColor}`} numberOfLines={1}>
                   {displayArtist}
                 </Text>
               )}
@@ -131,7 +131,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
                 <AnimatedPressable
                   haptic="none"
                   onPress={handleShowLyricsToggle}
-                  className={`rounded-full border px-2.5 py-1 ${showLyrics ? pillActiveBase : pillBase}`}
+                  className={`rounded-full border px-2.5 py-1.5 ${showLyrics ? pillActiveBase : pillBase}`}
                   accessibilityRole="button"
                 >
                   <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${showLyrics ? 'text-wood-900' : mutedTextColor}`}>Lyrics</Text>
@@ -141,7 +141,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
                 <AnimatedPressable
                   haptic="light"
                   onPress={onSeekToStart}
-                  className={`rounded-full border px-2.5 py-1 ${pillBase}`}
+                  className={`rounded-full border px-2.5 py-1.5 ${pillBase}`}
                   accessibilityRole="button"
                 >
                   <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${mutedTextColor}`}>⏮ Start</Text>

@@ -237,11 +237,11 @@ export default function ProgressScreen() {
                                 </Text>
                               ) : null}
                               {summaryBundle.vocabulary_patterns.length > 0 ? (
-                                <Text className="mt-1.5 font-sans text-[11px] text-muted-light/80">
+                                <Text className="mt-1.5 font-sans text-xs text-muted-light/80">
                                   Patterns: {summaryBundle.vocabulary_patterns.map((p) => p.description).join('; ')}
                                 </Text>
                               ) : null}
-                              <Text className="mt-1 font-sans text-[11px] text-muted-light/60">
+                              <Text className="mt-1 font-sans text-xs text-muted-light/60">
                                 {summaryBundle.phrase_count} phrases · {summaryBundle.total_notes} notes · diversity{' '}
                                 {(summaryBundle.vocabulary_diversity * 100).toFixed(0)}%
                               </Text>

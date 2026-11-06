@@ -247,7 +247,7 @@ export default function JamHistoryScreen() {
                           </Text>
                         ) : null}
                         <Text
-                          className={`font-sans text-[11px] ${
+                          className={`font-sans text-xs ${
                             status === 'failed' ? 'text-danger' : 'text-muted-light'
                           }`}
                         >

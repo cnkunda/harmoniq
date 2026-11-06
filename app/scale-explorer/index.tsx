@@ -316,13 +316,14 @@ export default function ScaleExplorerScreen() {
                         {entry.name}
                       </Text>
                       {entry.aliases.length > 0 && (
-                        <Text className="mt-0.5 font-sans text-[11px] text-muted-brown">
+                        <Text className="mt-0.5 font-sans text-xs text-muted-brown">
                           {entry.aliases.join(', ')}
                         </Text>
                       )}
                     </View>
                     <AnimatedPressable
-                      onPress={() => {
+                      onPress={(e) => {
+                        e.stopPropagation()
                         if (isFav) {
                           void removeFavorite(dbKey, selectedRoot).then(() => {
                             setFavorites((prev) =>

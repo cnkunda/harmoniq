@@ -31,17 +31,17 @@ export function DiscoveryCard({ suggestion, onAnalyze }: DiscoveryCardProps) {
           <View className="mt-2 flex-row flex-wrap gap-2">
             {suggestion.key && (
               <View className="rounded-full bg-wood-700 px-2 py-0.5">
-                <Text className="font-sans text-[11px] font-medium text-cream/90">{suggestion.key}</Text>
+                <Text className="font-sans text-xs font-medium text-cream/90">{suggestion.key}</Text>
               </View>
             )}
             {suggestion.style_label && (
               <View className="rounded-full bg-wood-700 px-2 py-0.5">
-                <Text className="font-sans text-[11px] font-medium text-cream/90">{suggestion.style_label}</Text>
+                <Text className="font-sans text-xs font-medium text-cream/90">{suggestion.style_label}</Text>
               </View>
             )}
             {suggestion.tempo && (
               <View className="rounded-full bg-wood-700 px-2 py-0.5">
-                <Text className="font-sans text-[11px] font-medium text-cream/90">{Math.round(suggestion.tempo)} BPM</Text>
+                <Text className="font-sans text-xs font-medium text-cream/90">{Math.round(suggestion.tempo)} BPM</Text>
               </View>
             )}
           </View>

@@ -26,7 +26,7 @@
  * containers, and full-page captures can race to blank.
  */
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import os from "node:os";
@@ -41,6 +41,7 @@ const REPORT_PATH = path.join(OUTPUT_DIR, "ui-feedback-report.json");
 const STATE_PATH = path.join(OUTPUT_DIR, "ux-improve-state.json");
 const WAIVERS_PATH = path.join(OUTPUT_DIR, "ux-waivers.json");
 const FIXED_MARKER = path.join(OUTPUT_DIR, ".ux-loop-complete");
+const GUARD_REPORT_PATH = path.join(OUTPUT_DIR, "ux-guard-report.json");
 
 // Passed unquoted as trailing words to the vision proxy — must contain no
 // shell metacharacters (cmd.exe and /bin/sh both see it). Moondream emits an
@@ -76,6 +77,19 @@ const ISSUE_SLUGS = {
   "Color mismatch": "color-mismatch",
   "Typography": "typography",
   "Other visual defect": "other",
+  "Purple gradient": "purple-gradient",
+  "Excessive padding": "excessive-padding",
+  "Floating elements": "floating-element",
+  "Keyboard overlap": "keyboard-overlap",
+  "Tap target too small": "small-tap-target",
+  "Missing caching": "missing-caching",
+  "Text too small": "tiny-text",
+  "Double activation": "double-activation",
+  "Empty screen": "empty-screen",
+  "Text scaling breakage": "text-scaling",
+  "Raw error text": "raw-error-text",
+  "Missing tap feedback": "tap-feedback",
+  "Preferences not persisted": "preferences-wiped",
 };
 
 // Maps a defect sentence to the canonical gap taxonomy.
@@ -121,6 +135,58 @@ const FIX_GUIDANCE = {
     approach: "Inspect the screenshot and route source; apply a cosmetic fix with existing tokens and components.",
     allowed: "cosmetic only",
   },
+  "Purple gradient": {
+    approach: "Replace the off-palette purple gradient with a wood/amber token from the palette.",
+    allowed: "color tokens from src/constants/colors.ts only",
+  },
+  "Excessive padding": {
+    approach: "Reduce the oversized padding to the app's spacing scale (p-4/p-6), keeping the layout intact.",
+    allowed: "spacing props only",
+  },
+  "Floating elements": {
+    approach: "Anchor the detached fixed element (edge alignment) or convert it into normal flow content.",
+    allowed: "layout/positioning props only",
+  },
+  "Keyboard overlap": {
+    approach: "Put the form inside a scrollable container or replace the fixed height with flex so the focused input can scroll above the keyboard.",
+    allowed: "layout props only",
+  },
+  "Tap target too small": {
+    approach: "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+    allowed: "padding/size props only",
+  },
+  "Missing caching": {
+    approach: "Cache the repeated request (React Query/SWR or a module-level memo). This is usually a functional change — log it if so.",
+    allowed: "styling only; caching is functional",
+  },
+  "Text too small": {
+    approach: "Bump long body copy from 9-11px to text-xs/text-sm; short mono labels may stay small.",
+    allowed: "font-size class swap only",
+  },
+  "Double activation": {
+    approach: "Remove the nested interactive wrapper so one tap fires one handler (e.g. move the child button outside the pressable card).",
+    allowed: "structure/cosmetic; report if behavior would change",
+  },
+  "Empty screen": {
+    approach: "Add an empty-state message/illustration or fix the render path that leaves the screen bare.",
+    allowed: "cosmetic only; report if data is missing",
+  },
+  "Text scaling breakage": {
+    approach: "Replace fixed heights/overflow-hidden on text containers with flex and min-height so text can grow.",
+    allowed: "layout props only",
+  },
+  "Raw error text": {
+    approach: "Replace the raw exception copy with a friendly message and keep the technical detail in console logging.",
+    allowed: "copy/UI text only; no logic changes",
+  },
+  "Missing tap feedback": {
+    approach: "Use AnimatedPressable from components/AnimatedPressable.tsx (scale spring on press) instead of a bare Pressable.",
+    allowed: "component swap only",
+  },
+  "Preferences not persisted": {
+    approach: "Stop clearing storage on mount/migration; preserve existing keys. Usually functional — log if so.",
+    allowed: "styling only; persistence is functional",
+  },
 };
 
 const args = new Set(process.argv.slice(2));
@@ -156,7 +222,13 @@ function runPlaywrightCapture() {
   console.log("[loop] Capturing route screenshots via Playwright...");
   // UX_AUDIT_SEED mocks the API and seeds IndexedDB so routes render
   // representative content without the FastAPI backend, deterministically.
-  execSync("npx playwright test --config=playwright.config.ts tests/ui/route-capture.spec.ts", {
+  // UX_AUDIT_ROUTE_GREP narrows the run to matching routes (test title
+  // contains "capture route artifacts: <route>"). A superset is captured —
+  // Playwright --grep is substring matching — which only costs time, never
+  // correctness, for the guard.
+  const grep = process.env.UX_AUDIT_ROUTE_GREP || "";
+  const grepArgs = grep ? ` --grep "${grep.replace(/"/g, "")}"` : "";
+  execSync(`npx playwright test --config=playwright.config.ts tests/ui/route-capture.spec.ts${grepArgs}`, {
     cwd: ROOT_DIR,
     stdio: "inherit",
     // 30min: the 30-route serial crawl takes ~17min on a loaded machine
@@ -440,6 +512,188 @@ function previousGapIds() {
   }
 }
 
+// ---- Pre-commit guard (changed routes only, deterministic checks, no vision) ----
+
+function knownRoutePaths() {
+  const src = readFileSync(path.join(ROOT_DIR, "tests", "routes.ts"), "utf-8");
+  const paths = new Set();
+  for (const m of src.matchAll(/path:\s*"([^"]+)"/g)) paths.add(m[1]);
+  // Mirror tests/routes.ts FS discovery: auto routes exist for every screen
+  // file, minus dynamic segments and framework files.
+  const appDir = path.join(ROOT_DIR, "app");
+  const walkApp = (dir, rel) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.isDirectory()) { walkApp(path.join(dir, e.name), [...rel, e.name]); continue; }
+      if (!/\.(tsx|ts)$/.test(e.name)) continue;
+      const base = e.name.replace(/\.(tsx|ts)$/, "");
+      if (/^_/.test(base) || /^\+/.test(base) || base.endsWith(".d")) continue;
+      const segments = rel
+        .filter((s) => !s.startsWith("("))
+        .filter((s) => !s.startsWith("["));
+      if (base === "index") {
+        paths.add(segments.length ? `/${segments.join("/")}` : "/");
+      } else {
+        paths.add(`/${[...segments, base].join("/")}`);
+      }
+    }
+  };
+  walkApp(appDir, []);
+  return Array.from(paths);
+}
+
+/** Map an app/ screen file to the concrete crawl routes that render it. */
+function appFileToRouteCandidates(absFile) {
+  const appDir = path.join(ROOT_DIR, "app");
+  if (!absFile.startsWith(appDir + path.sep)) return [];
+  const base = path.basename(absFile);
+  if (/^_layout\.|^_template\.|^\+html\.|^\+api\.|^\+not-found\.|^\+error-boundary\./.test(base)) return [];
+  let rel = absFile.slice(appDir.length + 1).split(path.sep).join("/");
+  rel = rel.replace(/\.(tsx|ts|jsx|js)$/, "");
+  const isIndex = rel.endsWith("/index") || rel === "index";
+  const segments = (isIndex ? rel.split("/").slice(0, -1) : rel.split("/"))
+    .filter((s) => s && !s.startsWith("("));
+  return knownRoutePaths().filter((routePath) => {
+    const rs = routePath.replace(/^\//, "").split("/").filter(Boolean);
+    if (rs.length !== segments.length) return false;
+    if (rs.length === 0) return segments.length === 0;
+    return rs.every((seg, i) => seg === segments[i] || segments[i].startsWith("["));
+  });
+}
+
+/**
+ * Map changed source files to crawl routes. app/ screen files map directly;
+ * shared component/module files map via app/ screens that reference them.
+ * Returns null when changes are broad or unidentifiable (→ check all routes).
+ */
+function changedRouteSet() {
+  let files;
+  try {
+    files = execSync("git diff --name-only HEAD", { cwd: ROOT_DIR, encoding: "utf-8" })
+      .split(/\r?\n/).filter(Boolean);
+  } catch {
+    return null;
+  }
+  const codeFiles = files.filter((f) => /\.(tsx?|jsx?)$/.test(f) && !/^tests\//.test(f));
+  if (codeFiles.length === 0) return { routes: [], broad: false };
+
+  const appDir = path.join(ROOT_DIR, "app");
+  const allScreens = [];
+  const walkApp = (dir) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkApp(p);
+      else if (/\.(tsx|ts)$/.test(e.name)) allScreens.push(p);
+    }
+  };
+  walkApp(appDir);
+  const screenTexts = new Map(allScreens.map((f) => [f, readFileSync(f, "utf-8")]));
+
+  const routes = new Set();
+  let unmapped = false;
+  for (const rel of codeFiles) {
+    const abs = path.resolve(ROOT_DIR, rel);
+    const direct = appFileToRouteCandidates(abs);
+    if (direct.length > 0) {
+      for (const r of direct) routes.add(r);
+      continue;
+    }
+    if (abs.startsWith(appDir + path.sep)) continue; // non-route app file (layouts etc.)
+    const base = path.basename(abs).replace(/\.(tsx|ts)$/, "");
+    if (!/^[A-Za-z][A-Za-z0-9]+$/.test(base)) { unmapped = true; break; }
+    let referenced = false;
+    for (const [screen, text] of screenTexts) {
+      if (new RegExp(`\\b${base}\\b`).test(text)) {
+        referenced = true;
+        for (const r of appFileToRouteCandidates(screen)) routes.add(r);
+      }
+    }
+    if (!referenced) { unmapped = true; break; }
+  }
+  if (unmapped) return null;
+  return { routes: Array.from(routes), broad: false };
+}
+
+/** Pre-commit guard: checks-only for the routes affected by the working tree. */
+async function guardRun() {
+  const selection = changedRouteSet();
+  if (selection === null) {
+    console.log("[guard] Broad or unresolvable change — checking all routes.");
+    process.env.UX_AUDIT_ROUTE_GREP = "";
+  } else if (selection.routes.length === 0) {
+    console.log("[guard] No routes affected by the current changes — nothing to check.");
+    process.exit(0);
+  } else {
+    const pattern = `(${selection.routes.map((r) => r.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`;
+    process.env.UX_AUDIT_ROUTE_GREP = `capture route artifacts: ${pattern}`;
+    console.log(`[guard] Routes affected by the current changes: ${selection.routes.join(", ")}`);
+  }
+
+  const hadManifest = existsSync(CAPTURE_MANIFEST);
+  const manifestBackup = hadManifest ? readFileSync(CAPTURE_MANIFEST, "utf-8") : null;
+  const summary = { status: "clean", routesAnalyzed: 0, totalGaps: 0, gaps: [], reportPath: GUARD_REPORT_PATH };
+  let failMessage = null;
+  let exitCode = 0;
+  try {
+    runPlaywrightCapture();
+    if (!existsSync(CAPTURE_MANIFEST)) throw new Error("capture produced no manifest");
+    const entries = JSON.parse(readFileSync(CAPTURE_MANIFEST, "utf-8"));
+
+    const waivers = loadWaivers();
+    const allGaps = [];
+    const routeAnalyses = [];
+    for (const entry of entries) {
+      const analysis = {
+        route: entry.route,
+        viewport: null,
+        states: {},
+        deterministicFindings: entry.deterministicFindings || [],
+        analyzedAt: new Date().toISOString(),
+        visionSkipped: true,
+      };
+      const gaps = deriveGaps(analysis).filter((g) => !waivers[g.id]);
+      if (gaps.length > 0) allGaps.push({ route: entry.route, gaps });
+      routeAnalyses.push({ route: entry.route, gaps, deterministicFindings: analysis.deterministicFindings });
+    }
+
+    const report = {
+      schemaVersion: 2,
+      mode: "guard",
+      generatedAt: new Date().toISOString(),
+      routesAnalyzed: entries.length,
+      totalUiGapsFound: allGaps.flatMap((r) => r.gaps).length,
+      note: "Pre-commit guard: deterministic DOM checks only (no vision analysis). Full-loop results live in ui-feedback-report.json.",
+      allGapsByRoute: allGaps,
+      routes: routeAnalyses,
+    };
+    ensure(OUTPUT_DIR);
+    writeFileSync(GUARD_REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, "utf-8");
+
+    summary.routesAnalyzed = entries.length;
+    summary.totalGaps = report.totalUiGapsFound;
+    summary.gaps = allGaps;
+    if (report.totalUiGapsFound > 0) {
+      summary.status = "needs_fixes";
+      exitCode = 1;
+    }
+  } catch (err) {
+    failMessage = err.message;
+  } finally {
+    // A guard capture rewrites the shared manifest with only the guarded routes —
+    // restore the full-loop manifest so a later full run starts from the whole set.
+    if (manifestBackup !== null) writeFileSync(CAPTURE_MANIFEST, manifestBackup, "utf-8");
+  }
+  if (failMessage) {
+    console.error("[guard] Failed:", failMessage);
+    process.exit(2);
+  }
+  console.log(JSON.stringify(summary, null, 2));
+  process.exit(exitCode);
+}
+
 function handleWaiveFlag() {
   const argv = process.argv.slice(2);
   const waiveIdx = argv.indexOf("--waive");
@@ -461,6 +715,12 @@ function handleWaiveFlag() {
 async function run() {
   handleWaiveFlag();
 
+  const isGuard = args.has("--guard");
+  if (isGuard) {
+    await guardRun();
+    return;
+  }
+
   const isVerify = args.has("--verify");
   const isAnalyzeOnly = args.has("--analyze-only");
   const skipServer = args.has("--skip-server");
@@ -472,6 +732,8 @@ async function run() {
 Usage:
   npm run ux:improve                      Fresh capture + deterministic checks + vision analysis
   npm run ux:verify                       Post-fix verification: fresh capture + full analysis
+  npm run ux:guard                        Pre-commit guard: deterministic checks on changed routes only
+                                          (maps "git diff" files to routes; broad changes check all routes)
   node scripts/audit/ux-improve-loop.mjs --analyze-only   Re-analyze existing screenshots (no capture)
   node scripts/audit/ux-improve-loop.mjs --waive "<route>::<gapId>" --reason "..."  Persist a waiver
   npm run ux:improve -- --skip-server     Skip web server check (attach to running one)
@@ -612,4 +874,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   });
 }
 
-export { parseVisionVerdict, deriveGaps, gapId, VISION_PROMPT };
+export { parseVisionVerdict, deriveGaps, gapId, VISION_PROMPT, knownRoutePaths, appFileToRouteCandidates, changedRouteSet };

@@ -74,13 +74,26 @@ function findHits(pattern: RegExp, code: string): string[] {
   return hits
 }
 
+// The repo walk + read + comment strip is the expensive part — computed once
+// and shared by all four assertions (the scan alone ran ~40s+ under load).
+type ScannedFile = { abs: string; rel: string; stripped: string }
+let scanned: ScannedFile[] | null = null
+function scanRepo(): ScannedFile[] {
+  if (scanned) return scanned
+  scanned = walkTsFiles(REPO_ROOT, []).map((abs) => ({
+    abs,
+    rel: toRepoPath(abs),
+    stripped: stripComments(readFileSync(abs, 'utf8')),
+  }))
+  return scanned
+}
+
 describe('designTokenConformance (Commit 154)', () => {
   it('has zero hex color literals outside the palette source', () => {
     const offenders: string[] = []
-    for (const abs of walkTsFiles(REPO_ROOT, [])) {
-      const rel = toRepoPath(abs)
+    for (const { rel, stripped } of scanRepo()) {
       if (rel === COLOR_SOURCE) continue
-      const hits = findHits(HEX_PATTERN, stripComments(readFileSync(abs, 'utf8')))
+      const hits = findHits(HEX_PATTERN, stripped)
       if (hits.length > 0) offenders.push(`${rel}: ${hits.join(', ')}`)
     }
     expect(offenders).toEqual([])
@@ -88,10 +101,9 @@ describe('designTokenConformance (Commit 154)', () => {
 
   it('has zero functional-notation color literals outside the palette source', () => {
     const offenders: string[] = []
-    for (const abs of walkTsFiles(REPO_ROOT, [])) {
-      const rel = toRepoPath(abs)
+    for (const { rel, stripped } of scanRepo()) {
       if (rel === COLOR_SOURCE) continue
-      const hits = findHits(RGB_FUNCTION_PATTERN, stripComments(readFileSync(abs, 'utf8')))
+      const hits = findHits(RGB_FUNCTION_PATTERN, stripped)
       if (hits.length > 0) offenders.push(`${rel}: ${hits.join(', ')}`)
     }
     expect(offenders).toEqual([])
@@ -99,10 +111,9 @@ describe('designTokenConformance (Commit 154)', () => {
 
   it('imports expo-linear-gradient only in the wrapper and the interop registration', () => {
     const offenders: string[] = []
-    for (const abs of walkTsFiles(REPO_ROOT, [])) {
-      const rel = toRepoPath(abs)
+    for (const { rel, stripped } of scanRepo()) {
       if (rel === GRADIENT_WRAPPER || rel === GRADIENT_INTEROP) continue
-      const hits = findHits(GRADIENT_IMPORT_PATTERN, stripComments(readFileSync(abs, 'utf8')))
+      const hits = findHits(GRADIENT_IMPORT_PATTERN, stripped)
       if (hits.length > 0) offenders.push(rel)
     }
     expect(offenders).toEqual([])
@@ -110,9 +121,8 @@ describe('designTokenConformance (Commit 154)', () => {
 
   it('has zero StyleSheet.create calls', () => {
     const offenders: string[] = []
-    for (const abs of walkTsFiles(REPO_ROOT, [])) {
-      const rel = toRepoPath(abs)
-      const hits = findHits(STYLESHEET_CREATE_PATTERN, stripComments(readFileSync(abs, 'utf8')))
+    for (const { rel, stripped } of scanRepo()) {
+      const hits = findHits(STYLESHEET_CREATE_PATTERN, stripped)
       if (hits.length > 0) offenders.push(rel)
     }
     expect(offenders).toEqual([])

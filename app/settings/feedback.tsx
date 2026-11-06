@@ -360,7 +360,7 @@ export default function FeedbackDashboardScreen() {
                     {lessonTitles.get(job.jobId)?.trim() || 'Analyzed song'}
                   </Text>
                   <Text className="mt-0.5 font-mono text-[10px] text-muted-light">{job.jobId}</Text>
-                  <Text className="mt-1 font-sans text-[11px] text-muted-light">
+                  <Text className="mt-1 font-sans text-xs text-muted-light">
                     {job.total} report{job.total === 1 ? '' : 's'} · {job.chord} chord · {job.note} note ·{' '}
                     {job.wrong} flagged
                   </Text>
@@ -375,7 +375,7 @@ export default function FeedbackDashboardScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Export chord feedback for ${job.jobId}`}
                 >
-                  <Text className="text-center font-sans-medium text-[11px] text-cream">
+                  <Text className="text-center font-sans-medium text-xs text-cream">
                     {exporting === `${job.jobId}:chord` ? 'Exporting…' : 'Export chords'}
                   </Text>
                 </AnimatedPressable>
@@ -386,7 +386,7 @@ export default function FeedbackDashboardScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Export solo feedback for ${job.jobId}`}
                 >
-                  <Text className="text-center font-sans-medium text-[11px] text-cream">
+                  <Text className="text-center font-sans-medium text-xs text-cream">
                     {exporting === `${job.jobId}:solo` ? 'Exporting…' : 'Export solo'}
                   </Text>
                 </AnimatedPressable>
@@ -399,7 +399,7 @@ export default function FeedbackDashboardScreen() {
                     className="flex-row items-center gap-3 rounded-xl border border-wood-600/35 bg-wood-900/40 p-3"
                   >
                     <View className="flex-1">
-                      <Text className="font-sans-medium text-[11px] text-amber-light">
+                      <Text className="font-sans-medium text-xs text-amber-light">
                         {FEEDBACK_TYPE_LABELS[row.feedback_type]} · event {row.event_index + 1}
                       </Text>
                       <Text className="mt-1 font-mono text-xs text-cream">{formatEventValue(row)}</Text>

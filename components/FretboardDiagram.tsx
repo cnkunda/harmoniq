@@ -637,7 +637,7 @@ export function FretboardDiagram({
             <Text className="font-sans text-base font-semibold text-cream">{keyLabel}</Text>
             {capoText ? (
               <Pill variant="accent" size="xs" className="px-2 py-0.5">
-                <Text className="font-sans-medium text-[10px] text-amber-light">{capoText}</Text>
+                <Text className="font-sans-medium text-xs text-amber-light">{capoText}</Text>
               </Pill>
             ) : null}
             {voicingLabel ? (

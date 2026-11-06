@@ -53,13 +53,13 @@ function SkillMovement({ deltas }: { deltas: MentorSkillDelta[] }) {
   if (deltas.length === 0) return null
   return (
     <View className="mt-4">
-      <Text className="mb-2 font-sans-medium text-[11px] uppercase tracking-wider text-muted-light">
+      <Text className="mb-2 font-sans-medium text-xs uppercase tracking-wider text-muted-light">
         Skill movement
       </Text>
       <View className="flex-row flex-wrap gap-2">
         {deltas.map((delta) => (
           <View key={delta.id} className="rounded-lg border border-wood-700/50 bg-wood-900/30 px-3 py-2">
-            <Text className="font-sans text-[11px] text-muted-light">{delta.label}</Text>
+            <Text className="font-sans text-xs text-muted-light">{delta.label}</Text>
             <Text className={`mt-0.5 font-sans-medium text-sm ${deltaClass(delta.delta)}`}>
               {formatDelta(delta.delta)}
             </Text>
@@ -251,7 +251,7 @@ function MentorNoteBody({
 
       {note.plateau_diagnosis ? (
         <View className="mt-4 rounded-lg border border-amber-accent/25 bg-amber-accent/5 px-3 py-3">
-          <Text className="font-sans-medium text-[11px] uppercase tracking-wider text-amber-light">Plateau read</Text>
+          <Text className="font-sans-medium text-xs uppercase tracking-wider text-amber-light">Plateau read</Text>
           <Text className="mt-1 font-sans text-xs leading-5 text-cream/85">{note.plateau_diagnosis}</Text>
         </View>
       ) : null}
@@ -352,7 +352,7 @@ function MentorNoteBody({
                   </Pill>
                   <Text className="flex-1 font-sans-medium text-sm text-cream">{item.title}</Text>
                 </View>
-                <Text className="mt-1 font-sans text-[11px] uppercase tracking-wider text-amber-light/80">
+                <Text className="mt-1 font-sans text-xs uppercase tracking-wider text-amber-light/80">
                   {item.skill_focus.replace(/_/g, ' ')}
                 </Text>
                 <Text className="mt-1 font-sans text-xs leading-5 text-cream/75">{item.why}</Text>
@@ -363,7 +363,7 @@ function MentorNoteBody({
       ) : null}
 
       <View className="mt-6 flex-row flex-wrap items-center justify-between gap-3 border-t border-wood-700/50 pt-4">
-        <Text className="flex-1 font-sans text-[11px] leading-4 text-muted-light">
+        <Text className="flex-1 font-sans text-xs leading-4 text-muted-light">
           Proposals only — nothing changes automatically.
         </Text>
         <Button

@@ -806,17 +806,17 @@ export default function ReviewScreen() {
       ) : null}
 
       {!sectionMidiBase64 && (tabs.full || tabs.skeleton || tabs.alt) ? (
-        <Text className="mt-2 font-sans text-[11px] text-muted-brown">
+        <Text className="mt-2 font-sans text-xs text-muted-brown">
           Using generated fallback MIDI for export (section has no `midi_base64` yet).
         </Text>
       ) : null}
 
       {__DEV__ ? (
         <>
-          <Text className="mt-3 font-sans text-[11px] text-muted-brown">
+          <Text className="mt-3 font-sans text-xs text-muted-brown">
             Recording buffer: {latestTake ? `${(latestTake.durationMs / 1000).toFixed(1)}s / ${latestTake.audioBytes.length} bytes` : 'none'}
           </Text>
-          <Text className="mt-1 font-sans text-[11px] text-muted-brown">
+          <Text className="mt-1 font-sans text-xs text-muted-brown">
             Persisted sessions: {sessionCount ?? '...'}
           </Text>
         </>

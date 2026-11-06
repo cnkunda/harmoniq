@@ -16,7 +16,7 @@ export function SettingsSwitch({ label, description, value, onValueChange }: Set
       <View className="flex-1 pr-2">
         <Text className="font-sans-medium text-sm text-cream">{label}</Text>
         {description && (
-          <Text className="mt-1 font-sans text-[11px] text-muted-light leading-relaxed">{description}</Text>
+          <Text className="mt-1 font-sans text-xs text-muted-light leading-relaxed">{description}</Text>
         )}
       </View>
       <ThemedSwitch

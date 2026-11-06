@@ -107,7 +107,7 @@ export function ChordMasteryHeatmap({ heatmap }: ChordMasteryHeatmapProps) {
         </Text>
       </View>
 
-      <Text className="mt-3 font-sans text-[10px] leading-4 text-muted-light/85">
+      <Text className="mt-3 font-sans text-xs leading-4 text-muted-light/85">
         Estimated from session accuracy on songs that contain each chord, then reduced by chord
         corrections. Not a note-by-note hit rate.
       </Text>

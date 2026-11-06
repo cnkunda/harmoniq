@@ -495,7 +495,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
         />
         {!soundFontReady ? (
           <View className="absolute left-3 right-3 top-3 rounded-lg border border-wood-600/45 bg-wood-800/70 p-3">
-            <Text className="mb-2 font-sans text-[11px] text-cream">Loading instrument sounds…</Text>
+            <Text className="mb-2 font-sans text-xs text-cream">Loading instrument sounds…</Text>
             <LoadingSkeleton height={10} borderRadius={6} />
           </View>
         ) : null}
@@ -504,7 +504,7 @@ export const AlphaTabWebView = forwardRef<AlphaTabSurfaceRef, AlphaTabWebViewPro
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
-            <Text className="text-center font-sans text-[11px] text-muted-brown">
+            <Text className="text-center font-sans text-xs text-muted-brown">
               {
                 "Score isn't available for this song yet. Try analyzing a song or another tab variant."
               }

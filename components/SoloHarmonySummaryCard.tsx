@@ -30,7 +30,7 @@ export function SoloHarmonySummaryCard({ harmonized }: { harmonized: HarmonizedS
           </View>
         ))}
       </View>
-      <Text className="mt-2 font-sans text-[11px] text-muted-brown">
+      <Text className="mt-2 font-sans text-xs text-muted-brown">
         Note roles in the reference solo — from the transcription, not your take.
       </Text>
     </View>

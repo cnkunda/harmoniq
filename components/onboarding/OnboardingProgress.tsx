@@ -35,7 +35,7 @@ export function OnboardingProgress({ totalSteps, currentStep }: OnboardingProgre
           )
         })}
       </View>
-      <Text className="text-right font-sans text-[11px] tracking-wide text-cream/70">
+      <Text className="text-right font-sans text-xs tracking-wide text-cream/70">
         {active} / {safeTotal}
       </Text>
     </View>

@@ -62,7 +62,7 @@ export function GhostPlayerControl({
           </Text>
         </AnimatedPressable>
       </View>
-      <Text className="mt-2 font-sans text-[11px] leading-snug text-muted-light">{subtitle}</Text>
+      <Text className="mt-2 font-sans text-xs leading-snug text-muted-light">{subtitle}</Text>
     </View>
   )
 }

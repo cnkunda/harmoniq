@@ -197,14 +197,14 @@ export function PhrasingWaveformVisualizer({ score, ghostRow, beatGrid, playback
         </Svg>
         {!hasAny ? (
           <View className="absolute inset-0 items-center justify-center px-2">
-            <Text className="text-center font-sans text-[11px] text-wood-600">
+            <Text className="text-center font-sans text-xs text-wood-600">
               Run score to plot reference vs your take. Ghost (faint amber) appears when a ghost reference exists for this
               section.
             </Text>
           </View>
         ) : null}
       </View>
-      <Text className="mt-2 font-sans text-[11px] text-wood-600">
+      <Text className="mt-2 font-sans text-xs text-wood-600">
         Terracotta = your take · cream = reference guide · faint amber = ghost self. {ghostErr ? ` ${ghostErr}` : ''}
       </Text>
     </View>

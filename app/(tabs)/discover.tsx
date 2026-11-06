@@ -386,7 +386,7 @@ export default function DiscoverScreen() {
             fullWidth
             className="mt-4"
           />
-          <Text className="mt-2 font-sans text-[11px] text-cream/60">
+          <Text className="mt-2 font-sans text-xs text-cream/60">
             This opens Spotify search for the selected song. Harmoniq never starts/stops Spotify playback.
           </Text>
           {playbackState ? (

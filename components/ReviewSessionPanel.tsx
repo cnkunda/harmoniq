@@ -19,7 +19,7 @@ export function PhrasingVisualizerStub() {
         <View className="absolute left-2 right-4 top-14 h-1 rounded-full bg-amber-accent/85" />
         <View className="absolute left-4 right-10 top-22 h-1 rounded-full bg-danger/70" />
       </View>
-      <Text className="mt-2 font-sans text-[11px] text-wood-700">
+      <Text className="mt-2 font-sans text-xs text-wood-700">
         Terracotta = your take, amber = reference guide. Beat lines are static until the live phrasing overlay is wired up.
       </Text>
     </View>

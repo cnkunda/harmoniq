@@ -40,7 +40,7 @@ export const SESSION_CARD_CLASS =
  * Non-interactive pill tokens (status labels, tags, metadata).
  * Interactive choice chips live above as `CHOICE_CHIP_*`.
  */
-export const PILL_BASE = 'flex-row items-center gap-1.5 rounded-full border px-2.5 py-1'
+export const PILL_BASE = 'flex-row items-center gap-1.5 rounded-full border px-2.5 py-1.5'
 export const PILL_NEUTRAL = 'border-hairline bg-wood-800/55'
 export const PILL_ACCENT = 'border-amber-accent/45 bg-amber-accent/15'
 export const PILL_SUCCESS = 'border-success/45 bg-success/15'

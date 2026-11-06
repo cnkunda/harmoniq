@@ -254,7 +254,7 @@ function FrequencyCard({ metrics }: { metrics: EngagementMetrics }) {
       <View className="gap-2">
         {metrics.sessionsByDay.map((day) => (
           <View key={day.date} className="flex-row items-center gap-3">
-            <Text className="w-10 font-sans text-[11px] text-muted-light">{formatDayLabel(day.date)}</Text>
+            <Text className="w-10 font-sans text-xs text-muted-light">{formatDayLabel(day.date)}</Text>
             <View className="h-2 flex-1 overflow-hidden rounded-full bg-wood-900/60">
               <View
                 className="h-2 rounded-full bg-amber-accent/80"

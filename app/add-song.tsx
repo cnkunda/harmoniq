@@ -382,7 +382,7 @@ export default function AddSongScreen() {
             </Text>
 
             <View className="mt-10 w-full rounded-2xl border border-wood-700/50 bg-wood-800/40 p-8 shadow-soft-wood">
-              <Text className="mb-4 text-center font-sans-medium text-[11px] uppercase tracking-[0.12em] text-muted-brown">
+              <Text className="mb-4 text-center font-sans-medium text-xs uppercase tracking-[0.12em] text-muted-brown">
                 Import source
               </Text>
               <View className="flex-row flex-wrap items-end justify-center gap-3">
@@ -625,7 +625,7 @@ export default function AddSongScreen() {
                       {progressPercent != null ? `${progressPercent}%` : '—'}
                     </Text>
                   </View>
-                  <Text className="text-center font-sans text-[11px] leading-4 text-muted-brown">
+                  <Text className="text-center font-sans text-xs leading-4 text-muted-brown">
                     Usually 1–4 minutes. You can leave this screen — analysis keeps running and stays visible in
                     Library. Long separation or transcription steps can take a few minutes without moving the
                     percentage.

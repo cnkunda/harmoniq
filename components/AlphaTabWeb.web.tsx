@@ -233,6 +233,13 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
     const [engineReady, setEngineReady] = useState(false)
     const [bootError, setBootError] = useState<string | null>(null)
     const [engineError, setEngineError] = useState<string | null>(null)
+
+    // Technical detail stays in the console for developers — the UI shows
+    // friendly copy instead of raw exception text.
+    useEffect(() => {
+      if (bootError) console.warn('[AlphaTabWeb] boot error:', bootError)
+      if (engineError) console.warn('[AlphaTabWeb] engine error:', engineError)
+    }, [bootError, engineError])
     const [soundFontReady, setSoundFontReady] = useState(false)
     const [reloadKey, setReloadKey] = useState(0)
     /** Server SVG overlay hidden after first client layout pass. */
@@ -1437,8 +1444,10 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
       >
         {(bootError || engineError) && (
           <View className="border-b border-amber-accent/30 bg-amber-accent/10 px-3 py-2">
-            <Text className="font-sans text-xs text-amber-light">{bootError ?? engineError}</Text>
-             <AnimatedPressable onPress={onRetry} className="mt-2 self-start" accessibilityRole="button">
+            <Text className="font-sans text-xs text-amber-light">
+              Score preview could not load here. Retry, or open this song in the mobile app.
+            </Text>
+             <AnimatedPressable onPress={onRetry} className="mt-2 self-start px-2 py-1.5" accessibilityRole="button">
                <Text className="font-sans-medium text-xs text-amber-accent underline">Retry</Text>
              </AnimatedPressable>
           </View>
@@ -1519,7 +1528,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
         )}
         {mounted && !soundFontReady ? (
           <View className="absolute left-3 right-3 top-3 rounded-lg border border-wood-600/45 bg-wood-800/70 p-3">
-            <Text className="mb-2 font-sans text-[11px] text-cream">Loading instrument sounds…</Text>
+            <Text className="mb-2 font-sans text-xs text-cream">Loading instrument sounds…</Text>
             <LoadingSkeleton height={10} borderRadius={6} />
           </View>
         ) : null}
@@ -1528,7 +1537,7 @@ export const AlphaTabWeb = forwardRef<AlphaTabSurfaceRef, AlphaTabWebProps>(
             className="absolute bottom-2 left-2 right-2 rounded-lg border border-wood-600/40 bg-ivory px-2 py-1.5"
             pointerEvents="none"
           >
-            <Text className="text-center font-sans text-[11px] text-wood-700">
+            <Text className="text-center font-sans text-xs text-wood-700">
               {
                 "Score isn't available for this song yet. Try analyzing a song or another tab variant."
               }

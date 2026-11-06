@@ -77,9 +77,9 @@ export function LearnerChordChart({ bars, currentBar }: LearnerChordChartProps) 
       </ScrollView>
 
       <View className="mt-3 flex-row flex-wrap gap-3">
-        <Text className="font-sans text-[11px] text-success">Easy</Text>
-        <Text className="font-sans text-[11px] text-amber-light">Medium</Text>
-        <Text className="font-sans text-[11px] text-danger">Hard</Text>
+        <Text className="font-sans text-xs text-success">Easy</Text>
+        <Text className="font-sans text-xs text-amber-light">Medium</Text>
+        <Text className="font-sans text-xs text-danger">Hard</Text>
       </View>
     </View>
   )

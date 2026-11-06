@@ -814,7 +814,7 @@ export default function JamScreen() {
             </View>
 
             <View className="mt-3 rounded-xl border border-wood-700/45 bg-wood-800/40 px-3 py-2.5">
-              <Text className="font-sans-medium text-[11px] uppercase tracking-wider text-muted-brown">
+              <Text className="font-sans-medium text-xs uppercase tracking-wider text-muted-brown">
                 Summary style
               </Text>
               <View className="mt-2 flex-row gap-2">
@@ -945,7 +945,7 @@ export default function JamScreen() {
                 <Text className="font-sans-medium text-xs uppercase tracking-wider text-amber-light">
                   Loop Style
                 </Text>
-                <Text className="font-sans text-[11px] text-muted-brown">
+                <Text className="font-sans text-xs text-muted-brown">
                   {backingMode === 'ai'
                     ? 'AI template from key / BPM'
                     : 'Bundled MP3 loop'}
@@ -1029,7 +1029,7 @@ export default function JamScreen() {
                       Patterns: {lastJamDiagnostics.summaryBundle.vocabulary_patterns.map((p) => p.description).join('; ')}
                     </Text>
                   ) : null}
-                  <Text className="mt-1 font-sans text-[11px] text-muted-light/70">
+                  <Text className="mt-1 font-sans text-xs text-muted-light/70">
                     {lastJamDiagnostics.summaryBundle.phrase_count} phrases · {lastJamDiagnostics.summaryBundle.total_notes} notes · diversity {(lastJamDiagnostics.summaryBundle.vocabulary_diversity * 100).toFixed(0)}%
                   </Text>
                 </View>

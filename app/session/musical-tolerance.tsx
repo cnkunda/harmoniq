@@ -76,7 +76,7 @@ export default function MusicalToleranceScreen() {
                   <Text className="font-sans-medium text-base text-cream">{opt.label}</Text>
                 </View>
                 <Text className="mt-1 font-sans text-xs leading-5 text-muted-brown">{opt.subtitle}</Text>
-                <Text className="mt-2 font-sans text-[11px] text-amber-accent/80">{opt.tolerance}</Text>
+                <Text className="mt-2 font-sans text-xs text-amber-accent/80">{opt.tolerance}</Text>
               </AnimatedPressable>
             )
           })}
