@@ -575,3 +575,50 @@ class TestCommit108Enhancements:
         }
         for name, present in checks.items():
             assert present, f"Missing {name} in enhanced MusicXML output"
+
+
+def test_full_score_includes_rhythm_part_when_chords_exist():
+    """F3b: MusicXML carries a second rhythm part alongside the lead."""
+    bg = BeatGrid(
+        bpm=120.0,
+        pulse_bpm=120.0,
+        beats=[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5],
+        downbeats=[0.0, 2.0],
+        time_signature=TimeSignature(numerator=4, denominator=4),
+        tick_value=0.25,
+    )
+    ct = ChordTimeline(events=[
+        ChordEvent(timestamp=0.0, chord="C:maj", confidence=0.9),
+        ChordEvent(timestamp=2.0, chord="G:maj", confidence=0.9),
+    ])
+    sn = SoloNotes(notes=[
+        SoloNote(start_time=0.0, duration=0.5, pitch=64, velocity=90),
+        SoloNote(start_time=0.5, duration=0.5, pitch=67, velocity=90),
+    ])
+
+    xml = build_musicxml(bg, ct, sn, title="Test", artist="Test")
+
+    assert "<part-name>Lead Sheet</part-name>" in xml
+    assert "<part-name>Rhythm</part-name>" in xml
+    assert xml.count("<score-part ") >= 2
+
+
+def test_full_score_notates_bend_technique():
+    """F5: SoloNote.technique bend becomes MusicXML bend notation."""
+    bg = BeatGrid(
+        bpm=120.0,
+        pulse_bpm=120.0,
+        beats=[0.0, 0.5, 1.0, 1.5],
+        downbeats=[0.0, 2.0],
+        time_signature=TimeSignature(numerator=4, denominator=4),
+        tick_value=0.25,
+    )
+    ct = ChordTimeline(events=[ChordEvent(timestamp=0.0, chord="C:maj", confidence=0.9)])
+    sn = SoloNotes(notes=[
+        SoloNote(start_time=0.0, duration=0.5, pitch=64, velocity=90, technique=["bend"]),
+    ])
+
+    xml = build_musicxml(bg, ct, sn, title="Test", artist="Test")
+
+    assert "<bend" in xml
+    assert "bend-alter" in xml

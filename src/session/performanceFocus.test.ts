@@ -5,6 +5,7 @@ import {
   performanceRoleLabel,
   performanceStyleLabel,
   resolveFretboardMode,
+  sectionSoloNotesForMode,
 } from './performanceFocus'
 
 function profile(overrides: Partial<PerformanceProfile> = {}): PerformanceProfile {
@@ -47,5 +48,45 @@ describe('performance labels', () => {
       'Fingerpicked',
     )
     expect(performanceRoleLabel(null)).toBeNull()
+  })
+})
+
+describe('resolveFretboardMode with per-note roles (T3)', () => {
+  it('all-lead notes show solo even if the section profile says rhythm', () => {
+    const notes = [{ part_role: 'lead' as const }, { part_role: 'lead' as const }]
+    expect(resolveFretboardMode('auto', profile({ part_role: 'rhythm' }), notes)).toBe('solo')
+  })
+
+  it('all-rhythm notes show chords', () => {
+    const notes = [{ part_role: 'rhythm' as const }, { part_role: 'rhythm' as const }]
+    expect(resolveFretboardMode('auto', profile({ part_role: 'lead_solo' }), notes)).toBe('chords')
+  })
+
+  it('mixed notes show both', () => {
+    const notes = [{ part_role: 'lead' as const }, { part_role: 'rhythm' as const }]
+    expect(resolveFretboardMode('auto', profile({ part_role: 'rhythm' }), notes)).toBe('both')
+  })
+
+  it('ignores notes without roles', () => {
+    expect(
+      resolveFretboardMode('auto', profile({ part_role: 'lead_solo' }), [
+        { part_role: null },
+        {},
+      ]),
+    ).toBe('solo')
+  })
+})
+
+describe('sectionSoloNotesForMode', () => {
+  it('prefers section notes and falls back to lesson notes', () => {
+    expect(
+      sectionSoloNotesForMode({ solo_notes: { notes: [{ part_role: 'lead' }] } }, [
+        { part_role: 'rhythm' },
+      ]),
+    ).toEqual([{ part_role: 'lead' }])
+    expect(sectionSoloNotesForMode({ solo_notes: { notes: [] } }, [{ part_role: 'rhythm' }])).toEqual([
+      { part_role: 'rhythm' },
+    ])
+    expect(sectionSoloNotesForMode(null, null)).toBeNull()
   })
 })

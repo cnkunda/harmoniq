@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "mode": "guard",
-  "generatedAt": "2026-11-06T17:45:30.682Z",
+  "generatedAt": "2026-11-11T15:53:06.247Z",
   "routesAnalyzed": 30,
   "totalUiGapsFound": 0,
   "note": "Pre-commit guard: deterministic DOM checks only (no vision analysis). Full-loop results live in ui-feedback-report.json.",

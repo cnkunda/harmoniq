@@ -1,8 +1,8 @@
 # Harmoniq — Product Requirements Document & Roadmap
 
-**Document purpose:** Single source of truth for product vision, scope, scoring strategy, release gates, and roadmap. It consolidates [PRODUCT_SOLO_PLATEAU.md](./PRODUCT_SOLO_PLATEAU.md), [E2E_DEMO.md](./E2E_DEMO.md), [SCORING.md](./SCORING.md), and the build specification in [README.md](../README.md). Engineering commit order and granular tasks remain in [PRIORITIES.md](../PRIORITIES.md).
+**Document purpose:** Single source of truth for product vision, scope, scoring strategy, release gates, and roadmap. It consolidates the build specification in [README.md](../README.md) and the measured results in [EVALUATION.md](./EVALUATION.md). Engineering commit order and granular tasks remain in [PRIORITIES.md](../PRIORITIES.md).
 
-**Last updated:** 2026-04-19
+**Last updated:** 2026-11-11
 
 ---
 
@@ -140,7 +140,7 @@ The product should feel **warm, analog, handcrafted** — workshop / jazz-club l
 Aligned with README “V1 Scope Summary”:
 
 - Onboarding placement; Home with spaced-repetition-driven suggestions; full **five-step** session loop; web + native clients.
-- Analyze pipeline: YouTube + upload; **htdemucs_6s** stems; librosa structure; Whisper lyrics; **two-branch transcription** (full-mix chord branch instrument-agnostic + guitar-conditioned solo branch with MR-MT3 leakage mitigation) → CRNN TFLite fallback (full mix for chords) → Basic Pitch fallback (guitar stem for solo) → Chroma fallback; skeleton/alternate tabs when confidence allows; Claude coach strings when API present.
+- Analyze pipeline: YouTube + upload; **htdemucs_6s** stems; librosa structure; Whisper lyrics; **two-branch transcription** (full-mix chord branch instrument-agnostic + separate guitar-stem MT3 solo branch restricted to guitar programs) → CRNN TFLite fallback (full mix for chords) → Basic Pitch fallback (guitar stem for solo) → Chroma fallback; per-section lead+rhythm GP5/MusicXML; DP tablature assignment; Claude coach strings when API present.
 - AlphaTab integration with shared message contract; SmartScroll via timestamps; smart metronome; section chips; mixer; pitch on device for play path.
 - Review phrasing visualization; MIDI export; lick library + drill/transpose concepts as specified in README.
 - Jam mode with bundled beds + inference + summaries.
@@ -169,10 +169,10 @@ These decisions directly affect transcription trustworthiness and are documented
 | Risk | Mitigation | Reference |
 |------|------------|-----------|
 | **Chord-source correctness:** chords derived from the guitar stem alone miss chord tones voiced by other instruments (bass, piano, etc.), producing wrong chord symbols that break user trust on first exposure. | Branch A runs instrument-agnostic chord extraction on the full mix or harmonic-bed submix (bass+piano+other+guitar, drums removed), never the guitar stem alone. | Two-branch architecture in README |
-| **Instrument leakage in solo transcription:** MT3-family models can bleed notes across instrument channels within a single autoregressive decode, and channel identity can drift between segments. Even with Demucs pre-separation, bleed-through from vocals/piano into the guitar stem produces wrong notes in tab. | Branch B uses a fixed guitar-program embedding to structurally prevent non-guitar output, plus MR-MT3 memory retention, prior token sampling, and token shuffling (arXiv:2403.10024). A post-hoc program-token filter provides a last-mile safety net. | MR-MT3 paper (§3.2-3.4), Branch B spec in README |
+| **Instrument leakage in solo transcription:** MT3-family models can bleed notes across instrument channels, and Demucs stem bleed can put piano/vocals into the guitar stem. | Branch B runs a separate MT3 pass on the guitar stem and solo decoding keeps only GM guitar programs (24–31); the vocals stem is never a solo fallback. MR-MT3 memory retention / prior-token sampling / token shuffling remain research (W2/W3). | Branch B implementation in `backend/app/mt3/solo_decoder.py`, `backend/app/audio_mix.py` |
 | **Distillation target mismatch:** a single student model cannot serve both chord classification and monophonic solo note detection — these need different output types and training data characteristics. | Two separate student models: (1) framewise non-autoregressive chord student (piano-roll output); (2) autoregressive guitar-vocabulary token solo student (program-filtered, structurally incapable of leaking). | Phase 3 milestones in PRIORITIES.md |
 | **Inference cost doubles** with two branches (full-mix pass + guitar-conditioned pass) vs the old single-pass assumption. | Queue hardening (Celery workers already in place; frontend SSE shipped as archived commit 151; GPU scheduling + DLQ wiring at PRIORITIES.md commit 170) must be scoped for 2× the per-job inference load. | PRIORITIES.md commit 170 |
-| **Stem separation quality** affects both branches differently: poor Demucs guitar separation raises solo-branch leakage_risk, while poor harmonic-bed separation (e.g., bass not isolated) lowers chord-branch confidence. Currently no explicit gate measures Demucs separation quality per job. | `leakage_risk` per section surfaces cross-stem correlation as a continuous signal. A future stem-separation-quality gate could pre-emptively flag jobs where Demucs output is unreliable. | `leakage_risk` field in LessonJSON schema |
+| **Stem separation quality** affects both branches differently: poor Demucs guitar separation degrades solo notes, while poor harmonic-bed separation lowers chord-branch confidence. No explicit per-job separation-quality gate exists. | Solo output is guitar-program-only, but `leakage_risk` is currently an **instrument-confusion proxy**, not a measured note-level leakage signal; a real stem-quality/leakage gate remains future work. | `leakage_risk` field in LessonJSON schema; `backend/app/analyze_audio.py` |
 
 ---
 
@@ -184,7 +184,7 @@ Detail stays in README and backend README; at PRD level the system comprises:
 |-------|----------------|
 | **Client** | Expo Router app; Zustand; local DB; AlphaTab harness; expo-av / Web Audio; `react-native-audio-api` + shared pitch hook on native; Jam and session UX. |
 | **Backend (FastAPI)** | `/analyze` jobs; `/score`; `/jam-score`; `/export`; `/practice/plan`; optional coach endpoints; pipeline workers. |
-| **Analysis pipeline** | yt-dlp or upload normalize → Demucs **6-stem** → two-branch transcription: **Branch A** (full mix / harmonic bed → aggregate pitch → chord decoder) + **Branch B** (guitar stem as prior + full mix → program-conditioned MT3 with MR-MT3 memory retention → program-filtered solo decoder) → CRNN TFLite fallback (full mix, chords only) → Basic Pitch fallback (guitar stem, solo only) → Chroma fallback → GP5/MusicXML → coach enrichment → **LessonJSON** with `chord_source`, per-section `leakage_risk`, and `transcription_source` tier indicators. |
+| **Analysis pipeline** | yt-dlp or upload normalize → Demucs **6-stem** → two-branch transcription: **Branch A** (full mix / harmonic bed → aggregate pitch → chord decoder) + **Branch B** (separate MT3 pass on guitar stem → guitar-program-only solo decoder) → CRNN TFLite fallback (full mix, chords only) → Basic Pitch fallback (guitar stem, solo only) → Chroma fallback → DP string/fret assignment → GP5/MusicXML (lead + rhythm) → coach enrichment → **LessonJSON** with `chord_source`, per-note positions/roles, and `transcription_source` tier indicators. |
 
 **Real-time rule:** Pitch estimation during play stays **on-device** — no network in the hot path.
 
@@ -328,8 +328,8 @@ Full prompt fragments and API model choice live in README.
 | [README.md](../README.md) | Full build spec: screens, schemas, endpoints, pipeline detail, AI prompts, v1 lists. |
 | [PRIORITIES.md](../PRIORITIES.md) | Engineering roadmap — commits, acceptance criteria. |
 | [E2E_DEMO.md](./E2E_DEMO.md) | Step-by-step cold start, troubleshooting, dry-run log. |
-| [SCORING.md](./SCORING.md) | Scoring rollout detail, benchmarks, local validation commands. |
-| [PRODUCT_SOLO_PLATEAU.md](./PRODUCT_SOLO_PLATEAU.md) | Compact product anchor (audience + implications). |
+| [EVALUATION.md](./EVALUATION.md) | Measured transcription results, calibration, and evaluation protocol. |
+| [KNOWN_FAILURES.md](./KNOWN_FAILURES.md) | Documented failure modes and mitigations. |
 | [MANUAL_QA.md](./MANUAL_QA.md) | Phase 5 realism, error states, stems/pitch QA. |
 | [DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md) | UI implementation reference. |
 

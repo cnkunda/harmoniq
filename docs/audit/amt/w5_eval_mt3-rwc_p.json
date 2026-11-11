@@ -1,0 +1,2140 @@
+{
+  "aggregates": {
+    "chord_frame_accuracy": 0.160691,
+    "chord_root_accuracy": 0.172313,
+    "completed": 15,
+    "ece": 0.731311,
+    "failed": 0,
+    "notes": {
+      "offset_multi": null,
+      "onset_multi": null,
+      "onset_pitch": null
+    },
+    "runtime_ms_mean": 23250.572,
+    "runtime_ms_total": 348758.584,
+    "tracks": 15
+  },
+  "failures": [],
+  "manifest_id": "amt-eval-v1+volumes",
+  "schema_version": 3,
+  "strata": {
+    "instrument_count": {
+      "3": {
+        "chord_frame_accuracy": 0.15986,
+        "chord_root_accuracy": 0.173293,
+        "completed": 11,
+        "ece": 0.717208,
+        "failed": 0,
+        "notes": {
+          "offset_multi": null,
+          "onset_multi": null,
+          "onset_pitch": null
+        },
+        "runtime_ms_mean": 23692.179,
+        "runtime_ms_total": 260613.972,
+        "tracks": 11
+      },
+      "4": {
+        "chord_frame_accuracy": 0.101669,
+        "chord_root_accuracy": 0.105428,
+        "completed": 2,
+        "ece": 0.834711,
+        "failed": 0,
+        "notes": {
+          "offset_multi": null,
+          "onset_multi": null,
+          "onset_pitch": null
+        },
+        "runtime_ms_mean": 23726.124,
+        "runtime_ms_total": 47452.248,
+        "tracks": 2
+      },
+      "5": {
+        "chord_frame_accuracy": 0.133333,
+        "chord_root_accuracy": 0.149333,
+        "completed": 1,
+        "ece": 0.808516,
+        "failed": 0,
+        "notes": {
+          "offset_multi": null,
+          "onset_multi": null,
+          "onset_pitch": null
+        },
+        "runtime_ms_mean": 17153.883,
+        "runtime_ms_total": 17153.883,
+        "tracks": 1
+      },
+      "7": {
+        "chord_frame_accuracy": 0.315228,
+        "chord_root_accuracy": 0.318274,
+        "completed": 1,
+        "ece": 0.602436,
+        "failed": 0,
+        "notes": {
+          "offset_multi": null,
+          "onset_multi": null,
+          "onset_pitch": null
+        },
+        "runtime_ms_mean": 23538.482,
+        "runtime_ms_total": 23538.482,
+        "tracks": 1
+      }
+    },
+    "recording_type": {
+      "studio": {
+        "chord_frame_accuracy": 0.160691,
+        "chord_root_accuracy": 0.172313,
+        "completed": 15,
+        "ece": 0.731311,
+        "failed": 0,
+        "notes": {
+          "offset_multi": null,
+          "onset_multi": null,
+          "onset_pitch": null
+        },
+        "runtime_ms_mean": 23250.572,
+        "runtime_ms_total": 348758.584,
+        "tracks": 15
+      }
+    },
+    "source": {
+      "rwc_p": {
+        "chord_frame_accuracy": 0.160691,
+        "chord_root_accuracy": 0.172313,
+        "completed": 15,
+        "ece": 0.731311,
+        "failed": 0,
+        "notes": {
+          "offset_multi": null,
+          "onset_multi": null,
+          "onset_pitch": null
+        },
+        "runtime_ms_mean": 23250.572,
+        "runtime_ms_total": 348758.584,
+        "tracks": 15
+      }
+    },
+    "split": {
+      "test": {
+        "chord_frame_accuracy": 0.160843,
+        "chord_root_accuracy": 0.172411,
+        "completed": 12,
+        "ece": 0.733826,
+        "failed": 0,
+        "notes": {
+          "offset_multi": null,
+          "onset_multi": null,
+          "onset_pitch": null
+        },
+        "runtime_ms_mean": 24299.076,
+        "runtime_ms_total": 291588.907,
+        "tracks": 12
+      },
+      "val": {
+        "chord_frame_accuracy": 0.160083,
+        "chord_root_accuracy": 0.171917,
+        "completed": 3,
+        "ece": 0.721249,
+        "failed": 0,
+        "notes": {
+          "offset_multi": null,
+          "onset_multi": null,
+          "onset_pitch": null
+        },
+        "runtime_ms_mean": 19056.559,
+        "runtime_ms_total": 57169.677,
+        "tracks": 3
+      }
+    }
+  },
+  "tier": "mt3",
+  "tracks": [
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P004",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.1,
+              "count": 2,
+              "gap": 0.1,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.719819
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 4,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 1.393197
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.4,
+              "count": 1,
+              "gap": 0.4,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.696599
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.540592,
+              "count": 57,
+              "gap": 0.540592,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 35.294331
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.086957,
+              "avg_confidence": 0.748448,
+              "count": 23,
+              "gap": 0.661491,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 8.010884
+            },
+            {
+              "accuracy": 0.059055,
+              "avg_confidence": 0.818412,
+              "count": 17,
+              "gap": 0.759357,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 5.897868
+            },
+            {
+              "accuracy": 0.081177,
+              "avg_confidence": 1.0,
+              "count": 193,
+              "gap": 0.918823,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 181.349388
+            }
+          ],
+          "ece": 0.840985,
+          "samples": 297,
+          "total_weight_s": 233.362086
+        },
+        "chords": {
+          "estimated_events": 520,
+          "event_prf": {
+            "f1": 0.00317,
+            "fn": 110,
+            "fp": 519,
+            "precision": 0.001923,
+            "recall": 0.009009,
+            "tp": 1
+          },
+          "frame_accuracy": 0.069438,
+          "frames": 2333,
+          "reference_events": 111,
+          "root_accuracy": 0.089584,
+          "root_frames": 2333
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 45236.697,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P005",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 2,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.882358
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.15,
+              "count": 2,
+              "gap": 0.15,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.905578
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 6,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 2.670295
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.4,
+              "count": 4,
+              "gap": 0.4,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 2.205896
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.536099,
+              "count": 47,
+              "gap": 0.536099,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 27.144127
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.6667,
+              "count": 2,
+              "gap": 0.6667,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.882358
+            },
+            {
+              "accuracy": 0.177914,
+              "avg_confidence": 0.743648,
+              "count": 17,
+              "gap": 0.565734,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 7.569705
+            },
+            {
+              "accuracy": 0.259594,
+              "avg_confidence": 0.80974,
+              "count": 22,
+              "gap": 0.550147,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 10.28644
+            },
+            {
+              "accuracy": 0.200389,
+              "avg_confidence": 1.0,
+              "count": 178,
+              "gap": 0.799611,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 166.395737
+            }
+          ],
+          "ece": 0.73057,
+          "samples": 280,
+          "total_weight_s": 218.942494
+        },
+        "chords": {
+          "estimated_events": 548,
+          "event_prf": {
+            "f1": 0.020896,
+            "fn": 115,
+            "fp": 541,
+            "precision": 0.012774,
+            "recall": 0.057377,
+            "tp": 7
+          },
+          "frame_accuracy": 0.168891,
+          "frames": 2173,
+          "reference_events": 122,
+          "root_accuracy": 0.188219,
+          "root_frames": 2173
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 28482.468,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P011",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 1,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.673379
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 1,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.650159
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.535853,
+              "count": 63,
+              "gap": 0.535853,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 53.916735
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.133411,
+              "avg_confidence": 0.744036,
+              "count": 30,
+              "gap": 0.610626,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 20.015601
+            },
+            {
+              "accuracy": 0.324053,
+              "avg_confidence": 0.819297,
+              "count": 28,
+              "gap": 0.495243,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 20.851519
+            },
+            {
+              "accuracy": 0.15768,
+              "avg_confidence": 1.0,
+              "count": 159,
+              "gap": 0.84232,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 160.219229
+            }
+          ],
+          "ece": 0.727942,
+          "samples": 282,
+          "total_weight_s": 256.326621
+        },
+        "chords": {
+          "estimated_events": 551,
+          "event_prf": {
+            "f1": 0.012232,
+            "fn": 99,
+            "fp": 547,
+            "precision": 0.00726,
+            "recall": 0.038835,
+            "tp": 4
+          },
+          "frame_accuracy": 0.133437,
+          "frames": 2563,
+          "reference_events": 103,
+          "root_accuracy": 0.149434,
+          "root_frames": 2563
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 26894.94,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P018",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.125,
+              "count": 2,
+              "gap": 0.125,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 1.068118
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 1,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 1.602177
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.534857,
+              "count": 51,
+              "gap": 0.534857,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 29.976961
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.166667,
+              "avg_confidence": 0.75,
+              "count": 6,
+              "gap": 0.583333,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 3.204354
+            },
+            {
+              "accuracy": 0.321181,
+              "avg_confidence": 0.811588,
+              "count": 24,
+              "gap": 0.490407,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 13.374694
+            },
+            {
+              "accuracy": 0.179937,
+              "avg_confidence": 1.0,
+              "count": 214,
+              "gap": 0.820063,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 196.535238
+            }
+          ],
+          "ece": 0.757836,
+          "samples": 298,
+          "total_weight_s": 245.761542
+        },
+        "chords": {
+          "estimated_events": 641,
+          "event_prf": {
+            "f1": 0.023166,
+            "fn": 127,
+            "fp": 632,
+            "precision": 0.014041,
+            "recall": 0.066176,
+            "tp": 9
+          },
+          "frame_accuracy": 0.151873,
+          "frames": 2456,
+          "reference_events": 136,
+          "root_accuracy": 0.160016,
+          "root_frames": 2456
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 22436.805,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P021",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.13375,
+              "count": 3,
+              "gap": 0.13375,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 1.857596
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 5,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 3.691973
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.4,
+              "count": 1,
+              "gap": 0.4,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.603719
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.534163,
+              "count": 49,
+              "gap": 0.534163,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 33.134875
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.096189,
+              "avg_confidence": 0.75,
+              "count": 21,
+              "gap": 0.653811,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 12.794195
+            },
+            {
+              "accuracy": 0.172142,
+              "avg_confidence": 0.8192,
+              "count": 28,
+              "gap": 0.647058,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 17.670385
+            },
+            {
+              "accuracy": 0.156549,
+              "avg_confidence": 1.0,
+              "count": 204,
+              "gap": 0.843451,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 190.892789
+            }
+          ],
+          "ece": 0.767726,
+          "samples": 311,
+          "total_weight_s": 260.645533
+        },
+        "chords": {
+          "estimated_events": 763,
+          "event_prf": {
+            "f1": 0.015436,
+            "fn": 137,
+            "fp": 756,
+            "precision": 0.009174,
+            "recall": 0.048611,
+            "tp": 7
+          },
+          "frame_accuracy": 0.136651,
+          "frames": 2532,
+          "reference_events": 144,
+          "root_accuracy": 0.152054,
+          "root_frames": 2532
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 24153.921,
+      "source": "rwc_p",
+      "split": "val",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P022",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 2,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.905578
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.1125,
+              "count": 4,
+              "gap": 0.1125,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 1.764717
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 11,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 7.569705
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.4,
+              "count": 4,
+              "gap": 0.4,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 2.229116
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.539024,
+              "count": 46,
+              "gap": 0.539024,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 32.368617
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.315934,
+              "avg_confidence": 0.75,
+              "count": 19,
+              "gap": 0.434066,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 8.452063
+            },
+            {
+              "accuracy": 0.395833,
+              "avg_confidence": 0.806591,
+              "count": 5,
+              "gap": 0.410757,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 2.229116
+            },
+            {
+              "accuracy": 0.239681,
+              "avg_confidence": 1.0,
+              "count": 179,
+              "gap": 0.760319,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 146.867755
+            }
+          ],
+          "ece": 0.677215,
+          "samples": 270,
+          "total_weight_s": 202.386667
+        },
+        "chords": {
+          "estimated_events": 470,
+          "event_prf": {
+            "f1": 0.043993,
+            "fn": 108,
+            "fp": 457,
+            "precision": 0.02766,
+            "recall": 0.107438,
+            "tp": 13
+          },
+          "frame_accuracy": 0.196029,
+          "frames": 1964,
+          "reference_events": 121,
+          "root_accuracy": 0.203157,
+          "root_frames": 1964
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 12020.63,
+      "source": "rwc_p",
+      "split": "val",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P023",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.125,
+              "count": 2,
+              "gap": 0.125,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.928798
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 4,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 2.275556
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.4,
+              "count": 4,
+              "gap": 0.4,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 1.834376
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.535393,
+              "count": 60,
+              "gap": 0.535393,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 37.198367
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.232283,
+              "avg_confidence": 0.75,
+              "count": 13,
+              "gap": 0.517717,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 5.897868
+            },
+            {
+              "accuracy": 0.561905,
+              "avg_confidence": 0.802114,
+              "count": 16,
+              "gap": 0.24021,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 7.314286
+            },
+            {
+              "accuracy": 0.176279,
+              "avg_confidence": 1.0,
+              "count": 195,
+              "gap": 0.823721,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 129.615329
+            }
+          ],
+          "ece": 0.718806,
+          "samples": 294,
+          "total_weight_s": 185.06458
+        },
+        "chords": {
+          "estimated_events": 628,
+          "event_prf": {
+            "f1": 0.008584,
+            "fn": 68,
+            "fp": 625,
+            "precision": 0.004777,
+            "recall": 0.042254,
+            "tp": 3
+          },
+          "frame_accuracy": 0.147568,
+          "frames": 1850,
+          "reference_events": 71,
+          "root_accuracy": 0.160541,
+          "root_frames": 1850
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 20995.126,
+      "source": "rwc_p",
+      "split": "val",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P026",
+      "instrument_count": 4,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 1,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.371519
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.544662,
+              "count": 14,
+              "gap": 0.544662,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 10.657959
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.496183,
+              "avg_confidence": 0.747684,
+              "count": 16,
+              "gap": 0.2515,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 6.083628
+            },
+            {
+              "accuracy": 0.426087,
+              "avg_confidence": 0.8,
+              "count": 7,
+              "gap": 0.373913,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 2.670295
+            },
+            {
+              "accuracy": 0.01291,
+              "avg_confidence": 1.0,
+              "count": 90,
+              "gap": 0.98709,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 176.264218
+            }
+          ],
+          "ece": 0.930558,
+          "samples": 128,
+          "total_weight_s": 196.047619
+        },
+        "chords": {
+          "estimated_events": 212,
+          "event_prf": {
+            "f1": 0.011142,
+            "fn": 145,
+            "fp": 210,
+            "precision": 0.009434,
+            "recall": 0.013605,
+            "tp": 2
+          },
+          "frame_accuracy": 0.031909,
+          "frames": 1943,
+          "reference_events": 147,
+          "root_accuracy": 0.031909,
+          "root_frames": 1943
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 23589.125,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P035",
+      "instrument_count": 5,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 4,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 1.996916
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.4,
+              "count": 1,
+              "gap": 0.4,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.510839
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.538739,
+              "count": 26,
+              "gap": 0.538739,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 16.393288
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.485507,
+              "avg_confidence": 0.75,
+              "count": 5,
+              "gap": 0.264493,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 3.204354
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.811271,
+              "count": 3,
+              "gap": 0.811271,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 1.509297
+            },
+            {
+              "accuracy": 0.146437,
+              "avg_confidence": 1.0,
+              "count": 141,
+              "gap": 0.853563,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 163.957642
+            }
+          ],
+          "ece": 0.808516,
+          "samples": 180,
+          "total_weight_s": 187.572336
+        },
+        "chords": {
+          "estimated_events": 370,
+          "event_prf": {
+            "f1": 0.016771,
+            "fn": 103,
+            "fp": 366,
+            "precision": 0.010811,
+            "recall": 0.037383,
+            "tp": 4
+          },
+          "frame_accuracy": 0.133333,
+          "frames": 1875,
+          "reference_events": 107,
+          "root_accuracy": 0.149333,
+          "root_frames": 1875
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 17153.883,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P047",
+      "instrument_count": 7,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 1,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.626939
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.1,
+              "count": 2,
+              "gap": 0.1,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 1.253878
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 5,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 3.181134
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.4,
+              "count": 1,
+              "gap": 0.4,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.650159
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.538791,
+              "count": 24,
+              "gap": 0.538791,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 19.783401
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.129032,
+              "avg_confidence": 0.741116,
+              "count": 8,
+              "gap": 0.612084,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 5.03873
+            },
+            {
+              "accuracy": 0.377273,
+              "avg_confidence": 0.804087,
+              "count": 8,
+              "gap": 0.426814,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 5.10839
+            },
+            {
+              "accuracy": 0.371532,
+              "avg_confidence": 1.0,
+              "count": 185,
+              "gap": 0.628468,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 161.682086
+            }
+          ],
+          "ece": 0.602436,
+          "samples": 234,
+          "total_weight_s": 197.324717
+        },
+        "chords": {
+          "estimated_events": 437,
+          "event_prf": {
+            "f1": 0.158895,
+            "fn": 96,
+            "fp": 391,
+            "precision": 0.105263,
+            "recall": 0.323944,
+            "tp": 46
+          },
+          "frame_accuracy": 0.315228,
+          "frames": 1970,
+          "reference_events": 142,
+          "root_accuracy": 0.318274,
+          "root_frames": 1970
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 23538.482,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P078",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.1,
+              "count": 1,
+              "gap": 0.1,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.789478
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 4,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 1.996916
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.532944,
+              "count": 108,
+              "gap": 0.532944,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 91.416961
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.6667,
+              "count": 1,
+              "gap": 0.6667,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.394739
+            },
+            {
+              "accuracy": 0.19591,
+              "avg_confidence": 0.75,
+              "count": 79,
+              "gap": 0.55409,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 43.142676
+            },
+            {
+              "accuracy": 0.145205,
+              "avg_confidence": 0.804835,
+              "count": 21,
+              "gap": 0.65963,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 8.475283
+            },
+            {
+              "accuracy": 0.295743,
+              "avg_confidence": 1.0,
+              "count": 140,
+              "gap": 0.704257,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 106.465034
+            }
+          ],
+          "ece": 0.61,
+          "samples": 354,
+          "total_weight_s": 252.681088
+        },
+        "chords": {
+          "estimated_events": 461,
+          "event_prf": {
+            "f1": 0.020906,
+            "fn": 107,
+            "fp": 455,
+            "precision": 0.013015,
+            "recall": 0.053097,
+            "tp": 6
+          },
+          "frame_accuracy": 0.162312,
+          "frames": 2526,
+          "reference_events": 113,
+          "root_accuracy": 0.187648,
+          "root_frames": 2526
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 18133.631,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P090",
+      "instrument_count": 4,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.109709,
+              "count": 3,
+              "gap": 0.109709,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 2.391655
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 4,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 1.857596
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.4,
+              "count": 2,
+              "gap": 0.4,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.928798
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.541515,
+              "count": 45,
+              "gap": 0.541515,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 30.65034
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.6667,
+              "count": 2,
+              "gap": 0.6667,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.952018
+            },
+            {
+              "accuracy": 0.191489,
+              "avg_confidence": 0.75,
+              "count": 16,
+              "gap": 0.558511,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 7.639365
+            },
+            {
+              "accuracy": 0.203922,
+              "avg_confidence": 0.811688,
+              "count": 21,
+              "gap": 0.607767,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 11.842177
+            },
+            {
+              "accuracy": 0.205445,
+              "avg_confidence": 1.0,
+              "count": 224,
+              "gap": 0.794555,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 209.770612
+            }
+          ],
+          "ece": 0.738864,
+          "samples": 317,
+          "total_weight_s": 266.032562
+        },
+        "chords": {
+          "estimated_events": 517,
+          "event_prf": {
+            "f1": 0.037152,
+            "fn": 117,
+            "fp": 505,
+            "precision": 0.023211,
+            "recall": 0.093023,
+            "tp": 12
+          },
+          "frame_accuracy": 0.171429,
+          "frames": 2660,
+          "reference_events": 129,
+          "root_accuracy": 0.178947,
+          "root_frames": 2660
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 23863.123,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P091",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 1,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.487619
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.15,
+              "count": 1,
+              "gap": 0.15,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.464399
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 10,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 4.852971
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.375,
+              "count": 2,
+              "gap": 0.375,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.975238
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.4,
+              "count": 1,
+              "gap": 0.4,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.487619
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.538012,
+              "count": 50,
+              "gap": 0.538012,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 26.052789
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.235075,
+              "avg_confidence": 0.747203,
+              "count": 12,
+              "gap": 0.512128,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 6.222948
+            },
+            {
+              "accuracy": 0.062874,
+              "avg_confidence": 0.811268,
+              "count": 16,
+              "gap": 0.748394,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 7.755465
+            },
+            {
+              "accuracy": 0.314938,
+              "avg_confidence": 1.0,
+              "count": 257,
+              "gap": 0.685062,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 171.271927
+            }
+          ],
+          "ece": 0.651624,
+          "samples": 350,
+          "total_weight_s": 218.570975
+        },
+        "chords": {
+          "estimated_events": 727,
+          "event_prf": {
+            "f1": 0.05,
+            "fn": 131,
+            "fp": 705,
+            "precision": 0.030261,
+            "recall": 0.143791,
+            "tp": 22
+          },
+          "frame_accuracy": 0.232037,
+          "frames": 2185,
+          "reference_events": 153,
+          "root_accuracy": 0.245309,
+          "root_frames": 2185
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 14344.678,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P093",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 1,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.673379
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.542336,
+              "count": 30,
+              "gap": 0.542336,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 25.147211
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.097902,
+              "avg_confidence": 0.75,
+              "count": 10,
+              "gap": 0.652098,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 6.640907
+            },
+            {
+              "accuracy": 0.486726,
+              "avg_confidence": 0.8232,
+              "count": 4,
+              "gap": 0.336474,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 2.623855
+            },
+            {
+              "accuracy": 0.114842,
+              "avg_confidence": 1.0,
+              "count": 155,
+              "gap": 0.885158,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 214.321723
+            }
+          ],
+          "ece": 0.837034,
+          "samples": 200,
+          "total_weight_s": 249.407075
+        },
+        "chords": {
+          "estimated_events": 374,
+          "event_prf": {
+            "f1": 0.034682,
+            "fn": 136,
+            "fp": 365,
+            "precision": 0.024064,
+            "recall": 0.062069,
+            "tp": 9
+          },
+          "frame_accuracy": 0.094226,
+          "frames": 2494,
+          "reference_events": 145,
+          "root_accuracy": 0.094627,
+          "root_frames": 2494
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 27271.611,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "rwc:RWC_P099",
+      "instrument_count": 3,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 2,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 1.625397
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.126724,
+              "count": 7,
+              "gap": 0.126724,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 5.387029
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.3,
+              "count": 6,
+              "gap": 0.3,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 3.668753
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.4,
+              "count": 5,
+              "gap": 0.4,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 4.551111
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.534998,
+              "count": 57,
+              "gap": 0.534998,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 58.583946
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.75,
+              "count": 28,
+              "gap": 0.75,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 16.253968
+            },
+            {
+              "accuracy": 0.662839,
+              "avg_confidence": 0.811978,
+              "count": 35,
+              "gap": 0.149139,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 22.244717
+            },
+            {
+              "accuracy": 0.354714,
+              "avg_confidence": 1.0,
+              "count": 168,
+              "gap": 0.645286,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 178.446893
+            }
+          ],
+          "ece": 0.56955,
+          "samples": 308,
+          "total_weight_s": 290.761814
+        },
+        "chords": {
+          "estimated_events": 432,
+          "event_prf": {
+            "f1": 0.073555,
+            "fn": 118,
+            "fp": 411,
+            "precision": 0.048611,
+            "recall": 0.151079,
+            "tp": 21
+          },
+          "frame_accuracy": 0.266001,
+          "frames": 2906,
+          "reference_events": 139,
+          "root_accuracy": 0.275637,
+          "root_frames": 2906
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 20643.465,
+      "source": "rwc_p",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    }
+  ],
+  "verdict_expectation_mismatches": [],
+  "verdicts": {
+    "fail": 0,
+    "pass": 15,
+    "unscored": 0,
+    "warn": 0
+  }
+}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import os
 import re
+from typing import Literal
 
 from app.gp_export_midi import gp5_bytes_to_midi
 from app.gp_export_musicxml import gp5_bytes_to_musicxml
@@ -75,6 +76,7 @@ def export_musicxml_from_json(
     title: str = "Harmoniq Score",
     artist: str = "Harmoniq AI",
     key_signature: str | None = None,
+    confidence_band: Literal["low", "medium", "high"] | None = None,
 ) -> tuple[bytes, str, str, str]:
     """
     Generate MusicXML from Harmoniq JSON artifacts.
@@ -87,6 +89,7 @@ def export_musicxml_from_json(
         title=title,
         artist=artist,
         key_signature=key_signature,
+        confidence_band=confidence_band,
     )
     # musicxml_builder returns a UTF-8 string, so encode it to bytes
     data = musicxml_str.encode("utf-8")

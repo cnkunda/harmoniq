@@ -48,6 +48,7 @@ def decode_events_to_solo_notes(
     *,
     prefer_guitar: bool = True,
     min_confidence: float = 0.3,
+    allowed_programs: set[int] | None = None,
 ) -> SoloNotes:
     """Convert an MT3 event stream into quantized SoloNotes.
 
@@ -57,6 +58,9 @@ def decode_events_to_solo_notes(
         prefer_guitar: If True, strongly prefer guitar-family events
             for the melodic line.
         min_confidence: Minimum event confidence to include.
+        allowed_programs: Restrict the melodic stream to these GM programs
+            (e.g. guitar-only for production solos). ``None`` keeps the legacy
+            guitar + piano set.
 
     Returns:
         A SoloNotes object with quantized note events.
@@ -68,7 +72,7 @@ def decode_events_to_solo_notes(
     if not events:
         return SoloNotes(notes=[])
 
-    melodic_events = _filter_melodic_events(events, prefer_guitar)
+    melodic_events = _filter_melodic_events(events, prefer_guitar, allowed_programs)
     if not melodic_events:
         return SoloNotes(notes=[])
 
@@ -306,6 +310,7 @@ def _merge_boundary_notes(
 def _filter_melodic_events(
     events: list[Mt3Event],
     prefer_guitar: bool,
+    allowed_programs: set[int] | None = None,
 ) -> list[Mt3Event]:
     """Filter events to keep only melodic instruments.
 
@@ -319,7 +324,8 @@ def _filter_melodic_events(
         if prefer_guitar and event.program in range(24, 32):
             event.confidence = min(1.0, event.confidence * 1.1)
 
-        if event.program in _MELODIC_PROGRAMS:
+        allowed = allowed_programs if allowed_programs is not None else _MELODIC_PROGRAMS
+        if event.program in allowed:
             result.append(event)
 
     return result

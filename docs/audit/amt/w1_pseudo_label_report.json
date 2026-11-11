@@ -1,0 +1,169 @@
+{
+  "config": {
+    "label_statuses": [
+      "none"
+    ],
+    "loss_weight": 0.5,
+    "min_chord_confidence": 0.6,
+    "min_kept_windows": 1,
+    "min_note_confidence": 0.5,
+    "require_chords": false,
+    "split": "train"
+  },
+  "manifest_id": "w1-dataset-v1",
+  "schema_version": 1,
+  "sources": {
+    "idmt_smt_guitar": {
+      "labeled": 10,
+      "selected": 10,
+      "skipped": 0,
+      "windows_kept": 42
+    }
+  },
+  "teacher": "mt3",
+  "totals": {
+    "labeled": 10,
+    "retention": 0.807692,
+    "selected": 10,
+    "skipped": 0,
+    "windows_kept": 42,
+    "windows_total": 52
+  },
+  "tracks": [
+    {
+      "chord_labels": {
+        "13": 4,
+        "276": 4
+      },
+      "id": "idmt_raw:dataset4/Career SG/fast/classical/audio/classical_2_60BPM",
+      "labels": "idmt_raw_dataset4_Career_SG_fast_classical_audio_classical_2_60BPM.json",
+      "npz": "idmt_raw_dataset4_Career_SG_fast_classical_audio_classical_2_60BPM.npz",
+      "retention": 1.0,
+      "source": "idmt_smt_guitar",
+      "status": "labeled",
+      "windows_kept": 8,
+      "windows_total": 8
+    },
+    {
+      "chord_labels": {
+        "276": 4
+      },
+      "id": "idmt_raw:dataset4/Career SG/fast/classical/audio/classical_4_80BPM",
+      "labels": "idmt_raw_dataset4_Career_SG_fast_classical_audio_classical_4_80BPM.json",
+      "npz": "idmt_raw_dataset4_Career_SG_fast_classical_audio_classical_4_80BPM.npz",
+      "retention": 0.8,
+      "source": "idmt_smt_guitar",
+      "status": "labeled",
+      "windows_kept": 4,
+      "windows_total": 5
+    },
+    {
+      "chord_labels": {
+        "276": 5
+      },
+      "id": "idmt_raw:dataset4/Career SG/fast/classical/audio/classical_7_60BPM",
+      "labels": "idmt_raw_dataset4_Career_SG_fast_classical_audio_classical_7_60BPM.json",
+      "npz": "idmt_raw_dataset4_Career_SG_fast_classical_audio_classical_7_60BPM.npz",
+      "retention": 0.833333,
+      "source": "idmt_smt_guitar",
+      "status": "labeled",
+      "windows_kept": 5,
+      "windows_total": 6
+    },
+    {
+      "chord_labels": {
+        "276": 3
+      },
+      "id": "idmt_raw:dataset4/Career SG/fast/classical/audio/classical_8_120BPM",
+      "labels": "idmt_raw_dataset4_Career_SG_fast_classical_audio_classical_8_120BPM.json",
+      "npz": "idmt_raw_dataset4_Career_SG_fast_classical_audio_classical_8_120BPM.npz",
+      "retention": 0.75,
+      "source": "idmt_smt_guitar",
+      "status": "labeled",
+      "windows_kept": 3,
+      "windows_total": 4
+    },
+    {
+      "chord_labels": {
+        "276": 2
+      },
+      "id": "idmt_raw:dataset4/Career SG/fast/country_folk/audio/country_1_150BPM",
+      "labels": "idmt_raw_dataset4_Career_SG_fast_country_folk_audio_country_1_150BPM.json",
+      "npz": "idmt_raw_dataset4_Career_SG_fast_country_folk_audio_country_1_150BPM.npz",
+      "retention": 0.5,
+      "source": "idmt_smt_guitar",
+      "status": "labeled",
+      "windows_kept": 2,
+      "windows_total": 4
+    },
+    {
+      "chord_labels": {
+        "5": 1,
+        "276": 1
+      },
+      "id": "idmt_raw:dataset4/Career SG/fast/country_folk/audio/country_2_150BPM",
+      "labels": "idmt_raw_dataset4_Career_SG_fast_country_folk_audio_country_2_150BPM.json",
+      "npz": "idmt_raw_dataset4_Career_SG_fast_country_folk_audio_country_2_150BPM.npz",
+      "retention": 0.5,
+      "source": "idmt_smt_guitar",
+      "status": "labeled",
+      "windows_kept": 2,
+      "windows_total": 4
+    },
+    {
+      "chord_labels": {
+        "276": 3
+      },
+      "id": "idmt_raw:dataset4/Career SG/fast/country_folk/audio/country_4_100BPM",
+      "labels": "idmt_raw_dataset4_Career_SG_fast_country_folk_audio_country_4_100BPM.json",
+      "npz": "idmt_raw_dataset4_Career_SG_fast_country_folk_audio_country_4_100BPM.npz",
+      "retention": 0.75,
+      "source": "idmt_smt_guitar",
+      "status": "labeled",
+      "windows_kept": 3,
+      "windows_total": 4
+    },
+    {
+      "chord_labels": {
+        "276": 5
+      },
+      "id": "idmt_raw:dataset4/Career SG/fast/country_folk/audio/folk_1_110BPM",
+      "labels": "idmt_raw_dataset4_Career_SG_fast_country_folk_audio_folk_1_110BPM.json",
+      "npz": "idmt_raw_dataset4_Career_SG_fast_country_folk_audio_folk_1_110BPM.npz",
+      "retention": 1.0,
+      "source": "idmt_smt_guitar",
+      "status": "labeled",
+      "windows_kept": 5,
+      "windows_total": 5
+    },
+    {
+      "chord_labels": {
+        "7": 1,
+        "14": 1,
+        "276": 4
+      },
+      "id": "idmt_raw:dataset4/Career SG/fast/country_folk/audio/folk_2_100BPM",
+      "labels": "idmt_raw_dataset4_Career_SG_fast_country_folk_audio_folk_2_100BPM.json",
+      "npz": "idmt_raw_dataset4_Career_SG_fast_country_folk_audio_folk_2_100BPM.npz",
+      "retention": 0.75,
+      "source": "idmt_smt_guitar",
+      "status": "labeled",
+      "windows_kept": 6,
+      "windows_total": 8
+    },
+    {
+      "chord_labels": {
+        "0": 1,
+        "276": 3
+      },
+      "id": "idmt_raw:dataset4/Career SG/fast/jazz/audio/jazz_3_140BPM",
+      "labels": "idmt_raw_dataset4_Career_SG_fast_jazz_audio_jazz_3_140BPM.json",
+      "npz": "idmt_raw_dataset4_Career_SG_fast_jazz_audio_jazz_3_140BPM.npz",
+      "retention": 1.0,
+      "source": "idmt_smt_guitar",
+      "status": "labeled",
+      "windows_kept": 4,
+      "windows_total": 4
+    }
+  ]
+}

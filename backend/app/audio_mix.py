@@ -131,6 +131,8 @@ def resolve_chord_stems(
 def resolve_solo_stem(
     stem_abs_paths: dict[str, Path],
     selected: str,
+    *,
+    allow_vocals: bool = True,
 ) -> tuple[Path, str]:
     """Cascade through ``[selected, "guitar", "vocals"]`` and return the first audible stem.
 
@@ -138,8 +140,12 @@ def resolve_solo_stem(
     log whether a fallback was activated (e.g., for telemetry: "selected was silent,
     fell back to guitar"). If all three candidates are silent / missing, falls back
     to the guitar path (may be silent but exists) with ``"default_guitar"``.
+
+    Set ``allow_vocals=False`` for solo-guitar transcription (T1): a vocal melody
+    must never be presented as guitar tab.
     """
-    for candidate in (selected, "guitar", "vocals"):
+    candidates = (selected, "guitar", "vocals") if allow_vocals else (selected, "guitar")
+    for candidate in candidates:
         p = stem_abs_paths.get(candidate)
         if p is None or not p.is_file():
             continue
@@ -151,7 +157,7 @@ def resolve_solo_stem(
         return guitar_path, "default_guitar"
 
     vocals_path = stem_abs_paths.get("vocals")
-    if vocals_path is not None and vocals_path.is_file():
+    if allow_vocals and vocals_path is not None and vocals_path.is_file():
         return vocals_path, "default_vocals"
 
     raise KeyError(

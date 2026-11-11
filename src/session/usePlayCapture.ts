@@ -17,6 +17,7 @@ import {
   captureBeatIndexFromTick,
   CentSampleRing,
   dynamicGhostRmsThreshold,
+  latencyCompensationSecFromDrift,
   peakRmsInWindow,
   resolvePitchResult,
   type NoteResultLabel,
@@ -62,9 +63,12 @@ function hzToMidiFloat(hz: number): number {
 
 const MAX_QUEUE = 32
 
-export function usePlayCapture(tempo: number | null | undefined) {
+export function usePlayCapture(tempo: number | null | undefined, playbackRate = 1) {
   const setLatestTake = useSessionPlayStore((s) => s.setLatestTake)
   const { start, stop } = usePitchStream()
+
+  const playbackRateRef = useRef(playbackRate > 0 && Number.isFinite(playbackRate) ? playbackRate : 1)
+  playbackRateRef.current = playbackRate > 0 && Number.isFinite(playbackRate) ? playbackRate : 1
 
   const recorderRef = useRef(createSessionRecorder())
   const lastPitchAtRef = useRef<number>(0)
@@ -84,6 +88,8 @@ export function usePlayCapture(tempo: number | null | undefined) {
   const lastReadingRef = useRef<{ hz?: number; rms: number; wallMs: number }>({ rms: 0, wallMs: 0 })
   const consecutiveMissByBeatRef = useRef<Map<number, number>>(new Map())
   const cleanBeatStreakRef = useRef(0)
+  /** Adaptive scoring-window delay derived from measured timing drift (P2). */
+  const driftCompensationSecRef = useRef(0)
   const adaptRecentRef = useRef<Array<'miss' | 'clean'>>([])
   const prevMidiForPreviewRef = useRef<number | null>(null)
   const stoppingCaptureRef = useRef(false)
@@ -181,7 +187,9 @@ export function usePlayCapture(tempo: number | null | undefined) {
         let driftMs: number | null = null
         const first = contourScratch.find((s) => s.hz > 0)
         if (first) {
-          const expectedWall = recordStartMsRef.current + closedBeatIndex * beatMs
+          // Wall time per beat scales with the transport rate (0.75x => 1.33x longer).
+          const wallBeatMs = beatMs / playbackRateRef.current
+          const expectedWall = recordStartMsRef.current + closedBeatIndex * wallBeatMs
           driftMs = expectedWall - first.wallMs
         }
 
@@ -195,6 +203,12 @@ export function usePlayCapture(tempo: number | null | undefined) {
           driftMsContribution: driftMs,
           fretCell: resolvedCell,
         })
+
+        const sessionAfter = useAppStore.getState().currentSession
+        driftCompensationSecRef.current = latencyCompensationSecFromDrift(
+          sessionAfter?.bpmDrift ?? null,
+          beatSec,
+        )
       }
 
       patternRef.current.push(result)
@@ -271,6 +285,7 @@ export function usePlayCapture(tempo: number | null | undefined) {
               anchorPosSec: anchorPosRef.current,
               recordStartMs: recordStartMsRef.current,
               beatSec,
+              latencyCompensationSec: driftCompensationSecRef.current,
             })
           }
         }
@@ -296,6 +311,7 @@ export function usePlayCapture(tempo: number | null | undefined) {
     consecutiveMissByBeatRef.current.clear()
     cleanBeatStreakRef.current = 0
     adaptRecentRef.current = []
+    driftCompensationSecRef.current = 0
     setLastFretResult(null)
     if (fretResultClearRef.current) {
       clearTimeout(fretResultClearRef.current)
@@ -391,13 +407,14 @@ export function usePlayCapture(tempo: number | null | undefined) {
           const idx =
             activeBeatRef.current >= 0
               ? activeBeatRef.current
-              : beatIndexFromClocks({
-                  playing: tickRef.current?.playing ?? false,
-                  positionSec: tickRef.current?.positionSec ?? 0,
-                  anchorPosSec: anchorPosRef.current,
-                  recordStartMs: recordStartMsRef.current,
-                  beatSec,
-                })
+            : beatIndexFromClocks({
+                playing: tickRef.current?.playing ?? false,
+                positionSec: tickRef.current?.positionSec ?? 0,
+                anchorPosSec: anchorPosRef.current,
+                recordStartMs: recordStartMsRef.current,
+                beatSec: beatSec / playbackRateRef.current,
+                latencyCompensationSec: driftCompensationSecRef.current,
+              })
           closeAndScoreBeat(Math.max(0, idx))
         }
 
@@ -458,7 +475,8 @@ export function usePlayCapture(tempo: number | null | undefined) {
         tick: ctx ? { playing: ctx.playing, positionSec: ctx.positionSec } : null,
         anchorPosSec: anchorPosRef.current,
         recordStartMs: recordStartMsRef.current,
-        beatSec,
+        beatSec: ctx ? beatSec : beatSec / playbackRateRef.current,
+        latencyCompensationSec: driftCompensationSecRef.current,
       })
       if (activeBeatRef.current < 0) {
         activeBeatRef.current = idx

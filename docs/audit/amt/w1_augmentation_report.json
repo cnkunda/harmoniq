@@ -1,0 +1,47 @@
+{
+  "augmented": 2,
+  "background_pool": 100,
+  "gain": 0.15,
+  "manifest_id": "w1-dataset-v1",
+  "manifest_path": "data/pseudo_label/w1/augmented/augmented_manifest.json",
+  "method": "cross_stem_style_audio_mix",
+  "schema_version": 1,
+  "seed": "harmoniq-w1-aug",
+  "selected": 2,
+  "tracks": [
+    {
+      "audio_path": "data/pseudo_label/w1/augmented/audio/guitarset_00_BN1-129-Eb_solo__aug_rwc_RWC_P081.wav",
+      "background_track_id": "rwc:RWC_P081",
+      "chord_label_path": "data/guitarset/processed/timelines/00_BN1-129-Eb_solo.json",
+      "gain": 0.15,
+      "id": "aug:guitarset:00_BN1-129-Eb_solo+rwc:RWC_P081",
+      "label_channels": [
+        "chord",
+        "solo"
+      ],
+      "label_status": "human",
+      "licence_id": "CC-BY-NC-4.0",
+      "note_label_path": "data/guitarset/raw/annotation/00_BN1-129-Eb_solo.jams",
+      "notes": "Cross-stem-style mix: GuitarSet solo + RWC-P background. Derivative is non-commercial; do not redistribute.",
+      "source_track_id": "guitarset:00_BN1-129-Eb_solo",
+      "split": "train"
+    },
+    {
+      "audio_path": "data/pseudo_label/w1/augmented/audio/guitarset_00_BN1-147-Gb_solo__aug_rwc_RWC_P061.wav",
+      "background_track_id": "rwc:RWC_P061",
+      "chord_label_path": "data/guitarset/processed/timelines/00_BN1-147-Gb_solo.json",
+      "gain": 0.15,
+      "id": "aug:guitarset:00_BN1-147-Gb_solo+rwc:RWC_P061",
+      "label_channels": [
+        "chord",
+        "solo"
+      ],
+      "label_status": "human",
+      "licence_id": "CC-BY-NC-4.0",
+      "note_label_path": "data/guitarset/raw/annotation/00_BN1-147-Gb_solo.jams",
+      "notes": "Cross-stem-style mix: GuitarSet solo + RWC-P background. Derivative is non-commercial; do not redistribute.",
+      "source_track_id": "guitarset:00_BN1-147-Gb_solo",
+      "split": "train"
+    }
+  ]
+}

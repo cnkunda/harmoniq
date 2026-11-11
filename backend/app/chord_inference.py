@@ -694,14 +694,56 @@ def _run_chroma_raw(y: np.ndarray, sr: int, hop_length: int = 512) -> list[dict]
     return results
 
 
-def _run_inference(y: np.ndarray, sr: int) -> list[dict]:
+def _run_inference(
+    y: np.ndarray,
+    sr: int,
+    *,
+    force_tier: str | None = None,
+) -> list[dict]:
     """Run chord inference using the best available model.
 
     Chain: Keras → TFLite → Chroma template matching.
     Falls through when the neural model produces mostly N (no-chord) or when
     its mean top-class probability is too low to be meaningful.
+
+    ``force_tier`` is an evaluation-only escape hatch used by W0 baselines:
+    ``"crnn"`` runs Keras/TFLite and never falls through to chroma;
+    ``"chroma"`` runs the chroma template matcher directly.
     """
     global _last_inference_tier
+
+    if force_tier == "chroma":
+        _last_inference_tier = "chroma"
+        raw_frames = _run_chroma_raw(y, sr)
+        logger.info("Chord inference: %d frames (forced chroma)", len(raw_frames))
+        return raw_frames
+
+    if force_tier == "crnn":
+        last_error: Exception | None = None
+        try:
+            raw_frames = _run_keras_raw(y, sr)
+            _last_inference_tier = "crnn"
+            logger.info("Chord inference: %d frames (forced Keras CRNN)", len(raw_frames))
+            return raw_frames
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Keras inference unavailable (forced CRNN): %s", exc)
+
+        try:
+            raw_frames = _run_tflite_raw(y, sr)
+            _last_inference_tier = "crnn"
+            logger.info("Chord inference: %d frames (forced TFLite CRNN)", len(raw_frames))
+            return raw_frames
+        except Exception as exc:
+            last_error = exc
+            logger.warning("TFLite inference unavailable (forced CRNN): %s", exc)
+
+        raise RuntimeError(
+            "CRNN tier requested but neither Keras nor TFLite inference succeeded"
+        ) from last_error
+
+    if force_tier is not None:
+        raise ValueError(f"unsupported force_tier: {force_tier!r}")
 
     try:
         raw_frames = _run_keras_raw(y, sr)
@@ -1055,7 +1097,14 @@ def _reject_spurious_n(
     return corrected
 
 
-def infer_chords(audio_path: Path, beat_grid: BeatGrid, *, detect_bass: bool = False, detect_voicing: bool = False) -> ChordTimeline:
+def infer_chords(
+    audio_path: Path,
+    beat_grid: BeatGrid,
+    *,
+    detect_bass: bool = False,
+    detect_voicing: bool = False,
+    force_tier: str | None = None,
+) -> ChordTimeline:
     try:
         import librosa
     except ImportError as exc:
@@ -1069,7 +1118,7 @@ def infer_chords(audio_path: Path, beat_grid: BeatGrid, *, detect_bass: bool = F
     except Exception as exc:
         raise RuntimeError(f"Error loading audio file {audio_path}: {exc}") from exc
 
-    raw_frames = _run_inference(y, sr)
+    raw_frames = _run_inference(y, sr, force_tier=force_tier)
 
     if raw_frames and "probs" in raw_frames[0]:
         all_probs = np.array([f["probs"] for f in raw_frames])

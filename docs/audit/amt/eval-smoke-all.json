@@ -1,0 +1,178 @@
+{
+  "manifest_id": "amt-eval-v1",
+  "schema_version": 1,
+  "tiers": {
+    "chroma": {
+      "aggregates": {
+        "chord_frame_accuracy": 0.467418,
+        "completed": 2,
+        "ece": 0.25482,
+        "failed": 0,
+        "notes": {
+          "offset_multi": {
+            "f1": 0.0,
+            "fn": 334,
+            "fp": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "onset_multi": {
+            "f1": 0.0,
+            "fn": 334,
+            "fp": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "onset_pitch": {
+            "f1": 0.0,
+            "fn": 334,
+            "fp": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          }
+        },
+        "runtime_ms_mean": 3014.332,
+        "runtime_ms_total": 6028.663,
+        "tracks": 2
+      },
+      "failures": [],
+      "verdicts": {
+        "fail": 0,
+        "pass": 0,
+        "warn": 2
+      }
+    },
+    "crnn": {
+      "aggregates": {
+        "chord_frame_accuracy": 0.083334,
+        "completed": 2,
+        "ece": 0.657191,
+        "failed": 0,
+        "notes": {
+          "offset_multi": {
+            "f1": 0.0,
+            "fn": 334,
+            "fp": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "onset_multi": {
+            "f1": 0.0,
+            "fn": 334,
+            "fp": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "onset_pitch": {
+            "f1": 0.0,
+            "fn": 334,
+            "fp": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          }
+        },
+        "runtime_ms_mean": 11388.29,
+        "runtime_ms_total": 22776.58,
+        "tracks": 2
+      },
+      "failures": [],
+      "verdicts": {
+        "fail": 1,
+        "pass": 0,
+        "warn": 1
+      }
+    },
+    "full": {
+      "aggregates": {
+        "chord_frame_accuracy": 0.451128,
+        "completed": 2,
+        "ece": 0.780881,
+        "failed": 0,
+        "notes": {
+          "offset_multi": {
+            "f1": 0.038554,
+            "fn": 326,
+            "fp": 73,
+            "precision": 0.098765,
+            "recall": 0.023952,
+            "tp": 8
+          },
+          "onset_multi": {
+            "f1": 0.163855,
+            "fn": 300,
+            "fp": 47,
+            "precision": 0.419753,
+            "recall": 0.101796,
+            "tp": 34
+          },
+          "onset_pitch": {
+            "f1": 0.322892,
+            "fn": 267,
+            "fp": 14,
+            "precision": 0.82716,
+            "recall": 0.200599,
+            "tp": 67
+          }
+        },
+        "runtime_ms_mean": 50326.472,
+        "runtime_ms_total": 100652.944,
+        "tracks": 2
+      },
+      "failures": [],
+      "verdicts": {
+        "fail": 0,
+        "pass": 2,
+        "warn": 0
+      }
+    },
+    "mt3": {
+      "aggregates": {
+        "chord_frame_accuracy": 0.451128,
+        "completed": 2,
+        "ece": 0.780881,
+        "failed": 0,
+        "notes": {
+          "offset_multi": {
+            "f1": 0.038554,
+            "fn": 326,
+            "fp": 73,
+            "precision": 0.098765,
+            "recall": 0.023952,
+            "tp": 8
+          },
+          "onset_multi": {
+            "f1": 0.163855,
+            "fn": 300,
+            "fp": 47,
+            "precision": 0.419753,
+            "recall": 0.101796,
+            "tp": 34
+          },
+          "onset_pitch": {
+            "f1": 0.322892,
+            "fn": 267,
+            "fp": 14,
+            "precision": 0.82716,
+            "recall": 0.200599,
+            "tp": 67
+          }
+        },
+        "runtime_ms_mean": 159873.906,
+        "runtime_ms_total": 319747.812,
+        "tracks": 2
+      },
+      "failures": [],
+      "verdicts": {
+        "fail": 0,
+        "pass": 2,
+        "warn": 0
+      }
+    }
+  }
+}

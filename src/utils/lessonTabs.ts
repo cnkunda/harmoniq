@@ -5,6 +5,7 @@ export type SectionTabPayloads = {
   full?: string
   skeleton?: string
   alt?: string
+  rhythm?: string
 }
 
 export function readSectionTabPayloads(section: unknown): SectionTabPayloads {
@@ -15,6 +16,7 @@ export function readSectionTabPayloads(section: unknown): SectionTabPayloads {
     full: str('tab_full_gp5_base64'),
     skeleton: str('tab_skeleton_gp5_base64'),
     alt: str('tab_alt_position_gp5_base64'),
+    rhythm: str('tab_rhythm_gp5_base64'),
   }
 }
 
@@ -29,7 +31,7 @@ export function firstGp5Base64FromLessonSections(sections: unknown): string | nu
   return null
 }
 
-export type TabVariant = 'full' | 'skeleton' | 'alt'
+export type TabVariant = 'full' | 'skeleton' | 'alt' | 'rhythm'
 
 /**
  * ML Fallback Logic milestone: pick which tab variant to render.

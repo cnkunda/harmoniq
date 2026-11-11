@@ -36,7 +36,7 @@ predictions) and **chroma template matching** as the last resort.
 (instrument-specific). Each branch reports per-note and per-chord confidence,
 enabling honest uncertainty display rather than silent failure.
 
-**Status:** Working pipeline, CPU-only. Active work is **Commit 1 — Harmoniq AMT Research Program** (Stage 0 CPU-ready; W1–W4 GPU-gated), followed by **Commit 2 — Part 3 blog post**. See [`PRIORITIES.md`](PRIORITIES.md) for the roadmap and [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) for limitations.
+**Status:** Working pipeline, CPU-only. **Commit 1 — Harmoniq AMT Research Program** is complete (W0–W6; W5 chord-confidence ECE 0.7281 on 526 tracks, calibrated gate not release-ready). **Commit 2 — Part 3 blog post** remains deferred. See [`PRIORITIES.md`](PRIORITIES.md) for the roadmap, [`docs/EVALUATION.md`](docs/EVALUATION.md) for measured results, and [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) for limitations.
 
 **Quick start:**
 
@@ -60,6 +60,7 @@ npm install && npx expo start --web
 **Related docs:** [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 [`docs/EVALUATION.md`](docs/EVALUATION.md) |
+[`docs/eval/REPRODUCIBILITY.md`](docs/eval/REPRODUCIBILITY.md) |
 [`PRIORITIES.md`](PRIORITIES.md) |
 [`docs/COMMIT_TEMPLATE.md`](docs/COMMIT_TEMPLATE.md) |
 [`priorities-archive.md`](priorities-archive.md)
@@ -145,6 +146,8 @@ Runs locally during development. Deploy to Railway, Fly.io, or Render free tier 
 - `GET /tabs/search?q=` — stub tab catalog for UI integration (`HARMONIQ_TAB_CATALOG`: `stub` default, or `none` for empty results). `GET /tabs/{id}/gp5` returns **501** until a licensed catalog API is wired.
 - `POST /score` — accepts recorded PCM buffer + target section metadata. Returns `ScoreResult`
 - `POST /jam-score` — accepts a jam session recording buffer. Returns `JamResult`
+- `POST /jam/backing` — synchronous jam-bed generation (provider chain: ACE-Step → Lyria → MRT2 → bundled).
+- `POST /jam/backing/jobs` / `GET /jam/backing/jobs/{job_id}` — async generation used by Jam's instant-loop hot-swap.
 
 **Audio ML pipeline (Python, executed in sequence per analysis job):**
 1. `yt-dlp --extract-audio --audio-format wav --audio-quality 0` → `song.wav` (44.1kHz mono). For uploaded files, accept WAV/MP3/M4A and normalize via `ffmpeg -ar 44100 -ac 1`.
@@ -152,9 +155,9 @@ Runs locally during development. Deploy to Railway, Fly.io, or Render free tier 
 3. `librosa.load(guitar_stem)` → key string (e.g., "G major"), tempo float (BPM), beat grid (array of timestamps in seconds), structure segments array (intro / verse / chorus / solo / bridge / outro, detected via onset strength + RMS energy segmentation).
 4. `whisper.transcribe(vocals_stem, word_timestamps=True)` (base model, runs locally) → lyrics with word-level timestamps. Map each word timestamp to the nearest beat in the beat grid.
 5. **Branch A — Chord extraction (instrument-agnostic).** Input = full mix or harmonic-bed submix (bass + piano + other + guitar, drums removed) — never the guitar stem alone. MT3 (or an instrument-agnostic pitch model like Basic Pitch at "Flat" granularity) collapses all pitched, non-drum content into an aggregate pitch/chroma representation. The model does not care which instrument is sounding a note, only that it is sounding. Chroma/pitch-class aggregation → template matching against `CHORD_INTERVALS` (Jaccard score, >0.66 coverage threshold) → 25-class MIREX or 277-class chord labels. Per-chord confidence reflects chroma clarity + template match quality, decoupled from guitar-stem separation quality. (Two-branch chord/solo split; see § Lead sheet roadmap for rationale.)
-6. **Branch B — Guitar solo extraction (leakage-hardened).** Input = guitar stem (Demucs `htdemucs_6s`) as a **soft prior**, not ground truth — both the isolated stem and the full mix are fed as parallel features so overlapping unisons with other instruments are not silently dropped. MT3-style token decoder **conditioned on a fixed guitar-program embedding**, so the decoder's output vocabulary never includes non-guitar program tokens (structural leakage prevention, not post-hoc filtering). Leakage mitigation borrows techniques from **MR-MT3** (arXiv:2403.10024): memory retention (aggregated token representation from the previous segment as extra decoder context), prior token sampling (varying how far back the memory window starts during training), and token shuffling (semantics-preserving augmentation on same-timestamp ordering). A post-hoc safety net hard-filters any token outside the guitar program range before it reaches the solo decoder. Output: monophonic melodic line with beat-grid quantization, tie detection → `SoloNotes` with per-note confidence, technique tags (bends, vibrato, grace notes), and `leakage_risk` (0.0–1.0 per section).
-7. **Aggregation** — chord timeline from Branch A and solo notes from Branch B are assembled into a single `LessonJSON` with `chord_source: "full_mix" | "harmonic_bed"` at the top level and per-section `leakage_risk` alongside the existing `transcription_confidence`.
-8. **Fallback chain**: if Branch A (MT3) is unavailable or confidence < 0.7, fall back to CRNN TFLite model (`chord_inference.py`) for chords running on the full mix, and if Branch B (MT3) is unavailable, fall back to Basic Pitch (`solo_inference.py`) on the guitar stem. Two quality gates bypass the CRNN result: `_neural_model_too_noisy()` when >80% of frames predict N (no-chord), and `_neural_model_too_uncertain()` when mean top-class confidence is below 0.20 (near-uniform output). Both fall through to chroma template matching. Key estimation uses normalized Krumhansl-Schmuckler correlation (`app/key_detection.py`); the Viterbi matrix applies a self-transition persistence prior and sub-beat penalties on chord changes. Basic Pitch results are cached by audio path and canonicalized model key to avoid duplicate inference between solo extraction and tab generation.
+6. **Branch B — Guitar solo extraction (guitar-only).** A **separate MT3 pass runs on the Demucs guitar stem** (chords use the chord mix). Solo decoding keeps only GM guitar programs (24–31); piano and vocal programs are filtered, and the vocals stem is never used as a solo fallback. Output: monophonic melodic line with beat-grid quantization, tie detection → `SoloNotes` with per-note confidence, technique tags (bends, vibrato, grace notes), string/fret positions, and per-note `part_role`. MR-MT3 memory retention / prior-token sampling / token shuffling are research track items (W2/W3), **not** in the production path; per-section `leakage_risk` is currently an instrument-confusion proxy, not a measured note-level leakage signal.
+7. **Aggregation** — chord timeline from Branch A and solo notes from Branch B are assembled into a single `LessonJSON` with `chord_source: "full_mix" | "harmonic_bed"` at the top level, per-note positions/roles, and per-section `transcription_confidence` (plus the instrument-confusion proxy currently exposed as `leakage_risk`).
+8. **Fallback chain**: if Branch A (MT3) is unavailable or confidence < 0.7 (or below the opt-in `HARMONIQ_CONFIDENCE_GATE` chord-confidence floor), fall back to CRNN TFLite model (`chord_inference.py`) for chords running on the full mix, and if Branch B (MT3) is unavailable, fall back to Basic Pitch (`solo_inference.py`) on the guitar stem. Two quality gates bypass the CRNN result: `_neural_model_too_noisy()` when >80% of frames predict N (no-chord), and `_neural_model_too_uncertain()` when mean top-class confidence is below 0.20 (near-uniform output). Both fall through to chroma template matching. Key estimation uses normalized Krumhansl-Schmuckler correlation (`app/key_detection.py`); the Viterbi matrix applies a self-transition persistence prior and sub-beat penalties on chord changes. Basic Pitch results are cached by audio path and canonicalized model key to avoid duplicate inference between solo extraction and tab generation.
 9. Skeleton tab generation: from solo notes, filter ornaments — grace notes, bends shorter than 50ms, and hammer-ons/pull-offs faster than a 16th note at the song's BPM. Remaining events → `.gp5` file.
 10. Alternate position generation *(only if confidence is high)*: given key and detected primary position, compute alternate fingering map (e.g., position 2 → position 4) → second `.gp5` file.
 11. `bar_timestamps` array: use beat grid and time signature to compute one timestamp per bar (e.g., 4/4 at 72 BPM → one bar every 3.33 seconds). This drives SmartScroll.
@@ -383,6 +386,8 @@ No gamification. No XP. No level badges.
 
 **Session journal:** Past sessions listed reverse-chronologically — song, date, one-line coach takeaway. Tap any session to open the full phrasing visualizer for that recording.
 
+**Jam generation:** provider chain, deployable ACE-Step Modal app, and async hot-swap are documented in [`docs/JAM_GENERATION.md`](docs/JAM_GENERATION.md).
+
 **Jam vocabulary panel:** Horizontal bar chart of scale/position usage frequencies across all jam sessions. Shows natural tendencies — what the user reaches for when not thinking. Used by the coach to inform session suggestions.
 
 ---
@@ -395,7 +400,7 @@ Mic listens passively while the user noodles freely — over a backing track, a 
 
 **Web:** Requires HTTPS and mic permission.
 
-**Backing tracks** (bundled as MP3 loops in `/assets/backing-tracks/`, looped via `expo-av`): in-repo **multi-part** beds (bass, chords/arpeggio, light drums — not single-tone demos). Regenerate from source with `python scripts/generate_backing_tracks.py` (requires numpy + ffmpeg). See `assets/backing-tracks/SOURCES.md`. Optional richer **AI** instrumental via `POST /jam/backing` using **MRT2 (Magenta RealTime 2)** — an open-weights generative audio model — when installed (`pip install "harmoniq-backend[mrt2]"`); route auto-falls back to bundled loops if MRT2 is unavailable.
+**Backing tracks** (bundled MP3 loops in `/assets/backing-tracks/`, looped via `expo-av`) plus optional generated beds. Generation uses an ordered provider chain (`HARMONIQ_BACKING_PROVIDERS`, default `ace_step_modal,lyria,mrt2,bundled`): warm ACE-Step/Lyria endpoints when configured, local **MRT2** when installed (`pip install "harmoniq-backend[mrt2]"`), then bundled loops. Every response reports `provider`/`used_fallback`, generated beds are key/BPM-verified and trimmed to bars, and Jam starts on the bundled loop then hot-swaps the generated bed in when the async job completes. Jam settings expose key, BPM, style, length, and an optional chord progression; lessons can prefill them via “Jam this section.”
 - A minor, slow blues shuffle — 70 BPM
 - A minor, open drone — ambient, no tempo
 - G major, fingerpicking groove — 80 BPM (Tommy Emmanuel / acoustic)
@@ -444,7 +449,7 @@ Target experience: **beat-aligned chord symbols**, a **clean monophonic solo lin
 * **Canonical score format:** MusicXML (partwise) with `<harmony>` for chords and `<note>` for the solo line; `<frame>` for chord diagrams; `<dynamics>`, `<articulations>`, `<beam>`, `<slur>`, and `<technical>` (string/fret) for full notation. **alphaTab** loads the file via its **MusicXML importer** for notation + diagrams. (Commit 108: MusicXML is now the primary render format; GP5 is retained as export-only fallback.)
 * **Primary transcription engine — two-branch architecture:**
   - **Chord branch (instrument-agnostic):** full mix or harmonic-bed submix → aggregate pitch/chroma representation → template matching against `CHORD_INTERVALS`. The model does not care which instrument is sounding a given pitch — only that pitch is present. Decouples chord accuracy from guitar-stem separation quality.
-  - **Solo branch (leakage-hardened):** guitar stem as soft prior + full mix as parallel feature → MT3-style token decoder conditioned on a fixed guitar-program embedding. Structural leakage prevention via program-scoped vocabulary. Additional mitigation follows **MR-MT3** (arXiv:2403.10024): memory retention across segment boundaries, prior token sampling during training, and token shuffling augmentation. Output includes per-section `leakage_risk` (0.0–1.0) alongside note confidence.
+  - **Solo branch (guitar-only):** a separate MT3 pass over the Demucs guitar stem; solo decoding is restricted to GM guitar programs (24–31) so piano/vocal bleed cannot become tab. MR-MT3 memory retention, prior-token sampling, and token shuffling remain research workstreams (W2/W3), not production behavior.
 * **Fallback chain:** Branch A (chords): MT3 → CRNN TFLite (full mix) → Chroma template matching. Branch B (solo): MT3 → Basic Pitch (guitar stem). Each tier is confidence-gated; `transcription_source` indicates which tier produced each branch's result.
 * **On-device real-time inference:** The CRNN TFLite model powers Live Mic Mode (<120ms latency) for chord detection during practice. Long-term, a framewise piano-roll student model (non-autoregressive, distilled from Branch A's output) will replace the CRNN for chords, and a guitar-only-vocabulary token student model (autoregressive, distilled from Branch B's output) will handle on-device solo transcription.
 * **Custom model future:** The CRNN training pipeline is preserved as a distillation target. Two student models, not one: (1) a **framewise chord student** — non-autoregressive piano-roll model distilled from Branch A's Flat-granularity pitch output, fast and real-time-capable; (2) a **guitar-vocabulary token solo student** — autoregressive token model distilled from Branch B's program-conditioned output, smaller than MT3 because its vocabulary is limited to guitar programs only and structurally incapable of leaking non-guitar notes. Both are fine-tuned on real guitar audio (GuitarSet, isolated stems from catalog), not only Slakh2100.
@@ -467,8 +472,8 @@ or multipart form with audio file (WAV/MP3/M4A, max 50MB).
 3. Librosa analysis on guitar stem → key, tempo, beat grid, structure segments, bar_timestamps
 4. Whisper on vocals stem → word-timestamped lyrics → mapped to beat grid
 5. **Branch A — Chord extraction (instrument-agnostic):** full mix or harmonic-bed submix → aggregate pitch/chroma representation (model-agnostic — MT3, Basic Pitch Flat granularity, or dedicated chroma extractor) → pitch-class set → template matching against `CHORD_INTERVALS` → chord timeline with per-chord confidence. Input is never the guitar stem alone.
-6. **Branch B — Guitar solo extraction (leakage-hardened):** guitar stem (Demucs) as soft prior + full mix as secondary parallel feature → MT3-style token decoder conditioned on fixed guitar-program embedding, with MR-MT3 memory retention (previous-segment token context), prior token sampling, and token shuffling → post-hoc program-token filter → melodic line → beat-grid quantization → tie detection → SoloNotes with per-note confidence and `leakage_risk` (0.0–1.0 per section).
-7. **Aggregation:** chord timeline from Branch A and solo notes from Branch B assembled into single LessonJSON. Top-level `chord_source: "full_mix" | "harmonic_bed"` and per-section `leakage_risk` alongside `transcription_confidence`.
+6. **Branch B — Guitar solo extraction (guitar-only):** separate MT3 pass on the Demucs guitar stem → guitar-program filter (GM 24–31) → melodic line → beat-grid quantization → tie detection → SoloNotes with per-note confidence, technique tags, string/fret positions, and per-note part role. No vocals fallback.
+7. **Aggregation:** chord timeline from Branch A and solo notes from Branch B assembled into single LessonJSON. Top-level `chord_source: "full_mix" | "harmonic_bed"`, per-note positions/roles, and per-section `transcription_confidence`.
 8. Fallback chain: Branch A (chords) — MT3 → CRNN TFLite on full mix → chroma template matching. Branch B (solo) — MT3 → Basic Pitch on guitar stem.
 9. Skeleton `.gp5` (ornaments filtered out from solo notes)
 10. Alternate position `.gp5` *(generate only if confidence is high; otherwise omit)*
@@ -663,7 +668,7 @@ Every error should be warm, specific, and tell the user exactly what to do next.
 - Home screen with SM-2-driven session suggestion and cold start handling
 - Full 5-step session loop (Listen → Study → Slow → Play → Review)
 - Web support (React Native Web / Expo Web) alongside iOS and Android
-- Song analysis via YouTube URL or upload (yt-dlp + htdemucs_6s + librosa + Whisper + two-branch architecture: full-mix chord branch + guitar-conditioned solo branch with MR-MT3 leakage mitigation); upload + fallback when extraction fails
+- Song analysis via YouTube URL or upload (yt-dlp + htdemucs_6s + librosa + Whisper + two-branch architecture: full-mix chord branch + separate guitar-stem solo branch with guitar-only program filtering); upload + fallback when extraction fails
 - Drag-and-drop audio upload on web (plus file picker)
 - 6-stem track mixer (Guitar / Bass / Drums / Vocals — independently mutable)
 - AlphaTab: WebView on mobile, direct DOM on web; shared JSON interface (Full + Skeleton toggle)

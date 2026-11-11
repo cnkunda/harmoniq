@@ -19,10 +19,28 @@ export const STRONG_HEDGE_TRIGGER = 0.6
 export const CHECK_BY_EAR_CUE =
   'The transcription here may be approximate — check this part by ear against the recording.'
 
+/**
+ * Calibration-honest wording. The underlying score is not a calibrated
+ * probability (W5 measured severe overconfidence on chord events), so the
+ * high band must not imply an accuracy claim. Every band asks the learner to
+ * verify against the recording.
+ */
 const CONFIDENCE_BAND_LABELS: Record<ConfidenceBand, string> = {
-  low: 'Rough transcription',
-  medium: 'Some fuzziness',
-  high: 'Good match',
+  low: 'Rough transcription — check by ear',
+  medium: 'Approximate transcription — check by ear',
+  high: 'Transcription generated — verify by ear',
+}
+
+const CONFIDENCE_BAND_SHORT_LABELS: Record<ConfidenceBand, string> = {
+  low: 'Rough',
+  medium: 'Approximate',
+  high: 'Verify',
+}
+
+const CONFIDENCE_BAND_BAR_WIDTHS: Record<ConfidenceBand, `${number}%`> = {
+  low: '33%',
+  medium: '66%',
+  high: '100%',
 }
 
 const CONFUSION_LEVEL_LABELS: Record<ConfusionLevel, string> = {
@@ -62,6 +80,22 @@ export function confidenceBandLabel(
 ): string | null {
   if (band === null || band === undefined) return null
   return CONFIDENCE_BAND_LABELS[band]
+}
+
+/** Compact band label for dense surfaces (pulse bars, note badges). */
+export function confidenceBandShortLabel(
+  band: ConfidenceBand | null | undefined,
+): string | null {
+  if (band === null || band === undefined) return null
+  return CONFIDENCE_BAND_SHORT_LABELS[band]
+}
+
+/** Fixed three-step width; never a continuous percentage. */
+export function confidenceBandBarWidth(
+  band: ConfidenceBand | null | undefined,
+): `${number}%` | null {
+  if (band === null || band === undefined) return null
+  return CONFIDENCE_BAND_BAR_WIDTHS[band]
 }
 
 /** Map instrument confusion to the same three tiers the coach hedge uses. */

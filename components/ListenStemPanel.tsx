@@ -14,6 +14,7 @@ import { toast } from '@/components/ToastConfig'
 import { ApiError, fetchStemExport, stemsExportUrl } from '@/src/api/analyze'
 import type { MetronomeSubdivision } from '@/src/audio/metronomeShared'
 import { createStemMixer } from '@/src/audio/Mixer'
+import { playCountIn } from '@/src/audio/countIn'
 import { GHOST_MIX_LINEAR, GHOST_STEM_ID } from '@/src/audio/ghostConstants'
 import type { StemMixer } from '@/src/audio/mixerTypes'
 import { useGhostStemSidecar } from '@/src/audio/useGhostStemSidecar'
@@ -100,6 +101,10 @@ export type ListenStemPanelProps = {
   captureRecording?: boolean
   /** Play session: full capture card (backing state from this panel); supersedes title/banner/`lessonCardInsert`. */
   playCaptureSlot?: (ctx: PlayLessonCaptureContext) => ReactNode
+  /** Count-in bars before transport start (0 = off). */
+  countInBars?: number
+  /** Show the stem mixer under a `stemsColumnReplacement` (Play keeps scoring + mixer). */
+  showMixerWithReplacement?: boolean
   /** Bundled demo only: start playback once stems load (≤3 taps from Home). */
   autoPlayOnReady?: boolean
   /** Commit 75: playable URI for the latest ghost reference (blob / file path). */
@@ -150,6 +155,8 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
       lessonPlaybackCardVariant = 'default',
       captureRecording = false,
       playCaptureSlot,
+      countInBars = 0,
+      showMixerWithReplacement = false,
       autoPlayOnReady = false,
       ghostStemPlaybackUri = null,
       ghostAnchorSec = null,
@@ -163,6 +170,8 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
   const isScreenFocused = useIsFocused()
 
   const mixerRef = useRef<StemMixer | null>(null)
+  const countInAbortRef = useRef<AbortController | null>(null)
+  const [countingInBeat, setCountingInBeat] = useState<number | null>(null)
   const paddedGhostRevokeRef = useRef<string | null>(null)
   const metro = useMetronome()
 
@@ -210,7 +219,17 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
   })
 
   useEffect(() => {
+    return () => {
+      countInAbortRef.current?.abort()
+      countInAbortRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
     if (isScreenFocused) return
+    countInAbortRef.current?.abort()
+    countInAbortRef.current = null
+    setCountingInBeat(null)
     metro.stop()
     const m = mixerRef.current
     if (!m) {
@@ -584,11 +603,38 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
   const togglePlay = async () => {
     const m = mixerRef.current
     if (!m || !ready) return
+    if (countInAbortRef.current) {
+      countInAbortRef.current.abort()
+      countInAbortRef.current = null
+      setCountingInBeat(null)
+      return
+    }
     try {
       if (playing) {
         await m.pause()
         setPlaying(false)
       } else {
+        if (countInBars > 0) {
+          const beatsPerBar = lesson?.beat_grid_structured?.time_signature?.numerator ?? 4
+          const controller = new AbortController()
+          countInAbortRef.current = controller
+          try {
+            const result = await playCountIn({
+              bpm: baseTempoBpm,
+              beats: beatsPerBar * countInBars,
+              beatsPerBar,
+              onBeat: (beat) => setCountingInBeat(beat),
+              signal: controller.signal,
+            })
+            if (result === 'cancelled') {
+              setCountingInBeat(null)
+              return
+            }
+          } finally {
+            countInAbortRef.current = null
+            setCountingInBeat(null)
+          }
+        }
         await m.play()
         setPlaying(true)
         logFirstAudioPlay({
@@ -737,7 +783,9 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
               </Text>
               <Text className="mt-1 font-sans text-xs text-muted-brown">{sectionLine}</Text>
               {currentSectionConfidence != null && currentSectionConfidence < 0.6 ? (
-                <Text className="font-sans text-[10px] text-danger/70">Label confidence: {Math.round(currentSectionConfidence * 100)}% — may not match musical content</Text>
+                <Text className="font-sans text-[10px] text-danger/70">
+                  Section label may not match the music — verify by ear.
+                </Text>
               ) : null}
 
               {playLessonCard ? (
@@ -755,6 +803,14 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             </>
           )}
 
+          {countingInBeat != null ? (
+            <View className="mt-3 flex-row items-center gap-2 rounded-lg border border-amber-accent/40 bg-amber-accent/10 px-3 py-2">
+              <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
+                Count-in
+              </Text>
+              <Text className="font-mono text-lg text-cream">{countingInBeat}</Text>
+            </View>
+          ) : null}
           <View
             className={`${
               showPlayCaptureShell ? 'mt-4' : lessonCardInsert != null ? 'mt-3' : 'mt-4'
@@ -806,8 +862,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             </View>
           </View>
 
-          {!playLessonCard ? (
-            <View className="mt-3 border-t border-wood-600/30 pt-3">
+          <View className="mt-3 border-t border-wood-600/30 pt-3">
               <View className="mb-2 flex-row items-baseline justify-between gap-3">
                 <Text className="font-sans-medium text-sm text-cream">Speed</Text>
                 <Text className="font-mono text-[13px] tabular-nums tracking-tight text-muted-brown">
@@ -835,7 +890,6 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                 })}
               </View>
             </View>
-          ) : null}
 
           {!playLessonCard && hasUpNext ? (
             <View className="mt-3 border-t border-wood-600/20 pt-3">
@@ -913,7 +967,52 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
         </View>
 
         {stemsColumnReplacement != null ? (
-          stemsColumnReplacement
+          <>
+            {stemsColumnReplacement}
+            {showMixerWithReplacement ? (
+              <View className={playbackCardClass}>
+                <Text className="mb-2 font-sans-medium text-sm text-cream">Mixer</Text>
+                <View className="flex-row flex-wrap gap-x-1 gap-y-1.5">
+                  {STEM_KEYS.map((id) => {
+                    const hasStem = Boolean((lesson.stems as Record<string, string>)?.[id])
+                    const Icon = STEM_ICONS[id]
+                    const unmuted = hasStem && !stemMute[id]
+                    const label = id.charAt(0).toUpperCase() + id.slice(1)
+                    const disabled = !ready || loading || !hasStem
+                    const tileBusy = hasStem && (!ready || loading)
+                    return (
+                      <AnimatedPressable
+                        key={`play-mixer-${id}`}
+                        onPress={() => toggleStem(id)}
+                        disabled={disabled}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${label} stem, ${unmuted ? 'on' : 'off'}`}
+                        accessibilityState={{ disabled }}
+                        className={`w-[32%] max-w-[32%] shrink-0 items-center rounded-lg border px-1.5 py-1.5 ${
+                          !hasStem
+                            ? 'border-wood-600/25 bg-wood-800/40 opacity-45'
+                            : unmuted
+                              ? 'border-amber-accent bg-amber-accent/20'
+                              : 'border-wood-600/40 bg-wood-900/40'
+                        } ${tileBusy ? 'opacity-45' : ''}`}
+                      >
+                        <Icon
+                          size={20}
+                          color={!hasStem ? colors.muted.brown : unmuted ? colors.amber.accent : colors.muted.brown}
+                          strokeWidth={1.75}
+                        />
+                        <Text
+                          className={`mt-1 font-sans text-[10px] leading-tight ${unmuted && hasStem ? 'font-sans-medium text-cream' : 'text-muted-brown'}`}
+                        >
+                          {label}
+                        </Text>
+                      </AnimatedPressable>
+                    )
+                  })}
+                </View>
+              </View>
+            ) : null}
+          </>
         ) : (
           /* Stems + optional sections */
           <View className={playbackCardClass}>

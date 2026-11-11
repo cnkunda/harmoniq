@@ -50,3 +50,23 @@ describe('buildJamPracticeHref', () => {
     ).toBe('/jam-practice?trackId=am-blues-70&startMs=1000&endMs=2001&phraseIndex=2')
   })
 })
+
+describe('buildJamPracticeHref with AI backing context', () => {
+  it('carries key, bpm, progression, and prompt for regeneration', () => {
+    expect(
+      buildJamPracticeHref({
+        trackId: 'ai-instrumental',
+        startMs: 0,
+        endMs: 1000,
+        phraseIndex: 0,
+        source: 'ai',
+        key: 'A minor',
+        bpm: 70,
+        progression: ['Am', 'F', 'C', 'G'],
+        prompt: 'blues shuffle',
+      }),
+    ).toBe(
+      '/jam-practice?trackId=ai-instrumental&startMs=0&endMs=1000&phraseIndex=0&source=ai&key=A%20minor&bpm=70&progression=Am%2CF%2CC%2CG&prompt=blues%20shuffle',
+    )
+  })
+})

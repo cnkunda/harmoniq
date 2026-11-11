@@ -180,6 +180,18 @@ def _seed_job_for_rebuild(job_id: str, tmp_path, monkeypatch) -> None:
             )
         ],
     )
+    # Give the first note rich metadata so correction tests can prove it is preserved.
+    lesson.solo_notes.notes[0] = SoloNote(
+        start_time=0.5,
+        duration=0.25,
+        pitch=60,
+        velocity=80,
+        confidence=0.42,
+        technique=["bend"],
+        string=3,
+        fret=7,
+        part_role="lead",
+    )
     jobs[job_id] = JobStatus(status="complete", result=lesson)
     job_dir = get_job_dir(job_id)
     job_dir.mkdir(parents=True, exist_ok=True)
@@ -223,6 +235,31 @@ class TestCorrectionScoreRebuild:
         musicxml = body["result"]["musicxml"]
         assert "<step>D</step>" in musicxml
         assert "<root-step>F</root-step>" not in musicxml  # chords untouched
+
+    def test_solo_note_correction_preserves_metadata_and_position(self, tmp_path, monkeypatch):
+        job_id = "rebuild-note-position-1"
+        _seed_job_for_rebuild(job_id, tmp_path, monkeypatch)
+
+        # Change pitch and position; everything else must survive the rebuild.
+        r = client.patch(
+            f"/analyze/{job_id}/solo-note/0",
+            json={
+                "pitch": 62,
+                "string": 2,
+                "fret": 10,
+                "technique": ["vibrato", "unknown_tag"],
+                "reason": "test",
+            },
+        )
+        assert r.status_code == 200, r.text
+
+        note = client.get(f"/analyze/{job_id}").json()["result"]["solo_notes"]["notes"][0]
+        assert note["pitch"] == 62
+        assert note["string"] == 2
+        assert note["fret"] == 10
+        assert note["technique"] == ["vibrato"]  # unknown tags filtered out
+        assert note["part_role"] == "lead"
+        assert note["confidence"] == pytest.approx(0.42)
 
     def test_voicing_patch_records_shape_and_rebuilds(self, tmp_path, monkeypatch):
         job_id = "rebuild-voicing-1"

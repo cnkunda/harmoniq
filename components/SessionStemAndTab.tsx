@@ -28,7 +28,7 @@ const DEFAULT_TICK: PlaybackTickContext = {
   ready: false,
 }
 
-export type SessionTabVariant = 'full' | 'skeleton' | 'alt'
+export type SessionTabVariant = 'full' | 'skeleton' | 'alt' | 'rhythm'
 
 export type SessionStemAndTabProps = {
   /** Inserted into ListenStemPanel “Current lesson” card (e.g. capture controls on Play). */
@@ -42,6 +42,12 @@ export type SessionStemAndTabProps = {
   loopHighlight?: TabLoopBarRegion | null
   initialStemMuteById?: Record<string, boolean>
   onPlaybackTick?: (ctx: PlaybackTickContext) => void
+  /** Fired when the transport rate changes (e.g. Play speed presets). */
+  onRateChange?: (rate: number) => void
+  /** Show the stem mixer even when `stemsColumnReplacement` is set (Play keeps scoring + mixer). */
+  showMixerWithReplacement?: boolean
+  /** Count-in bars before transport start (0 = off). */
+  countInBars?: number
   onNoteEvent?: (evt: NoteEventMessage) => void
   /** Content between the stem panel and the tab (e.g. Study). */
   insertBetweenStemAndTab?: ReactNode
@@ -97,6 +103,9 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     loopHighlight = null,
     initialStemMuteById,
     onPlaybackTick,
+    onRateChange,
+    showMixerWithReplacement = false,
+    countInBars = 0,
     onNoteEvent,
     insertBetweenStemAndTab,
     tabVariant,
@@ -138,7 +147,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
   useEffect(() => {
     if (onTabVariantChange && !variantInitialized) {
       void getAppPref(PREF_TAB_VARIANT).then((v) => {
-        if (v === 'skeleton' || v === 'alt') {
+        if (v === 'skeleton' || v === 'alt' || v === 'rhythm') {
           onTabVariantChange(v)
         }
         setVariantInitialized(true)
@@ -174,6 +183,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
     if (tabVariant === 'full') return tabs.full ?? null
     if (tabVariant === 'skeleton') return tabs.skeleton ?? null
     if (tabVariant === 'alt') return tabs.alt ?? null
+    if (tabVariant === 'rhythm') return tabs.rhythm ?? null
     return tabs.full ?? tabs.skeleton ?? null
   }, [gp5Base64Override, lessonMusicXml, tabVariant, tabs])
 
@@ -269,6 +279,8 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
           ref={stemPanelRef}
           lessonCardInsert={lessonCardInsert}
           stemsColumnReplacement={stemsColumnReplacement}
+          showMixerWithReplacement={showMixerWithReplacement}
+          countInBars={countInBars}
           lessonPlaybackCardVariant={lessonPlaybackCardVariant}
           captureRecording={captureRecording}
           playCaptureSlot={playCaptureSlot}
@@ -306,6 +318,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
           }}
           onRateChange={(rate) => {
             tabRef.current?.setPlaybackRate(rate)
+            onRateChange?.(rate)
           }}
           autoPlayOnReady={autoPlayOnReady}
           ghostStemPlaybackUri={ghostStemPlaybackUri}
@@ -352,6 +365,7 @@ export const SessionStemAndTab = forwardRef<SessionStemAndTabHandle, SessionStem
             hasFull={!!tabs.full}
             hasSkeleton={!!tabs.skeleton}
             hasAlt={!!tabs.alt}
+            hasRhythm={!!tabs.rhythm}
             onTabVariantChange={onTabVariantChange ? (v) => {
               void setAppPref(PREF_TAB_VARIANT, v)
               onTabVariantChange(v)

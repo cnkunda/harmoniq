@@ -1,10 +1,84 @@
 # Harmoniq Pipeline Evaluation
 
-This document records the pipeline smoke test results. Last updated: July 2026.
+Last updated: 2026-11-11 (W6). The current evaluation is the W0–W5
+challenge-style program on the expanded manifest. The original 5-song smoke
+test is retained below as historical context and is superseded by W0.
 
-## Test Set
+## Implementation status (2026-11-11)
 
-The current smoke test set consists of 5 recordings:
+Production-path changes made after the W0–W5 runs (these do not change the
+measured numbers above unless re-measured):
+
+- Solo branch runs a **separate MT3 pass on the guitar stem** and filters to GM
+  guitar programs (24–31); vocals are never a solo fallback.
+- Tablature positions are assigned with the W4 playability DP and persisted on
+  each note; the same positions feed MusicXML and the practice fretboard.
+- GP5 `tab_full` merges lead + rhythm tracks; MusicXML emits lead + rhythm parts.
+- Generated jam beds are key/BPM verified, trimmed to bars, and hot-swapped into
+  Jam; snapshots store the backing context for phrase practice.
+
+Known gaps: MT3 now runs twice when a guitar stem is present (≈2× CPU analysis
+time); `leakage_risk` is still an instrument-confusion proxy; AI phrase practice
+regenerates a bed instead of replaying the exact original audio.
+
+## Current evaluation (W0–W5, 2026-11)
+
+| Workstream | Result | Artifact |
+| --- | --- | --- |
+| W0 | 705-track manifest; instrument ID, pitch, onset/offset F1 at ±50 ms, dynamics, overlap, runtime, chord accuracy, ECE; four-tier baselines (2-track smoke artifact); Pass/Warn/Fail rubric | `docs/eval/amt_manifest.json`, `docs/audit/amt/eval-smoke-all.*` |
+| W1 | 1,004 pseudo-labeled tracks; 1,654 / 233 / 230 splits; zero train↔eval overlap | `docs/audit/amt/w1_pseudo_label_full.json`, `docs/eval/dataset_card.md` |
+| W2 | 50-track teacher comparison; `go` → YourMT3+ | `docs/audit/amt/w2_teacher_comparison.{json,md}` |
+| W3 | Student ceiling 0.5128 GuitarSet root accuracy; 0.002986 ms/frame; solo F1 0.0 | `docs/audit/amt/w3_eval_student.json`, `docs/audit/amt/w3_latency.json` |
+| W4 | Tab accuracy 0.5893 vs 0.5031 baseline (+8.62 pp); group validity 1.0 vs 0.5076 | `docs/audit/amt/w4_tab_eval.{json,md}` |
+| W5 | Chord-template ECE 0.7281 on 526 tracks; no bin reaches 0.70; quality gate inconclusive | `docs/audit/amt/w5_calibration.{json,md}` |
+
+Reproduce these numbers with the commands in
+[`docs/eval/REPRODUCIBILITY.md`](eval/REPRODUCIBILITY.md). The W5 calibration
+artifact is reproducible from the committed per-source reports without audio
+or GPUs (`--skip-quality`).
+
+### W2 — teacher comparison (50 tracks)
+
+| Teacher | Chord acc | Onset F1 | OnsetPitch F1 | Offset F1 | Retention | Leakage | RTF |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| MT3 | 0.2667 | 0.5092 | 0.5815 | 0.4436 | 0.5793 | 0.6962 | 3.1641 |
+| MR-MT3 | 0.2554 | 0.4222 | 0.4759 | 0.3891 | 0.4269 | 0.8251 | 0.6257 |
+| YourMT3+ | 0.2164 | 0.5723 | 0.5904 | 0.4871 | 0.6090 | 0.5756 | 0.1922 |
+
+Decision: `go` → YourMT3+. It has the best guitar-filtered onset accuracy,
+lower leakage, and the lowest RTF. MR-MT3 is not recommended as-is (leakage
+0.8251, retention 0.4269) and remains viable only with a mandatory
+guitar-program filter.
+
+### W3 — two-head student
+
+The shared-encoder student was trained on 1,244 available W1 tracks on a
+Modal A10G. It reached **0.5128 GuitarSet test root accuracy** (60 tracks,
+player 03) and **0.002986 ms/frame**, far below the 100 ms/frame budget but
+below the 0.70 G3 gate. The solo head trains (val token accuracy ~0.47) but
+produced **0.0 matched-note onset/pitch F1**. INT8 export falls back to FP16
+because the TF 2.20 converter fails on the Conv1D reshape. The student is
+off by default (`HARMONIQ_STUDENT_ENABLED`).
+
+### W4 — tablature assignment
+
+GuitarSet + EGSet12 test, 62 tracks / 9,550 notes:
+
+| Metric | allCellsForMidi | DP | Delta |
+| --- | ---: | ---: | ---: |
+| Pitch accuracy | 1.0000 | 1.0000 | 0.0000 |
+| Tab accuracy | 0.5031 | 0.5893 | +0.0862 |
+| Difficulty (lower better) | 2.4529 | 2.6092 | +0.1563 |
+| Group validity | 0.5076 | 1.0000 | +0.4924 |
+
+The gain comes from enforcing distinct strings for simultaneous notes. The DP
+trades some playability (it minimises transition cost subject to physical
+validity) and is reported honestly. DadaGP is not staged; the learned
+Fretting-Transformer T5 was not trained.
+
+## Historical 5-song smoke test (superseded by W0)
+
+The original smoke test set consists of 5 recordings:
 
 | # | Song | Artist | Source | Type | Notes |
 |---|------|--------|--------|------|-------|
@@ -14,7 +88,7 @@ The current smoke test set consists of 5 recordings:
 | 4 | *Improv blues* | Self-recorded | Upload (WAV) | Home recording | Single track, SM57 on amp |
 | 5 | *Stairway to Heaven* | Led Zeppelin | YouTube | Studio, complex | Acoustic + electric sections |
 
-## Evaluation Protocol
+### Historical evaluation protocol
 
 1. Submit each song via the analyze endpoint (upload or YouTube URL)
 2. Wait for pipeline to complete (MT3 mode, ~5 min per song on CPU)
@@ -30,9 +104,9 @@ The current smoke test set consists of 5 recordings:
 | Solo notes | Notes present for guitar sections | Notes present but low confidence or wrong pitch centers | No notes for guitar sections or obvious instrument leakage |
 | Pipeline completion | Complete LessonJSON returned within timeout | Partial result with fallback | No result or crash |
 
-## Test Results
+### Historical test results
 
-### #1 — Sunny (Bobby Hebb, studio)
+#### #1 — Sunny (Bobby Hebb, studio)
 
 | Component | Result | Confidence | Notes |
 |-----------|--------|------------|-------|
@@ -42,7 +116,7 @@ The current smoke test set consists of 5 recordings:
 
 **Verdict:** ✅ Pass
 
-### #2 — Sunny (Bobby Hebb, live)
+#### #2 — Sunny (Bobby Hebb, live)
 
 | Component | Result | Confidence | Notes |
 |-----------|--------|------------|-------|
@@ -52,7 +126,7 @@ The current smoke test set consists of 5 recordings:
 
 **Verdict:** ⚠️ Warn — chords present but low confidence in live sections. Expected for live recording.
 
-### #3 — Gravity (John Mayer, studio)
+#### #3 — Gravity (John Mayer, studio)
 
 | Component | Result | Confidence | Notes |
 |-----------|--------|------------|-------|
@@ -62,7 +136,7 @@ The current smoke test set consists of 5 recordings:
 
 **Verdict:** ✅ Pass
 
-### #4 — Improv blues (self-recorded, home)
+#### #4 — Improv blues (self-recorded, home)
 
 | Component | Result | Confidence | Notes |
 |-----------|--------|------------|-------|
@@ -72,7 +146,7 @@ The current smoke test set consists of 5 recordings:
 
 **Verdict:** ❌ Fail — poor recording quality (room reverb, low input gain) degraded the entire pipeline. The chroma fallback got the blues progression but couldn't capture detail. This is the worst-case demonstration of the domain gap.
 
-### #5 — Stairway to Heaven (Led Zeppelin, studio)
+#### #5 — Stairway to Heaven (Led Zeppelin, studio)
 
 | Component | Result | Confidence | Notes |
 |-----------|--------|------------|-------|
@@ -82,7 +156,7 @@ The current smoke test set consists of 5 recordings:
 
 **Verdict:** ✅ Pass
 
-## Summary
+### Historical summary
 
 | Result | Count |
 |--------|-------|
@@ -90,14 +164,14 @@ The current smoke test set consists of 5 recordings:
 | ⚠️ Warn | 1 |
 | ❌ Fail | 1 |
 
-## Conclusions
+### Historical conclusions
 
 1. **Studio recordings with clear guitar produce reliable output.** MT3 handles these well on both branches.
 2. **Home/live recordings are the failure mode.** The CRNN quality gate catches these and chroma provides basic coverage, but the pipeline can't produce detailed transcription in this range.
 3. **The fallback chain works as designed.** When MT3 confidence is low, CRNN fires. When CRNN is uncertain, chroma fires. Each tier handles the cases the previous tier can't.
 4. **CPU latency is the practical bottleneck.** ~5 min per song is acceptable for research but not for a real-time demo.
 
-## Next Steps for Re-evaluation
+### Historical next steps
 
 These items are now tracked as Workstream W0 in [`PRIORITIES.md` Commit 1 — Harmoniq AMT Research Program](../PRIORITIES.md).
 
@@ -183,6 +257,60 @@ bins, duration-weighted). Non-empty bins:
   math is in `backend/app/confidence_calibration.py` and covered by
   `backend/tests/test_confidence_ece.py`. Do not describe the score as a
   probability or a percentage.
+
+## W5 Calibration & Honest Productization (2026-11-11)
+
+W5 re-ran the chord-template calibration on the expanded evaluation manifest
+using the W0 `mt3` tier. The committed artifact is
+`docs/audit/amt/w5_calibration.{json,md}`.
+
+**Coverage:** 526 tracks (GuitarSet 360, IDMT 129, EGSet12 12, Guitar-TECHS
+10, RWC-P 15) / 15,204 chord events / 14,524 s. The remaining 179
+Guitar-TECHS and RWC-P tracks were not staged on the available Modal
+volumes; they are a documented limitation, not a silent omission. The W2
+volumes were reused to avoid a 10 GB re-upload.
+
+**Only chord-template confidence is calibrated.** MT3 note confidence is
+still the hardcoded `0.9` placeholder (`backend/app/mt3/model_server.py`)
+because the MT3 `NoteSequence` has no confidence field. Note-level
+calibration is explicitly deferred and must not be claimed.
+
+**Pooled reliability table** (duration-weighted, 10 bins):
+
+| Bin | Events | Duration (s) | Avg confidence | Accuracy | Gap |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0.0–0.1 | 12 | 6.7 | 0.000 | 0.000 | 0.000 |
+| 0.1–0.2 | 69 | 39.3 | 0.118 | 0.000 | 0.118 |
+| 0.2–0.3 | 267 | 150.1 | 0.300 | 0.000 | 0.300 |
+| 0.3–0.4 | 2 | 1.0 | 0.375 | 0.000 | 0.375 |
+| 0.4–0.5 | 34 | 19.5 | 0.400 | 0.000 | 0.400 |
+| 0.5–0.6 | 2,019 | 1,470.4 | 0.537 | 0.000 | 0.537 |
+| 0.6–0.7 | 9 | 4.8 | 0.667 | 0.000 | 0.667 |
+| 0.7–0.8 | 809 | 429.8 | 0.749 | 0.314 | 0.436 |
+| 0.8–0.9 | 549 | 292.0 | 0.807 | 0.544 | 0.263 |
+| 0.9–1.0 | 11,434 | 12,110.7 | 1.000 | 0.219 | 0.781 |
+
+Overall: **ECE 0.7281**, mean confidence **0.9307**, accuracy **0.2026**.
+The 0.9–1.0 bin alone carries 83% of the duration and is only 21.9%
+accurate. Per source: GuitarSet ECE 0.7337, IDMT 0.7547, EGSet12 0.8456,
+Guitar-TECHS 0.6098, RWC-P 0.7280.
+
+**Consequence for the release gate:** no confidence bin reaches the 0.70
+accuracy floor; the best bin (0.8–0.9) is only 0.544 accurate. The
+calibrated fallback gate therefore uses `0.80` as the best available cutoff
+and is **not release-ready**. `HARMONIQ_CONFIDENCE_GATE` stays off by
+default; enabling it only gates MT3 acceptance on the measured
+duration-weighted chord confidence. Rollback is unsetting the variable.
+
+**Recording-quality gate evaluation:** 513 tracks with chord accuracy were
+scored. The existing ingest gate accepted all 513; 18 were high-accuracy
+(>= 0.50) and 495 were low-accuracy. There were no rejected tracks, so the
+gate matrix cannot estimate separation, and raising the `score`/`snr_db`
+thresholds produced *negative* separation on this studio/controlled
+manifest (higher-quality tracks were not more accurate). The gate remains a
+conservative ingest guard, not a validated accuracy predictor. External
+live/home/OOD recordings are required to evaluate it properly; none are
+staged in the committed manifest.
 
 ## Instrument Confusion & Coach Hedging (Commit 156)
 

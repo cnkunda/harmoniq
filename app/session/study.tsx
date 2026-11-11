@@ -1,5 +1,5 @@
 import { useFocusEffect } from '@react-navigation/native'
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
 import { BookOpen, Ear, Headphones, X } from 'lucide-react-native'
@@ -31,6 +31,7 @@ import { PREF_PREFER_SIMPLER_TABS, TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { capoSuggestion, parseKey } from '@/src/music/capoSuggestion'
+import { techniquesForSelection } from '@/src/music/techniques'
 import { getScalePitchClassesFromKey } from '@/src/music/scales'
 import { getChordFunction } from '@/src/music/chordFunction'
 import { findProgressions, COMMON_PROGRESSIONS } from '@/src/music/progressionAnalysis'
@@ -43,7 +44,12 @@ import {
   parseHarmonizedSolo,
   parsePerBarAnalysis,
 } from '@/src/music/soloHarmony'
-import { performanceRoleLabel, performanceStyleLabel, resolveFretboardMode } from '@/src/session/performanceFocus'
+import {
+  performanceRoleLabel,
+  performanceStyleLabel,
+  resolveFretboardMode,
+  sectionSoloNotesForMode,
+} from '@/src/session/performanceFocus'
 import { CHECK_BY_EAR_CUE, sectionNeedsCheckByEar } from '@/src/session/transcriptionConfidence'
 import { barIndexForPlaybackSeconds } from '@/src/session/smartScroll'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
@@ -115,7 +121,7 @@ interface SoloNotes {
   notes: SoloNote[]
 }
 
-type TabVariant = 'full' | 'skeleton' | 'alt'
+type TabVariant = 'full' | 'skeleton' | 'alt' | 'rhythm'
 
 interface TranscriptionValidationMetadata {
   validation?: {
@@ -225,6 +231,7 @@ function StudyScreenInner() {
   const [noteModalPitch, setNoteModalPitch] = useState(60)
   const [noteModalDuration, setNoteModalDuration] = useState(0.5)
   const [noteModalStartTime, setNoteModalStartTime] = useState(0)
+  const [noteModalTechnique, setNoteModalTechnique] = useState<string[] | undefined>(undefined)
   const [noteModalString, setNoteModalString] = useState<number | undefined>(undefined)
   const [noteModalFret, setNoteModalFret] = useState<number | undefined>(undefined)
   const applyNoteCorrectionStore = useCorrectionStore((s) => s.applyNoteCorrection)
@@ -272,7 +279,8 @@ function StudyScreenInner() {
   const soloNotesForFeedback = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? []
   const performanceProfile = (section?.performance_profile ?? lesson?.performance_profile ?? null) as PerformanceProfile | null
   const effectiveFretboardMode = resolveFretboardMode(fretboardMode, performanceProfile)
-  const autoFretboardMode = resolveFretboardMode('auto', performanceProfile)
+  const sectionSoloNotes = sectionSoloNotesForMode(section, lesson?.solo_notes?.notes ?? null)
+  const autoFretboardMode = resolveFretboardMode('auto', performanceProfile, sectionSoloNotes)
   const autoFretboardLabel = [
     performanceRoleLabel(performanceProfile),
     performanceStyleLabel(performanceProfile),
@@ -445,7 +453,7 @@ function StudyScreenInner() {
   }, [barsData])
 
   const [variant, setVariant] = useState<TabVariant>('full')
-  const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
+  const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number; technique?: string[] } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const [overlayMode, setOverlayMode] = useState<FretboardOverlayMode>('off')
@@ -455,12 +463,22 @@ function StudyScreenInner() {
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
 
   const onTabNoteEvent = useCallback((evt: NoteEventMessage) => {
-    setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
+    setSelectedNote({
+      string: evt.string,
+      fret: evt.fret,
+      midi: evt.midi,
+      technique:
+        techniquesForSelection(sectionSoloNotes, {
+          string: evt.string,
+          fret: evt.fret,
+          midi: evt.midi,
+        }) ?? undefined,
+    })
     setFretPulseKey((k) => k + 1)
     if (evt.fromScoreTap) {
       setNoteModalOpen(true)
     }
-  }, [])
+  }, [sectionSoloNotes])
 
   const noteConfidence = typeof section?.confidence === 'number' ? section.confidence : (lesson?.transcription_confidence ?? null)
   const selectionDetail = useMemo(
@@ -516,7 +534,8 @@ function StudyScreenInner() {
   }, [isDemo, jobId, notifyFeedbackSaved, reportFeedback, selectedNote?.midi, soloNotesForFeedback, tick.positionSec])
 
   const correctSelectedNote = useCallback(() => {
-    const index = findSoloNoteIndexForSelection(soloNotesForFeedback, {
+    const sourceNotes = lesson?.solo_notes?.notes?.length ? lesson.solo_notes.notes : soloNotesForFeedback
+    const index = findSoloNoteIndexForSelection(sourceNotes, {
       midi: selectedNote?.midi,
       timeSec: tick.positionSec,
     })
@@ -524,16 +543,17 @@ function StudyScreenInner() {
       toast.error('Could not match this note to the transcribed solo line.')
       return
     }
-    const note = soloNotesForFeedback[index]!
+    const note = sourceNotes[index]!
     setNoteModalIndex(index)
     setNoteModalPitch(note.pitch)
     setNoteModalDuration(note.duration)
     setNoteModalStartTime(note.start_time)
+    setNoteModalTechnique((note as { technique?: string[] }).technique)
     setNoteModalString(selectedNote?.string)
     setNoteModalFret(selectedNote?.fret)
     setNoteModalOpen(false)
     setNoteModalVisible(true)
-  }, [selectedNote?.fret, selectedNote?.midi, selectedNote?.string, soloNotesForFeedback, tick.positionSec])
+  }, [lesson?.solo_notes?.notes, selectedNote?.fret, selectedNote?.midi, selectedNote?.string, soloNotesForFeedback, tick.positionSec])
 
   const currentChordVoicing = useMemo(() => {
     if (currentBar == null || !chordTimelineEvents) return null
@@ -679,6 +699,15 @@ function StudyScreenInner() {
         className="mb-3 self-start"
       >
         Listen
+      </Pill>
+
+      <Pill
+        onPress={() => router.push(`/(tabs)/jam?fromLesson=1&sectionIndex=${lessonSectionIndex}` as Href)}
+        accessibilityLabel="Jam over this lesson section"
+        textClassName="text-cream"
+        className="mb-3 self-start"
+      >
+        Jam this section
       </Pill>
 
       {showSectionCheckCue ? (
@@ -858,7 +887,10 @@ function StudyScreenInner() {
               harmonicContextMode={harmonicContextMode}
               onHarmonicContextModeChange={setHarmonicContextMode}
               onSelectNote={(note) => {
-                setSelectedNote(note)
+                setSelectedNote({
+                  ...note,
+                  technique: techniquesForSelection(sectionSoloNotes, note) ?? undefined,
+                })
                 setFretPulseKey((k) => k + 1)
                 setNoteModalOpen(true)
               }}
@@ -1028,6 +1060,7 @@ function StudyScreenInner() {
         originalPitch={noteModalPitch}
         originalDuration={noteModalDuration}
         originalStartTime={noteModalStartTime}
+        originalTechnique={noteModalTechnique}
         currentString={noteModalString}
         currentFret={noteModalFret}
         onSelect={async (idx, corrected) => {
@@ -1055,21 +1088,31 @@ function StudyScreenInner() {
             { pitch: noteModalPitch, duration: noteModalDuration, start_time: noteModalStartTime },
             corrected,
           )
-          // Re-apply to lesson
+          // Re-apply to lesson (global index) and to the visible section copy.
           if (lesson && jobId) {
-            const updatedCorrections = useCorrectionStore.getState().getCorrections(jobId)
-            const soloNotes = section?.solo_notes?.notes ?? lesson?.solo_notes?.notes ?? []
-            const patchedNotes = soloNotes.map((n, i) => {
-              const c = updatedCorrections.noteCorrections.find((nc) => nc.noteIndex === i)
-              if (!c) return n
-              return {
-                start_time: c.correctedStartTime ?? n.start_time,
-                duration: c.correctedDuration ?? n.duration,
-                pitch: c.correctedPitch ?? n.pitch,
-                velocity: n.velocity,
-              }
+            const applyCorrection = (n: NonNullable<typeof lesson.solo_notes>['notes'][number]) => ({
+              ...n,
+              start_time: corrected.start_time ?? n.start_time,
+              duration: corrected.duration ?? n.duration,
+              pitch: corrected.pitch ?? n.pitch,
+              string: corrected.string ?? n.string,
+              fret: corrected.fret ?? n.fret,
+              technique: corrected.technique ?? n.technique,
             })
-            const updatedLesson = { ...lesson, solo_notes: { notes: patchedNotes } }
+            const globalNotes = lesson.solo_notes?.notes ?? []
+            const patchedGlobal = globalNotes.map((n, i) => (i === idx ? applyCorrection(n) : n))
+            const patchedSection = (section?.solo_notes?.notes ?? []).map((n) =>
+              Math.abs(n.start_time - noteModalStartTime) < 1e-4 && n.pitch === noteModalPitch
+                ? applyCorrection(n)
+                : n,
+            )
+            const updatedLesson = {
+              ...lesson,
+              solo_notes: { notes: patchedGlobal },
+              sections: lesson.sections?.map((sec, i) =>
+                i === lessonSectionIndex ? { ...sec, solo_notes: { notes: patchedSection } } : sec,
+              ),
+            }
             useLessonStore.getState().saveLesson(updatedLesson)
           }
           // Commit 153: sync to backend so the rebuilt MusicXML can be re-fetched.

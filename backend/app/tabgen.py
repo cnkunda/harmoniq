@@ -22,6 +22,7 @@ from typing import Sequence
 from app.pipeline_proof import NoteEvent, basic_pitch_predict_events as _basic_pitch_predict_events
 from app.pipeline_proof import build_gp5_from_note_events as _build_gp5_from_note_events
 from app.schemas import LessonSectionStub
+from app.tab_positions import alternate_positions, chosen_beat_notes, primary_positions
 
 logger = logging.getLogger("harmoniq.tabgen")
 logger.setLevel(logging.INFO)
@@ -203,6 +204,7 @@ def _build_gp5_base64_from_events(
     bpm: float,
     title: str,
     beat_times_s: list[float] | None = None,
+    position_override: dict[tuple[int, int], tuple[int, int]] | None = None,
 ) -> str:
     import uuid
 
@@ -214,6 +216,7 @@ def _build_gp5_base64_from_events(
             output_gp5=out_gp5,
             title=title,
             beat_times_s=beat_times_s,
+            position_override=position_override,
         )
         return _read_file_b64(out_gp5)
 
@@ -230,19 +233,27 @@ def generate_tab_artifacts_from_note_events(
     Return GP5 base64 artifacts for a section (full + skeleton, optional alt).
     """
     try:
+        full_positions = primary_positions(
+            chosen_beat_notes(events, bpm=bpm, beat_times_s=beat_times_s)
+        )
         tab_full = _build_gp5_base64_from_events(
             events,
             bpm=bpm,
             title="Harmoniq tab (full)",
             beat_times_s=beat_times_s,
+            position_override=full_positions,
         )
 
         skeleton_events = filter_ornaments_for_skeleton(events, bpm=bpm)
+        skeleton_positions = primary_positions(
+            chosen_beat_notes(skeleton_events, bpm=bpm, beat_times_s=beat_times_s)
+        )
         tab_skeleton = _build_gp5_base64_from_events(
             skeleton_events,
             bpm=bpm,
             title="Harmoniq tab (skeleton)",
             beat_times_s=beat_times_s,
+            position_override=skeleton_positions,
         )
     except Exception:
         logger.exception("GP5 generation failed; using stub tab base64 artifacts")
@@ -255,17 +266,22 @@ def generate_tab_artifacts_from_note_events(
     }
 
     if float(transcription_confidence) >= float(alt_confidence_threshold):
-        # Smoke-test: "alt position" uses a different GP5 title for now.
-        # Production: compute position-based fret/string mapping.
-        try:
-            out["tab_alt_position_gp5_base64"] = _build_gp5_base64_from_events(
-                events,
-                bpm=bpm,
-                title="Harmoniq tab (alt position)",
-                beat_times_s=beat_times_s,
-            )
-        except Exception:
-            out["tab_alt_position_gp5_base64"] = STUB_TAB_ALT_POSITION_GP5_BASE64
+        # A genuine mid-neck alternate fingering; omit the artifact when the
+        # material has only one playable position.
+        alt_positions = alternate_positions(
+            chosen_beat_notes(events, bpm=bpm, beat_times_s=beat_times_s)
+        )
+        if alt_positions is not None:
+            try:
+                out["tab_alt_position_gp5_base64"] = _build_gp5_base64_from_events(
+                    events,
+                    bpm=bpm,
+                    title="Harmoniq tab (alt position)",
+                    beat_times_s=beat_times_s,
+                    position_override=alt_positions,
+                )
+            except Exception:
+                logger.exception("alt-position GP5 generation failed; omitting alt artifact")
 
     return out
 

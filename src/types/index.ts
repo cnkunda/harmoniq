@@ -97,6 +97,12 @@ export interface DrillSlotPayload {
   intent: PlanSlotIntent
   target_skill?: string | null
   remediation_for_slot_id?: string | null
+  /** J5: where a free-jam slot gets its backing bed. */
+  backing_source?: 'lesson' | 'progression' | 'none' | null
+  /** Suggested practice speed (0.25–1.25). */
+  target_rate?: number | null
+  /** Suggested loop length in bars. */
+  loop_bars?: number | null
 }
 
 export interface PracticePlanPayload {
@@ -308,15 +314,24 @@ export interface ChordTimeline {
   metadata?: ChordTimelineMetadata | null
 }
 
+export type SoloNotePartRole = 'lead' | 'rhythm'
+
 export interface SoloNote {
   start_time: number
   duration: number
   pitch: number
-  velocity: number
+  velocity?: number
   /** Tab string 1-6 (1 = high E) when score provides fretboard position. */
   string?: number
   /** Fret number when score provides fretboard position. */
   fret?: number
+  /** Model/coherence confidence for this note (0-1). */
+  confidence?: number
+  /** Technique tags: bend, vibrato, grace_note. */
+  technique?: string[]
+  is_tied?: boolean
+  /** Musical part this note belongs to (drives lead/rhythm display). */
+  part_role?: SoloNotePartRole
 }
 
 export interface SoloNotes {
@@ -364,6 +379,8 @@ export interface LessonSection {
   tab_skeleton_gp5_base64?: string | null
   /** @deprecated Export-only (GP5→MIDI conversion). Use `musicxml` for rendering. */
   tab_alt_position_gp5_base64?: string | null
+  /** Rhythm/strum chart (lead + rhythm scores also appear in tab_full when merged). */
+  tab_rhythm_gp5_base64?: string | null
   coach_note?: string | null
   coach_explanation?: string | null
   /** Commit 108: MusicXML score for this section (canonical render format). */
@@ -423,7 +440,7 @@ export interface LessonJSON {
   /** Chord timeline from transcription analysis - may be at lesson level or section level. */
   chord_timeline?: { events: Array<{ timestamp: number; chord: string; confidence: number }>; metadata?: ChordTimelineMetadata | null } | null
   /** Solo notes from transcription analysis - may be at lesson level or section level. String/fret are tab positions when available from score. */
-  solo_notes?: { notes: Array<{ start_time: number; duration: number; pitch: number; velocity?: number; string?: number; fret?: number }> } | null
+  solo_notes?: SoloNotes | null
   stems?: Record<string, string>
   lyrics_aligned?: Array<Record<string, unknown>>
   sections?: LessonSection[]
@@ -504,6 +521,7 @@ export interface NoteCorrection {
   correctedStartTime?: number
   correctedString?: number
   correctedFret?: number
+  correctedTechnique?: string[]
   timestamp: number
 }
 

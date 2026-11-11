@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import {
   Platform,
   Pressable,
+  ScrollView,
   Text,
   View,
   type LayoutChangeEvent,
@@ -23,6 +24,7 @@ import {
   G,
   Line,
   LinearGradient as SvgLinearGradient,
+  Path,
   RadialGradient as SvgRadialGradient,
   Rect as SvgRect,
   Stop,
@@ -33,6 +35,7 @@ import {
 import { spring } from '@/src/constants/animations'
 import { Pill } from '@/components/Pill'
 import { colors } from '@/src/constants/colors'
+import { techniqueLabel } from '@/src/music/techniques'
 import {
   CHOICE_CHIP_BASE,
   CHOICE_CHIP_OFF,
@@ -42,6 +45,7 @@ import {
   SECTION_EYEBROW_CLASS,
 } from '@/src/constants/uiTokens'
 import {
+  DISPLAY_FRETS,
   NUM_FRETS,
   OPEN_MIDI_BY_ROW,
   inferMidiFromNoteSelection,
@@ -77,6 +81,7 @@ type FretboardDiagramProps = {
     string?: number
     fret?: number
     midi?: number
+    technique?: string[]
   } | null
   pulseKey?: number
   scalePitchClasses?: readonly number[] | null
@@ -153,10 +158,12 @@ const SCALE_DEGREE_LABELS: Record<number, string> = {
 }
 
 const KEYBOARD_ROWS = ['1234567890-=', 'qwertyuiop[]', "asdfghjkl;'", 'zxcvbnm,./'] as const
-const SINGLE_INLAY_FRETS = new Set([3, 5, 7, 9])
+const SINGLE_INLAY_FRETS = new Set([3, 5, 7, 9, 15, 17, 19, 21])
+const DOUBLE_INLAY_FRETS = new Set([12, 24])
 
-// SVG layout constants
-const SVG_W = 900
+// SVG layout constants. BASE_SVG_W is the historical 12-fret width; the board
+// grows proportionally with DISPLAY_FRETS so per-fret width stays constant.
+const BASE_SVG_W = 900
 const SVG_H = 260
 const MARGIN_L = 44
 const MARGIN_R = 12
@@ -164,13 +171,15 @@ const BOARD_T = 36
 const BOARD_B = 234
 const BOARD_H = BOARD_B - BOARD_T
 const NUT_W = 8
+const FRET_CELL_W = (BASE_SVG_W - MARGIN_L - MARGIN_R) / 12
+const SVG_W = MARGIN_L + MARGIN_R + DISPLAY_FRETS * FRET_CELL_W
 
 /** Commit 168: hand-aware horizontal geometry. */
 const FRETBOARD_X_LAYOUT: FretboardXLayout = {
   boardLeft: MARGIN_L,
   boardRight: SVG_W - MARGIN_R,
   nutWidth: NUT_W,
-  fretCount: NUM_FRETS,
+  fretCount: DISPLAY_FRETS,
 }
 
 function stringY(i: number): number {
@@ -186,7 +195,7 @@ function fretWireX(f: number, hand: GuitarHand): number {
 }
 
 function fretInlayKind(fret: number, stringIdx: number): 'single' | 'doubleUpper' | 'doubleLower' | null {
-  if (fret === 12) {
+  if (DOUBLE_INLAY_FRETS.has(fret)) {
     if (stringIdx === 0) return 'doubleUpper'
     if (stringIdx === 5) return 'doubleLower'
     return null
@@ -425,6 +434,7 @@ export function FretboardDiagram({
   }
 
   const cell = selectedNote ? resolveFretCell(selectedNote) : null
+  const selectedTechniques = selectedNote?.technique ?? []
   const flashMidi = selectedNote ? inferMidiFromNoteSelection(selectedNote) : null
   const showPitchLadderControl = pitchLadderSlot != null
 
@@ -556,7 +566,9 @@ export function FretboardDiagram({
   // Chord circle opacity based on mode
   const onSvgLayout = useCallback((e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width
-    setSvgSize({ w, h: w * SVG_H / SVG_W })
+    // Render at the natural width for DISPLAY_FRETS so the board scrolls instead of squashing.
+    const renderW = (w * SVG_W) / BASE_SVG_W
+    setSvgSize({ w: renderW, h: (w * SVG_H) / BASE_SVG_W })
   }, [])
 
   useEffect(() => {
@@ -879,6 +891,13 @@ export function FretboardDiagram({
         className="mt-3 overflow-hidden rounded-lg"
         style={{ width: '100%', height: svgSize.h || 200 }}
       >
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator
+          style={{ width: '100%', height: svgSize.h }}
+          contentContainerStyle={{ width: svgSize.w, height: svgSize.h }}
+        >
+          <View style={{ width: svgSize.w, height: svgSize.h }}>
         {svgSize.w > 0 && (
           <Svg viewBox={`0 0 ${SVG_W} ${SVG_H}`} width={svgSize.w} height={svgSize.h}>
             <Defs>
@@ -910,7 +929,7 @@ export function FretboardDiagram({
             >
               O
             </SvgText>
-            {Array.from({ length: 12 }).map((_, i) => (
+            {Array.from({ length: DISPLAY_FRETS }).map((_, i) => (
               <SvgText
                 key={`fn-${i}`}
                 x={fretCenterX(i + 1, hand)}
@@ -952,7 +971,7 @@ export function FretboardDiagram({
             />
 
             {/* Fret wires (silver vertical lines) */}
-            {Array.from({ length: 12 }).map((_, i) => (
+            {Array.from({ length: DISPLAY_FRETS }).map((_, i) => (
               <Line
                 key={`fw-${i}`}
                 x1={fretWireX(i + 1, hand)}
@@ -967,7 +986,7 @@ export function FretboardDiagram({
 
             {/* Fret inlays */}
             {Array.from({ length: 6 }).map((_, si) =>
-              Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
+              Array.from({ length: DISPLAY_FRETS + 1 }).map((_, col) => {
                 const inlay = fretInlayKind(col, si)
                 if (!inlay) return null
                 const cx = fretCenterX(col, hand)
@@ -1028,7 +1047,7 @@ export function FretboardDiagram({
 
             {/* Commit B2: Scale tone circles — only in key_context mode */}
             {harmonicContextMode === 'key_context' && Array.from({ length: 6 }).map((_, si) =>
-              Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
+              Array.from({ length: DISPLAY_FRETS + 1 }).map((_, col) => {
                 if (!scaleHighlightActive(scalePitchClasses, si, col)) return null
                 const midi = OPEN_MIDI_BY_ROW[si]! + col
                 const posKey = `${si + 1}-${col}`
@@ -1194,7 +1213,7 @@ export function FretboardDiagram({
             {/* Overlay labels */}
             {overlayMode !== 'off' && !fretGuideCells && (
               Array.from({ length: 6 }).map((_, si) =>
-                Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
+                Array.from({ length: DISPLAY_FRETS + 1 }).map((_, col) => {
                   const midi = OPEN_MIDI_BY_ROW[si]! + col
                   const label = overlayLabelForCell(overlayMode, midi, degreeRootPitchClass)
                   if (!label) return null
@@ -1215,6 +1234,46 @@ export function FretboardDiagram({
                 }),
               )
             )}
+
+            {/* F5: technique arcs over the selected note */}
+            {cell && selectedTechniques.includes('bend') ? (
+              <Path
+                d={(() => {
+                  const cx = fretCenterX(cell.fret, hand)
+                  const cy = stringY(cell.row)
+                  return `M ${cx - 11} ${cy - 9} Q ${cx} ${cy - 30} ${cx + 11} ${cy - 9}`
+                })()}
+                stroke={colors.danger}
+                strokeWidth={1.8}
+                fill="none"
+                strokeLinecap="round"
+              />
+            ) : null}
+            {cell && selectedTechniques.includes('vibrato') ? (
+              <Path
+                d={(() => {
+                  const cx = fretCenterX(cell.fret, hand)
+                  const cy = stringY(cell.row)
+                  return `M ${cx - 16} ${cy - 20} q 3 -6 6 0 t 6 0 t 6 0 t 6 0`
+                })()}
+                stroke={colors.amber.accent}
+                strokeWidth={1.6}
+                fill="none"
+                strokeLinecap="round"
+              />
+            ) : null}
+            {cell && selectedTechniques.length > 0 ? (
+              <SvgText
+                x={fretCenterX(cell.fret, hand)}
+                y={stringY(cell.row) - 34}
+                textAnchor="middle"
+                fill={colors.cream}
+                fontSize={8}
+                fontFamily="JetBrainsMono-Regular"
+              >
+                {selectedTechniques.map(techniqueLabel).join(' · ')}
+              </SvgText>
+            ) : null}
 
             {/* Tap targets (transparent pressable rects) */}
             {svgCells.map(({ stringIdx, fret, sx, sy, ex, ey }) => (
@@ -1282,7 +1341,7 @@ export function FretboardDiagram({
             pointerEvents="box-none"
           >
             {Array.from({ length: 6 }).map((_, si) =>
-              Array.from({ length: NUM_FRETS + 1 }).map((_, col) => {
+              Array.from({ length: DISPLAY_FRETS + 1 }).map((_, col) => {
                 const cxFrac = fretCenterX(col, hand) / SVG_W
                 const cyFrac = stringY(si) / SVG_H
                 const left = (cxFrac * svgSize.w) - 22
@@ -1307,6 +1366,9 @@ export function FretboardDiagram({
             )}
           </View>
         )}
+
+          </View>
+        </ScrollView>
 
         {/* Keyboard shortcut overlay on web */}
         {enableKeyboardInput && Platform.OS === 'web' && (

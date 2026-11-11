@@ -36,7 +36,10 @@ async def export_tab(req: ExportRequest) -> Response:
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     filename = f"{stem}{ext}"
-    return Response(content=data, media_type=mime, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    if req.confidence_band is not None:
+        headers["X-Harmoniq-Confidence-Band"] = req.confidence_band
+    return Response(content=data, media_type=mime, headers=headers)
 
 
 @router.post(
@@ -53,9 +56,13 @@ async def export_musicxml_json(req: MusicXMLJsonExportRequest) -> Response:
             title=req.title,
             artist=req.artist,
             key_signature=req.key_signature,
+            confidence_band=req.confidence_band,
         )
     except Exception as e:
         logger.exception("MusicXML generation failed")
         raise HTTPException(status_code=422, detail=f"MusicXML generation failed: {e}") from e
     filename = f"{stem}{ext}"
-    return Response(content=data, media_type=mime, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    if req.confidence_band is not None:
+        headers["X-Harmoniq-Confidence-Band"] = req.confidence_band
+    return Response(content=data, media_type=mime, headers=headers)

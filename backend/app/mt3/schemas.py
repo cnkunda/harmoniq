@@ -45,5 +45,5 @@ class Mt3EventStream(BaseModel):
     num_instruments: int = Field(default=0, description="Number of distinct instrument programs detected")
 
 
-TranscriptionSource = Literal["mt3", "crnn", "chroma", "none"]
+TranscriptionSource = Literal["mt3", "student", "crnn", "chroma", "none"]
 """Identifies which tier of the fallback chain produced the transcription result."""

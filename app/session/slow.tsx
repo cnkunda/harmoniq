@@ -17,8 +17,14 @@ import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTou
 import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { barRangeToSeconds } from '@/src/music/barLoopBounds'
 import { capoSuggestion } from '@/src/music/capoSuggestion'
+import { techniquesForSelection } from '@/src/music/techniques'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
-import { performanceRoleLabel, performanceStyleLabel, resolveFretboardMode } from '@/src/session/performanceFocus'
+import {
+  performanceRoleLabel,
+  performanceStyleLabel,
+  resolveFretboardMode,
+  sectionSoloNotesForMode,
+} from '@/src/session/performanceFocus'
 import { deriveSlowLoopRegion } from '@/src/session/slowLoopRegion'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
@@ -74,7 +80,8 @@ function SlowScreenInner() {
       : 'Tap a note to infer position'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
   const performanceProfile = (section?.performance_profile ?? lesson?.performance_profile ?? null) as PerformanceProfile | null
-  const autoFretboardMode = resolveFretboardMode('auto', performanceProfile)
+  const sectionSoloNotes = sectionSoloNotesForMode(section, lesson?.solo_notes?.notes ?? null)
+  const autoFretboardMode = resolveFretboardMode('auto', performanceProfile, sectionSoloNotes)
   const autoFretboardLabel = [performanceRoleLabel(performanceProfile), performanceStyleLabel(performanceProfile)].filter(Boolean).join(' · ') || null
   const beatSec = lesson?.tempo && lesson.tempo > 0 ? 60 / lesson.tempo : 0.5
 
@@ -84,7 +91,7 @@ function SlowScreenInner() {
   )
 
   const [loopBars, setLoopBars] = useState<TabLoopBarRegion | null>(null)
-  const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
+  const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number; technique?: string[] } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const selectionDetail = useMemo(() => buildNoteSelectionDetail(keyLabel, selectedNote, null, null), [keyLabel, selectedNote])
@@ -237,7 +244,10 @@ function SlowScreenInner() {
               autoMode={autoFretboardMode}
               autoModeLabel={autoFretboardLabel}
               onSelectNote={(note) => {
-                setSelectedNote(note)
+                setSelectedNote({
+                  ...note,
+                  technique: techniquesForSelection(sectionSoloNotes, note) ?? undefined,
+                })
                 setFretPulseKey((k) => k + 1)
                 setNoteModalOpen(true)
               }}
@@ -245,7 +255,17 @@ function SlowScreenInner() {
           </View>
         }
         onNoteEvent={(evt: NoteEventMessage) => {
-          setSelectedNote({ string: evt.string, fret: evt.fret, midi: evt.midi })
+          setSelectedNote({
+            string: evt.string,
+            fret: evt.fret,
+            midi: evt.midi,
+            technique:
+              techniquesForSelection(sectionSoloNotes, {
+                string: evt.string,
+                fret: evt.fret,
+                midi: evt.midi,
+              }) ?? undefined,
+          })
           setFretPulseKey((k) => k + 1)
           if (evt.fromScoreTap) {
             setNoteModalOpen(true)

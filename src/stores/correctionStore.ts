@@ -83,7 +83,7 @@ export interface CorrectionStoreState {
     jobId: string,
     noteIndex: number,
     original: { pitch: number; duration: number; start_time: number },
-    corrected: { pitch?: number; duration?: number; start_time?: number; string?: number; fret?: number },
+    corrected: { pitch?: number; duration?: number; start_time?: number; string?: number; fret?: number; technique?: string[] },
   ) => Promise<void>
   /** Apply a voicing override. */
   applyVoicingOverride: (jobId: string, chordTimestamp: number, originalShape: string, correctedShape: string) => Promise<void>
@@ -155,6 +155,7 @@ export const useCorrectionStore = create<CorrectionStoreState>((set, get) => ({
       correctedStartTime: corrected.start_time,
       correctedString: corrected.string,
       correctedFret: corrected.fret,
+      correctedTechnique: corrected.technique,
       timestamp: Date.now(),
     }
     const filtered = current.noteCorrections.filter((c) => c.noteIndex !== noteIndex)

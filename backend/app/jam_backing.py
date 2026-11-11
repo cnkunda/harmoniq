@@ -10,7 +10,7 @@ import struct
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 import wave
 
 import numpy as np
@@ -142,14 +142,27 @@ def _write_wav(buf: io.BytesIO, samples: np.ndarray, sample_rate: int) -> None:
 # ---- Prompt building ----
 
 
-def build_mrt2_prompt(style_hint: str, musical_key: str, bpm: int | None) -> str:
-    """Build a text prompt for MRT2 from the user's practice preferences."""
+def build_mrt2_prompt(
+    style_hint: str,
+    musical_key: str,
+    bpm: int | None,
+    weak_areas: Sequence[str] | None = None,
+    chord_progression: Sequence[str] | None = None,
+) -> str:
+    """Build a text prompt for a backing provider from the user's practice preferences."""
     parts: list[str] = [
         style_hint.strip() if style_hint else "Instrumental guitar practice backing track",
         f"Key: {musical_key}",
     ]
     if bpm is not None:
         parts.append(f"Tempo: approximately {bpm} BPM, consistent tempo")
+    focus = [area.strip() for area in (weak_areas or ()) if area and area.strip()]
+    if focus:
+        parts.append(f"Focus areas: {', '.join(focus[:6])[:120]}")
+    progression = [chord.strip() for chord in (chord_progression or ()) if chord and chord.strip()]
+    if progression:
+        parts.append(f"Chord progression: {', '.join(progression[:16])}")
+        parts.append("Loop the chord progression")
     parts.extend([
         "Rhythm section: drums, bass, comping guitar, optional light keys",
         "Steady loop-friendly groove, no vocals",

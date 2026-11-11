@@ -6,6 +6,11 @@ import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanima
 import { Button } from './Button'
 import type { ChordToneStatus } from '@/src/music/noteSelectionDetail'
 import { colors } from '@/src/constants/colors'
+import {
+  confidenceBandFromScore,
+  confidenceBandLabel,
+  confidenceBandShortLabel,
+} from '@/src/session/transcriptionConfidence'
 
 export type NoteDetailCardProps = {
   noteName: string
@@ -42,11 +47,19 @@ function ChordToneBadge({ status }: { status: ChordToneStatus }) {
 }
 
 function ConfidenceBadge({ confidence }: { confidence: number }) {
-  const pct = Math.round(confidence * 100)
-  const color = pct >= 85 ? colors.success : pct >= 60 ? colors.amber.accent : colors.danger
+  const band = confidenceBandFromScore(confidence)
+  const shortLabel = confidenceBandShortLabel(band)
+  const fullLabel = confidenceBandLabel(band)
+  if (!band || !shortLabel) return null
+  const color = band === 'low' ? colors.danger : colors.amber.accent
   return (
-    <View className="flex-row items-center gap-1 rounded-full border px-2 py-1" style={{ borderColor: color + '50' }}>
-      <Text className="font-mono text-[10px]" style={{ color }}>Confidence: {pct}%</Text>
+    <View
+      accessible
+      accessibilityLabel={fullLabel ?? undefined}
+      className="flex-row items-center gap-1 rounded-full border px-2 py-1"
+      style={{ borderColor: color + '50' }}
+    >
+      <Text className="font-mono text-[10px]" style={{ color }}>{shortLabel}</Text>
     </View>
   )
 }

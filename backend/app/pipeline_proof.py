@@ -16,6 +16,7 @@ import subprocess
 import sys
 import wave
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
@@ -900,6 +901,7 @@ def build_gp5_from_note_events(
     title: str = "Harmoniq proof",
     artist: str = "",
     beat_times_s: Sequence[float] | None = None,
+    position_override: Mapping[tuple[int, int], tuple[int, int]] | None = None,
 ) -> None:
     """
     Map note events onto quarter-note slots and write a monophonic/tab GP5.
@@ -963,7 +965,11 @@ def build_gp5_from_note_events(
                     status=gp.BeatStatus.normal,
                 )
                 for midi_pitch in by_beat[b]:
-                    tab = _best_tab_slot(midi_pitch, track.strings)
+                    tab = None
+                    if position_override is not None:
+                        tab = position_override.get((b, int(midi_pitch)))
+                    if tab is None:
+                        tab = _best_tab_slot(midi_pitch, track.strings)
                     if tab is None:
                         continue
                     s_num, fret = tab

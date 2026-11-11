@@ -415,3 +415,25 @@ export const DEFAULT_SKILL_NODES: Array<{ id: string; label: string }> = [
   { id: 'bend_accuracy', label: 'Bend accuracy' },
   { id: 'vibrato_control', label: 'Vibrato control' },
 ]
+
+
+/** v22: jam snapshot backing-bed context (AI/classic key, BPM, progression, prompt). */
+export const MIGRATION_V22_JAM_BACKING_CONTEXT = [
+  'ALTER TABLE jam_snapshots ADD COLUMN backing_source TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN backing_key TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN backing_bpm INTEGER',
+  'ALTER TABLE jam_snapshots ADD COLUMN backing_progression_json TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN backing_prompt TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN backing_provider TEXT',
+  'ALTER TABLE jam_snapshots ADD COLUMN backing_duration_ms INTEGER',
+] as const
+
+export const ROLLBACK_V22_JAM_BACKING_CONTEXT = [
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS backing_source',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS backing_key',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS backing_bpm',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS backing_progression_json',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS backing_prompt',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS backing_provider',
+  'ALTER TABLE jam_snapshots DROP COLUMN IF EXISTS backing_duration_ms',
+] as const

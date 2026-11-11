@@ -1,0 +1,2221 @@
+{
+  "aggregates": {
+    "chord_frame_accuracy": 0.234278,
+    "chord_root_accuracy": 0.234278,
+    "completed": 12,
+    "ece": 0.876801,
+    "failed": 0,
+    "notes": {
+      "offset_multi": {
+        "f1": 0.055309,
+        "fn": 1511,
+        "fp": 402,
+        "precision": 0.122271,
+        "recall": 0.035737,
+        "tp": 56
+      },
+      "onset_multi": {
+        "f1": 0.182716,
+        "fn": 1382,
+        "fp": 273,
+        "precision": 0.40393,
+        "recall": 0.11806,
+        "tp": 185
+      },
+      "onset_pitch": {
+        "f1": 0.320988,
+        "fn": 1242,
+        "fp": 133,
+        "precision": 0.709607,
+        "recall": 0.207403,
+        "tp": 325
+      }
+    },
+    "runtime_ms_mean": 9807.318,
+    "runtime_ms_total": 117687.814,
+    "tracks": 12
+  },
+  "failures": [],
+  "manifest_id": "amt-eval-v1+volumes",
+  "schema_version": 3,
+  "strata": {
+    "instrument_count": {
+      "1": {
+        "chord_frame_accuracy": 0.234278,
+        "chord_root_accuracy": 0.234278,
+        "completed": 12,
+        "ece": 0.876801,
+        "failed": 0,
+        "notes": {
+          "offset_multi": {
+            "f1": 0.055309,
+            "fn": 1511,
+            "fp": 402,
+            "precision": 0.122271,
+            "recall": 0.035737,
+            "tp": 56
+          },
+          "onset_multi": {
+            "f1": 0.182716,
+            "fn": 1382,
+            "fp": 273,
+            "precision": 0.40393,
+            "recall": 0.11806,
+            "tp": 185
+          },
+          "onset_pitch": {
+            "f1": 0.320988,
+            "fn": 1242,
+            "fp": 133,
+            "precision": 0.709607,
+            "recall": 0.207403,
+            "tp": 325
+          }
+        },
+        "runtime_ms_mean": 9807.318,
+        "runtime_ms_total": 117687.814,
+        "tracks": 12
+      }
+    },
+    "recording_type": {
+      "studio": {
+        "chord_frame_accuracy": 0.234278,
+        "chord_root_accuracy": 0.234278,
+        "completed": 12,
+        "ece": 0.876801,
+        "failed": 0,
+        "notes": {
+          "offset_multi": {
+            "f1": 0.055309,
+            "fn": 1511,
+            "fp": 402,
+            "precision": 0.122271,
+            "recall": 0.035737,
+            "tp": 56
+          },
+          "onset_multi": {
+            "f1": 0.182716,
+            "fn": 1382,
+            "fp": 273,
+            "precision": 0.40393,
+            "recall": 0.11806,
+            "tp": 185
+          },
+          "onset_pitch": {
+            "f1": 0.320988,
+            "fn": 1242,
+            "fp": 133,
+            "precision": 0.709607,
+            "recall": 0.207403,
+            "tp": 325
+          }
+        },
+        "runtime_ms_mean": 9807.318,
+        "runtime_ms_total": 117687.814,
+        "tracks": 12
+      }
+    },
+    "source": {
+      "egset12": {
+        "chord_frame_accuracy": 0.234278,
+        "chord_root_accuracy": 0.234278,
+        "completed": 12,
+        "ece": 0.876801,
+        "failed": 0,
+        "notes": {
+          "offset_multi": {
+            "f1": 0.055309,
+            "fn": 1511,
+            "fp": 402,
+            "precision": 0.122271,
+            "recall": 0.035737,
+            "tp": 56
+          },
+          "onset_multi": {
+            "f1": 0.182716,
+            "fn": 1382,
+            "fp": 273,
+            "precision": 0.40393,
+            "recall": 0.11806,
+            "tp": 185
+          },
+          "onset_pitch": {
+            "f1": 0.320988,
+            "fn": 1242,
+            "fp": 133,
+            "precision": 0.709607,
+            "recall": 0.207403,
+            "tp": 325
+          }
+        },
+        "runtime_ms_mean": 9807.318,
+        "runtime_ms_total": 117687.814,
+        "tracks": 12
+      }
+    },
+    "split": {
+      "test": {
+        "chord_frame_accuracy": 0.147059,
+        "chord_root_accuracy": 0.147059,
+        "completed": 2,
+        "ece": 0.984446,
+        "failed": 0,
+        "notes": {
+          "offset_multi": {
+            "f1": 0.029304,
+            "fn": 188,
+            "fp": 77,
+            "precision": 0.049383,
+            "recall": 0.020833,
+            "tp": 4
+          },
+          "onset_multi": {
+            "f1": 0.043956,
+            "fn": 186,
+            "fp": 75,
+            "precision": 0.074074,
+            "recall": 0.03125,
+            "tp": 6
+          },
+          "onset_pitch": {
+            "f1": 0.25641,
+            "fn": 157,
+            "fp": 46,
+            "precision": 0.432099,
+            "recall": 0.182292,
+            "tp": 35
+          }
+        },
+        "runtime_ms_mean": 1681.321,
+        "runtime_ms_total": 3362.642,
+        "tracks": 2
+      },
+      "train": {
+        "chord_frame_accuracy": 0.251722,
+        "chord_root_accuracy": 0.251722,
+        "completed": 10,
+        "ece": 0.855272,
+        "failed": 0,
+        "notes": {
+          "offset_multi": {
+            "f1": 0.059361,
+            "fn": 1323,
+            "fp": 325,
+            "precision": 0.137931,
+            "recall": 0.037818,
+            "tp": 52
+          },
+          "onset_multi": {
+            "f1": 0.204338,
+            "fn": 1196,
+            "fp": 198,
+            "precision": 0.474801,
+            "recall": 0.130182,
+            "tp": 179
+          },
+          "onset_pitch": {
+            "f1": 0.33105,
+            "fn": 1085,
+            "fp": 87,
+            "precision": 0.769231,
+            "recall": 0.210909,
+            "tp": 290
+          }
+        },
+        "runtime_ms_mean": 11432.517,
+        "runtime_ms_total": 114325.172,
+        "tracks": 10
+      }
+    }
+  },
+  "tier": "mt3",
+  "tracks": [
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:01",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.55,
+              "count": 1,
+              "gap": 0.55,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 0.766259
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 1.0,
+              "avg_confidence": 0.8,
+              "count": 3,
+              "gap": 0.2,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 1.137778
+            },
+            {
+              "accuracy": 0.31565,
+              "avg_confidence": 1.0,
+              "count": 22,
+              "gap": 0.68435,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 26.261769
+            }
+          ],
+          "ece": 0.661129,
+          "samples": 26,
+          "total_weight_s": 28.165805
+        },
+        "chords": {
+          "estimated_events": 30,
+          "event_prf": {
+            "f1": 0.45614,
+            "fn": 14,
+            "fp": 17,
+            "precision": 0.433333,
+            "recall": 0.481481,
+            "tp": 13
+          },
+          "frame_accuracy": 0.639098,
+          "frames": 133,
+          "reference_events": 27,
+          "root_accuracy": 0.639098,
+          "root_frames": 133
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 44,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.117647,
+            "fn": 84,
+            "fp": 36,
+            "precision": 0.181818,
+            "recall": 0.086957,
+            "tp": 8
+          },
+          "onset_multi": {
+            "f1": 0.397059,
+            "fn": 65,
+            "fp": 17,
+            "precision": 0.613636,
+            "recall": 0.293478,
+            "tp": 27
+          },
+          "onset_pitch": {
+            "f1": 0.558824,
+            "fn": 54,
+            "fp": 6,
+            "precision": 0.863636,
+            "recall": 0.413043,
+            "tp": 38
+          },
+          "overlap_mean": 0.81035,
+          "reference_notes": 92
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 29521.928,
+      "source": "egset12",
+      "split": "train",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:02",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.55,
+              "count": 1,
+              "gap": 0.55,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 1.277098
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 1.0,
+              "avg_confidence": 0.8,
+              "count": 4,
+              "gap": 0.2,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 2.113016
+            },
+            {
+              "accuracy": 0.030627,
+              "avg_confidence": 1.0,
+              "count": 11,
+              "gap": 0.969373,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 28.051247
+            }
+          ],
+          "ece": 0.900633,
+          "samples": 16,
+          "total_weight_s": 31.441361
+        },
+        "chords": {
+          "estimated_events": 24,
+          "event_prf": {
+            "f1": 0.115385,
+            "fn": 25,
+            "fp": 21,
+            "precision": 0.125,
+            "recall": 0.107143,
+            "tp": 3
+          },
+          "frame_accuracy": 0.263158,
+          "frames": 114,
+          "reference_events": 28,
+          "root_accuracy": 0.263158,
+          "root_frames": 114
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 37,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.0,
+            "fn": 242,
+            "fp": 37,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "onset_multi": {
+            "f1": 0.050179,
+            "fn": 235,
+            "fp": 30,
+            "precision": 0.189189,
+            "recall": 0.028926,
+            "tp": 7
+          },
+          "onset_pitch": {
+            "f1": 0.207885,
+            "fn": 213,
+            "fp": 8,
+            "precision": 0.783784,
+            "recall": 0.119835,
+            "tp": 29
+          },
+          "overlap_mean": 0.0,
+          "reference_notes": 242
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 37146.207,
+      "source": "egset12",
+      "split": "train",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:03",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.55,
+              "count": 1,
+              "gap": 0.55,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 0.417959
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 1.0,
+              "avg_confidence": 0.75,
+              "count": 1,
+              "gap": 0.25,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 0.394739
+            },
+            {
+              "accuracy": 1.0,
+              "avg_confidence": 0.8,
+              "count": 1,
+              "gap": 0.2,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 0.394739
+            },
+            {
+              "accuracy": 0.333803,
+              "avg_confidence": 1.0,
+              "count": 17,
+              "gap": 0.666197,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 31.85932
+            }
+          ],
+          "ece": 0.654194,
+          "samples": 20,
+          "total_weight_s": 33.066757
+        },
+        "chords": {
+          "estimated_events": 26,
+          "event_prf": {
+            "f1": 0.26087,
+            "fn": 14,
+            "fp": 20,
+            "precision": 0.230769,
+            "recall": 0.3,
+            "tp": 6
+          },
+          "frame_accuracy": 0.47907,
+          "frames": 215,
+          "reference_events": 20,
+          "root_accuracy": 0.47907,
+          "root_frames": 215
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 38,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.12069,
+            "fn": 71,
+            "fp": 31,
+            "precision": 0.184211,
+            "recall": 0.089744,
+            "tp": 7
+          },
+          "onset_multi": {
+            "f1": 0.224138,
+            "fn": 65,
+            "fp": 25,
+            "precision": 0.342105,
+            "recall": 0.166667,
+            "tp": 13
+          },
+          "onset_pitch": {
+            "f1": 0.431034,
+            "fn": 53,
+            "fp": 13,
+            "precision": 0.657895,
+            "recall": 0.320513,
+            "tp": 25
+          },
+          "overlap_mean": 0.849811,
+          "reference_notes": 78
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 10096.679,
+      "source": "egset12",
+      "split": "train",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:04",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.55,
+              "count": 1,
+              "gap": 0.55,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 0.557279
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.039407,
+              "avg_confidence": 1.0,
+              "count": 17,
+              "gap": 0.960593,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 28.283447
+            }
+          ],
+          "ece": 0.95266,
+          "samples": 18,
+          "total_weight_s": 28.840726
+        },
+        "chords": {
+          "estimated_events": 32,
+          "event_prf": {
+            "f1": 0.072727,
+            "fn": 21,
+            "fp": 30,
+            "precision": 0.0625,
+            "recall": 0.086957,
+            "tp": 2
+          },
+          "frame_accuracy": 0.095238,
+          "frames": 63,
+          "reference_events": 23,
+          "root_accuracy": 0.095238,
+          "root_frames": 63
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 40,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.057143,
+            "fn": 164,
+            "fp": 34,
+            "precision": 0.15,
+            "recall": 0.035294,
+            "tp": 6
+          },
+          "onset_multi": {
+            "f1": 0.057143,
+            "fn": 164,
+            "fp": 34,
+            "precision": 0.15,
+            "recall": 0.035294,
+            "tp": 6
+          },
+          "onset_pitch": {
+            "f1": 0.27619,
+            "fn": 141,
+            "fp": 11,
+            "precision": 0.725,
+            "recall": 0.170588,
+            "tp": 29
+          },
+          "overlap_mean": 0.600355,
+          "reference_notes": 170
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 10839.689,
+      "source": "egset12",
+      "split": "train",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:05",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 1.0,
+              "count": 2,
+              "gap": 1.0,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 31.023401
+            }
+          ],
+          "ece": 1.0,
+          "samples": 2,
+          "total_weight_s": 31.023401
+        },
+        "chords": {
+          "estimated_events": 3,
+          "event_prf": {
+            "f1": 0.0,
+            "fn": 45,
+            "fp": 3,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "frame_accuracy": 0.0,
+          "frames": 91,
+          "reference_events": 45,
+          "root_accuracy": 0.0,
+          "root_frames": 91
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 52,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.051948,
+            "fn": 98,
+            "fp": 48,
+            "precision": 0.076923,
+            "recall": 0.039216,
+            "tp": 4
+          },
+          "onset_multi": {
+            "f1": 0.571429,
+            "fn": 58,
+            "fp": 8,
+            "precision": 0.846154,
+            "recall": 0.431373,
+            "tp": 44
+          },
+          "onset_pitch": {
+            "f1": 0.662338,
+            "fn": 51,
+            "fp": 1,
+            "precision": 0.980769,
+            "recall": 0.5,
+            "tp": 51
+          },
+          "overlap_mean": 0.824725,
+          "reference_notes": 102
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 8289.328,
+      "source": "egset12",
+      "split": "train",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:06",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.525,
+              "count": 2,
+              "gap": 0.525,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 1.160998
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.510204,
+              "avg_confidence": 0.8,
+              "count": 2,
+              "gap": 0.289796,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 1.137778
+            },
+            {
+              "accuracy": 0.307808,
+              "avg_confidence": 1.0,
+              "count": 21,
+              "gap": 0.692192,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 26.70449
+            }
+          ],
+          "ece": 0.669713,
+          "samples": 25,
+          "total_weight_s": 29.003265
+        },
+        "chords": {
+          "estimated_events": 48,
+          "event_prf": {
+            "f1": 0.090909,
+            "fn": 15,
+            "fp": 45,
+            "precision": 0.0625,
+            "recall": 0.166667,
+            "tp": 3
+          },
+          "frame_accuracy": 0.276817,
+          "frames": 289,
+          "reference_events": 18,
+          "root_accuracy": 0.276817,
+          "root_frames": 289
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 31,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.0,
+            "fn": 390,
+            "fp": 31,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "onset_multi": {
+            "f1": 0.004751,
+            "fn": 389,
+            "fp": 30,
+            "precision": 0.032258,
+            "recall": 0.002564,
+            "tp": 1
+          },
+          "onset_pitch": {
+            "f1": 0.071259,
+            "fn": 375,
+            "fp": 16,
+            "precision": 0.483871,
+            "recall": 0.038462,
+            "tp": 15
+          },
+          "overlap_mean": 0.0,
+          "reference_notes": 390
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 2726.307,
+      "source": "egset12",
+      "split": "train",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:07",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 1.0,
+              "count": 1,
+              "gap": 1.0,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 1.0
+            }
+          ],
+          "ece": 1.0,
+          "samples": 1,
+          "total_weight_s": 1.0
+        },
+        "chords": {
+          "estimated_events": 1,
+          "event_prf": {
+            "f1": 0.0,
+            "fn": 26,
+            "fp": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "frame_accuracy": 0.0,
+          "frames": 4,
+          "reference_events": 26,
+          "root_accuracy": 0.0,
+          "root_frames": 4
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 45,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.348624,
+            "fn": 45,
+            "fp": 26,
+            "precision": 0.422222,
+            "recall": 0.296875,
+            "tp": 19
+          },
+          "onset_multi": {
+            "f1": 0.623853,
+            "fn": 30,
+            "fp": 11,
+            "precision": 0.755556,
+            "recall": 0.53125,
+            "tp": 34
+          },
+          "onset_pitch": {
+            "f1": 0.642202,
+            "fn": 29,
+            "fp": 10,
+            "precision": 0.777778,
+            "recall": 0.546875,
+            "tp": 35
+          },
+          "overlap_mean": 0.868267,
+          "reference_notes": 64
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 1464.929,
+      "source": "egset12",
+      "split": "train",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "fail"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:08",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 1.0,
+              "avg_confidence": 0.75,
+              "count": 2,
+              "gap": 0.25,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 1.137778
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.019402,
+              "avg_confidence": 1.0,
+              "count": 6,
+              "gap": 0.980598,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 31.116281
+            }
+          ],
+          "ece": 0.954826,
+          "samples": 8,
+          "total_weight_s": 32.254059
+        },
+        "chords": {
+          "estimated_events": 17,
+          "event_prf": {
+            "f1": 0.166667,
+            "fn": 16,
+            "fp": 14,
+            "precision": 0.176471,
+            "recall": 0.157895,
+            "tp": 3
+          },
+          "frame_accuracy": 0.084848,
+          "frames": 165,
+          "reference_events": 19,
+          "root_accuracy": 0.084848,
+          "root_frames": 165
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 34,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.084746,
+            "fn": 79,
+            "fp": 29,
+            "precision": 0.147059,
+            "recall": 0.059524,
+            "tp": 5
+          },
+          "onset_multi": {
+            "f1": 0.220339,
+            "fn": 71,
+            "fp": 21,
+            "precision": 0.382353,
+            "recall": 0.154762,
+            "tp": 13
+          },
+          "onset_pitch": {
+            "f1": 0.440678,
+            "fn": 58,
+            "fp": 8,
+            "precision": 0.764706,
+            "recall": 0.309524,
+            "tp": 26
+          },
+          "overlap_mean": 0.86689,
+          "reference_notes": 84
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 1697.48,
+      "source": "egset12",
+      "split": "train",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:09",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 1.0,
+              "count": 4,
+              "gap": 1.0,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 3.252336
+            }
+          ],
+          "ece": 1.0,
+          "samples": 4,
+          "total_weight_s": 3.252336
+        },
+        "chords": {
+          "estimated_events": 9,
+          "event_prf": {
+            "f1": 0.0,
+            "fn": 27,
+            "fp": 9,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "frame_accuracy": 0.0,
+          "frames": 18,
+          "reference_events": 27,
+          "root_accuracy": 0.0,
+          "root_frames": 18
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 41,
+          "instrument_exact": null,
+          "instrument_family": null,
+          "offset_multi": {
+            "f1": 0.0,
+            "fn": 89,
+            "fp": 41,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "onset_multi": {
+            "f1": 0.0,
+            "fn": 89,
+            "fp": 41,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "onset_pitch": {
+            "f1": 0.384615,
+            "fn": 64,
+            "fp": 16,
+            "precision": 0.609756,
+            "recall": 0.280899,
+            "tp": 25
+          },
+          "overlap_mean": 0.0,
+          "reference_notes": 89
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 1745.233,
+      "source": "egset12",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:10",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.14779,
+              "avg_confidence": 1.0,
+              "count": 7,
+              "gap": 0.85221,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 17.439728
+            }
+          ],
+          "ece": 0.85221,
+          "samples": 7,
+          "total_weight_s": 17.439728
+        },
+        "chords": {
+          "estimated_events": 7,
+          "event_prf": {
+            "f1": 0.153846,
+            "fn": 5,
+            "fp": 6,
+            "precision": 0.142857,
+            "recall": 0.166667,
+            "tp": 1
+          },
+          "frame_accuracy": 0.362319,
+          "frames": 69,
+          "reference_events": 6,
+          "root_accuracy": 0.362319,
+          "root_frames": 69
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 22,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.064516,
+            "fn": 68,
+            "fp": 19,
+            "precision": 0.136364,
+            "recall": 0.042254,
+            "tp": 3
+          },
+          "onset_multi": {
+            "f1": 0.365591,
+            "fn": 54,
+            "fp": 5,
+            "precision": 0.772727,
+            "recall": 0.239437,
+            "tp": 17
+          },
+          "onset_pitch": {
+            "f1": 0.408602,
+            "fn": 52,
+            "fp": 3,
+            "precision": 0.863636,
+            "recall": 0.267606,
+            "tp": 19
+          },
+          "overlap_mean": 0.833056,
+          "reference_notes": 71
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 1642.307,
+      "source": "egset12",
+      "split": "train",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:11",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.031108,
+              "avg_confidence": 1.0,
+              "count": 4,
+              "gap": 0.968892,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 15.675011
+            }
+          ],
+          "ece": 0.968892,
+          "samples": 4,
+          "total_weight_s": 15.675011
+        },
+        "chords": {
+          "estimated_events": 4,
+          "event_prf": {
+            "f1": 0.0,
+            "fn": 37,
+            "fp": 4,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "frame_accuracy": 0.294118,
+          "frames": 17,
+          "reference_events": 37,
+          "root_accuracy": 0.294118,
+          "root_frames": 17
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 40,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.055944,
+            "fn": 99,
+            "fp": 36,
+            "precision": 0.1,
+            "recall": 0.038835,
+            "tp": 4
+          },
+          "onset_multi": {
+            "f1": 0.083916,
+            "fn": 97,
+            "fp": 34,
+            "precision": 0.15,
+            "recall": 0.058252,
+            "tp": 6
+          },
+          "onset_pitch": {
+            "f1": 0.13986,
+            "fn": 93,
+            "fp": 30,
+            "precision": 0.25,
+            "recall": 0.097087,
+            "tp": 10
+          },
+          "overlap_mean": 0.551189,
+          "reference_notes": 103
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 1617.408,
+      "source": "egset12",
+      "split": "test",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    },
+    {
+      "capo": 0,
+      "completed": true,
+      "error": null,
+      "expected_verdict": null,
+      "expected_verdict_matches": null,
+      "id": "egset12:12",
+      "instrument_count": 1,
+      "metrics": {
+        "calibration": {
+          "bins": [
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.0,
+              "upper": 0.1,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.1,
+              "upper": 0.2,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.2,
+              "upper": 0.3,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.3,
+              "upper": 0.4,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.4,
+              "upper": 0.5,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.55,
+              "count": 1,
+              "gap": 0.55,
+              "lower": 0.5,
+              "upper": 0.6,
+              "weight": 0.487619
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.6,
+              "upper": 0.7,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 1.0,
+              "avg_confidence": 0.75,
+              "count": 4,
+              "gap": 0.25,
+              "lower": 0.7,
+              "upper": 0.8,
+              "weight": 1.996916
+            },
+            {
+              "accuracy": 0.0,
+              "avg_confidence": 0.0,
+              "count": 0,
+              "gap": 0.0,
+              "lower": 0.8,
+              "upper": 0.9,
+              "weight": 0.0
+            },
+            {
+              "accuracy": 0.022049,
+              "avg_confidence": 1.0,
+              "count": 14,
+              "gap": 0.977951,
+              "lower": 0.9,
+              "upper": 1.0,
+              "weight": 21.062041
+            }
+          ],
+          "ece": 0.907353,
+          "samples": 19,
+          "total_weight_s": 23.546576
+        },
+        "chords": {
+          "estimated_events": 31,
+          "event_prf": {
+            "f1": 0.2,
+            "fn": 14,
+            "fp": 26,
+            "precision": 0.16129,
+            "recall": 0.263158,
+            "tp": 5
+          },
+          "frame_accuracy": 0.316667,
+          "frames": 60,
+          "reference_events": 19,
+          "root_accuracy": 0.316667,
+          "root_frames": 60
+        },
+        "notes": {
+          "dynamics_mae": null,
+          "dynamics_n": 0,
+          "estimated_notes": 34,
+          "instrument_exact": 1.0,
+          "instrument_family": 1.0,
+          "offset_multi": {
+            "f1": 0.0,
+            "fn": 82,
+            "fp": 34,
+            "precision": 0.0,
+            "recall": 0.0,
+            "tp": 0
+          },
+          "onset_multi": {
+            "f1": 0.293103,
+            "fn": 65,
+            "fp": 17,
+            "precision": 0.5,
+            "recall": 0.207317,
+            "tp": 17
+          },
+          "onset_pitch": {
+            "f1": 0.396552,
+            "fn": 59,
+            "fp": 11,
+            "precision": 0.676471,
+            "recall": 0.280488,
+            "tp": 23
+          },
+          "overlap_mean": 0.0,
+          "reference_notes": 82
+        }
+      },
+      "qualitative": false,
+      "recording_type": "studio",
+      "runtime_ms": 10900.319,
+      "source": "egset12",
+      "split": "train",
+      "tier": "mt3",
+      "tuning": "standard",
+      "verdict": "pass"
+    }
+  ],
+  "verdict_expectation_mismatches": [],
+  "verdicts": {
+    "fail": 1,
+    "pass": 11,
+    "unscored": 0,
+    "warn": 0
+  }
+}

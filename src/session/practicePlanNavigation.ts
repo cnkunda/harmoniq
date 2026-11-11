@@ -1,4 +1,4 @@
-import type { Router } from 'expo-router'
+import type { Href, Router } from 'expo-router'
 
 import { speak } from '@/src/audio/voiceCoach'
 import { sessionEntryHref } from '@/src/constants/sessionFlow'
@@ -55,7 +55,15 @@ export async function navigateToPracticePlanSlot(
   const intro = typeof slot.coach_intro === 'string' ? slot.coach_intro.trim() : ''
   if (intro) speak(intro)
   if (slot.slot_type === 'free_jam') {
-    router.push('/(tabs)/jam')
+    if (slot.backing_source === 'lesson' && slot.lesson_ref) {
+      const lesson = await getLessonByJobId(slot.lesson_ref)
+      if (lesson) deps.saveLesson(lesson)
+    }
+    const params: string[] = []
+    if (slot.backing_source === 'lesson') params.push('fromLesson=1')
+    if (slot.target_rate != null) params.push(`targetRate=${slot.target_rate}`)
+    if (slot.loop_bars != null) params.push(`loopBars=${slot.loop_bars}`)
+    router.push((params.length > 0 ? `/(tabs)/jam?${params.join('&')}` : '/(tabs)/jam') as Href)
     return
   }
   if (slot.slot_type === 'warmup' && slot.warmup_plan?.exercises?.length) {

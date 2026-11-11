@@ -1,8 +1,8 @@
 import { Asset } from 'expo-asset'
 import { Audio, type AVPlaybackStatus } from 'expo-av'
-import { useRouter, type Href } from 'expo-router'
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Platform, ScrollView, Text, View } from 'react-native'
+import { ActivityIndicator, Platform, ScrollView, Text, TextInput, View } from 'react-native'
 import Animated, {
     cancelAnimation,
     useAnimatedStyle,
@@ -28,7 +28,17 @@ import {
     parseTasteProfileJson,
     submitJamScore,
 } from '@/src/api/analyze'
-import { requestJamBacking, type JamPersonaChoice, type JamPhraseMetrics, type JamSummaryBundle } from '@/src/api/jam'
+import {
+  createJamBackingJob,
+  getJamBackingJob,
+  JAM_BACKING_JOB_POLL_MS,
+  resolveJamBackingSource,
+  type JamBackingResponseBody,
+  type JamBackingSourceInfo,
+  type JamPersonaChoice,
+  type JamPhraseMetrics,
+  type JamSummaryBundle,
+} from '@/src/api/jam'
 import { emit } from '@/src/analytics/eventBus'
 import { BACKING_TRACKS, type BackingTrackDefinition, type BackingTrackId } from '@/src/constants/backingTracks'
 import { getAllSkillNodes, getAppPref, insertJamSnapshotRow } from '@/src/db/client'
@@ -48,6 +58,8 @@ import {
   saveJamPersonaChoice,
 } from '@/src/jam/jamSummaryRunner'
 import { normalizeExternalAudioSrcForTabHarness } from '@/src/jam/normalizeJamTabAudioUri'
+import { deriveLessonBed, type LessonBed } from '@/src/jam/lessonBed'
+import { PROGRESSION_PRESETS, parseProgressionInput } from '@/src/jam/progression'
 import { createPitchClassHistogram, type BestScaleMatch } from '@/src/jam/pitchClassHistogram'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
 import { completePracticePlanSlot } from '@/src/session/planProgress'
@@ -66,6 +78,10 @@ import { colors } from '@/src/constants/colors'
 
 const SCALE_UI_INTERVAL_MS = 2000
 const AI_INSTRUMENTAL_TRACK_ID = 'ai-instrumental'
+const KEY_ROOTS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const
+const JAM_STYLES = ['blues', 'jazz', 'fingerpicking', 'rock', 'ambient'] as const
+const JAM_BPM_PRESETS = [60, 70, 80, 90, 100, 120] as const
+const JAM_DURATION_PRESETS = [16, 32, 48] as const
 type InferenceConfidence = 'low' | 'medium' | 'high'
 type BackingMode = 'classic' | 'ai'
 
@@ -82,6 +98,15 @@ export default function JamScreen() {
 
   const [isJamming, setIsJamming] = useState(false)
   const [backingMode, setBackingMode] = useState<BackingMode>('classic')
+  const [aiBackingSource, setAiBackingSource] = useState<JamBackingSourceInfo | null>(null)
+  const [aiBackingPending, setAiBackingPending] = useState(false)
+  const [aiKeyRoot, setAiKeyRoot] = useState<string>('A')
+  const [aiKeyMode, setAiKeyMode] = useState<'major' | 'minor'>('minor')
+  const [aiBpm, setAiBpm] = useState(70)
+  const [aiStyle, setAiStyle] = useState<string>('blues')
+  const [aiDurationSec, setAiDurationSec] = useState(16)
+  const [progressionText, setProgressionText] = useState('')
+  const [lessonBed, setLessonBed] = useState<LessonBed | null>(null)
   const [classicTrackId, setClassicTrackId] = useState<BackingTrackId>(BACKING_TRACKS[0].id)
   const [weakAreas, setWeakAreas] = useState<readonly string[]>([])
   const [scaleLabel, setScaleLabel] = useState('—')
@@ -121,6 +146,17 @@ export default function JamScreen() {
 
   const soundRef = useRef<Audio.Sound | null>(null)
   const jamAiPlaybackReleaseRef = useRef<(() => void) | null>(null)
+  const jamBackingJobRef = useRef<string | null>(null)
+  const aiBackingMetaRef = useRef<{
+    source: 'classic' | 'ai'
+    key: string
+    bpm: number | null
+    progression: string[]
+    prompt: string | null
+    provider: string | null
+    durationMs: number | null
+  } | null>(null)
+  const jamBackingPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastAiPromptRef = useRef<string | null>(null)
   const histogramRef = useRef(createPitchClassHistogram())
   const jamBackingPositionRef = useRef(0)
@@ -138,8 +174,40 @@ export default function JamScreen() {
   const lastScaleTintRef = useRef<{ rootMidi: number; intervals: readonly number[] } | null>(null)
   const summaryRunIdRef = useRef(0)
   const classicTrackDef = BACKING_TRACKS.find((t) => t.id === classicTrackId) ?? BACKING_TRACKS[0]
-  jamBpmRef.current = classicTrackDef.bpm ?? null
-  const activeJamTrackSource = backingMode === 'ai' ? 'AI instrumental · MRT2' : 'Offline loop (bundled)'
+  const lessonForBed = useLessonStore((s) => s.lesson)
+  const lessonSectionIndexForBed = useLessonStore((s) => s.lessonSectionIndex)
+  const jamParams = useLocalSearchParams<{
+    fromLesson?: string
+    sectionIndex?: string
+    targetRate?: string
+    loopBars?: string
+  }>()
+
+  useEffect(() => {
+    if (jamParams.fromLesson !== '1' || !lessonForBed) return
+    const raw = Number(jamParams.sectionIndex ?? lessonSectionIndexForBed)
+    const idx = Number.isFinite(raw) ? Math.max(0, Math.trunc(raw)) : lessonSectionIndexForBed
+    const bed = deriveLessonBed(lessonForBed as never, idx)
+    setLessonBed(bed)
+    setAiKeyRoot(bed.keyRoot)
+    setAiKeyMode(bed.keyMode)
+    if (bed.bpm != null) setAiBpm(bed.bpm)
+    setProgressionText(bed.progression.join(' '))
+    setBackingMode('ai')
+  }, [jamParams.fromLesson, jamParams.sectionIndex, lessonForBed, lessonSectionIndexForBed])
+
+  const aiProgression = useMemo(() => parseProgressionInput(progressionText), [progressionText])
+  const jamDisplayKey = backingMode === 'ai' ? `${aiKeyRoot} ${aiKeyMode}` : classicTrackDef.key
+  const jamDisplayBpm = backingMode === 'ai' ? aiBpm : classicTrackDef.bpm
+  jamBpmRef.current = jamDisplayBpm ?? null
+  const activeJamTrackSource =
+    backingMode === 'ai'
+      ? aiBackingPending
+        ? 'Generating · bundled loop playing'
+        : aiBackingSource?.usedFallback
+          ? `Bundled fallback${aiBackingSource.fallbackTrack ? ` · ${aiBackingSource.fallbackTrack}` : ''}`
+          : `AI instrumental · ${aiBackingSource?.provider ?? 'server'}`
+      : 'Offline loop (bundled)'
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner()
 
   const currentPlan = usePlanStore((s) => s.currentPlan)
@@ -270,17 +338,10 @@ export default function JamScreen() {
       jamAiPlaybackReleaseRef.current?.()
       jamAiPlaybackReleaseRef.current = null
       setJamTabExternalAudioSrc(null)
+      jamBackingJobRef.current = null
+      if (jamBackingPollRef.current != null) clearTimeout(jamBackingPollRef.current)
     }
   }, [pulse, stopPitch])
-
-  useEffect(() => {
-    if (!isJamming) {
-      setJamTabReady(false)
-      jamLastStemPlayingRef.current = false
-      jamAiPlaybackReleaseRef.current?.()
-      jamAiPlaybackReleaseRef.current = null
-    }
-  }, [isJamming])
 
   useEffect(() => {
     if (!isJamming || !jamTabReady) return
@@ -328,6 +389,110 @@ export default function JamScreen() {
     })
   }, [syncJamTabFromPlaybackStatus])
 
+  const cancelJamBackingPolling = useCallback(() => {
+    jamBackingJobRef.current = null
+    if (jamBackingPollRef.current != null) {
+      clearTimeout(jamBackingPollRef.current)
+      jamBackingPollRef.current = null
+    }
+  }, [])
+
+  const hotSwapJamBacking = useCallback(
+    async (res: JamBackingResponseBody) => {
+      const prepared = await prepareJamBackingPlayable(res.audio_base64, res.mime_type)
+      const old = soundRef.current
+      const oldPos = jamBackingPositionRef.current
+      const { sound: next } = await Audio.Sound.createAsync(
+        { uri: prepared.uri },
+        { isLooping: true, shouldPlay: false, volume: 0 },
+      )
+      next.setOnPlaybackStatusUpdate(handleJamPlaybackStatus)
+      try {
+        const cap = typeof res.duration_ms === 'number' && res.duration_ms > 0 ? res.duration_ms : oldPos
+        await next.setPositionAsync(Math.max(0, Math.min(oldPos, cap)))
+      } catch {
+        /* start from 0 when position restore is unavailable */
+      }
+      await next.playAsync()
+      if (old) {
+        for (let i = 1; i <= 6; i += 1) {
+          const v = i / 6
+          await old.setVolumeAsync(1 - v).catch(() => {})
+          await next.setVolumeAsync(v).catch(() => {})
+          await new Promise((resolve) => setTimeout(resolve, 100))
+        }
+        old.setOnPlaybackStatusUpdate(null)
+        await old.stopAsync().catch(() => {})
+        await old.unloadAsync().catch(() => {})
+      }
+      jamAiPlaybackReleaseRef.current?.()
+      jamAiPlaybackReleaseRef.current = prepared.release
+      soundRef.current = next
+      setJamTabExternalAudioSrc(normalizeExternalAudioSrcForTabHarness(prepared.uri))
+    },
+    [handleJamPlaybackStatus],
+  )
+
+  const pollJamBackingJob = useCallback(
+    async (jobId: string) => {
+      const startedAt = Date.now()
+      while (jamBackingJobRef.current === jobId && Date.now() - startedAt < 8 * 60 * 1000) {
+        await new Promise((resolve) => setTimeout(resolve, JAM_BACKING_JOB_POLL_MS))
+        if (jamBackingJobRef.current !== jobId) return
+        try {
+          const job = await getJamBackingJob(jobId)
+          if (job.status === 'complete' && job.result) {
+            await hotSwapJamBacking(job.result)
+            lastAiPromptRef.current = job.result.prompt_used
+            const info = resolveJamBackingSource(job.result)
+            aiBackingMetaRef.current = {
+              source: info.usedFallback ? 'classic' : 'ai',
+              key: `${aiKeyRoot} ${aiKeyMode}`,
+              bpm: aiBpm,
+              progression: [...aiProgression],
+              prompt: job.result.prompt_used,
+              provider: info.provider,
+              durationMs: job.result.duration_ms ?? null,
+            }
+            setAiBackingSource(info)
+            setAiBackingPending(false)
+            return
+          }
+          if (job.status === 'failed') {
+            setAiBackingPending(false)
+            aiBackingMetaRef.current = {
+              source: 'classic',
+              key: `${aiKeyRoot} ${aiKeyMode}`,
+              bpm: aiBpm,
+              progression: [...aiProgression],
+              prompt: null,
+              provider: 'bundled',
+              durationMs: null,
+            }
+            setAiBackingSource({ provider: 'bundled', usedFallback: true, fallbackTrack: null })
+            toast.info('AI bed unavailable — staying on the bundled loop.')
+            return
+          }
+        } catch {
+          /* transient poll failure; keep trying until the deadline */
+        }
+      }
+      setAiBackingPending(false)
+    },
+    [hotSwapJamBacking],
+  )
+
+  useEffect(() => {
+    if (!isJamming) {
+      setJamTabReady(false)
+      jamLastStemPlayingRef.current = false
+      jamAiPlaybackReleaseRef.current?.()
+      jamAiPlaybackReleaseRef.current = null
+      cancelJamBackingPolling()
+      setAiBackingPending(false)
+    }
+  }, [cancelJamBackingPolling, isJamming])
+
   const beginJamAfterMic = useCallback(async () => {
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
@@ -341,18 +506,40 @@ export default function JamScreen() {
     let source: number | { uri: string }
     let tabHarnessAudioSrc: string | null = null
     if (backingMode === 'ai') {
-      const res = await requestJamBacking({
-        musical_key: classicTrackDef.key,
-        bpm: classicTrackDef.bpm,
-        weak_areas: [...weakAreas],
-      })
-      lastAiPromptRef.current = res.prompt_used
-      const prepared = await prepareJamBackingPlayable(res.audio_base64, res.mime_type)
-      pendingUriCleanup.push(prepared.release)
-      source = { uri: prepared.uri }
-      tabHarnessAudioSrc = normalizeExternalAudioSrcForTabHarness(prepared.uri)
+      // Start instantly on the bundled loop; the generated bed hot-swaps in when ready.
+      const asset = Asset.fromModule(classicTrackDef.source)
+      await asset.downloadAsync()
+      const resolved = asset.localUri ?? asset.uri
+      if (!resolved) {
+        throw new Error('Could not resolve classic backing URL for tab sync.')
+      }
+      tabHarnessAudioSrc = normalizeExternalAudioSrcForTabHarness(resolved)
+      source = Platform.OS === 'web' ? { uri: resolved } : classicTrackDef.source
+      lastAiPromptRef.current = null
+      aiBackingMetaRef.current = {
+        source: 'ai',
+        key: `${aiKeyRoot} ${aiKeyMode}`,
+        bpm: aiBpm,
+        progression: [...aiProgression],
+        prompt: null,
+        provider: null,
+        durationMs: null,
+      }
+      cancelJamBackingPolling()
+      setAiBackingSource({ provider: 'bundled', usedFallback: true, fallbackTrack: null })
+      setAiBackingPending(true)
     } else {
       lastAiPromptRef.current = null
+      aiBackingMetaRef.current = {
+        source: 'classic',
+        key: classicTrackDef.key,
+        bpm: classicTrackDef.bpm ?? null,
+        progression: [],
+        prompt: null,
+        provider: 'bundled',
+        durationMs: null,
+      }
+      setAiBackingSource(null)
       const asset = Asset.fromModule(classicTrackDef.source)
       await asset.downloadAsync()
       const resolved = asset.localUri ?? asset.uri
@@ -379,6 +566,23 @@ export default function JamScreen() {
       jamStartedAtRef.current = Date.now()
       setIsJamming(true)
       startPulse()
+      if (backingMode === 'ai') {
+        try {
+          const created = await createJamBackingJob({
+            musical_key: `${aiKeyRoot} ${aiKeyMode}`,
+            bpm: aiBpm,
+            style_hint: aiStyle,
+            duration_secs: aiDurationSec,
+            chord_progression: aiProgression,
+            weak_areas: [...weakAreas],
+          })
+          jamBackingJobRef.current = created.job_id
+          void pollJamBackingJob(created.job_id)
+        } catch {
+          setAiBackingPending(false)
+          toast.info('AI bed unavailable — using the bundled loop.')
+        }
+      }
     } catch (err) {
       setJamTabExternalAudioSrc(null)
       for (const fn of pendingUriCleanup) {
@@ -388,11 +592,17 @@ export default function JamScreen() {
       throw err
     }
   }, [
+    aiBpm,
+    aiDurationSec,
+    aiKeyMode,
+    aiKeyRoot,
+    aiProgression,
+    aiStyle,
     backingMode,
-    classicTrackDef.bpm,
-    classicTrackDef.key,
+    cancelJamBackingPolling,
     classicTrackDef.source,
     handleJamPlaybackStatus,
+    pollJamBackingJob,
     startPulse,
     weakAreas,
   ])
@@ -461,11 +671,13 @@ export default function JamScreen() {
       setJamTabExternalAudioSrc(null)
       jamAiPlaybackReleaseRef.current?.()
       jamAiPlaybackReleaseRef.current = null
+      cancelJamBackingPolling()
+      setAiBackingPending(false)
       lastAiPromptRef.current = null
       if (e instanceof ApiError) {
         if (e.status === 503) {
           toast.error(
-            'AI backing needs MRT2 model files on the practice server. Choose a classic loop or install magenta-rt.',
+            'AI backing needs a music-generation provider on the practice server. Choose a classic loop or install/configure a provider.',
           )
         } else {
           toast.error(e.message || 'Could not generate backing track')
@@ -497,6 +709,8 @@ export default function JamScreen() {
     jamStartedAtRef.current = null
 
     await stopPitch()
+    cancelJamBackingPolling()
+    setAiBackingPending(false)
 
     const snd = soundRef.current
     soundRef.current = null
@@ -556,8 +770,8 @@ export default function JamScreen() {
         inferred_mode: inferredMode,
         track_id: trackIdForSave,
         track_label: trackLabelForSave,
-        track_key: classicTrackDef.key,
-        track_bpm: classicTrackDef.bpm,
+        track_key: jamDisplayKey,
+        track_bpm: jamDisplayBpm,
         recording_wav_base64: '',
       })
       coachSummary = res.coach_summary
@@ -588,8 +802,8 @@ export default function JamScreen() {
     const snapshotId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
     const practiceTrack = resolveJamPracticeTrack({
       trackId: trackIdForSave,
-      trackKey: classicTrackDef.key,
-      trackBpm: classicTrackDef.bpm,
+      trackKey: jamDisplayKey,
+      trackBpm: jamDisplayBpm,
     })
 
     try {
@@ -605,8 +819,15 @@ export default function JamScreen() {
         inference_confidence: inferenceConfidence,
         track_id: trackIdForSave,
         track_label: trackLabelForSave,
-        track_key: classicTrackDef.key,
-        track_bpm: classicTrackDef.bpm,
+        track_key: jamDisplayKey,
+        track_bpm: jamDisplayBpm,
+        backing_source: aiBackingMetaRef.current?.source ?? (backingMode === 'ai' ? 'ai' : 'classic'),
+        backing_key: aiBackingMetaRef.current?.key ?? jamDisplayKey,
+        backing_bpm: aiBackingMetaRef.current?.bpm ?? jamDisplayBpm,
+        backing_progression: aiBackingMetaRef.current?.progression ?? [],
+        backing_prompt: aiBackingMetaRef.current?.prompt ?? lastAiPromptRef.current,
+        backing_provider: aiBackingMetaRef.current?.provider ?? null,
+        backing_duration_ms: aiBackingMetaRef.current?.durationMs ?? null,
         reliability_tags: reliabilityTags,
         reliability_confidence: reliabilityConfidence,
         reliability_signal_quality: reliabilitySignalQuality,
@@ -667,8 +888,8 @@ export default function JamScreen() {
         inference_confidence: inferenceConfidence,
         track_id: trackIdForSave,
         track_label: trackLabelForSave,
-        track_key: classicTrackDef.key,
-        track_bpm: classicTrackDef.bpm,
+        track_key: jamDisplayKey,
+        track_bpm: jamDisplayBpm,
         phrases,
         personaChoice,
         weak_areas: weakAreas,
@@ -696,11 +917,11 @@ export default function JamScreen() {
   }, [
     backingMode,
     busy,
-    classicTrackDef.bpm,
     classicTrackDef.id,
-    classicTrackDef.key,
     classicTrackDef.label,
     isJamming,
+    jamDisplayBpm,
+    jamDisplayKey,
     personaChoice,
     stopPitch,
     stopPulse,
@@ -793,8 +1014,8 @@ export default function JamScreen() {
                 <Text className="font-sans-medium text-sm text-cream">{classicTrackDef.label}</Text>
                 <Text className="mt-0.5 font-sans text-xs text-cream/80">
                   {activeJamTrackSource}
-                  {classicTrackDef.bpm != null ? ` · ${classicTrackDef.bpm} BPM` : ' · ambient'}
-                  {classicTrackDef.key ? ` · ${classicTrackDef.key}` : ''}
+                  {jamDisplayBpm != null ? ` · ${jamDisplayBpm} BPM` : ' · ambient'}
+                  {jamDisplayKey ? ` · ${jamDisplayKey}` : ''}
                 </Text>
                 {weakAreas.length > 0 ? (
                   <Text className="mt-1 font-sans text-xs text-amber-light/90">
@@ -876,6 +1097,34 @@ export default function JamScreen() {
             </View>
           ) : null}
 
+          {lessonBed ? (
+            <View className="mb-3 rounded-xl border border-amber-accent/35 bg-amber-accent/10 px-3 py-2">
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="flex-1">
+                  <Text className="font-sans-medium text-sm text-cream">
+                    Lesson bed · {lessonBed.songTitle}
+                    {lessonBed.sectionLabel ? ` · ${lessonBed.sectionLabel}` : ''}
+                  </Text>
+                  <Text className="mt-0.5 font-sans text-xs text-muted-light">
+                    Key, tempo and progression prefilled from your song.
+                    {jamParams.targetRate ? ` Target speed ${Math.round(Number(jamParams.targetRate) * 100)}%.` : ''}
+                    {jamParams.loopBars ? ` Loop ${jamParams.loopBars} bars.` : ''}
+                    {' '}Adjust below, then start jamming.
+                  </Text>
+                </View>
+                <AnimatedPressable
+                  onPress={() => setLessonBed(null)}
+                  haptic="light"
+                  className="rounded-lg border border-wood-600/40 bg-wood-900/40 px-2.5 py-1.5"
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear lesson bed context"
+                >
+                  <Text className="font-sans text-[10px] text-muted-light">Clear</Text>
+                </AnimatedPressable>
+              </View>
+            </View>
+          ) : null}
+
           {webMicBlocked && Platform.OS === 'web' ? (
             <ErrorBanner
               key={`mic-${micBannerKey}`}
@@ -929,10 +1178,10 @@ export default function JamScreen() {
                   >
                     <View className="flex-1 pr-2">
                       <Text className={`font-sans text-sm ${backingMode === 'ai' ? 'text-amber-light' : 'text-cream'}`}>
-                        AI instrumental (server · MRT2)
+                        AI instrumental (server)
                       </Text>
                       <Text className="mt-0.5 font-sans text-xs text-muted-light">
-                        Generates a fresh bed from the key/tempo of the loop you select below
+                        Generates a fresh bed from the key, tempo, style and progression you choose below
                       </Text>
                     </View>
                     {busy && backingMode === 'ai' ? <ActivityIndicator color={colors.amber.light} /> : null}
@@ -988,6 +1237,199 @@ export default function JamScreen() {
                   })}
                 </View>
               </View>
+
+              {backingMode === 'ai' ? (
+                <View className="gap-1">
+                  <Text className="font-sans-medium text-xs uppercase tracking-wider text-amber-light">
+                    Bed settings
+                  </Text>
+                  <Text className="font-sans text-xs text-muted-brown">
+                    Drives the generated bed: key, tempo, style, length, progression.
+                  </Text>
+                  <View className="mt-1 gap-3 rounded-xl border border-wood-700/50 bg-wood-800/40 p-3">
+                    <View>
+                      <Text className="mb-1.5 font-sans-medium text-sm text-cream">Key</Text>
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        <View className="flex-row gap-1.5">
+                          {KEY_ROOTS.map((root) => {
+                            const active = aiKeyRoot === root
+                            return (
+                              <AnimatedPressable
+                                key={`key-${root}`}
+                                onPress={() => setAiKeyRoot(root)}
+                                haptic="light"
+                                disabled={busy}
+                                className={`rounded-lg border px-3 py-2 ${
+                                  active ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/40 bg-wood-900/40'
+                                }`}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: active }}
+                                accessibilityLabel={`Key root ${root}`}
+                              >
+                                <Text className={`font-mono text-xs ${active ? 'text-cream' : 'text-muted-light'}`}>{root}</Text>
+                              </AnimatedPressable>
+                            )
+                          })}
+                        </View>
+                      </ScrollView>
+                      <View className="mt-1.5 flex-row gap-1.5">
+                        {(['major', 'minor'] as const).map((mode) => {
+                          const active = aiKeyMode === mode
+                          return (
+                            <AnimatedPressable
+                              key={`mode-${mode}`}
+                              onPress={() => setAiKeyMode(mode)}
+                              haptic="light"
+                              disabled={busy}
+                              className={`flex-1 rounded-lg border px-3 py-2 ${
+                                active ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/40 bg-wood-900/40'
+                              }`}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: active }}
+                              accessibilityLabel={`${mode} mode`}
+                            >
+                              <Text className={`text-center font-sans text-xs capitalize ${active ? 'text-cream' : 'text-muted-light'}`}>
+                                {mode}
+                              </Text>
+                            </AnimatedPressable>
+                          )
+                        })}
+                      </View>
+                    </View>
+
+                    <View>
+                      <Text className="mb-1.5 font-sans-medium text-sm text-cream">Tempo</Text>
+                      <View className="flex-row flex-wrap gap-1.5">
+                        {JAM_BPM_PRESETS.map((bpm) => {
+                          const active = aiBpm === bpm
+                          return (
+                            <AnimatedPressable
+                              key={`bpm-${bpm}`}
+                              onPress={() => setAiBpm(bpm)}
+                              haptic="light"
+                              disabled={busy}
+                              className={`rounded-lg border px-3 py-2 ${
+                                active ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/40 bg-wood-900/40'
+                              }`}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: active }}
+                              accessibilityLabel={`${bpm} beats per minute`}
+                            >
+                              <Text className={`font-mono text-xs ${active ? 'text-cream' : 'text-muted-light'}`}>{bpm}</Text>
+                            </AnimatedPressable>
+                          )
+                        })}
+                      </View>
+                    </View>
+
+                    <View>
+                      <Text className="mb-1.5 font-sans-medium text-sm text-cream">Style</Text>
+                      <View className="flex-row flex-wrap gap-1.5">
+                        {JAM_STYLES.map((style) => {
+                          const active = aiStyle === style
+                          return (
+                            <AnimatedPressable
+                              key={`style-${style}`}
+                              onPress={() => setAiStyle(style)}
+                              haptic="light"
+                              disabled={busy}
+                              className={`rounded-lg border px-3 py-2 ${
+                                active ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/40 bg-wood-900/40'
+                              }`}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: active }}
+                              accessibilityLabel={`${style} style`}
+                            >
+                              <Text className={`font-sans text-xs capitalize ${active ? 'text-cream' : 'text-muted-light'}`}>{style}</Text>
+                            </AnimatedPressable>
+                          )
+                        })}
+                      </View>
+                    </View>
+
+                    <View>
+                      <Text className="mb-1.5 font-sans-medium text-sm text-cream">Length</Text>
+                      <View className="flex-row gap-1.5">
+                        {JAM_DURATION_PRESETS.map((secs) => {
+                          const active = aiDurationSec === secs
+                          return (
+                            <AnimatedPressable
+                              key={`dur-${secs}`}
+                              onPress={() => setAiDurationSec(secs)}
+                              haptic="light"
+                              disabled={busy}
+                              className={`flex-1 rounded-lg border px-3 py-2 ${
+                                active ? 'border-amber-accent bg-amber-accent/20' : 'border-wood-600/40 bg-wood-900/40'
+                              }`}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected: active }}
+                              accessibilityLabel={`${secs} seconds`}
+                            >
+                              <Text className={`text-center font-mono text-xs ${active ? 'text-cream' : 'text-muted-light'}`}>{secs}s</Text>
+                            </AnimatedPressable>
+                          )
+                        })}
+                      </View>
+                    </View>
+
+                    <View>
+                      <Text className="mb-1.5 font-sans-medium text-sm text-cream">Progression (optional)</Text>
+                      <TextInput
+                        value={progressionText}
+                        onChangeText={setProgressionText}
+                        editable={!busy}
+                        placeholder="Am F C G"
+                        placeholderTextColor={colors.muted.brown}
+                        className="rounded-lg border border-wood-600/40 bg-wood-900/40 px-3 py-2 font-mono text-sm text-cream"
+                        accessibilityLabel="Chord progression input"
+                      />
+                      <View className="mt-1.5 flex-row flex-wrap gap-1.5">
+                        {PROGRESSION_PRESETS.map((preset) => (
+                          <AnimatedPressable
+                            key={`prog-${preset.label}`}
+                            onPress={() => setProgressionText(preset.text)}
+                            haptic="light"
+                            disabled={busy}
+                            className="rounded-lg border border-wood-600/40 bg-wood-900/40 px-2.5 py-1.5"
+                            accessibilityRole="button"
+                            accessibilityLabel={`Use ${preset.label} progression`}
+                          >
+                            <Text className="font-sans text-[10px] text-muted-light">{preset.label}</Text>
+                          </AnimatedPressable>
+                        ))}
+                        {progressionText ? (
+                          <AnimatedPressable
+                            onPress={() => setProgressionText('')}
+                            haptic="light"
+                            disabled={busy}
+                            className="rounded-lg border border-danger/40 bg-danger/10 px-2.5 py-1.5"
+                            accessibilityRole="button"
+                            accessibilityLabel="Clear progression"
+                          >
+                            <Text className="font-sans text-[10px] text-danger">Clear</Text>
+                          </AnimatedPressable>
+                        ) : null}
+                      </View>
+                      {aiProgression.length > 0 ? (
+                        <View className="mt-1.5 flex-row flex-wrap gap-1">
+                          {aiProgression.map((chord, index) => (
+                            <View
+                              key={`parsed-${chord}-${index}`}
+                              className="rounded border border-amber-accent/30 bg-amber-accent/10 px-2 py-0.5"
+                            >
+                              <Text className="font-mono text-[10px] text-amber-light">{chord}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : progressionText.trim() ? (
+                        <Text className="mt-1 font-sans text-[10px] text-danger">
+                          No valid chords recognized yet.
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                </View>
+              ) : null}
             </View>
           )}
 

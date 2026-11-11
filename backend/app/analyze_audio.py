@@ -8,6 +8,7 @@ commits (whisper + tabs) isolated.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -15,7 +16,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.ingest import SourceMetadata, resolve_lesson_titles
-from app.pipeline_proof import LibrosaSummary, librosa_summarize
+from app.pipeline_proof import LibrosaSummary, NoteEvent, librosa_summarize
 from app.style_detect import infer_style_from_librosa_summary
 from app.transcribe import transcribe_vocals_to_lyrics_aligned
 from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
@@ -32,8 +33,14 @@ from app.schemas import (
 from app.stem_quality import StemClassification
 from app.repeat_detection import detect_repeated_sections
 from app.alphatab_prerender import enrich_lesson_with_prerender_hints
+from app.tab_assignment import assign_solo_note_positions
+from app.part_role import assign_solo_note_part_roles, dominant_part_role
 from app.musicxml_builder import build_musicxml
-from app.tabgen import apply_tab_artifacts_to_sections, derive_section_confidence, generate_tab_artifacts_for_guitar_stem
+from app.tabgen import derive_section_confidence, generate_tab_artifacts_from_note_events
+from app.tab_rhythm import build_rhythm_gp5_base64, merge_rhythm_into_gp5
+
+# Backwards-compatible seam used by tests and earlier callers.
+generate_tab_artifacts_for_guitar_stem = generate_tab_artifacts_from_note_events
 from app.beat_grid import estimate_beat_grid
 from app.chord_enrichment import assign_roman_numerals
 from app.chord_inference import infer_chords, infer_chords_dual_path
@@ -98,6 +105,42 @@ def _filter_solo_notes_by_section(
         filtered_notes.append(note)
     
     return SoloNotes(notes=filtered_notes)
+
+
+def _solo_note_events(raw: object) -> list[NoteEvent]:
+    """Convert section-attached solo notes into Basic-Pitch-like events."""
+    notes = raw.get("notes") if isinstance(raw, dict) else getattr(raw, "notes", None)
+    if not notes:
+        return []
+    events: list[NoteEvent] = []
+    for note in notes:
+        data = note if isinstance(note, dict) else note.model_dump()
+        start = float(data.get("start_time", 0.0) or 0.0)
+        duration = max(0.01, float(data.get("duration", 0.0) or 0.0))
+        pitch = int(data.get("pitch", 0) or 0)
+        velocity = int(data.get("velocity", 80) or 80)
+        events.append(
+            NoteEvent(
+                start_s=start,
+                end_s=start + duration,
+                pitch_midi=pitch,
+                amplitude=max(0.05, min(1.0, velocity / 127.0)),
+            )
+        )
+    return events
+
+
+def _section_chord_pairs(raw: object) -> list[tuple[float, str]]:
+    """Extract ``(timestamp, chord)`` pairs from a section chord timeline."""
+    events = raw.get("events") if isinstance(raw, dict) else getattr(raw, "events", None)
+    pairs: list[tuple[float, str]] = []
+    for event in events or []:
+        data = event if isinstance(event, dict) else event.model_dump()
+        timestamp = data.get("timestamp")
+        chord = data.get("chord")
+        if isinstance(timestamp, (int, float)) and isinstance(chord, str):
+            pairs.append((float(timestamp), chord))
+    return pairs
 
 
 def _sorted_unique_floats(values: list[float], *, tol: float = 1e-3) -> list[float]:
@@ -348,7 +391,9 @@ def build_lesson_json_from_librosa(
 
         try:
             resolved_solo, chosen_stem = resolve_solo_stem(
-                stem_abs_paths, routing_hints.selected_melodic_stem
+                stem_abs_paths,
+                routing_hints.selected_melodic_stem,
+                allow_vocals=False,
             )
             solo_source_path = resolved_solo
             routing_hints.resolved_solo_path = str(resolved_solo)
@@ -383,6 +428,8 @@ def build_lesson_json_from_librosa(
             chord_mix_path,
             beat_grid,
             use_mt3=use_mt3,
+            solo_audio_path=solo_source_path,
+            guitar_only_solo=True,
         )
         chord_timeline = mt3_result.chord_timeline
         solo_notes = mt3_result.solo_notes
@@ -396,6 +443,12 @@ def build_lesson_json_from_librosa(
             len(chord_timeline.events), len(solo_notes.notes),
             f" fallback={mt3_result.fallback_reason}" if mt3_result.fallback_reason else "",
         )
+        if mt3_result.solo_leakage_ratio is not None:
+            logger.info(
+                "solo leakage for job_id=%s: %.2f non-guitar onset share",
+                job_id,
+                mt3_result.solo_leakage_ratio,
+            )
     except Exception:
         logger.exception(
             "MT3 transcription failed for job_id=%s; falling back to CRNN",
@@ -464,6 +517,35 @@ def build_lesson_json_from_librosa(
         except Exception:
             logger.exception("solo inference failed for job_id=%s", job_id)
             solo_notes = SoloNotes(notes=[])
+
+    # F1: one authoritative string/fret per note (score + fretboard agree).
+    try:
+        assigned = assign_solo_note_positions(solo_notes)
+        if solo_notes.notes:
+            logger.info(
+                "tab positions assigned for job_id=%s: %d/%d notes",
+                job_id,
+                assigned,
+                len(solo_notes.notes),
+            )
+    except Exception:
+        logger.exception("tab position assignment failed for job_id=%s", job_id)
+
+    # T3: per-note lead/rhythm roles (section profile stays a summary).
+    try:
+        role_stats = assign_solo_note_part_roles(
+            solo_notes,
+            chord_timestamps=[float(event.timestamp) for event in (chord_timeline.events if chord_timeline else [])],
+        )
+        logger.info(
+            "part roles for job_id=%s: lead=%d rhythm=%d dominant=%s",
+            job_id,
+            role_stats.lead,
+            role_stats.rhythm,
+            dominant_part_role(role_stats),
+        )
+    except Exception:
+        logger.exception("part-role assignment failed for job_id=%s", job_id)
 
     # Commit 116: Assign deterministic Roman numeral labels to all chord events
     if chord_timeline.events and summary.key_name:
@@ -660,15 +742,23 @@ def build_lesson_json_from_librosa(
         
         # Update section with transcription data
         section_dict = section.model_dump(exclude_none=True)
-        if section_chord_timeline:
+        # Only attach non-empty payloads so the client can fall back to the
+        # lesson-wide timeline instead of receiving an explicit empty list.
+        if section_chord_timeline and section_chord_timeline.events:
             section_dict["chord_timeline"] = section_chord_timeline.model_dump()
-        if section_solo_notes:
+        if section_solo_notes and section_solo_notes.notes:
             section_dict["solo_notes"] = section_solo_notes.model_dump()
         if section_beat_grid:
             section_dict["beat_grid"] = section_beat_grid.model_dump()
         
         # Commit 108: Generate per-section MusicXML
-        if section_beat_grid and section_chord_timeline and section_solo_notes:
+        if (
+            section_beat_grid
+            and section_chord_timeline
+            and section_chord_timeline.events
+            and section_solo_notes
+            and section_solo_notes.notes
+        ):
             try:
                 section_musicxml = build_musicxml(
                     beat_grid=section_beat_grid,
@@ -756,31 +846,77 @@ def build_lesson_json_from_librosa(
             job_id,
         )
     else:
+        # Per-section tab artifacts: each section gets its own time-sliced lead
+        # chart, rhythm chart, and (when distinct) alternate position.
+        section_conf = derive_section_confidence(transcription_confidence)
+        sliced_sections: list[LessonSectionStub] = []
+        for sec in sections:
+            section_dict = sec.model_dump(exclude_none=True)
+            section_dict["confidence"] = section_conf
+            events = _solo_note_events(section_dict.get("solo_notes"))
+            if events:
+                try:
+                    artifacts = generate_tab_artifacts_for_guitar_stem(
+                        events,
+                        bpm=summary.tempo_bpm,
+                        transcription_confidence=transcription_confidence,
+                        beat_times_s=beat_grid_list,
+                    )
+                    chord_pairs = _section_chord_pairs(section_dict.get("chord_timeline"))
+                    if chord_pairs:
+                        try:
+                            artifacts["tab_rhythm_gp5_base64"] = build_rhythm_gp5_base64(
+                                chord_pairs,
+                                bpm=summary.tempo_bpm,
+                                beat_times_s=beat_grid_list,
+                            )
+                            merged = merge_rhythm_into_gp5(
+                                base64.b64decode(artifacts["tab_full_gp5_base64"]),
+                                chord_pairs,
+                                bpm=summary.tempo_bpm,
+                                beat_times_s=beat_grid_list,
+                            )
+                            artifacts["tab_full_gp5_base64"] = base64.b64encode(merged).decode("ascii")
+                        except Exception:
+                            logger.exception(
+                                "rhythm track merge failed for section %r of job_id=%s",
+                                sec.label,
+                                job_id,
+                            )
+                    section_dict.update(artifacts)
+                except Exception:
+                    logger.exception(
+                        "per-section tab generation failed for section %r of job_id=%s",
+                        sec.label,
+                        job_id,
+                    )
+            sliced_sections.append(LessonSectionStub(**section_dict))
+        sections = sliced_sections
+
+        # Lesson-level lead chart (used for prerender hints).
         try:
+            whole_events = _solo_note_events(solo_notes)
             tab_artifacts = generate_tab_artifacts_for_guitar_stem(
-                guitar_stem_path,
+                whole_events,
                 bpm=summary.tempo_bpm,
                 transcription_confidence=transcription_confidence,
                 beat_times_s=beat_grid_list,
             )
-            sections = apply_tab_artifacts_to_sections(
-                sections,
-                transcription_confidence=transcription_confidence,
-                tab_artifacts=tab_artifacts,
-            )
+            if whole_events:
+                if chord_timeline and chord_timeline.events:
+                    chord_pairs = [(float(event.timestamp), event.chord) for event in chord_timeline.events]
+                    try:
+                        merged = merge_rhythm_into_gp5(
+                            base64.b64decode(tab_artifacts["tab_full_gp5_base64"]),
+                            chord_pairs,
+                            bpm=summary.tempo_bpm,
+                            beat_times_s=beat_grid_list,
+                        )
+                        tab_artifacts["tab_full_gp5_base64"] = base64.b64encode(merged).decode("ascii")
+                    except Exception:
+                        logger.exception("lesson-level rhythm merge failed for job_id=%s", job_id)
         except Exception:
-            logger.exception("tab generation failed for job_id=%s; returning lesson without tabs", job_id)
-            section_conf = derive_section_confidence(transcription_confidence)
-            sections = [
-                LessonSectionStub(
-                    label=sec.label,
-                    confidence=section_conf,
-                    start_time_seconds=sec.start_time_seconds,
-                    **{k: v for k, v in sec.model_dump(exclude_none=True).items() 
-                       if k not in ("label", "confidence", "start_time_seconds")}
-                )
-                for sec in sections
-            ]
+            logger.exception("lesson-level tab generation failed for job_id=%s", job_id)
 
     style = infer_style_from_librosa_summary(summary)
     stem_fields = _lesson_json_stem_fields(stem_classification)

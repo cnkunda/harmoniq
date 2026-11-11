@@ -151,21 +151,28 @@ export default function JamHistoryScreen() {
   const practicePhrase = useCallback(
     (phraseIndex: number, startMs: number | null | undefined, endMs: number | null | undefined) => {
       const track = selected?.track
-      if (!track || startMs == null || endMs == null || endMs <= startMs) {
+      const row = selected?.row
+      const isAi = row?.backing_source === 'ai' || row?.track_id === 'ai-instrumental'
+      if (!row || (!track && !isAi) || startMs == null || endMs == null || endMs <= startMs) {
         toast.error('This phrase has no matching backing loop.')
         return
       }
       setSelected(null)
       router.push(
         buildJamPracticeHref({
-          trackId: track.id,
+          trackId: track?.id ?? row.track_id ?? 'ai-instrumental',
           startMs,
           endMs,
           phraseIndex,
+          source: isAi ? 'ai' : 'classic',
+          key: row.backing_key ?? row.track_key ?? null,
+          bpm: row.backing_bpm ?? row.track_bpm ?? null,
+          progression: row.backing_progression ?? null,
+          prompt: row.backing_prompt ?? null,
         }),
       )
     },
-    [router, selected?.track],
+    [router, selected?.row, selected?.track],
   )
 
   return (

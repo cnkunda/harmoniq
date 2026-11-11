@@ -21,6 +21,7 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Path as FastPath, Query, Request, Response
@@ -28,7 +29,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 
 from app.coach import generate_jam_coach_summary, generate_onboarding_placement_summary, generate_quick_feedback, generate_orient_annotation, generate_theory_annotation
-from app.jam_backing import Mrt2BackingGenerator, build_mrt2_prompt, load_bundled_track_wav, select_bundled_track
+from app.music_generation import BackingRequest, generate_backing
+from app.music_generation import jobs as backing_jobs
 from app.lyria_clip import generate_orient_clip
 from app.routers.analyze import router as analyze_router
 from app.routers.export import router as export_router
@@ -39,6 +41,8 @@ from app.routers.mt3 import router as mt3_router
 from app.routers.mentor import router as mentor_router
 from app.routers.ws import router as ws_router
 from app.schemas import (
+    JamBackingJobCreateResponse,
+    JamBackingJobResponse,
     JamBackingRequest,
     JamBackingResponse,
     JamScoreRequest,
@@ -834,33 +838,100 @@ async def quick_feedback(payload: QuickFeedbackRequest) -> QuickFeedbackResponse
 # Jam
 # ---------------------------------------------------------------------------
 
+def _to_jam_backing_response(result) -> JamBackingResponse:
+    return JamBackingResponse(
+        audio_base64=base64.b64encode(result.wav_bytes).decode("ascii"),
+        mime_type="audio/wav",
+        format="wav",
+        prompt_used=result.prompt_used,
+        duration_ms=result.duration_ms,
+        provider=result.provider,
+        used_fallback=result.used_fallback,
+        fallback_reason=result.fallback_reason,
+        sample_rate=result.sample_rate,
+        key_label=result.key_label,
+        key_confidence=result.key_confidence,
+        bpm=result.bpm,
+        beat_grid=result.beat_grid,
+    )
+
+
+def _backing_request_from_payload(payload: JamBackingRequest) -> BackingRequest:
+    return BackingRequest(
+        musical_key=payload.musical_key.strip(),
+        bpm=payload.bpm,
+        style_hint=payload.style_hint,
+        weak_areas=tuple(payload.weak_areas),
+        chord_progression=tuple(payload.chord_progression),
+        duration_secs=payload.duration_secs,
+        model=payload.model,
+    )
+
+
 @app.post(
     "/jam/backing",
     response_model=JamBackingResponse,
     tags=["Jam"],
-    summary="POST /jam/backing — instrumental practice bed (MRT2 + bundled fallback)",
+    summary="POST /jam/backing — instrumental practice bed (provider chain)",
 )
 async def jam_backing(payload: JamBackingRequest) -> JamBackingResponse:
-    prompt = build_mrt2_prompt(
-        style_hint=payload.style_hint or "",
-        musical_key=payload.musical_key.strip(),
-        bpm=payload.bpm,
+    request = _backing_request_from_payload(payload)
+    try:
+        result = await generate_backing(request)
+    except RuntimeError as exc:
+        logger.error("jam_backing failed: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    logger.info(
+        "jam_backing provider=%s used_fallback=%s attempts=%s",
+        result.provider,
+        result.used_fallback,
+        ",".join(result.attempts),
     )
-    raw: bytes | None = None
-    duration_ms: int | None = None
-    prompt_used = prompt
-    generator = Mrt2BackingGenerator()
-    result = await asyncio.to_thread(generator.generate, prompt=prompt)
-    if result is not None:
-        raw, duration_ms = result
-        logger.info("jam_backing generated with MRT2")
-    if raw is None:
-        logger.info("jam_backing MRT2 unavailable; using bundled fallback")
-        fallback = select_bundled_track(musical_key=payload.musical_key.strip(), bpm=payload.bpm, style_hint=payload.style_hint)
-        raw, duration_ms = load_bundled_track_wav(fallback)
-        prompt_used = f"{prompt} [fallback_track={fallback.filename}]"
-    b64 = base64.b64encode(raw).decode("ascii")
-    return JamBackingResponse(audio_base64=b64, mime_type="audio/wav", format="wav", prompt_used=prompt_used, duration_ms=duration_ms)
+    return _to_jam_backing_response(result)
+
+
+async def _run_backing_job(job_id: str, request: BackingRequest) -> None:
+    backing_jobs.mark_processing(job_id)
+    try:
+        result = await generate_backing(request)
+    except Exception as exc:  # noqa: BLE001 - job errors surface to the poller
+        logger.error("jam_backing job %s failed: %s", job_id, exc)
+        backing_jobs.fail_job(job_id, str(exc))
+        return
+    backing_jobs.complete_job(job_id, result)
+
+
+@app.post(
+    "/jam/backing/jobs",
+    response_model=JamBackingJobCreateResponse,
+    tags=["Jam"],
+    summary="POST /jam/backing/jobs — start async backing generation",
+)
+async def create_jam_backing_job(payload: JamBackingRequest) -> JamBackingJobCreateResponse:
+    job_id = str(uuid4())
+    backing_jobs.create_job(job_id)
+    request = _backing_request_from_payload(payload)
+    asyncio.create_task(_run_backing_job(job_id, request))
+    return JamBackingJobCreateResponse(job_id=job_id, status="queued")
+
+
+@app.get(
+    "/jam/backing/jobs/{job_id}",
+    response_model=JamBackingJobResponse,
+    tags=["Jam"],
+    summary="GET /jam/backing/jobs/{job_id} — poll async backing generation",
+)
+async def get_jam_backing_job(job_id: str) -> JamBackingJobResponse:
+    job = backing_jobs.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Unknown backing job: {job_id}")
+    result = _to_jam_backing_response(job.result) if job.status == "complete" and job.result else None
+    return JamBackingJobResponse(
+        job_id=job.job_id,
+        status=job.status,
+        result=result,
+        error=job.error,
+    )
 
 
 @app.post(
@@ -1165,7 +1236,7 @@ async def jam_summary(payload: JamSummaryRequest) -> JamSummaryResponse:
     summary="POST /session/orient-clip — generate orient clip for Orient phase",
 )
 async def orient_clip(req: OrientClipRequest):
-    clip_result = generate_orient_clip(
+    clip_result = await generate_orient_clip(
         style_label=req.style_label, technique=req.technique,
         key=req.key, bpm=req.bpm, job_id=req.job_id,
     )

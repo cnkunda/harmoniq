@@ -26,11 +26,19 @@ type NoteCorrectionPanelProps = {
   originalPitch: number
   originalDuration: number
   originalStartTime: number
+  originalTechnique?: string[]
   currentString?: number
   currentFret?: number
   onSelect: (
     noteIndex: number,
-    corrected: { pitch?: number; duration?: number; start_time?: number; string?: number; fret?: number },
+    corrected: {
+      pitch?: number
+      duration?: number
+      start_time?: number
+      string?: number
+      fret?: number
+      technique?: string[]
+    },
   ) => void
   /** Commit 159: flag the detected note without changing its values. */
   onReportWrong?: (noteIndex: number) => void
@@ -42,6 +50,8 @@ export function NoteCorrectionPanel({
   noteIndex,
   originalPitch,
   originalDuration,
+  originalStartTime,
+  originalTechnique,
   currentString,
   currentFret,
   onSelect,
@@ -50,35 +60,63 @@ export function NoteCorrectionPanel({
 }: NoteCorrectionPanelProps) {
   const [pitch, setPitch] = useState(originalPitch)
   const [duration, setDuration] = useState(originalDuration)
+  const [startTime, setStartTime] = useState(originalStartTime)
   const [fret, setFret] = useState(currentFret ?? 0)
   const [string, setString] = useState(currentString ?? 1)
+  const [technique, setTechnique] = useState<string[]>(originalTechnique ?? [])
 
   useEffect(() => {
     if (!visible) return
     setPitch(originalPitch)
     setDuration(originalDuration)
+    setStartTime(originalStartTime)
     setFret(currentFret ?? 0)
     setString(currentString ?? 1)
-  }, [visible, noteIndex, originalPitch, originalDuration, currentString, currentFret])
+    setTechnique(originalTechnique ?? [])
+  }, [visible, noteIndex, originalPitch, originalDuration, originalStartTime, originalTechnique, currentString, currentFret])
 
   const noteName = midiToNoteName(pitch)
   const octave = Math.floor(pitch / 12 - 1)
 
+  const techniqueChanged = () => {
+    const before = [...(originalTechnique ?? [])].sort().join(',')
+    const after = [...technique].sort().join(',')
+    return before !== after
+  }
+
   const handleConfirm = () => {
-    const corrected: { pitch?: number; duration?: number; start_time?: number; string?: number; fret?: number } = {}
+    const corrected: {
+      pitch?: number
+      duration?: number
+      start_time?: number
+      string?: number
+      fret?: number
+      technique?: string[]
+    } = {}
     if (pitch !== originalPitch) corrected.pitch = pitch
     if (duration !== originalDuration) corrected.duration = duration
-    if (Object.keys(corrected).length === 0 && fret === (currentFret ?? 0) && string === (currentString ?? 1)) {
+    if (Math.abs(startTime - originalStartTime) > 1e-6) corrected.start_time = startTime
+    if (techniqueChanged()) corrected.technique = technique
+    const positionChanged = fret !== (currentFret ?? 0) || string !== (currentString ?? 1)
+    if (Object.keys(corrected).length === 0 && !positionChanged) {
       onClose()
       return
     }
-    corrected.string = string
-    corrected.fret = fret
+    if (positionChanged) {
+      corrected.string = string
+      corrected.fret = fret
+    }
     onSelect(noteIndex, corrected)
     onClose()
   }
 
-  const hasChanges = pitch !== originalPitch || duration !== originalDuration || fret !== (currentFret ?? 0) || string !== (currentString ?? 1)
+  const hasChanges =
+    pitch !== originalPitch ||
+    duration !== originalDuration ||
+    startTime !== originalStartTime ||
+    fret !== (currentFret ?? 0) ||
+    string !== (currentString ?? 1) ||
+    techniqueChanged()
 
   const handleReportWrong = () => {
     onReportWrong?.(noteIndex)
@@ -173,6 +211,62 @@ export function NoteCorrectionPanel({
                 >
                   <Text className={CHOICE_LABEL_SANS_ON}>+1</Text>
                 </AnimatedPressable>
+              </View>
+            </View>
+
+            {/* Start time stepper */}
+            <View className="mb-3">
+              <Text className={SECTION_EYEBROW_CLASS}>Start time</Text>
+              <View className="mt-2 flex-row items-center gap-2">
+                <AnimatedPressable
+                  onPress={() => setStartTime(Math.max(0, +(startTime - 0.02).toFixed(2)))}
+                  className={`${CHOICE_CHIP_BASE} ${CHOICE_CHIP_OFF} px-3 py-1.5`}
+                >
+                  <Text className={CHOICE_LABEL_SANS_ON}>−0.02s</Text>
+                </AnimatedPressable>
+                <View className="flex-1 items-center">
+                  <Text className="font-mono text-sm text-cream">{startTime.toFixed(2)}s</Text>
+                </View>
+                <AnimatedPressable
+                  onPress={() => setStartTime(+(startTime + 0.02).toFixed(2))}
+                  className={`${CHOICE_CHIP_BASE} ${CHOICE_CHIP_OFF} px-3 py-1.5`}
+                >
+                  <Text className={CHOICE_LABEL_SANS_ON}>+0.02s</Text>
+                </AnimatedPressable>
+              </View>
+            </View>
+
+            {/* Technique tags */}
+            <View className="mb-3">
+              <Text className={SECTION_EYEBROW_CLASS}>Technique</Text>
+              <View className="mt-2 flex-row flex-wrap gap-1.5">
+                {[
+                  { tag: 'bend', label: 'Bend' },
+                  { tag: 'vibrato', label: 'Vibrato' },
+                  { tag: 'grace_note', label: 'Grace' },
+                  { tag: 'slide', label: 'Slide' },
+                  { tag: 'hammer_on', label: 'Hammer' },
+                ].map(({ tag, label }) => {
+                  const active = technique.includes(tag)
+                  return (
+                    <AnimatedPressable
+                      key={tag}
+                      onPress={() =>
+                        setTechnique((prev) =>
+                          prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+                        )
+                      }
+                      className={`${CHOICE_CHIP_BASE} ${active ? CHOICE_CHIP_ON : CHOICE_CHIP_OFF} px-2.5 py-1`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`${label} technique`}
+                    >
+                      <Text className={`font-sans text-xs ${active ? CHOICE_LABEL_SANS_ON : CHOICE_LABEL_SANS_OFF}`}>
+                        {label}
+                      </Text>
+                    </AnimatedPressable>
+                  )
+                })}
               </View>
             </View>
 

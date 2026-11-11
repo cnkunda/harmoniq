@@ -1,0 +1,2291 @@
+{
+  "config": {
+    "alpha": 0.25,
+    "augment_capo": true,
+    "augment_tuning": true,
+    "capo": 0,
+    "group_tolerance_ms": 30.0,
+    "max_fret": 24,
+    "max_group_candidates": 256,
+    "max_span": 5,
+    "sources": [
+      "egset12",
+      "guitarset"
+    ],
+    "split": "test",
+    "tuning": "standard"
+  },
+  "evaluation": "symbolic MIDI-to-tab string/fret assignment on reference pitches",
+  "gate": {
+    "baseline_difficulty": 2.452866,
+    "baseline_group_validity": 0.507634,
+    "baseline_pitch_accuracy": 1.0,
+    "baseline_tab_accuracy": 0.503141,
+    "checks": {
+      "group_validity": true,
+      "pitch_accuracy": false,
+      "playability": false,
+      "tab_accuracy": true
+    },
+    "difficulty_improvement": -0.156344,
+    "dp_difficulty": 2.60921,
+    "dp_group_validity": 1.0,
+    "dp_pitch_accuracy": 1.0,
+    "dp_tab_accuracy": 0.589319,
+    "group_validity_delta": 0.492366,
+    "passed": true,
+    "pitch_accuracy_delta": 0.0,
+    "tab_accuracy_delta": 0.086178
+  },
+  "manifest_id": "amt-eval-v1",
+  "notes": [
+    "DadaGP was not staged (research access on request); the gate uses GuitarSet (primary) and EGSet12 (secondary).",
+    "Tuning/capo variants are augmented by transposing the reference performance; they are not recorded tuning/capo performances.",
+    "The DP receives reference pitches, so pitch accuracy is 1.0 for every assignable note; unassignable notes are counted as misses.",
+    "The DP minimises playability cost subject to distinct strings for simultaneous notes. The per-note baseline can report a lower difficulty only by placing colliding notes on the same string; group validity shows that difference directly.",
+    "Tab accuracy and group validity are the primary gains here; playability may trade off against physical validity.",
+    "Technique labels are a heuristic prototype and are not scored.",
+    "The audio string-activity auxiliary head is deferred; target construction is implemented in app.fretting.string_activity."
+  ],
+  "schema_version": 1,
+  "skipped": [],
+  "summary": {
+    "notes": 9550,
+    "skipped": 0,
+    "tracks": 62
+  },
+  "techniques": {
+    "bend": 212,
+    "hammer_on": 303,
+    "pull_off": 222,
+    "slide": 466,
+    "vibrato": 76
+  },
+  "tracks": [
+    {
+      "baseline": {
+        "assigned": 89,
+        "difficulty": 3.475962,
+        "group_validity": 0.653846,
+        "notes": 89,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.280899,
+        "tab_accuracy_assigned": 0.280899,
+        "tab_matches": 25,
+        "transitions": 52,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 89,
+        "difficulty": 3.8125,
+        "group_validity": 1.0,
+        "notes": 89,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.191011,
+        "tab_accuracy_assigned": 0.191011,
+        "tab_matches": 17,
+        "transitions": 52,
+        "unassignable": 0
+      },
+      "id": "egset12:09",
+      "notes": 89,
+      "source": "egset12",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 103,
+        "difficulty": 2.342697,
+        "group_validity": 0.888889,
+        "notes": 103,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.359223,
+        "tab_accuracy_assigned": 0.359223,
+        "tab_matches": 37,
+        "transitions": 89,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 103,
+        "difficulty": 2.63764,
+        "group_validity": 1.0,
+        "notes": 103,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.398058,
+        "tab_accuracy_assigned": 0.398058,
+        "tab_matches": 41,
+        "transitions": 89,
+        "unassignable": 0
+      },
+      "id": "egset12:11",
+      "notes": 103,
+      "source": "egset12",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 157,
+        "difficulty": 2.210938,
+        "group_validity": 0.756098,
+        "notes": 157,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.127389,
+        "tab_accuracy_assigned": 0.127389,
+        "tab_matches": 20,
+        "transitions": 64,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 157,
+        "difficulty": 2.074219,
+        "group_validity": 1.0,
+        "notes": 157,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.324841,
+        "tab_accuracy_assigned": 0.324841,
+        "tab_matches": 51,
+        "transitions": 64,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN1-129-Eb_comp",
+      "notes": 157,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 58,
+        "difficulty": 3.25,
+        "group_validity": null,
+        "notes": 58,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.396552,
+        "tab_accuracy_assigned": 0.396552,
+        "tab_matches": 23,
+        "transitions": 57,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 58,
+        "difficulty": 3.25,
+        "group_validity": null,
+        "notes": 58,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.396552,
+        "tab_accuracy_assigned": 0.396552,
+        "tab_matches": 23,
+        "transitions": 57,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN1-129-Eb_solo",
+      "notes": 58,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 155,
+        "difficulty": 1.851562,
+        "group_validity": 0.926829,
+        "notes": 155,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.980645,
+        "tab_accuracy_assigned": 0.980645,
+        "tab_matches": 152,
+        "transitions": 64,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 155,
+        "difficulty": 1.808594,
+        "group_validity": 1.0,
+        "notes": 155,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.967742,
+        "tab_accuracy_assigned": 0.967742,
+        "tab_matches": 150,
+        "transitions": 64,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN1-147-Gb_comp",
+      "notes": 155,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 64,
+        "difficulty": 2.440476,
+        "group_validity": null,
+        "notes": 64,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.828125,
+        "tab_accuracy_assigned": 0.828125,
+        "tab_matches": 53,
+        "transitions": 63,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 64,
+        "difficulty": 2.384921,
+        "group_validity": null,
+        "notes": 64,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.859375,
+        "tab_accuracy_assigned": 0.859375,
+        "tab_matches": 55,
+        "transitions": 63,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN1-147-Gb_solo",
+      "notes": 64,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 230,
+        "difficulty": 1.387363,
+        "group_validity": 0.77193,
+        "notes": 230,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.543478,
+        "tab_accuracy_assigned": 0.543478,
+        "tab_matches": 125,
+        "transitions": 91,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 230,
+        "difficulty": 1.447802,
+        "group_validity": 1.0,
+        "notes": 230,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.617391,
+        "tab_accuracy_assigned": 0.617391,
+        "tab_matches": 142,
+        "transitions": 91,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN2-131-B_comp",
+      "notes": 230,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 72,
+        "difficulty": 3.172535,
+        "group_validity": null,
+        "notes": 72,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.361111,
+        "tab_accuracy_assigned": 0.361111,
+        "tab_matches": 26,
+        "transitions": 71,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 72,
+        "difficulty": 3.130282,
+        "group_validity": null,
+        "notes": 72,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.388889,
+        "tab_accuracy_assigned": 0.388889,
+        "tab_matches": 28,
+        "transitions": 71,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN2-131-B_solo",
+      "notes": 72,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 200,
+        "difficulty": 1.834416,
+        "group_validity": 0.45098,
+        "notes": 200,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.245,
+        "tab_accuracy_assigned": 0.245,
+        "tab_matches": 49,
+        "transitions": 77,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 200,
+        "difficulty": 1.957792,
+        "group_validity": 1.0,
+        "notes": 200,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.36,
+        "tab_accuracy_assigned": 0.36,
+        "tab_matches": 72,
+        "transitions": 77,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN2-166-Ab_comp",
+      "notes": 200,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 76,
+        "difficulty": 3.02027,
+        "group_validity": 0.0,
+        "notes": 76,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.328947,
+        "tab_accuracy_assigned": 0.328947,
+        "tab_matches": 25,
+        "transitions": 74,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 76,
+        "difficulty": 3.013514,
+        "group_validity": 1.0,
+        "notes": 76,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.342105,
+        "tab_accuracy_assigned": 0.342105,
+        "tab_matches": 26,
+        "transitions": 74,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN2-166-Ab_solo",
+      "notes": 76,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 199,
+        "difficulty": 1.431818,
+        "group_validity": 0.5,
+        "notes": 199,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.326633,
+        "tab_accuracy_assigned": 0.326633,
+        "tab_matches": 65,
+        "transitions": 77,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 199,
+        "difficulty": 1.603896,
+        "group_validity": 1.0,
+        "notes": 199,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.512563,
+        "tab_accuracy_assigned": 0.512563,
+        "tab_matches": 102,
+        "transitions": 77,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN3-119-G_comp",
+      "notes": 199,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 79,
+        "difficulty": 3.676282,
+        "group_validity": null,
+        "notes": 79,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.303797,
+        "tab_accuracy_assigned": 0.303797,
+        "tab_matches": 24,
+        "transitions": 78,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 79,
+        "difficulty": 3.666667,
+        "group_validity": null,
+        "notes": 79,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.316456,
+        "tab_accuracy_assigned": 0.316456,
+        "tab_matches": 25,
+        "transitions": 78,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN3-119-G_solo",
+      "notes": 79,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 181,
+        "difficulty": 1.746429,
+        "group_validity": 0.659091,
+        "notes": 181,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.132597,
+        "tab_accuracy_assigned": 0.132597,
+        "tab_matches": 24,
+        "transitions": 70,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 181,
+        "difficulty": 1.728571,
+        "group_validity": 1.0,
+        "notes": 181,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.187845,
+        "tab_accuracy_assigned": 0.187845,
+        "tab_matches": 34,
+        "transitions": 70,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN3-154-E_comp",
+      "notes": 181,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 66,
+        "difficulty": 2.464286,
+        "group_validity": 0.5,
+        "notes": 66,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.257576,
+        "tab_accuracy_assigned": 0.257576,
+        "tab_matches": 17,
+        "transitions": 63,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 66,
+        "difficulty": 2.428571,
+        "group_validity": 1.0,
+        "notes": 66,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.287879,
+        "tab_accuracy_assigned": 0.287879,
+        "tab_matches": 19,
+        "transitions": 63,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_BN3-154-E_solo",
+      "notes": 66,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 174,
+        "difficulty": 3.027778,
+        "group_validity": 0.425532,
+        "notes": 174,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.390805,
+        "tab_accuracy_assigned": 0.390805,
+        "tab_matches": 68,
+        "transitions": 81,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 174,
+        "difficulty": 3.515432,
+        "group_validity": 1.0,
+        "notes": 174,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.666667,
+        "tab_accuracy_assigned": 0.666667,
+        "tab_matches": 116,
+        "transitions": 81,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk1-114-Ab_comp",
+      "notes": 174,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 96,
+        "difficulty": 2.123684,
+        "group_validity": null,
+        "notes": 96,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.239583,
+        "tab_accuracy_assigned": 0.239583,
+        "tab_matches": 23,
+        "transitions": 95,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 96,
+        "difficulty": 2.121053,
+        "group_validity": null,
+        "notes": 96,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.25,
+        "tab_accuracy_assigned": 0.25,
+        "tab_matches": 24,
+        "transitions": 95,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk1-114-Ab_solo",
+      "notes": 96,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 259,
+        "difficulty": 2.08547,
+        "group_validity": 0.724138,
+        "notes": 259,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.737452,
+        "tab_accuracy_assigned": 0.737452,
+        "tab_matches": 191,
+        "transitions": 117,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 259,
+        "difficulty": 2.239316,
+        "group_validity": 1.0,
+        "notes": 259,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.741313,
+        "tab_accuracy_assigned": 0.741313,
+        "tab_matches": 192,
+        "transitions": 117,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk1-97-C_comp",
+      "notes": 259,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 105,
+        "difficulty": 3.757653,
+        "group_validity": 0.0,
+        "notes": 105,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.247619,
+        "tab_accuracy_assigned": 0.247619,
+        "tab_matches": 26,
+        "transitions": 98,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 105,
+        "difficulty": 3.793367,
+        "group_validity": 1.0,
+        "notes": 105,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.257143,
+        "tab_accuracy_assigned": 0.257143,
+        "tab_matches": 27,
+        "transitions": 98,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk1-97-C_solo",
+      "notes": 105,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 299,
+        "difficulty": 2.266791,
+        "group_validity": 0.389474,
+        "notes": 299,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.545151,
+        "tab_accuracy_assigned": 0.545151,
+        "tab_matches": 163,
+        "transitions": 134,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 299,
+        "difficulty": 2.794776,
+        "group_validity": 1.0,
+        "notes": 299,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.782609,
+        "tab_accuracy_assigned": 0.782609,
+        "tab_matches": 234,
+        "transitions": 134,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk2-108-Eb_comp",
+      "notes": 299,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 127,
+        "difficulty": 2.627083,
+        "group_validity": 0.0,
+        "notes": 127,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.598425,
+        "tab_accuracy_assigned": 0.598425,
+        "tab_matches": 76,
+        "transitions": 120,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 127,
+        "difficulty": 2.604167,
+        "group_validity": 1.0,
+        "notes": 127,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.590551,
+        "tab_accuracy_assigned": 0.590551,
+        "tab_matches": 75,
+        "transitions": 120,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk2-108-Eb_solo",
+      "notes": 127,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 234,
+        "difficulty": 2.275,
+        "group_validity": 0.60274,
+        "notes": 234,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.444444,
+        "tab_accuracy_assigned": 0.444444,
+        "tab_matches": 104,
+        "transitions": 90,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 234,
+        "difficulty": 3.091667,
+        "group_validity": 1.0,
+        "notes": 234,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.641026,
+        "tab_accuracy_assigned": 0.641026,
+        "tab_matches": 150,
+        "transitions": 90,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk2-119-G_comp",
+      "notes": 234,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 106,
+        "difficulty": 2.5875,
+        "group_validity": 0.4,
+        "notes": 106,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.54717,
+        "tab_accuracy_assigned": 0.54717,
+        "tab_matches": 58,
+        "transitions": 100,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 106,
+        "difficulty": 2.545,
+        "group_validity": 1.0,
+        "notes": 106,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.556604,
+        "tab_accuracy_assigned": 0.556604,
+        "tab_matches": 59,
+        "transitions": 100,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk2-119-G_solo",
+      "notes": 106,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 203,
+        "difficulty": 1.898585,
+        "group_validity": 0.695652,
+        "notes": 203,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.482759,
+        "tab_accuracy_assigned": 0.482759,
+        "tab_matches": 98,
+        "transitions": 106,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 203,
+        "difficulty": 2.441038,
+        "group_validity": 1.0,
+        "notes": 203,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.70936,
+        "tab_accuracy_assigned": 0.70936,
+        "tab_matches": 144,
+        "transitions": 106,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk3-112-C#_comp",
+      "notes": 203,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 121,
+        "difficulty": 2.525641,
+        "group_validity": 0.0,
+        "notes": 121,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.330579,
+        "tab_accuracy_assigned": 0.330579,
+        "tab_matches": 40,
+        "transitions": 117,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 121,
+        "difficulty": 2.5,
+        "group_validity": 1.0,
+        "notes": 121,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.355372,
+        "tab_accuracy_assigned": 0.355372,
+        "tab_matches": 43,
+        "transitions": 117,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk3-112-C#_solo",
+      "notes": 121,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 395,
+        "difficulty": 2.633152,
+        "group_validity": 0.472,
+        "notes": 395,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.21519,
+        "tab_accuracy_assigned": 0.21519,
+        "tab_matches": 85,
+        "transitions": 184,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 395,
+        "difficulty": 3.315217,
+        "group_validity": 1.0,
+        "notes": 395,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.617722,
+        "tab_accuracy_assigned": 0.617722,
+        "tab_matches": 244,
+        "transitions": 184,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk3-98-A_comp",
+      "notes": 395,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 135,
+        "difficulty": 3.257634,
+        "group_validity": 0.0,
+        "notes": 135,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.266667,
+        "tab_accuracy_assigned": 0.266667,
+        "tab_matches": 36,
+        "transitions": 131,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 135,
+        "difficulty": 3.257634,
+        "group_validity": 1.0,
+        "notes": 135,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.288889,
+        "tab_accuracy_assigned": 0.288889,
+        "tab_matches": 39,
+        "transitions": 131,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Funk3-98-A_solo",
+      "notes": 135,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 90,
+        "difficulty": 1.210938,
+        "group_validity": 0.535714,
+        "notes": 90,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.333333,
+        "tab_accuracy_assigned": 0.333333,
+        "tab_matches": 30,
+        "transitions": 32,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 90,
+        "difficulty": 2.148438,
+        "group_validity": 1.0,
+        "notes": 90,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.6,
+        "tab_accuracy_assigned": 0.6,
+        "tab_matches": 54,
+        "transitions": 32,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz1-130-D_comp",
+      "notes": 90,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 70,
+        "difficulty": 2.721014,
+        "group_validity": null,
+        "notes": 70,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.385714,
+        "tab_accuracy_assigned": 0.385714,
+        "tab_matches": 27,
+        "transitions": 69,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 70,
+        "difficulty": 2.706522,
+        "group_validity": null,
+        "notes": 70,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.4,
+        "tab_accuracy_assigned": 0.4,
+        "tab_matches": 28,
+        "transitions": 69,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz1-130-D_solo",
+      "notes": 70,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 82,
+        "difficulty": 2.196429,
+        "group_validity": 0.625,
+        "notes": 82,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.134146,
+        "tab_accuracy_assigned": 0.134146,
+        "tab_matches": 11,
+        "transitions": 28,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 82,
+        "difficulty": 3.0,
+        "group_validity": 1.0,
+        "notes": 82,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.597561,
+        "tab_accuracy_assigned": 0.597561,
+        "tab_matches": 49,
+        "transitions": 28,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz1-200-B_comp",
+      "notes": 82,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 43,
+        "difficulty": 3.35119,
+        "group_validity": null,
+        "notes": 43,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.232558,
+        "tab_accuracy_assigned": 0.232558,
+        "tab_matches": 10,
+        "transitions": 42,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 43,
+        "difficulty": 3.309524,
+        "group_validity": null,
+        "notes": 43,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.232558,
+        "tab_accuracy_assigned": 0.232558,
+        "tab_matches": 10,
+        "transitions": 42,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz1-200-B_solo",
+      "notes": 43,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 132,
+        "difficulty": 1.5,
+        "group_validity": 0.5,
+        "notes": 132,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.0,
+        "tab_accuracy_assigned": 0.0,
+        "tab_matches": 0,
+        "transitions": 43,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 132,
+        "difficulty": 2.209302,
+        "group_validity": 1.0,
+        "notes": 132,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.075758,
+        "tab_accuracy_assigned": 0.075758,
+        "tab_matches": 10,
+        "transitions": 43,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz2-110-Bb_comp",
+      "notes": 132,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 99,
+        "difficulty": 3.315104,
+        "group_validity": 0.0,
+        "notes": 99,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.272727,
+        "tab_accuracy_assigned": 0.272727,
+        "tab_matches": 27,
+        "transitions": 96,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 99,
+        "difficulty": 3.286458,
+        "group_validity": 1.0,
+        "notes": 99,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.30303,
+        "tab_accuracy_assigned": 0.30303,
+        "tab_matches": 30,
+        "transitions": 96,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz2-110-Bb_solo",
+      "notes": 99,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 102,
+        "difficulty": 1.314286,
+        "group_validity": 0.923077,
+        "notes": 102,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.470588,
+        "tab_accuracy_assigned": 0.470588,
+        "tab_matches": 48,
+        "transitions": 35,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 102,
+        "difficulty": 1.5,
+        "group_validity": 1.0,
+        "notes": 102,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.578431,
+        "tab_accuracy_assigned": 0.578431,
+        "tab_matches": 59,
+        "transitions": 35,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz2-187-F#_comp",
+      "notes": 102,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 72,
+        "difficulty": 2.598592,
+        "group_validity": null,
+        "notes": 72,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.402778,
+        "tab_accuracy_assigned": 0.402778,
+        "tab_matches": 29,
+        "transitions": 71,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 72,
+        "difficulty": 2.591549,
+        "group_validity": null,
+        "notes": 72,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.402778,
+        "tab_accuracy_assigned": 0.402778,
+        "tab_matches": 29,
+        "transitions": 71,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz2-187-F#_solo",
+      "notes": 72,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 107,
+        "difficulty": 1.78125,
+        "group_validity": 0.71875,
+        "notes": 107,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.420561,
+        "tab_accuracy_assigned": 0.420561,
+        "tab_matches": 45,
+        "transitions": 48,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 107,
+        "difficulty": 1.776042,
+        "group_validity": 1.0,
+        "notes": 107,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.485981,
+        "tab_accuracy_assigned": 0.485981,
+        "tab_matches": 52,
+        "transitions": 48,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz3-137-Eb_comp",
+      "notes": 107,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 97,
+        "difficulty": 2.568421,
+        "group_validity": 0.0,
+        "notes": 97,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.463918,
+        "tab_accuracy_assigned": 0.463918,
+        "tab_matches": 45,
+        "transitions": 95,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 97,
+        "difficulty": 2.568421,
+        "group_validity": 1.0,
+        "notes": 97,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.474227,
+        "tab_accuracy_assigned": 0.474227,
+        "tab_matches": 46,
+        "transitions": 95,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz3-137-Eb_solo",
+      "notes": 97,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 101,
+        "difficulty": 1.217949,
+        "group_validity": 0.606061,
+        "notes": 101,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.257426,
+        "tab_accuracy_assigned": 0.257426,
+        "tab_matches": 26,
+        "transitions": 39,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 101,
+        "difficulty": 1.916667,
+        "group_validity": 1.0,
+        "notes": 101,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.405941,
+        "tab_accuracy_assigned": 0.405941,
+        "tab_matches": 41,
+        "transitions": 39,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz3-150-C_comp",
+      "notes": 101,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 77,
+        "difficulty": 3.532895,
+        "group_validity": null,
+        "notes": 77,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.415584,
+        "tab_accuracy_assigned": 0.415584,
+        "tab_matches": 32,
+        "transitions": 76,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 77,
+        "difficulty": 3.526316,
+        "group_validity": null,
+        "notes": 77,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.428571,
+        "tab_accuracy_assigned": 0.428571,
+        "tab_matches": 33,
+        "transitions": 76,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Jazz3-150-C_solo",
+      "notes": 77,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 212,
+        "difficulty": 1.237037,
+        "group_validity": 0.885246,
+        "notes": 212,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.938679,
+        "tab_accuracy_assigned": 0.938679,
+        "tab_matches": 199,
+        "transitions": 135,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 212,
+        "difficulty": 1.268519,
+        "group_validity": 1.0,
+        "notes": 212,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.915094,
+        "tab_accuracy_assigned": 0.915094,
+        "tab_matches": 194,
+        "transitions": 135,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock1-130-A_comp",
+      "notes": 212,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 58,
+        "difficulty": 2.328947,
+        "group_validity": null,
+        "notes": 58,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.172414,
+        "tab_accuracy_assigned": 0.172414,
+        "tab_matches": 10,
+        "transitions": 57,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 58,
+        "difficulty": 2.307018,
+        "group_validity": null,
+        "notes": 58,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.172414,
+        "tab_accuracy_assigned": 0.172414,
+        "tab_matches": 10,
+        "transitions": 57,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock1-130-A_solo",
+      "notes": 58,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 204,
+        "difficulty": 1.881148,
+        "group_validity": 0.955224,
+        "notes": 204,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.568627,
+        "tab_accuracy_assigned": 0.568627,
+        "tab_matches": 116,
+        "transitions": 122,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 204,
+        "difficulty": 1.875,
+        "group_validity": 1.0,
+        "notes": 204,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.617647,
+        "tab_accuracy_assigned": 0.617647,
+        "tab_matches": 126,
+        "transitions": 122,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock1-90-C#_comp",
+      "notes": 204,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 75,
+        "difficulty": 3.408451,
+        "group_validity": 0.333333,
+        "notes": 75,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.106667,
+        "tab_accuracy_assigned": 0.106667,
+        "tab_matches": 8,
+        "transitions": 71,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 75,
+        "difficulty": 3.40493,
+        "group_validity": 1.0,
+        "notes": 75,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.106667,
+        "tab_accuracy_assigned": 0.106667,
+        "tab_matches": 8,
+        "transitions": 71,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock1-90-C#_solo",
+      "notes": 75,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 259,
+        "difficulty": 1.75,
+        "group_validity": 0.822785,
+        "notes": 259,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.409266,
+        "tab_accuracy_assigned": 0.409266,
+        "tab_matches": 106,
+        "transitions": 143,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 259,
+        "difficulty": 1.917832,
+        "group_validity": 1.0,
+        "notes": 259,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.57529,
+        "tab_accuracy_assigned": 0.57529,
+        "tab_matches": 149,
+        "transitions": 143,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock2-142-D_comp",
+      "notes": 259,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 88,
+        "difficulty": 3.360465,
+        "group_validity": 0.0,
+        "notes": 88,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.363636,
+        "tab_accuracy_assigned": 0.363636,
+        "tab_matches": 32,
+        "transitions": 86,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 88,
+        "difficulty": 3.290698,
+        "group_validity": 1.0,
+        "notes": 88,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.409091,
+        "tab_accuracy_assigned": 0.409091,
+        "tab_matches": 36,
+        "transitions": 86,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock2-142-D_solo",
+      "notes": 88,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 260,
+        "difficulty": 1.753571,
+        "group_validity": 0.768421,
+        "notes": 260,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.546154,
+        "tab_accuracy_assigned": 0.546154,
+        "tab_matches": 142,
+        "transitions": 140,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 260,
+        "difficulty": 2.342857,
+        "group_validity": 1.0,
+        "notes": 260,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.696154,
+        "tab_accuracy_assigned": 0.696154,
+        "tab_matches": 181,
+        "transitions": 140,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock2-85-F_comp",
+      "notes": 260,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 97,
+        "difficulty": 2.43617,
+        "group_validity": 0.0,
+        "notes": 97,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.670103,
+        "tab_accuracy_assigned": 0.670103,
+        "tab_matches": 65,
+        "transitions": 94,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 97,
+        "difficulty": 2.43617,
+        "group_validity": 1.0,
+        "notes": 97,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.670103,
+        "tab_accuracy_assigned": 0.670103,
+        "tab_matches": 65,
+        "transitions": 94,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock2-85-F_solo",
+      "notes": 97,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 241,
+        "difficulty": 1.572266,
+        "group_validity": 0.816092,
+        "notes": 241,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.809129,
+        "tab_accuracy_assigned": 0.809129,
+        "tab_matches": 195,
+        "transitions": 128,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 241,
+        "difficulty": 1.730469,
+        "group_validity": 1.0,
+        "notes": 241,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.825726,
+        "tab_accuracy_assigned": 0.825726,
+        "tab_matches": 199,
+        "transitions": 128,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock3-117-Bb_comp",
+      "notes": 241,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 94,
+        "difficulty": 3.383333,
+        "group_validity": 0.0,
+        "notes": 94,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.297872,
+        "tab_accuracy_assigned": 0.297872,
+        "tab_matches": 28,
+        "transitions": 90,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 94,
+        "difficulty": 3.305556,
+        "group_validity": 1.0,
+        "notes": 94,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.319149,
+        "tab_accuracy_assigned": 0.319149,
+        "tab_matches": 30,
+        "transitions": 90,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock3-117-Bb_solo",
+      "notes": 94,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 293,
+        "difficulty": 1.302365,
+        "group_validity": 1.0,
+        "notes": 293,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 1.0,
+        "tab_accuracy_assigned": 1.0,
+        "tab_matches": 293,
+        "transitions": 148,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 293,
+        "difficulty": 1.236486,
+        "group_validity": 1.0,
+        "notes": 293,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.959044,
+        "tab_accuracy_assigned": 0.959044,
+        "tab_matches": 281,
+        "transitions": 148,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock3-148-C_comp",
+      "notes": 293,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 66,
+        "difficulty": 5.441406,
+        "group_validity": 0.0,
+        "notes": 66,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.333333,
+        "tab_accuracy_assigned": 0.333333,
+        "tab_matches": 22,
+        "transitions": 64,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 66,
+        "difficulty": 5.394531,
+        "group_validity": 1.0,
+        "notes": 66,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.454545,
+        "tab_accuracy_assigned": 0.454545,
+        "tab_matches": 30,
+        "transitions": 64,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_Rock3-148-C_solo",
+      "notes": 66,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 368,
+        "difficulty": 1.619512,
+        "group_validity": 0.957265,
+        "notes": 368,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.467391,
+        "tab_accuracy_assigned": 0.467391,
+        "tab_matches": 172,
+        "transitions": 205,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 368,
+        "difficulty": 1.714634,
+        "group_validity": 1.0,
+        "notes": 368,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.521739,
+        "tab_accuracy_assigned": 0.521739,
+        "tab_matches": 192,
+        "transitions": 205,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS1-100-C#_comp",
+      "notes": 368,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 111,
+        "difficulty": 2.823077,
+        "group_validity": 0.155556,
+        "notes": 111,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.432432,
+        "tab_accuracy_assigned": 0.432432,
+        "tab_matches": 48,
+        "transitions": 65,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 111,
+        "difficulty": 4.319231,
+        "group_validity": 1.0,
+        "notes": 111,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.459459,
+        "tab_accuracy_assigned": 0.459459,
+        "tab_matches": 51,
+        "transitions": 65,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS1-100-C#_solo",
+      "notes": 111,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 256,
+        "difficulty": 0.935294,
+        "group_validity": 1.0,
+        "notes": 256,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 1.0,
+        "tab_accuracy_assigned": 1.0,
+        "tab_matches": 256,
+        "transitions": 170,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 256,
+        "difficulty": 0.925,
+        "group_validity": 1.0,
+        "notes": 256,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.988281,
+        "tab_accuracy_assigned": 0.988281,
+        "tab_matches": 253,
+        "transitions": 170,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS1-68-E_comp",
+      "notes": 256,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 92,
+        "difficulty": 3.114943,
+        "group_validity": 0.75,
+        "notes": 92,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.26087,
+        "tab_accuracy_assigned": 0.26087,
+        "tab_matches": 24,
+        "transitions": 87,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 92,
+        "difficulty": 3.100575,
+        "group_validity": 1.0,
+        "notes": 92,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.271739,
+        "tab_accuracy_assigned": 0.271739,
+        "tab_matches": 25,
+        "transitions": 87,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS1-68-E_solo",
+      "notes": 92,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 395,
+        "difficulty": 1.715802,
+        "group_validity": 0.734375,
+        "notes": 395,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.56962,
+        "tab_accuracy_assigned": 0.56962,
+        "tab_matches": 225,
+        "transitions": 212,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 395,
+        "difficulty": 1.992925,
+        "group_validity": 1.0,
+        "notes": 395,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.724051,
+        "tab_accuracy_assigned": 0.724051,
+        "tab_matches": 286,
+        "transitions": 212,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS2-107-Ab_comp",
+      "notes": 395,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 101,
+        "difficulty": 3.315,
+        "group_validity": null,
+        "notes": 101,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.326733,
+        "tab_accuracy_assigned": 0.326733,
+        "tab_matches": 33,
+        "transitions": 100,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 101,
+        "difficulty": 3.315,
+        "group_validity": null,
+        "notes": 101,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.326733,
+        "tab_accuracy_assigned": 0.326733,
+        "tab_matches": 33,
+        "transitions": 100,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS2-107-Ab_solo",
+      "notes": 101,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 340,
+        "difficulty": 1.810484,
+        "group_validity": 0.736842,
+        "notes": 340,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.502941,
+        "tab_accuracy_assigned": 0.502941,
+        "tab_matches": 171,
+        "transitions": 186,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 340,
+        "difficulty": 2.18414,
+        "group_validity": 1.0,
+        "notes": 340,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.647059,
+        "tab_accuracy_assigned": 0.647059,
+        "tab_matches": 220,
+        "transitions": 186,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS2-88-F_comp",
+      "notes": 340,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 98,
+        "difficulty": 2.857895,
+        "group_validity": 0.0,
+        "notes": 98,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.479592,
+        "tab_accuracy_assigned": 0.479592,
+        "tab_matches": 47,
+        "transitions": 95,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 98,
+        "difficulty": 2.852632,
+        "group_validity": 1.0,
+        "notes": 98,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.489796,
+        "tab_accuracy_assigned": 0.489796,
+        "tab_matches": 48,
+        "transitions": 95,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS2-88-F_solo",
+      "notes": 98,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 186,
+        "difficulty": 1.862179,
+        "group_validity": 0.740741,
+        "notes": 186,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.849462,
+        "tab_accuracy_assigned": 0.849462,
+        "tab_matches": 158,
+        "transitions": 156,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 186,
+        "difficulty": 1.921474,
+        "group_validity": 1.0,
+        "notes": 186,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.887097,
+        "tab_accuracy_assigned": 0.887097,
+        "tab_matches": 165,
+        "transitions": 156,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS3-84-Bb_comp",
+      "notes": 186,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 82,
+        "difficulty": 4.224359,
+        "group_validity": 0.0,
+        "notes": 82,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.426829,
+        "tab_accuracy_assigned": 0.426829,
+        "tab_matches": 35,
+        "transitions": 78,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 82,
+        "difficulty": 4.160256,
+        "group_validity": 1.0,
+        "notes": 82,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.463415,
+        "tab_accuracy_assigned": 0.463415,
+        "tab_matches": 38,
+        "transitions": 78,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS3-84-Bb_solo",
+      "notes": 82,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 408,
+        "difficulty": 1.305814,
+        "group_validity": 1.0,
+        "notes": 408,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 1.0,
+        "tab_accuracy_assigned": 1.0,
+        "tab_matches": 408,
+        "transitions": 215,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 408,
+        "difficulty": 1.226744,
+        "group_validity": 1.0,
+        "notes": 408,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.933824,
+        "tab_accuracy_assigned": 0.933824,
+        "tab_matches": 381,
+        "transitions": 215,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS3-98-C_comp",
+      "notes": 408,
+      "source": "guitarset",
+      "split": "test"
+    },
+    {
+      "baseline": {
+        "assigned": 111,
+        "difficulty": 3.959091,
+        "group_validity": null,
+        "notes": 111,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.441441,
+        "tab_accuracy_assigned": 0.441441,
+        "tab_matches": 49,
+        "transitions": 110,
+        "unassignable": 0
+      },
+      "dp": {
+        "assigned": 111,
+        "difficulty": 3.845455,
+        "group_validity": null,
+        "notes": 111,
+        "pitch_accuracy": 1.0,
+        "tab_accuracy": 0.486486,
+        "tab_accuracy_assigned": 0.486486,
+        "tab_matches": 54,
+        "transitions": 110,
+        "unassignable": 0
+      },
+      "id": "guitarset:03_SS3-98-C_solo",
+      "notes": 111,
+      "source": "guitarset",
+      "split": "test"
+    }
+  ],
+  "variants": {
+    "base": {
+      "capo": 0,
+      "description": "standard tuning, capo 0",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.452866,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.503141,
+          "tab_accuracy_assigned": 0.503141,
+          "tab_matches": 4805,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.60921,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.589319,
+          "tab_accuracy_assigned": 0.589319,
+          "tab_matches": 5628,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "standard"
+    },
+    "capo_1": {
+      "capo": 1,
+      "description": "standard tuning, augmented capo 1",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.452866,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.503141,
+          "tab_accuracy_assigned": 0.503141,
+          "tab_matches": 4805,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.60921,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.589319,
+          "tab_accuracy_assigned": 0.589319,
+          "tab_matches": 5628,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "standard"
+    },
+    "capo_2": {
+      "capo": 2,
+      "description": "standard tuning, augmented capo 2",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.452866,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.503141,
+          "tab_accuracy_assigned": 0.503141,
+          "tab_matches": 4805,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.60921,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.589319,
+          "tab_accuracy_assigned": 0.589319,
+          "tab_matches": 5628,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "standard"
+    },
+    "capo_3": {
+      "capo": 3,
+      "description": "standard tuning, augmented capo 3",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.452866,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.503141,
+          "tab_accuracy_assigned": 0.503141,
+          "tab_matches": 4805,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.60921,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.589319,
+          "tab_accuracy_assigned": 0.589319,
+          "tab_matches": 5628,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "standard"
+    },
+    "capo_4": {
+      "capo": 4,
+      "description": "standard tuning, augmented capo 4",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.452866,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.503141,
+          "tab_accuracy_assigned": 0.503141,
+          "tab_matches": 4805,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.60921,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.589319,
+          "tab_accuracy_assigned": 0.589319,
+          "tab_matches": 5628,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "standard"
+    },
+    "capo_5": {
+      "capo": 5,
+      "description": "standard tuning, augmented capo 5",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.452866,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.503141,
+          "tab_accuracy_assigned": 0.503141,
+          "tab_matches": 4805,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.60921,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.589319,
+          "tab_accuracy_assigned": 0.589319,
+          "tab_matches": 5628,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "standard"
+    },
+    "capo_6": {
+      "capo": 6,
+      "description": "standard tuning, augmented capo 6",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.452866,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.503141,
+          "tab_accuracy_assigned": 0.503141,
+          "tab_matches": 4805,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.60921,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.589319,
+          "tab_accuracy_assigned": 0.589319,
+          "tab_matches": 5628,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "standard"
+    },
+    "capo_7": {
+      "capo": 7,
+      "description": "standard tuning, augmented capo 7",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.452866,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.503141,
+          "tab_accuracy_assigned": 0.503141,
+          "tab_matches": 4805,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.60921,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.589319,
+          "tab_accuracy_assigned": 0.589319,
+          "tab_matches": 5628,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "standard"
+    },
+    "tuning_drop_d": {
+      "capo": 0,
+      "description": "augmented drop_d tuning",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.495472,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.510576,
+          "tab_accuracy_assigned": 0.510576,
+          "tab_matches": 4876,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.650722,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.605026,
+          "tab_accuracy_assigned": 0.605026,
+          "tab_matches": 5778,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "drop_d"
+    },
+    "tuning_full_step_down": {
+      "capo": 0,
+      "description": "augmented full_step_down tuning",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.452866,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.503141,
+          "tab_accuracy_assigned": 0.503141,
+          "tab_matches": 4805,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.60921,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.589319,
+          "tab_accuracy_assigned": 0.589319,
+          "tab_matches": 5628,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "full_step_down"
+    },
+    "tuning_half_step_down": {
+      "capo": 0,
+      "description": "augmented half_step_down tuning",
+      "modes": {
+        "baseline": {
+          "assigned": 9550,
+          "difficulty": 2.452866,
+          "difficulty_tracks": 62,
+          "group_validity": 0.507634,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.503141,
+          "tab_accuracy_assigned": 0.503141,
+          "tab_matches": 4805,
+          "tracks": 62,
+          "unassignable": 0
+        },
+        "dp": {
+          "assigned": 9550,
+          "difficulty": 2.60921,
+          "difficulty_tracks": 62,
+          "group_validity": 1.0,
+          "notes": 9550,
+          "pitch_accuracy": 1.0,
+          "tab_accuracy": 0.589319,
+          "tab_accuracy_assigned": 0.589319,
+          "tab_matches": 5628,
+          "tracks": 62,
+          "unassignable": 0
+        }
+      },
+      "tuning": "half_step_down"
+    }
+  }
+}

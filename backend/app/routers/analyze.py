@@ -900,6 +900,9 @@ async def correct_solo_note(job_id: str, note_index: int, req: SoloNoteCorrectio
         corrected_dict["string"] = req.string
     if req.fret is not None:
         corrected_dict["fret"] = req.fret
+    if req.technique is not None:
+        allowed = {"bend", "vibrato", "grace_note", "slide", "hammer_on", "pull_off"}
+        corrected_dict["technique"] = [tag for tag in req.technique if tag in allowed]
 
     record = CorrectionRecord(
         correction_type="solo_note",
@@ -915,6 +918,16 @@ async def correct_solo_note(job_id: str, note_index: int, req: SoloNoteCorrectio
         start_time=req.start_time if req.start_time is not None else original.start_time,
         duration=req.duration if req.duration is not None else original.duration,
         velocity=req.velocity if req.velocity is not None else original.velocity,
+        confidence=original.confidence,
+        is_tied=original.is_tied,
+        string=req.string if req.string is not None else original.string,
+        fret=req.fret if req.fret is not None else original.fret,
+        technique=(
+            [tag for tag in req.technique if tag in {"bend", "vibrato", "grace_note", "slide", "hammer_on", "pull_off"}]
+            if req.technique is not None
+            else list(original.technique)
+        ),
+        part_role=original.part_role,
     )
     _save_job_artifacts(job_id, solo_notes=solo_notes)
 

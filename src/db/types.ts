@@ -191,6 +191,14 @@ export type JamSnapshotRow = {
   phrases_json: string | null
   /** Commit 160: summary lifecycle; undefined/null legacy rows are treated as ready. */
   summary_status?: JamSummaryStatus | null
+  /** J6: backing bed context for phrase practice (AI or classic). */
+  backing_source?: 'classic' | 'ai' | null
+  backing_key?: string | null
+  backing_bpm?: number | null
+  backing_progression?: string[] | null
+  backing_prompt?: string | null
+  backing_provider?: string | null
+  backing_duration_ms?: number | null
 }
 
 /** Row when the user finishes a practice plan from Jam (final step). */
@@ -304,6 +312,13 @@ export type JamSnapshotInsertInput = {
   phrases_json?: string | null
   /** Commit 160: summary lifecycle for retry/history. */
   summary_status?: JamSummaryStatus | null
+  backing_source?: 'classic' | 'ai' | null
+  backing_key?: string | null
+  backing_bpm?: number | null
+  backing_progression?: string[] | null
+  backing_prompt?: string | null
+  backing_provider?: string | null
+  backing_duration_ms?: number | null
 }
 
 export type LickRow = {

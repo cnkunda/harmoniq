@@ -136,3 +136,34 @@ def test_jam_reference_gp5_is_parseable():
     assert len(song.tracks) >= 1, "Jam reference GP5 must have at least one track"
     assert _count_pitched_beats(song) >= 1, "Jam reference GP5 must have at least one pitched beat"
 
+
+
+def _collect_positions(song: "gp.Song") -> list[tuple[int, int]]:
+    out: list[tuple[int, int]] = []
+    for measure in song.tracks[0].measures:
+        for beat in measure.voices[0].beats:
+            for note in beat.notes:
+                out.append((int(note.string), int(note.value)))
+    return out
+
+
+def test_alt_position_tab_uses_different_fingering_than_full() -> None:
+    bpm = 120.0
+    seconds_per_beat = 60.0 / bpm
+    events = [
+        NoteEvent(start_s=index * seconds_per_beat, end_s=index * seconds_per_beat + 0.2, pitch_midi=pitch, amplitude=1.0)
+        for index, pitch in enumerate([64, 67, 69])
+    ]
+
+    artifacts = generate_tab_artifacts_from_note_events(
+        events,
+        bpm=bpm,
+        transcription_confidence=TAB_ALT_CONFIDENCE_THRESHOLD + 0.2,
+    )
+    assert "tab_alt_position_gp5_base64" in artifacts
+
+    full_positions = _collect_positions(_parse_gp5_from_base64(artifacts["tab_full_gp5_base64"]))
+    alt_positions = _collect_positions(_parse_gp5_from_base64(artifacts["tab_alt_position_gp5_base64"]))
+    assert full_positions
+    assert alt_positions
+    assert alt_positions != full_positions

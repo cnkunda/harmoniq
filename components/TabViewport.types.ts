@@ -29,10 +29,11 @@ export type TabViewportProps = {
   playbackSec?: number
   songTitle?: string
   songArtist?: string
-  tabVariant?: 'full' | 'skeleton' | 'alt'
+  tabVariant?: 'full' | 'skeleton' | 'alt' | 'rhythm'
   hasFull?: boolean
   hasSkeleton?: boolean
   hasAlt?: boolean
-  onTabVariantChange?: (v: 'full' | 'skeleton' | 'alt') => void
+  hasRhythm?: boolean
+  onTabVariantChange?: (v: 'full' | 'skeleton' | 'alt' | 'rhythm') => void
   onSeekToStart?: () => void
 }

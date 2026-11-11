@@ -136,21 +136,36 @@ export function dynamicGhostRmsThreshold(peakRmsRecent: number): number {
   return Math.max(GHOST_RMS_MIN_FLOOR, fromPeak)
 }
 
+/**
+ * Scoring-window compensation from measured timing drift.
+ *
+ * `driftMs` is `expectedBeatStartWall - firstPitchSampleWall` (negative = player is late).
+ * Windows must close later for a late player, so the returned value is `-driftMs`,
+ * clamped to a fraction of a beat to avoid chasing reaction time.
+ */
+export function latencyCompensationSecFromDrift(driftMs: number | null, beatSec: number): number {
+  if (driftMs == null || !Number.isFinite(driftMs) || beatSec <= 0) return 0
+  const maxSec = Math.min(beatSec * 0.35, 0.3)
+  const raw = -driftMs / 1000
+  return Math.max(-maxSec, Math.min(maxSec, raw))
+}
+
 export function beatIndexFromClocks(args: {
   playing: boolean
   positionSec: number
   anchorPosSec: number
   recordStartMs: number
   beatSec: number
+  /** Positive seconds delay beat closure (see latencyCompensationSecFromDrift). */
+  latencyCompensationSec?: number
 }): number {
-  const { playing, positionSec, anchorPosSec, recordStartMs, beatSec } = args
+  const { playing, positionSec, anchorPosSec, recordStartMs, beatSec, latencyCompensationSec = 0 } = args
   if (beatSec <= 0) return 0
-  if (playing) {
-    const delta = Math.max(0, positionSec - anchorPosSec)
-    return Math.floor(delta / beatSec)
-  }
-  const elapsedSec = (Date.now() - recordStartMs) / 1000
-  return Math.floor(Math.max(0, elapsedSec) / beatSec)
+  const elapsedSec = playing
+    ? Math.max(0, positionSec - anchorPosSec)
+    : Math.max(0, (Date.now() - recordStartMs) / 1000)
+  const compensatedSec = Math.max(0, elapsedSec - latencyCompensationSec)
+  return Math.floor(compensatedSec / beatSec)
 }
 
 /** Minimal tick shape for capture beat indexing (avoids coupling hooks to full `PlaybackTickContext`). */
@@ -165,8 +180,9 @@ export function captureBeatIndexFromTick(args: {
   anchorPosSec: number
   recordStartMs: number
   beatSec: number
+  latencyCompensationSec?: number
 }): number {
-  const { tick, anchorPosSec, recordStartMs, beatSec } = args
+  const { tick, anchorPosSec, recordStartMs, beatSec, latencyCompensationSec = 0 } = args
   if (tick) {
     return beatIndexFromClocks({
       playing: tick.playing,
@@ -174,6 +190,7 @@ export function captureBeatIndexFromTick(args: {
       anchorPosSec,
       recordStartMs,
       beatSec,
+      latencyCompensationSec,
     })
   }
   return beatIndexFromClocks({
@@ -182,5 +199,6 @@ export function captureBeatIndexFromTick(args: {
     anchorPosSec,
     recordStartMs,
     beatSec,
+    latencyCompensationSec,
   })
 }

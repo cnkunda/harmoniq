@@ -8,7 +8,29 @@ from here. No duplicated magic numbers.
 from __future__ import annotations
 
 import math
+import os
 from typing import Literal
+
+# ---- W5 calibrated fallback gate -------------------------------------------
+
+#: Set to ``1`` to gate MT3 acceptance on the duration-weighted chord-template
+#: confidence measured by the W5 calibration run. Off by default so production
+#: behavior is unchanged; rollback is unsetting the variable.
+CONFIDENCE_GATE_ENV = "HARMONIQ_CONFIDENCE_GATE"
+
+#: Minimum duration-weighted chord confidence for MT3 acceptance when the
+#: calibrated gate is enabled. W5 measured the best bin (0.8–0.9) at only
+#: 0.544 chord accuracy, so no bin reached the 0.70 release floor; 0.80 is
+#: the best available cutoff and the gate is documented as NOT release-ready.
+#: Update only with a new measured artifact in
+#: docs/audit/amt/w5_calibration.json.
+MT3_GATE_CHORD_CONFIDENCE_MIN = 0.80
+
+
+def confidence_gate_enabled() -> bool:
+    """Return whether the W5 calibrated fallback gate is enabled."""
+    return os.getenv(CONFIDENCE_GATE_ENV, "").strip() == "1"
+
 
 # ---- Instrument-confusion hedging tiers (0.0–1.0) ----
 

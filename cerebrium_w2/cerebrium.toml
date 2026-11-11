@@ -1,0 +1,26 @@
+[cerebrium.deployment]
+name = "harmoniq-w2"
+python_version = "3.11"
+# Deploy only this directory (the W2 bundle lives in persistent storage).
+include = ["main.py", "requirements.txt"]
+# Cerebrium's pip parser rejects PEP 508 direct references ("name @ git+..."),
+# so install the GitHub-only `mt3-infer` toolkit in a build shell command.
+shell_commands = [
+    'python -m pip install --no-deps "mt3-infer @ git+https://github.com/openmirlab/mt3-infer.git"',
+]
+
+[cerebrium.hardware]
+# A10 = 24 GB VRAM; the local 4 GB GTX 1050 could not hold the long RWC-P
+# full-mix tracks. L4/T4 also work but A10 gives comfortable headroom.
+compute = "AMPERE_A10"
+gpu_count = 1
+cpu = 8
+memory = 32.0
+
+[cerebrium.dependencies.apt]
+git = "latest"
+ffmpeg = "latest"
+libsndfile1 = "latest"
+
+[cerebrium.dependencies.paths]
+pip = "requirements.txt"

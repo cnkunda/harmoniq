@@ -16,6 +16,11 @@ import { PulseChordTimeline } from '@/components/pulse/PulseChordTimeline'
 import { PulseRing } from '@/components/pulse/PulseRing'
 import { colors } from '@/src/constants/colors'
 import type { PulseStageData } from '@/src/progress/pulseData'
+import {
+  confidenceBandBarWidth,
+  confidenceBandFromScore,
+  confidenceBandLabel,
+} from '@/src/session/transcriptionConfidence'
 
 export interface PulseStageProps {
   stage: PulseStageData
@@ -97,7 +102,10 @@ export function PulseStage({ stage, trackTitle, isDemoPreview = false, onPreview
   const activeBar = activeBarIndex >= 0 ? stage.bars[activeBarIndex] : null
   const display = activeEvent?.display ?? activeBar?.display ?? '—'
   const roman = activeEvent?.roman ?? activeBar?.roman ?? null
-  const confidence = activeEvent?.confidence ?? activeBar?.confidence ?? 0
+  const confidence = activeEvent?.confidence ?? activeBar?.confidence ?? null
+  const confidenceBand = confidenceBandFromScore(confidence)
+  const confidenceLabel = confidenceBandLabel(confidenceBand)
+  const confidenceWidth = confidenceBandBarWidth(confidenceBand)
 
   if (stage.events.length === 0 || stage.windowSec <= 0) {
     return (
@@ -151,7 +159,7 @@ export function PulseStage({ stage, trackTitle, isDemoPreview = false, onPreview
             confidences={confidences}
             downbeats={stage.beatGrid.downbeats}
             pulseBpm={stage.beatGrid.pulseBpm}
-            activeConfidence={confidence}
+            activeConfidence={confidence ?? 0}
           >
             <Text className="font-serif text-4xl text-cream" numberOfLines={1}>
               {display}
@@ -167,15 +175,15 @@ export function PulseStage({ stage, trackTitle, isDemoPreview = false, onPreview
                 Confidence
               </Text>
               <Text className="font-mono text-[10px] text-cream/80">
-                {Math.round(confidence * 100)}%
+                {confidenceLabel ?? '—'}
               </Text>
             </View>
             <View className="h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: `${colors.wood[600]}70` }}>
               <View
                 className="h-1.5 rounded-full"
                 style={{
-                  width: `${Math.round(confidence * 100)}%`,
-                  backgroundColor: confidence >= 0.85 ? colors.success : colors.amber.accent,
+                  width: confidenceWidth ?? '0%',
+                  backgroundColor: confidenceBand === 'low' ? colors.danger : colors.amber.accent,
                 }}
               />
             </View>

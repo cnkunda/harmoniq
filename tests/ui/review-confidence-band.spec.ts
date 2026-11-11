@@ -130,9 +130,13 @@ test('review renders a plain-language confidence band without a percentage', asy
 
   const chip = page.getByTestId('confidence-band-chip')
   await expect(chip).toBeVisible({ timeout: 15_000 })
-  await expect(chip).toContainText('Good match')
+  await expect(chip).toContainText('Transcription generated — verify by ear')
   await expect(chip).not.toContainText('%')
-  await expect(page.getByLabel('Transcription confidence: Good match')).toBeVisible()
+  await expect(
+    page.getByLabel(
+      'Transcription confidence: Transcription generated — verify by ear',
+    ),
+  ).toBeVisible()
 })
 
 test('MT3-style lesson renders per-section confusion when song-level is null', async ({ page }) => {

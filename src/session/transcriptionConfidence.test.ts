@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CHECK_BY_EAR_CUE,
+  confidenceBandBarWidth,
   confidenceBandFromScore,
   confidenceBandLabel,
+  confidenceBandShortLabel,
   confusionBarWidth,
   confusionLevel,
   confusionLevelLabel,
@@ -27,15 +29,40 @@ describe('confidenceBandFromScore', () => {
 })
 
 describe('confidenceBandLabel', () => {
-  it('returns plain-language wording per band', () => {
-    expect(confidenceBandLabel('low')).toBe('Rough transcription')
-    expect(confidenceBandLabel('medium')).toBe('Some fuzziness')
-    expect(confidenceBandLabel('high')).toBe('Good match')
+  it('returns calibration-honest wording per band', () => {
+    expect(confidenceBandLabel('low')).toBe('Rough transcription — check by ear')
+    expect(confidenceBandLabel('medium')).toBe('Approximate transcription — check by ear')
+    expect(confidenceBandLabel('high')).toBe('Transcription generated — verify by ear')
+  })
+
+  it('never claims a "good match" for the high band', () => {
+    for (const band of ['low', 'medium', 'high'] as const) {
+      expect(confidenceBandLabel(band)).not.toMatch(/good match/i)
+      expect(confidenceBandLabel(band)).not.toContain('%')
+    }
   })
 
   it('renders nothing for an unknown band', () => {
     expect(confidenceBandLabel(null)).toBeNull()
     expect(confidenceBandLabel(undefined)).toBeNull()
+  })
+})
+
+describe('confidenceBandShortLabel', () => {
+  it('returns compact labels without percentages', () => {
+    expect(confidenceBandShortLabel('low')).toBe('Rough')
+    expect(confidenceBandShortLabel('medium')).toBe('Approximate')
+    expect(confidenceBandShortLabel('high')).toBe('Verify')
+    expect(confidenceBandShortLabel(null)).toBeNull()
+  })
+})
+
+describe('confidenceBandBarWidth', () => {
+  it('uses fixed three-step widths, not continuous percentages', () => {
+    expect(confidenceBandBarWidth('low')).toBe('33%')
+    expect(confidenceBandBarWidth('medium')).toBe('66%')
+    expect(confidenceBandBarWidth('high')).toBe('100%')
+    expect(confidenceBandBarWidth(null)).toBeNull()
   })
 })
 

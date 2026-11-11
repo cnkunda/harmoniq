@@ -165,6 +165,22 @@ class DrillSlot(BaseModel):
     intent: PlanSlotIntent = "practice"
     target_skill: str | None = Field(default=None, max_length=80)
     remediation_for_slot_id: str | None = Field(default=None, max_length=80)
+    backing_source: Literal["lesson", "progression", "none"] | None = Field(
+        default=None,
+        description="Where a free-jam slot should get its bed (J5).",
+    )
+    target_rate: float | None = Field(
+        default=None,
+        ge=0.25,
+        le=1.25,
+        description="Suggested practice speed for the slot.",
+    )
+    loop_bars: int | None = Field(
+        default=None,
+        ge=1,
+        le=64,
+        description="Suggested loop length in bars.",
+    )
 
 
 class PracticePlan(BaseModel):
@@ -637,7 +653,7 @@ class LessonJSON(BaseModel):
     # Phase 2 Milestone A: MT3 transcription source indicator
     transcription_source: str | None = Field(
         default=None,
-        description="Which pipeline tier produced this transcription: 'mt3', 'crnn', 'chroma', or None",
+        description="Which pipeline tier produced this transcription: 'mt3', 'student', 'crnn', 'chroma', or None",
     )
     # Duration-weighted summary of section performance profiles.
     performance_profile: PerformanceProfile | None = None
@@ -854,7 +870,7 @@ class QuickFeedbackResponse(BaseModel):
 
 
 class JamBackingRequest(BaseModel):
-    """POST /jam/backing — instrumental practice bed via Gemini Lyria (fallback-capable)."""
+    """POST /jam/backing — instrumental practice bed via the provider chain."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -862,7 +878,9 @@ class JamBackingRequest(BaseModel):
     bpm: int | None = Field(default=None, ge=40, le=240)
     weak_areas: list[str] = Field(default_factory=list, max_length=24)
     style_hint: str | None = Field(default=None, max_length=500)
+    chord_progression: list[str] = Field(default_factory=list, max_length=16)
     model: str | None = Field(default=None, max_length=64)
+    duration_secs: float = Field(default=16.0, ge=4.0, le=64.0)
 
 
 class JamBackingResponse(BaseModel):
@@ -871,6 +889,27 @@ class JamBackingResponse(BaseModel):
     format: Literal["wav"] = "wav"
     prompt_used: str
     duration_ms: int | None = None
+    provider: str | None = None
+    used_fallback: bool = False
+    fallback_reason: str | None = None
+    cache_hit: bool = False
+    sample_rate: int | None = None
+    key_label: str | None = None
+    key_confidence: float | None = None
+    bpm: float | None = None
+    beat_grid: dict[str, Any] | None = None
+
+
+class JamBackingJobCreateResponse(BaseModel):
+    job_id: str
+    status: Literal["queued", "processing", "complete", "failed"] = "queued"
+
+
+class JamBackingJobResponse(BaseModel):
+    job_id: str
+    status: Literal["queued", "processing", "complete", "failed"]
+    result: JamBackingResponse | None = None
+    error: str | None = None
 
 
 class ExportRequest(BaseModel):
@@ -885,6 +924,10 @@ class ExportRequest(BaseModel):
         description="Target export format; pdf/png may be rejected by the server build.",
     )
     title: str | None = Field(default=None, max_length=200, description="Optional filename stem hint.")
+    confidence_band: Literal["low", "medium", "high"] | None = Field(
+        default=None,
+        description="Optional coarse transcription confidence band (never a percentage).",
+    )
 
 
 class MusicXMLJsonExportRequest(BaseModel):
@@ -901,6 +944,10 @@ class MusicXMLJsonExportRequest(BaseModel):
         default=None,
         max_length=80,
         description="Optional key signature (e.g., 'C major', 'A minor'). If omitted, C major is used.",
+    )
+    confidence_band: Literal["low", "medium", "high"] | None = Field(
+        default=None,
+        description="Optional coarse transcription confidence band (never a percentage).",
     )
 
 # Commit 79 Schemas
@@ -961,6 +1008,22 @@ class SoloNote(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Combined model + coherence confidence")
     technique: list[str] = Field(default_factory=list, description="Technique tags: 'bend', 'vibrato', 'grace_note'")
     is_tied: bool = Field(default=False, description="True if this note is tied from a previous segment")
+    string: int | None = Field(
+        default=None,
+        ge=1,
+        le=6,
+        description="Tab string (1 = high E). Null when the note has no authoritative position.",
+    )
+    fret: int | None = Field(
+        default=None,
+        ge=0,
+        le=24,
+        description="Tab fret for `string`. Persisted so the fretboard and score agree.",
+    )
+    part_role: Literal["lead", "rhythm"] | None = Field(
+        default=None,
+        description="Musical part this note belongs to; drives lead/rhythm display and exports.",
+    )
 
 class SoloNotes(BaseModel):
     notes: list[SoloNote]
@@ -1177,6 +1240,11 @@ class SoloNoteCorrectionRequest(BaseModel):
     velocity: int | None = Field(default=None, ge=0, le=127, description="Velocity override")
     string: int | None = Field(default=None, ge=1, le=6, description="Guitar string override (1=high E)")
     fret: int | None = Field(default=None, ge=0, le=24, description="Fret position override")
+    technique: list[str] | None = Field(
+        default=None,
+        max_length=8,
+        description="Technique tags override (bend, vibrato, grace_note, slide, hammer_on, pull_off)",
+    )
     reason: str | None = Field(default=None, max_length=200, description="Optional reason for correction")
 
 

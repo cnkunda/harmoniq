@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, Text, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { FretboardDiagram } from '@/components/FretboardDiagram'
 import { GhostPlayerControl } from '@/components/GhostPlayerControl'
+import { LoopRegionControl } from '@/components/LoopRegionControl'
 import { PlayCaptureCard, PlayStemRowScoringCard } from '@/components/play'
 import { SessionNoteDetailModal } from '@/components/SessionNoteDetailModal'
 import { SessionStemAndTab } from '@/components/SessionStemAndTab'
@@ -27,10 +28,18 @@ import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { mapMicPermissionDenied, toErrorBannerProps, type MappedUiError } from '@/src/errors/mapErrorToUi'
 import { openHarmoniqAppSettings } from '@/src/errors/openHarmoniqAppSettings'
 import { capoSuggestion } from '@/src/music/capoSuggestion'
+import { techniquesForSelection } from '@/src/music/techniques'
 import { buildNoteSelectionDetail } from '@/src/music/noteSelectionDetail'
+import { barRangeToSeconds } from '@/src/music/barLoopBounds'
+import { deriveSlowLoopRegion } from '@/src/session/slowLoopRegion'
 import { commitPendingGhostTakeIfNeeded } from '@/src/session/commitPendingGhostTake'
 import { hitInnerThresholdCents } from '@/src/session/noteAccuracyBeats'
-import { performanceRoleLabel, performanceStyleLabel, resolveFretboardMode } from '@/src/session/performanceFocus'
+import {
+  performanceRoleLabel,
+  performanceStyleLabel,
+  resolveFretboardMode,
+  sectionSoloNotesForMode,
+} from '@/src/session/performanceFocus'
 import { ghostReferenceToPlaybackUri } from '@/src/session/persistGhostTake'
 import { useFretboardTuner } from '@/src/session/useFretboardTuner'
 import { useOrientClip } from '@/src/session/useOrientClip'
@@ -46,7 +55,7 @@ import { MusicProvider, useMusicActions, useMusicState } from '@/src/context/Mus
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
 import { CENTS_TOLERANCE } from '@/src/utils/practiceConfig'
 import type { PerformanceProfile } from '@/src/types'
-import type { NoteEventMessage } from '@/types/tabMessage'
+import type { NoteEventMessage, TabLoopBarRegion } from '@/types/tabMessage'
 import * as FileSystem from 'expo-file-system/legacy'
 import { getLessonWideChordEvents } from '@/src/utils/lessonChordTimeline'
 import { colors } from '@/src/constants/colors'
@@ -97,8 +106,57 @@ function PlayScreenInner() {
       : 'Tap a note to infer position'
   const capoText = useMemo(() => capoSuggestion(keyLabel, positionLabel), [keyLabel, positionLabel])
   const performanceProfile = (section?.performance_profile ?? lesson?.performance_profile ?? null) as PerformanceProfile | null
-  const autoFretboardMode = resolveFretboardMode('auto', performanceProfile)
+  const sectionSoloNotes = sectionSoloNotesForMode(section, lesson?.solo_notes?.notes ?? null)
+  const autoFretboardMode = resolveFretboardMode('auto', performanceProfile, sectionSoloNotes)
   const autoFretboardLabel = [performanceRoleLabel(performanceProfile), performanceStyleLabel(performanceProfile)].filter(Boolean).join(' · ') || null
+
+  const sectionsForLoop = (lesson?.sections ?? []) as Array<Record<string, unknown>>
+  const barTimestampsForLoop = lesson?.bar_timestamps ?? []
+  const beatSec = lesson?.tempo && lesson.tempo > 0 ? 60 / lesson.tempo : 0.5
+  const derivedLoop = useMemo(
+    () => deriveSlowLoopRegion(section, sectionsForLoop, barTimestampsForLoop, lesson?.tempo),
+    [barTimestampsForLoop, lesson?.tempo, section, sectionsForLoop],
+  )
+  const [loopBars, setLoopBars] = useState<TabLoopBarRegion | null>(null)
+  const [loopEnabled, setLoopEnabled] = useState(false)
+  const [playbackRate, setPlaybackRate] = useState(1)
+  const [countInBars, setCountInBars] = useState(0)
+
+  useEffect(() => {
+    if (!derivedLoop) {
+      setLoopBars(null)
+      return
+    }
+    setLoopBars({
+      startBarIndex: derivedLoop.startBarIndex,
+      endBarIndexExclusive: derivedLoop.endBarIndexExclusive,
+    })
+  }, [derivedLoop?.endBarIndexExclusive, derivedLoop?.startBarIndex, lesson?.job_id, sectionIndex])
+
+  const playbackLoop = useMemo(() => {
+    if (loopBars && barTimestampsForLoop.length > 0) {
+      const r = barRangeToSeconds(
+        barTimestampsForLoop,
+        loopBars.startBarIndex,
+        loopBars.endBarIndexExclusive,
+        beatSec,
+      )
+      if (r) {
+        return {
+          startSec: r.startSec,
+          endSec: r.endSec,
+          label: `Bars ${loopBars.startBarIndex + 1}–${loopBars.endBarIndexExclusive}`,
+        }
+      }
+    }
+    if (derivedLoop) {
+      return { startSec: derivedLoop.startSec, endSec: derivedLoop.endSec, label: derivedLoop.label }
+    }
+    return null
+  }, [barTimestampsForLoop, beatSec, derivedLoop, loopBars])
+
+  const loopHighlight: TabLoopBarRegion | null =
+    loopBars && barTimestampsForLoop.length > 0 ? loopBars : null
   const adaptedCentsTolerance = useAppStore(
     (s) => s.currentSession?.adaptedCentsTolerance ?? CENTS_TOLERANCE,
   )
@@ -127,7 +185,7 @@ function PlayScreenInner() {
     stopCapture,
     onNoteEvent: hookOnNoteEvent,
     playbackTick,
-  } = usePlayCapture(lesson?.tempo)
+  } = usePlayCapture(lesson?.tempo, playbackRate)
 
   recordingRef.current = recording
   useStepCoachNarration(() => recordingRef.current)
@@ -142,7 +200,7 @@ function PlayScreenInner() {
   }, [quickCoachText, recording])
 
   const [micError, setMicError] = useState<MappedUiError | null>(null)
-  const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number } | null>(null)
+  const [selectedNote, setSelectedNote] = useState<{ string?: number; fret?: number; midi?: number; technique?: string[] } | null>(null)
   const [fretPulseKey, setFretPulseKey] = useState(0)
   const [noteModalOpen, setNoteModalOpen] = useState(false)
   const { state: tunerState, toggleTuner, startCalibration } = useFretboardTuner({ disableWhen: recording })
@@ -310,18 +368,104 @@ function PlayScreenInner() {
             Listen
           </Pill>
 
+          <Pill
+            onPress={() => router.push(`/(tabs)/jam?fromLesson=1&sectionIndex=${sectionIndex}` as Href)}
+            accessibilityLabel="Jam over this lesson section"
+            textClassName="text-cream"
+            className="self-start"
+          >
+            Jam this section
+          </Pill>
+
           {typeof __DEV__ !== 'undefined' && __DEV__ ? (
             <Text className="rounded-lg border border-dashed border-wood-600/35 bg-wood-800/40 px-3 py-2 font-mono text-xs text-muted-brown">
               noiseGateThresholdRms ({activeMicProfile}):{' '}
               {micNoiseGateRms != null ? micNoiseGateRms.toFixed(4) : '—'}
             </Text>
           ) : null}
+
+          <View className="rounded-lg border border-wood-600/45 bg-wood-800/40 px-3 py-2">
+            <View className="flex-row items-center justify-between gap-3">
+              <View className="flex-1">
+                <Text className="font-sans-medium text-sm text-cream">Loop this section</Text>
+                <Text className="mt-0.5 font-sans text-xs text-muted-brown">
+                  {playbackLoop
+                    ? `${playbackLoop.label} · ${playbackLoop.startSec.toFixed(2)}s – ${playbackLoop.endSec.toFixed(2)}s`
+                    : 'No section loop available'}
+                </Text>
+              </View>
+              <AnimatedPressable
+                onPress={() => setLoopEnabled((v) => !v)}
+                disabled={!playbackLoop}
+                accessibilityRole="button"
+                accessibilityState={{ selected: loopEnabled, disabled: !playbackLoop }}
+                accessibilityLabel="Toggle section loop"
+                className={`rounded-lg border px-3 py-2 ${
+                  loopEnabled
+                    ? 'border-amber-accent bg-amber-accent/20'
+                    : 'border-wood-600/40 bg-wood-900/40'
+                } ${!playbackLoop ? 'opacity-40' : ''}`}
+              >
+                <Text className="font-sans-medium text-xs text-cream">
+                  {loopEnabled ? 'Loop on' : 'Loop off'}
+                </Text>
+              </AnimatedPressable>
+            </View>
+            {loopEnabled && loopBars && barTimestampsForLoop.length >= 2 ? (
+              <View className="mt-2">
+                <LoopRegionControl
+                  barCount={barTimestampsForLoop.length}
+                  value={loopBars}
+                  onChange={setLoopBars}
+                />
+              </View>
+            ) : null}
+            <View className="mt-2 border-t border-wood-600/30 pt-2">
+              <Text className="mb-1.5 font-sans-medium text-xs uppercase tracking-wide text-muted-brown">
+                Count-in
+              </Text>
+              <View className="flex-row gap-1.5">
+                {[
+                  { label: 'Off', value: 0 },
+                  { label: '1 bar', value: 1 },
+                  { label: '2 bars', value: 2 },
+                ].map(({ label, value }) => {
+                  const active = countInBars === value
+                  return (
+                    <AnimatedPressable
+                      key={`count-in-${value}`}
+                      onPress={() => setCountInBars(value)}
+                      haptic="light"
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={`Count-in ${label}`}
+                      className={`flex-1 rounded-lg border px-2.5 py-2 ${
+                        active
+                          ? 'border-amber-accent bg-amber-accent/20'
+                          : 'border-wood-600/40 bg-wood-900/40'
+                      }`}
+                    >
+                      <Text className={`text-center font-sans text-xs ${active ? 'text-cream' : 'text-muted-light'}`}>
+                        {label}
+                      </Text>
+                    </AnimatedPressable>
+                  )
+                })}
+              </View>
+            </View>
+          </View>
+
           <SessionStemAndTab
             ref={stemTabRef}
             tabRenderPreset="light"
             showScore={outputTier !== 'learner'}
             lessonPlaybackCardVariant="play"
             captureRecording={recording}
+            autoLoopRegion={loopEnabled ? playbackLoop : null}
+            loopHighlight={loopEnabled ? loopHighlight : null}
+            showMixerWithReplacement
+            countInBars={countInBars}
+            onRateChange={setPlaybackRate}
             playCaptureSlot={(ctx) => (
               <PlayCaptureCard
                 {...ctx}
@@ -401,7 +545,10 @@ function PlayScreenInner() {
                     onToggleOrientPlayback={orientClip.togglePlayback}
                     orientError={orientClip.error}
                     onSelectNote={(note) => {
-                      setSelectedNote(note)
+                      setSelectedNote({
+                        ...note,
+                        technique: techniquesForSelection(sectionSoloNotes, note) ?? undefined,
+                      })
                       setFretPulseKey((k) => k + 1)
                       setNoteModalOpen(true)
                     }}
@@ -423,7 +570,17 @@ function PlayScreenInner() {
           onPlaybackTick={combinedPlaybackTick}
           onNoteEvent={(evt: NoteEventMessage) => {
             hookOnNoteEvent(evt)
-            setSelectedNote({ string: evt.string, fret: evt.fret, midi: Math.round(evt.midi) })
+            setSelectedNote({
+              string: evt.string,
+              fret: evt.fret,
+              midi: Math.round(evt.midi),
+              technique:
+                techniquesForSelection(sectionSoloNotes, {
+                  string: evt.string,
+                  fret: evt.fret,
+                  midi: Math.round(evt.midi),
+                }) ?? undefined,
+            })
             setFretPulseKey((k) => k + 1)
             if (evt.fromScoreTap) {
               setNoteModalOpen(true)

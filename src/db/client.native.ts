@@ -20,6 +20,8 @@ import {
     MIGRATION_V17_USER_FEEDBACK_UNIQUE_INDEX,
     MIGRATION_V18_JAM_SNAPSHOT_SUMMARY_STATUS,
     MIGRATION_V19_ANALYTICS_EVENTS,
+    MIGRATION_V22_JAM_BACKING_CONTEXT,
+    ROLLBACK_V22_JAM_BACKING_CONTEXT,
     MIGRATION_V20_PRACTICE_PLANS,
     MIGRATION_V21_SESSION_INTEGRITY,
     MIGRATION_V3_APP_PREFS,
@@ -119,6 +121,16 @@ function parseJsonNumberRecord(raw: string | null | undefined): Record<string, n
     return out
   } catch {
     return {}
+  }
+}
+
+function parseJsonStringArray(raw: string | null | undefined): string[] {
+  if (!raw) return []
+  try {
+    const value = JSON.parse(raw) as unknown
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
   }
 }
 
@@ -413,6 +425,19 @@ async function applyMigrations(): Promise<void> {
       await applyMigrationWithRollback(21, pendingStatements, ROLLBACK_V21_SESSION_INTEGRITY)
     }
   }
+  if (current < 22) {
+    const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(jam_snapshots)')
+    const names = new Set((cols ?? []).map((c) => c.name))
+    const pending = MIGRATION_V22_JAM_BACKING_CONTEXT.filter((stmt) => {
+      const col = stmt.split('ADD COLUMN ')[1]?.split(' ')[0] ?? ''
+      return !names.has(col)
+    })
+    if (pending.length > 0) {
+      await applyMigrationWithRollback(22, pending, ROLLBACK_V22_JAM_BACKING_CONTEXT)
+    } else {
+      await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 22, new Date().toISOString())
+    }
+  }
   for (const n of DEFAULT_SKILL_NODES) {
     await db.runAsync(
       `INSERT OR IGNORE INTO skill_nodes
@@ -670,7 +695,7 @@ export async function commitTasteQuizProfile(
       PREF_EXPERIENCE_LEVEL,
       experienceLevel,
     )
-    for (const n of DEFAULT_SKILL_NODES) {
+  for (const n of DEFAULT_SKILL_NODES) {
       const row = rows.find((r) => r.id === n.id)
       if (!row) continue
       const u = deriveSkillNodeAfterSession(
@@ -707,7 +732,7 @@ async function seedPlacementBaseline(aggregatedNodeScores: Record<string, number
   await initDb()
   const db = await getDb()
   await db.withTransactionAsync(async () => {
-    for (const n of DEFAULT_SKILL_NODES) {
+  for (const n of DEFAULT_SKILL_NODES) {
       const raw = aggregatedNodeScores[n.id]
       const sessionScore =
         typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0.05, Math.min(1, raw)) : 0.15
@@ -932,8 +957,10 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
      (id, date, duration_seconds, scale_position_map, pitch_class_weight_map, position_weight_map,
       inferred_scale_label, inferred_mode, inference_confidence, track_id, track_label, track_key, track_bpm,
       reliability_tags, reliability_confidence, reliability_signal_quality,
-      recurring_gestures, coach_summary, summary_bundle_json, phrases_json, summary_status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      recurring_gestures, coach_summary, summary_bundle_json, phrases_json, summary_status,
+      backing_source, backing_key, backing_bpm, backing_progression_json, backing_prompt,
+      backing_provider, backing_duration_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     input.id,
     input.date,
     input.duration_seconds,
@@ -955,6 +982,13 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
     input.summary_bundle_json ?? null,
     input.phrases_json ?? null,
     input.summary_status ?? null,
+    input.backing_source ?? null,
+    input.backing_key ?? null,
+    input.backing_bpm ?? null,
+    JSON.stringify(input.backing_progression ?? []),
+    input.backing_prompt ?? null,
+    input.backing_provider ?? null,
+    input.backing_duration_ms ?? null,
   )
 }
 
@@ -1007,6 +1041,13 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
     summary_bundle_json: string | null
     phrases_json: string | null
     summary_status: string | null
+    backing_source: string | null
+    backing_key: string | null
+    backing_bpm: number | null
+    backing_progression_json: string | null
+    backing_prompt: string | null
+    backing_provider: string | null
+    backing_duration_ms: number | null
   }>('SELECT * FROM jam_snapshots ORDER BY date DESC')
   return (rows ?? []).map((r) => ({
     id: r.id,

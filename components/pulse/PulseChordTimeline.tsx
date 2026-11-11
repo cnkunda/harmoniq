@@ -3,6 +3,12 @@ import { ScrollView, Text, View } from 'react-native'
 
 import { colors } from '@/src/constants/colors'
 import type { PulseBar } from '@/src/progress/pulseData'
+import {
+  confidenceBandBarWidth,
+  confidenceBandFromScore,
+  confidenceBandLabel,
+  confidenceBandShortLabel,
+} from '@/src/session/transcriptionConfidence'
 
 const BAR_WIDTH = 68
 const BAR_GAP = 6
@@ -49,12 +55,18 @@ export function PulseChordTimeline({ bars, activeIndex }: PulseChordTimelineProp
         >
           {bars.map((bar) => {
             const isActive = bar.index === activeIndex
+            const band = confidenceBandFromScore(bar.confidence)
+            const bandShort = confidenceBandShortLabel(band)
+            const bandWidth = confidenceBandBarWidth(band)
+            const bandLabel = confidenceBandLabel(band)
             return (
               <View
                 key={`bar-${bar.index}`}
                 accessible
                 accessibilityRole="text"
-                accessibilityLabel={`Bar ${bar.index + 1}, ${bar.display}${bar.roman ? `, ${bar.roman}` : ''}`}
+                accessibilityLabel={`Bar ${bar.index + 1}, ${bar.display}${bar.roman ? `, ${bar.roman}` : ''}${
+                  bandLabel ? `, ${bandLabel}` : ''
+                }`}
                 className={`mr-1.5 rounded-lg border px-2.5 py-2 ${
                   isActive
                     ? 'border-amber-accent bg-amber-accent/15'
@@ -79,13 +91,13 @@ export function PulseChordTimeline({ bars, activeIndex }: PulseChordTimelineProp
                     <View
                       className="h-1 rounded-full"
                       style={{
-                        width: `${Math.round(bar.confidence * 100)}%`,
+                        width: bandWidth ?? '0%',
                         backgroundColor: isActive ? colors.amber.light : colors.muted.light,
                       }}
                     />
                   </View>
                   <Text className="font-mono text-[9px] text-muted-light/85">
-                    {Math.round(bar.confidence * 100)}
+                    {bandShort ?? '—'}
                   </Text>
                 </View>
               </View>

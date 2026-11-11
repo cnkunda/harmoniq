@@ -1,12 +1,20 @@
 import { API_BASE_URL } from '@/src/config'
 
 import { ApiError } from '@/src/api/analyze'
+import {
+  resolveJamBackingSource,
+  type JamBackingSourceInfo,
+} from '@/src/jam/jamBackingSource'
+
+export { resolveJamBackingSource, type JamBackingSourceInfo }
 
 export type JamBackingRequestBody = {
   musical_key: string
   bpm?: number | null
   weak_areas?: string[]
   style_hint?: string | null
+  chord_progression?: string[]
+  duration_secs?: number
 }
 
 export type JamBackingResponseBody = {
@@ -15,10 +23,70 @@ export type JamBackingResponseBody = {
   format: string
   prompt_used: string
   duration_ms?: number | null
+  /** Newer backends report provenance explicitly; older ones only encode it in prompt_used. */
+  provider?: string | null
+  used_fallback?: boolean | null
+  fallback_reason?: string | null
+  cache_hit?: boolean | null
+  sample_rate?: number | null
+  key_label?: string | null
+  key_confidence?: number | null
+  bpm?: number | null
+  beat_grid?: Record<string, unknown> | null
 }
 
+/** Generous ceiling: legacy MRT2 CPU generation can take minutes. */
+export const JAM_BACKING_TIMEOUT_MS = 8 * 60 * 1000
+
 export async function requestJamBacking(body: JamBackingRequestBody): Promise<JamBackingResponseBody> {
-  const res = await fetch(`${API_BASE_URL}/jam/backing`, {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), JAM_BACKING_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE_URL}/jam/backing`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        musical_key: body.musical_key,
+        bpm: body.bpm ?? null,
+        weak_areas: body.weak_areas ?? [],
+        style_hint: body.style_hint ?? null,
+        chord_progression: body.chord_progression ?? [],
+        duration_secs: body.duration_secs ?? 16,
+      }),
+      signal: controller.signal,
+    })
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new ApiError(408, 'Backing generation timed out.')
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || res.statusText)
+  }
+  return res.json() as Promise<JamBackingResponseBody>
+}
+
+// ---------------------------------------------------------------------------
+// Async backing generation (J2): start a job, poll, then hot-swap audio.
+// ---------------------------------------------------------------------------
+
+export type JamBackingJobCreate = { job_id: string; status: 'queued' | 'processing' | 'complete' | 'failed' }
+export type JamBackingJob = {
+  job_id: string
+  status: 'queued' | 'processing' | 'complete' | 'failed'
+  result?: JamBackingResponseBody | null
+  error?: string | null
+}
+
+export const JAM_BACKING_JOB_POLL_MS = 2000
+
+export async function createJamBackingJob(body: JamBackingRequestBody): Promise<JamBackingJobCreate> {
+  const res = await fetch(`${API_BASE_URL}/jam/backing/jobs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -26,13 +94,24 @@ export async function requestJamBacking(body: JamBackingRequestBody): Promise<Ja
       bpm: body.bpm ?? null,
       weak_areas: body.weak_areas ?? [],
       style_hint: body.style_hint ?? null,
+      chord_progression: body.chord_progression ?? [],
+      duration_secs: body.duration_secs ?? 16,
     }),
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new ApiError(res.status, text || res.statusText)
   }
-  return res.json() as Promise<JamBackingResponseBody>
+  return res.json() as Promise<JamBackingJobCreate>
+}
+
+export async function getJamBackingJob(jobId: string): Promise<JamBackingJob> {
+  const res = await fetch(`${API_BASE_URL}/jam/backing/jobs/${encodeURIComponent(jobId)}`)
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ApiError(res.status, text || res.statusText)
+  }
+  return res.json() as Promise<JamBackingJob>
 }
 
 // ---------------------------------------------------------------------------

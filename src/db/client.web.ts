@@ -694,6 +694,13 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
     summary_bundle_json: input.summary_bundle_json ?? null,
     phrases_json: input.phrases_json ?? null,
     summary_status: input.summary_status ?? null,
+    backing_source: input.backing_source ?? null,
+    backing_key: input.backing_key ?? null,
+    backing_bpm: input.backing_bpm ?? null,
+    backing_progression: [...(input.backing_progression ?? [])],
+    backing_prompt: input.backing_prompt ?? null,
+    backing_provider: input.backing_provider ?? null,
+    backing_duration_ms: input.backing_duration_ms ?? null,
   })
   await flushJams()
 }
@@ -746,6 +753,13 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
       summary_bundle_json: j.summary_bundle_json ?? null,
       phrases_json: j.phrases_json ?? null,
       summary_status: j.summary_status ?? null,
+      backing_source: j.backing_source ?? null,
+      backing_key: j.backing_key ?? null,
+      backing_bpm: j.backing_bpm ?? null,
+      backing_progression: [...(j.backing_progression ?? [])],
+      backing_prompt: j.backing_prompt ?? null,
+      backing_provider: j.backing_provider ?? null,
+      backing_duration_ms: j.backing_duration_ms ?? null,
     }))
 }
 

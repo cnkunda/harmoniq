@@ -1,0 +1,20 @@
+# Minimal environment for running the W2 teacher comparison on a GPU box.
+#
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements-w2-cloud.txt
+#
+# The MT3 (JAX/T5X) baseline is scored from the uploaded output cache, so the
+# heavy `mt3` extra is NOT required here. Install it only if you want to
+# re-run MT3 from scratch.
+pydantic>=2.0
+numpy>=1.26
+librosa>=0.10.2
+pretty_midi>=0.2.10
+# Match the local environment that produced the existing cache.
+torch==2.5.1
+torchaudio==2.5.1
+# mt3-infer 0.2.0 needs T5Block.forward(past_key_values=...) (plural,
+# transformers 5.x) AND ModuleUtilsMixin.get_extended_attention_mask
+# (removed in 5.17), so 5.13.x is the compatible window.
+transformers==5.13.0
+mt3-infer @ git+https://github.com/openmirlab/mt3-infer.git

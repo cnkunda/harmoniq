@@ -40,6 +40,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
       hasFull,
       hasSkeleton,
       hasAlt,
+      hasRhythm,
       onTabVariantChange,
       onSeekToStart,
     },
@@ -82,7 +83,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
     const hasVariantControls = !!onTabVariantChange
     const showHeader = displayTitle || displayArtist || hasVariantControls || hasLyrics || !!onSeekToStart
 
-    const variantPill = (v: 'full' | 'skeleton' | 'alt', label: string, available?: boolean) => {
+    const variantPill = (v: 'full' | 'skeleton' | 'alt' | 'rhythm', label: string, available?: boolean) => {
       if (!available) return null
       const active = tabVariant === v
       return (
@@ -127,6 +128,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
               {variantPill('full', 'Full', hasFull)}
               {variantPill('skeleton', 'Skeleton', hasSkeleton)}
               {variantPill('alt', 'Alt', hasAlt)}
+              {variantPill('rhythm', 'Rhythm', hasRhythm)}
               {hasLyrics && (
                 <AnimatedPressable
                   haptic="none"

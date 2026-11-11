@@ -137,23 +137,39 @@ def _build_active_note_grid(
     grid: dict[float, dict[int, list[Mt3Event]]] = {}
     bass_notes: dict[float, int | None] = {}
 
+    # Precompute each onset's end time (the first offset at or after it) so the
+    # per-slice scan below is a linear sweep instead of rescanning every offset.
+    offsets_by_pitch = {pitch: sorted(times) for pitch, times in offsets.items()}
+    end_times: list[float | None] = []
+    for onset_event in onsets:
+        pitch_offsets = offsets_by_pitch.get(onset_event.pitch)
+        if not pitch_offsets:
+            end_times.append(None)
+            continue
+        index = bisect.bisect_left(pitch_offsets, onset_event.time)
+        end_times.append(pitch_offsets[index] if index < len(pitch_offsets) else None)
+
+    active_onsets: list[int] = []
+    next_onset = 0
+    onset_count = len(onsets)
+
     for t in time_slices:
         t = float(round(t, 2))
+
+        while next_onset < onset_count and onsets[next_onset].time <= t:
+            active_onsets.append(next_onset)
+            next_onset += 1
+        active_onsets = [
+            index
+            for index in active_onsets
+            if end_times[index] is None or end_times[index] > t
+        ]
+
         raw_active: dict[int, list[Mt3Event]] = {}
-
-        for onset_event in onsets:
-            if onset_event.time > t:
-                break
-
-            offset_times = offsets.get(onset_event.pitch, [])
-            future_offsets = [ot for ot in offset_times if ot >= onset_event.time]
-            if future_offsets and min(future_offsets) <= t:
-                continue
-
+        for index in active_onsets:
+            onset_event = onsets[index]
             pc = onset_event.pitch % 12
-            if pc not in raw_active:
-                raw_active[pc] = []
-            raw_active[pc].append(onset_event)
+            raw_active.setdefault(pc, []).append(onset_event)
 
         if prefer_guitar:
             active: dict[int, list[Mt3Event]] = {}

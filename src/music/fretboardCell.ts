@@ -1,8 +1,10 @@
 /** High E (top of diagram) → low E. Matches typical 1-based tab numbering (1 = high E). */
 export const OPEN_MIDI_BY_ROW = [64, 59, 55, 50, 45, 40] as const
 
-/** Display shows nut + 12 frets; MIDI resolution searches further for high notes. */
+/** Keyboard-mapped frets (web shortcut rows); the board itself renders further. */
 export const NUM_FRETS = 12
+/** Frets rendered on the SVG board (nut + 24), scrollable horizontally. */
+export const DISPLAY_FRETS = 24
 export const MIDI_SEARCH_MAX_FRET = 24
 
 function normalizeStringIndex(tabString: number | undefined): number | null {
@@ -47,7 +49,7 @@ export function resolveFretCell(note: {
 }): { row: number; fret: number } | null {
   const rowFromTab = normalizeStringIndex(note.string)
   if (note.fret != null && Number.isFinite(note.fret)) {
-    /** Keep true fret for finger copy; diagram clamps display to column 12 when > NUM_FRETS. */
+    /** Keep the true fret; the board scrolls through fret 24. */
     const fret = Math.max(0, Math.min(MIDI_SEARCH_MAX_FRET, Math.round(note.fret)))
     if (rowFromTab != null) return { row: rowFromTab, fret }
   }

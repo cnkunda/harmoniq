@@ -81,6 +81,7 @@ export async function exportMusicXmlFromJson(payload: {
   solo_notes: unknown
   title?: string | null
   artist?: string | null
+  confidence_band?: 'low' | 'medium' | 'high' | null
 }): Promise<string> {
   const body: Record<string, unknown> = {
     beat_grid: payload.beat_grid,
@@ -89,6 +90,7 @@ export async function exportMusicXmlFromJson(payload: {
   }
   if (typeof payload.title === 'string' && payload.title.trim()) body.title = payload.title.trim()
   if (typeof payload.artist === 'string' && payload.artist.trim()) body.artist = payload.artist.trim()
+  if (payload.confidence_band) body.confidence_band = payload.confidence_band
 
   const res = await fetch(`${API_BASE_URL}/export/musicxml-from-json`, {
     method: 'POST',
@@ -108,6 +110,7 @@ export async function submitExportJob(payload: {
   gp5_base64: string
   format: ExportFormat
   title?: string | null
+  confidence_band?: 'low' | 'medium' | 'high' | null
 }): Promise<{ blob: Blob; mimeType: string; contentDisposition: string | null }> {
   const body: Record<string, unknown> = {
     gp5_base64: payload.gp5_base64,
@@ -115,6 +118,7 @@ export async function submitExportJob(payload: {
   }
   const t = typeof payload.title === 'string' ? payload.title.trim() : ''
   if (t) body.title = t
+  if (payload.confidence_band) body.confidence_band = payload.confidence_band
 
   const res = await fetch(`${API_BASE_URL}/export`, {
     method: 'POST',
@@ -1311,6 +1315,7 @@ export async function correctSoloNote(
     velocity?: number
     string?: number
     fret?: number
+    technique?: string[]
     reason?: string
   },
 ): Promise<CorrectionRecord> {

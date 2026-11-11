@@ -412,6 +412,7 @@ export default function ReviewScreen() {
           gp5_base64: gp5ForExport,
           format: 'midi',
           title: songTitleBase,
+          confidence_band: lesson?.confidence_band ?? null,
         })
         await shareExportedBlob({
           blob,
@@ -454,7 +455,7 @@ export default function ReviewScreen() {
     } catch (e) {
       setExportState(`Export failed: ${e instanceof Error ? e.message : String(e)}`)
     }
-  }, [gp5ForExport, midiBase64, sectionIndex, songTitleBase])
+  }, [gp5ForExport, lesson?.confidence_band, midiBase64, sectionIndex, songTitleBase])
 
   const exportMusicXml = useCallback(async () => {
     // Commit 108: Prefer section-level MusicXML over GP5→MusicXML conversion
@@ -488,6 +489,7 @@ export default function ReviewScreen() {
         gp5_base64: gp5ForExport,
         format: 'musicxml',
         title: songTitleBase,
+        confidence_band: lesson?.confidence_band ?? null,
       })
       await shareExportedBlob({
         blob,
@@ -501,7 +503,7 @@ export default function ReviewScreen() {
       const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e)
       setExportState(`Export failed: ${msg}`)
     }
-  }, [gp5ForExport, section, songTitleBase])
+  }, [gp5ForExport, lesson?.confidence_band, section, songTitleBase])
 
   const finish = useCallback(async () => {
     clearLatestTake()

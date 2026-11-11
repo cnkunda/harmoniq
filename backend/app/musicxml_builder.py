@@ -967,6 +967,33 @@ def _inject_slurs(musicxml: str, solo_notes: SoloNotes, beat_grid: BeatGrid) -> 
 
     return "\n".join(result_lines)
 
+_OPEN_MIDI_BY_TAB_STRING = {1: 64, 2: 59, 3: 55, 4: 50, 5: 45, 6: 40}
+
+
+def _rhythm_chord_pitches(chord_symbol: str | None) -> list[int]:
+    """Playable MIDI pitches for a rhythm-chart chord (empty for N/unknown)."""
+    if not chord_symbol:
+        return []
+    from app.tab_rhythm import chord_positions
+
+    return [
+        _OPEN_MIDI_BY_TAB_STRING[position.string] + position.fret
+        for position in chord_positions(chord_symbol)
+        if position.string in _OPEN_MIDI_BY_TAB_STRING
+    ]
+
+
+def _chord_at_time(timestamp: float, events) -> str | None:
+    """Last non-N chord whose timestamp is at or before ``timestamp``."""
+    active: str | None = None
+    for event in events:
+        if float(event.timestamp) > timestamp + 1e-6:
+            break
+        chord = getattr(event, "chord", None)
+        active = chord if chord and chord != "N" else None
+    return active
+
+
 def build_musicxml(
     beat_grid: BeatGrid,
     chord_timeline: ChordTimeline,
@@ -977,6 +1004,7 @@ def build_musicxml(
     *,
     lyrics: list[str] | None = None,
     layout: Literal["full_score", "lead_sheet"] = "full_score",
+    confidence_band: Literal["low", "medium", "high"] | None = None,
 ) -> str:
     """
     Builds a MusicXML string from Harmoniq's internal data structures.
@@ -995,6 +1023,9 @@ def build_musicxml(
             annotations. ``"lead_sheet"`` emits melody, harmony and lyric
             underlay only, avoiding annotations that are invalid in a
             standalone lead-sheet document.
+        confidence_band: Optional coarse transcription confidence band. It is
+            written as a ``<miscellaneous-field>`` under ``<identification>``;
+            raw percentages are never exported.
 
     Returns:
         A string containing the MusicXML representation of the score.
@@ -1091,10 +1122,16 @@ def build_musicxml(
     if layout == "full_score":
         for note in solo_notes.notes:
             try:
-                pos = midi_to_guitar_position(note.pitch)
                 step, alter, octave = _midi_to_step_alter_octave(note.pitch)
                 pitch_key = (step, alter, octave)
-                if pitch_key not in pitch_to_position:
+                if pitch_key in pitch_to_position:
+                    continue
+                # Persisted/corrected positions win over the pitch-only heuristic so
+                # the score and the practice fretboard agree.
+                if note.string is not None and note.fret is not None:
+                    pitch_to_position[pitch_key] = (note.string, note.fret)
+                else:
+                    pos = midi_to_guitar_position(note.pitch)
                     pitch_to_position[pitch_key] = (pos.string, pos.fret)
             except ValueError:
                 pass
@@ -1182,6 +1219,7 @@ def build_musicxml(
                 # Attach guitar technical elements (string/fret) via music21-native API
                 if layout == "full_score":
                     _attach_technical_elements(m21_note_segment, note.pitch, pitch_to_position)
+                    _attach_technique_articulations(m21_note_segment, list(note.technique))
 
                 lyric_text = lyric_by_note.get(id(note))
                 if lyric_text:
@@ -1229,6 +1267,30 @@ def build_musicxml(
 
         part.append(m21_measure)
 
+    # 3b. F3b: rhythm part (one strum per measure) so lead + rhythm render together.
+    if layout == "full_score" and chord_timeline.events:
+        rhythm_part = m21.stream.Part()
+        rhythm_part.id = "P2"
+        rhythm_part.partName = "Rhythm"
+        score.append(rhythm_part)
+        for measure_index in range(len(measure_start_times) - 1):
+            rhythm_measure = m21.stream.Measure(number=measure_index + 1)
+            if measure_index == 0:
+                rhythm_measure.append(m21_clef)
+                rhythm_measure.append(m21_time_signature)
+                rhythm_measure.append(m21_key)
+            chord_symbol = _chord_at_time(measure_start_times[measure_index], chord_timeline.events)
+            pitches = _rhythm_chord_pitches(chord_symbol)
+            if pitches:
+                chord_obj = m21.chord.Chord(pitches)
+                chord_obj.quarterLength = float(time_sig.numerator)
+                rhythm_measure.append(chord_obj)
+            else:
+                rest_obj = m21.note.Rest()
+                rest_obj.quarterLength = float(time_sig.numerator)
+                rhythm_measure.append(rest_obj)
+            rhythm_part.append(rhythm_measure)
+
     # 4. Convert the score to MusicXML string
     musicxml_output = m21.musicxml.m21ToXml.GeneralObjectExporter().parse(score).decode('utf-8')
 
@@ -1252,7 +1314,36 @@ def build_musicxml(
         musicxml_output = _inject_divisions(musicxml_output)
         musicxml_output = _inject_defaults_block(musicxml_output)
 
+    musicxml_output = _inject_confidence_band(musicxml_output, confidence_band)
     return musicxml_output
+
+
+_BAND_VALUES = frozenset({"low", "medium", "high"})
+
+
+def _inject_confidence_band(
+    musicxml: str,
+    confidence_band: Literal["low", "medium", "high"] | None,
+) -> str:
+    """Add the coarse confidence band as MusicXML identification metadata.
+
+    MusicXML allows ``<miscellaneous>`` as the final child of
+    ``<identification>``. Raw percentages are deliberately not exported.
+    """
+    if confidence_band is None:
+        return musicxml
+    if confidence_band not in _BAND_VALUES:
+        raise ValueError(f"Unsupported confidence band: {confidence_band!r}")
+    marker = "</identification>"
+    if marker not in musicxml:
+        raise ValueError("MusicXML is missing <identification>")
+    block = (
+        "  <miscellaneous>\n"
+        f'    <miscellaneous-field name="harmoniq-confidence-band">'
+        f"{confidence_band}</miscellaneous-field>\n"
+        "  </miscellaneous>\n"
+    )
+    return musicxml.replace(marker, block + marker, 1)
 
 
 def _attach_technical_elements(
@@ -1285,6 +1376,25 @@ def _attach_technical_elements(
             )
     except ValueError:
         pass
+
+
+def _attach_technique_articulations(note_obj, techniques: list[str]) -> None:
+    """Attach MusicXML technique notation (bends) to a note object.
+
+    Vibrato/grace tags are surfaced in the practice UI; music21 has no simple
+    vibrato expression, so only bends are notated in the score today.
+    """
+    if not techniques:
+        return
+    try:
+        import music21 as m21
+
+        if "bend" in techniques:
+            note_obj.articulations.append(
+                m21.articulations.FretBend(bendAlter=m21.interval.ChromaticInterval(2))
+            )
+    except Exception:
+        logger.exception("Could not attach technique articulations for %s", techniques)
 
 
 def _add_technical_elements(musicxml: str, solo_notes: SoloNotes) -> str:
