@@ -57,6 +57,17 @@ curl http://localhost:8000/analyze/{job_id}
 npm install && npx expo start --web
 ```
 
+**Docker Compose (API + Celery worker + Postgres + Redis):**
+
+```bash
+docker compose build
+docker compose up -d
+curl http://localhost:8000/health
+docker compose down        # add -v to also remove the Postgres volume
+```
+
+The stack builds the single `backend/Dockerfile`; the `api` service runs Alembic migrations at startup and the `worker` service runs Celery. Service definitions and environment variables live in `docker-compose.yml`.
+
 **Related docs:** [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
 [`docs/EVALUATION.md`](docs/EVALUATION.md) |

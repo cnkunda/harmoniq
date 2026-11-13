@@ -60,6 +60,24 @@ analysis_cache_lookups_total = Counter(
 )
 
 # ---------------------------------------------------------------------------
+# Fallback metrics (Commit 8)
+# ---------------------------------------------------------------------------
+
+fallback_total = Counter(
+    "harmoniq_fallback_total",
+    "Intentional fallbacks taken instead of the preferred pipeline path",
+    ["stage", "reason"],
+)
+
+
+def record_fallback(stage: str, reason: str = "exception") -> None:
+    """Increment the fallback counter.
+
+    Callers pass fixed stage/reason values; do not use user data in labels.
+    """
+    fallback_total.labels(stage=stage, reason=reason).inc()
+
+# ---------------------------------------------------------------------------
 # Queue / DLQ metrics (Commit 170)
 # ---------------------------------------------------------------------------
 
@@ -202,6 +220,7 @@ def _collect_gpu_rows() -> list[dict]:
     except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError, OSError):
         rows = []
     except Exception:
+        logger.debug("unexpected GPU metric collection failure", exc_info=True)
         rows = []
     _gpu_cache["ts"] = now
     _gpu_cache["rows"] = rows
@@ -213,6 +232,7 @@ def update_gpu_metrics() -> None:
     try:
         rows = _collect_gpu_rows()
     except Exception:
+        logger.debug("GPU metric update failed", exc_info=True)
         rows = []
     for row in rows:
         gpu = str(row["index"])
@@ -238,8 +258,8 @@ def _queue_depth(r, queue: str) -> int:
         key = queue if priority == 0 else f"{queue}{_QUEUE_PRIORITY_SEP}{priority}"
         try:
             total += int(r.llen(key))
-        except Exception:
-            pass
+        except (ValueError, TypeError):
+            logger.debug("queue depth bucket unreadable queue=%s priority=%s", queue, priority, exc_info=True)
     return total
 
 
@@ -251,13 +271,13 @@ def update_queue_metrics() -> None:
         r = get_redis()
         try:
             dlq_length_gauge.set(_dlq_len())
-        except Exception:
-            pass
+        except (ValueError, TypeError):
+            logger.debug("DLQ length gauge update failed", exc_info=True)
         for q in _KNOWN_QUEUES:
             try:
                 queue_depth.labels(queue=q).set(_queue_depth(r, q))
-            except Exception:
-                pass
+            except (ValueError, TypeError):
+                logger.debug("queue depth gauge update failed queue=%s", q, exc_info=True)
     except Exception:
         logger.debug("queue metric update failed", exc_info=True)
 

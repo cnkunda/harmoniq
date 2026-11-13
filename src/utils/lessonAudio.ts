@@ -33,11 +33,16 @@ export function firstLessonStemRelPath(stems: LessonJSON['stems']): string | nul
   return null
 }
 
-/** Build fetch URL for a stem path from `LessonJSON.stems` (server-relative POSIX path). */
-export function lessonStemUrl(relPath: string): string {
+/** Build fetch URL for a server-relative POSIX path served by `/lesson-file`. */
+export function lessonFileUrl(relPath: string): string {
   const rel = relPath.replace(/\\/g, '/').replace(/^\//, '')
   const q = encodeURIComponent(rel)
   return `${API_BASE_URL}/lesson-file?rel=${q}`
+}
+
+/** Build fetch URL for a stem path from `LessonJSON.stems`. */
+export function lessonStemUrl(relPath: string): string {
+  return lessonFileUrl(relPath)
 }
 
 /** One stem slot for `StemMixer`: bundled asset or `/lesson-file` URL. */

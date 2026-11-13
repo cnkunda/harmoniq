@@ -972,7 +972,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
             {showMixerWithReplacement ? (
               <View className={playbackCardClass}>
                 <Text className="mb-2 font-sans-medium text-sm text-cream">Mixer</Text>
-                <View className="flex-row flex-wrap gap-x-1 gap-y-1.5">
+                <View className="w-full flex-row flex-wrap gap-x-1 gap-y-1.5">
                   {STEM_KEYS.map((id) => {
                     const hasStem = Boolean((lesson.stems as Record<string, string>)?.[id])
                     const Icon = STEM_ICONS[id]
@@ -988,7 +988,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                         accessibilityRole="button"
                         accessibilityLabel={`${label} stem, ${unmuted ? 'on' : 'off'}`}
                         accessibilityState={{ disabled }}
-                        className={`w-[32%] max-w-[32%] shrink-0 items-center rounded-lg border px-1.5 py-1.5 ${
+                        className={`basis-[30%] min-w-[72px] flex-1 items-center rounded-lg border px-2 py-2.5 ${
                           !hasStem
                             ? 'border-wood-600/25 bg-wood-800/40 opacity-45'
                             : unmuted
@@ -1091,7 +1091,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                   </AnimatedPressable>
                 ) : null}
               </View>
-              <View className="flex-row flex-wrap gap-x-1 gap-y-1.5">
+              <View className="w-full flex-row flex-wrap gap-x-1 gap-y-1.5">
                 {STEM_KEYS.map((id) => {
                   const hasStem = Boolean((lesson.stems as Record<string, string>)?.[id])
                   const Icon = STEM_ICONS[id]
@@ -1107,7 +1107,7 @@ export const ListenStemPanel = forwardRef<ListenStemPanelHandle, ListenStemPanel
                        accessibilityRole="button"
                        accessibilityLabel={`${label} stem, ${unmuted ? 'on' : 'off'}`}
                        accessibilityState={{ disabled }}
-                       className={`w-[32%] max-w-[32%] shrink-0 items-center rounded-lg border px-1.5 py-1.5 ${
+                       className={`basis-[30%] min-w-[72px] flex-1 items-center rounded-lg border px-2 py-2.5 ${
                          !hasStem
                            ? 'border-wood-600/25 bg-wood-800/40 opacity-45'
                            : unmuted

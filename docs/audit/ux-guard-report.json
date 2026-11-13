@@ -1,11 +1,80 @@
 {
   "schemaVersion": 2,
   "mode": "guard",
-  "generatedAt": "2026-11-11T15:53:06.247Z",
+  "generatedAt": "2026-11-13T06:14:19.813Z",
   "routesAnalyzed": 30,
-  "totalUiGapsFound": 0,
+  "totalUiGapsFound": 4,
   "note": "Pre-commit guard: deterministic DOM checks only (no vision analysis). Full-loop results live in ui-feedback-report.json.",
-  "allGapsByRoute": [],
+  "allGapsByRoute": [
+    {
+      "route": "/session/play",
+      "gaps": [
+        {
+          "id": "/session/play::layout-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[element-overflow] <div.flex-row.items-baseline.justify-between> \"Pitch targetsTab…\" overflows horizontally (scrollWidth 85 > clientWidth 80, overflow-x visible)",
+            "[element-overflow] <div.mt-2.5.flex-row.items-end> overflows horizontally (scrollWidth 170 > clientWidth 80, overflow-x visible)"
+          ],
+          "suggestedFix": {
+            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
+            "allowed": "container/layout props only"
+          }
+        },
+        {
+          "id": "/session/play::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
+    },
+    {
+      "route": "/session/slow",
+      "gaps": [
+        {
+          "id": "/session/slow::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
+    },
+    {
+      "route": "/session/study",
+      "gaps": [
+        {
+          "id": "/session/study::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
+    }
+  ],
   "routes": [
     {
       "route": "/",
@@ -114,8 +183,55 @@
     },
     {
       "route": "/session/play",
-      "gaps": [],
-      "deterministicFindings": []
+      "gaps": [
+        {
+          "id": "/session/play::layout-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[element-overflow] <div.flex-row.items-baseline.justify-between> \"Pitch targetsTab…\" overflows horizontally (scrollWidth 85 > clientWidth 80, overflow-x visible)",
+            "[element-overflow] <div.mt-2.5.flex-row.items-end> overflows horizontally (scrollWidth 170 > clientWidth 80, overflow-x visible)"
+          ],
+          "suggestedFix": {
+            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
+            "allowed": "container/layout props only"
+          }
+        },
+        {
+          "id": "/session/play::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ],
+      "deterministicFindings": [
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<div.flex-row.items-baseline.justify-between> \"Pitch targetsTab…\" overflows horizontally (scrollWidth 85 > clientWidth 80, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<div.mt-2.5.flex-row.items-end> overflows horizontally (scrollWidth 170 > clientWidth 80, overflow-x visible)"
+        },
+        {
+          "check": "small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "detail": "67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
+        }
+      ]
     },
     {
       "route": "/session/review",
@@ -124,13 +240,55 @@
     },
     {
       "route": "/session/slow",
-      "gaps": [],
-      "deterministicFindings": []
+      "gaps": [
+        {
+          "id": "/session/slow::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ],
+      "deterministicFindings": [
+        {
+          "check": "small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "detail": "67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
+        }
+      ]
     },
     {
       "route": "/session/study",
-      "gaps": [],
-      "deterministicFindings": []
+      "gaps": [
+        {
+          "id": "/session/study::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ],
+      "deterministicFindings": [
+        {
+          "check": "small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "detail": "67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
+        }
+      ]
     },
     {
       "route": "/session/tune",

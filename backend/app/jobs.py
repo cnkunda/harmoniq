@@ -18,6 +18,8 @@ import os
 import threading
 import time
 
+from pydantic import ValidationError
+
 from app.analyze_audio import build_lesson_json_from_librosa
 from app.audio_mix import mix_stems, resolve_chord_stems, resolve_solo_stem
 from app.audio_processing import prepare_audio_input
@@ -49,6 +51,7 @@ from app.schemas import (BeatGrid, BeatGridRecomputeResponse,
                          JobStatus, LessonJSON, LessonSectionStub,
                          PartialAnalysisResult, PlayerProfile,
                          StemRoutingHints)
+from app.metrics import record_fallback
 from app.separate import SeparationError, separate_song_to_stems
 from app.stem_quality import classify_stems_for_lesson
 
@@ -140,7 +143,8 @@ def _fail_job_and_dlq(
     _persist_job_to_db(job_id)
     try:
         save_job_to_disk(job_id)
-    except Exception:
+    except (OSError, ValueError, TypeError):
+        record_fallback("disk_persist")
         logger.debug("save_job_to_disk failed job_id=%s", job_id, exc_info=True)
     job_data = None
     if youtube_url is not None or upload_path is not None:
@@ -158,6 +162,7 @@ def _fail_job_and_dlq(
 
         push_to_dlq(job_id, error, error_code=error_code, retry_count=retry_count, job_data=job_data)
     except Exception:
+        record_fallback("dlq_push")
         logger.exception("DLQ push failed job_id=%s", job_id)
 
 # ---- Commit 110: Disk persistence for completed/failed jobs ----
@@ -175,7 +180,8 @@ def save_job_to_disk(job_id: str) -> None:
             encoding="utf-8",
         )
         logger.info("job persisted to disk job_id=%s status=%s", job_id, job.status)
-    except Exception:
+    except (OSError, ValueError, TypeError):
+        record_fallback("disk_persist")
         logger.exception("Failed to persist job to disk job_id=%s", job_id)
 
 
@@ -200,7 +206,8 @@ def load_jobs_from_disk() -> int:
             if job_status.status in ("complete", "failed"):
                 jobs[job_id] = job_status
                 loaded += 1
-        except Exception:
+        except (OSError, _json.JSONDecodeError, ValidationError):
+            record_fallback("disk_load", "invalid_data")
             logger.exception("Failed to reload job from disk: %s", job_dir.name)
     logger.info("loaded %d jobs from disk", loaded)
     return loaded
@@ -214,7 +221,8 @@ def _delete_job_from_disk(job_id: str) -> None:
         if status_file.exists():
             status_file.unlink()
             logger.info("job removed from disk job_id=%s", job_id)
-    except Exception:
+    except OSError:
+        record_fallback("disk_delete")
         logger.exception("Failed to remove job from disk job_id=%s", job_id)
 
 # ---- End Commit 110 ----
@@ -241,6 +249,7 @@ def _persist_job_to_db(job_id: str) -> None:
                 analysis_stage=job.analysis_stage,
             )
     except Exception:
+        record_fallback("db_persist")
         logger.warning("Failed to persist job to DB job_id=%s (non-fatal)", job_id)
 
 
@@ -258,6 +267,7 @@ def load_jobs_from_db() -> int:
             logger.info("Loaded %d jobs from database", count)
         return count
     except Exception:
+        record_fallback("db_load")
         logger.exception("Failed to load jobs from database")
         return 0
 
@@ -463,6 +473,7 @@ def _enrich_chord_timeline_job(
             len(enriched_events),
         )
     except Exception as exc:
+        record_fallback("chord_enrichment", "unavailable")
         if is_auth_error(exc) or isinstance(exc, CircuitBreakerError):
             logger.warning(
                 "chord_enrichment skipped job_id=%s reason=api_key_rejected",
@@ -742,7 +753,8 @@ def _process_analyze_job(
             (job_dir / "stem_routing.json").write_text(
                 routing_hints.model_dump_json(indent=2), encoding="utf-8"
             )
-        except Exception:
+        except OSError:
+            record_fallback("disk_persist")
             logger.exception("stem_routing_persist_failed job_id=%s", job_id)
 
         guitar_rel_path = stems.get("guitar")
@@ -858,6 +870,7 @@ def _process_analyze_job(
         )
     except Exception:
         # Fail loudly in logs; user sees a warm, safe message.
+        record_fallback("worker")
         logger.exception("worker failed job_id=%s", job_id)
         _fail_job_and_dlq(
             job_id, ANALYSIS_FAILED_USER_MESSAGE, ANALYZE_ERROR_ANALYSIS_FAILED,
@@ -918,6 +931,7 @@ def enqueue_analyze_job(
             logger.info("enqueue job_id=%s dispatched to Celery priority=%s", job_id, priority_norm)
             return
         except Exception:
+            record_fallback("celery_dispatch", "dispatch_failed")
             logger.info("Celery not available for job_id=%s; falling back to thread", job_id)
     else:
         logger.info("Celery dispatch skipped (HARMONIQ_SKIP_CELERY=1) job_id=%s; using thread", job_id)
@@ -954,6 +968,7 @@ def get_recompute_job(job_id: str) -> BeatGridRecomputeResponse | None:
             if row is not None:
                 return BeatGridRecomputeResponse(**row)
         except Exception:
+            record_fallback("db_load")
             logger.warning("Failed to read recompute from DB job_id=%s", job_id)
     return None
 
@@ -972,6 +987,7 @@ def _persist_coach_to_db(job_id: str) -> None:
         ]
         _repo_coach(job_id, status=status.status, sections=sections, fallback_reason=status.fallback_reason)
     except Exception:
+        record_fallback("db_persist")
         logger.warning("Failed to persist coach hydration to DB job_id=%s (non-fatal)", job_id)
 
 
@@ -993,6 +1009,7 @@ def _persist_enrichment_to_db(job_id: str) -> None:
             fallback_reason=status.fallback_reason,
         )
     except Exception:
+        record_fallback("db_persist")
         logger.warning("Failed to persist chord enrichment to DB job_id=%s (non-fatal)", job_id)
 
 
@@ -1017,6 +1034,7 @@ def _persist_recompute_to_db(job_id: str) -> None:
             error=status.error,
         )
     except Exception:
+        record_fallback("db_persist")
         logger.warning("Failed to persist recompute to DB job_id=%s (non-fatal)", job_id)
 
 
@@ -1133,7 +1151,8 @@ def _process_beat_grid_recompute(
                 routing_hints = StemRoutingHints.model_validate_json(
                     routing_path.read_text(encoding="utf-8")
                 )
-            except Exception:
+            except (OSError, ValidationError):
+                record_fallback("disk_load", "invalid_data")
                 logger.exception("recompute: stem_routing read failed; using defaults")
                 routing_hints = StemRoutingHints()
         else:
@@ -1163,6 +1182,7 @@ def _process_beat_grid_recompute(
                 )
             chord_timeline = infer_chords(chord_mix_path, beat_grid)
         except Exception:
+            record_fallback("recompute_chords")
             logger.exception("recompute chord inference failed for job_id=%s", job_id)
             chord_timeline = ChordTimeline(events=[])
 
@@ -1185,6 +1205,7 @@ def _process_beat_grid_recompute(
                 job_id, resolved_solo,
             )
         except Exception:
+            record_fallback("recompute_solo")
             logger.exception("recompute solo inference failed for job_id=%s", job_id)
             solo_notes = SoloNotes(notes=[])
 
@@ -1209,6 +1230,7 @@ def _process_beat_grid_recompute(
                     key_signature=job.result.key,
                 )
         except Exception:
+            record_fallback("recompute_musicxml")
             logger.exception("recompute MusicXML build failed for job_id=%s", job_id)
 
         # Update the main job result with new artifacts
@@ -1248,7 +1270,8 @@ def _process_beat_grid_recompute(
             if musicxml_str:
                 (job_dir / "score.musicxml").write_text(musicxml_str, encoding="utf-8")
             logger.info("recompute artifacts persisted to disk for job_id=%s", job_id)
-        except Exception:
+        except OSError:
+            record_fallback("disk_persist")
             logger.exception("Failed to persist recompute artifacts for job_id=%s", job_id)
 
         _set_recompute_progress(
@@ -1267,6 +1290,7 @@ def _process_beat_grid_recompute(
         logger.warning("beat grid recompute failed for job_id=%s: %s", job_id, exc)
         _set_recompute_progress(job_id, "failed", error=str(exc))
     except Exception:
+        record_fallback("recompute")
         logger.exception("beat grid recompute failed for job_id=%s", job_id)
         _set_recompute_progress(job_id, "failed", error="Recompute failed unexpectedly.")
 
@@ -1292,6 +1316,7 @@ def enqueue_beat_grid_recompute(
             logger.info("recompute job_id=%s dispatched to Celery", job_id)
             return
         except Exception:
+            record_fallback("celery_dispatch", "dispatch_failed")
             logger.info("Celery not available for recompute job_id=%s; falling back to thread", job_id)
     else:
         logger.info("Celery dispatch skipped (HARMONIQ_SKIP_CELERY=1) recompute job_id=%s; using thread", job_id)

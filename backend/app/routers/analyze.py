@@ -13,6 +13,7 @@ import tempfile
 import uuid
 import zipfile
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -69,6 +70,7 @@ from app.schemas import (
     FeedbackRevertRequest,
     FeedbackType,
     JobStatus,
+    PlayerProfile,
     SoloNote,
     SoloNoteCorrectionRequest,
     SoloNotes,
@@ -140,7 +142,6 @@ def _parse_player_profile_field(raw: object) -> PlayerProfile | None:
         return None
     if not isinstance(data, dict):
         return None
-    from app.schemas import PlayerProfile
     try:
         return PlayerProfile.model_validate(data)
     except Exception:
@@ -1274,8 +1275,6 @@ def _requeue_dlq_index(index: int) -> dict:
 
     player_profile = job_data.get("player_profile")
     try:
-        from app.schemas import PlayerProfile
-
         pp = PlayerProfile.model_validate(player_profile) if isinstance(player_profile, dict) else None
     except Exception:
         pp = None

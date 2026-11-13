@@ -11,6 +11,18 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
+@pytest.fixture(autouse=True)
+def _skip_celery_by_default(monkeypatch):
+    """Run analysis jobs in-process unless a test explicitly exercises Celery.
+
+    A local Redis broker is commonly running during development; without this,
+    ``enqueue_analyze_job`` publishes to queues no worker consumes and API tests
+    hang in ``processing``. Tests that need Celery dispatch (e.g. Commit 170)
+    clear this variable with ``monkeypatch.delenv``.
+    """
+    monkeypatch.setenv("HARMONIQ_SKIP_CELERY", "1")
+
+
 @pytest.fixture
 def data_dir(tmp_path: Path) -> Path:
     """Create a temporary data directory with GuitarSet-like structure.

@@ -104,15 +104,40 @@ From the **`backend/`** directory:
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -U pip
-pip install -e .
-# or: pip install -r requirements.txt
+# Install from the committed dependency lock (Commit 7):
+pip install -e ".[dev]" -c constraints.txt
+# Serving adds db/redis/celery; tests/QAT add training:
+# pip install -e ".[dev,db,redis,celery,training]" -c constraints.txt
 ```
+
+### Dependency lock and audit (Commit 7)
+
+`constraints.txt` is a universal uv lock covering the serving, test, and
+training extras (`dev`, `db`, `redis`, `celery`, `training`). `mt3`,
+`basicpitch`, `mrt2`, and `notebook` remain unlocked optional extras.
+
+```bash
+# Refresh after changing pyproject.toml:
+pip install "uv==0.13.8"
+uv pip compile pyproject.toml --extra dev --extra db --extra redis --extra celery --extra training --universal -o constraints.txt
+
+# Audit the locked set; fails on findings not accepted in security/pip-audit-baseline.json:
+pip install "pip-audit==2.10.1"
+pip-audit --no-deps -r constraints.txt --format json --output pip-audit.json || true
+python scripts/check_pip_audit.py pip-audit.json
+```
+
+`torch==2.5.1` is pinned for Demucs compatibility; its advisories are accepted
+with an expiry in [`security/pip-audit-baseline.json`](security/pip-audit-baseline.json)
+and re-reviewed monthly.
 
 Copy environment template and edit:
 
 ```bash
 cp .env.example .env
-# Set ANTHROPIC_API_KEY when you implement coach calls; DATA_DIR defaults to ./data
+# Set ANTHROPIC_API_KEY to enable coach calls; DATA_DIR defaults to ./data.
+# Every backend variable, default, and required flag is documented in
+# ../docs/CONFIGURATION.md.
 ```
 
 The `data/` folder is gitignored except `.gitkeep`; stems and caches should land there in later commits.
@@ -253,7 +278,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | `tests/` | `pytest` targets (e.g. `test_pipeline_proof.py`) |
 | `pyproject.toml` | Package metadata + pinned dependency set |
 | `data/` | Local runtime output (stems, etc.) — ignored by git |
-| `.env.example` | Template for API keys and `PIPELINE_VERSION` |
+| `.env.example` | Local backend environment template — see [`../docs/CONFIGURATION.md`](../docs/CONFIGURATION.md) |
 
 ## Heavy dependencies
 

@@ -8,8 +8,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[dev,db,redis]"
+# Copy packaging metadata and the package source before the editable install
+# so setuptools sees README.md and the app package. `constraints.txt` is the
+# committed universal lock (Commit 7); training-only QAT deps stay out.
+COPY pyproject.toml README.md constraints.txt ./
+COPY app ./app
+RUN pip install --no-cache-dir -e ".[dev,db,redis,celery]" -c constraints.txt
 
 COPY . .
 

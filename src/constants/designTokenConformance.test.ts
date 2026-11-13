@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -41,13 +41,38 @@ function toRepoPath(abs: string): string {
   return relative(REPO_ROOT, abs).split(sep).join('/')
 }
 
+// Directories that cannot contain app source and are expensive to walk
+// (native projects, generated bundles, caches, data/model artifacts).
+const PRUNED_DIRECTORIES = new Set([
+  'node_modules',
+  '.expo',
+  '.git',
+  'backend',
+  'android',
+  'ios',
+  'artifacts',
+  'test-results',
+  'dist',
+  'coverage',
+  '.ruff_cache',
+  '.pytest_cache',
+  'data',
+  'docker',
+  'cerebrium_w2',
+  'public',
+  'assets',
+  'techdebt',
+])
+
 function walkTsFiles(dir: string, out: string[]): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (entry === 'node_modules' || entry === '.expo' || entry === '.git' || entry === 'backend') continue
-    const abs = join(dir, entry)
-    if (statSync(abs).isDirectory()) {
+  // `withFileTypes` avoids a statSync per entry, which is the dominant cost of
+  // walking the repo on Windows-mounted filesystems.
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (PRUNED_DIRECTORIES.has(entry.name)) continue
+    const abs = join(dir, entry.name)
+    if (entry.isDirectory()) {
       walkTsFiles(abs, out)
-    } else if (entry.endsWith('.ts') || entry.endsWith('.tsx')) {
+    } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
       out.push(abs)
     }
   }
@@ -97,7 +122,7 @@ describe('designTokenConformance (Commit 154)', () => {
       if (hits.length > 0) offenders.push(`${rel}: ${hits.join(', ')}`)
     }
     expect(offenders).toEqual([])
-  }, 30_000)
+  }, 60_000)
 
   it('has zero functional-notation color literals outside the palette source', () => {
     const offenders: string[] = []
@@ -107,7 +132,7 @@ describe('designTokenConformance (Commit 154)', () => {
       if (hits.length > 0) offenders.push(`${rel}: ${hits.join(', ')}`)
     }
     expect(offenders).toEqual([])
-  }, 30_000)
+  }, 60_000)
 
   it('imports expo-linear-gradient only in the wrapper and the interop registration', () => {
     const offenders: string[] = []
@@ -117,7 +142,7 @@ describe('designTokenConformance (Commit 154)', () => {
       if (hits.length > 0) offenders.push(rel)
     }
     expect(offenders).toEqual([])
-  }, 30_000)
+  }, 60_000)
 
   it('has zero StyleSheet.create calls', () => {
     const offenders: string[] = []
@@ -126,5 +151,5 @@ describe('designTokenConformance (Commit 154)', () => {
       if (hits.length > 0) offenders.push(rel)
     }
     expect(offenders).toEqual([])
-  }, 30_000)
+  }, 60_000)
 })

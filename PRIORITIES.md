@@ -10,8 +10,9 @@ The immediate research question is no longer “can the pipeline transcribe a so
 
 | | |
 | --- | --- |
-| **Active research** | **Commit 1 — Harmoniq AMT Research Program** (W0–W6 complete; W4 tab accuracy 0.5893 vs 0.5031 baseline; W5 ECE 0.7281 on 526 tracks; W6 reproducibility package committed; ready to archive) |
-| **Publication** | **Commit 2 — Part 3 Blog Post — The Meta-Layer** (deferred until Commit 1 produces results) |
+| **Active research** | None — Commit 1 (Harmoniq AMT Research Program) archived 2026-11-11; see [`priorities-archive.md`](priorities-archive.md). |
+| **Tech debt** | **Commits 2–25** — audit in [`techdebt/REPORT.md`](techdebt/REPORT.md); prioritized backlog in [`techdebt/backlog.json`](techdebt/backlog.json) |
+| **Publication** | **Commit 26 — Part 3 Blog Post — The Meta-Layer** (deferred; Commit 1 results are now available) |
 | **Archive** | [`priorities-archive.md`](priorities-archive.md) (completed and superseded work) |
 | **Spec template** | [`docs/COMMIT_TEMPLATE.md`](docs/COMMIT_TEMPLATE.md) |
 | **Research framework** | [`docs/RESEARCH.md`](docs/RESEARCH.md) |
@@ -58,587 +59,1323 @@ This program exists to close the gap between “working demo” and “credible,
 
 ---
 
-## Commit 1 — Harmoniq AMT Research Program
+## Technical Debt Paydown Program (Commits 2–25)
 
-**Status:** W0–W6 complete (W3 ceiling 0.5128; W4 tab accuracy 0.5893 vs 0.5031 baseline; W5 ECE 0.7281 on 526 tracks, gate not release-ready; W6 reproducibility package committed). Commit 1 is ready to archive; Commit 2 remains deferred.
-**Priority:** P0
-**Depends on:** archived 174, 175, 176, 180; existing MT3/CRNN/chroma pipeline; GuitarSet, IDMT-SMT-Guitar, RWC-P, and pseudo-label tooling; GPU access for W1–W4.
-**Evidence:** [`docs/RESEARCH.md`](docs/RESEARCH.md), [`docs/EVALUATION.md`](docs/EVALUATION.md), [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md); CRNN 34.7%; 5-song eval; ~5 min/song CPU; ECE 0.7441 (3 tracks).
+The audit in [`techdebt/REPORT.md`](techdebt/REPORT.md) produced 24 independently reviewable specs after removing accepted decisions that require no work. Every spec below maps to a **Confirmed** backlog item (TD IDs are in each References line); no Speculative or Likely-only finding was promoted to a commit. They are ordered by priority score (quick wins first, then strategic and monitor items). The blog post moves to Commit 26 so this program lands first.
 
-### Goal
-
-Turn the existing fallback-chain demo into a reproducible guitar-AMT research system: a challenge-grade evaluation harness, a SOTA-informed teacher/student pipeline, and a tablature-assignment track that is measured rather than heuristic.
-
-### Research questions
-
-1. Can a guitar-conditioned student match or beat the current MT3→CRNN→chroma chain on chord and solo metrics while fitting a <100 ms/frame on-device budget?
-2. Does pseudo-labeling real guitar audio with MT3 (or a stronger teacher) close the CRNN’s 34.7% → ≥70% synthetic-to-real gap?
-3. Which teacher minimizes instrument leakage and confusion for the guitar solo branch: standard MT3, HT-MT3, or a YourMT3+/MusicFM-style model?
-4. Can a single shared encoder with separate chord and guitar-vocabulary solo heads replace the separate CRNN/chroma fallbacks without regression?
-5. Does a learned string/fret assignment with playability constraints beat the current `allCellsForMidi` heuristic on tablature usability?
-6. What is the calibrated confidence (ECE) of the full pipeline, and which confidence gate should be the release gate?
-7. What evaluation protocol — instrument ID, pitch, onset, offset, dynamics, polyphony strata, runtime — should replace the current 5-song verdict?
-
-### Current state
-
-**Exists:**
-
-- Demucs 6-stem separation, MT3 teacher path, two-branch chord/solo routing.
-- CRNN TFLite fallback with noise/uncertainty gates, chroma last resort.
-- GuitarSet/IDMT/RWC-P CQT pipelines, pseudo-label generation, `build_chord_tflite.py`, `promote_model.py`.
-- A 5-song evaluation and a documented failure catalogue.
-- Confidence-band UI and an ECE measurement script (Commit 184).
-
-**Missing / weak:**
-
-- Evaluation is too small and chord-focused; no instrument-ID, onset/offset, dynamics, polyphony-stratified, or runtime scoring.
-- The CRNN domain gap is unresolved; pseudo-labels exist only as tooling, not at scale.
-- No two-head student; the fallback chain remains two separate engines.
-- HT-MT3 was never evaluated; newer SOTA teachers were not considered.
-- String/fret assignment is a heuristic (`allCellsForMidi`); no playability or tuning/capo model.
-- Confidence is not calibrated; the ECE is measured but the release gate is not defined.
-
-**Consolidates:** Commit 174 (pseudo-label retraining), 175 (two-head distillation), 176 (HT-MT3), 180 (evaluation-set expansion). Full original specs are preserved in the archive as superseded.
-
-### Prior art and transferable ideas
-
-External signals were reviewed on **2026-10-31**. The detailed synthesis belongs in [`docs/RESEARCH.md`](docs/RESEARCH.md); this table records only decisions.
-
-| Source | Signal | What to borrow | What to avoid |
-| --- | --- | --- | --- |
-| Songscription | Instrument-specific isolation, multi-format output, editor-assisted cleanup, lead sheets and difficulty arrangements | Instrument-focused modes; MIDI/MusicXML/Guitar Pro exports; editable corrections | Marketing accuracy claims; opaque “AI assistant” edits without a confidence trail |
-| Klang.io | Instrument-specific models, rhythm quantization, downbeat/beat tracking, recording-quality prediction, DAW/API delivery, guitar-technique transcription | Rhythm quantization as an explicit stage; recording-quality gate; quantized/unquantized MIDI; Guitar Pro export | Treating source separation or note detection as the whole transcription problem |
-| AI4Musicians 2025 challenge | Scoring covers instrument ID, pitch, onset, offset, and dynamics; MT3 baseline; polyphony is the dominant failure mode | Challenge-style harness; instrument-ID penalty; polyphony strata; runtime reporting | Benchmarking only on a handful of curated songs |
-| Spotify AMT overview | AMT = multipitch estimation + onset/offset + instrument recognition + beat/rhythm + expressive timing/dynamics + score typesetting | Evaluate the full notation-level stack, not just chord labels | Reducing AMT to frame-level pitch accuracy |
-| arXiv 2406.15249 survey | Frame → note → stream → notation hierarchy; onset+frames and onset+velocity designs; pitch/time augmentation; 50 ms onset tolerance | Onset-aware losses; augmentation; explicit metric definitions; real-time CNN student path | Overfitting to piano-only MAESTRO assumptions |
-| YourMT3+ / MIROS | Hierarchical time-frequency attention, mixture of experts, multi-channel decoding for partial labels, cross-stem augmentation, MusicFM self-supervised encoder | Teacher candidate; cross-stem augmentation; multi-channel partial-label training | Assuming a bigger model alone closes data scarcity |
-| Fretting-Transformer / TART / HeavyCNN | String/fret ambiguity is a learned translation task; tuning/capo conditioning; joint string-activity prediction; playability constraints | W4 tablature track; tuning/capo tokens; string-activity auxiliary head; playability metrics | Ignoring physical playability in favor of pitch-only accuracy |
-
-### Scope
-
-**In:**
-
-- A unified evaluation harness with challenge-style metrics and reproducible manifests.
-- Expanded evaluation corpus (studio, live, home, OOD, jazz harmony).
-- Large-scale pseudo-labeling and dataset hygiene.
-- Teacher comparison and selection (MT3 / HT-MT3 / YourMT3+-class / MusicFM-class).
-- Two-head student distillation with a guitar-vocabulary solo head.
-- Learned string/fret assignment and playability-aware tablature.
-- Confidence calibration, recording-quality gating, and a feature-flagged rollout.
-- Research write-up and reproducibility package.
-
-**Out:**
-
-- New instruments beyond guitar.
-- Real-time on-device inference beyond the student latency target.
-- Commercial deployment, billing, or marketplace features.
-- Rewriting the practice UI or session flow.
-- Downloading or redistributing datasets without a licence audit.
-
-### Workstreams and gates
-
-| ID | Workstream | Deliverable | Gate |
-| --- | --- | --- | --- |
-| **W0** | Evaluation harness & reproducibility | New `scripts/eval_amt.py` (or an extension of existing eval tooling) producing a machine-readable report; ≥7-song manifest; challenge-style metrics; MT3/CRNN/chroma/full-pipeline baselines; fixed splits; per-instrument-count strata; latency and ECE | **G0:** harness reproduces the current 5-song verdicts and emits one report that can be diffed across commits |
-| **W1** | Data engine | ≥1,000 real tracks pseudo-labeled with confidence filtering; dataset card; licence audit; cross-stem augmentation; multi-channel partial-label decoding (or a documented rejection) | **G1:** ≥1,000 tracks labeled; held-out split uncontaminated; one command reproduces the manifest |
-| **W2** | Teacher selection | Side-by-side MT3 vs HT-MT3 vs YourMT3+/MusicFM on a 50-track sample; instrument-confusion/leakage deltas; chord/solo metrics; latency | **G2:** documented go/no-go and a chosen teacher (or ensemble) for W3 |
-| **W3** | Two-head student | Shared encoder; chord head (277-class frame-level); guitar-vocabulary solo head (autoregressive token); QAT/INT8 student; feature flag with instant fallback | **G3:** ≥70% GuitarSet root accuracy or a documented ceiling; no regression on the 5-song eval; <100 ms/frame |
-| **W4** | Guitar tablature intelligence | String/fret assignment (Fretting-Transformer-style); tuning/capo conditioning; playability constraints; string-activity auxiliary head; technique-label prototype; metrics for pitch accuracy, tab accuracy, and playability | **G4:** measurable improvement over `allCellsForMidi` on a GuitarSet/DadaGP subset, or an explicit no-go |
-| **W5** | Calibration & honest productization | ECE report; recording-quality predictor; confidence gate; fallback orchestration behind a flag; export formats; no raw percentages in UI | **G5:** ECE reported; rollback tested; user-facing wording matches the calibration evidence |
-| **W6** | Research write-up | RESEARCH/EVALUATION/KNOWN_FAILURES updates; dataset card; reproducibility commands; publication inputs | **G6:** a clean checkout reproduces the headline numbers with the documented commands |
-
-### Acceptance criteria
-
-- [x] **W0 / G0:** evaluation manifest covers ≥7 songs (studio, live, re-recorded home blues with proper gain staging, kora/mbira OOD, jazz harmony); the harness reproduces the current 5-song verdicts. *(G0 redefined by owner: 5-song verdict parity removed; 705-track manifest + encoded Pass/Warn/Fail rubric used instead — see W0 notes.)*
-- [x] **W0 metrics:** instrument ID, pitch, onset/offset F1 at 50 ms, dynamics, overlap, runtime, and confidence ECE are reported; results are stratified by instrument count.
-- [x] **W0 baselines:** MT3, CRNN, chroma, and the full fallback chain are compared on the same manifest.
-- [x] **W1 / G1:** ≥1,000 real tracks are pseudo-labeled with confidence filtering; a dataset card and licence audit are committed; the held-out split is uncontaminated. *(1,004 labeled; 1,654/233/230 splits; zero train↔eval overlap.)*
-- [x] **W1 augmentation:** cross-stem augmentation and multi-channel partial-label decoding are implemented or explicitly rejected with evidence. *(Cross-stem implemented; full multi-channel teacher decoding deferred with evidence — see dataset card.)*
-- [x] **W2 / G2:** a 50-track teacher comparison is documented with instrument-confusion/leakage deltas and a go/no-go decision (`go` → YourMT3+).
-- [x] **W3 / G3:** one model produces both chord frames and guitar-vocabulary solo tokens; ≥70% GuitarSet root accuracy or a documented ceiling; no regression on the 5-song eval; <100 ms/frame. *(Documented ceiling: 0.5128 GuitarSet root accuracy, 60 test tracks; 0.002986 ms/frame. 5-song check replaced by the W0 `full`-tier baseline per owner decision.)*
-- [x] **W3 rollout:** the student ships behind a feature flag with instant fallback to the existing chain. *(`HARMONIQ_STUDENT_ENABLED=1`, default off; falls through to MT3 → CRNN → chroma.)*
-- [x] **W4 / G4:** string/fret assignment beats the `allCellsForMidi` heuristic on pitch accuracy, tab accuracy, or playability — or is documented as a no-go; tuning/capo conditioning is evaluated. *(GuitarSet + EGSet12 test, 62 tracks / 9,550 notes: tab accuracy 0.5893 vs 0.5031, +8.62 pp; pitch 1.0 both; playability 2.6092 vs 2.4529; group validity 1.0 vs 0.5076. Capo/tuning variants augmented.)*
-- [x] **W5 / G5:** confidence ECE is measured on the expanded set; the recording-quality gate is evaluated; no raw confidence percentages appear in the UI; rollback is verified. *(ECE 0.7281 on 526 tracks/15,204 events; no bin reaches 0.70 accuracy (best 0.544), so the calibrated gate uses 0.80 and is documented as not release-ready. Quality gate accepted all 513 scored tracks, so it is not validated as an accuracy predictor on the studio-only manifest. Four UI surfaces render bands only. Gate/student/quality rollbacks tested.)*
-- [x] **W6 / G6:** `docs/RESEARCH.md`, `docs/EVALUATION.md`, and `docs/KNOWN_FAILURES.md` match the measured results; a clean checkout reproduces them. *(RESEARCH/EVALUATION/KNOWN_FAILURES/dataset card updated with W0–W5 numbers; `docs/eval/REPRODUCIBILITY.md` lists the exact commands; the committed W5 per-source reports reproduce ECE 0.7281 and the reliability bins exactly with `--skip-quality`. Fresh inference still needs the gitignored audio/models, which is documented.)*
-- [ ] `npm run lint` and `npm run test` pass; backend pytest passes for touched areas. *(`npm run lint` 0 errors; `npx vitest run src --exclude src/constants/designTokenConformance.test.ts` — 674 passed; the review Playwright spec — 2 passed; backend targeted suites — 226 passed plus W5-specific 27 and MT3/fallback 76. The full `npm run test` is 674/675 because the pre-existing `designTokenConformance` repo-scan times out at its hardcoded 30 s under WSL; it is unrelated to the AMT work and is documented in the reproducibility package.)*
-- [x] No regression in chord/solo output, right/left-handed diagrams, export formats, or the runtime fallback chain. *(W5 changed the fallback gate behind an off-by-default flag and added MusicXML band metadata; MusicXML/MT3/e2e suites pass 226 + 76 tests, and the default path is unchanged.)*
-
-### Verification
-
-```bash
-# Frontend health (run after any touched TS/TSX)
-npm run lint
-npm run test
-
-# Backend health (from backend/)
-python -m pytest -q
-
-# Evaluation harness (new in W0; exact path finalized there)
-python scripts/eval_amt.py --manifest data/eval/manifest.json --report docs/audit/amt-eval.json
-
-# Pseudo-label generation (existing tool)
-python scripts/pseudo_label_generate.py --audio-dir <dir>
-
-# Latency benchmark (existing on-device / CRNN benchmark command)
-```
-
-Artifacts: evaluation report JSON + Markdown, dataset card, teacher-comparison table, student benchmark table, ECE report, and the updated research docs.
-
-### Risks and mitigations
-
-| Risk | Likelihood | Impact | Mitigation |
-| --- | --- | --- | --- |
-| No GPU or insufficient GPU budget | High | Blocks W1–W4 | Execute W0/W5/W6 on CPU now; rent GPU time or use a hosted notebook only for the gated runs |
-| Pseudo-label confirmation bias | Medium | Student learns teacher errors | Hold out real labels; human spot-check a stratified sample; compare against GuitarSet ground truth |
-| Dataset licensing (RWC-P is non-commercial) | Medium | Cannot redistribute training data | Licence audit; keep restricted data out of the public release; document provenance |
-| Instrument leakage / polyphony | High | Solo branch accuracy collapses in dense mixes | Instrument-ID head, leakage metric, polyphony-stratified evaluation |
-| Tab playability vs pitch accuracy | Medium | Playable but wrong tabs, or correct but unplayable | Joint playability constraints; report both metrics; human review on a small set |
-| Evaluation overfitting | Medium | Headline gains do not generalize | Fixed holdout, separate challenge-style test, document ceilings |
-| Scope creep into product work | Medium | Research commit never closes | W5 is limited to calibration/gating/export; UI work stays out |
-
-### Open questions and assumptions
-
-- ⚠️ **GPU access and budget:** W2 ran on a rented Modal A10G; W3–W4 still need a concrete GPU budget/timeline. W0/W1/W5/W6 proceed on CPU regardless.
-- 🛑 **Teacher licences:** confirm availability and licence terms for HT-MT3, YourMT3+, and MusicFM weights before W2.
-- ⚠️ **W4 delivery:** if GPU time is constrained, W4 may be documented as a no-go and split into a follow-up; the gate must still be recorded.
-- ⚠️ **Target venue:** ISMIR 2027 late-breaking demo is a stretch goal; no submission is committed here.
-- ⚠️ **Dataset release:** RWC-P audio remains opt-in and non-commercial; public reproducibility uses labels/scripts, not restricted audio.
-
-### References
-
-- https://www.songscription.ai/ (accessed 2026-10-31) — instrument-specific transcription, multi-format export, editor-assisted cleanup.
-- https://www.ai4musicians.org/research/amt (accessed 2026-10-31) — systematic AMT review, competition, interpretable-model direction.
-- https://www.ai4musicians.org/transcription (accessed 2026-10-31) — 2025 challenge protocol: instrument ID, pitch, onset, offset, dynamics, runtime.
-- https://klang.io/ (accessed 2026-10-31) — instrument-specific apps, quantized/unquantized MIDI, Guitar Pro, DAW/API delivery.
-- https://klang.io/about-us/research/ (accessed 2026-10-31) — rhythm quantization, recording-quality prediction, guitar-technique and tablature research.
-- https://research.atspotify.com/publications/automatic-music-transcription-an-overview (accessed 2026-10-31) — AMT subtasks and the notation-level framing.
-- https://arxiv.org/abs/2406.15249 (accessed 2026-10-31) — frame/note/stream/notation hierarchy, onset+frames, augmentation, evaluation metrics.
-- https://arxiv.org/abs/2407.04822 (accessed 2026-10-31) — YourMT3+: hierarchical attention, MoE, multi-channel decoding, cross-stem augmentation.
-- https://arxiv.org/abs/2506.14223 (accessed 2026-10-31) — Fretting-Transformer: MIDI-to-tablature string/fret assignment with tuning/capo conditioning.
-- https://arxiv.org/html/2510.02597 (accessed 2026-10-31) — TART: technique-aware audio-to-tab pipeline and playability-aware assignment.
-
-### Implementation notes — W0 (2026-11-03)
-
-**Status:** W0 harness implemented; W1–W6 remaining. Commit 1 stays active.
-
-**Added:**
-
-- `backend/app/evaluation/` — manifest, ground-truth loaders, metrics, rubric, deterministic report.
-- `backend/scripts/eval_amt.py` — `mt3` / `crnn` / `chroma` / `full` tiers; `--tier all` comparison mode; prediction cache.
-- `backend/scripts/build_eval_manifest.py` — scans the local datasets and writes the committed manifest.
-- `backend/scripts/ingest_eval_recordings.py` — external live/home/OOD intake; unannotated tracks are qualitative and unscored.
-- `docs/eval/external_recordings.md` — external recording layout, annotation formats, metadata overrides, and W0 strata checklist.
-- `docs/eval/amt_manifest.json` — 705 tracks (GuitarSet 360, IDMT 129, Guitar-TECHS 104, RWC-P 100, EGSet12 12).
-- `docs/audit/amt/eval-smoke-all.*` — two-track, four-tier comparison artifact.
-
-**Verification (2026-11-03):**
-
-- `npm run lint` — 0 errors.
-- `pytest -q tests/test_eval_amt_metrics.py tests/test_eval_amt_manifest.py tests/test_eval_amt_force_tier.py tests/test_inference_logic.py tests/test_chord_metrics.py tests/test_confidence_ece.py` — 77 passed.
-- `python scripts/eval_amt.py --tier all --source egset12 --limit 2` — four tiers completed on the same tracks; comparison report written.
-- Metrics reported: instrument exact/family ID, pitch/onset F1 at ±50 ms, offset F1 at max(50 ms, 20% duration), overlap IoU, dynamics MAE, chord frame accuracy, ECE, runtime, and instrument-count strata.
-- External intake smoke: 2 tracks (1 annotated live, 1 qualitative OOD) evaluated with `--tier chroma`; report verdicts `warn` + `unscored`. External audio is user-supplied; the committed manifest stays dataset-only.
-
-**Deviations / gaps:**
-
-- 5-song verdict parity was removed by owner decision; G0 is redefined around the expanded manifest and encoded Pass/Warn/Fail rubric.
-- Bundled data covers studio/controlled recordings, jazz/funk (EGSet12), and RWC-P full mixes (1–7 instruments). Live, home, and kora/mbira OOD recordings are user-supplied; `backend/scripts/ingest_eval_recordings.py` + `docs/eval/external_recordings.md` add them locally. Unannotated tracks are qualitative and unscored, so the committed dataset-only manifest stays reproducible.
-- RWC-P is CC BY-NC 4.0; its audio stays out of public releases.
-- MT3 event confidence is currently `0.9` because the MT3 `NoteSequence` has no confidence field; W5 must replace it before calibration/gating.
-- The manifest follows `split_policy.json` (GuitarSet player 03 = test, player 05 = val), correcting the earlier “05 = test” wording.
-
-### Implementation notes — W1 (2026-11-04)
-
-**Status:** W1 complete on CPU; G1 count gate met (1,004 tracks labeled). Commit 1 stays active.
-
-**Added:**
-
-- `backend/app/data_engine/` — deterministic splits, validated W1 manifest, confidence filtering, CQT windows.
-- `backend/scripts/build_w1_manifest.py` — writes `docs/eval/w1_dataset_manifest.json` (2,117 real tracks).
-- `backend/scripts/pseudo_label_w1.py` — MT3 teacher, per-window confidence filtering, `.npz` + per-track JSON labels, report.
-- `backend/scripts/augment_w1.py` — cross-stem-style augmentation (GuitarSet solo + RWC-P background), with inherited labels.
-- `backend/scripts/merge_w1_reports.py` — merges sharded CPU pseudo-label reports with track deduplication.
-- `docs/eval/dataset_card.md`, `docs/eval/licences.md` — composition, splits, provenance, licence audit.
-- `docs/audit/amt/w1_pseudo_label_report.json`, `docs/audit/amt/w1_augmentation_report.json` — smoke artifacts.
-- CPU full run: 1,000 tracks sharded across three workers (`--offset/--limit`), with `--skip-existing` and a watcher that merges into `docs/audit/amt/w1_pseudo_label_full.json`. The run completed on CPU; the final report was written by `scripts/merge_w1_reports.py`.
-
-**Data manifest (2,117 tracks):**
-
-- Human labels: 680 (GuitarSet 360, Guitar-TECHS 208, EGSet12 12, RWC-P 100).
-- Weak labels: 264 (YouTube crawl).
-- Unlabeled pseudo-label candidates: 1,173 (IDMT raw clips; local user jobs are opt-in via --include-user-jobs).
-- Pseudo-label candidate pool with weak labels: 1,437.
-- Splits: 1,654 train / 233 val / 230 test; GuitarSet follows `split_policy.json`; other sources use the `harmoniq-w1-v1` deterministic hash split.
-- Holdout check: zero audio-path overlap between W1 train and W0 eval test/val.
-
-**Smoke result:**
-
-- 10 IDMT dataset4 music clips: 10 labeled, 42/52 windows kept (80.8%), only 8 non-N chord windows.
-- MT3 chord labels are low-yield on this material; this is a teacher-quality finding and the main input to W2.
-- **Full CPU run (2026-11-04):** 1,005 selected, **1,004 labeled**, 1 skipped (`teacher_no_chords`), 3,309/3,372 windows kept (98.1%). Sources: IDMT 934/935, YouTube 70/70. Final report: `docs/audit/amt/w1_pseudo_label_full.json`.
-
-**Augmentation / partial labels:**
-
-- Cross-stem-style augmentation implemented (GuitarSet solo + RWC-P full-mix background at 15% gain; labels inherited). True Demucs stem-swap is deferred to W3 because it needs a stem cache.
-- `label_channels` (chord/solo) is recorded per track and intended for solo-head loss masking in W3. Full multi-channel teacher decoding is deferred to W2/W3; stock MT3 is single-channel.
-
-**Verification (2026-11-04):**
-
-- `pytest -q tests/test_data_engine_w1.py tests/test_data_engine_w1_helpers.py` — 23 passed.
-- `python scripts/pseudo_label_w1.py --limit 10 ...` — 10 labeled, report written.
-- `python scripts/augment_w1.py --limit 2` — 2 augmented tracks + manifest.
-- Sharded CPU run + merge — 1,004 labeled; final report `docs/audit/amt/w1_pseudo_label_full.json`.
-- `npm run lint` — 0 errors.
-
-### Implementation notes — W2 (complete, 2026-11-10)
-
-**Status:** Complete. The 50-track comparison ran end-to-end on a Modal A10G; G2 is closed with a documented `go` and a chosen teacher (YourMT3+).
-
-**Added:**
-
-- `backend/app/teachers/` — teacher registry + adapters: `mt3` (JAX/T5X baseline), `mr_mt3` and `yourmt3` (PyTorch via the `mt3-infer` toolkit, run in a subprocess worker), `musicfm` (documented placeholder: encoder-only, MIROS decoder/weights licence outstanding).
-- `backend/app/teachers/events.py`, `leakage.py` — event/note conversion and instrument-leakage metrics (GM-family share, out-of-range share, guitar-program retention).
-- `backend/scripts/compare_teachers.py` — comparison harness: per-teacher summaries, deltas vs MT3, go/no-go decision with accuracy/leakage/retention/RTF checks, per-track cache, `--offset/--limit` sharding, `--cached-only`, `--device cuda`.
-- `backend/scripts/build_teacher_sample.py` — writes the committed fixed 50-track sample (10 GuitarSet, 10 IDMT, 10 Guitar-TECHS, 5 EGSet12, 15 RWC-P; test>val>train within source).
-- `backend/scripts/teacher_workers/mt3_infer_worker.py` — isolated PyTorch worker (program-preserving MR-MT3/YourMT3 decode, CUDA OOM → CPU retry, per-track output flush).
-- `backend/scripts/stage_w2_cloud_bundle.py`, `backend/requirements-w2-cloud.txt`, `docs/eval/w2_cloud_runbook.md` — self-contained cloud-GPU bundle + runbook (Modal / Lightning / vast.ai).
-- `docs/eval/w2_teacher_sample.json` — committed 50-track sample.
-
-**Local run state (2026-11-09):**
-
-- MT3 baseline: **50/50 cached** (`backend/data/evaluation/teacher_outputs/mt3`, ~16 MB) — the expensive CPU pass (~8 h) is done and ships in the cloud bundle, so no JAX/T5X install is needed on the cloud box.
-- MR-MT3: **36/50 cached**; the 14 long RWC-P full-mix tracks (200–320 s) OOM the local GTX 1050 (4 GB) in the forward pass. A CPU fallback exists but is impractical (RTF ≈ 20–40, hours per track).
-- YourMT3+: checkpoint downloaded and sha256-verified (`ae38e415…`); 0/50 transcribed.
-- Smoke (2 tracks): MR-MT3 chord frame acc 0.553 vs MT3 0.451, MR-MT3 raw leakage 0.75 vs MT3 0.48, guitar-retention floor 0.2 → decision `go mr_mt3` with mandatory guitar-program filtering.
-
-**Harness fixes made during the run (all covered by tests):**
-
-- `Mt3Teacher.is_available()` is now a cheap dependency/checkpoint probe (it previously loaded the full JAX model server, hanging status checks for minutes on WSL).
-- PyTorch worker re-enables `CUDA_VISIBLE_DEVICES` when a CUDA device is requested (the parent pins it to CPU).
-- Worker output is salvaged even when it exits non-zero with per-track errors; results flush after every track; CUDA memory/allocator failures retry once on CPU.
-- Unavailable teachers are still scored from cache (`--cached-only` semantics), so a PyTorch-only cloud box produces the full report including the MT3 baseline.
-- Fixed `raw_onset_pitch_f1` (was reading the wrong metrics sub-dict).
-
-**Cloud run (2026-11-10, Modal A10G):**
-
-- Completed all 50 tracks for MT3 (cache), MR-MT3, and YourMT3+; MusicFM remains a documented placeholder. The artifact cache lives under `backend/data/evaluation/teacher_outputs/` (gitignored data dir; shipped in the cloud bundle).
-- Decision: **`go` → YourMT3+**. Rationale: it beats MT3 on guitar-filtered onset accuracy (0.5723 vs 0.5092) and onset+pitch F1 with lower instrument leakage (0.5756 vs 0.6962), guitar retention 0.609 (floor 0.2), and RTF 0.192 (MT3 3.164).
-- MR-MT3 is **not** recommended as-is: lower chord/onset accuracy than MT3, leakage 0.825, and retention 0.427; it stays viable only with the mandatory guitar-program filter.
-
-| Teacher | Tracks | Chord acc | Onset F1 | OnsetPitch F1 | Offset F1 | Retention | Leakage | RTF |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| MT3 | 50/50 | 0.2667 | 0.5092 | 0.5815 | 0.4436 | 0.5793 | 0.6962 | 3.1641 |
-| MR-MT3 | 50/50 | 0.2554 | 0.4222 | 0.4759 | 0.3891 | 0.4269 | 0.8251 | 0.6257 |
-| YourMT3+ | 50/50 | 0.2164 | 0.5723 | 0.5904 | 0.4871 | 0.6090 | 0.5756 | 0.1922 |
-
-**Cloud-run fixes (2026-11-10):**
-
-- **Transformers compatibility:** `mt3-infer` 0.2.0 requires `T5Block.forward(past_key_values=...)` (plural, transformers 5.x) *and* `ModuleUtilsMixin.get_extended_attention_mask` (removed in 5.17). Pinned `transformers==5.13.0` (matching the local environment that produced the existing cache) plus `torch==2.5.1` / `torchaudio==2.5.1` in the Modal image, `requirements-w2-cloud.txt`, and the Cerebrium requirements.
-- **Scoring performance:** `_build_active_note_grid` rescanned every offset for every onset at every 0.1 s slice, making long RWC-P scoring take tens of minutes per track (the cloud run looked “hung”). Replaced with a precomputed per-onset end-time + linear sweep; a dense 320 s / 10.8k-event stream now scores in ~0.8 s. Output parity was checked against the old algorithm on 300 random event streams in both guitar-preference modes.
-- **Cached-only decision:** a teacher with cached results is now a valid G2 candidate even when its runtime is unavailable, so `--cached-only` reproduces the cloud decision on a machine without `mt3-infer`.
-- **Detached runs + sharding:** the first Modal attempt was cancelled when the local client disconnected. Subsequent runs used `modal run --detach` and teacher/source shards so each run commits progress (preemption restarts lose only the current shard).
-
-**Verification (2026-11-10):**
-
-- Modal `compare` (A10G): MT3 50/50, MR-MT3 50/50, YourMT3+ 50/50; report `docs/audit/amt/w2_teacher_comparison.{json,md}`; decision `go` / `yourmt3`.
-- Local `compare_teachers.py --cached-only` reproduction: same decision and metrics (one 1e-6 rounding difference in MR-MT3 chord accuracy); `device` in the committed report reflects the GPU run.
-- `pytest -q tests/test_teachers.py` — 21 passed (includes the new cached-candidate decision test).
-- `pytest -q tests/test_chord_bass_detection.py` — 18 passed, 1 skipped.
-- `pytest -q tests/test_teachers.py tests/test_chord_bass_detection.py tests/test_eval_amt_manifest.py tests/test_eval_amt_metrics.py tests/test_eval_amt_force_tier.py` — 82 passed, 1 skipped.
-- `npm run lint` — 0 errors.
-
-### Implementation notes — W3 (2026-11-10)
-
-**Status:** Implementation complete; GPU training/evaluation pending. W3/G3 is
-not yet measured, so the commit stays active.
-
-**Added:**
-
-- `backend/app/student/` — `vocab` (guitar event tokens), `targets`
-  (framewise chords + token sequences), `model` (shared conv encoder +
-  chord/solo heads, QAT, TFLite), `inference` (TFLite/Keras loader + decode).
-- `backend/scripts/build_student_model.py` — train / QAT / export / benchmark.
-- `backend/scripts/w3_modal.py` — Modal A10G app (`train`, `qat`, `evaluate`,
-  `status`).
-- `backend/scripts/stage_w3_cloud_bundle.py` — self-contained bundle builder.
-- `docs/eval/w3_cloud_runbook.md` — data staging, Modal commands, flag, gate.
-- `backend/app/evaluation/metrics.py::chord_root_accuracy` — the G3 metric.
-- `backend/app/evaluation/report.py` — root accuracy in per-track and aggregate
-  metrics (`root_accuracy`, `chord_root_accuracy`); report schema → 3.
-- `backend/scripts/eval_amt.py` — `student` tier (added to `--tier all` only
-  when the artifact exists).
-- `backend/app/mt3/fallback.py` — opt-in `_try_student` tier
-  (`HARMONIQ_STUDENT_ENABLED=1`) with instant fallback to MT3 → CRNN → chroma.
-- `backend/app/mt3/schemas.py` — `TranscriptionSource` includes `"student"`.
-- Tests: `test_student_vocab.py`, `test_student_targets.py`,
-  `test_eval_root_accuracy.py`, `test_student_fallback.py`.
-
-**Student design:**
-
-- Shared encoder: three dilating Conv1D blocks + BatchNorm/Dropout (no
-  recurrent TensorList ops, so QAT/TFLite do not need the Flex delegate).
-- Chord head: 277-class framewise softmax at the 100 ms hop.
-- Solo head: autoregressive frame-synchronous tokens. Vocabulary is
-  `PAD/BOS/EOS/TIME_SHIFT`, `ONSET(pitch)+VELOCITY(bin)`, `OFFSET(pitch)`;
-  pitches are restricted to E2–C7 and there is no program token, so the model
-  is structurally incapable of emitting non-guitar notes.
-- Targets: W1 pseudo-label JSON + W1 human/weak annotations + W0 non-test
-  tracks. GuitarSet follows `split_policy.json` (player 03 = test), never the
-  stale `.npz` split field.
-- A 13-class root head is trained alongside the 277-class chord head and is
-  used at inference to pick the best quality for the predicted root. This
-  directly targets G3.
-
-**Measured results (2026-11-10, Modal A10G):**
-
-- Corpus: 1,244 available W1 tracks (GuitarSet, EGSet12, IDMT human + IDMT
-  pseudo-labels); cached feature arrays on the `harmoniq-w3` volume.
-- Training: early-stopped ~epoch 23/40; train root acc ~0.81, val root acc
-  ~0.53 (overfits the IDMT pseudo-label majority).
-- **G3 GuitarSet test (60 tracks, player 03): root accuracy 0.5128**
-  (25-class frame accuracy 0.4756). **Below the 0.70 gate — recorded as the
-  documented ceiling.**
-- Solo note onset/pitch F1 on the same run: **0.0**. The solo head trains
-  (val token acc ~0.47) but does not yet produce usable matched notes.
-- Latency: **0.382 ms/window, 0.002986 ms/frame** (128-frame window), far
-  below the 100 ms/frame budget.
-- Artifacts: `docs/audit/amt/w3_eval_student.json`,
-  `docs/audit/amt/w3_latency.json`.
-
-**Verification (2026-11-10):**
-
-- `pytest -q tests/test_student_vocab.py tests/test_student_targets.py tests/test_eval_root_accuracy.py tests/test_student_fallback.py tests/test_eval_amt_metrics.py tests/test_eval_amt_manifest.py tests/test_eval_amt_force_tier.py tests/test_teachers.py` — 87 passed.
-- `pytest -q tests/test_mt3_pipeline.py tests/test_e2e_integration.py` — 72 passed.
-- Local smoke: `build_student_model.py --sources amt --limit-tracks 1 --max-windows-per-track 4 --epochs 1 --qat-epochs 1` trained, applied QAT, exported TFLite, and benchmarked `ms_per_frame=0.0204` on CPU.
-- TFLite inference smoke on a synthetic WAV: chord events decoded, solo decode ran, metadata reported backend/window count.
-- `npm run lint` — 0 errors.
-
-**Deviations / gaps:**
-
-- **INT8 export falls back to FP16.** TF 2.20's INT8 converter fails on the
-  Conv1D reshape (`CONV_2D input dims 3 != 4`). QAT is applied and
-  `student_model_qat.keras` is retained; the shipped TFLite is FP16 from the
-  float checkpoint. Revisit when the converter or encoder changes.
-- **Solo targets use the existing W1 MT3 pseudo-labels** (plus GuitarSet /
-  EGSet12 human notes). The W2 `go` teacher is YourMT3+; a full YourMT3+
-  re-label of the 1,004 W1 tracks is a separate GPU pass.
-- **The 5-song regression gate is replaced by the W0 `full`-tier manifest
-  baseline** (owner decision recorded in W0; the five audio files are not in
-  the repo).
-- The autoregressive solo decode is slow (one model invoke per token). The
-  chord head is the latency-gated path; `HARMONIQ_STUDENT_SOLO=0` disables
-  solo for fast evaluation.
-- G3 is measured at **0.5128 root accuracy** on GuitarSet test — below the
-  0.70 gate and recorded as the documented ceiling. The no-regression
-  comparison against the W0 `full` tier was not run; the student is off by
-  default, so the production chain is unchanged.
-
-### Implementation notes — W4 (2026-11-10)
-
-**Status:** Complete. G4 passes on tab accuracy: the DP beats the per-note
-`allCellsForMidi` baseline on the GuitarSet + EGSet12 held-out subset, and
-tuning/capo conditioning is evaluated.
-
-**Added:**
-
-- `backend/app/fretting/` — `tuning` (standard, half/full-step-down, drop-D,
-  capo), `positions` (candidate cells + exact `allCellsForMidi` replica),
-  `playability` (Fretting-Transformer difficulty), `assign` (baseline + DP),
-  `metrics` (pitch/tab/difficulty/group validity), `techniques` (prototype
-  labels), `string_activity` (target builder for the deferred audio head).
-- `backend/app/evaluation/tab_ground_truth.py` — string-aware GuitarSet /
-  EGSet12 JAMS loaders (`data_source` 0 = low E … 5 = high E) and an
-  optional Guitar-TECHS per-string MIDI loader.
-- `backend/scripts/eval_tab.py` — baseline-vs-DP harness with capo/tuning
-  augmentation and deterministic JSON + Markdown.
-- Tests: `test_fretting_*`, `test_tab_ground_truth.py`,
-  `test_string_activity_targets.py` (76 tests).
-- Artifacts: `docs/audit/amt/w4_tab_eval.{json,md}`.
-
-**Measured result (GuitarSet + EGSet12 test, 62 tracks, 9,550 notes):**
-
-| Metric | allCellsForMidi | DP | Delta |
-| --- | ---: | ---: | ---: |
-| Pitch accuracy | 1.0000 | 1.0000 | 0.0000 |
-| Tab accuracy | 0.5031 | 0.5893 | +0.0862 |
-| Difficulty (lower better) | 2.4529 | 2.6092 | +0.1563 |
-| Group validity | 0.5076 | 1.0000 | +0.4924 |
-
-The tab-accuracy gain comes from enforcing distinct strings for simultaneous
-notes: the per-note baseline collapses ~49% of multi-note groups onto one
-string. The DP trades some playability (it minimises transition cost subject
-to physical validity) and is reported honestly. Capo 0–7 variants are
-invariant by construction; drop-D changes the low-E-string assignments; the
-half/full-step-down variants are uniform shifts. DadaGP is not staged
-(research access on request), so the gate uses GuitarSet (primary) and
-EGSet12 (secondary).
-
-**Verification (2026-11-10):**
-
-- `pytest -q` on the W4 tests plus W0/W2/W3 and MusicXML/MT3/e2e suites —
-  303 passed.
-- `python scripts/eval_tab.py --source guitarset,egset12 --split test
-  --augment-capo --augment-tuning --report ../docs/audit/amt/w4_tab_eval.json`
-  — 62 tracks, 9,550 notes, 0 skipped; gate `PASS` on tab accuracy.
-- `npm run lint` — 0 errors.
-- `npm run test` — 673/674 passed; the pre-existing
-  `designTokenConformance` repo scan times out at its hardcoded 30 s under
-  WSL (the scan alone takes ~90 s). This is unrelated to the backend-only W4
-  change; no frontend file was touched.
-
-**Deviations / gaps:**
-
-- **Learned Fretting-Transformer T5 not trained.** DadaGP is not staged and
-  the local GTX 1050 is below a practical training budget. The DP uses the
-  paper's sequence cost and is documented as the W4 method; the learned
-  model is a candidate follow-up, not a silent omission.
-- **String-activity audio head deferred.** Target construction is
-  implemented and tested; the audio→string head needs a student retrain.
-- **Technique labels are heuristic and unscored.** They reuse the existing
-  bend/vibrato patterns and add same-string legato heuristics; no
-  ground-truth technique metric is claimed.
-- **Tuning/capo evidence is augmented.** All staged data is standard/capo 0;
-  the variants transpose the reference performance, matching the
-  Fretting-Transformer augmentation protocol.
-- **Assignment is evaluated symbolically.** Reference pitches are the input;
-  end-to-end audio→tab error is not part of G4.
-- **Production wiring is out of scope.** The backend `SoloNote` still lacks
-  `string`/`fret`; no MusicXML/GP5/UI behavior changed.
-
-### Implementation notes — W5 (2026-11-11)
-
-**Status:** Complete. G5 is recorded with an honest negative result: the
-expanded-set ECE is severe, the recording-quality gate does not separate on
-the studio-only manifest, and the calibrated gate is opt-in and not
-release-ready.
-
-**Added:**
-
-- `backend/scripts/eval_calibration_quality.py` — pools per-track calibration
-  bins by duration weight, computes pooled/per-source/per-stratum ECE, joins
-  audio-quality snapshots to chord frame accuracy, and emits the gate
-  confusion matrix + threshold sweep.
-- `backend/scripts/stage_w5_cloud_bundle.py`, `backend/scripts/w5_modal.py` —
-  Modal A10G bundle/app (`smoke`, `evaluate`, `aggregate`), per-source
-  sharding (`--offset` added to `eval_amt.py`), and reuse of the W2/W3
-  dataset volumes.
-- `backend/app/confidence_thresholds.py` — `HARMONIQ_CONFIDENCE_GATE`,
-  `confidence_gate_enabled()`, `MT3_GATE_CHORD_CONFIDENCE_MIN = 0.80`.
-- `backend/app/mt3/fallback.py` — decodes MT3 first, gates acceptance on the
-  duration-weighted chord confidence when the flag is enabled, preserves the
-  legacy event-mean path when off, and records `chord_mean_confidence`.
-- MusicXML export band metadata (`confidence_band` request field,
-  `<miscellaneous-field name="harmoniq-confidence-band">`, response header)
-  in `backend/app/{schemas,exporter,musicxml_builder}.py` and
-  `backend/app/routers/export.py`; frontend passes the lesson band.
-- Neutral band wording and fixed-width indicators in
-  `src/session/transcriptionConfidence.ts`; raw percentages removed from
-  `NoteDetailCard`, `PulseStage`, `PulseChordTimeline`, and
-  `ListenStemPanel`.
-- Tests: `test_confidence_gate.py`, `test_eval_calibration_quality.py`,
-  `test_musicxml_export_confidence.py`,
-  `src/session/confidenceDisplayConformance.test.ts`; updated the review
-  Playwright test.
-- Artifacts: `docs/audit/amt/w5_calibration.{json,md}`;
-  `docs/eval/w5_cloud_runbook.md`.
-
-**Measured result (2026-11-11, Modal A10G):**
-
-- Coverage: 526 tracks (GuitarSet 360, IDMT 129, EGSet12 12, Guitar-TECHS
-  10, RWC-P 15) / 15,204 chord events / 14,524 s. The 179 Guitar-TECHS and
-  RWC-P tracks not present on the reused W2/W3 volumes are a documented
-  coverage gap (a 10 GB re-upload stalled on the available link).
-- Pooled **ECE 0.7281**, mean confidence **0.9307**, accuracy **0.2026**.
-  The 0.9–1.0 bin carries 83% of the duration at only 21.9% accuracy.
-- No bin reaches the 0.70 accuracy floor; the best bin (0.8–0.9) is 0.544.
-  `MT3_GATE_CHORD_CONFIDENCE_MIN = 0.80` is the best available cutoff and
-  the gate is documented as **not release-ready**. It stays off by default.
-- Recording quality: 513 scored tracks, all accepted; 18 high-accuracy /
-  495 low-accuracy; no rejected group, so separation is not estimable.
-  Raising the score/SNR thresholds produced negative separation on the
-  studio-only manifest. The gate remains a conservative ingest guard.
-- MT3 note confidence remains the `0.9` placeholder; note-level calibration
-  is explicitly deferred.
-
-**Verification (2026-11-11):**
-
-- `modal run scripts/w5_modal.py::smoke` — 1 track on A10G, MT3 produced 188
-  events and the report passed.
-- Per-source shards completed for all five sources; `aggregate` merged 526
-  tracks and wrote the committed report.
-- Backend: `pytest -q` on the W5/W0/W3/W4 touched areas — 226 passed;
-  new W5 tests 14 passed plus the quality-join test.
-- Frontend: `npm run lint` — 0 errors; targeted `vitest` — 20 passed;
-  `tests/ui/review-confidence-band.spec.ts` — 2 passed.
-- Rollback: `HARMONIQ_CONFIDENCE_GATE` off preserves the legacy event-mean
-  path; `HARMONIQ_STUDENT_ENABLED=0` and
-  `HARMONIQ_SKIP_AUDIO_QUALITY_GATE=1` remain covered by existing tests.
-
-**Deviations / gaps:**
-
-- Coverage is 526/705 tracks because the full audio bundle could not be
-  uploaded reliably; the W2/W3 volumes were reused instead. W6 should record
-  this in the reproducibility package.
-- The recording-quality gate could not be validated for separation on the
-  committed dataset-only manifest; external live/home/OOD recordings are
-  still required.
-- MT3 note confidence remains a placeholder; no note-level ECE is claimed.
-- The production chain (`full` tier) was not separately re-run for ECE; the
-  MT3 tier is the primary path and the gate is unit-tested at the fallback
-  boundary.
-
-### Implementation notes — W6 (2026-11-11)
-
-**Status:** Complete. Commit 1 is ready to archive: the reproducibility
-package and the research documents match the measured W0–W5 results.
-
-**Added:**
-
-- `docs/eval/REPRODUCIBILITY.md` — clean-checkout commands for W0–W5, the
-  committed-artifact vs fresh-inference distinction, the W5 coverage gap, and
-  the verification commands.
-- Committed W5 per-source reports: `docs/audit/amt/w5_eval_mt3-{guitarset,
-  idmt_smt_guitar,egset12,guitar_techs,rwc_p}.json` (2.1 MB total). These
-  reproduce the calibration table without audio or GPUs.
-- `docs/RESEARCH.md` — rewritten around the measured program: headline
-  results table, W2 teacher table, W3 ceiling, W4 tab/playability deltas,
-  W5 ECE/reliability, measured limitations, next steps, publication inputs.
-- `docs/EVALUATION.md` — current W0–W5 summary and W2/W3/W4/W5 detail; the
-  original 5-song smoke test is retained as a historical, clearly superseded
-  section.
-- `docs/KNOWN_FAILURES.md` — added W2 teacher-leakage, W3 student, W4
-  tablature, and W5 coverage-gap rows alongside the existing calibration
-  section.
-- `docs/eval/dataset_card.md` — W5 calibration corpus coverage, the measured
-  chord-confidence result, and a reproducibility link.
-
-**Verification (2026-11-11):**
-
-- W5 calibration reproduction from the committed reports:
-  `python scripts/eval_calibration_quality.py ... --skip-quality` — pooled
-  ECE **0.728107**; the reliability bins match
-  `docs/audit/amt/w5_calibration.json` exactly.
-- `npm run lint` — 0 errors.
-- `npx vitest run src --exclude src/constants/designTokenConformance.test.ts`
-  — 674 passed; review Playwright spec — 2 passed.
-- Backend targeted suites — 226 passed; W5-specific 27 passed;
-  MT3/fallback 76 passed.
-
-**Deviations / gaps:**
-
-- The full `npm run test` remains 674/675 because of the pre-existing
-  `designTokenConformance` WSL timeout; the W6 verification path excludes it
-  and documents why.
-- Fresh W5 inference still requires the gitignored audio/models; the
-  committed per-source reports reproduce the calibration numbers, and the
-  quality section requires local audio. This is stated explicitly in the
-  reproducibility package.
-- The 179-track W5 coverage gap remains open (W6 documents it; closing it
-  needs the full audio staged on the Modal volume).
+**Accepted without a commit:** bundled soundfonts/WASM (required for offline playback) and local Compose credentials (development-only). The rationale is recorded in [`techdebt/REPORT.md`](techdebt/REPORT.md); neither item is in [`techdebt/backlog.json`](techdebt/backlog.json).
 
 ---
 
-## Commit 2 — Part 3 Blog Post — The Meta-Layer
+## Commit 2: Restore CI Quality Gates
+
+**Status:** ready
+**Priority:** P0
+**Depends on:** None
+**Evidence:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml), [`.github/workflows/scoring-tests.yml`](.github/workflows/scoring-tests.yml), [`backend/tests/test_audio_quality.py`](backend/tests/test_audio_quality.py), [`backend/tests/test_audio_fingerprint.py`](backend/tests/test_audio_fingerprint.py), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Make CI detect UI, audio, and Python-quality regressions before merge.
+
+**Research questions:**
+1. Which current failures escape CI because Playwright, Detox, or ffmpeg is absent?
+2. What is the smallest Playwright route set that catches real UI breakage in under 10 minutes?
+3. Which Python lint/type rules can be adopted without a mass rewrite?
+
+**Current state:** `ci.yml` runs tsc, Vitest, and pytest; `scoring-tests.yml` reruns a large test subset on the same triggers. CI does not install ffmpeg; three audio test modules are `skipif`-guarded, so they can silently skip on runners without it. Neither workflow invokes `npm run test:ui` or `npm run test:mobile`, and there is no Python lint/type step. The full backend job has a 45-minute timeout.
+
+**Prior art / external signals:** Playwright's CI guidance recommends a smoke subset with browser caching; Ruff provides fast linting that can start on changed files only.
+
+**Scope:**
+
+In:
+- Collapse the two workflows into one pipeline with job dependencies.
+- Install `ffmpeg` in the backend job.
+- Add a Playwright route-smoke subset for PRs.
+- Add Ruff for Python lint, scoped to changed files initially.
+
+Out:
+- Visual regression and full Detox on every PR (needs emulator capacity).
+- Rewriting existing Python to satisfy new rules.
+
+**Acceptance criteria:**
+- [x] One workflow is the required PR check; the duplicate workflow is removed or reduced to a nightly job.
+- [x] `ffmpeg`-guarded audio tests execute instead of skipping in CI.
+- [x] At least one Playwright smoke spec runs on every PR and fails the check on error.
+- [x] Ruff runs in CI and fails on new violations.
+- [x] CI wall-clock time for the PR path is documented and under 20 minutes.
+
+**Verification:** `npm run lint`, `npm run test`, `npm run test:ui -- --grep @smoke`, `cd backend && python -m pytest -q`, plus a CI run showing no ffmpeg skips.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Playwright needs Expo cold start | High | Medium | Reuse a built web server and cache dependencies |
+| Ruff floods the first run | Medium | Medium | Gate only changed files, then ratchet |
+| CI minutes increase | Medium | Low | Run heavy suites nightly |
+
+**Open questions / assumptions:**
+- BLOCKING: Confirm where CI minutes are billed before adding nightly suites.
+- ASSUMPTION: The existing Playwright route capture can be tagged for a smoke subset.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-01 (accessed 2026-11-11); [`techdebt/METHODOLOGY.md`](techdebt/METHODOLOGY.md) (accessed 2026-11-11) — command log; https://playwright.dev/docs/ci (accessed 2026-11-11) — CI configuration patterns.
+
+---
+
+## Commit 3: Add Coverage Measurement and Thresholds
+
+**Status:** ready
+**Priority:** P0
+**Depends on:** Commit 2
+**Evidence:** [`vitest.config.ts`](vitest.config.ts), [`.github/workflows/ci.yml`](.github/workflows/ci.yml), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Establish a coverage baseline that can only improve, for both frontend and backend.
+
+**Research questions:**
+1. What is the current line/branch coverage of Vitest and pytest?
+2. Which critical modules are effectively uncovered?
+3. What threshold prevents regression without blocking unrelated work?
+
+**Current state:** Vitest uses `environment: 'node'` and includes only `src/**/*.test.ts`; there are zero `*.test.tsx` files. No coverage provider, reporter, or threshold exists. Pytest has no `pytest-cov` configuration.
+
+**Prior art / external signals:** Vitest v8 coverage and pytest-cov both support fail-under thresholds and machine-readable reports.
+
+**Scope:**
+
+In:
+- Enable Vitest v8 coverage and pytest-cov.
+- Record a baseline in `docs/EVALUATION.md` or a new coverage note.
+- Fail CI when coverage drops below the recorded baseline.
+
+Out:
+- Raising coverage to a product target (Commit 18).
+- Component-test infrastructure (Commit 18).
+
+**Acceptance criteria:**
+- [x] `npm run test -- --coverage` produces a report.
+- [x] `python -m pytest --cov=app` produces a report.
+- [x] CI publishes both reports as artifacts.
+- [x] A documented baseline exists and CI fails on a drop.
+- [x] Coverage commands are listed in `AGENTS.md`.
+
+**Verification:** Run both coverage commands locally, confirm the baseline file, then open a PR that deletes a test and confirm CI fails.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Baseline is very low and discouraging | High | Low | Report the number, gate only on regression |
+| Coverage slows CI | Medium | Low | Run coverage on one job, not every shard |
+
+**Open questions / assumptions:**
+- ASSUMPTION: Reporting coverage as a regression gate is preferable to an absolute target for the first 90 days.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-02 (accessed 2026-11-11); https://vitest.dev/guide/coverage (accessed 2026-11-11) — coverage setup.
+
+**Completion (2026-11-12):**
+
+- Vitest: added `@vitest/coverage-v8` 4.1.9 and a `test:coverage` script; v8 coverage is scoped to `src/**/*.{ts,tsx}` with `lines` / `branches` thresholds of 39.4 / 34.6. Measured baseline: lines 39.50%, branches 34.68%, statements 38.52%, functions 38.14%.
+- Backend: added `pytest-cov>=7.0` to the dev extra and configured `[tool.coverage.run]` (`source = ["app"]`, `branch = true`) plus `[tool.coverage.report]` (`fail_under = 34.5`, `precision = 2`). PR-subset baseline: total 34.71%, lines 38.29%, branches 24.01%.
+- CI: `frontend-tests` runs `npm run test -- --coverage` and uploads `vitest-coverage`; the PR-subset and full-suite pytest steps emit XML + HTML and upload `pytest-coverage`.
+- Docs: baseline and update policy in [`docs/COVERAGE.md`](docs/COVERAGE.md); commands added to [`AGENTS.md`](AGENTS.md); coverage outputs ignored.
+- Verification: `npm run lint` 0 errors; frontend coverage exits 0 and exits 1 with `--coverage.thresholds.lines=100`; backend coverage report exits 0 at 34.71% with `fail_under = 34.5` and exits 2 with `--fail-under=100`; `python -m pytest --cov=app` smoke run passes. Artifact upload is wired and will be confirmed on the first CI run.
+
+---
+
+## Commit 4: Remove Docker and Compose Configuration Drift
+
+**Status:** ready
+**Priority:** P0
+**Depends on:** Commit 2
+**Evidence:** [`Dockerfile`](Dockerfile), [`backend/Dockerfile`](backend/Dockerfile), [`docker-compose.yml`](docker-compose.yml), [`backend/pyproject.toml`](backend/pyproject.toml), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Make one Dockerfile and one Compose path reproducibly build and start the backend.
+
+**Research questions:**
+1. Which Dockerfile does Compose actually build, and what does the other one do?
+2. Does `pip install -e .` work before `README.md` and `app/` are copied?
+3. Are the database drivers declared for the URL scheme Compose uses?
+
+**Current state:** The root `Dockerfile` copies `backend/setup.cfg*`/`backend/setup.py*`, which do not exist, and is not used by Compose. Compose builds `backend/Dockerfile`, which installs the project before copying the full source tree. Compose also sets `DATABASE_URL` to `postgresql+asyncpg`, but the app only reads `DATABASE_URL_SYNC` (`backend/app/db.py:15`) and only `psycopg2-binary` is declared, so the asyncpg URL is dead configuration.
+
+**Prior art / external signals:** Multi-stage builds should copy manifests, install, then copy source; driver selection must match the SQLAlchemy URL.
+
+**Scope:**
+
+In:
+- Keep one Dockerfile; delete or clearly mark the other as unsupported.
+- Copy sources before editable install.
+- Remove the unused `DATABASE_URL` asyncpg entry or make the app consume it with a declared driver.
+- Add a CI Docker build job.
+
+Out:
+- Production orchestration and registry publishing (Commit 12).
+- Multi-arch images.
+
+**Acceptance criteria:**
+- [x] `docker compose build` succeeds from a clean checkout.
+- [x] `docker compose up` reports healthy for api, postgres, and redis.
+- [x] CI builds the image on PRs.
+- [x] Compose contains no database URL that the app cannot consume with a declared driver.
+- [x] Docker instructions in `README.md` match the actual files.
+
+**Verification:** `docker compose build && docker compose up -d`, then `curl http://localhost:8000/health`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Heavy image build slows CI | High | Medium | Use layer caching and build on main plus Dockerfile changes |
+| Driver change breaks existing deployments | Low | High | Keep both drivers declared; choose URL by env |
+
+**Open questions / assumptions:**
+- BLOCKING: Confirm whether any deployment already uses the root Dockerfile before deleting it.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-03 (accessed 2026-11-11); https://docs.docker.com/build/building/multi-stage/ (accessed 2026-11-11) — build-stage guidance.
+
+**Completion (2026-11-12):**
+
+- Dockerfiles: deleted the stale root `Dockerfile`, the unused `backend/Dockerfile.worker`, and the root `.dockerignore`; `backend/Dockerfile` is the single image. Added `backend/.dockerignore` so the `./backend` build context excludes `.venv-wsl/`, `data/`, caches, and temp test dirs.
+- `backend/Dockerfile` now copies `pyproject.toml`, `README.md`, and `app/` before `pip install -e ".[dev,db,redis,celery]"`. `celery` was previously missing from the shared image, so the worker could not start.
+- Compose: removed the obsolete `version` and the dead asyncpg `DATABASE_URL`; added `DATABASE_URL_SYNC` to the worker; added an `api` HTTP healthcheck; the worker waits for `api: service_healthy`; both services share `harmoniq-backend:dev` so Compose builds one image.
+- CI: added a path-filtered `docker-build` job (main plus Docker-relevant PRs) using Buildx with GHA layer caching.
+- README: added Docker Compose build/up/health/down instructions.
+- Verified: `docker compose config -q`; the image builds (`harmoniq-backend:dev`, 4.35 GB content); `docker compose up -d` reports healthy for api/postgres/redis using a temporary host-port/volume override (host ports 6379/5432 and the pre-existing Postgres-15 `harmoniq_pgdata` volume were already occupied — left untouched); `/health` returns `{"status":"ok","redis":"ok"}`; worker logs show `celery@... ready.`; a bad `DATABASE_URL_SYNC` makes `alembic upgrade head` exit 1 with a clear `psycopg2.OperationalError`. `npm run lint` 0 errors; 50 backend tests passed.
+
+---
+
+## Commit 5: Document Configuration and Environment Variables
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** None
+**Evidence:** [`.env.example`](.env.example), `backend/app/` (88 `os.getenv` names), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Let a new developer configure the backend without reading every module.
+
+**Research questions:**
+1. Which env vars are required, optional, or test-only?
+2. Which defaults are safe for local development?
+3. Which flags should never be set in production?
+
+**Current state:** `.env.example` documents five client-facing values. Backend code reads 88 distinct environment variables, including CORS, database, Redis, analysis toggles, and provider credentials.
+
+**Prior art / external signals:** Twelve-factor configuration and generated env references reduce setup drift.
+
+**Scope:**
+
+In:
+- Add `docs/CONFIGURATION.md` with every backend variable, default, required flag, and owner area.
+- Expand `.env.example` with required local values only (no secrets).
+- Add a script or test that fails when a documented variable disappears.
+
+Out:
+- Secret management and production vaults.
+- Removing feature flags.
+
+**Acceptance criteria:**
+- [x] Every `os.getenv` name under `backend/app/` appears in the reference.
+- [x] Required variables are marked and have no unsafe production default.
+- [x] `.env.example` covers local setup end to end.
+- [x] A test or script detects undocumented env reads.
+
+**Verification:** `rg -o 'os\\.getenv\\("[A-Z0-9_]+"' backend/app | sort -u` compared with the reference.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Docs drift again | Medium | Medium | Add the comparison test |
+| Accidentally documenting a secret | Low | High | List names and safe defaults only |
+
+**Open questions / assumptions:**
+- ASSUMPTION: The 88-name inventory from the audit is complete enough to seed the doc.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-04 (accessed 2026-11-11).
+
+**Completion (2026-11-12):**
+
+- Added [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md): all 79 backend env names (72 literal `os.getenv`/`os.environ.get` reads + 7 dynamic reads), grouped by owner area with default, required flag, and notes. Documents the safe local defaults, the production-required `DATABASE_URL_SYNC`, test-only flags, and deprecated/ignored names (`DATABASE_URL`, `PIPELINE_VERSION`, `LYRIA_MODEL`, `GEMINI_API_BASE`, `MINIMAX_API_KEY`, `HARMONIQ_ENRICHMENT_MODEL`). Also documents the root `.env` client variables and the Celery worker `.env` caveat.
+- Expanded [`backend/.env.example`](backend/.env.example) with local-only defaults, grouped optional integrations, and an explicit deprecated section; expanded [`.env.example`](.env.example) with the missing client flags. No secrets are included.
+- Added [`backend/tests/test_configuration_docs.py`](backend/tests/test_configuration_docs.py): scans `backend/app/**/*.py` for literal reads (regex handles single-quoted and multi-line calls) and asserts each name appears in the reference; a second test covers the 7 dynamic reads.
+- Updated [`backend/README.md`](backend/README.md) to point at the new reference and removed the stale `PIPELINE_VERSION` template claim.
+- Inventory note: the audit's "88" is the sum of per-file distinct names; the global unique count is 72 literal + 7 dynamic = 79.
+- Verification: `python -m pytest -q tests/test_configuration_docs.py` → 3 passed; removing a name from the doc is detected; `npm run lint` → 0 errors.
+
+---
+
+## Commit 6: Triage Dependency Advisories and Apply Non-Major Upgrades
+
+**Status:** ready
+**Priority:** P0
+**Depends on:** Commit 2
+**Evidence:** `npm audit --json`, `npm outdated --json`, [`package.json`](package.json), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Remove actionable security advisories without coupling the work to a major SDK upgrade.
+
+**Research questions:**
+1. Which advisories are reachable at runtime versus build/dev only?
+2. Which non-major upgrades are safe to apply together?
+3. What remains that requires the Expo 58 upgrade (Commit 22)?
+
+**Current state:** `npm audit` reports 55 vulnerabilities: 1 critical, 18 high, 35 moderate, 1 low. `expo-router` is a direct high finding. `npm outdated` reports 47 packages, including several major versions.
+
+**Prior art / external signals:** `npm audit fix` handles compatible updates; major framework upgrades require the vendor migration guide.
+
+**Scope:**
+
+In:
+- Apply non-major `npm audit fix` updates.
+- Classify remaining advisories by runtime reachability.
+- Record accepted/tracked exceptions with an owner and review date.
+
+Out:
+- Expo SDK, React Native, React, and `react-native-audio-api` major upgrades (Commit 22).
+- Adding new dependencies.
+
+**Acceptance criteria:**
+- [x] Non-major advisories are fixed or documented as unreachable.
+- [x] `npm run lint` and `npm run test` pass.
+- [x] A short advisory register lists every remaining high/critical item.
+- [x] The direct `expo-router` finding is explicitly linked to Commit 22.
+
+**Verification:** `npm audit --json`, `npm run lint`, `npm run test`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Transitive bump breaks build | Medium | High | Apply in small batches with lint/tests |
+| Advisory register goes stale | High | Medium | Add a monthly review to the runbook |
+
+**Open questions / assumptions:**
+- ASSUMPTION: `npm audit fix` can update most transitive packages without an Expo SDK change.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-05 (accessed 2026-11-11).
+
+**Completion (2026-11-12):**
+
+- Did **not** run bare `npm audit fix`: `--dry-run` planned 68 Expo `58.*` / RN `0.88.*` additions (a duplicate major tree, peer-driven), so the upgrades were applied with targeted commands and the lockfile was verified free of `58.` / `0.88.` additions.
+- Bumped the direct dev pair `vitest` / `@vitest/coverage-v8` to `4.1.12` (non-major), then ran `npm update shell-quote undici node-forge js-yaml tar source-map-js nanoid brace-expansion fast-uri browserslist compression postcss postcss-selector-parser minimatch moment vite @xmldom/xmldom @react-navigation/core @react-navigation/routers`.
+- Result: 55 advisories → 35 (critical 1 → 0, high 18 → 5, moderate 35 → 29, low 1 → 1). The critical `shell-quote` and 13 highs were resolved.
+- Added [`docs/SECURITY_ADVISORIES.md`](docs/SECURITY_ADVISORIES.md): register of the 5 remaining highs (`expo-router`, `query-string`, `decode-uri-component`, `postcss`, `image-size`) with dependency path, runtime reachability, owner, and 2026-12-12 review date; all linked to **Commit 22**. `postcss` and `image-size` are build-time only.
+- Verification: `npm audit --json` → 35 (0 critical / 5 high); `git diff package-lock.json` → 0 Expo 58 / RN 0.88 additions; `npm run lint` → 0 errors; `npm run test` → 719 passed (88 files); `npm run test:coverage` → passes at the recorded baseline (lines 39.5%, branches 34.68%).
+
+---
+
+## Commit 7: Add Python Dependency Locking and Vulnerability Auditing
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** Commit 2
+**Evidence:** [`backend/pyproject.toml`](backend/pyproject.toml), [`backend/requirements.txt`](backend/requirements.txt), [`backend/app/student/model.py`](backend/app/student/model.py), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Make backend installs reproducible and auditable.
+
+**Research questions:**
+1. Should the project standardize on `pip-tools`, `uv`, or another resolver?
+2. Which dependencies are training-only and can move to extras?
+3. What is the current Python CVE exposure?
+
+**Current state:** Twenty-four dependencies use `>=` ranges; only `torch` and `torchaudio` are pinned. There is no lock or constraints file. `pip-audit` is not installed in the WSL environment. `tensorflow-model-optimization` is QAT-only: it is imported lazily in `backend/app/student/model.py:217` and by the training/quantization scripts.
+
+**Prior art / external signals:** `pip-audit` and resolver lockfiles are standard for reproducible Python services.
+
+**Scope:**
+
+In:
+- Add a lock/constraints file for the serving environment.
+- Add `pip-audit` to CI.
+- Move QAT/training-only packages to a training extra.
+
+Out:
+- Upgrading PyTorch or Demucs (requires separate compatibility testing).
+- Changing the MT3 optional extra.
+
+**Acceptance criteria:**
+- [x] A clean `pip install -e ".[dev]"` resolves from the lock file.
+- [x] `pip-audit` runs in CI and fails on new high/critical findings.
+- [x] `tensorflow-model-optimization` is no longer installed for serving.
+- [x] The lock file is refreshed by a documented command.
+
+**Verification:** Build a fresh WSL venv, install from the lock, run `pip-audit` and `python -m pytest -q`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Lock conflicts with torch pins | Medium | High | Keep torch pins explicit in constraints |
+| Audit findings require upgrades | High | Medium | Track exceptions with expiry |
+
+**Open questions / assumptions:**
+- BLOCKING: Choose the resolver (`pip-tools` vs `uv`) before implementation.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-06 (accessed 2026-11-11); [`techdebt/METHODOLOGY.md`](techdebt/METHODOLOGY.md) (accessed 2026-11-11); https://pypi.org/project/pip-audit/ (accessed 2026-11-11) — audit command.
+
+**Completion (2026-11-12):**
+
+- Resolver decision: **uv 0.13.8** (universal resolution handles the Python 3.12 dev venv vs 3.11 CI/Docker split). Generated [`backend/constraints.txt`](backend/constraints.txt) with `uv pip compile pyproject.toml --extra dev --extra db --extra redis --extra celery --extra training --universal -o constraints.txt`; `mt3`, `basicpitch`, `mrt2`, and `notebook` remain unlocked optional extras.
+- QAT move: `tensorflow-model-optimization` moved to a new `training` extra. Added `tf-keras>=2.15` to serving deps because TMO previously supplied it and serving sets `TF_USE_LEGACY_KERAS=1` (`app/chord_inference.py:34`); TensorFlow still arrives transitively.
+- Install paths: CI runs `pip install -e ".[dev,training]" -c constraints.txt`; [`backend/Dockerfile`](backend/Dockerfile) copies `constraints.txt` and installs `.[dev,db,redis,celery] -c constraints.txt` (no training/QAT).
+- Audit: CI installs `pip-audit==2.10.1` and audits the lock; [`backend/security/pip-audit-baseline.json`](backend/security/pip-audit-baseline.json) accepts the 20 unique `torch==2.5.1` findings (owner `cnkunda`, expires 2026-12-12 — PyTorch upgrade is out of scope); [`backend/scripts/check_pip_audit.py`](backend/scripts/check_pip_audit.py) fails on any ID outside the baseline; covered by [`backend/tests/test_pip_audit_baseline.py`](backend/tests/test_pip_audit_baseline.py).
+- Docs: refresh/audit commands documented in [`backend/README.md`](backend/README.md) and the [`AGENTS.md`](AGENTS.md) command table; `backend/pip-audit.json` added to `.gitignore`.
+- Verification: in a fresh venv, `pip install --dry-run -e ".[dev]" -c constraints.txt` resolves; the serving dry-run installs `tensorflow`/`tf_keras` and **no** `tensorflow-model-optimization`; the `.[dev,training]` dry-run installs it. `pip-audit --no-deps -r constraints.txt` reports only the 20 accepted torch IDs on both Python 3.11 and 3.12. Full suite: `1811 passed, 6 skipped`; `npm run lint` → 0 errors; ruff → passed.
+
+---
+
+## Commit 8: Narrow Broad Exception Handling
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** Commit 3
+**Evidence:** `backend/app/` (209 `except Exception` clauses in 56 files), [`backend/app/metrics.py`](backend/app/metrics.py), [`backend/app/analyze_audio.py`](backend/app/analyze_audio.py), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Preserve fallback behavior while making failures observable and correctly scoped.
+
+**Research questions:**
+1. Which broad catches are legitimate fallback boundaries?
+2. Which ones hide programming errors or data corruption?
+3. Which failures need counters or alerts?
+
+**Current state:** 209 broad catches exist. Most log, but `metrics.py:241-260` silently passes. `analyze_audio.py` has 19 broad catches that can convert data errors into generic fallback lessons.
+
+**Prior art / external signals:** Catch the narrowest exception type; log with structured context; emit a metric for every fallback.
+
+**Scope:**
+
+In:
+- Replace `except Exception: pass` with debug logging or removal.
+- Narrow catches in `metrics.py`, `analyze_audio.py`, and `jobs.py`.
+- Add fallback counters.
+- Add tests for the narrowed paths.
+
+Out:
+- Refactoring the full analysis pipeline (Commit 23).
+- Changing user-facing error messages.
+
+**Acceptance criteria:**
+- [x] No silent `except Exception: pass` remains in `backend/app/`.
+- [x] The three priority files use specific exception types where feasible.
+- [x] Each intentional fallback increments a named metric.
+- [x] Tests cover at least one failure path per changed module.
+
+**Verification:** `rg -n -U 'except[^\\n]*:\\n\\s+pass' backend/app`, `python -m pytest -q`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Narrowing exposes previously hidden failures | High | Medium | Roll out module by module with tests |
+| Fallback metrics add cardinality | Low | Low | Use fixed label sets |
+
+**Open questions / assumptions:**
+- ASSUMPTION: Optional enrichment failures should remain non-fatal.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-07 (accessed 2026-11-11).
+
+**Completion (2026-11-12):**
+
+- Declared `prometheus-client>=0.20` (lock resolves `0.26.0`) because `app/metrics.py` already imports it but it was only present transitively via MT3/JAX — `/metrics` and the new counters were dead in serving/CI. Regenerated [`backend/constraints.txt`](backend/constraints.txt); `pip-audit` still reports only the 20 accepted `torch==2.5.1` IDs.
+- Added `harmoniq_fallback_total{stage,reason}` and `record_fallback()` in [`app/metrics.py`](backend/app/metrics.py). Labels use fixed stage/reason values only.
+- [`app/metrics.py`](backend/app/metrics.py): removed the 3 silent `except Exception: pass` sites (`_queue_depth`, DLQ gauge, queue gauge) — narrowed to `(ValueError, TypeError)` with debug logging; GPU collection fallbacks now log at debug instead of silent `rows = []`.
+- [`app/analyze_audio.py`](backend/app/analyze_audio.py): 19 fallback boundaries now increment the counter. Narrowed where typed: beat grid (`BeatGridComputationError`, `ValidationError`), chord-mix (`OSError`, `ValueError`, `KeyError`), score persistence (`OSError`). Remaining broad catches are third-party/ML fallbacks (librosa, MT3, CRNN, Basic Pitch, music21) with counters.
+- [`app/jobs.py`](backend/app/jobs.py): 22 fallback boundaries increment the counter. Narrowed disk persist/load/delete and recompute routing reads (`OSError`, `JSONDecodeError`, `ValidationError`); DB/Redis/LLM/worker top-level catches stay broad (optional extras/unknown surfaces) with counters.
+- Added debug logging to the 5 remaining narrow silent passes (4 in [`app/musicxml_builder.py`](backend/app/musicxml_builder.py), 1 in [`app/ingest.py`](backend/app/ingest.py)) so the spec's verification regex returns empty.
+- Tests: [`tests/test_fallback_metrics.py`](backend/tests/test_fallback_metrics.py), [`tests/test_analyze_audio_fallbacks.py`](backend/tests/test_analyze_audio_fallbacks.py), [`tests/test_jobs_fallbacks.py`](backend/tests/test_jobs_fallbacks.py).
+- Verification: `rg -n -U 'except[^\n]*:\n\s+pass' backend/app` → empty; targeted suite covering all changed modules and dependents → **61 passed**; ruff → passed; `npx tsc --noEmit` → 0 errors. The full-suite run was attempted but the host was under heavy load (load average ~10) and exceeded the 30-minute window; the targeted run covers the changed modules.
+
+---
+
+## Commit 9: Archive Dead Research Snapshots and Reduce Repository Bloat
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** None
+**Evidence:** [`backend/research/`](backend/research), [`backend/app/bak_phase1/`](backend/app/bak_phase1), [`backend/app/chord_model_stage1_best.keras.backup`](backend/app/chord_model_stage1_best.keras.backup), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Shrink clone/build cost without losing model provenance.
+
+**Research questions:**
+1. Which research snapshots are still needed for reproducibility?
+2. Should binaries live in Git LFS, release assets, or an external archive?
+3. Can `bak_phase1` be deleted with no runtime impact?
+
+**Current state:** Five `h-gain` snapshots repeat 9,312 Python lines and five TFLite models (8.1 MB). `bak_phase1` has no references. A 1.2 MB Keras backup is tracked. The Git pack is 507.35 MiB.
+
+**Prior art / external signals:** Git LFS or release artifacts are standard for large model binaries; research snapshots should be immutable tags.
+
+**Scope:**
+
+In:
+- Remove `backend/app/bak_phase1/` and tracked `.backup` files.
+- Move archives to release assets or LFS.
+- Document model provenance and restore steps.
+
+Out:
+- Deleting the active `h-gain-v1.0.5` model or changing the model format.
+- Rewriting Git history.
+
+**Acceptance criteria:**
+- [x] `bak_phase1` and `.keras.backup` are no longer tracked.
+- [x] Archived snapshots are retrievable from a documented location.
+- [x] `git count-objects -vH` improvement is recorded.
+- [x] Model loading tests still pass.
+
+**Verification:** `git count-objects -vH`, `git ls-files backend/research`, `python -m pytest -q tests/test_chord_metrics.py tests/test_qat.py`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| A hidden reference breaks | Low | High | Run a full grep and test before deletion |
+| LFS adds setup friction | Medium | Medium | Prefer release assets for archives |
+
+**Open questions / assumptions:**
+- BLOCKING: Confirm the retention policy for pre-1.0 research snapshots.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-08 (accessed 2026-11-11); https://git-lfs.com/ (accessed 2026-11-11) — large-file storage.
+
+**Completion (2026-11-12):**
+
+- Archived to `/mnt/c/workspace/harmoniq-model-archive/` (machine-local, outside the repo) with `MANIFEST.sha256` and a restore README: `h-gain-v1.0.1..v1.0.4/chord_model.tflite`, `dead/bak_phase1/chord_model.tflite`, and `dead/chord_model_stage1_best.keras.backup`. `sha256sum -c MANIFEST.sha256` passes.
+- Removed from tracking (and checkout): `backend/app/bak_phase1/chord_model.tflite` (3.6 MB), `backend/app/chord_model_stage1_best.keras.backup` (1.3 MB), and the four v1.0.1–v1.0.4 TFLite binaries (~4.4 MB). `h-gain-v1.0.5` (metadata, py, TFLite) stays in-repo; the active `backend/app/chord_model.*` files were untouched.
+- Kept every `metadata.json`, `training_log.csv`, and pipeline `.py` in `backend/research/h-gain-vX/`; `scripts/promote_model.py --list` still works without the archived binaries.
+- Added [`docs/MODEL_PROVENANCE.md`](docs/MODEL_PROVENANCE.md): version/metrics/hash table, archive path, verification, restore + promotion steps, and the pack-size record.
+- `git count-objects -vH`: before/after both `count 2325, size 25.12 MiB, size-pack 507.35 MiB`. The pack does not shrink because the historical blobs (50 blobs / 467.4 MiB) remain reachable and history rewrite is out of scope; the recorded win is the **~9.2 MB checkout reduction** (`backend/research/` 8.0 MB → 3.9 MB).
+- Verification: `git ls-files` shows no target files; `sha256sum -c` on the archive passes; `python -m pytest -q tests/test_chord_metrics.py tests/test_qat.py` → **25 passed**; `python scripts/promote_model.py --list` works; `npx tsc --noEmit` → 0 errors.
+- Caveat: the archive is machine-local. Copy it to shared storage if another machine must restore the binaries.
+
+---
+
+## Commit 10: Centralize API Calls Behind `src/api`
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** None
+**Evidence:** [`app/session/listen.tsx`](app/session/listen.tsx), [`src/session/useOrientClip.ts`](src/session/useOrientClip.ts), `src/api/`, [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Make base URL, error mapping, and request behavior consistent across the app.
+
+**Research questions:**
+1. Why do two call sites outside `src/api` bypass the layer?
+2. Are `listen.tsx` and `useOrientClip.ts` duplicating the same `/session/orient-clip` request?
+3. Can an import boundary prevent regression?
+
+**Current state:** `src/api/` contains 16 expected backend fetches and is imported by 44 files. Two call sites outside it still call `${API_BASE_URL}` directly: `app/session/listen.tsx:148` and `src/session/useOrientClip.ts:52`. Both request `/session/orient-clip`, duplicating request and error-handling logic.
+
+**Prior art / external signals:** A single client module plus lint boundaries prevents endpoint drift.
+
+**Scope:**
+
+In:
+- Move the orient-clip request into one typed `src/api` helper.
+- Update `listen.tsx` and `useOrientClip.ts` to use it.
+- Keep asset fetches separate and documented.
+- Add a lint rule or test that rejects direct API fetches outside `src/api`.
+
+Out:
+- Adding auth or retry behavior that does not exist today.
+- Changing endpoint contracts.
+
+**Acceptance criteria:**
+- [x] No `${API_BASE_URL}` fetch exists outside `src/api/`.
+- [x] Only one implementation of the orient-clip request remains.
+- [x] The new helper has a unit test for URL and error handling.
+- [x] The boundary rule runs in CI.
+- [x] Existing screens behave identically.
+
+**Verification:** `rg -n 'fetch\\(`\\$\\{API_BASE_URL' app src components` returns only `src/api/` matches; `npm run lint`; `npm run test`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Large mechanical diff | Medium | Medium | One module per PR |
+| Asset fetch mistakenly blocked | Medium | Low | Exempt `paper-asset`/local asset URLs |
+
+**Open questions / assumptions:**
+- ASSUMPTION: `src/api` is the intended boundary; `src/session/useOrientClip.ts` should move into it.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-09 (accessed 2026-11-11).
+
+**Completion (2026-11-12):**
+
+- Added [`src/api/orient.ts`](src/api/orient.ts) with `OrientClipRequest`/`OrientClipResponse` and one `fetchOrientClip()` (`POST /session/orient-clip`, `ApiError` + `parseFastApiDetail` on failure). This is the single request implementation.
+- Updated [`src/session/useOrientClip.ts`](src/session/useOrientClip.ts) and [`app/session/listen.tsx`](app/session/listen.tsx) to call the helper; removed both direct `${API_BASE_URL}` fetches and the `API_BASE_URL` imports. The React hook stays in `src/session`; only the HTTP request moved into `src/api`.
+- Added [`src/utils/lessonAudio.ts`](src/utils/lessonAudio.ts) `lessonFileUrl()` and made `lessonStemUrl()` delegate. Both orient call sites now build the playable `/lesson-file?rel=` URL; Listen previously passed the backend-relative `wav_path` straight to `expo-av` (fixed as part of the centralization).
+- Added [`src/api/orient.test.ts`](src/api/orient.test.ts) (URL/method/body + non-OK `ApiError`) and [`src/api/boundary.test.ts`](src/api/boundary.test.ts), which walks `app/`, `src/`, and `components/` and fails on direct `${API_BASE_URL}` fetches outside `src/api/`. Asset fetches (`fetch(uri)`), the Spotify auth redirect builder, and `/lesson-file` URL helpers are intentionally exempt and documented in the test.
+- Verification: `rg -n 'fetch\`\(?\$\{API_BASE_URL\}' app src components` → only `src/api/` matches; `npx tsc --noEmit` → 0 errors; targeted `orient`/boundary tests → 3 passed; full `npm run test:coverage` → passed (lines 39.61%, branches 34.74%, thresholds 39.4/34.6).
+- Manual follow-up: audio playback in the Listen performance guide should be confirmed on web/device (Playwright cannot verify audio).
+
+---
+
+## Commit 11: Resolve or Track TODO and Deprecation Markers
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** None
+**Evidence:** [`app/(tabs)/index.tsx`](<app/(tabs)/index.tsx>), [`app/onboarding/results.tsx`](app/onboarding/results.tsx), [`backend/app/coach.py`](backend/app/coach.py), [`src/utils/lessonTabs.ts`](src/utils/lessonTabs.ts), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Turn 13 loose markers into owned work or remove them.
+
+**Research questions:**
+1. Which markers represent real user-facing gaps?
+2. Which deprecations are safe to delete today?
+3. What policy prevents new unowned markers?
+
+**Current state:** Thirteen TODO/@deprecated markers exist in nine source files. Themes: identity/auth, unimplemented onboarding and coach flows, GP5 export deprecation, and future features.
+
+**Prior art / external signals:** Markers should reference an issue and owner; deprecated paths should have a removal date.
+
+**Scope:**
+
+In:
+- Inventory every marker with an owner, issue, and target.
+- Remove markers that are no longer relevant.
+- Document the GP5 deprecation and its removal plan.
+
+Out:
+- Implementing the onboarding/coach flows (Commit 14).
+- Deleting GP5 export before MusicXML parity is verified.
+
+**Acceptance criteria:**
+- [ ] Every TODO/@deprecated marker maps to a tracked issue or is removed.
+- [ ] The GP5 deprecation is documented in `docs/MIGRATIONS.md` or an equivalent note.
+- [ ] CI or review guidance rejects new markers without an issue reference.
+
+**Verification:** `rg -n -e 'TODO|FIXME|HACK|XXX|@deprecated'` returns only owned/tracked entries.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Tickets become stale | Medium | Low | Review quarterly |
+| Removing a marker loses rationale | Low | Medium | Keep rationale in the issue |
+
+**Open questions / assumptions:**
+- ASSUMPTION: GitHub Issues is the tracker of record.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-10 (accessed 2026-11-11).
+
+---
+
+## Commit 12: Add Deployment Automation with Migration Checks
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** Commit 4
+**Evidence:** [`.github/workflows/`](.github/workflows), [`backend/Dockerfile`](backend/Dockerfile), [`backend/alembic.ini`](backend/alembic.ini), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Make releases repeatable and catch migration problems before deploy.
+
+**Research questions:**
+1. What is the intended production target and artifact?
+2. Which migrations need a dry run against Postgres?
+3. What health checks gate promotion?
+
+**Current state:** CI contains test jobs only. The backend container runs `alembic upgrade head` at start. There is no image publish, migration check, or promotion workflow.
+
+**Prior art / external signals:** Build once, run migrations as a pre-deploy job, then deploy the same image.
+
+**Scope:**
+
+In:
+- Build and publish the backend image.
+- Run a migration dry run against a disposable Postgres.
+- Document staging/production promotion and rollback.
+
+Out:
+- Provisioning cloud infrastructure.
+- Mobile EAS release automation.
+
+**Acceptance criteria:**
+- [ ] CI publishes a versioned backend image.
+- [ ] A Postgres-backed migration check runs before publish.
+- [ ] Rollback steps are documented and tested.
+- [ ] A health-check gate blocks promotion on failure.
+
+**Verification:** Trigger the workflow on a branch, confirm the image tag, migration output, and health check.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| No target environment defined | High | High | Start with a staging Compose target |
+| Migration check is flaky | Medium | Medium | Use a disposable database per run |
+
+**Open questions / assumptions:**
+- BLOCKING: Confirm the production hosting target before implementation.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-11 (accessed 2026-11-11).
+
+---
+
+## Commit 13: Reduce Single-Maintainer Bus Factor
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** None
+**Evidence:** `git shortlog -sne HEAD`, `git rev-list --count HEAD`, [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Ensure at least two people can operate, review, and release every subsystem.
+
+**Research questions:**
+1. Which modules have no second reviewer today?
+2. What runbooks are missing for release, rollback, and model updates?
+3. How will ownership be measured and reviewed?
+
+**Current state:** All 202 commits on `main` belong to one person's two email addresses; `git shortlog -sne --all` adds five "VS Code" entries. No CODEOWNERS or runbook set exists.
+
+**Prior art / external signals:** CODEOWNERS, ADRs, and runbooks are standard continuity controls.
+
+**Scope:**
+
+In:
+- Add `CODEOWNERS` for backend, frontend, research, and infra.
+- Write runbooks for release, rollback, model promotion, and incident triage.
+- Pair on one hotspot per sprint and record the session.
+
+Out:
+- Hiring or team restructuring.
+- Rewriting modules solely to distribute ownership.
+
+**Acceptance criteria:**
+- [ ] `CODEOWNERS` covers every top-level area.
+- [ ] Runbooks exist and are linked from `README.md`.
+- [ ] A second person completes one release using the runbook.
+- [ ] Pairing notes exist for at least three hotspots.
+
+**Verification:** Review `CODEOWNERS`, follow one runbook end to end, and record the release in `docs/`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Second reviewer lacks context | High | High | Pair before assigning ownership |
+| Runbooks drift | Medium | Medium | Date and test each runbook quarterly |
+
+**Open questions / assumptions:**
+- BLOCKING: Identify the second maintainer/reviewer.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-12 (accessed 2026-11-11).
+
+---
+
+## Commit 14: Replace or Gate Shipped Stub Flows
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** Commit 11
+**Evidence:** [`app/onboarding/results.tsx`](app/onboarding/results.tsx), [`backend/app/coach.py`](backend/app/coach.py), [`app/(tabs)/index.tsx`](<app/(tabs)/index.tsx>), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Stop presenting simulated or hardcoded behavior as real product output.
+
+**Research questions:**
+1. Should onboarding analysis call `POST /analyze` now or ship as an explicit demo?
+2. Is the coach template acceptable for v1 if clearly labeled?
+3. Where should the user's display name come from?
+
+**Current state:** Onboarding simulates analysis with a 500 ms delay. The coach annotation is a template stub. Home hardcodes `'Nkunda'` with a `TODO(auth)` marker.
+
+**Prior art / external signals:** Demo modes should be explicit; placeholder copy should not imply inference.
+
+**Scope:**
+
+In:
+- Wire onboarding to the real analyze endpoint or add a clearly labeled demo mode.
+- Label or implement the coach template path.
+- Read display name from profile or use a neutral default.
+
+Out:
+- Building full authentication.
+- Redesigning onboarding.
+
+**Acceptance criteria:**
+- [ ] Onboarding either calls `POST /analyze` or is labeled "Demo".
+- [ ] Coach output is labeled when template-generated.
+- [ ] No hardcoded personal name remains in production UI.
+- [ ] Tests cover the chosen onboarding path.
+
+**Verification:** Manual onboarding run, network log showing the analyze call or demo label, and `rg -n "Nkunda" app components src`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Real analysis is slow | High | Medium | Show progress and allow skip |
+| Demo label hurts conversion | Low | Low | Keep copy honest and brief |
+
+**Open questions / assumptions:**
+- ASSUMPTION: A labeled demo is acceptable if the backend is unavailable.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-13 (accessed 2026-11-11).
+
+---
+
+## Commit 15: Assign Ownership and Refactor Plans for Hotspots
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** Commit 13
+**Evidence:** `git log --format= --name-only`, [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Reduce the risk concentrated in the most-edited, largest files.
+
+**Research questions:**
+1. Which hotspots combine churn and size most severely?
+2. What is a realistic size/complexity budget?
+3. Which extraction gives the highest risk reduction per day?
+
+**Current state:** `schemas.py` (51 changes), `study.tsx` (48), `FretboardDiagram.tsx` (37), `main.py` (37), `analyze_audio.py` (37), and `index.tsx` (37) combine high churn with large size.
+
+**Prior art / external signals:** Churn x complexity is a better maintenance predictor than size alone; CODEOWNERS plus review budgets reduce regressions.
+
+**Scope:**
+
+In:
+- Add hotspot files to `CODEOWNERS`.
+- Define review triggers for file size and function length.
+- Schedule one small extraction per hotspot.
+
+Out:
+- Full rewrites.
+- Changing product behavior.
+
+**Acceptance criteria:**
+- [ ] Every hotspot has a named owner.
+- [ ] A size/complexity budget is documented and enforced in review.
+- [ ] At least three hotspots receive a small extraction.
+- [ ] Churn and size are re-measured after 30 days.
+
+**Verification:** Compare `git log` churn and `wc -l` before/after; inspect `CODEOWNERS`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Refactors expand scope | High | Medium | Cap each extraction to one concern |
+| Ownership becomes nominal | Medium | Medium | Require actual review participation |
+
+**Open questions / assumptions:**
+- ASSUMPTION: Hotspot owners can be the same person initially, but must be distinct by Commit 13's exit.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-14 (accessed 2026-11-11).
+
+---
+
+## Commit 16: Decide Production Job Runtime (Monitor)
+
+**Status:** deferred
+**Priority:** P2
+**Depends on:** Commit 12
+**Evidence:** [`backend/app/jobs.py`](backend/app/jobs.py), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Make job durability an explicit product decision rather than an environment accident.
+
+**Research questions:**
+1. Is Celery mandatory in production?
+2. What happens to in-flight jobs on restart today?
+3. Should the thread fallback be local-only?
+
+**Current state:** `jobs.py` tries Celery and falls back to daemon threads. The module documents this as a v1 single-process trade-off.
+
+**Prior art / external signals:** Durable queues are standard for long-running audio jobs.
+
+**Scope:**
+
+In:
+- Document the supported runtime per environment.
+- Add a health signal when the fallback is active.
+- Define restart behavior.
+
+Out:
+- Replacing Celery.
+- Implementing a new queue.
+
+**Acceptance criteria:**
+- [ ] Production requires Celery or explicitly accepts thread fallback.
+- [ ] Health output reports the active job runtime.
+- [ ] A restart test documents job loss/retention behavior.
+
+**Verification:** Stop Redis/Celery in staging and inspect `/health` plus job status.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Silent job loss | Medium | High | Surface fallback in health checks |
+
+**Open questions / assumptions:**
+- ASSUMPTION: Production will use Celery; the fallback is for local development only.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-15 (accessed 2026-11-11).
+
+---
+
+## Commit 17: Unify Native and Web Database Implementations
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** Commit 3
+**Evidence:** [`src/db/client.native.ts`](src/db/client.native.ts), [`src/db/client.web.ts`](src/db/client.web.ts), [`AGENTS.md`](AGENTS.md), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Prevent silent data divergence between mobile and web.
+
+**Research questions:**
+1. Which behaviors differ between the two clients today?
+2. Can IndexedDB mirror SQLite semantics for every contract method?
+3. How should migration versions be aligned?
+
+**Current state:** The native client is 1,593 lines and the web client is 1,123; the diff is about 2,100 non-whitespace lines. `AGENTS.md:234-239` records 14 mobile migrations vs v4 web versioning, but `src/db/client.web.ts:97` currently writes `schema_version: 1`, so the version mapping itself needs verification.
+
+**Prior art / external signals:** A shared behavioral contract test suite is the cheapest way to keep two adapters aligned.
+
+**Scope:**
+
+In:
+- Define contract tests that run against both clients.
+- Document intentional platform differences.
+- Converge migration numbering or add a mapping.
+
+Out:
+- Replacing SQLite or IndexedDB.
+- Rewriting all persistence.
+
+**Acceptance criteria:**
+- [ ] Contract tests run against both clients in CI.
+- [ ] Every intentional difference is documented.
+- [ ] Migration versions have a single documented mapping.
+- [ ] No contract test is skipped on either platform.
+
+**Verification:** `npm run test`, inspect the contract suite results for both clients.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Web lacks SQLite semantics | High | High | Document emulation limits and test them |
+| Migration convergence breaks users | Medium | High | Add a mapping before renumbering |
+
+**Open questions / assumptions:**
+- BLOCKING: Confirm whether web supports existing users with v4 data.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-16 (accessed 2026-11-11).
+
+---
+
+## Commit 18: Add Tests for Critical Untested Paths
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** Commit 3
+**Evidence:** [`vitest.config.ts`](vitest.config.ts), `src/audio/`, `src/db/`, [`src/config.ts`](src/config.ts), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Cover the audio, persistence, and configuration paths users depend on most.
+
+**Research questions:**
+1. Which untested modules have the highest failure impact?
+2. What test harness is needed for audio and IndexedDB?
+3. What coverage increase is realistic in one commit?
+
+**Current state:** Vitest runs in a Node environment and includes only `src/**/*.test.ts`; no `.test.tsx` files exist. `GlobalAudioManager`, `recordSession.*`, both DB clients, and `config.ts` have no direct tests.
+
+**Prior art / external signals:** Testing Library plus jsdom covers components; dependency injection makes audio managers testable without devices.
+
+**Scope:**
+
+In:
+- Add jsdom and Testing Library.
+- Test `GlobalAudioManager`, `recordSession`, both DB clients, and `config.ts`.
+- Add a first batch of high-traffic component tests.
+
+Out:
+- Full component coverage.
+- Device-level audio accuracy tests.
+
+**Acceptance criteria:**
+- [ ] The named modules have direct tests.
+- [ ] Component tests run in CI.
+- [ ] Coverage for the named modules is recorded.
+- [ ] Tests do not require a physical device.
+
+**Verification:** `npm run test -- --coverage`, inspect per-file coverage.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Audio APIs are hard to mock | High | Medium | Introduce narrow interfaces first |
+| jsdom diverges from native | Medium | Medium | Keep platform logic behind adapters |
+
+**Open questions / assumptions:**
+- ASSUMPTION: The native audio modules can be tested through their platform stubs.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-17 (accessed 2026-11-11).
+
+---
+
+## Commit 19: Remove Unstripped Frontend Console Logging (Monitor)
+
+**Status:** deferred
+**Priority:** P2
+**Depends on:** None
+**Evidence:** `src/`, `app/`, `components/` (179 `console.*` calls), [`AGENTS.md`](AGENTS.md)
+
+**Goal:** Keep useful diagnostics without shipping noise to release builds.
+
+**Research questions:**
+1. Which logs are load-bearing diagnostics?
+2. Can a single logger honor the existing prefix convention?
+3. What should be stripped in production?
+
+**Current state:** 179 `console.*` calls remain across the frontend; many are prefixed but not gated.
+
+**Prior art / external signals:** A small logger with level gating is standard for mobile/web releases.
+
+**Scope:**
+
+In:
+- Add a logger module with levels and production gating.
+- Migrate high-volume modules first.
+- Document the logging convention.
+
+Out:
+- Removing diagnostics needed for support.
+- Backend logging changes.
+
+**Acceptance criteria:**
+- [ ] A frontend logger exists and is documented.
+- [ ] High-volume modules use it.
+- [ ] Production builds emit no debug-level logs.
+- [ ] The remaining raw `console.*` count is tracked.
+
+**Verification:** Build for production and inspect logs; `rg -c 'console\\.' src app components`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Removing useful logs | Medium | Low | Migrate by module, not globally |
+
+**Open questions / assumptions:**
+- ASSUMPTION: Debug logs are not required in release support bundles.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-18 (accessed 2026-11-11).
+
+---
+
+## Commit 20: Reduce Backend Suite Runtime and Duplicate Runs (Monitor)
+
+**Status:** deferred
+**Priority:** P2
+**Depends on:** Commit 2
+**Evidence:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml), [`.github/workflows/scoring-tests.yml`](.github/workflows/scoring-tests.yml), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Keep pull-request feedback fast while preserving full coverage on main.
+
+**Research questions:**
+1. Which tests are slowest and why?
+2. Which subset gives the best regression signal per minute?
+3. Can heavy model fixtures be cached?
+
+**Current state:** The full backend suite has a 45-minute CI timeout, and a second workflow reruns a large subset on the same triggers. There are 1,747 test functions.
+
+**Prior art / external signals:** PR subsets plus nightly full runs and fixture caching are common.
+
+**Scope:**
+
+In:
+- Define a fast PR subset and a nightly full run.
+- Remove duplicate workflow coverage.
+- Cache heavy fixtures where safe.
+
+Out:
+- Dropping tests.
+- Changing test semantics.
+
+**Acceptance criteria:**
+- [ ] PR feedback target is documented and met.
+- [ ] Full suite still runs on main/nightly.
+- [ ] No test file is executed twice on the same trigger.
+- [ ] Slowest tests are identified.
+
+**Verification:** CI timing comparison before/after; `pytest --durations=20`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| PR subset misses a regression | Medium | High | Keep the nightly full run and rotate the subset |
+| Fixture caching hides state | Low | Medium | Use read-only caches |
+
+**Open questions / assumptions:**
+- ASSUMPTION: Nightly runs are acceptable for the full MT3/model suites.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-19 (accessed 2026-11-11).
+
+---
+
+## Commit 21: Plan the Expo SDK 58 / React Native 0.88 Upgrade
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** Commit 6
+**Evidence:** [`package.json`](package.json), `npm outdated --json`, `npm audit --json`, [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Move the frontend to a supported SDK line without mixing feature work into the upgrade.
+
+**Research questions:**
+1. Which native modules block the upgrade?
+2. Does the JSI pitch detector and Detox environment survive SDK 58?
+3. Which Expo breaking changes touch routing, assets, or audio?
+
+**Current state:** Expo is on 54.0.35 (latest 58.0.24), React Native on 0.81.5 (latest 0.88.1), React on 19.1.0 (latest 19.3.1), and `react-native-audio-api` on 0.11.7 (latest 1.0.0). The direct `expo-router` advisory is fixed only in 58.0.31.
+
+**Prior art / external signals:** Expo's upgrade guide and `expo-doctor` are the canonical migration path.
+
+**Scope:**
+
+In:
+- Run the upgrade in an isolated branch.
+- Update native projects and verify device builds.
+- Run Detox smoke and Playwright route smoke.
+- Resolve the direct `expo-router` advisory.
+
+Out:
+- New product features.
+- Redesigning native modules.
+
+**Acceptance criteria:**
+- [ ] `npx expo-doctor` passes.
+- [ ] Android and iOS development builds succeed.
+- [ ] Detox smoke and Playwright route smoke pass.
+- [ ] `npm audit` no longer lists the direct `expo-router` high finding.
+- [ ] No feature behavior changes are included.
+
+**Verification:** `npx expo-doctor`, `npm run test`, `npm run test:ui`, `npm run test:mobile`, and device smoke tests.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Native module incompatibility | High | High | Spike on a branch; keep rollback tag |
+| Upgrade uncovers existing bugs | High | Medium | Fix only blocking issues in the upgrade PR |
+
+**Open questions / assumptions:**
+- BLOCKING: Confirm access to Android and iOS build environments.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-21 (accessed 2026-11-11); https://docs.expo.dev/workflow/upgrading-expo-sdk-walkthrough/ (accessed 2026-11-11) — upgrade steps.
+
+---
+
+## Commit 22: Split Backend God Modules and the Lesson Builder
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** Commit 18
+**Evidence:** [`backend/app/main.py`](backend/app/main.py), [`backend/app/analyze_audio.py`](backend/app/analyze_audio.py), [`backend/app/tasks.py`](backend/app/tasks.py), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Make the analysis pipeline reviewable and testable in stages.
+
+**Research questions:**
+1. Which inline `main.py` endpoints have clean router boundaries?
+2. Can the 807-line lesson builder be split without changing output?
+3. What complexity budget is enforceable in review?
+
+**Current state:** `main.py` is 1,248 lines with 30 inline endpoints. `build_lesson_json_from_librosa` is 807 lines, `analyze_job_task` is 327, `build_musicxml` is 322, and `_process_analyze_job` is 309.
+
+**Prior art / external signals:** Stage boundaries (ingest, analyze, transcribe, assemble) make long pipelines testable.
+
+**Scope:**
+
+In:
+- Extract `main.py` endpoints into routers until it is composition-only.
+- Split the lesson builder into named stages with boundary tests.
+- Add a function-length review budget.
+
+Out:
+- Changing the pipeline's output or model choices.
+- Frontend changes.
+
+**Acceptance criteria:**
+- [ ] `main.py` is under 300 lines and contains no feature endpoints.
+- [ ] The lesson builder is split into at least four testable stages.
+- [ ] Each stage has boundary tests.
+- [ ] Output is byte/structurally identical on a fixture lesson.
+- [ ] A complexity budget is documented.
+
+**Verification:** Compare fixture output before/after; `python -m pytest -q`; `wc -l backend/app/main.py`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Output drift during extraction | High | High | Golden-fixture comparison per stage |
+| Large diff is hard to review | High | Medium | Extract one stage per PR |
+
+**Open questions / assumptions:**
+- ASSUMPTION: Existing LessonJSON fixtures are sufficient for parity checks.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-22 (accessed 2026-11-11).
+
+---
+
+## Commit 23: Split Frontend God Screens into Hooks and Components
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** Commit 18
+**Evidence:** [`app/(tabs)/jam/index.tsx`](<app/(tabs)/jam/index.tsx>), [`app/session/study.tsx`](app/session/study.tsx), [`app/(tabs)/index.tsx`](<app/(tabs)/index.tsx>), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Make the largest screens reviewable and testable without behavior changes.
+
+**Research questions:**
+1. Which state and effects are domain logic versus presentation?
+2. What component boundaries reduce re-render cost?
+3. Which extracted hooks need tests first?
+
+**Current state:** The jam screen is 1,641 lines with 13 `useState` and 8 `useEffect`; study is 1,159 lines with 14 `useState`; home is 1,119 lines.
+
+**Prior art / external signals:** Container/presenter splits and custom hooks reduce screen complexity.
+
+**Scope:**
+
+In:
+- Extract domain logic into hooks.
+- Split render sections into components.
+- Add tests for extracted hooks.
+- Set a file-size warning threshold.
+
+Out:
+- Visual redesign.
+- Changing user flows.
+
+**Acceptance criteria:**
+- [ ] Each named screen is under 600 lines or has documented exceptions.
+- [ ] Extracted hooks have unit tests.
+- [ ] Playwright route smoke passes unchanged.
+- [ ] A file-size threshold is documented.
+
+**Verification:** `wc -l`, `npm run test`, `npm run test:ui`.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Behavior drift | Medium | High | Extract one section per PR with smoke tests |
+| Hook extraction increases re-renders | Medium | Medium | Profile the jam screen before/after |
+
+**Open questions / assumptions:**
+- ASSUMPTION: The current Playwright smoke set covers the affected screens.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-23 (accessed 2026-11-11).
+
+---
+
+## Commit 24: Remove the Unused `@tombatossals/react-chords` Dependency
+
+**Status:** ready
+**Priority:** P1
+**Depends on:** None
+**Evidence:** [`package.json`](package.json), `priorities-archive.md:2221`, [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Remove a dead dependency from install and audit surface.
+
+**Research questions:**
+1. Does any dynamic import or script reference the package?
+2. Is the hand-rolled SVG renderer the only chart path?
+3. Does removal change the lockfile unexpectedly?
+
+**Current state:** The package is declared at `package.json:37` but has zero imports. `priorities-archive.md` already records it as unused.
+
+**Prior art / external signals:** Dependency hygiene tooling (`depcheck`, `knip`) treats zero-import packages as removable; lockfile regeneration is the standard verification.
+
+**Scope:**
+
+In:
+- Remove the dependency and regenerate the lockfile.
+- Verify the chord diagram path still works.
+
+Out:
+- Replacing the chart renderer.
+- Any UI change.
+
+**Acceptance criteria:**
+- [ ] The package is absent from `package.json` and the lockfile.
+- [ ] `rg` finds no references.
+- [ ] `npm run lint` and `npm run test` pass.
+- [ ] Chord diagrams render on web and native.
+
+**Verification:** `npm install`, `npm run lint`, `npm run test`, and a manual chord-diagram check.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Hidden dynamic import | Low | Low | Grep the full repo, not only source imports |
+
+**Open questions / assumptions:**
+- ASSUMPTION: The hand-rolled renderer remains the production path.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-24 (accessed 2026-11-11).
+
+---
+
+## Commit 25: Refresh Stale Documentation and Add a Docs Index
+
+**Status:** ready
+**Priority:** P2
+**Depends on:** Commit 5
+**Evidence:** [`README.md`](README.md) lines 358 and 709, [`docs/`](docs/), [`AGENTS.md`](AGENTS.md), [`techdebt/REPORT.md`](techdebt/REPORT.md)
+
+**Goal:** Make onboarding docs accurate about the MT3-primary pipeline and easy to navigate.
+
+**Research questions:**
+1. Which README statements still describe Basic Pitch as the solo path?
+2. Does a docs index reduce time to find setup, evaluation, and migration guides?
+3. Which setup sections need a "last verified" date?
+
+**Current state:** `README.md:358` says MIDI export uses Basic Pitch, and `README.md:709` presents a basic-pitch-only pipeline as the "does the tech work" gate; MT3 is now primary and Basic Pitch is a fallback. There is no `docs/README.md` index, despite 19 `docs/**/*.md` files plus `AGENTS.md`.
+
+**Prior art / external signals:** Docs-as-code indexes and "last verified" dates are common in projects with large internal documentation sets.
+
+**Scope:**
+
+In:
+- Correct the MIDI-export claim to describe the GP5-to-MIDI exporter.
+- Rewrite the pipeline-gate passage for MT3 primary plus Basic Pitch fallback.
+- Add `docs/README.md` indexing active docs.
+- Add a "last verified" date to setup instructions.
+- Link the tech-debt report and backlog from the index.
+
+Out:
+- Rewriting research write-ups.
+- Moving docs to an external wiki.
+
+**Acceptance criteria:**
+- [ ] README MIDI-export copy describes the GP5-to-MIDI path, not Basic Pitch.
+- [ ] README pipeline copy describes MT3 primary plus Basic Pitch fallback.
+- [ ] `docs/README.md` links every active guide.
+- [ ] Setup sections carry a last-verified date.
+- [ ] `techdebt/REPORT.md` and `techdebt/backlog.json` are linked.
+
+**Verification:** Follow the index to every active doc; re-run the `rg` check.
+
+**Risks / mitigations:**
+
+| Risk | Likelihood | Impact | Mitigation |
+| --- | --- | --- | --- |
+| Index goes stale | Medium | Low | Add it to the release checklist |
+| Rewriting copy introduces new inaccuracies | Low | Medium | Cite the pipeline spec in `AGENTS.md` |
+
+**Open questions / assumptions:**
+- ASSUMPTION: Keeping the corpus in-repo remains more valuable than moving it to a wiki.
+
+**References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-26 (accessed 2026-11-11); [`techdebt/REPORT.md`](techdebt/REPORT.md) "Documentation and knowledge" (accessed 2026-11-11).
+
+---
+
+## Commit 26: Part 3 Blog Post — The Meta-Layer
 
 **Status:** deferred — after Commit 1 produces results
 **Priority:** P1

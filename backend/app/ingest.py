@@ -270,7 +270,7 @@ def ingest_youtube_or_upload_to_wav(
                     downloaded_wav_path.unlink(missing_ok=True)
                 downloads_dir.rmdir()  # Only removes if empty
             except OSError:
-                pass  # Ignore cleanup failures
+                logger.debug("download cleanup failed", exc_info=True)  # Ignore cleanup failures
     elif upload_path:
         src = Path(upload_path)
         # Security: prevent path traversal by requiring uploads to be under data dir

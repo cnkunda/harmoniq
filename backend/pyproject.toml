@@ -34,8 +34,11 @@ dependencies = [
     "pretty_midi>=0.2.10",
     "soundfile>=0.12.0",
     "scikit-learn>=1.3.0",
-    # Commit 106: Quantization-Aware Training — requires TF>=2.15
-    "tensorflow-model-optimization>=0.8.0",
+    "prometheus-client>=0.20",  # /metrics endpoint + fallback counters (Commit 8)
+    # Serving needs TensorFlow for CRNN/TFLite inference and legacy Keras 2
+    # (`TF_USE_LEGACY_KERAS=1`); tf-keras pulls TensorFlow. QAT-only tooling
+    # lives in the `training` extra (Commit 7).
+    "tf-keras>=2.15",
 ]
 
 # basic-pitch is no longer the primary solo transcription engine (replaced by MT3).
@@ -62,6 +65,11 @@ dev = [
     "lxml>=5.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=7.0",
+]
+training = [
+    # Commit 106: Quantization-Aware Training — requires TF>=2.15.
+    "tensorflow-model-optimization>=0.8.0",
 ]
 db = [
     "sqlalchemy>=2.0",
@@ -88,6 +96,15 @@ filterwarnings = [
     # Librosa can hit short internal frames during chroma_cqt; harmless for our summarize smoke test.
     "ignore:n_fft=1024 is too large for input signal:UserWarning",
 ]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 34.5
+precision = 2
+show_missing = true
 
 [tool.setuptools.packages.find]
 where = ["."]

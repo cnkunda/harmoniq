@@ -1,7 +1,8 @@
 import { Audio } from 'expo-av'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { API_BASE_URL } from '@/src/config'
+import { fetchOrientClip as requestOrientClip } from '@/src/api/orient'
+import { lessonFileUrl } from '@/src/utils/lessonAudio'
 
 type OrientClipState = {
   url: string | null
@@ -49,20 +50,8 @@ export function useOrientClip(lessonId: string | undefined) {
     setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
     try {
-      const response = await fetch(`${API_BASE_URL}/session/orient-clip`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: lessonId }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch orient clip: ${response.statusText}`)
-      }
-
-      const result = await response.json()
-      const url = result.wav_path
-        ? `${API_BASE_URL}/lesson-file?rel=${encodeURIComponent(result.wav_path)}`
-        : null
+      const result = await requestOrientClip({ job_id: lessonId })
+      const url = result.wav_path ? lessonFileUrl(result.wav_path) : null
 
       const next: OrientClipState = {
         url,

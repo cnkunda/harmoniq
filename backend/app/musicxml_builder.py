@@ -666,7 +666,7 @@ def _inject_beams(musicxml: str, beat_grid: BeatGrid) -> str:
                             try:
                                 duration = int(s[10:-11])
                             except ValueError:
-                                pass
+                                logger.debug("unparseable MusicXML duration token: %r", s)
 
                     # Check if beammable (eighth or shorter)
                     if note_type in ("eighth", "16th", "32nd", "64th"):
@@ -701,7 +701,7 @@ def _inject_beams(musicxml: str, beat_grid: BeatGrid) -> str:
                             try:
                                 current_offset += int(s[10:-11])
                             except ValueError:
-                                pass
+                                logger.debug("unparseable MusicXML duration token: %r", s)
 
     # Finalize any remaining notes
     if beat_notes:
@@ -1134,7 +1134,7 @@ def build_musicxml(
                     pos = midi_to_guitar_position(note.pitch)
                     pitch_to_position[pitch_key] = (pos.string, pos.fret)
             except ValueError:
-                pass
+                logger.debug("no guitar position for pitch key=%s", pitch_key, exc_info=True)
 
     # Keep track of notes that are tied across measures
     tied_notes_queue = []
@@ -1375,7 +1375,7 @@ def _attach_technical_elements(
                 m21.articulations.FretIndication(number=fret_num)
             )
     except ValueError:
-        pass
+        logger.debug("invalid string/fret articulation; skipping", exc_info=True)
 
 
 def _attach_technique_articulations(note_obj, techniques: list[str]) -> None:

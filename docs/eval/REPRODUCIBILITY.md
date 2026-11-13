@@ -209,6 +209,6 @@ cd backend
   tests/test_musicxml_builder.py
 ```
 
-The full `npm run test` still includes the pre-existing
-`designTokenConformance` repo-scan timeout under WSL; it is unrelated to the
-AMT work. The command above is the W6 verification path.
+The full `npm run test` now passes (88 files / 719 tests). The earlier
+`designTokenConformance` repo-scan timeout no longer reproduces; the narrowed
+command above remains useful when iterating on AMT-related source only.

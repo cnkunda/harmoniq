@@ -1,387 +1,495 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T19:48:40.239Z",
-  "routesAnalyzed": 30,
-  "totalUiGapsFound": 0,
+  "generatedAt": "2026-11-11T20:28:55.230Z",
+  "routesAnalyzed": 4,
+  "totalUiGapsFound": 8,
   "note": "Cosmetic-only fixes. Never change functionality or business logic. Deterministic gaps are DOM-measured and authoritative; vision gaps are advisory.",
   "summary": {
     "error": 0,
-    "warning": 0,
+    "warning": 8,
     "info": 0
   },
-  "waiversApplied": [
-    {
-      "id": "/session/tune::alignment",
-      "reason": "Vision-only advisory: moondream cannot resolve the faint tuner needle/score rendering (screen"
-    }
-  ],
+  "waiversApplied": [],
   "vision": {
     "parseFailures": 0,
     "errors": 0
   },
-  "allGapsByRoute": [],
+  "allGapsByRoute": [
+    {
+      "route": "/session/listen",
+      "gaps": [
+        {
+          "id": "/session/listen::layout-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Other\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)"
+          ],
+          "suggestedFix": {
+            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
+            "allowed": "container/layout props only"
+          }
+        },
+        {
+          "id": "/session/listen::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
+    },
+    {
+      "route": "/session/play",
+      "gaps": [
+        {
+          "id": "/session/play::layout-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[element-overflow] <div.flex-row.items-baseline.justify-between> \"Pitch targetsTab…\" overflows horizontally (scrollWidth 85 > clientWidth 80, overflow-x visible)",
+            "[element-overflow] <div.mt-2.5.flex-row.items-end> overflows horizontally (scrollWidth 170 > clientWidth 80, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)"
+          ],
+          "suggestedFix": {
+            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
+            "allowed": "container/layout props only"
+          }
+        },
+        {
+          "id": "/session/play::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
+    },
+    {
+      "route": "/session/slow",
+      "gaps": [
+        {
+          "id": "/session/slow::layout-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Other\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)"
+          ],
+          "suggestedFix": {
+            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
+            "allowed": "container/layout props only"
+          }
+        },
+        {
+          "id": "/session/slow::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
+    },
+    {
+      "route": "/session/study",
+      "gaps": [
+        {
+          "id": "/session/study::layout-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Other\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)"
+          ],
+          "suggestedFix": {
+            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
+            "allowed": "container/layout props only"
+          }
+        },
+        {
+          "id": "/session/study::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
+    }
+  ],
   "routes": [
-    {
-      "route": "/",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music streaming app with a dark brown and cream theme. The app is titled \"Good afternoon, Nkunda\" and has a \"Ready to play\" button. The app is designed to play songs from a library, and it has a \"Practice a song\" button. The app also has a \"Library\" button, which is a common feature in music streaming apps to help users find and access their favorite songs. The app has a \"Library\" button, which is a common feature in music streaming apps to help users find and access their favorite songs.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:31:55.145Z",
-      "gaps": []
-    },
-    {
-      "route": "/add-song",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a page with a dark brown and cream theme. The screen is divided into two columns, with the left column containing a list of options and the right column showing a menu. The options include \"Add Song\", \"Add Song\", \"Add Song\", and \"Add Song\". The menu offers options such as \"Audio\", \"Audio\", \"Audio\", and \"Audio\". The screen also displays a search bar, a drop-down menu, and a button. The screen is well-organized and easy to navigate, making it a user-friendly interface.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:32:48.521Z",
-      "gaps": []
-    },
-    {
-      "route": "/discover",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music streaming app with a dark brown and cream theme. The app is titled \"HISCOURSE\" and is open to the \"Library\" tab. The screen features a menu bar with several options, including \"Start Listening\", \"Library\", and \"Play\". The app also has a \"Library\" tab, which is currently empty. The screen displays a list of songs, including \"Dark Side of the Moon\" by Pink Floyd, and a \"Library\" tab with a \"Library\" button. The app also has a \"Library\" tab with a \"Library\" button.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:33:36.301Z",
-      "gaps": []
-    },
-    {
-      "route": "/jam",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music application called \"Music Mode\". The application is open and ready to use, with a dark brown and cream theme. The screen is divided into multiple sections, including a menu bar, a summary style, and a technical analysis section. The application is designed to help users learn and practice music, providing them with a structured learning experience.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:34:11.608Z",
-      "gaps": []
-    },
-    {
-      "route": "/jam-practice",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a dark brown and cream theme. The screen displays a message that reads \"This phrase has matching loop.\" The message is accompanied by a screenshot of a computer screen, which shows a music player with a \"Close\" button. The screenshot also contains a description of the music player, stating that it is a classical music player. The screen is not perfectly aligned, and the text is not perfectly centered.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:34:46.368Z",
-      "gaps": []
-    },
-    {
-      "route": "/jam/history",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a dark brown and cream theme with a large blank screen. The text \"JAM HISTORY\" is displayed at the top, and the text \"A MIRACLE OF BLUE-SHUFFLING\" is displayed at the bottom. The screen is empty, with no visible content or elements. The overall layout and design of the screenshot appear to be well-organized and visually appealing.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:35:13.504Z",
-      "gaps": []
-    },
-    {
-      "route": "/library",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe image shows a screenshot of a computer screen displaying a library page. The library page is open and has a dark brown background with white text. The text on the page is in a serif font, and it appears to be a music library page. The library page is titled \"Library\" and has a search bar at the top, allowing users to search for specific songs or albums. The library page also has a \"Quick Search\" button, which can be used to search for songs by a specific artist or album title. The library page is well-organized, with the search bar and the \"Quick Search\" button clearly visible.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:36:07.189Z",
-      "gaps": []
-    },
-    {
-      "route": "/listening",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music streaming app with a dark brown and cream theme. The app is titled \"HISCOURSE\" and is open to the \"Library\" tab. The screen features a menu bar with several options, including \"Start Listening\", \"Library\", and \"Play\". The app also has a \"Library\" tab, which is currently empty. The screen displays a list of songs, including \"Dark Side of the Moon\" by Pink Floyd, and a \"Library\" tab with a \"Library\" button. The app also has a \"Library\" tab with a \"Library\" button.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:36:56.831Z",
-      "gaps": []
-    },
-    {
-      "route": "/musicxml-render-test",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a dark brown and cream theme. The screen displays a list of options, including a \"Playing music\" button, a \"Library\" button, and a \"Playback\" button. The options are arranged in a row, with the \"Library\" button being the first one and the \"Playback\" button being the last one. The screen also shows a \"Loading\" message, indicating that the options are being loaded onto the screen.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:37:31.522Z",
-      "gaps": []
-    },
-    {
-      "route": "/onboarding",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a dark brown and cream theme. The screen is divided into two columns, with the left column containing a message and the right column showing a map. The message is in a yellow font and reads \"First time here. Let's find out what you're interested in. There are two types of music you can listen to. The first type is a quick boost of energy, and the second type is a slow boost of energy. After listening to both types, you can try them out. We track patterns in your listening habits, and we suggest you try them out. After trying them out, you can continue to improve your experience. We suggest you try them out. We suggest you try them out. We suggest you try them out.\" The map on the right side of the screen is a simple line graph with two lines, one for each type of music. The left side of the screen has a message in a yellow font that reads \"Let's find out what you're interested in. There are two types of music you can listen to. The first",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:38:37.943Z",
-      "gaps": []
-    },
-    {
-      "route": "/onboarding/mic",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a dark brown and cream theme. The screen displays a message box with a microphone icon, indicating that the user is about to place a new voice recording. The message box also provides instructions on how to use the microphone. The screen is well-organized, with the microphone icon placed in the top left corner and the instructions displayed in the bottom right corner. The overall layout and design of the message box suggest that it is a user-friendly interface, guiding the user through the process of setting up the microphone.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:39:12.626Z",
-      "gaps": []
-    },
-    {
-      "route": "/onboarding/phrase/0",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a word processing document open, displaying a page titled \"Play reference\". The document appears to be a music recording or score, with a score sheet or a list of notes visible on the screen. The document is titled \"Piece 1 - Steady Pocket\" and is open in a word processing program. The screen is in a dark brown and cream color scheme, which complements the dark brown and cream theme of the music recording or score.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:40:04.174Z",
-      "gaps": []
-    },
-    {
-      "route": "/onboarding/results",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a webpage with a dark brown and cream theme. The text \"Your baseline will appear here\" is displayed in a white box at the top of the screen. The text \"Compile notes\" is also present in the same box. The text \"Start placement phrases\" is located below the \"Compile notes\" box. The text \"Your baseline will appear here\" is located at the bottom of the screen. The text \"Compile notes\" is located at the top of the screen. The text \"Start placement phrases\" is located at the bottom of the screen. The text \"Compile notes\" is located at the top of the screen. The text \"Start placement phrases\" is located at the bottom of the screen. The text \"Compile notes\" is located at the top of the screen. The text \"Start placement phrases\" is located at the bottom of the screen. The text \"Compile notes\" is located at the top of the screen. The text \"Start placement phrases\" is located at the bottom of the screen.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:41:04.888Z",
-      "gaps": []
-    },
-    {
-      "route": "/onboarding/taste-quiz",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a search bar with a list of names of artists. The names are arranged in a grid format, and the search bar is open. The screen is in a dark brown and cream color scheme, which complements the dark brown and cream theme of the app. The app appears to be a music streaming app, as indicated by the search bar and the presence of artists' names. The app is open and ready to use, providing a platform for users to search for and listen to their favorite artists.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:41:41.003Z",
-      "gaps": []
-    },
-    {
-      "route": "/progress",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a page on a computer screen displaying a progress bar and a list of instructions. The progress bar is located in the top left corner of the screen, and the instructions are displayed in the center of the screen. The screen is set against a dark brown background, and the text is written in a cream color. The instructions appear to be in a darker shade of brown, which contrasts with the lighter background. The layout of the instructions seems to be well-organized, with each step clearly outlined.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:42:17.473Z",
-      "gaps": []
-    },
-    {
-      "route": "/progress/pulse",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a chord pulse app. The app is open and ready to use, with a dark brown and cream theme. The app is designed to help users learn and practice music, with a focus on chord progressions. The app provides a user interface with various options and settings, such as a timer, a progress bar, and a chart. The app is currently open and ready to use, with no visible issues or problems.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:42:39.927Z",
-      "gaps": []
-    },
-    {
-      "route": "/review-archive/demo-session",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a page from a music software, possibly a music composition or editing software. The page is titled \"Back Journal\" and has a rating system, suggesting it is a tool for musicians to track their progress and performance. The page is organized with columns and rows, which are likely used to store and display information about the user's work.\n\nThe screen also shows a list of columns and rows, which could be used to store various types of data, such as notes, chords, or even time-stamps. The software might be used to create, edit, or perform music, and the rating system could be used to rate the quality of the user's work or provide feedback on their performance.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:43:18.833Z",
-      "gaps": []
-    },
-    {
-      "route": "/scale-explorer",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music player page with a list of songs. The screen is divided into two columns, with the left column containing the names of the songs and the right column displaying the artists' names. The screen is well-organized, and the songs are clearly labeled, making it easy for users to navigate and select their desired music. The dark brown and cream theme complements the overall design, creating a visually appealing and harmonious display.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:43:44.116Z",
-      "gaps": []
-    },
     {
       "route": "/session/listen",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a music app open, displaying a music listening app. The app is titled \"Listen\" and has a menu bar with options for \"Class\", \"Next Study\", and \"Back\" at the bottom. The app is open to a page with a music listening app, and the screen is black with a brown border. The app is located in the upper right corner of the screen.",
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music learning app. The app is open to the \"Listen\" tab, which is located at the top of the screen. The app has a dark brown and cream theme, which is consistent with the overall design. The screen is divided into two sections, with the left side being the main part of the app and the right side being a smaller section. The app has a user interface with various buttons and options, including a \"Class\" button, a \"Next Study\" button, and a \"Subtitles\" button. The app also has a \"Current Lesson\" button, which is currently active. The app has a rating of 8.4 stars, indicating that it is highly rated and well-liked by users.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:44:06.453Z",
-      "gaps": []
-    },
-    {
-      "route": "/session/mood-check",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a dark brown and cream theme. The main focus is a computer screen with a message asking \"How are you feeling today?\". The message is displayed in a simple, easy-to-read font, and the background is dark brown. The screen also has a small amount of white text, which is not the main focus of the image. The overall appearance of the image is clear and easy to understand.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:44:31.428Z",
-      "gaps": []
-    },
-    {
-      "route": "/session/musical-tolerance",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a dark brown and cream theme. The screen displays a message box with a list of instructions for choosing a scoring mode. The instructions include selecting a technique, choosing a technique, and selecting a technique for writing music. The instructions are presented in a clear and organized manner, making it easy for the user to follow along. The dark brown and cream theme complements the instructions, creating a visually appealing and professional appearance.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:44:53.235Z",
-      "gaps": []
+      "deterministicFindings": [
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Other\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "detail": "14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+        }
+      ],
+      "analyzedAt": "2026-11-11T20:24:45.574Z",
+      "gaps": [
+        {
+          "id": "/session/listen::layout-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Other\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)"
+          ],
+          "suggestedFix": {
+            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
+            "allowed": "container/layout props only"
+          }
+        },
+        {
+          "id": "/session/listen::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
     },
     {
       "route": "/session/play",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music app with a music sheet displayed on the screen. The music sheet is in a dark brown and cream color scheme, and it appears to be a guitar sheet music. The app is open, and the user is in the process of reviewing the sheet music. The app is titled \"Play\" and is located in the upper right corner of the screen. The user is at the \"Play\" tab, and the sheet music is displayed on the screen.",
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music production software interface. The interface is dark brown and cream in color, and it features a menu bar with various options for the user to navigate and interact with the software. The screen displays a list of options, including \"Play\", \"Playback\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"Volume\", \"",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:45:15.099Z",
-      "gaps": []
-    },
-    {
-      "route": "/session/review",
-      "viewport": {
-        "description": "[viewport.png]\n\nThere are no problems with the app screenshot. The app appears to be functioning correctly and is ready for use.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:45:22.822Z",
-      "gaps": []
+      "deterministicFindings": [
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<div.flex-row.items-baseline.justify-between> \"Pitch targetsTab…\" overflows horizontally (scrollWidth 85 > clientWidth 80, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<div.mt-2.5.flex-row.items-end> overflows horizontally (scrollWidth 170 > clientWidth 80, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Other\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "detail": "14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+        }
+      ],
+      "analyzedAt": "2026-11-11T20:25:57.763Z",
+      "gaps": [
+        {
+          "id": "/session/play::layout-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[element-overflow] <div.flex-row.items-baseline.justify-between> \"Pitch targetsTab…\" overflows horizontally (scrollWidth 85 > clientWidth 80, overflow-x visible)",
+            "[element-overflow] <div.mt-2.5.flex-row.items-end> overflows horizontally (scrollWidth 170 > clientWidth 80, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)"
+          ],
+          "suggestedFix": {
+            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
+            "allowed": "container/layout props only"
+          }
+        },
+        {
+          "id": "/session/play::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
     },
     {
       "route": "/session/slow",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music production software interface. The interface is designed with a dark brown and cream theme, and it features a music production screen with a progress bar and a button labeled \"Next Play\". The progress bar shows that the song is in progress, and the button is ready to play the next track.\n\nThere are a few elements on the screen, including a progress bar, a button, and a label. The progress bar is located in the center of the screen and shows that the song is in the middle of a process. The button is positioned to the right of the progress bar and is labeled \"Next Play\". The label is located at the bottom of the screen and is positioned to the right of the button.",
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music software interface. The interface is designed with a dark brown and cream color scheme, and it features a menu bar with various options for adjusting the music settings. The screen is divided into two sections, with the left section being the main part of the interface and the right section being a smaller section. The interface is well-organized, and the text is legible, making it easy for the user to navigate and make adjustments to their music settings.\n\nThere are several options available on the screen, including adjusting the speed of the music, changing the volume, and selecting different audio settings. The interface also provides a way to play music, with a button labeled \"Next Play\" at the bottom of the screen. The overall design and layout of the music software interface appear to be well-designed and user-friendly, making it easy for the user to navigate and make adjustments to their music settings.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:45:58.811Z",
-      "gaps": []
+      "deterministicFindings": [
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Other\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "detail": "14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+        }
+      ],
+      "analyzedAt": "2026-11-11T20:27:56.542Z",
+      "gaps": [
+        {
+          "id": "/session/slow::layout-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Other\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)"
+          ],
+          "suggestedFix": {
+            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
+            "allowed": "container/layout props only"
+          }
+        },
+        {
+          "id": "/session/slow::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
     },
     {
       "route": "/session/study",
       "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music learning app. The app is designed for beginners and is focused on teaching them how to play guitar. The screen is divided into multiple columns, each containing a different lesson or tutorial. The app is in the process of loading, and the user is waiting for it to load. The app is currently in the \"Study\" phase, which means it is in the process of learning and practicing guitar. The app is designed to help users learn guitar by providing step-by-step instructions and practice exercises.",
+        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music production software interface. The interface is dark brown and cream in color, and it features a study screen with various options and settings. The screen displays a list of options, including a study mode, a study playlist, and a study progress bar. The study mode is currently active, and the study playlist is displayed on the screen. The study progress bar shows that the study is currently in progress, with a total of 844 seconds remaining. The interface also includes a section for the user to navigate and interact with the software.",
         "verdict": "pass",
         "defects": []
       },
       "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:46:24.775Z",
-      "gaps": []
-    },
-    {
-      "route": "/session/tune",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a music player page with a note and a score. The music player is open, and the screen is dark, which makes it difficult to read the text. The note and score are not aligned properly, and the text appears to be in a foreign language. The screen is also blurry, which could make it challenging to read the details. The music player is not playing any music at the moment, and there are no visible errors or issues with the player itself.",
-        "verdict": "fail",
-        "defects": [
-          "The note and score are not aligned properly, and the text appears to be in a foreign language."
-        ]
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:46:47.870Z",
-      "gaps": []
-    },
-    {
-      "route": "/session/warmup",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen with a session warm-up screen. The screen displays a message that reads \"Session warm-up session available. This does not include a warm-up for current step. You continue to the next step. You can continue to the next step. This session is not available.\" The screen also shows a button that says \"Continue to next step\" and a button that says \"Back to previous step.\" The screen is in a dark brown and cream color scheme, and the text is written in a dark brown color.\n\nThere are no errors or issues visible in the screenshot. The session warm-up screen is functioning correctly, and the user can proceed to the next step as indicated by the buttons.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:47:22.910Z",
-      "gaps": []
-    },
-    {
-      "route": "/settings",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a computer screen displaying a user interface with a dark brown and cream theme. The interface is focused on a settings page, which is titled \"Settings\" and has a list of options. The screen also shows a progress bar, indicating that the user is in the process of customizing their experience. The interface is well-organized, with the settings page being the main focus, and the progress bar providing a visual representation of the user's progress.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:47:51.687Z",
-      "gaps": []
-    },
-    {
-      "route": "/settings/analytics",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a screenshot of a computer screen with a dark brown and cream theme. The screen displays a message that reads \"Complete a session only from this device only\". The message is written in a white font and is positioned in the center of the screen. The background of the screen is black, and the text is written in a white font. The screen is centered on the image, and the overall layout appears to be well-organized and clean.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:48:14.917Z",
-      "gaps": []
-    },
-    {
-      "route": "/settings/feedback",
-      "viewport": {
-        "description": "[viewport.png]\n\nThe screenshot shows a screenshot of a website, possibly a review or feedback system, with a dark brown and cream theme. The main focus of the screenshot is a feedback form, which is displayed on the screen. The form has a gray background and is filled with text, including a message that reads \"Review feedback\". The form also has a \"No feedback yet\" button, indicating that the feedback has not been processed yet. The screenshot is in a standard format, with the text and layout being easily readable.",
-        "verdict": "pass",
-        "defects": []
-      },
-      "states": {},
-      "deterministicFindings": [],
-      "analyzedAt": "2026-11-06T19:48:40.238Z",
-      "gaps": []
+      "deterministicFindings": [
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "element-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "detail": "<button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Other\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)"
+        },
+        {
+          "check": "small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "detail": "14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+        }
+      ],
+      "analyzedAt": "2026-11-11T20:28:55.229Z",
+      "gaps": [
+        {
+          "id": "/session/study::layout-overflow",
+          "issue": "Layout overflow / clipping",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\" overflows horizontally (scrollWidth 21 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Vocals\" overflows horizontally (scrollWidth 22 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Piano\" overflows horizontally (scrollWidth 19 > clientWidth 12, overflow-x visible)",
+            "[element-overflow] <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Other\" overflows horizontally (scrollWidth 20 > clientWidth 12, overflow-x visible)"
+          ],
+          "suggestedFix": {
+            "approach": "Add flex-shrink to overflowing children, fix container sizing, or overflow-hidden on the container.",
+            "allowed": "container/layout props only"
+          }
+        },
+        {
+          "id": "/session/study::small-tap-target",
+          "issue": "Tap target too small",
+          "severity": "warning",
+          "source": "deterministic",
+          "evidence": [
+            "[small-tap-target] 14x51 tap target on 6 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Guitar\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Bass\", <button.r-cursor-1loqt21.r-touchAction-1otgn73.w-[32%]> \"Drums\" (+3 more)"
+          ],
+          "suggestedFix": {
+            "approach": "Increase the control's hit area to at least 28px with padding; keep the visual size if it must stay compact.",
+            "allowed": "padding/size props only"
+          }
+        }
+      ]
     }
   ],
   "designSystem": {
@@ -390,5 +498,5 @@
     "components": "AnimatedPressable, NoiseOverlay, WoodGradient, lucide-react-native",
     "animation": "react-native-reanimated, spring/timing presets in src/constants/animations.ts"
   },
-  "isComplete": true
+  "isComplete": false
 }

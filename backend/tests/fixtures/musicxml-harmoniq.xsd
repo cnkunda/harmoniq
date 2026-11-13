@@ -213,6 +213,9 @@
   <xs:element name="note">
     <xs:complexType>
       <xs:sequence>
+        <xs:element name="chord" minOccurs="0">
+          <xs:complexType><xs:sequence/></xs:complexType>
+        </xs:element>
         <xs:element name="pitch" minOccurs="0">
           <xs:complexType>
             <xs:sequence>

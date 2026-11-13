@@ -13,7 +13,7 @@ import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/Listen
 import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
 import { correctChord } from '@/src/api/analyze'
-import { API_BASE_URL } from '@/src/config'
+import { fetchOrientClip as requestOrientClip } from '@/src/api/orient'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
@@ -21,7 +21,7 @@ import { useIsDemoLesson } from '@/src/demo/useIsDemoLesson'
 import { useStepCoachNarration } from '@/src/session/useStepCoachNarration'
 import { useCorrectionStore } from '@/src/stores/correctionStore'
 import { useLessonStore } from '@/src/stores/lessonStore'
-import { sectionSeekSeconds } from '@/src/utils/lessonAudio'
+import { lessonFileUrl, sectionSeekSeconds } from '@/src/utils/lessonAudio'
 import { applyCorrectionsToChordTimeline } from '@/src/utils/applyCorrections'
 import { MusicProvider, useMusicActions } from '@/src/context/MusicContext'
 import type { PlaybackTickContext } from '@/src/session/useSessionSmartScroll'
@@ -145,20 +145,14 @@ function ListenScreenInner() {
       setOrientIsLoading(true)
       setOrientError(null)
       try {
-        const response = await fetch(`${API_BASE_URL}/session/orient-clip`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            job_id: lesson.job_id,
-            style_label: lesson.style_label,
-            technique: null,
-            key: lesson.key,
-            bpm: lesson.tempo,
-          }),
+        const data = await requestOrientClip({
+          job_id: lesson.job_id,
+          style_label: lesson.style_label,
+          technique: null,
+          key: lesson.key,
+          bpm: lesson.tempo,
         })
-        if (!response.ok) throw new Error(`Failed to fetch orient clip: ${response.statusText}`)
-        const data = await response.json()
-        setOrientClipUrl(data.wav_path)
+        setOrientClipUrl(data.wav_path ? lessonFileUrl(data.wav_path) : null)
         setOrientAnnotation(data.annotation)
       } catch (e) {
         console.error('Failed to fetch orient clip:', e)

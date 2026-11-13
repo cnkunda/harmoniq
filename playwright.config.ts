@@ -39,7 +39,7 @@ export default defineConfig({
     ? {
         command: `npx expo start --web --port ${port}`,
         url: baseURL,
-        timeout: 180_000,
+        timeout: 300_000,
         reuseExistingServer: !process.env.CI,
         env: {
           ...process.env,

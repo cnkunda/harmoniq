@@ -50,9 +50,39 @@ const LESSON = {
       coach_explanation: "Keep the pick angle consistent so the dynamic lift comes from the line, not volume.",
     },
   ],
-  stems: {},
+  stems: {
+    guitar: "jobs/ux-audit-lesson-v1/stems/guitar.wav",
+    bass: "jobs/ux-audit-lesson-v1/stems/bass.wav",
+    drums: "jobs/ux-audit-lesson-v1/stems/drums.wav",
+    vocals: "jobs/ux-audit-lesson-v1/stems/vocals.wav",
+    piano: "jobs/ux-audit-lesson-v1/stems/piano.wav",
+    other: "jobs/ux-audit-lesson-v1/stems/other.wav",
+  },
   lyrics_aligned: [],
 };
+
+/** Minimal 0.1s silent mono WAV so stem controls render with a loadable source. */
+function tinyWav(): Buffer {
+  const sampleRate = 44100;
+  const samples = 4410;
+  const buf = Buffer.alloc(44 + samples * 2);
+  buf.write("RIFF", 0);
+  buf.writeUInt32LE(36 + samples * 2, 4);
+  buf.write("WAVE", 8);
+  buf.write("fmt ", 12);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(sampleRate, 24);
+  buf.writeUInt32LE(sampleRate * 2, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write("data", 36);
+  buf.writeUInt32LE(samples * 2, 40);
+  return buf;
+}
+
+const TINY_WAV_BUFFER = tinyWav();
 
 const LESSON_ROW = {
   job_id: JOB_ID,
@@ -372,6 +402,13 @@ export async function seedUxAuditState(page: Page): Promise<void> {
 }
 
 export async function installUxAuditApiMocks(page: Page): Promise<void> {
+  await page.route("**/lesson-file*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "audio/wav",
+      body: TINY_WAV_BUFFER,
+    });
+  });
   await page.route("**/practice/plan", async (route) => {
     await route.fulfill({
       status: 200,

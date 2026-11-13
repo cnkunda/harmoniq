@@ -15,6 +15,8 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
+from pydantic import ValidationError
+
 from app.ingest import SourceMetadata, resolve_lesson_titles
 from app.pipeline_proof import LibrosaSummary, NoteEvent, librosa_summarize
 from app.style_detect import infer_style_from_librosa_summary
@@ -41,11 +43,12 @@ from app.tab_rhythm import build_rhythm_gp5_base64, merge_rhythm_into_gp5
 
 # Backwards-compatible seam used by tests and earlier callers.
 generate_tab_artifacts_for_guitar_stem = generate_tab_artifacts_from_note_events
-from app.beat_grid import estimate_beat_grid
+from app.beat_grid import BeatGridComputationError, estimate_beat_grid
 from app.chord_enrichment import assign_roman_numerals
 from app.chord_inference import infer_chords, infer_chords_dual_path
 from app.instrument_confusion import compute_per_section_confusion, heuristic_mt3_section_confusion
 from app.confidence_thresholds import HEDGE_TRIGGER, confidence_band
+from app.metrics import record_fallback
 from app.transcription_confidence import (
     chord_section_confidence,
     composite_transcription_confidence,
@@ -294,6 +297,7 @@ def build_lesson_json_from_librosa(
     try:
         summary = librosa_summarize(analysis_path)
     except Exception:
+        record_fallback("librosa_summary")
         logger.exception(
             "librosa analysis failed for job_id=%s audio_path=%s",
             job_id,
@@ -314,7 +318,8 @@ def build_lesson_json_from_librosa(
     try:
         beat_grid_dict = estimate_beat_grid(analysis_path)
         beat_grid = BeatGrid.model_validate(beat_grid_dict)
-    except Exception:
+    except (BeatGridComputationError, ValidationError):
+        record_fallback("beat_grid", "invalid_data")
         logger.exception("beat grid estimation failed for job_id=%s; using fallback", job_id)
         beat_grid = BeatGrid(
             bpm=summary.tempo_bpm,
@@ -376,7 +381,8 @@ def build_lesson_json_from_librosa(
                     "stem_routing job_id=%s chord_mix stems=%s → %s",
                     job_id, routing_hints.chord_mix_stems, chord_mix_path,
                 )
-            except Exception:
+            except (OSError, ValueError, KeyError):
+                record_fallback("stem_mix")
                 logger.exception(
                     "stem_routing job_id=%s chord_mix failed; falling back to %s",
                     job_id, chord_mix_path,
@@ -450,6 +456,7 @@ def build_lesson_json_from_librosa(
                 mt3_result.solo_leakage_ratio,
             )
     except Exception:
+        record_fallback("mt3_chords", "unavailable")
         logger.exception(
             "MT3 transcription failed for job_id=%s; falling back to CRNN",
             job_id,
@@ -489,6 +496,7 @@ def build_lesson_json_from_librosa(
                 job_id, len(chord_timeline.events), use_dual_path,
             )
         except Exception:
+            record_fallback("crnn_chords")
             logger.exception("CRNN chord inference failed for job_id=%s", job_id)
             chord_timeline = ChordTimeline(events=[])
             transcription_source = "none"
@@ -515,6 +523,7 @@ def build_lesson_json_from_librosa(
                 job_id, len(solo_notes.notes),
             )
         except Exception:
+            record_fallback("solo_inference")
             logger.exception("solo inference failed for job_id=%s", job_id)
             solo_notes = SoloNotes(notes=[])
 
@@ -529,6 +538,7 @@ def build_lesson_json_from_librosa(
                 len(solo_notes.notes),
             )
     except Exception:
+        record_fallback("tab_positions")
         logger.exception("tab position assignment failed for job_id=%s", job_id)
 
     # T3: per-note lead/rhythm roles (section profile stays a summary).
@@ -545,6 +555,7 @@ def build_lesson_json_from_librosa(
             dominant_part_role(role_stats),
         )
     except Exception:
+        record_fallback("part_roles")
         logger.exception("part-role assignment failed for job_id=%s", job_id)
 
     # Commit 116: Assign deterministic Roman numeral labels to all chord events
@@ -584,6 +595,7 @@ def build_lesson_json_from_librosa(
                 job_id, harmonized_solo.note_count, len(per_bar_analysis),
             )
         except Exception:
+            record_fallback("solo_harmony")
             logger.exception("solo harmony analysis failed for job_id=%s; skipping", job_id)
 
     # Commit 117: Run Whisper before section construction so refinement has
@@ -623,6 +635,7 @@ def build_lesson_json_from_librosa(
                 len(refined_segments),
             )
         except Exception:
+            record_fallback("section_refinement")
             logger.exception(
                 "section refinement failed for job_id=%s; using original segments",
                 job_id,
@@ -661,6 +674,7 @@ def build_lesson_json_from_librosa(
                     len(set(ri["repeat_group_id"] for ri in repeat_results)),
                 )
         except Exception:
+            record_fallback("repeat_detection")
             logger.exception(
                 "repeat detection failed for job_id=%s; labels unchanged", job_id
             )
@@ -770,6 +784,7 @@ def build_lesson_json_from_librosa(
                 )
                 section_dict["musicxml"] = section_musicxml
             except Exception:
+                record_fallback("section_musicxml")
                 logger.exception(
                     "Per-section MusicXML generation failed for section %d of job_id=%s",
                     i, job_id,
@@ -801,6 +816,7 @@ def build_lesson_json_from_librosa(
             song_performance.confidence,
         )
     except Exception:
+        record_fallback("performance_profile")
         logger.exception("performance profile detection failed for job_id=%s", job_id)
 
     # Commit 156: composite transcription confidence replaces the vocals-only
@@ -878,6 +894,7 @@ def build_lesson_json_from_librosa(
                             )
                             artifacts["tab_full_gp5_base64"] = base64.b64encode(merged).decode("ascii")
                         except Exception:
+                            record_fallback("rhythm_merge")
                             logger.exception(
                                 "rhythm track merge failed for section %r of job_id=%s",
                                 sec.label,
@@ -885,6 +902,7 @@ def build_lesson_json_from_librosa(
                             )
                     section_dict.update(artifacts)
                 except Exception:
+                    record_fallback("section_tab")
                     logger.exception(
                         "per-section tab generation failed for section %r of job_id=%s",
                         sec.label,
@@ -914,8 +932,10 @@ def build_lesson_json_from_librosa(
                         )
                         tab_artifacts["tab_full_gp5_base64"] = base64.b64encode(merged).decode("ascii")
                     except Exception:
+                        record_fallback("rhythm_merge")
                         logger.exception("lesson-level rhythm merge failed for job_id=%s", job_id)
         except Exception:
+            record_fallback("lesson_tab")
             logger.exception("lesson-level tab generation failed for job_id=%s", job_id)
 
     style = infer_style_from_librosa_summary(summary)
@@ -1015,6 +1035,7 @@ def build_lesson_json_from_librosa(
             )
             logger.info("MusicXML generated for job_id=%s, length=%d chars", job_id, len(musicxml_str))
     except Exception:
+        record_fallback("lesson_musicxml")
         logger.exception("MusicXML generation failed for job_id=%s; continuing without it", job_id)
 
     lesson = LessonJSON(
@@ -1061,7 +1082,8 @@ def build_lesson_json_from_librosa(
             job_dir.mkdir(parents=True, exist_ok=True)
             (job_dir / "score.musicxml").write_text(musicxml_str, encoding="utf-8")
             logger.info("Persisted score.musicxml for job_id=%s", job_id)
-        except Exception:
+        except OSError:
+            record_fallback("score_persist")
             logger.exception("Failed to persist score.musicxml for job_id=%s", job_id)
 
     full_gp5 = tab_artifacts.get("tab_full_gp5_base64") if tab_artifacts else None

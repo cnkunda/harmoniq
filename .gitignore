@@ -62,9 +62,16 @@ playwright/.cache/
 test-results/
 .detox/
 
+# Test coverage reports
+/coverage/
+backend/.coverage
+backend/coverage.xml
+backend/htmlcov/
+
 # Backend / analysis artifacts (see PRIORITIES 0.5)
 backend/data/
 backend/data/smoke_test/
+backend/pip-audit.json
 *.wav
 !assets/demo-lesson/*.wav
 *.gp5

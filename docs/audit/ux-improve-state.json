@@ -1,11 +1,26 @@
 {
-  "iteration": 20,
+  "iteration": 22,
   "fixedGapIds": [],
   "lastReportPath": "C:\\workspace\\harmoniq\\docs\\audit\\ui-feedback-report.json",
-  "resolvedGapIds": [
-    "/library::layout-overflow",
-    "/session/tune::alignment"
+  "resolvedGapIds": [],
+  "newGapIds": [
+    "/session/listen::layout-overflow",
+    "/session/listen::small-tap-target",
+    "/session/play::layout-overflow",
+    "/session/play::small-tap-target",
+    "/session/slow::layout-overflow",
+    "/session/slow::small-tap-target",
+    "/session/study::layout-overflow",
+    "/session/study::small-tap-target"
   ],
-  "newGapIds": [],
-  "remainingGapIds": []
+  "remainingGapIds": [
+    "/session/listen::layout-overflow",
+    "/session/listen::small-tap-target",
+    "/session/play::layout-overflow",
+    "/session/play::small-tap-target",
+    "/session/slow::layout-overflow",
+    "/session/slow::small-tap-target",
+    "/session/study::layout-overflow",
+    "/session/study::small-tap-target"
+  ]
 }

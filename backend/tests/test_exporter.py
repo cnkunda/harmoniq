@@ -93,10 +93,11 @@ def test_export_musicxml_from_json_basic():
     # 4. Parse MusicXML with music21 and assert on content
     score = music21.converter.parse(musicxml_str)
 
-    # Check basic score structure
-    assert len(score.parts) == 1
+    # Check basic score structure: full score emits lead + rhythm parts.
+    assert len(score.parts) == 2
     part = score.parts[0]
     assert part.partName == "Lead Sheet"
+    assert score.parts[1].partName == "Rhythm"
 
     # Check measures
     measures = list(part.getElementsByClass('Measure'))

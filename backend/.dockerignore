@@ -1,0 +1,41 @@
+# Python virtual environments and caches
+.venv/
+.venv-*/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+pytest.log
+
+# Scratch test artifacts
+.tmp_test_data_*/
+
+# Local data (mounted by docker-compose at runtime)
+data/
+
+# Secrets
+.env
+.env.*
+
+# Version control / IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Container files (not needed inside the image)
+Dockerfile
+Dockerfile.*
+.dockerignore
+
+# Tests are not needed at runtime
+tests/
+
+# Logs
+*.log

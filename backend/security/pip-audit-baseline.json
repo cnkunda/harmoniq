@@ -1,0 +1,28 @@
+{
+  "reviewed": "2026-11-12",
+  "owner": "cnkunda",
+  "expires": "2026-12-12",
+  "reason": "torch==2.5.1 is pinned for Demucs/torchaudio compatibility. Upgrading PyTorch (and Demucs) requires separate compatibility testing and is out of scope for Commit 7. Re-review monthly and when the torch upgrade is scheduled.",
+  "accepted_ids": [
+    "PYSEC-2025-189",
+    "PYSEC-2025-190",
+    "PYSEC-2025-191",
+    "PYSEC-2025-192",
+    "PYSEC-2025-193",
+    "PYSEC-2025-194",
+    "PYSEC-2025-195",
+    "PYSEC-2025-198",
+    "PYSEC-2025-203",
+    "PYSEC-2025-204",
+    "PYSEC-2025-205",
+    "PYSEC-2025-206",
+    "PYSEC-2025-207",
+    "PYSEC-2025-208",
+    "PYSEC-2025-209",
+    "PYSEC-2025-41",
+    "PYSEC-2026-139",
+    "PYSEC-2026-1856",
+    "PYSEC-2026-1970",
+    "PYSEC-2026-2286"
+  ]
+}

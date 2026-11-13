@@ -33,7 +33,7 @@ npx expo run:ios             # macOS only: Xcode + CocoaPods; run `cd ios && pod
 
 # Backend (Python 3.11+, from backend/)
 python -m venv .venv-wsl && source .venv-wsl/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev]" -c constraints.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # MT3 (primary transcription engine) — downloads ~600MB checkpoint
@@ -54,6 +54,7 @@ mrt models init && mrt models download mrt2_small
 |---------|-------------|
 | `npm run lint` | `tsc --noEmit` — zero errors required before every commit |
 | `npm run test` | `vitest run` — unit test files |
+| `npm run test:coverage` | `vitest run --coverage` — coverage gate (baseline in [`docs/COVERAGE.md`](docs/COVERAGE.md)) |
 | `npm run test:ui` | Playwright structural tests (non-visual) |
 | `npm run test:visual` | Playwright visual regression |
 | `npm run test:visual:update` | Update Playwright visual snapshots |
@@ -64,12 +65,16 @@ mrt models init && mrt models download mrt2_small
 | `npm run audit:ui` | Playwright route capture + vision-tool analysis -> UI/UX gap report |
 | `npm run ux:improve` | Full UX improvement loop: capture → deterministic checks + vision analysis → flag gaps |
 | `npm run ux:verify` | Post-fix verification: fresh capture + full re-analysis |
+| `uv pip compile pyproject.toml --extra dev --extra db --extra redis --extra celery --extra training --universal -o constraints.txt` | Refresh the backend dependency lock (from `backend/`, Commit 7) |
+| `pip-audit --no-deps -r constraints.txt -f json -o pip-audit.json && python scripts/check_pip_audit.py pip-audit.json` | Audit locked Python deps against the accepted baseline (from `backend/`) |
 | `npm run ux:guard` | Pre-commit guard: deterministic checks on **changed routes only** (no vision); exit 1 = actionable gaps |
 | `node scripts/audit/ux-improve-loop.mjs --waive "<route>::<slug>" --reason "..."` | Persist a gap waiver (false positives stay suppressed) |
 | `python -m pytest -q` | All backend tests (from `backend/`) |
+| `python -m pytest --cov=app --cov-branch` | Backend coverage report (from `backend/`) |
 | `python -m pytest -q tests/test_cqt_features.py tests/test_chord_augmentation.py tests/test_chord_metrics.py tests/test_inference_logic.py` | Chord model tests |
 | `python -m pytest -q tests/test_viterbi_decoder.py tests/test_viterbi_chord_progression.py tests/test_chord_transitions.py` | Viterbi decoding tests |
 | `python -m pytest -q tests/test_boundary_tie.py` | Boundary tie tests |
+| `docker compose build` / `docker compose up -d` | Build/start the backend stack (api, worker, Postgres, Redis); see `docker-compose.yml` |
 | `python scripts/clear_analysis_cache.py` | Clear cached song analyses |
 | `python scripts/version_model.py --version X.Y.Z --weights app/chord_model.weights.h5 --log scripts/training_log.csv` | Archive model version to `research/h-gain-vX.Y.Z/` |
 | `python scripts/promote_model.py --list` | Show all model versions and active status |
@@ -133,7 +138,20 @@ First run takes ~3 min (Expo cold start). Subsequent runs reuse the server.
 
 Detailed step-by-step workflow in `.opencode/instructions/UX_IMPROVE_LOOP.md`.
 
-**CI** (`.github/workflows/scoring-tests.yml`): runs frontend `vitest run` + backend pytest on a selected list of scoring/chord/Viterbi/key-detection tests (see the workflow file). Triggered on push to `main`/`master` and on all PRs.
+**CI** (`.github/workflows/ci.yml`) is the single required workflow. Triggered on push to `main`/`master` and on all PRs.
+
+| Job | Runs | PR path |
+|-----|------|---------|
+| TypeScript lint | `npm run lint` (`tsc --noEmit`) | yes |
+| Vitest | `npm run test -- --coverage` (uploads `vitest-coverage`) | yes |
+| Ruff | `ruff check backend/app backend/tests --select E9,F63,F7,F82` | yes |
+| Playwright route smoke | `npm run test:ui -- --grep @smoke` (seeded, 5 routes) | yes |
+| Pytest | curated subset with `--cov=app` on PR; full suite with coverage on push to `main`/`master`; uploads `pytest-coverage` | yes (subset) |
+| Docker image build | `backend/Dockerfile` via Buildx (GHA layer cache) on main; Docker-relevant PRs only | yes (filtered) |
+
+Coverage is a regression gate: thresholds live in `vitest.config.ts` and `backend/pyproject.toml`, and the recorded baseline is in [`docs/COVERAGE.md`](docs/COVERAGE.md).
+
+The backend job installs `ffmpeg` and fails if `ffmpeg not available` skips appear, so `test_audio_quality.py`, `test_audio_fingerprint.py`, and `test_commit171_audio_cache.py` always execute. **PR wall-clock budget: under 20 minutes.** Measured locally (WSL): Vitest ~1m, Pytest PR subset 531 passed / 2 Flex-op skips in ~11m, Playwright `@smoke` ~1m with a warm Expo server (cold start adds ~2–4m). Jobs run in parallel; the backend subset is the long pole.
 
 ---
 
@@ -333,6 +351,7 @@ Slow and intentional — "jazz club lighting, not mobile game." Shared spring/ti
 | Framework | What for | Where | Run command |
 |-----------|----------|-------|-------------|
 | Vitest | Unit tests | `src/` (co-located `*.test.ts`) | `npm run test` |
+| Coverage | Regression gate | `src/` + `backend/app/` | `npm run test:coverage` / `python -m pytest --cov=app --cov-branch` |
 | Playwright | E2E + visual regression | `tests/ui/` | `npm run test:ui` / `npm run test:visual` |
 | Detox | Mobile E2E | `tests/mobile/` | `npm run test:mobile` |
 | pytest | Backend tests | `backend/tests/` | `python -m pytest -q` |
