@@ -1425,7 +1425,7 @@ def generate_orient_annotation(
     """
     Generate 2-3 sentences telling the user what to listen for in the orient clip.
 
-    TODO: This is currently a template stub. Production should use Claude for
+    TODO(M-03): This is currently a template stub. Production should use Claude for
     dynamic generation based on style, technique, key, and BPM.
     Issue: Currently returns deterministic copy without AI inference.
 

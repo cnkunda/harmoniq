@@ -30,7 +30,6 @@ export async function commitPendingGhostTakeIfNeeded(params: {
     take: latestTake,
     lesson,
     sectionIndex,
-    anchorSec: anchor,
   })
 
   if (!jobId) {

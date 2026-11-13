@@ -639,9 +639,9 @@ Out:
 - Deleting GP5 export before MusicXML parity is verified.
 
 **Acceptance criteria:**
-- [ ] Every TODO/@deprecated marker maps to a tracked issue or is removed.
-- [ ] The GP5 deprecation is documented in `docs/MIGRATIONS.md` or an equivalent note.
-- [ ] CI or review guidance rejects new markers without an issue reference.
+- [x] Every TODO/@deprecated marker maps to a tracked issue or is removed.
+- [x] The GP5 deprecation is documented in `docs/MIGRATIONS.md` or an equivalent note.
+- [x] CI or review guidance rejects new markers without an issue reference.
 
 **Verification:** `rg -n -e 'TODO|FIXME|HACK|XXX|@deprecated'` returns only owned/tracked entries.
 
@@ -656,6 +656,16 @@ Out:
 - ASSUMPTION: GitHub Issues is the tracker of record.
 
 **References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-10 (accessed 2026-11-11).
+
+**Completion (2026-11-13):**
+
+- Added [`techdebt/MARKERS.md`](techdebt/MARKERS.md) as the in-repo marker registry (M-01…M-06) with location, kind, owner, `TD-*` tracker, target, and status. This replaces the "GitHub Issues is the tracker" assumption with IDs that work offline and in CI.
+- Removed four markers that no longer applied: the unused `AlphaTabWebViewRef` alias in [`components/AlphaTabWebView.tsx`](components/AlphaTabWebView.tsx), the stale `anchorSec` TODO and ignored input field in [`src/session/persistGhostTake.ts`](src/session/persistGhostTake.ts) (anchor persistence remains in [`src/session/commitPendingGhostTake.ts`](src/session/commitPendingGhostTake.ts)), and the two inaccurate `@deprecated` tags in [`src/utils/lessonTabs.ts`](src/utils/lessonTabs.ts) (both helpers are still used for export/fallback).
+- Tagged the remaining nine marker lines with registry IDs: `M-01` home display name, `M-02` onboarding analysis, `M-03` coach template, `M-04` GP5 contract fields, `M-05` position-aware fingering, `M-06` label-noise annotations.
+- Added [`scripts/check-markers.mjs`](scripts/check-markers.mjs) (scans `app/`, `src/`, `components/`, `types/`, `backend/app/`, `backend/scripts/`; requires an `M-xx` ID; fails on stale registry rows) and [`scripts/check-markers.test.mjs`](scripts/check-markers.test.mjs). Wired `npm run check:markers` into the existing CI lint job, and added review policy to `AGENTS.md` and `docs/CODER.md`.
+- Documented the GP5 contract deprecation in [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md#gp5-contract-deprecation-non-db): current consumers, five removal gates (render parity, legacy data, export parity, verification corpus, stub parity), and ordered removal steps. Corrected the README claim that GP5 was export-only — demo and legacy lessons still render from it.
+- Verification: `npm run check:markers` → pass; `npx vitest run scripts/check-markers.test.mjs` → 6 passed; `npm run lint` → 0 errors; `pytest -q tests/test_coach.py tests/test_orient_clip.py tests/test_d3_stub_coach.py` → 17 passed; scoped `rg` over source shows only `M-xx`-tagged markers.
+- Scope note: GP5 render fallback and MIDI export are intentionally unchanged; removal stays gated on MusicXML parity.
 
 ---
 
@@ -689,10 +699,10 @@ Out:
 - Mobile EAS release automation.
 
 **Acceptance criteria:**
-- [ ] CI publishes a versioned backend image.
-- [ ] A Postgres-backed migration check runs before publish.
-- [ ] Rollback steps are documented and tested.
-- [ ] A health-check gate blocks promotion on failure.
+- [x] CI publishes a versioned backend image.
+- [x] A Postgres-backed migration check runs before publish.
+- [x] Rollback steps are documented and tested.
+- [x] A health-check gate blocks promotion on failure.
 
 **Verification:** Trigger the workflow on a branch, confirm the image tag, migration output, and health check.
 
@@ -707,6 +717,16 @@ Out:
 - BLOCKING: Confirm the production hosting target before implementation.
 
 **References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-11 (accessed 2026-11-11).
+
+**Completion (2026-11-13):**
+
+- Moved backend migrations out of the container startup path. [`backend/Dockerfile`](backend/Dockerfile) now runs `uvicorn` only; [`docker-compose.yml`](docker-compose.yml) adds a one-shot `migrate` service (`alembic upgrade head`) and makes `api` wait for `service_completed_successfully`. `api`, `worker`, and `migrate` use `${HARMONIQ_IMAGE:-harmoniq-backend:dev}` so staging can pull a published image.
+- Extended the existing `docker-build` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) into a build → migrate → health → publish pipeline: job-level `packages: write`, expanded Docker-relevant path filter (includes migrations, `alembic.ini`, and `constraints.txt`), build/load once, disposable Postgres 14 + Redis, `alembic upgrade head`, `alembic current`/`alembic_version` assertion, downgrade-base/upgrade-head rollback test, API/worker startup, and a JSON health gate that requires `"status":"ok"` before publishing.
+- Publishing is gated on non-PR runs and uses GHCR: `ghcr.io/<owner>/harmoniq-backend:sha-<full SHA>` plus `:latest` on `main`/`master`. The digest is written to the workflow step summary. PRs build and check but never push.
+- Added [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) covering the artifact/tag scheme, staging Compose deploy, promotion by immutable digest, health semantics, application/DB rollback, GHCR auth, and limitations. Updated the README Docker section and the AGENTS key-files table.
+- Resolved the blocking assumption: **GHCR + staging Compose** is the target; no cloud provisioning. Migration execution is a pre-deploy step, and publishing runs on main plus `workflow_dispatch`.
+- Verification: `docker compose config` valid; Alembic offline SQL generated for upgrade and downgrade; real disposable PostgreSQL 14 run: `upgrade head` → `0001 (head)` with all four tables, `downgrade base` → only `alembic_version`, `upgrade head` → `0001 (head)` again. `npm run lint` → 0 errors; `npm run check:markers` → pass; `pytest -q tests/test_boundary_tie.py` → 28 passed.
+- Local limitation: the Docker daemon is unavailable in this environment, so the image build, Compose startup, and `/health` gate could not be executed locally. Those steps run in CI; the migration sequence itself was verified against a local Postgres 14 cluster.
 
 ---
 

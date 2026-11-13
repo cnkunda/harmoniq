@@ -1,6 +1,6 @@
 import { TRANSCRIPTION_CONFIDENCE_UNCERTAIN_MAX } from '@/src/db/schema'
 
-/** GP5 payloads on `LessonJSON.sections[]` items (backend tabgen). @deprecated Export-only — use `musicxml` for rendering. */
+/** GP5 payloads on `LessonJSON.sections[]` items (backend tabgen). Used for MIDI export and legacy render fallback; prefer `musicxml` when present. */
 export type SectionTabPayloads = {
   full?: string
   skeleton?: string
@@ -20,7 +20,7 @@ export function readSectionTabPayloads(section: unknown): SectionTabPayloads {
   }
 }
 
-/** First GP5 blob on any section (full → skeleton → alt), for server export from a saved lesson. @deprecated Export-only (GP5→MIDI conversion). */
+/** First GP5 blob on any section (full → skeleton → alt), for server export from a saved lesson. */
 export function firstGp5Base64FromLessonSections(sections: unknown): string | null {
   if (!Array.isArray(sections)) return null
   for (const sec of sections) {

@@ -21,4 +21,6 @@ RUN mkdir -p /app/data
 
 EXPOSE 8000
 
-CMD alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Migrations run as a one-shot pre-deploy step (see docker-compose.yml `migrate`
+# and docs/DEPLOYMENT.md); the API container must not race other replicas.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

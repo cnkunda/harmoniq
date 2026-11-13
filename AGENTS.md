@@ -53,6 +53,7 @@ mrt models init && mrt models download mrt2_small
 | Command | What it does |
 |---------|-------------|
 | `npm run lint` | `tsc --noEmit` — zero errors required before every commit |
+| `npm run check:markers` | Validate every in-code marker has an `M-xx` ID in [`techdebt/MARKERS.md`](techdebt/MARKERS.md) |
 | `npm run test` | `vitest run` — unit test files |
 | `npm run test:coverage` | `vitest run --coverage` — coverage gate (baseline in [`docs/COVERAGE.md`](docs/COVERAGE.md)) |
 | `npm run test:ui` | Playwright structural tests (non-visual) |
@@ -441,6 +442,7 @@ Full 6-phase process in `docs/CODER.md` (read before implementing a commit):
 - Write code before planning
 - Swallow exceptions silently
 - Add "it might be useful later" abstractions
+- Add `TODO` / `FIXME` / `HACK` / `XXX` / `@deprecated` without an `M-xx` ID registered in `techdebt/MARKERS.md`
 - Combine two commits into one
 - Refactor unrelated code while implementing
 - Guess when the spec is ambiguous — ask instead
@@ -458,6 +460,7 @@ Full 6-phase process in `docs/CODER.md` (read before implementing a commit):
 | `docs/screenshots/README.md` | README screenshot inventory and regeneration command |
 | `docs/E2E_DEMO.md` | End-to-end walkthrough with checkpoints |
 | `docs/MIGRATIONS.md` | Database migration strategy and version history |
+| `docs/DEPLOYMENT.md` | Backend image publishing, staging promotion, health gate, and rollback |
 | `README.md` | Product spec, backend pipeline, DB schema, 5-step loop |
 | `.github/copilot-instructions.md` | Legacy copilot context (partially stale) |
 | `src/config.ts` | API URL resolution and feature flags |

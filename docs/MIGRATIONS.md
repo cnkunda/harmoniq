@@ -241,6 +241,60 @@ The migration system ensures:
 3. Ensure field types match between schema and code
 4. Review rollback SQL for errors
 
+## GP5 contract deprecation (non-DB)
+
+Commit 108 made MusicXML the primary render format, but GP5 remains in the
+`LessonJSON` contract. This section is the removal plan; it is not a database
+migration.
+
+### Why GP5 is still present
+
+- `src/demo/demoLesson.ts` renders from `tab_full_gp5_base64` only.
+- `src/jam/jamReferenceTabGp5Base64.ts` is a GP5-only fixture.
+- `components/SessionStemAndTab.tsx` prefers `musicxml` and falls back to GP5
+  when a lesson has none.
+- `app/(tabs)/library.tsx` exports MIDI by sending GP5 to `POST /export`;
+  `backend/app/routers/export.py` requires `gp5_base64`.
+- `backend/app/tabgen.py` also emits GP5-only skeleton/alternate-position
+  variants and last-resort stub artifacts.
+
+MusicXML is not yet a full replacement, so the `@deprecated` tags on
+`src/types/index.ts` (`tab_full_gp5_base64`, `tab_skeleton_gp5_base64`,
+`tab_alt_position_gp5_base64`, tracked as `M-04`) mean "prefer MusicXML", not
+"safe to delete".
+
+### Removal gates
+
+All gates must pass before removing GP5 from the contract:
+
+1. **Render parity** — every render path has MusicXML: demo lesson, jam
+   reference fixture, and saved lessons. Skeleton and alternate-position
+   variants have MusicXML equivalents or a documented UX decision to drop them.
+2. **Legacy data** — a backfill or re-analysis makes `musicxml` present for
+   persisted lessons, or a documented cutoff keeps read-only GP5 fallback for
+   old rows.
+3. **Export parity** — MIDI export works without GP5 (add MusicXML→MIDI or an
+   export route that accepts MusicXML).
+4. **Verification** — `backend/tests/test_musicxml_corpus.py`,
+   `tests/ui/musicxml-render.spec.ts`, and `tests/mobile/musicxml-render.e2e.js`
+   pass, and the Partial items in
+   [`docs/ALPHATAB_MUSICXML_LIMITATIONS.md`](./ALPHATAB_MUSICXML_LIMITATIONS.md)
+   are accepted or fixed.
+5. **Stub parity** — `STUB_TAB_*_GP5_BASE64` fallbacks are replaced by
+   MusicXML fallbacks.
+
+### Removal order
+
+1. Types and helpers: `LessonSection.tab_*_gp5_base64`,
+   `firstGp5Base64FromLessonSections`, `readSectionTabPayloads` GP5 fields.
+2. Render call sites: `SessionStemAndTab`, `study`, `review`.
+3. Fixtures: demo lesson and jam reference tab.
+4. Backend emission and stubs in `backend/app/tabgen.py`.
+5. `POST /export` GP5 path in `backend/app/routers/export.py`.
+
+Do not remove GP5 in Commit 11. This plan is tracked as `M-04` in
+[`techdebt/MARKERS.md`](../techdebt/MARKERS.md).
+
 ## Future Considerations
 
 - Add automated migration tests

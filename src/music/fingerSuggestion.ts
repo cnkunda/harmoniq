@@ -37,7 +37,7 @@ export function suggestFingerings(
 
 /**
  * Single-note fingering hint for pedagogy UI. Does not model hand frame or shifts across strings.
- * TODO: position-aware fingering using surrounding tab beats and capo.
+ * TODO(M-05): position-aware fingering using surrounding tab beats and capo.
  */
 export function fingerSuggestion(input: FingerSuggestionInput): string {
   const fret = Math.round(input.fret)

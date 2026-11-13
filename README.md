@@ -66,7 +66,7 @@ curl http://localhost:8000/health
 docker compose down        # add -v to also remove the Postgres volume
 ```
 
-The stack builds the single `backend/Dockerfile`; the `api` service runs Alembic migrations at startup and the `worker` service runs Celery. Service definitions and environment variables live in `docker-compose.yml`.
+The stack builds the single `backend/Dockerfile`. A one-shot `migrate` service runs `alembic upgrade head` before the `api` and `worker` start; the API container no longer migrates on startup. Set `HARMONIQ_IMAGE` to pull a published image. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for image publishing, promotion, health gates, and rollback.
 
 **Related docs:** [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |
@@ -457,7 +457,7 @@ Mic listens passively while the user noodles freely — over a backing track, a 
 
 Target experience: **beat-aligned chord symbols**, a **clean monophonic solo line**, and **fretboard sync** to the current chord and note — matching the modular pattern (stems → beat grid → MT3 transcription → chord timeline + solo notes → MusicXML) described in the product PRD.
 
-* **Canonical score format:** MusicXML (partwise) with `<harmony>` for chords and `<note>` for the solo line; `<frame>` for chord diagrams; `<dynamics>`, `<articulations>`, `<beam>`, `<slur>`, and `<technical>` (string/fret) for full notation. **alphaTab** loads the file via its **MusicXML importer** for notation + diagrams. (Commit 108: MusicXML is now the primary render format; GP5 is retained as export-only fallback.)
+* **Canonical score format:** MusicXML (partwise) with `<harmony>` for chords and `<note>` for the solo line; `<frame>` for chord diagrams; `<dynamics>`, `<articulations>`, `<beam>`, `<slur>`, and `<technical>` (string/fret) for full notation. **alphaTab** loads the file via its **MusicXML importer** for notation + diagrams. (Commit 108: MusicXML is the primary render format; GP5 is retained for MIDI export and as the legacy/demo render fallback. Removal gates are in [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md#gp5-contract-deprecation-non-db).)
 * **Primary transcription engine — two-branch architecture:**
   - **Chord branch (instrument-agnostic):** full mix or harmonic-bed submix → aggregate pitch/chroma representation → template matching against `CHORD_INTERVALS`. The model does not care which instrument is sounding a given pitch — only that pitch is present. Decouples chord accuracy from guitar-stem separation quality.
   - **Solo branch (guitar-only):** a separate MT3 pass over the Demucs guitar stem; solo decoding is restricted to GM guitar programs (24–31) so piano/vocal bleed cannot become tab. MR-MT3 memory retention, prior-token sampling, and token shuffling remain research workstreams (W2/W3), not production behavior.

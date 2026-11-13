@@ -16,7 +16,6 @@ export type PersistGhostTakeInput = {
   take: RecordedTake
   lesson: LessonJSON | null | undefined
   sectionIndex: number
-  anchorSec: number
 }
 
 /**
@@ -27,7 +26,7 @@ export async function prepareGhostTakePayload(input: PersistGhostTakeInput): Pro
   ghost_audio_base64: string | null
   ghost_recording_mime: string | null
 }> {
-  const { take, lesson, sectionIndex, anchorSec } = input
+  const { take, lesson, sectionIndex } = input
   const jobId = typeof lesson?.job_id === 'string' ? lesson.job_id.trim() : ''
   if (!jobId || take.audioBytes.length === 0) {
     return { waveform_user_path: null, ghost_audio_base64: null, ghost_recording_mime: null }
@@ -37,8 +36,6 @@ export async function prepareGhostTakePayload(input: PersistGhostTakeInput): Pro
   const baseName = `ghost_${jobId}_${sectionIndex}_${Date.now().toString(36)}.${ext}`
 
   if (typeof window !== 'undefined') {
-    // TODO: anchorSec reserved for future ghost take anchoring feature
-    void anchorSec
     return {
       waveform_user_path: null,
       ghost_audio_base64: bytesToBase64(take.audioBytes),

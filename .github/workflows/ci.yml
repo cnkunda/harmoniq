@@ -36,6 +36,9 @@ jobs:
       - name: tsc --noEmit
         run: npm run lint
 
+      - name: Marker tracking
+        run: npm run check:markers
+
   frontend-tests:
     name: Vitest (all unit tests)
     runs-on: ubuntu-latest
@@ -89,9 +92,15 @@ jobs:
           --output-format=github
 
   docker-build:
-    name: Docker image build
+    name: Docker image build + migration check
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      packages: write
+    env:
+      HARMONIQ_IMAGE: harmoniq-backend:ci
+      IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/harmoniq-backend
 
     steps:
       - name: Checkout
@@ -108,7 +117,7 @@ jobs:
             exit 0
           fi
           git fetch --no-tags origin "${{ github.base_ref }}"
-          if git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(backend/Dockerfile|backend/\.dockerignore|docker-compose\.yml|backend/pyproject\.toml|backend/README\.md)$'; then
+          if git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -Eq '^(backend/(Dockerfile|\.dockerignore|pyproject\.toml|README\.md|alembic\.ini|constraints\.txt|migrations/.*)|docker-compose\.yml|\.github/workflows/ci\.yml)$'; then
             echo "build=true" >> "$GITHUB_OUTPUT"
           else
             echo "build=false" >> "$GITHUB_OUTPUT"
@@ -126,9 +135,95 @@ jobs:
           file: ./backend/Dockerfile
           tags: harmoniq-backend:ci
           push: false
-          load: false
+          load: true
           cache-from: type=gha
           cache-to: type=gha,mode=min
+
+      - name: Start Postgres and Redis
+        if: steps.changes.outputs.build == 'true'
+        run: docker compose up -d --wait --wait-timeout 120 postgres redis
+
+      - name: Run migration dry run
+        if: steps.changes.outputs.build == 'true'
+        shell: bash
+        run: |
+          docker compose run --rm migrate
+          current="$(docker compose run --rm migrate alembic current 2>&1)"
+          echo "$current"
+          grep -q '0001 (head)' <<< "$current"
+          version="$(docker compose exec -T postgres psql -U harmoniq -d harmoniq -tAc 'select version_num from alembic_version')"
+          test "$version" = "0001"
+
+      - name: Test migration rollback
+        if: steps.changes.outputs.build == 'true'
+        shell: bash
+        run: |
+          docker compose run --rm migrate alembic downgrade base
+          docker compose run --rm migrate alembic upgrade head
+          current="$(docker compose run --rm migrate alembic current 2>&1)"
+          echo "$current"
+          grep -q '0001 (head)' <<< "$current"
+
+      - name: Start API and worker
+        if: steps.changes.outputs.build == 'true'
+        shell: bash
+        run: |
+          docker compose up -d --no-deps --wait --wait-timeout 180 api
+          docker compose up -d --no-deps worker
+
+      - name: Health-check gate
+        if: steps.changes.outputs.build == 'true'
+        shell: bash
+        run: |
+          for i in $(seq 1 24); do
+            body="$(curl -fsS http://127.0.0.1:8000/health || true)"
+            status="$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)"
+            if [ "$status" = "ok" ]; then
+              echo "/health ok: $body"
+              exit 0
+            fi
+            echo "Waiting for /health (attempt $i): ${body:-no response}"
+            sleep 5
+          done
+          echo "::error::/health did not report status=ok"
+          docker compose logs --no-color --tail=200 api
+          exit 1
+
+      - name: Log in to GitHub Container Registry
+        if: steps.changes.outputs.build == 'true' && github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish backend image
+        if: steps.changes.outputs.build == 'true' && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          image="${IMAGE_NAME}:sha-${GITHUB_SHA}"
+          docker tag "${HARMONIQ_IMAGE}" "${image}"
+          docker push "${image}"
+          if [ "${GITHUB_REF}" = "refs/heads/main" ] || [ "${GITHUB_REF}" = "refs/heads/master" ]; then
+            docker tag "${HARMONIQ_IMAGE}" "${IMAGE_NAME}:latest"
+            docker push "${IMAGE_NAME}:latest"
+          fi
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${image}" 2>/dev/null || true)"
+          {
+            echo "### Backend image"
+            echo "- Tag: \`${image}\`"
+            echo "- Digest: \`${digest:-unknown}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Dump compose state on failure
+        if: failure() && steps.changes.outputs.build == 'true'
+        run: |
+          docker compose ps || true
+          docker compose logs --no-color --tail=200 postgres redis migrate api worker || true
+
+      - name: Stop stack
+        if: always() && steps.changes.outputs.build == 'true'
+        run: docker compose down -v
 
   playwright-smoke:
     name: Playwright route smoke

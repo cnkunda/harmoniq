@@ -25,8 +25,20 @@ services:
       timeout: 3s
       retries: 5
 
+  migrate:
+    image: ${HARMONIQ_IMAGE:-harmoniq-backend:dev}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL_SYNC: postgresql+psycopg2://harmoniq:harmoniq_dev@postgres:5432/harmoniq
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
-    image: harmoniq-backend:dev
+    image: ${HARMONIQ_IMAGE:-harmoniq-backend:dev}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -45,6 +57,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
       interval: 10s
@@ -53,7 +67,7 @@ services:
       start_period: 60s
 
   worker:
-    image: harmoniq-backend:dev
+    image: ${HARMONIQ_IMAGE:-harmoniq-backend:dev}
     build:
       context: ./backend
       dockerfile: Dockerfile

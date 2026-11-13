@@ -229,7 +229,7 @@ function DifficultyDots({ level }: { level: number }) {
 export default function HomeScreen() {
   const router = useRouter()
   const tabInset = useTabContentInset()
-  const displayName = 'Nkunda' // TODO(auth): Replace with signed-in profile name.
+  const displayName = 'Nkunda' // TODO(M-01, TD-13): Replace with signed-in profile name.
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const [suggestion, setSuggestion] = useState<HomeSuggestion | null>(null)

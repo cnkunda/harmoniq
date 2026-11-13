@@ -77,19 +77,19 @@ export function PlayPitchBeatCard({
         </Text>
       </View>
 
-      <View className="px-3 pb-3 pt-3">
-        <View className="flex-row items-baseline justify-between gap-2">
-          <Text className={`font-sans-medium text-xs uppercase tracking-wide ${mutedTextTone}`}>Pitch targets</Text>
+      <View className="min-w-0 px-3 pb-3 pt-3">
+        <View className="min-w-0 flex-row items-baseline justify-between gap-2">
+          <Text className={`shrink font-sans-medium text-xs uppercase tracking-wide ${mutedTextTone}`} numberOfLines={1}>Pitch targets</Text>
           {nQueue > 0 ? (
-            <Text className={`shrink font-mono text-[10px] ${mutedTextTone}`}>
+            <Text className={`shrink font-mono text-[10px] ${mutedTextTone}`} numberOfLines={1}>
               {nQueue} note{nQueue === 1 ? '' : 's'}
             </Text>
           ) : (
-            <Text className={`shrink font-mono text-[10px] ${mutedTextTone}`}>Tab…</Text>
+            <Text className={`shrink font-mono text-[10px] ${mutedTextTone}`} numberOfLines={1}>Tab…</Text>
           )}
         </View>
 
-        <View className="mt-2.5 flex-row items-end justify-center gap-1.5">
+        <View className="mt-2.5 flex-row flex-wrap items-end justify-center gap-1.5">
           {slots.map((note, displayIdx) => {
             if (!note) {
               return <View key={`e-${displayIdx}`} className="h-12 w-8 shrink-0" />
@@ -127,13 +127,13 @@ export function PlayPitchBeatCard({
 
       <View className="h-px bg-wood-600/20" />
 
-      <View className="px-3 pb-3 pt-3">
-        <View className="flex-row items-baseline justify-between gap-2">
-          <Text className={`font-sans-medium text-xs uppercase tracking-wide ${mutedTextTone}`}>Score · by beat</Text>
+      <View className="min-w-0 px-3 pb-3 pt-3">
+        <View className="min-w-0 flex-row items-baseline justify-between gap-2">
+          <Text className={`shrink font-sans-medium text-xs uppercase tracking-wide ${mutedTextTone}`} numberOfLines={1}>Score · by beat</Text>
           {pct != null ? (
-            <Text className={`font-mono text-[10px] ${embedded ? 'text-muted-light' : 'text-cream'}`}>{pct}% on-pitch</Text>
+            <Text className={`shrink font-mono text-[10px] ${embedded ? 'text-muted-light' : 'text-cream'}`} numberOfLines={1}>{pct}% on-pitch</Text>
           ) : (
-            <Text className={`font-mono text-[10px] ${mutedTextTone}`}>—</Text>
+            <Text className={`shrink font-mono text-[10px] ${mutedTextTone}`} numberOfLines={1}>—</Text>
           )}
         </View>
         <View className="mt-2">

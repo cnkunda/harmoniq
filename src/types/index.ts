@@ -373,11 +373,11 @@ export interface LessonSection {
   beat_grid?: BeatGrid | null
   chord_timeline?: ChordTimeline | null
   solo_notes?: SoloNotes | null
-  /** @deprecated Export-only (GP5→MIDI conversion). Use `musicxml` for rendering. */
+  /** @deprecated M-04 — prefer `musicxml` when present; kept for legacy/demo render and MIDI export. See docs/MIGRATIONS.md#gp5-contract-deprecation-non-db. */
   tab_full_gp5_base64?: string | null
-  /** @deprecated Export-only (GP5→MIDI conversion). Use `musicxml` for rendering. */
+  /** @deprecated M-04 — prefer `musicxml` when present; kept for legacy/demo render and MIDI export. See docs/MIGRATIONS.md#gp5-contract-deprecation-non-db. */
   tab_skeleton_gp5_base64?: string | null
-  /** @deprecated Export-only (GP5→MIDI conversion). Use `musicxml` for rendering. */
+  /** @deprecated M-04 — prefer `musicxml` when present; kept for legacy/demo render and MIDI export. See docs/MIGRATIONS.md#gp5-contract-deprecation-non-db. */
   tab_alt_position_gp5_base64?: string | null
   /** Rhythm/strum chart (lead + rhythm scores also appear in tab_full when merged). */
   tab_rhythm_gp5_base64?: string | null

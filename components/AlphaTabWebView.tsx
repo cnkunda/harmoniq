@@ -25,9 +25,6 @@ import type {
 } from '@/types/tabMessage'
 import { decodeTabMessage, encodeTabMessage } from '@/types/tabMessage'
 
-/** @deprecated Use `AlphaTabSurfaceRef` from `@/types/tabMessage`. */
-export type AlphaTabWebViewRef = AlphaTabSurfaceRef
-
 const HARNESS_HTML = require('../assets/alphatab-harness/index.html') as number
 
 export type AlphaTabWebViewProps = {

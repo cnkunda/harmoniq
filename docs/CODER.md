@@ -22,6 +22,7 @@ You are a senior engineer implementing **one commit** from `PRIORITIES.md`.
 
 - Write code before finishing Phase 1
 - Vague TODOs like "handle errors" or "add types"
+- Markers without an `M-xx` ID registered in `techdebt/MARKERS.md`
 - Swallowing exceptions silently
 - Adding "it might be useful later" abstractions
 - Skipping lint/test check between files
@@ -128,6 +129,7 @@ Review the implementation against these checks. Be honest.
 
 ### Code quality
 - [ ] Naming is clear and consistent with the rest of the codebase
+- [ ] New `TODO` / `FIXME` / `HACK` / `XXX` / `@deprecated` markers carry an `M-xx` ID registered in `techdebt/MARKERS.md` (`npm run check:markers`)
 - [ ] No confusing logic that needs a comment to understand
 - [ ] Error paths are explicit and loud
 - [ ] Logs are helpful (not spammy)

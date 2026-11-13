@@ -161,7 +161,7 @@ export default function OnboardingResultsScreen() {
       const selected = suggestions.filter((_, i) => selectedSongs.has(i))
       for (let i = 0; i < selected.length; i++) {
         setAnalysisProgress(Math.round(((i + 1) / selected.length) * 100))
-        // TODO: Actually analyze the YouTube URLs via POST /analyze
+        // TODO(M-02): Actually analyze the YouTube URLs via POST /analyze
         // For now, simulate a short delay
         await new Promise((resolve) => setTimeout(resolve, 500))
       }

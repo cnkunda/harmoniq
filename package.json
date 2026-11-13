@@ -12,6 +12,7 @@
     "preweb": "node scripts/copy-ort-assets.mjs",
     "web": "expo start --web",
     "lint": "tsc --noEmit",
+    "check:markers": "node scripts/check-markers.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:ui": "playwright test --config=playwright.config.ts --grep-invert @visual",

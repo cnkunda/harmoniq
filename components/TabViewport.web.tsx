@@ -90,7 +90,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
           key={v}
           haptic="none"
           onPress={() => onTabVariantChange?.(v)}
-          className={`rounded-full border px-2.5 py-1.5 ${active ? pillActiveBase : pillBase}`}
+          className={`min-h-8 items-center justify-center rounded-full border px-2.5 py-1.5 ${active ? pillActiveBase : pillBase}`}
           accessibilityRole="button"
         >
           <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${active ? 'text-amber-accent' : mutedTextColor}`}>{label}</Text>
@@ -131,7 +131,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
                 <AnimatedPressable
                   haptic="none"
                   onPress={handleShowLyricsToggle}
-                  className={`rounded-full border px-2.5 py-1.5 ${showLyrics ? pillActiveBase : pillBase}`}
+                  className={`min-h-8 items-center justify-center rounded-full border px-2.5 py-1.5 ${showLyrics ? pillActiveBase : pillBase}`}
                   accessibilityRole="button"
                 >
                   <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${showLyrics ? 'text-wood-900' : mutedTextColor}`}>Lyrics</Text>
@@ -141,7 +141,7 @@ export const TabViewport = forwardRef<AlphaTabSurfaceRef, TabViewportProps>(
                 <AnimatedPressable
                   haptic="light"
                   onPress={onSeekToStart}
-                  className={`rounded-full border px-2.5 py-1.5 ${pillBase}`}
+                  className={`min-h-8 items-center justify-center rounded-full border px-2.5 py-1.5 ${pillBase}`}
                   accessibilityRole="button"
                 >
                   <Text className={`font-sans-medium text-[10px] uppercase tracking-wide ${mutedTextColor}`}>⏮ Start</Text>

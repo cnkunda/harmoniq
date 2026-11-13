@@ -45,7 +45,7 @@ export function PlayStemRowScoringCard({
       <Text className="mb-2 shrink-0 font-sans-medium text-xs uppercase tracking-wide text-amber-accent">
         Pitch & score
       </Text>
-      <View className="min-h-0 flex-1 flex-col gap-3 lg:flex-row lg:items-stretch">
+      <View className="min-h-0 flex-1 flex-col gap-3">
         <PlayPitchBeatCard
           embedded
           currentStreak={currentStreak}

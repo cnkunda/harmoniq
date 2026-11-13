@@ -7,22 +7,6 @@
     "/session/tune::alignment": {
       "reason": "Vision-only advisory: moondream cannot resolve the faint tuner needle/score rendering (screen",
       "waivedAt": "2026-11-06T19:31:12.130Z"
-    },
-    "/session/play::layout-overflow": {
-      "reason": "Pre-existing session transport layout/tap-target warning; outside the tech-debt commit scope, tracked for a dedicated UI pass.",
-      "waivedAt": "2026-11-13T06:15:15.893Z"
-    },
-    "/session/play::small-tap-target": {
-      "reason": "Pre-existing session transport layout/tap-target warning; outside the tech-debt commit scope, tracked for a dedicated UI pass.",
-      "waivedAt": "2026-11-13T06:15:16.116Z"
-    },
-    "/session/slow::small-tap-target": {
-      "reason": "Pre-existing session transport layout/tap-target warning; outside the tech-debt commit scope, tracked for a dedicated UI pass.",
-      "waivedAt": "2026-11-13T06:15:16.357Z"
-    },
-    "/session/study::small-tap-target": {
-      "reason": "Pre-existing session transport layout/tap-target warning; outside the tech-debt commit scope, tracked for a dedicated UI pass.",
-      "waivedAt": "2026-11-13T06:15:16.551Z"
     }
   }
 }

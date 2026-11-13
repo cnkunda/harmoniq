@@ -136,7 +136,7 @@ def run_sensitivity_analysis_on_dataset(
             # Load audio
             y, _ = librosa.load(str(audio_path), sr=sr, mono=True)
             
-            # TODO: Load ground truth annotations from ann_path
+            # TODO(M-06): Load ground truth annotations from ann_path
             # For now, we'll use the model's own predictions as pseudo-ground truth
             # In a real implementation, this would load actual human annotations
             
@@ -158,7 +158,7 @@ def run_sensitivity_analysis_on_dataset(
             chord_timeline: ChordTimeline = infer_chords(audio_path, beat_grid)
             estimated_events = chord_timeline.events
             
-            # TODO: Load actual reference events from annotations
+            # TODO(M-06): Load actual reference events from annotations
             # For demonstration, we'll use a simplified approach
             # In reality, you would load JAMS annotations or .lab files
             reference_events = estimated_events  # Placeholder - replace with real annotations
