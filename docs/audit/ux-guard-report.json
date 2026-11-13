@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "mode": "guard",
-  "generatedAt": "2026-11-13T06:25:53.189Z",
+  "generatedAt": "2026-11-13T21:56:38.722Z",
   "routesAnalyzed": 30,
   "totalUiGapsFound": 0,
   "note": "Pre-commit guard: deterministic DOM checks only (no vision analysis). Full-loop results live in ui-feedback-report.json.",
@@ -115,26 +115,7 @@
     {
       "route": "/session/play",
       "gaps": [],
-      "deterministicFindings": [
-        {
-          "check": "element-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "detail": "<div.flex-row.items-baseline.justify-between> \"Pitch targetsTab…\" overflows horizontally (scrollWidth 85 > clientWidth 80, overflow-x visible)"
-        },
-        {
-          "check": "element-overflow",
-          "issue": "Layout overflow / clipping",
-          "severity": "warning",
-          "detail": "<div.mt-2.5.flex-row.items-end> overflows horizontally (scrollWidth 170 > clientWidth 80, overflow-x visible)"
-        },
-        {
-          "check": "small-tap-target",
-          "issue": "Tap target too small",
-          "severity": "warning",
-          "detail": "67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
-        }
-      ]
+      "deterministicFindings": []
     },
     {
       "route": "/session/review",
@@ -144,26 +125,12 @@
     {
       "route": "/session/slow",
       "gaps": [],
-      "deterministicFindings": [
-        {
-          "check": "small-tap-target",
-          "issue": "Tap target too small",
-          "severity": "warning",
-          "detail": "67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
-        }
-      ]
+      "deterministicFindings": []
     },
     {
       "route": "/session/study",
       "gaps": [],
-      "deterministicFindings": [
-        {
-          "check": "small-tap-target",
-          "issue": "Tap target too small",
-          "severity": "warning",
-          "detail": "67x27 tap target on 1 control(s) — e.g. <button.r-cursor-1loqt21.r-touchAction-1otgn73.rounded-full> \"⏮ Start\""
-        }
-      ]
+      "deterministicFindings": []
     },
     {
       "route": "/session/tune",
