@@ -1,0 +1,45 @@
+{
+  "split": "test",
+  "n_tracks": 60,
+  "n_windows": 324,
+  "n_true_rate_mirex25": 0.037037037037037035,
+  "comparison_space": "MIREX-25 (app.chord_vocab.MIREX_VOCAB)",
+  "baselines": {
+    "deployed-keras": {
+      "chord_head": {
+        "n_windows": 324,
+        "exact_accuracy": 0.043209876543209874,
+        "root_accuracy": 0.05555555555555555,
+        "macro_f1": 0.015468354609327509,
+        "top3_accuracy": 0.1697530864197531,
+        "n_true_rate": 0.037037037037037035,
+        "n_pred_rate": 0.5925925925925926
+      },
+      "presence_gated": {
+        "n_windows": 324,
+        "exact_accuracy": 0.043209876543209874,
+        "root_accuracy": 0.05555555555555555,
+        "macro_f1": 0.015468354609327509,
+        "top3_accuracy": null,
+        "n_true_rate": 0.037037037037037035,
+        "n_pred_rate": 0.5925925925925926
+      },
+      "gate_impact": {
+        "n_forced_changed": 0,
+        "forced_change_rate": 0.0,
+        "correct_to_wrong": 0,
+        "wrong_to_correct": 0,
+        "wrong_to_wrong": 0
+      },
+      "presence_low_rate": 0.49382716049382713
+    },
+    "v1.0.3-tflite-277": {
+      "status": "unavailable",
+      "reason": "Flex delegate (libtensorflowlite_flex.so) not installed \u2014 BiLSTM models cannot run in-process. See docs/CHORD_170_PHASE0_BASELINE.md."
+    },
+    "v1.0.5-tflite-277": {
+      "status": "unavailable",
+      "reason": "Flex delegate (libtensorflowlite_flex.so) not installed \u2014 BiLSTM models cannot run in-process. See docs/CHORD_170_PHASE0_BASELINE.md."
+    }
+  }
+}

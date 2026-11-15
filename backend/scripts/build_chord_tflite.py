@@ -17,6 +17,7 @@ Roles (Commit A2.2):
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any, Callable
 
@@ -3207,7 +3208,10 @@ class DualValidationLogger(tf.keras.callbacks.Callback):
         self.append = append
         self.writer = None
         self.keys: list[str] | None = None
-        self.plot_output_dir = Path(plot_output_dir) if plot_output_dir else _SCRIPTS_DIR
+        # NOTE: run_pipeline defines _SCRIPTS_DIR as a function-local, so the
+        # module-global lookup would NameError here — fall back to this file's
+        # directory instead.
+        self.plot_output_dir = Path(plot_output_dir) if plot_output_dir else Path(__file__).resolve().parent
         self.plot_every_n = plot_every_n
         self.emd_history: list[float] = []
 
@@ -3277,8 +3281,22 @@ class DualValidationLogger(tf.keras.callbacks.Callback):
                         has_header_mismatch = True
         except FileNotFoundError:
             pass
-        # If header mismatch, truncate and start fresh
-        mode = "w" if (not file_exists or has_header_mismatch) else ("a" if self.append else "w")
+        # Never destroy rows mid-run: a header mismatch (e.g. cqt_emd first
+        # appearing once both val sets are non-empty in Phase 6c) used to
+        # truncate the CSV and silently drop every earlier epoch. Rotate the
+        # old file aside instead so the full epoch history stays recoverable.
+        if has_header_mismatch:
+            from datetime import datetime
+
+            backup = self.filename.replace(
+                ".csv", f"-{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv"
+            )
+            shutil.move(self.filename, backup)
+            print(f"    [DualValidationLogger] header changed; previous log rotated to {backup}")
+            file_exists = False
+            mode = "w"
+        else:
+            mode = "a" if (file_exists and self.append) else "w"
         with open(self.filename, mode, newline="") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=self.keys)
             if mode == "w" or has_header_mismatch:
