@@ -41,6 +41,7 @@ image = (
     modal.Image.from_registry("tensorflow/tensorflow:2.20.0-gpu")
     .apt_install("ffmpeg", "libsndfile1")
     .pip_install(
+        "pydantic>=2.0",
         "numpy>=1.26",
         "scipy>=1.11",
         "librosa>=0.10.2",

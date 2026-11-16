@@ -188,6 +188,16 @@ modal run --detach scripts/modal_chord_170.py::prepare --extract-rwc true
 
 Phase 3 adds `train`/`eval` to the same app (A10G) — not stubbed here.
 
+**Verified 2026-11-16** (`modal run --detach ...::prepare`): bundle uploaded
+to the `harmoniq-chord170-data` volume and extracted; sidecars built for
+GuitarSet 360/360, EGSet12 12/12, Guitar-TECHS 68/68, IDMT 129/129 (RWC 0 —
+audio not uploaded yet); 11 pseudo v2 tracks; the Modal-generated dataset
+card matches the local card exactly (train 3,514 / val 406 / test 340
+windows, `cross_split_overlap_count: 0`). The image needs `pydantic`
+(`app.data_engine` imports the manifest models). RWC CQT remains the only
+prepare gap: it needs the 4.1 GB opt-in RWC-P audio uploaded, then
+`--extract-rwc true`.
+
 ### Known gaps
 
 - RWC-P CQT cache requires the Modal run (4.1 GB opt-in audio; no local cache).
