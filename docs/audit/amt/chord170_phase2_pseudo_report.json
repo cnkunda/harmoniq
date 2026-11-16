@@ -1,0 +1,26 @@
+{
+  "w1_root": "/mnt/c/workspace/harmoniq/backend/data/pseudo_label/w1",
+  "out_dir": "/mnt/c/workspace/harmoniq/backend/data/chord170/pseudo_v2",
+  "filters": {
+    "min_pitches": 3,
+    "min_confidence": 0.6,
+    "n_cap": 0.2,
+    "old_confidence": 0.5
+  },
+  "per_source": {
+    "idmt_smt_guitar": {
+      "windows_in": 52,
+      "windows_out": 25,
+      "n_in": 32,
+      "n_out": 5,
+      "bass_known": 20,
+      "unique_classes": 5
+    }
+  },
+  "tracks": 1004,
+  "skipped_alignment": [],
+  "skipped_filters": 0,
+  "windows_in": 3309,
+  "windows_after_filters": 25,
+  "status": "ok"
+}

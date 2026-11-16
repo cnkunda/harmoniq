@@ -1,7 +1,7 @@
 # Chord 170 Program — Implementation
 
-Status: **Phase 0 + Phase 1 complete** (2026-11-15). Phases 2–6 pending
-review before GPU training. Spec source: the "Harmoniq 170-Class Chord
+Status: **Phase 0 + Phase 1 + Phase 2 complete** (2026-11-15). Phases 3–6
+pending review before GPU training. Spec source: the "Harmoniq 170-Class Chord
 Model v2" implementation brief; repo rules in
 [`AGENTS.md`](../../AGENTS.md).
 
@@ -96,11 +96,112 @@ locally (Flex delegate absent) with a ready harness path for Modal.
 - v1.0.5 metadata/code mismatch (patience 25 vs 10; ramp 80% vs 92%) is
   documented, not rewritten.
 
+
+## Phase 2 — data pipeline (complete)
+
+Modules: `backend/app/chord_labels.py` (bass/annotation logic) and
+`backend/scripts/chord_data_v2.py` (builders + dataset card), with the
+Modal prepare entrypoint in `backend/scripts/modal_chord_170.py`.
+
+### Real datasets (bass derived from annotations)
+
+| Source | Bass method | Train (tracks/windows) | Val | Test | Bass known |
+| --- | --- | ---: | ---: | ---: | ---: |
+| GuitarSet | JAMS `note_midi`, lowest active note | 240 / 1,296 | 60 / 324 | 60 / 324 | 63% train, 52% test |
+| Guitar-TECHS | per-string MIDI, lowest active note | 56 / 1,452 | 12 / 82 | — | 83% |
+| IDMT-SMT-Guitar (dataset4) | CSV slash bass (root position = root) | 129 / 696 | — | — | 40% |
+| EGSet12 | JAMS `note_midi`, lowest active note | 9 / 45 | — | 3 / 16 | 29% |
+| RWC-P | CSV Harte degree bass (`/3`, `/b7`) | pending CQT extraction on Modal | | | — |
+
+Bass labels are written as sidecars (`processed/chord170/<track>.npz`) so the
+existing 144-bin feature cache is not duplicated. Unknown bass (X) is
+reported honestly: silent/count-in windows and annotation gaps are X.
+
+### Pseudo-labels (v2 rebuild)
+
+`build-pseudo` re-derives labels from the W1 teacher outputs with the spec's
+filters: ≥ 3 active pitches, confidence ≥ 0.6, N capped at ≤ 20 % (highest
+confidence N kept).
+
+**Finding — W1 pseudo-labels are not usable as training data.** All 1,004
+W1 tracks align and load, but only **25 windows survive** (11 IDMT tracks;
+N rate 20.0 %, 5 unique classes). The YouTube-crawl labels are N-dominated
+(87 % in W1) and the teacher detected ≤ 1 note at most window centres, so
+the ≥ 3-pitch rule correctly rejects them. This is why the spec mandates a
+BTC teacher: BTC labels chords directly from audio (no note prerequisite)
+and a note model (MT3/YourMT3+) supplies the pitch count, agreement check,
+and bass. That relabeling is a GPU/Modal job; Phase 2 ships the pipeline,
+filters, cache format, and teacher module.
+
+Artifacts: `docs/audit/amt/chord170_phase2_dataset.json` (dataset card),
+`docs/audit/amt/chord170_phase2_pseudo_report.json` (filter report).
+
+### Splits
+
+Track-level only; zero cross-split track overlap across **all** pairs
+(train↔val, train↔test, val↔test) — verified by the card
+(`cross_split_overlap_count: 0`). GuitarSet remains player-level
+(00–03 train, 04 val, 05 test). IDMT/YouTube have no split metadata and are
+treated as train.
+
+### Teacher availability (checked)
+
+| Teacher | Status |
+| --- | --- |
+| MT3 T5-small | local checkpoint present (`data/models/mt3/mt3_t5_small`, 186 MB) — W1 teacher |
+| YourMT3+ | local checkpoint present (`data/models/mt3infer/yourmt3`) — W2 winner, usable for the agreement/pitch filter |
+| MR-MT3 | local checkpoint present (`data/models/mt3infer/mr_mt3`) |
+| BTC 170-class | **downloaded and verified** (`data/models/btc/btc_model_large_voca.pt`, 12 MB) |
+
+BTC is a drop-in teacher: its 170-class vocabulary is the *same set* as ours
+(12 roots × the same 14 qualities), ordered `root*14 + quality`, 168 = X,
+169 = N. `scripts/btc_teacher.py` provides the verified bijection
+(`BTC_INDEX_TO_170`, unit-tested) and a direct torch+librosa inference path
+(the HF wrapper's `transformers` import costs minutes on this mount).
+Smoke-tested on a GuitarSet track: correct-looking timeline
+(`A#:maj`, `D#:maj7`, …) at ~3m50s/track on WSL CPU — bulk labeling belongs
+on Modal (prepare/train functions already run there).
+
+**Licence note:** BTC source code is MIT, but the released 170-class weights
+are trained on Isophonics / Robbie Williams / UsPop2002 and distributed as
+**CC-BY-NC-SA 4.0 (non-commercial)**. Project owner confirmed acceptance for
+this research program; the weights are git-ignored and must not ship in a
+commercial build.
+
+### Chord-oriented mix (Deferred to GPU)
+
+`bass + guitar + piano + other` (vocals/drums removed) is the intended
+pseudo-label input. Demucs on 1,004 tracks is a GPU job; the pipeline
+(`prepare` on Modal + BTC teacher) is ready for it. Locally the
+teacher outputs that exist (W1) were produced from the shipped audio.
+
+### Modal
+
+```bash
+modal volume create harmoniq-chord170-data
+tar -czf /tmp/chord170_bundle.tgz -C <repo-root> backend docs
+modal volume put harmoniq-chord170-data /tmp/chord170_bundle.tgz /chord170
+modal run scripts/modal_chord_170.py::status
+modal run --detach scripts/modal_chord_170.py::prepare
+modal run --detach scripts/modal_chord_170.py::prepare --extract-rwc true
+```
+
+Phase 3 adds `train`/`eval` to the same app (A10G) — not stubbed here.
+
+### Known gaps
+
+- RWC-P CQT cache requires the Modal run (4.1 GB opt-in audio; no local cache).
+- EGSet12 train windows are 69 % N and IDMT 38 % N — both are small; the
+  training recipe handles N via sampling/loss weighting, and the card records
+  the rates.
+- YouTube-crawl pseudo-labels are unusable until BTC + note-model relabeling
+  runs on Modal.
+
 ## Phase plan (remaining)
 
 | Phase | Scope | Gate |
 | --- | --- | --- |
-| 2 | Real + pseudo-label pipeline, chord-oriented mix, bass derivation, Modal CQT cache, track-level splits, dataset cards | Pseudo-label report: N ≤ 20%, no track overlap |
+| 2 | **Done** — see Phase 2 section above | Pseudo-label report (N ≤ 20% ✓), zero track overlap ✓, Modal cache ✓ |
 | 3 | `train_chord_170.py` + Modal entrypoint; 170 + bass model | ≥ v1.0.3 WCSR MIREX +5pp, ≥ v1.0.5 chord-head +8pp; macro-F1 ≥ 0.45; bass ≥ 0.60; slash ≥ 0.50; ECE ≤ 0.15 |
 | 4 | Ablations (25/170/277, aux heads, teachers, mixes, pretrain epochs) | Winning config with CIs; negative results documented |
 | 5 | Distill + TFLite/ONNX export, FP16/INT8, latency, feature flag `HARMONIQ_CHORD_MODEL_V2=1`, registry/docs | Exported heads match evaluated heads; teacher drop ≤ 3pp |

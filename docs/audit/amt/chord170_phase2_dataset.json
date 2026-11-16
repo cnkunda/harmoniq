@@ -1,0 +1,235 @@
+{
+  "sources": {
+    "guitarset": {
+      "kind": "real",
+      "splits": {
+        "train": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitarset",
+          "split": "train",
+          "n_tracks": 240,
+          "n_windows": 1296,
+          "n_rate": 0.037037037037037035,
+          "x_rate": 0.0,
+          "unique_classes": 33,
+          "bass_unknown_rate": 0.36574074074074076,
+          "slash_rate": 0.3441358024691358
+        },
+        "val": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitarset",
+          "split": "val",
+          "n_tracks": 60,
+          "n_windows": 324,
+          "n_rate": 0.037037037037037035,
+          "x_rate": 0.0,
+          "unique_classes": 33,
+          "bass_unknown_rate": 0.3549382716049383,
+          "slash_rate": 0.37037037037037035
+        },
+        "test": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitarset",
+          "split": "test",
+          "n_tracks": 60,
+          "n_windows": 324,
+          "n_rate": 0.037037037037037035,
+          "x_rate": 0.0,
+          "unique_classes": 33,
+          "bass_unknown_rate": 0.4783950617283951,
+          "slash_rate": 0.2623456790123457
+        }
+      }
+    },
+    "egset12": {
+      "kind": "real",
+      "splits": {
+        "train": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/egset12",
+          "split": "train",
+          "n_tracks": 9,
+          "n_windows": 45,
+          "n_rate": 0.6888888888888889,
+          "x_rate": 0.0,
+          "unique_classes": 12,
+          "bass_unknown_rate": 0.7111111111111111,
+          "slash_rate": 0.2
+        },
+        "val": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/egset12",
+          "split": "val",
+          "n_tracks": 0,
+          "n_windows": 0,
+          "n_rate": 0.0,
+          "x_rate": 0.0,
+          "unique_classes": 0,
+          "bass_unknown_rate": 0.0,
+          "slash_rate": 0.0
+        },
+        "test": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/egset12",
+          "split": "test",
+          "n_tracks": 3,
+          "n_windows": 16,
+          "n_rate": 0.75,
+          "x_rate": 0.0,
+          "unique_classes": 4,
+          "bass_unknown_rate": 0.875,
+          "slash_rate": 0.0625
+        }
+      }
+    },
+    "guitar_techs": {
+      "kind": "real",
+      "splits": {
+        "train": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitar_techs",
+          "split": "train",
+          "n_tracks": 56,
+          "n_windows": 1452,
+          "n_rate": 0.15082644628099173,
+          "x_rate": 0.0,
+          "unique_classes": 96,
+          "bass_unknown_rate": 0.174931129476584,
+          "slash_rate": 0.5736914600550964
+        },
+        "val": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitar_techs",
+          "split": "val",
+          "n_tracks": 12,
+          "n_windows": 82,
+          "n_rate": 0.35365853658536583,
+          "x_rate": 0.0,
+          "unique_classes": 31,
+          "bass_unknown_rate": 0.4024390243902439,
+          "slash_rate": 0.3780487804878049
+        },
+        "test": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitar_techs",
+          "split": "test",
+          "n_tracks": 0,
+          "n_windows": 0,
+          "n_rate": 0.0,
+          "x_rate": 0.0,
+          "unique_classes": 0,
+          "bass_unknown_rate": 0.0,
+          "slash_rate": 0.0
+        }
+      }
+    },
+    "idmt_smt_guitar": {
+      "kind": "real",
+      "splits": {
+        "train": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/idmt_smt_guitar",
+          "split": "train",
+          "n_tracks": 129,
+          "n_windows": 696,
+          "n_rate": 0.382183908045977,
+          "x_rate": 0.0,
+          "unique_classes": 57,
+          "bass_unknown_rate": 0.5962643678160919,
+          "slash_rate": 0.30028735632183906
+        },
+        "val": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/idmt_smt_guitar",
+          "split": "val",
+          "n_tracks": 0,
+          "n_windows": 0,
+          "n_rate": 0.0,
+          "x_rate": 0.0,
+          "unique_classes": 0,
+          "bass_unknown_rate": 0.0,
+          "slash_rate": 0.0
+        },
+        "test": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/idmt_smt_guitar",
+          "split": "test",
+          "n_tracks": 0,
+          "n_windows": 0,
+          "n_rate": 0.0,
+          "x_rate": 0.0,
+          "unique_classes": 0,
+          "bass_unknown_rate": 0.0,
+          "slash_rate": 0.0
+        }
+      }
+    },
+    "rwc": {
+      "kind": "real",
+      "splits": {
+        "train": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/rwc",
+          "split": "train",
+          "n_tracks": 0,
+          "n_windows": 0,
+          "n_rate": 0.0,
+          "x_rate": 0.0,
+          "unique_classes": 0,
+          "bass_unknown_rate": 0.0,
+          "slash_rate": 0.0
+        },
+        "val": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/rwc",
+          "split": "val",
+          "n_tracks": 0,
+          "n_windows": 0,
+          "n_rate": 0.0,
+          "x_rate": 0.0,
+          "unique_classes": 0,
+          "bass_unknown_rate": 0.0,
+          "slash_rate": 0.0
+        },
+        "test": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/rwc",
+          "split": "test",
+          "n_tracks": 0,
+          "n_windows": 0,
+          "n_rate": 0.0,
+          "x_rate": 0.0,
+          "unique_classes": 0,
+          "bass_unknown_rate": 0.0,
+          "slash_rate": 0.0
+        }
+      }
+    },
+    "pseudo_v2": {
+      "kind": "pseudo",
+      "splits": {
+        "train": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/chord170/pseudo_v2",
+          "split": "train",
+          "n_tracks": 11,
+          "n_windows": 25,
+          "n_rate": 0.2,
+          "x_rate": 0.0,
+          "unique_classes": 5,
+          "bass_unknown_rate": 0.2,
+          "slash_rate": 0.48
+        },
+        "test": {
+          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/chord170/pseudo_v2",
+          "split": "test",
+          "n_tracks": 0,
+          "n_windows": 0,
+          "n_rate": 0.0,
+          "x_rate": 0.0,
+          "unique_classes": 0,
+          "bass_unknown_rate": 0.0,
+          "slash_rate": 0.0
+        }
+      }
+    }
+  },
+  "overlap": [],
+  "totals": {
+    "windows_per_split": {
+      "train": 3514,
+      "val": 406,
+      "test": 340
+    },
+    "tracks_per_split": {
+      "train": 445,
+      "val": 72,
+      "test": 63
+    },
+    "cross_split_overlap_count": 0
+  }
+}
