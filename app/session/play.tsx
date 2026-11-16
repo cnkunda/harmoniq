@@ -541,6 +541,7 @@ function PlayScreenInner() {
                     showOrientControl
                     orientClipUrl={orientClip.url}
                     orientAnnotation={orientClip.annotation}
+                    orientAnnotationSource={orientClip.annotationSource}
                     orientIsPlaying={orientClip.isPlaying}
                     onToggleOrientPlayback={orientClip.togglePlayback}
                     orientError={orientClip.error}

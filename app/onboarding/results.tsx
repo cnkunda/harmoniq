@@ -5,10 +5,12 @@ import { ActivityIndicator, Text, View } from 'react-native'
 
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { Button } from '@/components/Button'
+import { CoachSourceLabel } from '@/components/CoachSourceLabel'
 import { ErrorBanner } from '@/components/ErrorBanner'
 import { OnboardingScreenShell } from '@/components/onboarding/OnboardingScreenShell'
 import { toast } from '@/components/ToastConfig'
-import { fetchOnboardingPlacementCoach, parseTasteProfileJson } from '@/src/api/analyze'
+import { fetchOnboardingPlacementCoach, parseTasteProfileJson, submitAnalyzeJob } from '@/src/api/analyze'
+import type { CoachSource } from '@/src/coach/coachSource'
 import { ONBOARDING_STEP_WITHOUT_QUIZ, ONBOARDING_WITHOUT_QUIZ_TOTAL, ONBOARDING_WITH_QUIZ_TOTAL } from '@/src/constants/onboardingSteps'
 import { colors } from '@/src/constants/colors'
 import { getAppPref, commitPlacementOnboarding } from '@/src/db/client'
@@ -20,7 +22,9 @@ import {
   aggregatePlacementNodeScores,
 } from '@/src/onboarding/aggregatePlacementScores'
 import { FALLBACK_PLACEMENT_COACH_COPY } from '@/src/onboarding/fallbackPlacementCoach'
+import { startOnboardingAnalyses } from '@/src/onboarding/startOnboardingAnalyses'
 import { suggestOnboardingSongs, type SongSuggestion } from '@/src/onboarding/suggestSongs'
+import { useAnalysisJobsStore } from '@/src/stores/analysisJobsStore'
 import { useOnboardingPlacementStore } from '@/src/stores/onboardingPlacementStore'
 import { useSkillStore } from '@/src/stores/skillStore'
 
@@ -35,8 +39,10 @@ export default function OnboardingResultsScreen() {
   const { quizTaken } = useLocalSearchParams<{ quizTaken?: string }>()
   const results = useOnboardingPlacementStore((s) => s.results)
   const loadSkills = useSkillStore((s) => s.loadFromDb)
+  const trackAnalysisJob = useAnalysisJobsStore((s) => s.track)
 
   const [coachText, setCoachText] = useState<string | null>(null)
+  const [coachSource, setCoachSource] = useState<CoachSource | null>(null)
   const [confidenceNote, setConfidenceNote] = useState<string | null>(null)
   const [seedError, setSeedError] = useState<MappedUiError | null>(null)
   const [retryToken, setRetryToken] = useState(0)
@@ -45,6 +51,7 @@ export default function OnboardingResultsScreen() {
   const [selectedSongs, setSelectedSongs] = useState<Set<number>>(() => new Set())
   const [analysisState, setAnalysisState] = useState<AnalysisState>('idle')
   const [analysisProgress, setAnalysisProgress] = useState(0)
+  const [analysisNote, setAnalysisNote] = useState<string | null>(null)
   const [hasQuiz, setHasQuiz] = useState(quizTaken === '1')
   const resultsStep = hasQuiz ? 7 : ONBOARDING_STEP_WITHOUT_QUIZ.results
   const resultsTotal = hasQuiz ? ONBOARDING_WITH_QUIZ_TOTAL : ONBOARDING_WITHOUT_QUIZ_TOTAL
@@ -68,11 +75,13 @@ export default function OnboardingResultsScreen() {
           const res = await fetchOnboardingPlacementCoach(metrics)
           if (!cancelled) {
             setCoachText(res.coach_paragraph)
+            setCoachSource(res.coach_source ?? 'template')
             setConfidenceNote(res.confidence_note ?? null)
           }
         } catch {
           if (!cancelled) {
             setCoachText(FALLBACK_PLACEMENT_COACH_COPY)
+            setCoachSource('template')
             setConfidenceNote(
               metrics.placement_confidence === 'low'
                 ? 'Your initial baseline used lower-confidence phrase captures and will adapt quickly with more takes.'
@@ -157,19 +166,33 @@ export default function OnboardingResultsScreen() {
     }
     setAnalysisState('analyzing')
     setAnalysisProgress(0)
+    setAnalysisNote(null)
+    const selected = suggestions.filter((_, i) => selectedSongs.has(i))
     try {
-      const selected = suggestions.filter((_, i) => selectedSongs.has(i))
-      for (let i = 0; i < selected.length; i++) {
-        setAnalysisProgress(Math.round(((i + 1) / selected.length) * 100))
-        // TODO(M-02): Actually analyze the YouTube URLs via POST /analyze
-        // For now, simulate a short delay
-        await new Promise((resolve) => setTimeout(resolve, 500))
+      const outcome = await startOnboardingAnalyses(selected, {
+        submit: (input) => submitAnalyzeJob(input),
+        track: (input) => trackAnalysisJob(input),
+        onProgress: (completed, total) =>
+          setAnalysisProgress(Math.round((completed / total) * 100)),
+      })
+      if (outcome.started.length === 0) {
+        setAnalysisState('error')
+        toast.error('Could not start analysis. You can add these songs later from Home.')
+        return
       }
+      const count = outcome.started.length
+      const failedTitles = outcome.failed.map((row) => row.song.title)
       setAnalysisState('done')
-      toast.success('Session ready!')
-    } catch {
+      setAnalysisNote(
+        failedTitles.length > 0
+          ? `Started ${count} of ${selected.length}. Could not start: ${failedTitles.join(', ')}. Add them later from Home.`
+          : `Started analysis for ${count} song${count === 1 ? '' : 's'}. Track progress in Library; songs appear when ready.`,
+      )
+      toast.success(`Started analysis for ${count} song${count === 1 ? '' : 's'}.`)
+    } catch (error) {
+      console.error('[onboarding] could not start analysis', error)
       setAnalysisState('error')
-      toast.error('Could not analyze songs. You can add them later from Home.')
+      toast.error('Could not start analysis. You can add these songs later from Home.')
     }
   }
 
@@ -245,7 +268,10 @@ export default function OnboardingResultsScreen() {
         </View>
 
         <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/80 p-4">
-          <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Coach</Text>
+          <View className="flex-row items-center gap-2">
+            <Text className="font-sans-medium text-xs uppercase tracking-wide text-amber-light">Coach</Text>
+            <CoachSourceLabel source={coachSource} />
+          </View>
           {coachText == null ? (
             <Text className="mt-2 font-sans text-sm text-muted-light">Fetching coach note…</Text>
           ) : (
@@ -302,7 +328,7 @@ export default function OnboardingResultsScreen() {
 
           {analysisState === 'analyzing' && (
             <View className="mt-4 items-center">
-              <Text className="font-sans text-sm text-amber-light">Analyzing songs… {analysisProgress}%</Text>
+              <Text className="font-sans text-sm text-amber-light">Starting analysis… {analysisProgress}%</Text>
               <View className="mt-2 h-1.5 w-full max-w-xs rounded-full bg-wood-700">
                 <View
                   className="h-full rounded-full bg-amber-accent"
@@ -312,9 +338,13 @@ export default function OnboardingResultsScreen() {
             </View>
           )}
 
+          {analysisState === 'done' && analysisNote ? (
+            <Text className="mt-3 text-center font-sans text-xs text-muted-light">{analysisNote}</Text>
+          ) : null}
+
           {analysisState === 'error' && (
             <Text className="mt-3 text-center font-sans text-xs text-danger">
-              Analysis failed. You can add these songs later from Home.
+              Could not start analysis. Check the server connection, or add these songs later from Home.
             </Text>
           )}
         </View>
@@ -323,11 +353,11 @@ export default function OnboardingResultsScreen() {
           {analysisState === 'idle' && (
             <>
               <Button
-                label="Analyze & start session"
+                label="Start analysis"
                 haptic="light"
                 onPress={analyzeAndContinue}
                 disabled={suggestions.length === 0}
-                accessibilityLabel="Analyze selected songs and start session"
+                accessibilityLabel="Start analysis for selected songs"
                 fullWidth
               />
               <Button

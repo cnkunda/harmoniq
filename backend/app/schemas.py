@@ -820,6 +820,7 @@ class OnboardingPlacementRequest(BaseModel):
 
 class OnboardingPlacementResponse(BaseModel):
     coach_paragraph: str
+    coach_source: Literal["ai", "template"] = "template"
     confidence_note: str | None = None
 
 
@@ -1161,6 +1162,10 @@ class OrientClipResponse(BaseModel):
     duration: float = Field(..., description="Duration in seconds")
     used_placeholder: bool = Field(default=False, description="Whether a placeholder was used")
     placeholder_reason: str | None = Field(default=None, description="Reason for placeholder if used")
+    annotation_source: Literal["template"] = Field(
+        default="template",
+        description="Provenance of the annotation text (template for v1).",
+    )
 
 # Commit 85 Schemas
 

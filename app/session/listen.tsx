@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { ChordCorrectionModal } from '@/components/ChordCorrectionModal'
 import { ChordStrip } from '@/components/ChordStrip'
+import { CoachSourceLabel } from '@/components/CoachSourceLabel'
 import { DemoTourCallout } from '@/components/DemoTourCallout'
 import { EmptyState } from '@/components/EmptyState'
 import { ListenStemPanel, type ListenStemPanelHandle } from '@/components/ListenStemPanel'
@@ -14,6 +15,7 @@ import { SessionStepScreen } from '@/components/SessionStepScreen'
 import { toast } from '@/components/ToastConfig'
 import { correctChord } from '@/src/api/analyze'
 import { fetchOrientClip as requestOrientClip } from '@/src/api/orient'
+import type { CoachSource } from '@/src/coach/coachSource'
 import { sessionHref } from '@/src/constants/sessionFlow'
 import { DEMO_LESSON_JOB_ID } from '@/src/demo/constants'
 import { DEMO_TOUR_CALLOUT, DEMO_TOUR_SUBTITLE } from '@/src/demo/demoSessionTourCopy'
@@ -80,6 +82,7 @@ function ListenScreenInner() {
   // Commit 110: chord correction state — declare early so chordEvents can use them
   const [orientClipUrl, setOrientClipUrl] = useState<string | null>(null)
   const [orientAnnotation, setOrientAnnotation] = useState<string | null>(null)
+  const [orientAnnotationSource, setOrientAnnotationSource] = useState<CoachSource>('template')
   const [orientIsPlaying, setOrientIsPlaying] = useState(false)
   const [orientModalVisible, setOrientModalVisible] = useState(false)
   const [orientIsLoading, setOrientIsLoading] = useState(false)
@@ -154,6 +157,7 @@ function ListenScreenInner() {
         })
         setOrientClipUrl(data.wav_path ? lessonFileUrl(data.wav_path) : null)
         setOrientAnnotation(data.annotation)
+        setOrientAnnotationSource(data.annotation_source ?? 'template')
       } catch (e) {
         console.error('Failed to fetch orient clip:', e)
         setOrientError(e instanceof Error ? e.message : 'Failed to load orient clip')
@@ -424,6 +428,7 @@ function ListenScreenInner() {
 
               {orientAnnotation ? (
                 <View className="mt-4 rounded-xl border border-wood-600/50 bg-wood-800/40 p-4">
+                  <CoachSourceLabel source={orientAnnotationSource} className="mb-1" />
                   <Text className="font-sans text-sm leading-relaxed text-cream/80">
                     {orientAnnotation}
                   </Text>

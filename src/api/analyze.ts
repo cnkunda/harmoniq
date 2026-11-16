@@ -938,8 +938,8 @@ export async function fetchOnboardingPlacementCoach(payload: {
   bend_error_cents_avg: number
   placement_confidence?: 'low' | 'medium' | 'high' | null
   reliability_flags?: string[]
-}): Promise<{ coach_paragraph: string; confidence_note?: string | null }> {
-  return request<{ coach_paragraph: string; confidence_note?: string | null }>('/onboarding-placement', {
+}): Promise<{ coach_paragraph: string; coach_source?: 'ai' | 'template'; confidence_note?: string | null }> {
+  return request<{ coach_paragraph: string; coach_source?: 'ai' | 'template'; confidence_note?: string | null }>('/onboarding-placement', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

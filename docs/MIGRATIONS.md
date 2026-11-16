@@ -77,6 +77,7 @@ If a migration fails:
 - V19: Add analytics_events table + type/timestamp indexes (Commit 161)
 - V20: Add practice_plans active-plan persistence table + status/updated index (Commit 162)
 - V21: Add practice_plans.session_id + applied_sessions replay ledger (Commit 164)
+- V22: Add jam_snapshots backing-bed context columns (J6; web IndexedDB is schemaless, no version bump)
 
 ## Web (IndexedDB) Migrations
 
@@ -90,10 +91,15 @@ Migrations are tracked in the `schema_migrations` object store:
 type MigrationRow = { version: number; applied_at: string }
 ```
 
+> **Note:** the `schema_version` field written on web skill-node rows
+> (`src/db/client.web.ts`, value `1`) is the **skill-node row schema version**
+> (matches native migration V14), **not** the IndexedDB database version.
+> The database version is `DB_VERSION` in `src/db/idbWeb.ts` (currently 8).
+
 ### Migration Pattern
 IndexedDB uses built-in versioning:
 ```typescript
-const DB_VERSION = 7
+const DB_VERSION = 8
 const r = indexedDB.open(DB_NAME, DB_VERSION)
 r.onupgradeneeded = (event) => {
   const oldVersion = (event as IDBVersionChangeEvent).oldVersion
@@ -177,12 +183,12 @@ export type SkillNodeRow = {
 
 1. Increment `DB_VERSION` in `src/db/idbWeb.ts`:
 ```typescript
-const DB_VERSION = 7
+const DB_VERSION = 9
 ```
 
 2. Add version-specific logic in `onupgradeneeded`:
 ```typescript
-if (oldVersion < 7) {
+if (oldVersion < 9) {
   // Add new object store or modify existing
   if (!db.objectStoreNames.contains(S_NEW_STORE)) {
     db.createObjectStore(S_NEW_STORE, { keyPath: 'id' })
@@ -191,10 +197,37 @@ if (oldVersion < 7) {
   const tx = r.transaction
   if (tx) {
     const migrationStore = tx.objectStore(S_MIGRATIONS)
-    migrationStore.put({ version: 7, applied_at: new Date().toISOString() })
+    migrationStore.put({ version: 9, applied_at: new Date().toISOString() })
   }
 }
 ```
+
+## Native ↔ Web version mapping (Commit 17)
+
+Web is schemaless (object stores of JSON rows), so the two version sequences
+are **not numerically aligned and must never be renumbered into each other** —
+web users already exist on v1–v8 and renumbering would invent meaningless
+"schemaless migrations". The mapping below is feature-based; keep it updated
+when either side gains a migration.
+
+| Feature | Native | Web |
+|---|---|---|
+| Initial stores: skill_nodes, sessions, licks, jam_snapshots (+ prefs, lesson cache, lessons, plan completions) | V1–V3 | V1–V3 |
+| schema_migrations tracking store | — (native tracks versions natively) | V4 |
+| review_snapshot + waveform paths on sessions | V4 | schemaless (row fields) |
+| stems_json on licks | V5 | schemaless |
+| jam context / reliability fields | V6–V7 | schemaless |
+| lessons table | V8 | store existed since V1 |
+| technique_roll_json, skill_nodes.schema_version | V9, V14 | schemaless (row fields; `schema_version: 1` written by `client.web.ts`) |
+| practice_plan_completions | V10 | store existed since V1 |
+| ghost fields + mime + mood on sessions | V11–V13 | schemaless |
+| jam summary fields + summary_status | V15, V18 | schemaless |
+| inferred_mode | V16 | schemaless |
+| user_feedback store | V17 | V5 |
+| analytics_events store | V19 | V6 |
+| practice_plans store | V20 | V7 |
+| applied_sessions replay ledger | V21 | V8 |
+| jam backing-bed context columns | V22 | schemaless |
 
 ## Testing
 

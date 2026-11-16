@@ -36,6 +36,7 @@ async def test_orient_clip_uses_generated_audio(monkeypatch, tmp_path):
     )
     assert result["provider"] == "ace_step_modal"
     assert result["used_placeholder"] is False
+    assert result["annotation_source"] == "template"
     assert result["duration"] == 8.0
     assert result["wav_path"] == "data/orient_clips/job-1/orient_clip.wav"
     assert (tmp_path / "orient_clips" / "job-1" / "orient_clip.wav").read_bytes() == b"RIFFfake"
@@ -51,6 +52,7 @@ async def test_orient_clip_marks_bundled_fallback(monkeypatch):
         style_label=None, technique=None, key="G major", bpm=90, job_id="job-2"
     )
     assert result["used_placeholder"] is True
+    assert result["annotation_source"] == "template"
     assert result["placeholder_reason"] == "provider_fallback:bundled"
 
 
@@ -64,6 +66,7 @@ async def test_orient_clip_falls_back_to_placeholder_on_failure(monkeypatch):
         style_label=None, technique=None, key="A minor", bpm=70, job_id="job-3"
     )
     assert result["used_placeholder"] is True
+    assert result["annotation_source"] == "template"
     assert result["placeholder_reason"].startswith("generation_failed:")
     assert result["duration"] == 30
 
@@ -75,4 +78,5 @@ async def test_orient_clip_skip_env_still_uses_placeholder(monkeypatch):
         style_label=None, technique=None, key=None, bpm=None, job_id="job-4"
     )
     assert result["used_placeholder"] is True
+    assert result["annotation_source"] == "template"
     assert result["placeholder_reason"] == "HARMONIQ_SKIP_LYRIA_CLIP=1"

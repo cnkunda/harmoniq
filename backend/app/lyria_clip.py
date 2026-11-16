@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from app.coach import generate_orient_annotation
+from app.coach import ORIENT_ANNOTATION_SOURCE, generate_orient_annotation
 from app.ingest import get_data_dir
 
 logger = logging.getLogger("harmoniq.lyria_clip")
@@ -70,6 +70,7 @@ async def generate_orient_clip(
         return {
             "wav_path": f"data/orient_clips/{job_id}/orient_clip.wav",
             "annotation": annotation,
+            "annotation_source": ORIENT_ANNOTATION_SOURCE,
             "duration": duration,
             "used_placeholder": used_placeholder,
             "placeholder_reason": (
@@ -122,6 +123,7 @@ def _generate_placeholder_clip(
     return {
         "wav_path": rel_path,
         "annotation": annotation,
+        "annotation_source": ORIENT_ANNOTATION_SOURCE,
         "duration": 30,
         "used_placeholder": True,
         "placeholder_reason": reason,

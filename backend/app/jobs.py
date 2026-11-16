@@ -127,6 +127,17 @@ def _celery_dispatch_enabled() -> bool:
     return os.getenv("HARMONIQ_SKIP_CELERY", "").strip() != "1"
 
 
+def get_job_runtime() -> tuple[str, str | None]:
+    """Return the configured job runtime and a fallback reason for health output.
+
+    Staging/production run the Celery worker from docker-compose. The thread
+    fallback is for local/dev/test only; `/health` reports it as degraded.
+    """
+    if _celery_dispatch_enabled():
+        return "celery", None
+    return "thread", "HARMONIQ_SKIP_CELERY=1"
+
+
 def _fail_job_and_dlq(
     job_id: str,
     error: str,
@@ -260,8 +271,8 @@ def load_jobs_from_db() -> int:
     try:
         from app.repository import list_active_jobs as _repo_list
         active = _repo_list()
-        for js in active:
-            jobs[js.job_id] = js
+        for job_id, js in active:
+            jobs[job_id] = js
         count = len(active)
         if count:
             logger.info("Loaded %d jobs from database", count)

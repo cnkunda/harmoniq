@@ -110,13 +110,54 @@ If you run the image directly (`docker run`), run migrations first:
 docker compose run --rm migrate
 ```
 
+## Job runtime
+
+Staging and production require the Celery worker from `docker-compose.yml`.
+`HARMONIQ_SKIP_CELERY=1` runs analysis in daemon threads and is **local/dev/test
+only**; it is not the supported deployed runtime.
+
+`GET /health` reports the active runtime:
+
+- `job_runtime`: `celery` or `thread`
+- `job_runtime_fallback`: `HARMONIQ_SKIP_CELERY=1` in thread mode, otherwise empty
+
+Thread mode marks `status` as `degraded` even when Redis is healthy. The HTTP
+status remains 200; consumers must inspect the JSON body. This is the configured
+dispatch mode; a per-job Celery dispatch failure falls back to a thread and is
+recorded in `harmoniq_fallback_total{stage="celery_dispatch"}`.
+
+### Restart behavior
+
+- **API restart:** Celery jobs continue in the worker. Thread-fallback jobs die
+  with the API process; their `processing` rows are reloaded on startup but are
+  never re-dispatched, so the job must be re-added.
+- **Worker restart:** a normal `TERM` shutdown requeues unacknowledged tasks. A
+  forced/cold shutdown may delay redelivery until the Redis visibility timeout
+  (default 1 hour). A killed worker child (OOM/SIGKILL) is acknowledged and lost
+  because `task_reject_on_worker_lost` is not enabled. `task_time_limit` is 900s,
+  which is below the 1-hour visibility timeout.
+- **Redis restart:** queued and unacknowledged Celery messages may be lost;
+  Compose does not configure Redis persistence.
+- **Recovery:** re-add the song from Home, or inspect/requeue the DLQ through the
+  operator-token endpoints.
+
+Worker liveness is not proven by `/health`. Check it directly:
+
+```bash
+docker compose exec worker celery -A app.celery_app inspect ping
+```
+
+The restart retention test lives in
+[`backend/tests/test_commit16_job_runtime.py`](../backend/tests/test_commit16_job_runtime.py).
+
 ## Limitations
 
 - `/health` checks Redis only and returns HTTP 200 when Redis is unreachable
   (`status: "degraded"`). The CI gate parses the JSON body and requires
   `status: "ok"`. Database readiness is proven by the migration step, not by
   the endpoint.
-- The worker has no healthcheck, so the gate covers the API only.
+- The worker has no healthcheck, so the gate covers the API only. `/health`
+  reports the configured job runtime but does not prove the worker is alive.
 - Images are built for the runner's `linux/amd64` platform; multi-arch builds
   are not configured.
 - Cloud provisioning and automated production deploys are out of scope; this

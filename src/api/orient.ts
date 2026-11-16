@@ -23,6 +23,7 @@ export type OrientClipResponse = {
   duration: number
   used_placeholder: boolean
   placeholder_reason: string | null
+  annotation_source: 'template'
 }
 
 /** Generate or fetch the orient clip for a lesson job. */

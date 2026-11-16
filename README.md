@@ -66,7 +66,7 @@ curl http://localhost:8000/health
 docker compose down        # add -v to also remove the Postgres volume
 ```
 
-The stack builds the single `backend/Dockerfile`. A one-shot `migrate` service runs `alembic upgrade head` before the `api` and `worker` start; the API container no longer migrates on startup. Set `HARMONIQ_IMAGE` to pull a published image. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for image publishing, promotion, health gates, and rollback.
+The stack builds the single `backend/Dockerfile`. A one-shot `migrate` service runs `alembic upgrade head` before the `api` and `worker` start; the API container no longer migrates on startup. The Celery `worker` is required for staging/production; `HARMONIQ_SKIP_CELERY=1` thread mode is local/dev/test only and makes `/health` report `job_runtime=thread` with a degraded status. Set `HARMONIQ_IMAGE` to pull a published image. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for image publishing, promotion, health gates, job runtime, and rollback.
 
 **Related docs:** [`docs/RESEARCH.md`](docs/RESEARCH.md) |
 [`docs/KNOWN_FAILURES.md`](docs/KNOWN_FAILURES.md) |

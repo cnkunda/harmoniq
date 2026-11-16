@@ -149,6 +149,20 @@ async function applyMigrations(): Promise<void> {
   await db.execAsync(MIGRATION_TABLE_SQL)
   const row = await db.getFirstAsync<{ version: number }>('SELECT MAX(version) as version FROM schema_migrations')
   const current = row?.version ?? 0
+
+  /**
+   * Validation helpers bypass `initDb` — calling `getSessionCount` /
+   * `getAllSkillNodes` here would re-enter the in-flight `migrationPromise`
+   * and deadlock fresh installs (Commit 17 contract suite).
+   */
+  const countSessionsForValidation = async (): Promise<number> => {
+    const row = await db.getFirstAsync<{ c: number }>('SELECT COUNT(*) as c FROM sessions')
+    return row?.c ?? 0
+  }
+  const listSkillNodesForValidation = async (): Promise<SkillNodeRow[]> => {
+    const rows = await db.getAllAsync<SkillNodeRow>('SELECT * FROM skill_nodes')
+    return rows ?? []
+  }
   
   // Helper to apply migration with rollback support
   async function applyMigrationWithRollback(
@@ -230,7 +244,7 @@ async function applyMigrations(): Promise<void> {
       }
     }
     if (pendingStatements.length > 0) {
-      await applyMigrationWithRollback(4, pendingStatements, ROLLBACK_V4_SESSIONS_REVIEW, async () => validateSessionsPreservation(getSessionCount))
+      await applyMigrationWithRollback(4, pendingStatements, ROLLBACK_V4_SESSIONS_REVIEW, async () => validateSessionsPreservation(countSessionsForValidation))
     } else {
       await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 4, new Date().toISOString())
     }
@@ -287,7 +301,7 @@ async function applyMigrations(): Promise<void> {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(skill_nodes)')
     const names = new Set((cols ?? []).map((c) => c.name))
     if (!names.has('technique_roll_json')) {
-      await applyMigrationWithRollback(9, MIGRATION_V9_SKILL_TECHNIQUE_ROLL, ROLLBACK_V9_SKILL_TECHNIQUE_ROLL, async () => validateSkillNodesPreservation(getAllSkillNodes))
+      await applyMigrationWithRollback(9, MIGRATION_V9_SKILL_TECHNIQUE_ROLL, ROLLBACK_V9_SKILL_TECHNIQUE_ROLL, async () => validateSkillNodesPreservation(listSkillNodesForValidation))
     } else {
       await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 9, new Date().toISOString())
     }
@@ -308,7 +322,7 @@ async function applyMigrations(): Promise<void> {
       }
     }
     if (pendingStatements.length > 0) {
-      await applyMigrationWithRollback(11, pendingStatements, ROLLBACK_V11_SESSION_GHOST, async () => validateSessionsPreservation(getSessionCount))
+      await applyMigrationWithRollback(11, pendingStatements, ROLLBACK_V11_SESSION_GHOST, async () => validateSessionsPreservation(countSessionsForValidation))
     } else {
       await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 11, new Date().toISOString())
     }
@@ -335,7 +349,7 @@ async function applyMigrations(): Promise<void> {
     const cols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(skill_nodes)')
     const names = new Set((cols ?? []).map((c) => c.name))
     if (!names.has('schema_version')) {
-      await applyMigrationWithRollback(14, MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION, ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION, async () => validateSkillNodesPreservation(getAllSkillNodes))
+      await applyMigrationWithRollback(14, MIGRATION_V14_SKILL_NODES_SCHEMA_VERSION, ROLLBACK_V14_SKILL_NODES_SCHEMA_VERSION, async () => validateSkillNodesPreservation(listSkillNodesForValidation))
     } else {
       await db.runAsync('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)', 14, new Date().toISOString())
     }
@@ -1534,7 +1548,7 @@ export async function listUserFeedback(): Promise<UserFeedbackRow[]> {
   await initDb()
   const db = await getDb()
   const rows = await db.getAllAsync<UserFeedbackRow>(
-    `SELECT ${USER_FEEDBACK_COLUMNS} FROM user_feedback ORDER BY timestamp DESC`,
+    `SELECT ${USER_FEEDBACK_COLUMNS} FROM user_feedback ORDER BY timestamp DESC, id DESC`,
   )
   return rows ?? []
 }
@@ -1545,7 +1559,7 @@ export async function listUserFeedbackForJob(jobId: string): Promise<UserFeedbac
   const jid = jobId.trim()
   if (!jid) return []
   const rows = await db.getAllAsync<UserFeedbackRow>(
-    `SELECT ${USER_FEEDBACK_COLUMNS} FROM user_feedback WHERE job_id = ? ORDER BY timestamp DESC`,
+    `SELECT ${USER_FEEDBACK_COLUMNS} FROM user_feedback WHERE job_id = ? ORDER BY timestamp DESC, id DESC`,
     jid,
   )
   return rows ?? []

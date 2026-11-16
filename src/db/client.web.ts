@@ -328,14 +328,9 @@ function insertSessionRowInMemory(input: SessionInsertInput): void {
   const i = sessionLog.findIndex((x) => x.id === row.id)
   if (i >= 0) sessionLog[i] = row
   else sessionLog.unshift(row)
-  if (input.song_title?.trim()) {
-    sessionSongLog.push({
-      song_title: input.song_title.trim(),
-      artist: input.artist,
-      section_label: input.section_label,
-      date: input.date,
-    })
-  }
+  // Mirror native `ORDER BY date DESC` for the latest-song lookup; an append
+  // here let stale/duplicate entries shadow the newest row (Commit 17 contract).
+  rebuildSessionSongLogFromSessions()
 }
 
 export async function getSessionCount(): Promise<number> {
@@ -382,7 +377,8 @@ export async function getSessionById(id: string): Promise<SessionArchiveRow | nu
 
 export async function getLatestSessionSnippetForNode(nodeId: string): Promise<NodeSessionSnippet | null> {
   seedWebSkillNodes()
-  for (const s of sessionLog) {
+  const sorted = [...sessionLog].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  for (const s of sorted) {
     if (s.nodes_targeted.includes(nodeId)) {
       return {
         coach_review: s.coach_review,
@@ -676,7 +672,7 @@ export async function finalizePracticePlan(input: FinalizePracticePlanInput): Pr
 export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promise<void> {
   seedWebSkillNodes()
   const pitchMap = input.pitch_class_weight_map ?? input.scale_position_map ?? {}
-  jamSnapshots.unshift({
+  const row: JamSnapshotInsertInput = {
     ...input,
     scale_position_map: { ...pitchMap },
     pitch_class_weight_map: { ...pitchMap },
@@ -701,7 +697,12 @@ export async function insertJamSnapshotRow(input: JamSnapshotInsertInput): Promi
     backing_prompt: input.backing_prompt ?? null,
     backing_provider: input.backing_provider ?? null,
     backing_duration_ms: input.backing_duration_ms ?? null,
-  })
+  }
+  // Mirror native `INSERT OR REPLACE`: same id must replace, not duplicate
+  // (Commit 17 contract).
+  const i = jamSnapshots.findIndex((x) => x.id === row.id)
+  if (i >= 0) jamSnapshots[i] = row
+  else jamSnapshots.unshift(row)
   await flushJams()
 }
 
@@ -748,7 +749,7 @@ export async function listJamSnapshots(): Promise<JamSnapshotRow[]> {
       reliability_tags: [...(j.reliability_tags ?? [])],
       reliability_confidence: j.reliability_confidence ?? null,
       reliability_signal_quality: typeof j.reliability_signal_quality === 'number' ? j.reliability_signal_quality : null,
-      recurring_gestures: [...j.recurring_gestures],
+      recurring_gestures: [...(j.recurring_gestures ?? [])],
       coach_summary: j.coach_summary,
       summary_bundle_json: j.summary_bundle_json ?? null,
       phrases_json: j.phrases_json ?? null,
@@ -1074,7 +1075,10 @@ export async function upsertUserFeedback(input: UserFeedbackInsertInput): Promis
 export async function listUserFeedback(): Promise<UserFeedbackRow[]> {
   await initDb()
   seedWebSkillNodes()
-  return [...userFeedback].sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0))
+  return [...userFeedback].sort((a, b) => {
+    if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? 1 : -1
+    return a.id < b.id ? 1 : a.id > b.id ? -1 : 0
+  })
 }
 
 export async function listUserFeedbackForJob(jobId: string): Promise<UserFeedbackRow[]> {
@@ -1084,7 +1088,10 @@ export async function listUserFeedbackForJob(jobId: string): Promise<UserFeedbac
   if (!jid) return []
   return userFeedback
     .filter((row) => row.job_id === jid)
-    .sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0))
+    .sort((a, b) => {
+      if (a.timestamp !== b.timestamp) return a.timestamp < b.timestamp ? 1 : -1
+      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0
+    })
 }
 
 export async function deleteUserFeedback(id: string): Promise<void> {

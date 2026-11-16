@@ -2,11 +2,13 @@ import { Audio } from 'expo-av'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { fetchOrientClip as requestOrientClip } from '@/src/api/orient'
+import type { CoachSource } from '@/src/coach/coachSource'
 import { lessonFileUrl } from '@/src/utils/lessonAudio'
 
 type OrientClipState = {
   url: string | null
   annotation: string | null
+  annotationSource: CoachSource
   usedPlaceholder: boolean
   placeholderReason: string | null
   isLoading: boolean
@@ -17,6 +19,7 @@ type OrientClipState = {
 const EMPTY_STATE: OrientClipState = {
   url: null,
   annotation: null,
+  annotationSource: 'template',
   usedPlaceholder: false,
   placeholderReason: null,
   isLoading: false,
@@ -56,6 +59,7 @@ export function useOrientClip(lessonId: string | undefined) {
       const next: OrientClipState = {
         url,
         annotation: result.annotation ?? null,
+        annotationSource: result.annotation_source ?? 'template',
         usedPlaceholder: result.used_placeholder ?? false,
         placeholderReason: result.placeholder_reason ?? null,
         isLoading: false,

@@ -33,7 +33,9 @@ import {
 } from 'react-native-svg'
 
 import { spring } from '@/src/constants/animations'
+import { CoachSourceLabel } from '@/components/CoachSourceLabel'
 import { Pill } from '@/components/Pill'
+import type { CoachSource } from '@/src/coach/coachSource'
 import { colors } from '@/src/constants/colors'
 import { techniqueLabel } from '@/src/music/techniques'
 import {
@@ -106,6 +108,7 @@ type FretboardDiagramProps = {
   onToggleOrient?: () => void
   orientClipUrl?: string | null
   orientAnnotation?: string | null
+  orientAnnotationSource?: CoachSource | null
   orientIsPlaying?: boolean
   onToggleOrientPlayback?: () => void
   orientError?: string | null
@@ -399,6 +402,7 @@ export function FretboardDiagram({
   onToggleOrient,
   orientClipUrl = null,
   orientAnnotation = null,
+  orientAnnotationSource = null,
   orientIsPlaying = false,
   onToggleOrientPlayback,
   orientError = null,
@@ -852,7 +856,10 @@ export function FretboardDiagram({
         <View className="mt-2 rounded-lg border border-wood-700/50 bg-wood-900/50 px-2.5 py-2">
           <Text className={SECTION_EYEBROW_CLASS}>Technique Hint</Text>
           {orientAnnotation ? (
-            <Text className="mt-1 font-sans text-xs text-muted-brown">{orientAnnotation}</Text>
+            <>
+              <CoachSourceLabel source={orientAnnotationSource} className="mt-1" />
+              <Text className="mt-1 font-sans text-xs text-muted-brown">{orientAnnotation}</Text>
+            </>
           ) : null}
           {orientClipUrl ? (
             <Pressable

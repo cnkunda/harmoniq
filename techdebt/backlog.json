@@ -301,7 +301,7 @@
       "git rev-list --count HEAD: 202",
       "git shortlog -sne --all adds 5 VS Code entries"
     ],
-    "recommendedFix": "Add CODEOWNERS, ADRs/runbooks for the top hotspots, pair-review on analysis/jobs/DB changes, and rotate a second owner through each subsystem."
+    "recommendedFix": "Accepted risk: Harmoniq is intentionally single-maintainer. Revisit CODEOWNERS, pair-review, and ownership rotation only if a second maintainer joins."
   },
   {
     "id": "TD-13",
@@ -347,7 +347,7 @@
       "backend/app/analyze_audio.py (37 changes, 1,073 lines)",
       "components/FretboardDiagram.tsx (37 changes, 1,449 lines)"
     ],
-    "recommendedFix": "Create CODEOWNERS for these files, add a size/complexity review budget, and schedule one small extraction per hotspot per sprint."
+    "recommendedFix": "Accepted risk for ownership/review-budget process in a single-maintainer project. Refactor work is tracked by TD-22 (backend god modules) and TD-23 (frontend god screens); use churn x size to prioritize opportunistic extractions."
   },
   {
     "id": "TD-15",
@@ -369,7 +369,7 @@
       "backend/app/jobs.py:902-923 (Celery to daemon thread fallback)",
       "backend/app/jobs.py:1281-1297 (recompute fallback)"
     ],
-    "recommendedFix": "Require Celery in production and fail startup if unavailable, or expose the fallback as an explicit local-dev mode with a health warning."
+    "recommendedFix": "Resolved: staging/production require the Celery worker; HARMONIQ_SKIP_CELERY=1 is local/dev/test only and is surfaced as job_runtime=thread with degraded /health. Restart behavior documented and tested."
   },
   {
     "id": "TD-16",

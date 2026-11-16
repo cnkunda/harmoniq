@@ -75,7 +75,7 @@ give the fastest pipeline without the MT3 checkpoint or a worker process.
 | --- | --- | --- | --- | --- |
 | `CELERY_BROKER_URL` | `redis://localhost:6379/0` | No | `app/celery_app.py` | Celery broker. |
 | `CELERY_RESULT_BACKEND` | `redis://localhost:6379/1` | No | `app/celery_app.py` | Celery result backend. |
-| `HARMONIQ_SKIP_CELERY` | off | No | `app/jobs.py` | `1` runs analysis in-process instead of dispatching to Celery (no worker needed). Test-only in practice. |
+| `HARMONIQ_SKIP_CELERY` | off | No | `app/jobs.py` | `1` runs analysis in-process instead of dispatching to Celery (no worker needed). **Local/dev/test only** — staging/production require the Compose `worker`. `/health` reports `job_runtime=thread` and `status=degraded` when this is set. |
 
 ### Analysis pipeline
 

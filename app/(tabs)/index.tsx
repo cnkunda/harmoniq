@@ -77,11 +77,9 @@ import { spotifyTasteLooksPresent } from '@/src/taste/tasteQuizGate'
 import type { PracticePlanPayload } from '@/src/types'
 import { lessonFromSavedLick } from '@/src/utils/lessonFromSavedLick'
 
-function getGreeting(name?: string | null): string {
+function getGreeting(): string {
   const h = new Date().getHours()
-  const base = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
-  const trimmed = name?.trim()
-  return trimmed ? `${base}, ${trimmed}` : base
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 }
 
 function relativeDateLabel(input: unknown): string {
@@ -229,7 +227,6 @@ function DifficultyDots({ level }: { level: number }) {
 export default function HomeScreen() {
   const router = useRouter()
   const tabInset = useTabContentInset()
-  const displayName = 'Nkunda' // TODO(M-01, TD-13): Replace with signed-in profile name.
   const saveLesson = useLessonStore((s) => s.saveLesson)
   const setLessonSectionIndex = useLessonStore((s) => s.setLessonSectionIndex)
   const [suggestion, setSuggestion] = useState<HomeSuggestion | null>(null)
@@ -692,7 +689,7 @@ export default function HomeScreen() {
       >
         <View className="w-full max-w-4xl self-center px-6 pb-8 pt-4">
           <View className="mb-10 mt-2">
-            <Text className="mb-1 font-serif text-3xl text-cream">{getGreeting(displayName)}</Text>
+            <Text className="mb-1 font-serif text-3xl text-cream">{getGreeting()}</Text>
             <Text className="font-sans text-base text-muted-brown">Ready to play?</Text>
           </View>
 

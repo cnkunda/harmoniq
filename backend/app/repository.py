@@ -121,14 +121,14 @@ def complete_job(job_id: str, result: LessonJSON) -> None:
         session.close()
 
 
-def list_active_jobs() -> list[JobStatus]:
+def list_active_jobs() -> list[tuple[str, JobStatus]]:
     """Load all processing and complete jobs from DB. Used on startup to warm the cache."""
     session = get_session()
     try:
         rows = session.execute(
             select(JobModel).where(JobModel.status.in_(["processing", "complete"]))
         ).scalars().all()
-        return [_job_model_to_status(r) for r in rows]
+        return [(row.job_id, _job_model_to_status(row)) for row in rows]
     finally:
         session.close()
 

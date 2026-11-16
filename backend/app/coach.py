@@ -9,7 +9,7 @@ import re
 import time
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
-from typing import Any
+from typing import Any, Literal
 
 from anthropic import Anthropic
 
@@ -526,6 +526,18 @@ FALLBACK_ONBOARDING_PLACEMENT = (
     "Keep bends relaxed and let vibrato settle before you move on — small stability wins there carry into everything else."
 )
 
+# Orient tips are deterministic template copy for v1 (M-03). The client labels
+# them as template-generated so the UI never implies AI inference.
+ORIENT_ANNOTATION_SOURCE: Literal["template"] = "template"
+
+
+@dataclass(frozen=True)
+class CoachText:
+    """Coach paragraph plus whether it came from Claude or a local template."""
+
+    text: str
+    source: Literal["ai", "template"]
+
 
 def _fallback_coach_fields() -> tuple[str, str]:
     return FALLBACK_COACH_NOTE, FALLBACK_COACH_EXPLANATION
@@ -861,16 +873,16 @@ def generate_onboarding_placement_summary(
     phrasing_avg: float,
     timing_avg: float,
     bend_error_cents_avg: float,
-) -> str:
+) -> CoachText:
     """Single plain-text paragraph for placement results; never JSON."""
     if os.getenv("PYTEST_CURRENT_TEST") and os.getenv("HARMONIQ_ENABLE_COACH_IN_TESTS") != "1":
         logger.info("onboarding placement coach fallback reason=pytest_mode")
-        return FALLBACK_ONBOARDING_PLACEMENT
+        return CoachText(FALLBACK_ONBOARDING_PLACEMENT, "template")
 
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         logger.warning("onboarding placement coach fallback reason=missing_api_key")
-        return FALLBACK_ONBOARDING_PLACEMENT
+        return CoachText(FALLBACK_ONBOARDING_PLACEMENT, "template")
 
     user_prompt = f"""The guitarist just finished a Harmoniq placement session: three very short phrases recorded back-to-back.
 Aggregated scores (0–1 scale): pitch {pitch_avg:.2f}, phrasing {phrasing_avg:.2f}, timing {timing_avg:.2f}.
@@ -886,18 +898,18 @@ Never start with "Great job" or "Nice work"."""
         text = (raw_text or "").strip()
         if len(text) < 50:
             logger.warning("onboarding placement coach fallback reason=short_response")
-            return FALLBACK_ONBOARDING_PLACEMENT
-        return text
+            return CoachText(FALLBACK_ONBOARDING_PLACEMENT, "template")
+        return CoachText(text, "ai")
     except FutureTimeoutError:
         future.cancel()
         logger.warning("onboarding placement coach fallback reason=timeout")
-        return FALLBACK_ONBOARDING_PLACEMENT
+        return CoachText(FALLBACK_ONBOARDING_PLACEMENT, "template")
     except Exception as exc:
         logger.warning(
             "onboarding placement coach fallback reason=api_error error=%s",
             exc.__class__.__name__,
         )
-        return FALLBACK_ONBOARDING_PLACEMENT
+        return CoachText(FALLBACK_ONBOARDING_PLACEMENT, "template")
 
 
 def generate_jam_coach_summary(
@@ -1428,6 +1440,7 @@ def generate_orient_annotation(
     TODO(M-03): This is currently a template stub. Production should use Claude for
     dynamic generation based on style, technique, key, and BPM.
     Issue: Currently returns deterministic copy without AI inference.
+    The client labels this output as template guidance (Commit 14).
 
     Args:
         style_label: Musical style (e.g., "rock", "blues", "jazz")

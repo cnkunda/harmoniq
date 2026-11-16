@@ -873,6 +873,7 @@ function StudyScreenInner() {
               showOrientControl={orientPanelVisible}
               orientClipUrl={orientClip.url}
               orientAnnotation={orientClip.annotation}
+              orientAnnotationSource={orientClip.annotationSource}
               orientIsPlaying={orientClip.isPlaying}
               onToggleOrientPlayback={handleToggleOrientPlayback}
               orientError={orientClip.error}

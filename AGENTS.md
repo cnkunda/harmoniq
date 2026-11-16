@@ -254,10 +254,11 @@ Defined in `src/constants/sessionFlow.ts` and `sessionPhases.ts`. Mood check gat
 
 | Platform | Engine | Versions |
 |----------|--------|----------|
-| Mobile | SQLite via `expo-sqlite` | 14 migration versions |
-| Web | IndexedDB + in-memory arrays | v4 (separate versioning) |
+| Mobile | SQLite via `expo-sqlite` | 22 migration versions |
+| Web | IndexedDB + in-memory arrays | v8 (separate versioning) |
 
 Shared contract: `HarmoniqDbClient` interface in `src/db/harmoniqDbClient.ts`. Platform resolution via `client.native.ts` / `client.web.ts`.
+The shared contract suite runs against both clients in CI — see [`docs/DB_CONTRACT.md`](docs/DB_CONTRACT.md); the feature-based native↔web migration mapping lives in [`docs/MIGRATIONS.md`](docs/MIGRATIONS.md).
 
 ### Audio architecture
 
@@ -443,6 +444,7 @@ Full 6-phase process in `docs/CODER.md` (read before implementing a commit):
 - Swallow exceptions silently
 - Add "it might be useful later" abstractions
 - Add `TODO` / `FIXME` / `HACK` / `XXX` / `@deprecated` without an `M-xx` ID registered in `techdebt/MARKERS.md`
+- Add CODEOWNERS, named-owner, pairing, or review-budget artifacts for TD-12/TD-14 — the single-maintainer model is intentional (see the Commit 13/15 closures in `PRIORITIES.md`)
 - Combine two commits into one
 - Refactor unrelated code while implementing
 - Guess when the spec is ambiguous — ask instead
@@ -468,6 +470,7 @@ Full 6-phase process in `docs/CODER.md` (read before implementing a commit):
 | `src/constants/sessionPhases.ts` | 4-phase pedagogical model |
 | `src/constants/colors.ts` | Real color palette (not `constants/Colors.ts`) |
 | `src/db/harmoniqDbClient.ts` | DB interface contract |
+| `docs/DB_CONTRACT.md` | Shared DB contract suite (native + web) and intentional platform differences |
 
 ---
 
@@ -593,5 +596,8 @@ Both datasets derive chord labels from MIDI note data rather than explicit chord
 - **MT3 / JAX**: MT3 requires JAX for GPU inference. The CRNN TFLite fallback activates automatically when JAX/TPU is unavailable. basic-pitch / TensorFlow is no longer a primary pipeline dependency (was the solo inference engine before MT3).
 - **Anthropic 401**: `circuit_breaker.py` records an invalid/rejected API key and suppresses coach/enrichment calls for 300s. Chord enrichment reports `status="skipped"`, `fallback_reason="api_key_rejected"` — never `complete` with zero corrections on an auth failure.
 - **CSS grid**: Not available in React Native. Use `flex-row flex-wrap` instead.
+- **Job runtime**: Staging/production require the Celery `worker`. `HARMONIQ_SKIP_CELERY=1` is local/dev/test only; `/health` reports `job_runtime=thread` with a degraded status. API restarts do not resume thread jobs (processing rows reload but are not re-dispatched).
 - **WSL networking**: Use LAN IP (`192.168.x.x`) in both `EXPO_PUBLIC_API_URL` and `HARMONIQ_CORS_ORIGINS` so physical devices can reach the backend.
 - **Starter song**: "Gravity" by John Mayer (G major pentatonic) — the default if no song is added.
+- **DB versions**: Web's `DB_VERSION` (idbWeb.ts, 8) is unrelated to native's 22 SQL migrations. The `schema_version: 1` written on web skill-node rows is the **skill-node row** version (native V14), not a database version. Never renumber one sequence into the other — see the mapping in `docs/MIGRATIONS.md`.
+- **DB contract harness**: `expo-sqlite`, `expo-constants`, and the `lessonStore` graph all pull react-native, which cannot load in Vitest node or a plain browser bundle. The contract suite mocks/aliases them (see `docs/DB_CONTRACT.md`); don't import those modules into shared contract code.

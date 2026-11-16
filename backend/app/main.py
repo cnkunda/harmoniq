@@ -239,7 +239,7 @@ app.include_router(ws_router)
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    """Health check with Redis connectivity."""
+    """Health check with Redis connectivity and active job runtime."""
     health_status = {"status": "ok"}
 
     # Check Redis if configured
@@ -251,6 +251,14 @@ async def health() -> dict[str, str]:
             health_status["status"] = "degraded"
     except Exception:
         health_status["redis"] = "unavailable"
+        health_status["status"] = "degraded"
+
+    from app.jobs import get_job_runtime
+
+    job_runtime, fallback_reason = get_job_runtime()
+    health_status["job_runtime"] = job_runtime
+    health_status["job_runtime_fallback"] = fallback_reason or ""
+    if job_runtime != "celery":
         health_status["status"] = "degraded"
 
     return health_status
@@ -807,7 +815,7 @@ async def score(payload: ScoreRequest) -> ScoreResult:
     summary="POST /onboarding-placement — placement baseline coach paragraph",
 )
 async def onboarding_placement(payload: OnboardingPlacementRequest) -> OnboardingPlacementResponse:
-    paragraph = generate_onboarding_placement_summary(
+    coach = generate_onboarding_placement_summary(
         pitch_avg=payload.pitch_avg, phrasing_avg=payload.phrasing_avg,
         timing_avg=payload.timing_avg, bend_error_cents_avg=payload.bend_error_cents_avg,
     )
@@ -816,7 +824,11 @@ async def onboarding_placement(payload: OnboardingPlacementRequest) -> Onboardin
         note = "Some placement samples had lower reliability, so this baseline will tighten after a few normal sessions."
     elif payload.reliability_flags:
         note = "Baseline includes signal-quality guards and may be refined as cleaner phrase captures arrive."
-    return OnboardingPlacementResponse(coach_paragraph=paragraph, confidence_note=note)
+    return OnboardingPlacementResponse(
+        coach_paragraph=coach.text,
+        coach_source=coach.source,
+        confidence_note=note,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1245,4 +1257,5 @@ async def orient_clip(req: OrientClipRequest):
         duration=clip_result["duration"],
         used_placeholder=clip_result["used_placeholder"],
         placeholder_reason=clip_result["placeholder_reason"],
+        annotation_source=clip_result.get("annotation_source", "template"),
     )
