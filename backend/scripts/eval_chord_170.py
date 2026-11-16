@@ -411,6 +411,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--split", default="test")
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--label-space", default="170", choices=["170", "277", "mirex25"])
     args = parser.parse_args(argv)
 
     from scripts import chord_data_v2 as data
@@ -428,8 +429,20 @@ def main(argv: list[str] | None = None) -> int:
         loaded = data.load_dataset_dir_170(source_dirs[name], args.split)
         if len(loaded["labels170"]) == 0:
             continue
+        if args.label_space == "277":
+            if loaded.get("labels277") is None:
+                continue
+            native = loaded["labels277"]
+        elif args.label_space == "mirex25":
+            native = map_native_to_mirex25(
+                loaded["labels277"] if loaded.get("labels277") is not None
+                else loaded["labels170"],
+                "277" if loaded.get("labels277") is not None else "170",
+            )
+        else:
+            native = loaded["labels170"]
         features.append(loaded["features"])
-        labels.append(loaded["labels170"])
+        labels.append(native)
         bass.append(loaded["bass_labels"])
         track_ids.extend(loaded["track_ids"])
         centres.append(loaded["center_times"])
@@ -446,7 +459,13 @@ def main(argv: list[str] | None = None) -> int:
     chord_probs, bass_probs = predict_arrays(model, X, args.batch_size)
     chord_pred = chord_probs.argmax(axis=1)
     bass_pred = bass_probs.argmax(axis=1)
-    report = evaluate_arrays(y, chord_pred, b, bass_pred, chord_probs, track_ids, c, sources)
+    if args.label_space == "170":
+        report = evaluate_arrays(y, chord_pred, b, bass_pred, chord_probs,
+                                 track_ids, c, sources)
+    else:
+        report = evaluate_ablation(y, chord_probs, track_ids, c,
+                                   space=args.label_space,
+                                   bass_true=b, bass_pred=bass_pred)
     report["checkpoint"] = str(args.checkpoint)
     report["split"] = args.split
     report["sources"] = sorted(set(sources))
@@ -467,3 +486,149 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# ---------------------------------------------------------------------------
+# Ablation support: native vocabularies compared in MIREX-25 space
+# ---------------------------------------------------------------------------
+
+
+def map_native_to_mirex25(labels: np.ndarray, space: str) -> np.ndarray:
+    """Map native label indices (170 / 277 / 25) to MIREX-25 indices."""
+    labels = np.asarray(labels, dtype=np.int64)
+    if space == "mirex25":
+        return labels
+    if space == "170":
+        from app.chord_vocab_170 import map_170_to_mirex25
+
+        table = np.array([map_170_to_mirex25(i) for i in range(NUM_CLASSES_170)],
+                         dtype=np.int64)
+        return table[labels]
+    if space == "277":
+        from app.chord_vocab import NUM_CLASSES, mirex_label
+
+        table = np.array([mirex_label(i) for i in range(NUM_CLASSES)], dtype=np.int64)
+        return table[labels]
+    raise ValueError(f"unknown label space: {space}")
+
+
+def probs_to_mirex25(probs: np.ndarray, space: str) -> np.ndarray:
+    """Aggregate native class probabilities into the MIREX-25 space."""
+    probs = np.asarray(probs, dtype=np.float64)
+    if space == "mirex25":
+        return probs.astype(np.float32)
+    if space == "170":
+        from app.chord_vocab_170 import map_170_to_mirex25
+
+        mapping = np.array([map_170_to_mirex25(i) for i in range(NUM_CLASSES_170)])
+    elif space == "277":
+        from app.chord_vocab import NUM_CLASSES, mirex_label
+
+        mapping = np.array([mirex_label(i) for i in range(NUM_CLASSES)])
+    else:
+        raise ValueError(f"unknown label space: {space}")
+    out = np.zeros((len(probs), 25), dtype=np.float64)
+    for native_index, mirex_index in enumerate(mapping):
+        out[:, mirex_index] += probs[:, native_index]
+    return out.astype(np.float32)
+
+
+def label_to_harte_25(idx: int, bass_idx: int | None = None) -> str:
+    """Harte label for a MIREX-25 index (maj/min/N)."""
+    from app.chord_vocab import MIREX_VOCAB
+
+    if int(idx) >= len(MIREX_VOCAB) - 1:
+        return "N"
+    root, quality = MIREX_VOCAB[int(idx)].split(":", 1)
+    label = f"{root}:{quality}"
+    if bass_idx is not None and int(bass_idx) != BASS_X_IDX:
+        semitones = (int(bass_idx) % 12 - ROOTS_12.index(root)) % 12
+        if semitones:
+            label += f"/{_SEMITONE_TO_DEGREE[semitones]}"
+    return label
+
+
+def evaluate_ablation(
+    native_labels: np.ndarray,
+    native_probs: np.ndarray,
+    track_ids: list[str],
+    centres: np.ndarray,
+    *,
+    space: str,
+    bass_true: np.ndarray | None = None,
+    bass_pred: np.ndarray | None = None,
+    sources: list[str] | None = None,
+    hop_s: float = 6.4,
+) -> dict:
+    """Evaluate any vocab size in the shared MIREX-25 comparison space."""
+    labels25 = map_native_to_mirex25(native_labels, space)
+    probs25 = probs_to_mirex25(native_probs, space)
+    pred25 = probs25.argmax(axis=1)
+    report = {
+        "label_space": space,
+        "n_windows": int(len(labels25)),
+        "n_tracks": len(set(track_ids)),
+        "exact_accuracy": float(np.mean(pred25 == labels25)),
+        "root_accuracy": float(np.mean([
+            (int(a) % 12 == int(b) % 12) if a != 24 and b != 24 else (a == b)
+            for a, b in zip(labels25, pred25)
+        ])),
+        "macro_f1": macro_f1(labels25, pred25, n_classes=25),
+        "top3_accuracy": top_k_accuracy(probs25, labels25, 3),
+        "ece": expected_calibration_error(probs25, labels25),
+    }
+    by_track: dict[str, list[int]] = defaultdict(list)
+    for index, track in enumerate(track_ids):
+        by_track[track].append(index)
+    wcsr_accum = defaultdict(float)
+    weight_total = 0
+    for track, indices in by_track.items():
+        idx = np.asarray(indices)
+        ref = [label_to_harte_25(int(i), int(b) if bass_true is not None else None)
+               for i, b in zip(labels25[idx], bass_true[idx] if bass_true is not None else [None] * len(idx))]
+        est = [label_to_harte_25(int(i), int(b) if bass_pred is not None else None)
+               for i, b in zip(pred25[idx], bass_pred[idx] if bass_pred is not None else [None] * len(idx))]
+        scores = wcsr_metrics(np.array(ref), np.array(est),
+                              np.asarray(centres)[idx], hop_s=hop_s)
+        weight_total += len(idx)
+        for key, value in scores.items():
+            wcsr_accum[key] += value * len(idx)
+    report["wcsr"] = {key: (wcsr_accum[key] / weight_total if weight_total else 0.0)
+                      for key in _WCSR_KEYS}
+    report["ci"] = bootstrap_ci(labels25, pred25, track_ids, n_classes=25)
+    return report
+
+
+def bootstrap_ci(
+    labels: np.ndarray,
+    preds: np.ndarray,
+    track_ids: list[str],
+    *,
+    n_classes: int = NUM_CLASSES_170,
+    n_boot: int = 1000,
+    seed: int = 0,
+) -> dict:
+    """Bootstrap 95% CIs over tracks for exact accuracy and macro F1."""
+    rng = np.random.default_rng(seed)
+    labels = np.asarray(labels)
+    preds = np.asarray(preds)
+    by_track: dict[str, list[int]] = defaultdict(list)
+    for index, track in enumerate(track_ids):
+        by_track[track].append(index)
+    track_indices = list(by_track.values())
+    if not track_indices:
+        return {"exact_accuracy": [0.0, 0.0], "macro_f1": [0.0, 0.0]}
+    exact_samples, f1_samples = [], []
+    for _ in range(n_boot):
+        chosen = rng.integers(0, len(track_indices), size=len(track_indices))
+        idx = np.concatenate([track_indices[i] for i in chosen])
+        exact_samples.append(float(np.mean(preds[idx] == labels[idx])))
+        f1_samples.append(macro_f1(labels[idx], preds[idx], n_classes=n_classes))
+    def _ci(values):
+        return [float(np.percentile(values, 2.5)), float(np.percentile(values, 97.5))]
+    return {
+        "exact_accuracy": _ci(exact_samples),
+        "macro_f1": _ci(f1_samples),
+        "n_tracks": len(track_indices),
+        "n_boot": n_boot,
+    }

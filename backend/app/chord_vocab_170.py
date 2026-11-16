@@ -208,3 +208,24 @@ def label_to_indices(label: str) -> tuple[int, int]:
     chord_idx = CHORD_TO_IDX_170[compose_label(root, quality)]
     bass_idx = BASS_TO_IDX[bass if bass is not None else root]
     return chord_idx, bass_idx
+
+
+# Strong-minor / strong-major quality families for the MIREX-25 ablation.
+_MAJORISH_QUALITIES = {"maj", "maj6", "maj7", "7", "sus2", "sus4"}
+_MINORISH_QUALITIES = {"min", "min6", "min7", "minmaj7", "dim", "dim7", "hdim7", "aug"}
+
+
+def map_170_to_mirex25(chord_idx: int) -> int:
+    """Map a 170-class index to the MIREX-25 index (maj/min/N).
+
+    Follows the legacy 277→25 policy: major-ish → major, minor-ish → minor,
+    N/X → N. Used only by the vocabulary-size ablation.
+    """
+    from app.chord_vocab import MIREX_TO_IDX, ROOT_NOTES
+
+    if chord_idx in (N_IDX_170, X_IDX_170):
+        return MIREX_TO_IDX["N"]
+    quality_index, root_index = divmod(int(chord_idx), 12)
+    quality = QUALITIES_14[quality_index]
+    target = "maj" if quality in _MAJORISH_QUALITIES else "min"
+    return MIREX_TO_IDX[f"{ROOT_NOTES[root_index]}:{target}"]

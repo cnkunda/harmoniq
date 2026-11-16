@@ -27,6 +27,7 @@ Later phases extend this app with ``train``/``eval``/``sweep``/``export``
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import time
@@ -67,6 +68,14 @@ image = (
 
 data_volume = modal.Volume.from_name("harmoniq-chord170-data", create_if_missing=True)
 runs_volume = modal.Volume.from_name("harmoniq-chord170-runs", create_if_missing=True)
+
+btc_image = (
+    modal.Image.debian_slim("3.11")
+    .apt_install("ffmpeg", "libsndfile1")
+    .pip_install("torch==2.5.1", index_url="https://download.pytorch.org/whl/cpu")
+    .pip_install("numpy>=1.26", "librosa>=0.10.2", "soundfile>=0.13")
+    .env({"PYTHONUNBUFFERED": "1"})
+)
 
 ROOT = "/chord170"
 BACKEND = f"{ROOT}/backend"
@@ -308,6 +317,164 @@ def eval_model(
             print("===== eval report =====", flush=True)
             print(handle.read(), flush=True)
     return output
+
+
+@app.function(
+    image=image,
+    gpu="A10G",
+    cpu=8,
+    memory=32768,
+    timeout=24 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=0,
+)
+def sweep(epochs: str = "25", tag: str = "") -> str:
+    """Run the Phase 4 ablation suite sequentially on one A10G.
+
+    All variants share the config, seed, and epoch budget; patience equals the
+    budget so every run completes (no early-stop asymmetry). Each run is
+    evaluated on the held-out test split in its native label space and the
+    comparison is written to ``sweeps/<tag>/summary.json``.
+    """
+    import shlex
+
+    _ensure_bundle()
+    stamp = tag.strip() or time.strftime("sweep-%Y%m%d-%H%M%S")
+    base_out = os.path.join(RUNS, "chord170", "sweeps", stamp)
+    budget = int(epochs)
+    variants = [
+        ("170-baseline", "170", "--epochs %d --patience %d" % (budget, budget)),
+        ("170-aux", "170", "--aux-heads"),
+        ("170-bass0.5", "170", "--bass-loss-weight 0.5"),
+        ("170-noaugment", "170", "--no-augment"),
+        ("mirex25", "mirex25", "--label-space mirex25"),
+        ("vocab277", "277", "--label-space 277"),
+        ("synth5", "170", "--synthetic-epochs 5 --synthetic-limit 1500"),
+        ("synth10", "170", "--synthetic-epochs 10 --synthetic-limit 1500"),
+    ]
+    summary: dict = {"tag": stamp, "epochs": budget, "config": "configs/chord170_base.yaml",
+                     "variants": {}}
+    for name, space, extra in variants:
+        out_dir = os.path.join(base_out, name)
+        command = [
+            "python", "scripts/train_chord_170.py",
+            "--config", "configs/chord170_base.yaml",
+            "--out-dir", out_dir,
+            "--label-space", space,
+        ]
+        # Avoid duplicating label-space/epochs flags for variants that set them.
+        extra_args = shlex.split(extra)
+        if "--label-space" in extra_args:
+            index = extra_args.index("--label-space")
+            extra_args = extra_args[:index] + extra_args[index + 2:]
+        command += extra_args
+        try:
+            _run(command)
+            eval_out = os.path.join(out_dir, "eval_test.json")
+            _run([
+                "python", "scripts/eval_chord_170.py",
+                "--checkpoint", os.path.join(out_dir, "best.keras"),
+                "--split", "test",
+                "--sources", "guitarset,egset12",
+                "--label-space", space,
+                "--out", eval_out,
+            ])
+            entry: dict = {"label_space": space, "args": extra}
+            metrics_path = os.path.join(out_dir, "metrics.json")
+            if os.path.isfile(metrics_path):
+                entry["val"] = json.load(open(metrics_path, encoding="utf-8"))
+            if os.path.isfile(eval_out):
+                entry["test"] = json.load(open(eval_out, encoding="utf-8"))
+            summary["variants"][name] = entry
+        except Exception as exc:  # record failures instead of aborting the suite
+            summary["variants"][name] = {"label_space": space, "args": extra,
+                                         "error": f"{type(exc).__name__}: {exc}"}
+            print(f"[sweep] {name} FAILED: {exc}", flush=True)
+        runs_volume.commit()
+
+    summary_path = os.path.join(base_out, "summary.json")
+    os.makedirs(base_out, exist_ok=True)
+    with open(summary_path, "w", encoding="utf-8") as handle:
+        json.dump(summary, handle, indent=2)
+    runs_volume.commit()
+    print(compact_sweep_table(summary), flush=True)
+    return summary_path
+
+
+def compact_sweep_table(summary: dict) -> str:
+    lines = ["variant                space    exact   macroF1  wcsr-mirex  ece"]
+    for name, entry in summary.get("variants", {}).items():
+        test = entry.get("test") or {}
+        if not test:
+            lines.append(f"{name:22s} {entry.get('label_space',''):8s} ERROR")
+            continue
+        lines.append(
+            f"{name:22s} {entry.get('label_space',''):8s} "
+            f"{test.get('exact_accuracy', 0):.3f}   "
+            f"{test.get('macro_f1', 0):.3f}    "
+            f"{test.get('wcsr', {}).get('mirex', 0):.3f}       "
+            f"{test.get('ece', 0):.3f}"
+        )
+    return "\n".join(lines)
+
+
+@app.function(
+    image=btc_image,
+    cpu=8,
+    memory=16384,
+    timeout=6 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def btc_label_tracks(limit: str = "80", per_style: str = "10") -> str:
+    """Run the BTC 170-class teacher over IDMT dataset4 audio.
+
+    Writes one timeline JSON per track to
+    ``/runs/chord170/teacher/btc/<track>.json`` (Teacher comparison, Phase 4).
+    """
+    import sys as _sys
+
+    _ensure_bundle()
+    backend_path = BACKEND
+    if backend_path not in _sys.path:
+        _sys.path.insert(0, backend_path)
+    from scripts.btc_teacher import BtcTeacher
+
+    base = os.path.join(BACKEND, "data", "idmt_smt_guitar", "raw", "audio", "dataset4")
+    wavs = sorted(Path(base).rglob("audio/*.wav"))
+    # Spread the subset across styles: keep at most ``per_style`` per style dir.
+    by_style: dict[str, list] = {}
+    for wav in wavs:
+        style = wav.parent.parent.name
+        by_style.setdefault(style, []).append(wav)
+    chosen = []
+    for style, files in sorted(by_style.items()):
+        chosen.extend(files[: int(per_style)])
+    if int(limit or 0):
+        chosen = chosen[: int(limit)]
+    out_dir = os.path.join(RUNS, "chord170", "teacher", "btc")
+    os.makedirs(out_dir, exist_ok=True)
+    teacher = BtcTeacher(device="cpu")
+    written = 0
+    for wav in chosen:
+        rel = wav.relative_to(base).with_suffix("")
+        track_id = "idmt_raw:dataset4/" + str(rel).replace(os.sep, "/")
+        safe = str(rel).replace(os.sep, "_")
+        try:
+            timeline = teacher.predict_timeline(wav)
+        except Exception as exc:
+            print(f"[btc] {track_id} failed: {exc}", flush=True)
+            continue
+        payload = {"track_id": track_id, "teacher": "btc", "wave": str(wav),
+                   "events": timeline}
+        with open(os.path.join(out_dir, safe + ".json"), "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        written += 1
+        if written % 10 == 0:
+            print(f"[btc] {written}/{len(chosen)} tracks labelled", flush=True)
+    runs_volume.commit()
+    print(f"[btc] wrote {written} timelines to {out_dir}", flush=True)
+    return out_dir
 
 
 @app.local_entrypoint()

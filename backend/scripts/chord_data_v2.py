@@ -152,6 +152,7 @@ def load_track(npz_path: Path) -> dict | None:
             return {
                 "features": data["features"].astype(np.float32),
                 "labels170": labels170,
+                "labels277": None,  # v2 pseudo-label files have no 277 labels
                 "bass_labels": bass,
                 "confidence": confidence,
                 "track_id": _decode(data["track_id"]) if "track_id" in data.files else npz_path.stem,
@@ -182,6 +183,7 @@ def load_track(npz_path: Path) -> dict | None:
         return {
             "features": data["features"].astype(np.float32),
             "labels170": labels170,
+            "labels277": labels277,
             "bass_labels": bass,
             "confidence": extra.get("confidence", np.ones(n_windows, dtype=np.float32)),
             "track_id": _decode(data["track_id"]),
@@ -203,6 +205,7 @@ def load_dataset_dir_170(
     """Load a dataset's windows as concatenated 170-class arrays."""
     features: list[np.ndarray] = []
     labels: list[np.ndarray] = []
+    labels277: list[np.ndarray | None] = []
     bass: list[np.ndarray] = []
     conf: list[np.ndarray] = []
     centers: list[np.ndarray] = []
@@ -215,6 +218,7 @@ def load_dataset_dir_170(
             continue
         features.append(track["features"])
         labels.append(track["labels170"])
+        labels277.append(track.get("labels277"))
         bass.append(track["bass_labels"])
         conf.append(track["confidence"])
         centers.append(track["center_times"])
@@ -227,15 +231,21 @@ def load_dataset_dir_170(
         return {
             "features": np.zeros((0, 128, 144), dtype=np.float32),
             "labels170": np.zeros((0,), dtype=np.int64),
+            "labels277": None,
             "bass_labels": np.zeros((0,), dtype=np.int64),
             "confidence": np.zeros((0,), dtype=np.float32),
             "center_times": np.zeros((0,), dtype=np.float64),
             "track_ids": [],
             "loss_weights": [],
         }
+    if any(x is None for x in labels277):
+        concatenated277 = None
+    else:
+        concatenated277 = np.concatenate(labels277, axis=0)
     return {
         "features": np.concatenate(features, axis=0),
         "labels170": np.concatenate(labels, axis=0),
+        "labels277": concatenated277,
         "bass_labels": np.concatenate(bass, axis=0),
         "confidence": np.concatenate(conf, axis=0),
         "center_times": np.concatenate(centers, axis=0),
@@ -778,6 +788,8 @@ def sampling_probabilities(
     sources: np.ndarray,
     *,
     temperature: float = 0.3,
+    n_classes: int = NUM_CLASSES_170,
+    n_index: int = N_IDX_170,
 ) -> np.ndarray:
     """Per-window sampling probability: class temperature × source balance.
 
@@ -786,15 +798,15 @@ def sampling_probabilities(
     re-weighted toward an equal share (clipped to [0.5, 4]).
     """
     n = len(labels)
-    counts = np.bincount(labels, minlength=NUM_CLASSES_170).astype(np.float64)
+    counts = np.bincount(labels, minlength=n_classes).astype(np.float64)
     safe_counts = np.maximum(counts, 1.0)
     class_weight = (1.0 / safe_counts) ** temperature
     chord_mask = np.array([
-        i not in (N_IDX_170, NUM_CLASSES_170 - 1) for i in range(NUM_CLASSES_170)
+        i not in (n_index, n_classes - 1) for i in range(n_classes)
     ])
     if chord_mask.any():
-        class_weight[N_IDX_170] = min(
-            class_weight[N_IDX_170], float(np.median(class_weight[chord_mask]))
+        class_weight[n_index] = min(
+            class_weight[n_index], float(np.median(class_weight[chord_mask]))
         )
 
     source_weight: dict[str, float] = {}
@@ -812,7 +824,7 @@ def sampling_probabilities(
 
     # Never amplify N beyond 1.5x its natural share (spec: "do not
     # over-weight N"). Downscale N and renormalise the chord mass.
-    n_mask = labels == N_IDX_170
+    n_mask = labels == n_index
     natural = float(n_mask.mean()) if n_mask.any() else 0.0
     if natural and prob[n_mask].sum() > max(1.5 * natural, natural + 0.05):
         cap = max(1.5 * natural, natural + 0.05)

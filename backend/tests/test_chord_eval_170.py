@@ -232,3 +232,55 @@ class TestEvaluateArrays:
         assert report["wcsr"]["mirex"] < 1.0
         # N→C:maj costs root on one of five windows → 4/5 duration-weighted.
         assert report["wcsr"]["root"] == pytest.approx(0.8)
+
+
+class TestAblationSpace:
+    def test_map_170_to_mirex25(self):
+        from app.chord_vocab_170 import map_170_to_mirex25
+        from app.chord_vocab import MIREX_TO_IDX
+
+        assert map_170_to_mirex25(CHORD_TO_IDX_170["C:maj"]) == MIREX_TO_IDX["C:maj"]
+        assert map_170_to_mirex25(CHORD_TO_IDX_170["C:min"]) == MIREX_TO_IDX["C:min"]
+        assert map_170_to_mirex25(CHORD_TO_IDX_170["C:hdim7"]) == MIREX_TO_IDX["C:min"]
+        assert map_170_to_mirex25(N_IDX_170) == MIREX_TO_IDX["N"]
+
+    def test_probs_to_mirex25_sums_to_one(self):
+        from scripts.eval_chord_170 import probs_to_mirex25
+
+        probs = np.zeros((2, 170), dtype=np.float32)
+        probs[:, CHORD_TO_IDX_170["C:maj"]] = 0.5
+        probs[:, CHORD_TO_IDX_170["C:min7"]] = 0.5
+        mapped = probs_to_mirex25(probs, "170")
+        assert mapped.shape == (2, 25)
+        assert np.allclose(mapped.sum(axis=1), 1.0)
+
+    def test_evaluate_ablation_perfect(self):
+        from scripts.eval_chord_170 import evaluate_ablation
+
+        labels = np.array([CHORD_TO_IDX_170["C:maj"], CHORD_TO_IDX_170["D:min"]])
+        probs = np.zeros((2, 170), dtype=np.float32)
+        probs[np.arange(2), labels] = 1.0
+        report = evaluate_ablation(labels, probs, ["t", "t"],
+                                   np.array([0.0, 6.4]), space="170")
+        assert report["exact_accuracy"] == pytest.approx(1.0)
+        assert report["wcsr"]["mirex"] == pytest.approx(1.0)
+        assert "ci" in report
+
+    def test_evaluate_ablation_mirex25_native(self):
+        from scripts.eval_chord_170 import evaluate_ablation
+
+        labels = np.array([0, 12, 24])  # C:maj, C:min, N
+        probs = np.eye(25, dtype=np.float32)[labels]
+        report = evaluate_ablation(labels, probs, ["t"] * 3,
+                                   np.array([0.0, 6.4, 12.8]), space="mirex25")
+        assert report["exact_accuracy"] == pytest.approx(1.0)
+
+    def test_bootstrap_ci_bounds(self):
+        from scripts.eval_chord_170 import bootstrap_ci
+
+        labels = np.array([0, 1, 2, 3])
+        preds = np.array([0, 1, 0, 0])
+        ci = bootstrap_ci(labels, preds, ["a", "a", "b", "b"], n_boot=200)
+        assert ci["exact_accuracy"][0] <= ci["exact_accuracy"][1]
+        assert 0.0 <= ci["exact_accuracy"][0]
+        assert ci["exact_accuracy"][1] <= 1.0

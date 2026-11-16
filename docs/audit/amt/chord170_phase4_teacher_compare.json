@@ -1,0 +1,323 @@
+{
+  "n_tracks": 37,
+  "n_windows": 153,
+  "skipped": 11,
+  "teachers": {
+    "mt3": {
+      "exact": 0.5032679738562091,
+      "root": 0.5490196078431373,
+      "majmin": 0.5490196078431373,
+      "exact_ci95": [
+        0.4579429429429429,
+        0.6124737237237238
+      ]
+    },
+    "btc": {
+      "exact": 0.7516339869281046,
+      "root": 0.8431372549019608,
+      "majmin": 0.8431372549019608,
+      "exact_ci95": [
+        0.6932357357357357,
+        0.8588175675675674
+      ]
+    }
+  },
+  "per_track": {
+    "idmt_raw:dataset4/Career SG/fast/classical/audio/classical_2_60BPM": {
+      "n_windows": 8,
+      "gt_n_rate": 0.25,
+      "mt3_exact": 0.75,
+      "btc_exact": 0.875,
+      "mt3_macro_f1": 0.41666666666666663,
+      "btc_macro_f1": 0.7
+    },
+    "idmt_raw:dataset4/Career SG/fast/classical/audio/classical_4_80BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.5,
+      "mt3_exact": 0.5,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.3333333333333333,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/classical/audio/classical_7_60BPM": {
+      "n_windows": 5,
+      "gt_n_rate": 0.4,
+      "mt3_exact": 0.4,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.14285714285714285,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/country_folk/audio/country_1_150BPM": {
+      "n_windows": 2,
+      "gt_n_rate": 0.5,
+      "mt3_exact": 0.5,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.3333333333333333,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/country_folk/audio/country_2_150BPM": {
+      "n_windows": 2,
+      "gt_n_rate": 0.5,
+      "mt3_exact": 1.0,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 1.0,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/country_folk/audio/country_4_100BPM": {
+      "n_windows": 3,
+      "gt_n_rate": 0.6666666666666666,
+      "mt3_exact": 0.6666666666666666,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.4,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/country_folk/audio/folk_1_110BPM": {
+      "n_windows": 5,
+      "gt_n_rate": 0.6,
+      "mt3_exact": 0.6,
+      "btc_exact": 0.8,
+      "mt3_macro_f1": 0.375,
+      "btc_macro_f1": 0.5555555555555555
+    },
+    "idmt_raw:dataset4/Career SG/fast/jazz/audio/jazz_3_140BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.75,
+      "mt3_exact": 0.75,
+      "btc_exact": 0.75,
+      "mt3_macro_f1": 0.3333333333333333,
+      "btc_macro_f1": 0.3333333333333333
+    },
+    "idmt_raw:dataset4/Career SG/fast/jazz/audio/jazz_4_88BPM": {
+      "n_windows": 9,
+      "gt_n_rate": 0.2222222222222222,
+      "mt3_exact": 0.3333333333333333,
+      "btc_exact": 0.7777777777777778,
+      "mt3_macro_f1": 0.16296296296296298,
+      "btc_macro_f1": 0.5833333333333333
+    },
+    "idmt_raw:dataset4/Career SG/fast/jazz/audio/jazz_5_100BPM": {
+      "n_windows": 5,
+      "gt_n_rate": 0.4,
+      "mt3_exact": 0.4,
+      "btc_exact": 0.8,
+      "mt3_macro_f1": 0.16666666666666666,
+      "btc_macro_f1": 0.7777777777777777
+    },
+    "idmt_raw:dataset4/Career SG/fast/jazz/audio/jazz_6_180BPM": {
+      "n_windows": 5,
+      "gt_n_rate": 0.6,
+      "mt3_exact": 0.6,
+      "btc_exact": 0.6,
+      "mt3_macro_f1": 0.21428571428571427,
+      "btc_macro_f1": 0.21428571428571427
+    },
+    "idmt_raw:dataset4/Career SG/fast/jazz/audio/jazz_7_180BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.5,
+      "mt3_exact": 0.5,
+      "btc_exact": 0.5,
+      "mt3_macro_f1": 0.26666666666666666,
+      "btc_macro_f1": 0.3333333333333333
+    },
+    "idmt_raw:dataset4/Career SG/fast/latin/audio/latin_2_120BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.25,
+      "mt3_exact": 0.25,
+      "btc_exact": 0.25,
+      "mt3_macro_f1": 0.125,
+      "btc_macro_f1": 0.13333333333333333
+    },
+    "idmt_raw:dataset4/Career SG/fast/latin/audio/latin_3_120BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.25,
+      "mt3_exact": 0.5,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.375,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/latin/audio/latin_4_160BPM": {
+      "n_windows": 3,
+      "gt_n_rate": 0.3333333333333333,
+      "mt3_exact": 0.3333333333333333,
+      "btc_exact": 0.3333333333333333,
+      "mt3_macro_f1": 0.25,
+      "btc_macro_f1": 0.2222222222222222
+    },
+    "idmt_raw:dataset4/Career SG/fast/latin/audio/latin_5_180BPM": {
+      "n_windows": 3,
+      "gt_n_rate": 0.6666666666666666,
+      "mt3_exact": 1.0,
+      "btc_exact": 0.6666666666666666,
+      "mt3_macro_f1": 1.0,
+      "btc_macro_f1": 0.6666666666666666
+    },
+    "idmt_raw:dataset4/Career SG/fast/latin/audio/latin_6_140BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.5,
+      "mt3_exact": 0.5,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.3333333333333333,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/latin/audio/latin_7_150BPM": {
+      "n_windows": 5,
+      "gt_n_rate": 0.2,
+      "mt3_exact": 0.2,
+      "btc_exact": 0.2,
+      "mt3_macro_f1": 0.1111111111111111,
+      "btc_macro_f1": 0.2
+    },
+    "idmt_raw:dataset4/Career SG/fast/metal/audio/metal_1_180BPM": {
+      "n_windows": 3,
+      "gt_n_rate": 0.3333333333333333,
+      "mt3_exact": 0.3333333333333333,
+      "btc_exact": 0.6666666666666666,
+      "mt3_macro_f1": 0.16666666666666666,
+      "btc_macro_f1": 0.5555555555555555
+    },
+    "idmt_raw:dataset4/Career SG/fast/metal/audio/metal_2_180BPM": {
+      "n_windows": 3,
+      "gt_n_rate": 0.3333333333333333,
+      "mt3_exact": 0.3333333333333333,
+      "btc_exact": 0.3333333333333333,
+      "mt3_macro_f1": 0.25,
+      "btc_macro_f1": 0.25
+    },
+    "idmt_raw:dataset4/Career SG/fast/metal/audio/metal_3_135BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.25,
+      "mt3_exact": 0.25,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.2,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/metal/audio/metal_4_180BPM": {
+      "n_windows": 3,
+      "gt_n_rate": 0.3333333333333333,
+      "mt3_exact": 0.3333333333333333,
+      "btc_exact": 0.6666666666666666,
+      "mt3_macro_f1": 0.16666666666666666,
+      "btc_macro_f1": 0.5555555555555555
+    },
+    "idmt_raw:dataset4/Career SG/fast/metal/audio/metal_6_130BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.25,
+      "mt3_exact": 0.25,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.13333333333333333,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/pop/audio/pop_1_160BPM": {
+      "n_windows": 2,
+      "gt_n_rate": 0.5,
+      "mt3_exact": 1.0,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 1.0,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/pop/audio/pop_2_140BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.5,
+      "mt3_exact": 0.5,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.3333333333333333,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/pop/audio/pop_4_120BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.5,
+      "mt3_exact": 1.0,
+      "btc_exact": 0.75,
+      "mt3_macro_f1": 1.0,
+      "btc_macro_f1": 0.6
+    },
+    "idmt_raw:dataset4/Career SG/fast/pop/audio/pop_5_90BPM": {
+      "n_windows": 5,
+      "gt_n_rate": 0.4,
+      "mt3_exact": 0.4,
+      "btc_exact": 0.8,
+      "mt3_macro_f1": 0.14285714285714285,
+      "btc_macro_f1": 0.6666666666666666
+    },
+    "idmt_raw:dataset4/Career SG/fast/pop/audio/pop_6_110BPM": {
+      "n_windows": 3,
+      "gt_n_rate": 0.6666666666666666,
+      "mt3_exact": 0.6666666666666666,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.4,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/reggae_ska/audio/reggae_1_120BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.75,
+      "mt3_exact": 0.75,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.42857142857142855,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/reggae_ska/audio/reggae_2_120BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.75,
+      "mt3_exact": 0.75,
+      "btc_exact": 0.75,
+      "mt3_macro_f1": 0.42857142857142855,
+      "btc_macro_f1": 0.6
+    },
+    "idmt_raw:dataset4/Career SG/fast/reggae_ska/audio/reggae_3_120BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.75,
+      "mt3_exact": 0.75,
+      "btc_exact": 0.75,
+      "mt3_macro_f1": 0.42857142857142855,
+      "btc_macro_f1": 0.6
+    },
+    "idmt_raw:dataset4/Career SG/fast/reggae_ska/audio/reggae_4_120BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.75,
+      "mt3_exact": 0.75,
+      "btc_exact": 0.75,
+      "mt3_macro_f1": 0.42857142857142855,
+      "btc_macro_f1": 0.6
+    },
+    "idmt_raw:dataset4/Career SG/fast/reggae_ska/audio/ska_1_180BPM": {
+      "n_windows": 3,
+      "gt_n_rate": 0.3333333333333333,
+      "mt3_exact": 0.3333333333333333,
+      "btc_exact": 0.6666666666666666,
+      "mt3_macro_f1": 0.16666666666666666,
+      "btc_macro_f1": 0.5555555555555555
+    },
+    "idmt_raw:dataset4/Career SG/fast/reggae_ska/audio/ska_2_180BPM": {
+      "n_windows": 3,
+      "gt_n_rate": 0.3333333333333333,
+      "mt3_exact": 0.6666666666666666,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.5555555555555555,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/rock_blues/audio/rock_4_125BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.25,
+      "mt3_exact": 0.5,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.41666666666666663,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/rock_blues/audio/rock_5_120BPM": {
+      "n_windows": 4,
+      "gt_n_rate": 0.25,
+      "mt3_exact": 0.25,
+      "btc_exact": 1.0,
+      "mt3_macro_f1": 0.1,
+      "btc_macro_f1": 1.0
+    },
+    "idmt_raw:dataset4/Career SG/fast/rock_blues/audio/rock_6_120BPM": {
+      "n_windows": 9,
+      "gt_n_rate": 0.1111111111111111,
+      "mt3_exact": 0.1111111111111111,
+      "btc_exact": 0.1111111111111111,
+      "mt3_macro_f1": 0.0625,
+      "btc_macro_f1": 0.2
+    }
+  }
+}

@@ -50,17 +50,28 @@ os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
 import tensorflow as tf  # noqa: E402
 
 from app.chord_labels import pitch_shift_labels  # noqa: E402
+from app.chord_vocab import (  # noqa: E402
+    CHORD_VOCAB as CHORD_VOCAB_277,
+    ROOT_NOTES as ROOT_NOTES_277,
+    mirex_label,
+)
 from app.chord_vocab_170 import (  # noqa: E402
     BASS_X_IDX,
-    CHORD_VOCAB_170 as CHORD_LABELS,
     N_IDX_170,
     NUM_CLASSES_170,
     NUM_CLASSES_BASS,
     QUALITIES_14,
+    QUALITY_MAP_277_TO_170,
+    map_170_to_mirex25,
 )
 from scripts import chord_data_v2 as chord_data  # noqa: E402
 from scripts.chord_data_v2 import sampling_probabilities  # noqa: E402
-from scripts.eval_chord_170 import evaluate_arrays, macro_f1  # noqa: E402
+from scripts.eval_chord_170 import (
+    bootstrap_ci,
+    evaluate_ablation,
+    evaluate_arrays,
+    macro_f1,
+)  # noqa: E402
 
 WINDOW = 128
 FEATURE_DIM = 144
@@ -93,13 +104,68 @@ class CircularCqtPad(tf.keras.layers.Layer):
         return (input_shape[0], input_shape[1] + 2, input_shape[2])
 
 
+LABEL_SPACES: dict[str, int] = {"170": NUM_CLASSES_170, "277": len(CHORD_VOCAB_277), "mirex25": 25}
+N_INDEX_BY_SPACE: dict[str, int] = {"170": N_IDX_170, "277": len(CHORD_VOCAB_277) - 1, "mirex25": 24}
+NUM_ROOT_CLASSES = 13  # 12 roots + unknown
+NUM_QUALITY_CLASSES = 15  # 14 qualities + unknown
+
+
+def native_labels_for(windows: dict, space: str) -> tuple[np.ndarray, np.ndarray]:
+    """Return (native chord labels, keep mask) for the requested label space.
+
+    ``277`` drops windows from datasets without legacy labels (v2
+    pseudo-labels). ``mirex25`` maps 170 labels when 277 labels are absent.
+    """
+    if space == "170":
+        labels = windows["labels170"]
+        return labels, np.ones(len(labels), dtype=bool)
+    if space == "277":
+        labels277 = windows["labels277"]
+        if labels277 is None:
+            return np.zeros(0, dtype=np.int64), np.zeros(len(windows["labels170"]), dtype=bool)
+        return labels277, np.ones(len(labels277), dtype=bool)
+    if space == "mirex25":
+        keep = np.ones(len(windows["labels170"]), dtype=bool)
+        if windows["labels277"] is not None:
+            return np.array([mirex_label(int(i)) for i in windows["labels277"]], dtype=np.int64), keep
+        return np.array([map_170_to_mirex25(int(i)) for i in windows["labels170"]],
+                        dtype=np.int64), keep
+    raise ValueError(f"unknown label space: {space}")
+
+
+def aux_labels_for(labels: np.ndarray, space: str) -> tuple[np.ndarray, np.ndarray]:
+    """Derive (root13, quality15) auxiliary labels for any label space."""
+    roots = np.full(len(labels), NUM_ROOT_CLASSES - 1, dtype=np.int64)
+    qualities = np.full(len(labels), NUM_QUALITY_CLASSES - 1, dtype=np.int64)
+    for index, value in enumerate(np.asarray(labels, dtype=np.int64)):
+        if space == "170":
+            if value >= N_IDX_170:
+                continue
+            qualities[index] = value // 12
+            roots[index] = value % 12
+        elif space == "277":
+            if value >= len(CHORD_VOCAB_277) - 1:
+                continue
+            root, quality_277 = CHORD_VOCAB_277[value].split(":", 1)
+            roots[index] = ROOT_NOTES_277.index(root)
+            quality_170 = QUALITY_MAP_277_TO_170[quality_277]
+            qualities[index] = QUALITIES_14.index(quality_170)
+        else:  # mirex25
+            if value >= 24:
+                continue
+            qualities[index] = 0 if value < 12 else 1
+            roots[index] = value % 12
+    return roots, qualities
+
+
 def build_model(
     window: int = WINDOW,
     feature_dim: int = FEATURE_DIM,
     num_chords: int = NUM_CLASSES_170,
     num_bass: int = NUM_CLASSES_BASS,
+    aux_heads: bool = False,
 ) -> tf.keras.Model:
-    """Build the 170-class chord + 13-class bass CRNN."""
+    """Build the chord + bass CRNN (optional root/quality auxiliary heads)."""
     inputs = tf.keras.Input(shape=(window, feature_dim), name="cqt_window")
     x = CircularCqtPad(name="circular_cqt_pad")(inputs)
 
@@ -126,10 +192,18 @@ def build_model(
     x = tf.keras.layers.Dense(256, activation="relu", name="dense_256")(x)
     x = tf.keras.layers.Dropout(0.3, name="dropout")(x)
 
-    chord = tf.keras.layers.Dense(num_chords, activation="softmax", name="chord_probs")(x)
-    bass = tf.keras.layers.Dense(num_bass, activation="softmax", name="bass_probs")(x)
-    return tf.keras.Model(inputs=inputs, outputs={"chord_probs": chord, "bass_probs": bass},
-                          name="chord_crnn_170")
+    outputs = {
+        "chord_probs": tf.keras.layers.Dense(
+            num_chords, activation="softmax", name="chord_probs")(x),
+        "bass_probs": tf.keras.layers.Dense(
+            num_bass, activation="softmax", name="bass_probs")(x),
+    }
+    if aux_heads:
+        outputs["root_probs"] = tf.keras.layers.Dense(
+            NUM_ROOT_CLASSES, activation="softmax", name="root_probs")(x)
+        outputs["quality_probs"] = tf.keras.layers.Dense(
+            NUM_QUALITY_CLASSES, activation="softmax", name="quality_probs")(x)
+    return tf.keras.Model(inputs=inputs, outputs=outputs, name="chord_crnn_170")
 
 
 # ---------------------------------------------------------------------------
@@ -143,9 +217,11 @@ def load_split(
     split: str,
     *,
     limit_tracks: int = 0,
+    label_space: str = "170",
+    aux_heads: bool = False,
 ) -> dict | None:
-    """Load and concatenate one split across sources."""
-    feats, labels, bass, conf, tracks, centres, srcs = [], [], [], [], [], [], []
+    """Load and concatenate one split across sources for a label space."""
+    feats, labels, labels277, bass, conf, tracks, centres, srcs = [], [], [], [], [], [], [], []
     for source in sources:
         data_dir = data_root / SOURCE_DIRS[source]
         loaded = chord_data.load_dataset_dir_170(data_dir, split, limit_tracks=limit_tracks)
@@ -153,6 +229,7 @@ def load_split(
             continue
         feats.append(loaded["features"])
         labels.append(loaded["labels170"])
+        labels277.append(loaded.get("labels277"))
         bass.append(loaded["bass_labels"])
         conf.append(loaded["confidence"])
         tracks.extend(loaded["track_ids"])
@@ -163,15 +240,34 @@ def load_split(
     features = np.concatenate(feats)
     if features.shape[1:] != (WINDOW, FEATURE_DIM):
         raise ValueError(f"unexpected feature shape {features.shape}; expected (*, {WINDOW}, {FEATURE_DIM})")
-    return {
+    windows = {
         "features": features.astype(np.float32),
         "labels170": np.concatenate(labels),
+        "labels277": (None if any(x is None for x in labels277)
+                      else np.concatenate(labels277)),
         "bass_labels": np.concatenate(bass),
-        "confidence": np.concatenate(conf),
         "track_ids": tracks,
         "center_times": np.concatenate(centres),
         "sources": np.asarray(srcs),
     }
+    native, keep = native_labels_for(windows, label_space)
+    if not keep.any():
+        return None
+    result = {
+        "features": windows["features"][keep],
+        "labels_native": native,
+        "bass_labels": windows["bass_labels"][keep],
+        "track_ids": [t for t, k in zip(tracks, keep) if k],
+        "center_times": windows["center_times"][keep],
+        "sources": windows["sources"][keep],
+        "label_space": label_space,
+        "num_chords": LABEL_SPACES[label_space],
+    }
+    if aux_heads:
+        roots, qualities = aux_labels_for(native, label_space)
+        result["root_labels"] = roots
+        result["quality_labels"] = qualities
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -243,11 +339,17 @@ class ChordSequence(tf.keras.utils.Sequence):
         batch_size: int,
         seed: int,
         augment: bool = True,
+        num_chords: int = NUM_CLASSES_170,
+        root_labels: np.ndarray | None = None,
+        quality_labels: np.ndarray | None = None,
     ):
         super().__init__()
         self.features = features
         self.chord = chord
         self.bass = bass
+        self.num_chords = num_chords
+        self.root_labels = root_labels
+        self.quality_labels = quality_labels
         self.probabilities = probabilities
         self.batch_size = batch_size
         self.seed = seed
@@ -269,9 +371,18 @@ class ChordSequence(tf.keras.utils.Sequence):
         bass = self.bass[indices]
         if self.augment:
             features, chord, bass = augment_batch(features, chord, bass, self.rng)
-        chord_onehot = tf.keras.utils.to_categorical(chord, num_classes=NUM_CLASSES_170)
-        bass_onehot = tf.keras.utils.to_categorical(bass, num_classes=NUM_CLASSES_BASS)
-        return features, {"chord_probs": chord_onehot, "bass_probs": bass_onehot}
+        targets = {
+            "chord_probs": tf.keras.utils.to_categorical(chord, num_classes=self.num_chords),
+            "bass_probs": tf.keras.utils.to_categorical(bass, num_classes=NUM_CLASSES_BASS),
+        }
+        if self.root_labels is not None and self.quality_labels is not None:
+            roots = self.root_labels[indices]
+            qualities = self.quality_labels[indices]
+            targets["root_probs"] = tf.keras.utils.to_categorical(
+                roots, num_classes=NUM_ROOT_CLASSES)
+            targets["quality_probs"] = tf.keras.utils.to_categorical(
+                qualities, num_classes=NUM_QUALITY_CLASSES)
+        return features, targets
 
     def on_epoch_end(self) -> None:
         self.epoch += 1
@@ -300,8 +411,10 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
         patience: int = 12,
         batch_size: int = 256,
         train_sample: dict | None = None,
+        label_space: str = "170",
     ):
         super().__init__()
+        self.label_space = label_space
         self.val_data = val_data
         self.train_sample = train_sample
         self.out_dir = out_dir
@@ -321,12 +434,23 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
 
     def _evaluate(self) -> dict:
         chord_probs, bass_probs = self._predict(self.val_data["features"])
-        return evaluate_arrays(
-            self.val_data["labels170"], chord_probs.argmax(axis=1),
-            self.val_data["bass_labels"], bass_probs.argmax(axis=1),
-            chord_probs, self.val_data["track_ids"], self.val_data["center_times"],
-            list(self.val_data["sources"]),
+        # Shared MIREX-25 space so vocab-size ablations are comparable.
+        ablation = evaluate_ablation(
+            self.val_data["labels_native"], chord_probs,
+            self.val_data["track_ids"], self.val_data["center_times"],
+            space=self.label_space,
+            bass_true=self.val_data["bass_labels"],
+            bass_pred=bass_probs.argmax(axis=1),
         )
+        if self.label_space == "170":
+            rich = evaluate_arrays(
+                self.val_data["labels_native"], chord_probs.argmax(axis=1),
+                self.val_data["bass_labels"], bass_probs.argmax(axis=1),
+                chord_probs, self.val_data["track_ids"], self.val_data["center_times"],
+                list(self.val_data["sources"]),
+            )
+            ablation["rich_170"] = rich
+        return ablation
 
     def on_epoch_end(self, epoch: int, logs: dict | None = None) -> None:
         logs = logs or {}
@@ -336,8 +460,9 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
         if self.train_sample is not None:
             train_probs, _ = self._predict(self.train_sample["features"])
             train_pred = train_probs.argmax(axis=1)
-            train_acc = float(np.mean(train_pred == self.train_sample["labels170"]))
-            train_f1 = macro_f1(self.train_sample["labels170"], train_pred)
+            train_acc = float(np.mean(train_pred == self.train_sample["labels_native"]))
+            train_f1 = macro_f1(self.train_sample["labels_native"], train_pred,
+                                n_classes=LABEL_SPACES[self.label_space])
         entry = {
             "epoch": epoch + 1,
             "loss": logs.get("loss", ""),
@@ -345,12 +470,12 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
             "bass_loss": logs.get("bass_probs_loss", ""),
             "train_acc": train_acc,
             "train_macro_f1": train_f1,
-            "val_macro_f1": report["macro_f1"],
+            "val_macro_f1": report.get("macro_f1", 0.0),
             "val_wcsr_mirex": report["wcsr"]["mirex"],
             "val_wcsr_root": report["wcsr"]["root"],
             "val_wcsr_tetrads": report["wcsr"]["tetrads"],
-            "val_bass_acc": report.get("bass", {}).get("chord_frames", 0.0),
-            "val_slash_acc": report.get("slash", {}).get("slash_acc", 0.0),
+            "val_bass_acc": report.get("rich_170", {}).get("bass", {}).get("chord_frames", 0.0),
+            "val_slash_acc": report.get("rich_170", {}).get("slash", {}).get("slash_acc", 0.0),
             "val_ece": report["ece"],
             "lr": float(tf.keras.backend.get_value(self.model.optimizer.learning_rate)),
         }
@@ -361,7 +486,7 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
         self.lines_written += 1
         print(
             f"    train acc={train_acc if train_acc != '' else 'n/a'} "
-            f"val macroF1={report['macro_f1']:.4f} "
+            f"val macroF1={report.get('macro_f1', 0.0):.4f} "
             f"WCSR-mirex={report['wcsr']['mirex']:.4f} "
             f"bass={entry['val_bass_acc']:.4f} ece={report['ece']:.4f} "
             f"({time.time() - started:.0f}s)",
@@ -380,14 +505,14 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
             chord_pred = None
             chord_probs, bass_probs = self._predict(self.val_data["features"])
             chord_pred = chord_probs.argmax(axis=1)
-            confusion = np.zeros((NUM_CLASSES_170, NUM_CLASSES_170), dtype=np.int64)
-            np.add.at(confusion, (self.val_data["labels170"], chord_pred), 1)
+            n_classes = LABEL_SPACES[self.label_space]
+            confusion = np.zeros((n_classes, n_classes), dtype=np.int64)
+            np.add.at(confusion, (self.val_data["labels_native"], chord_pred), 1)
             np.save(self.out_dir / "confusion.npy", confusion)
             per_class = {}
-            for cls in np.unique(self.val_data["labels170"]):
-                mask = self.val_data["labels170"] == cls
+            for cls in np.unique(self.val_data["labels_native"]):
+                mask = self.val_data["labels_native"] == cls
                 per_class[str(int(cls))] = {
-                    "label": (CHORD_LABELS[int(cls)] if int(cls) < N_IDX_170 else "N/X"),
                     "support": int(mask.sum()),
                     "recall": float(np.mean(chord_pred[mask] == cls)),
                 }
@@ -429,6 +554,40 @@ def load_config(path: Path | None) -> dict:
 
         return yaml.safe_load(text) or {}
     return json.loads(text)
+
+
+def load_synthetic_split(
+    data_root: Path,
+    label_space: str,
+    aux_heads: bool,
+    *,
+    limit_tracks: int = 0,
+) -> dict | None:
+    """Load the VST synthetic CQT cache for optional short pretraining."""
+    loaded = chord_data.load_dataset_dir_170(
+        data_root / "vst_synthetic", None, limit_tracks=limit_tracks
+    )
+    if len(loaded["labels170"]) == 0:
+        return None
+    windows = {
+        "labels170": loaded["labels170"],
+        "labels277": loaded.get("labels277"),
+    }
+    native, keep = native_labels_for(windows, label_space)
+    if not keep.any():
+        return None
+    result = {
+        "features": loaded["features"][keep],
+        "labels_native": native,
+        "bass_labels": loaded["bass_labels"][keep],
+        "sources": np.asarray(["synthetic"] * int(keep.sum())),
+        "num_chords": LABEL_SPACES[label_space],
+    }
+    if aux_heads:
+        roots, qualities = aux_labels_for(native, label_space)
+        result["root_labels"] = roots
+        result["quality_labels"] = qualities
+    return result
 
 
 def _configure_device(requested: str) -> bool:
@@ -479,6 +638,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", type=Path, default=None)
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "gpu"])
     parser.add_argument("--no-augment", action="store_true")
+    parser.add_argument("--label-space", default=None, choices=list(LABEL_SPACES))
+    parser.add_argument("--aux-heads", action="store_true")
+    parser.add_argument("--synthetic-epochs", type=int, default=None)
+    parser.add_argument("--synthetic-limit", type=int, default=0)
     args = parser.parse_args(argv)
 
     config = {
@@ -493,6 +656,8 @@ def main(argv: list[str] | None = None) -> int:
         "patience": 12,
         "seed": 1,
         "synthetic_epochs": 0,
+        "label_space": "170",
+        "aux_heads": False,
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -509,6 +674,14 @@ def main(argv: list[str] | None = None) -> int:
             config[key] = value
     if args.sources:
         config["sources"] = [s.strip() for s in args.sources.split(",") if s.strip()]
+    if args.label_space:
+        config["label_space"] = args.label_space
+    if args.aux_heads:
+        config["aux_heads"] = True
+    if args.synthetic_epochs is not None:
+        config["synthetic_epochs"] = args.synthetic_epochs
+    if config["label_space"] not in LABEL_SPACES:
+        raise SystemExit(f"unknown label space: {config['label_space']}")
 
     out_dir = args.out_dir or (
         _BACKEND_DIR / "runs" / "chord170" / time.strftime("run-%Y%m%d-%H%M%S")
@@ -517,76 +690,120 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Loading data (sources={config['sources']})", flush=True)
     train = load_split(args.data_root, config["sources"], "train",
-                       limit_tracks=args.limit_train)
+                       limit_tracks=args.limit_train,
+                       label_space=config["label_space"],
+                       aux_heads=config["aux_heads"])
     val = load_split(args.data_root, config["sources"], "val",
-                     limit_tracks=args.limit_val_tracks)
+                     limit_tracks=args.limit_val_tracks,
+                     label_space=config["label_space"],
+                     aux_heads=config["aux_heads"])
     if train is None or val is None:
         raise SystemExit("No train/val windows found — run the data prepare step first.")
     print(
-        f"  train: {len(train['labels170'])} windows / {len(set(train['track_ids']))} tracks\n"
-        f"  val  : {len(val['labels170'])} windows / {len(set(val['track_ids']))} tracks",
+        f"  space={config['label_space']} aux_heads={config['aux_heads']}\n"
+        f"  train: {len(train['labels_native'])} windows / {len(set(train['track_ids']))} tracks\n"
+        f"  val  : {len(val['labels_native'])} windows / {len(set(val['track_ids']))} tracks",
         flush=True,
     )
 
     tf.keras.utils.set_random_seed(int(config["seed"]))
     use_gpu = _configure_device(args.device)
 
-    model = build_model()
+    model = build_model(num_chords=train["num_chords"],
+                        aux_heads=config["aux_heads"])
     optimizer = tf.keras.optimizers.AdamW(
         learning_rate=tf.keras.optimizers.schedules.CosineDecay(
             initial_learning_rate=float(config["learning_rate"]),
             decay_steps=int(config["epochs"]) * max(
-                1, int(np.ceil(len(train["labels170"]) / int(config["batch_size"])))
+                1, int(np.ceil(len(train["labels_native"]) / int(config["batch_size"])))
             ),
             alpha=0.01,
         ),
         weight_decay=float(config["weight_decay"]),
         clipnorm=1.0,
     )
-    model.compile(
-        optimizer=optimizer,
-        loss={
-            "chord_probs": tf.keras.losses.CategoricalCrossentropy(
-                label_smoothing=float(config["label_smoothing"])
-            ),
-            "bass_probs": tf.keras.losses.CategoricalCrossentropy(),
-        },
-        loss_weights={"chord_probs": 1.0, "bass_probs": float(config["bass_loss_weight"])},
-        metrics={
-            "chord_probs": [tf.keras.metrics.CategoricalAccuracy(name="acc")],
-            "bass_probs": [tf.keras.metrics.CategoricalAccuracy(name="acc")],
-        },
-    )
+    losses = {
+        "chord_probs": tf.keras.losses.CategoricalCrossentropy(
+            label_smoothing=float(config["label_smoothing"])
+        ),
+        "bass_probs": tf.keras.losses.CategoricalCrossentropy(),
+    }
+    loss_weights = {
+        "chord_probs": 1.0,
+        "bass_probs": float(config["bass_loss_weight"]),
+    }
+    metrics = {
+        "chord_probs": [tf.keras.metrics.CategoricalAccuracy(name="acc")],
+        "bass_probs": [tf.keras.metrics.CategoricalAccuracy(name="acc")],
+    }
+    if config["aux_heads"]:
+        losses["root_probs"] = tf.keras.losses.CategoricalCrossentropy()
+        losses["quality_probs"] = tf.keras.losses.CategoricalCrossentropy()
+        loss_weights["root_probs"] = 0.15
+        loss_weights["quality_probs"] = 0.15
+        metrics["root_probs"] = [tf.keras.metrics.CategoricalAccuracy(name="acc")]
+        metrics["quality_probs"] = [tf.keras.metrics.CategoricalAccuracy(name="acc")]
+    model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights,
+                  metrics=metrics)
 
     probabilities = sampling_probabilities(
-        train["labels170"], train["sources"], temperature=float(config["temperature"])
+        train["labels_native"], train["sources"], temperature=float(config["temperature"]),
+        n_classes=train["num_chords"], n_index=N_INDEX_BY_SPACE[config["label_space"]],
     )
     sequence = ChordSequence(
-        train["features"], train["labels170"], train["bass_labels"], probabilities,
+        train["features"], train["labels_native"], train["bass_labels"], probabilities,
         batch_size=int(config["batch_size"]), seed=int(config["seed"]),
-        augment=not args.no_augment,
+        augment=not args.no_augment, num_chords=train["num_chords"],
+        root_labels=train.get("root_labels"),
+        quality_labels=train.get("quality_labels"),
     )
-    n_train_sample = min(512, len(train["labels170"]))
+    n_train_sample = min(512, len(train["labels_native"]))
     callback = ValidationCheckpoint(
         val, out_dir, patience=int(config["patience"]),
         batch_size=max(256, int(config["batch_size"])),
         train_sample={
             "features": train["features"][:n_train_sample],
-            "labels170": train["labels170"][:n_train_sample],
+            "labels_native": train["labels_native"][:n_train_sample],
         },
+        label_space=config["label_space"],
     )
 
     (out_dir / "config.json").write_text(json.dumps({
         **config,
         "git_sha": _git_sha(),
         "tf_version": tf.__version__,
-        "n_train_windows": int(len(train["labels170"])),
-        "n_val_windows": int(len(val["labels170"])),
+        "n_train_windows": int(len(train["labels_native"])),
+        "n_val_windows": int(len(val["labels_native"])),
         "train_sources": {str(k): int(v) for k, v in
                           zip(*np.unique(train["sources"], return_counts=True))},
         "val_sources": {str(k): int(v) for k, v in
                         zip(*np.unique(val["sources"], return_counts=True))},
     }, indent=2))
+
+    synthetic_epochs = int(config.get("synthetic_epochs") or 0)
+    if synthetic_epochs > 0:
+        synthetic = load_synthetic_split(
+            args.data_root, config["label_space"], config["aux_heads"],
+            limit_tracks=args.synthetic_limit,
+        )
+        if synthetic is None:
+            print("  [WARN] synthetic data unavailable — skipping pretraining", flush=True)
+        else:
+            print(f"  synthetic pretraining: {synthetic_epochs} epochs on "
+                  f"{len(synthetic['labels_native'])} windows", flush=True)
+            synth_prob = sampling_probabilities(
+                synthetic["labels_native"], synthetic["sources"],
+                temperature=float(config["temperature"]), n_classes=synthetic["num_chords"],
+                n_index=N_INDEX_BY_SPACE[config["label_space"]],
+            )
+            synth_seq = ChordSequence(
+                synthetic["features"], synthetic["labels_native"], synthetic["bass_labels"],
+                synth_prob, batch_size=int(config["batch_size"]), seed=int(config["seed"]),
+                augment=False, num_chords=synthetic["num_chords"],
+                root_labels=synthetic.get("root_labels"),
+                quality_labels=synthetic.get("quality_labels"),
+            )
+            model.fit(synth_seq, epochs=synthetic_epochs, verbose=2)
 
     history = model.fit(
         sequence,
