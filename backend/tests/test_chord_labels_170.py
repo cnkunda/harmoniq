@@ -460,3 +460,77 @@ class TestBtcTeacherMapping:
         assert report["is_bijection"] is True
         assert report["n_is_our_index"] is True
         assert report["x_is_our_index"] is True
+
+
+class TestAugmentationLabels:
+    def test_pitch_shift_remaps_roots(self):
+        from app.chord_labels import pitch_shift_labels
+        from app.chord_vocab_170 import CHORD_TO_IDX_170, BASS_TO_IDX
+
+        chord, bass = pitch_shift_labels(
+            np.array([CHORD_TO_IDX_170["C:maj"], CHORD_TO_IDX_170["C:min7"]]),
+            np.array([BASS_TO_IDX["C"], BASS_TO_IDX["E"]]),
+            2,
+        )
+        assert chord.tolist() == [
+            CHORD_TO_IDX_170["D:maj"], CHORD_TO_IDX_170["D:min7"]
+        ]
+        assert bass.tolist() == [BASS_TO_IDX["D"], BASS_TO_IDX["F#"]]
+
+    def test_pitch_shift_preserves_n_x_and_unknown_bass(self):
+        from app.chord_labels import pitch_shift_labels
+        from app.chord_vocab_170 import BASS_X_IDX, N_IDX_170, X_IDX_170
+
+        chord, bass = pitch_shift_labels(
+            np.array([N_IDX_170, X_IDX_170]), np.array([BASS_X_IDX, BASS_X_IDX]), 5
+        )
+        assert chord.tolist() == [N_IDX_170, X_IDX_170]
+        assert bass.tolist() == [BASS_X_IDX, BASS_X_IDX]
+
+    def test_pitch_shift_wraps_and_noops(self):
+        from app.chord_labels import pitch_shift_labels
+        from app.chord_vocab_170 import BASS_TO_IDX, CHORD_TO_IDX_170
+
+        idx = CHORD_TO_IDX_170["B:maj"]
+        chord, _ = pitch_shift_labels(np.array([idx]), np.array([BASS_TO_IDX["B"]]), 1)
+        assert chord.tolist() == [CHORD_TO_IDX_170["C:maj"]]
+        chord0, _ = pitch_shift_labels(np.array([idx]), np.array([BASS_TO_IDX["B"]]), 0)
+        assert chord0.tolist() == [idx]
+
+
+class TestSamplingProbabilities:
+    def test_sums_to_one(self):
+        from scripts.chord_data_v2 import sampling_probabilities
+
+        labels = np.array([0, 1, 2, 3, 4])
+        sources = np.array(["a", "a", "b", "b", "b"])
+        probs = sampling_probabilities(labels, sources)
+        assert probs.sum() == pytest.approx(1.0)
+        assert (probs > 0).all()
+
+    def test_rare_class_upweighted(self):
+        from scripts.chord_data_v2 import sampling_probabilities
+
+        labels = np.array([0] * 90 + [1] * 10)
+        sources = np.array(["a"] * 100)
+        probs = sampling_probabilities(labels, sources, temperature=0.3)
+        assert probs[labels == 1].mean() > probs[labels == 0].mean()
+
+    def test_source_balance_upweights_small_source(self):
+        from scripts.chord_data_v2 import sampling_probabilities
+
+        labels = np.array([0] * 90 + [1] * 10)
+        sources = np.array(["big"] * 90 + ["small"] * 10)
+        probs = sampling_probabilities(labels, sources, temperature=0.0)
+        assert probs[sources == "small"].mean() > probs[sources == "big"].mean()
+
+    def test_n_not_amplified(self):
+        from scripts.chord_data_v2 import sampling_probabilities
+        from app.chord_vocab_170 import N_IDX_170
+
+        labels = np.array([0] * 40 + [1] * 40 + [2] * 10 + [N_IDX_170] * 10)
+        sources = np.array(["a"] * 100)
+        probs = sampling_probabilities(labels, sources, temperature=0.3)
+        n_share = float(probs[labels == N_IDX_170].sum())
+        natural = 0.10
+        assert n_share <= max(1.5 * natural, natural + 0.05) + 1e-9

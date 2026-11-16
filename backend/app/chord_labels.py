@@ -16,7 +16,11 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
+
 from app.chord_vocab_170 import (
+    BASS_X_IDX,
+    N_IDX_170,
     QUALITIES_14,
     QUALITY_INTERVALS_170,
     ROOTS_12,
@@ -212,3 +216,27 @@ def chord_tones(root: str, quality: str) -> set[int]:
     """Absolute pitch classes of a chord's interval template."""
     root_pc = ROOTS_12.index(root)
     return {(root_pc + interval) % 12 for interval in QUALITY_INTERVALS_170[quality]}
+
+
+def pitch_shift_labels(
+    chord: np.ndarray | list[int],
+    bass: np.ndarray | list[int],
+    shift: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Transpose 170-class chord and bass labels by ``shift`` semitones.
+
+    Chord classes are ordered quality-major (``quality * 12 + root``), so the
+    root is ``idx % 12``. N/X are unchanged; unknown bass stays unknown.
+    """
+    chord_arr = np.asarray(chord).copy()
+    bass_arr = np.asarray(bass).copy()
+    shift = int(shift) % 12
+    if shift == 0:
+        return chord_arr, bass_arr
+    chord_mask = chord_arr < N_IDX_170
+    quality = chord_arr[chord_mask] // 12
+    root = chord_arr[chord_mask] % 12
+    chord_arr[chord_mask] = quality * 12 + ((root + shift) % 12)
+    bass_mask = bass_arr != BASS_X_IDX
+    bass_arr[bass_mask] = (bass_arr[bass_mask] + shift) % 12
+    return chord_arr, bass_arr

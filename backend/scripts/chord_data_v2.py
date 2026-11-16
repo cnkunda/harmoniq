@@ -773,6 +773,55 @@ def build_pseudo_labels_v2(
     return report
 
 
+def sampling_probabilities(
+    labels: np.ndarray,
+    sources: np.ndarray,
+    *,
+    temperature: float = 0.3,
+) -> np.ndarray:
+    """Per-window sampling probability: class temperature × source balance.
+
+    Rare classes are up-weighted by ``(1/count)^temperature``; N is clamped
+    so it is never up-weighted above the chord-class median; each source is
+    re-weighted toward an equal share (clipped to [0.5, 4]).
+    """
+    n = len(labels)
+    counts = np.bincount(labels, minlength=NUM_CLASSES_170).astype(np.float64)
+    safe_counts = np.maximum(counts, 1.0)
+    class_weight = (1.0 / safe_counts) ** temperature
+    chord_mask = np.array([
+        i not in (N_IDX_170, NUM_CLASSES_170 - 1) for i in range(NUM_CLASSES_170)
+    ])
+    if chord_mask.any():
+        class_weight[N_IDX_170] = min(
+            class_weight[N_IDX_170], float(np.median(class_weight[chord_mask]))
+        )
+
+    source_weight: dict[str, float] = {}
+    unique_sources, source_counts = np.unique(sources, return_counts=True)
+    target_share = 1.0 / len(unique_sources)
+    for source, count in zip(unique_sources, source_counts):
+        share = count / n
+        source_weight[str(source)] = float(np.clip(target_share / max(share, 1e-6), 0.5, 4.0))
+
+    prob = np.array([
+        class_weight[label] * source_weight[str(source)]
+        for label, source in zip(labels, sources)
+    ], dtype=np.float64)
+    prob /= prob.sum()
+
+    # Never amplify N beyond 1.5x its natural share (spec: "do not
+    # over-weight N"). Downscale N and renormalise the chord mass.
+    n_mask = labels == N_IDX_170
+    natural = float(n_mask.mean()) if n_mask.any() else 0.0
+    if natural and prob[n_mask].sum() > max(1.5 * natural, natural + 0.05):
+        cap = max(1.5 * natural, natural + 0.05)
+        prob[n_mask] *= cap / prob[n_mask].sum()
+        prob /= prob.sum()
+    return prob
+
+
+
 # ---------------------------------------------------------------------------
 # Dataset card + split-overlap check
 # ---------------------------------------------------------------------------

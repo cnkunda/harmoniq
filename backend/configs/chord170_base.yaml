@@ -1,0 +1,19 @@
+# Chord 170 baseline training configuration (Phase 3).
+# Input: 128 x 144 L1-normalised CQT windows at 0.1 s hop.
+seed: 1
+epochs: 100
+batch_size: 64
+learning_rate: 0.001
+weight_decay: 0.0001
+label_smoothing: 0.07   # chord CE; spec range 0.05-0.1
+bass_loss_weight: 0.35  # spec range 0.2-0.5
+temperature: 0.3        # class-temperature resampling
+patience: 15            # early stopping on validation WCSR MIREX
+synthetic_epochs: 0     # <=10 allowed; Phase 4 ablates 0/5/10/30
+sources:
+  - guitarset
+  - guitar_techs
+  - egset12
+  - idmt_smt_guitar
+  - rwc
+  - pseudo_v2

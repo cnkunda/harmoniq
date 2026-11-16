@@ -1,0 +1,94 @@
+{
+  "n_windows": 340,
+  "n_tracks": 63,
+  "macro_f1": 0.2408055220059379,
+  "exact_accuracy": 0.37058823529411766,
+  "top3_accuracy": 0.6235294117647059,
+  "top5_accuracy": 0.7235294117647059,
+  "ece": 0.08708869058857945,
+  "per_quality": {
+    "maj": {
+      "support": 207,
+      "precision": 0.7268292682926829,
+      "recall": 0.7198067632850241,
+      "f1": 0.7233009708737865
+    },
+    "min": {
+      "support": 80,
+      "precision": 0.45,
+      "recall": 0.45,
+      "f1": 0.45
+    },
+    "min7": {
+      "support": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "maj7": {
+      "support": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "7": {
+      "support": 19,
+      "precision": 0.36363636363636365,
+      "recall": 0.21052631578947367,
+      "f1": 0.26666666666666666
+    },
+    "dim7": {
+      "support": 8,
+      "precision": 0.75,
+      "recall": 0.375,
+      "f1": 0.5
+    },
+    "N": {
+      "support": 24,
+      "precision": 0.3055555555555556,
+      "recall": 0.4583333333333333,
+      "f1": 0.3666666666666667
+    }
+  },
+  "wcsr": {
+    "root": 0.4117647086021279,
+    "majmin": 0.3530812362623057,
+    "thirds": 0.3823529437472338,
+    "triads": 0.3352941205901424,
+    "sevenths": 0.3203291366871387,
+    "tetrads": 0.3000000037686998,
+    "mirex": 0.3852941192098023
+  },
+  "bass": {
+    "overall": 0.3764705882352941,
+    "known_bass": 0.30994152046783624,
+    "chord_frames": 0.37658227848101267,
+    "n_known": 171
+  },
+  "slash": {
+    "root_position_acc": 0.3058823529411765,
+    "slash_acc": 0.06976744186046512,
+    "n_root_position": 85,
+    "n_slash": 86
+  },
+  "per_source": {
+    "egset12": {
+      "n_windows": 16,
+      "macro_f1": 0.06315789473684211,
+      "exact_accuracy": 0.375,
+      "wcsr_mirex": 0.38888888375626673
+    },
+    "guitarset": {
+      "n_windows": 324,
+      "macro_f1": 0.2475005523375559,
+      "exact_accuracy": 0.37037037037037035,
+      "wcsr_mirex": 0.370773811621283
+    }
+  },
+  "checkpoint": "/runs/chord170/baseline-seed1-v2/best.keras",
+  "split": "test",
+  "sources": [
+    "egset12",
+    "guitarset"
+  ]
+}

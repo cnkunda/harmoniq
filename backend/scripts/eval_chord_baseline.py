@@ -206,6 +206,49 @@ def gate_impact(y_true: np.ndarray, y_pred_head: np.ndarray, y_pred_gated: np.nd
 # ---------------------------------------------------------------------------
 
 
+def keras_config_compat_copy(path: Path) -> Path | None:  # noqa: D401
+    """Return a temp .keras copy with ``InputLayer.optional`` removed.
+
+    Newer tf_keras builds emit an ``optional`` key that older 2.20 builds
+    reject; stripping it lets the weights load unchanged (same approach as
+    app/chord_inference.py). Returns None when no patch is needed.
+    """
+    try:
+        with zipfile.ZipFile(path) as zin:
+            config = json.loads(zin.read("config.json"))
+            changed = False
+
+            def _strip_optional(node) -> None:
+                nonlocal changed
+                if isinstance(node, dict):
+                    if node.get("class_name") == "InputLayer" and isinstance(node.get("config"), dict):
+                        if "optional" in node["config"]:
+                            node["config"].pop("optional", None)
+                            changed = True
+                    for value in node.values():
+                        _strip_optional(value)
+                elif isinstance(node, list):
+                    for value in node:
+                        _strip_optional(value)
+
+            _strip_optional(config)
+            if not changed:
+                return None
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(suffix=".keras", delete=False) as tmp:
+                patched = Path(tmp.name)
+            with zipfile.ZipFile(patched, "w", zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    data = (json.dumps(config).encode()
+                            if item.filename == "config.json" else zin.read(item.filename))
+                    zout.writestr(item, data)
+            return patched
+    except Exception as exc:
+        print(f"  [WARN] keras config patch skipped for {Path(path).name}: {exc}")
+        return None
+
+
 def _load_keras_model(path: Path):
     """Load a .keras model with the CircularCqtPad custom objects.
 
@@ -232,39 +275,7 @@ def _load_keras_model(path: Path):
     def _circular_cqt_pad(x):
         return tf.concat([x[:, :, -1:], x, x[:, :, :1]], axis=-1)
 
-    patched = None
-    try:
-        with zipfile.ZipFile(path) as zin:
-            config = json.loads(zin.read("config.json"))
-            changed = False
-
-            def _strip_optional(node) -> None:
-                nonlocal changed
-                if isinstance(node, dict):
-                    if node.get("class_name") == "InputLayer" and isinstance(node.get("config"), dict):
-                        if "optional" in node["config"]:
-                            node["config"].pop("optional", None)
-                            changed = True
-                    for value in node.values():
-                        _strip_optional(value)
-                elif isinstance(node, list):
-                    for value in node:
-                        _strip_optional(value)
-
-            _strip_optional(config)
-            if changed:
-                import tempfile
-
-                with tempfile.NamedTemporaryFile(suffix=".keras", delete=False) as tmp:
-                    patched = Path(tmp.name)
-                with zipfile.ZipFile(patched, "w", zipfile.ZIP_DEFLATED) as zout:
-                    for item in zin.infolist():
-                        data = (json.dumps(config).encode()
-                                if item.filename == "config.json" else zin.read(item.filename))
-                        zout.writestr(item, data)
-    except Exception as exc:
-        print(f"  [WARN] keras config patch skipped for {path.name}: {exc}")
-
+    patched = keras_config_compat_copy(path)
     load_path = patched or path
     try:
         model = tf.keras.models.load_model(

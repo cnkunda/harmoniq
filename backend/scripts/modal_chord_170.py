@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
+from pathlib import Path
 
 import modal
 
@@ -50,8 +52,9 @@ image = (
         "pretty_midi>=0.2.10",
         "mir_eval>=0.8",
         "tqdm>=4.67",
-        "torch==2.5.1",
         "huggingface_hub>=0.20",
+        "pyyaml>=6.0",
+        "tf_keras==2.20.0",
     )
     .env(
         {
@@ -226,6 +229,85 @@ def ls(path: str = ROOT) -> str:
     text = "\n".join(lines) or f"({path} is empty)"
     print(text, flush=True)
     return text
+
+
+@app.function(
+    image=image,
+    gpu="A10G",
+    cpu=8,
+    memory=32768,
+    timeout=24 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def train(
+    config: str = "configs/chord170_base.yaml",
+    run_name: str = "",
+    extra_args: str = "",
+) -> str:
+    """Train the 170-class chord + bass model on an A10G.
+
+    ``extra_args`` is appended verbatim (e.g. ``--epochs 5 --limit-train 40``)
+    and is handy for smoke runs. Artifacts land in
+    ``/runs/chord170/<run_name>`` on the runs volume.
+    """
+    import shlex
+
+    _ensure_bundle()
+    name = run_name.strip() or time.strftime("run-%Y%m%d-%H%M%S")
+    out_dir = os.path.join(RUNS, "chord170", name)
+    command = [
+        "python", "scripts/train_chord_170.py",
+        "--config", config,
+        "--out-dir", out_dir,
+    ]
+    if extra_args.strip():
+        command += shlex.split(extra_args)
+    output = _run(command)
+    runs_volume.commit()
+    metrics_path = os.path.join(out_dir, "metrics.json")
+    if os.path.isfile(metrics_path):
+        with open(metrics_path, encoding="utf-8") as handle:
+            print("===== metrics.json =====", flush=True)
+            print(handle.read(), flush=True)
+    with open(os.path.join(out_dir, "training_log.csv"), encoding="utf-8") as handle:
+        print("===== training_log.csv =====", flush=True)
+        print(handle.read(), flush=True)
+    return output
+
+
+@app.function(
+    image=image,
+    cpu=8,
+    memory=32768,
+    timeout=2 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+)
+def eval_model(
+    checkpoint: str,
+    split: str = "test",
+    sources: str = "guitarset,egset12",
+    out: str = "",
+) -> str:
+    """Evaluate a checkpoint on the requested split (artifacts on /runs)."""
+    _ensure_bundle()
+    out_path = out.strip() or os.path.join(
+        RUNS, "chord170", "eval", f"{Path(checkpoint).stem}_{split}.json"
+    )
+    command = [
+        "python", "scripts/eval_chord_170.py",
+        "--checkpoint", checkpoint,
+        "--split", split,
+        "--sources", sources,
+        "--out", out_path,
+    ]
+    output = _run(command)
+    runs_volume.commit()
+    if os.path.isfile(out_path):
+        with open(out_path, encoding="utf-8") as handle:
+            print("===== eval report =====", flush=True)
+            print(handle.read(), flush=True)
+    return output
 
 
 @app.local_entrypoint()

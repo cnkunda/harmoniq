@@ -1,0 +1,121 @@
+{
+  "epoch": 45,
+  "metric": "val_wcsr_mirex",
+  "metric_value": 0.3940886718493582,
+  "n_windows": 406,
+  "n_tracks": 72,
+  "macro_f1": 0.13572151910757932,
+  "exact_accuracy": 0.34236453201970446,
+  "top3_accuracy": 0.5566502463054187,
+  "top5_accuracy": 0.7019704433497537,
+  "ece": 0.04360671493734043,
+  "per_quality": {
+    "maj": {
+      "support": 215,
+      "precision": 0.6094890510948905,
+      "recall": 0.7767441860465116,
+      "f1": 0.6830265848670757
+    },
+    "min": {
+      "support": 84,
+      "precision": 0.42424242424242425,
+      "recall": 0.3333333333333333,
+      "f1": 0.3733333333333333
+    },
+    "dim": {
+      "support": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "aug": {
+      "support": 6,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "min6": {
+      "support": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "min7": {
+      "support": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "maj7": {
+      "support": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "7": {
+      "support": 26,
+      "precision": 0.07692307692307693,
+      "recall": 0.038461538461538464,
+      "f1": 0.05128205128205129
+    },
+    "dim7": {
+      "support": 8,
+      "precision": 0.4,
+      "recall": 0.25,
+      "f1": 0.3076923076923077
+    },
+    "sus2": {
+      "support": 8,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "sus4": {
+      "support": 8,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "N": {
+      "support": 41,
+      "precision": 0.1891891891891892,
+      "recall": 0.17073170731707318,
+      "f1": 0.17948717948717952
+    }
+  },
+  "wcsr": {
+    "root": 0.39655172692498075,
+    "majmin": 0.377545157571535,
+    "thirds": 0.3669950765033195,
+    "triads": 0.3448275880897863,
+    "sevenths": 0.3261494274840793,
+    "tetrads": 0.30049261300357716,
+    "mirex": 0.3940886718493582
+  },
+  "bass": {
+    "overall": 0.37192118226600984,
+    "known_bass": 0.3488372093023256,
+    "chord_frames": 0.3780821917808219,
+    "n_known": 258
+  },
+  "slash": {
+    "root_position_acc": 0.3644859813084112,
+    "slash_acc": 0.026490066225165563,
+    "n_root_position": 107,
+    "n_slash": 151
+  },
+  "per_source": {
+    "guitar_techs": {
+      "n_windows": 82,
+      "macro_f1": 0.023025277108565372,
+      "exact_accuracy": 0.08536585365853659,
+      "wcsr_mirex": 0.1749338599616769
+    },
+    "guitarset": {
+      "n_windows": 324,
+      "macro_f1": 0.21555961636181784,
+      "exact_accuracy": 0.4074074074074074,
+      "wcsr_mirex": 0.4353174629601778
+    }
+  }
+}
