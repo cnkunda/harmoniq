@@ -4,7 +4,7 @@
       "kind": "real",
       "splits": {
         "train": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitarset",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/guitarset",
           "split": "train",
           "n_tracks": 240,
           "n_windows": 1296,
@@ -15,7 +15,7 @@
           "slash_rate": 0.3441358024691358
         },
         "val": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitarset",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/guitarset",
           "split": "val",
           "n_tracks": 60,
           "n_windows": 324,
@@ -26,7 +26,7 @@
           "slash_rate": 0.37037037037037035
         },
         "test": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitarset",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/guitarset",
           "split": "test",
           "n_tracks": 60,
           "n_windows": 324,
@@ -42,7 +42,7 @@
       "kind": "real",
       "splits": {
         "train": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/egset12",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/egset12",
           "split": "train",
           "n_tracks": 9,
           "n_windows": 45,
@@ -53,7 +53,7 @@
           "slash_rate": 0.2
         },
         "val": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/egset12",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/egset12",
           "split": "val",
           "n_tracks": 0,
           "n_windows": 0,
@@ -64,7 +64,7 @@
           "slash_rate": 0.0
         },
         "test": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/egset12",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/egset12",
           "split": "test",
           "n_tracks": 3,
           "n_windows": 16,
@@ -80,7 +80,7 @@
       "kind": "real",
       "splits": {
         "train": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitar_techs",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/guitar_techs",
           "split": "train",
           "n_tracks": 56,
           "n_windows": 1452,
@@ -91,7 +91,7 @@
           "slash_rate": 0.5736914600550964
         },
         "val": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitar_techs",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/guitar_techs",
           "split": "val",
           "n_tracks": 12,
           "n_windows": 82,
@@ -102,7 +102,7 @@
           "slash_rate": 0.3780487804878049
         },
         "test": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/guitar_techs",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/guitar_techs",
           "split": "test",
           "n_tracks": 0,
           "n_windows": 0,
@@ -118,7 +118,7 @@
       "kind": "real",
       "splits": {
         "train": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/idmt_smt_guitar",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/idmt_smt_guitar",
           "split": "train",
           "n_tracks": 129,
           "n_windows": 696,
@@ -129,7 +129,7 @@
           "slash_rate": 0.30028735632183906
         },
         "val": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/idmt_smt_guitar",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/idmt_smt_guitar",
           "split": "val",
           "n_tracks": 0,
           "n_windows": 0,
@@ -140,7 +140,7 @@
           "slash_rate": 0.0
         },
         "test": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/idmt_smt_guitar",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/idmt_smt_guitar",
           "split": "test",
           "n_tracks": 0,
           "n_windows": 0,
@@ -156,18 +156,18 @@
       "kind": "real",
       "splits": {
         "train": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/rwc",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/rwc",
           "split": "train",
-          "n_tracks": 0,
-          "n_windows": 0,
-          "n_rate": 0.0,
+          "n_tracks": 100,
+          "n_windows": 3833,
+          "n_rate": 0.06678841638403339,
           "x_rate": 0.0,
-          "unique_classes": 0,
-          "bass_unknown_rate": 0.0,
-          "slash_rate": 0.0
+          "unique_classes": 123,
+          "bass_unknown_rate": 0.07122358465953561,
+          "slash_rate": 0.12053222019306027
         },
         "val": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/rwc",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/rwc",
           "split": "val",
           "n_tracks": 0,
           "n_windows": 0,
@@ -178,7 +178,7 @@
           "slash_rate": 0.0
         },
         "test": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/rwc",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/rwc",
           "split": "test",
           "n_tracks": 0,
           "n_windows": 0,
@@ -194,7 +194,7 @@
       "kind": "pseudo",
       "splits": {
         "train": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/chord170/pseudo_v2",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/chord170/pseudo_v2",
           "split": "train",
           "n_tracks": 11,
           "n_windows": 25,
@@ -205,7 +205,7 @@
           "slash_rate": 0.48
         },
         "test": {
-          "data_dir": "/mnt/c/workspace/harmoniq/backend/data/chord170/pseudo_v2",
+          "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/chord170/pseudo_v2",
           "split": "test",
           "n_tracks": 0,
           "n_windows": 0,
@@ -221,12 +221,12 @@
   "overlap": [],
   "totals": {
     "windows_per_split": {
-      "train": 3514,
+      "train": 7347,
       "val": 406,
       "test": 340
     },
     "tracks_per_split": {
-      "train": 445,
+      "train": 545,
       "val": 72,
       "test": 63
     },

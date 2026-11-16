@@ -111,7 +111,7 @@ Modal prepare entrypoint in `backend/scripts/modal_chord_170.py`.
 | Guitar-TECHS | per-string MIDI, lowest active note | 56 / 1,452 | 12 / 82 | — | 83% |
 | IDMT-SMT-Guitar (dataset4) | CSV slash bass (root position = root) | 129 / 696 | — | — | 40% |
 | EGSet12 | JAMS `note_midi`, lowest active note | 9 / 45 | — | 3 / 16 | 29% |
-| RWC-P | CSV Harte degree bass (`/3`, `/b7`) | pending CQT extraction on Modal | | | — |
+| RWC-P | CSV Harte degree bass (`/3`, `/b7`) | 100 / 3,833 | — | — | 93% |
 
 Bass labels are written as sidecars (`processed/chord170/<track>.npz`) so the
 existing 144-bin feature cache is not duplicated. Unknown bass (X) is
@@ -188,19 +188,19 @@ modal run --detach scripts/modal_chord_170.py::prepare --extract-rwc true
 
 Phase 3 adds `train`/`eval` to the same app (A10G) — not stubbed here.
 
-**Verified 2026-11-16** (`modal run --detach ...::prepare`): bundle uploaded
-to the `harmoniq-chord170-data` volume and extracted; sidecars built for
-GuitarSet 360/360, EGSet12 12/12, Guitar-TECHS 68/68, IDMT 129/129 (RWC 0 —
-audio not uploaded yet); 11 pseudo v2 tracks; the Modal-generated dataset
-card matches the local card exactly (train 3,514 / val 406 / test 340
-windows, `cross_split_overlap_count: 0`). The image needs `pydantic`
-(`app.data_engine` imports the manifest models). RWC CQT remains the only
-prepare gap: it needs the 4.1 GB opt-in RWC-P audio uploaded, then
-`--extract-rwc true`.
+**Verified 2026-11-16** (`modal run --detach ...::prepare --extract-rwc true`):
+bundle uploaded to the `harmoniq-chord170-data` volume and extracted; RWC-P
+audio (4.0 GB, 100 tracks) uploaded; sidecars built for GuitarSet 360/360,
+EGSet12 12/12, Guitar-TECHS 68/68, IDMT 129/129 and **RWC 100/100 after CQT
+extraction**; 11 pseudo v2 tracks. The committed dataset card is the
+Modal-generated one: **train 7,347 / val 406 / test 340 windows**,
+`cross_split_overlap_count: 0`. Two image/pipeline fixes were found by
+running it: the image needs `pydantic` (`app.data_engine` imports the
+manifest models), and RWC extraction requires `parse_rwc.py` to run before
+`extract_rwc_cqt.py` (both now in `prepare`).
 
 ### Known gaps
 
-- RWC-P CQT cache requires the Modal run (4.1 GB opt-in audio; no local cache).
 - EGSet12 train windows are 69 % N and IDMT 38 % N — both are small; the
   training recipe handles N via sampling/loss weighting, and the card records
   the rates.

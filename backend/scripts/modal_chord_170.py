@@ -166,6 +166,8 @@ def prepare(extract_rwc: str = "false", datasets: str = "all") -> str:
     output = ""
     if _truthy(extract_rwc):
         # RWC-P audio is opt-in (CC BY-NC 4.0); extraction runs on the volume.
+        # Timelines (from the annotation CSVs) must exist before CQT extraction.
+        output += _run(["python", "scripts/parse_rwc.py"])
         output += _run(["python", "scripts/extract_rwc_cqt.py"])
     output += _run(["python", "scripts/chord_data_v2.py", "build-real",
                     "--dataset", datasets])
