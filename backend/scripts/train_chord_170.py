@@ -227,6 +227,9 @@ def load_split(
         loaded = chord_data.load_dataset_dir_170(data_dir, split, limit_tracks=limit_tracks)
         if len(loaded["labels170"]) == 0:
             continue
+        if label_space == "277" and loaded.get("labels277") is None:
+            print(f"  [skip] {source}: no legacy 277 labels for the 277 ablation", flush=True)
+            continue
         feats.append(loaded["features"])
         labels.append(loaded["labels170"])
         labels277.append(loaded.get("labels277"))
@@ -288,6 +291,7 @@ def augment_batch(
     *,
     pitch_shift_range: int = 3,
     specaug_p: float = 0.5,
+    label_space: str = "170",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """On-the-fly augmentation: pitch shift, gain, noise, SpecAugment."""
     features = features.copy()
@@ -300,7 +304,8 @@ def augment_batch(
         if shift:
             features[index] = np.roll(features[index], int(shift) * BINS_PER_SEMITONE, axis=1)
             c_arr, b_arr = pitch_shift_labels(
-                chord[index:index + 1], bass[index:index + 1], int(shift)
+                chord[index:index + 1], bass[index:index + 1], int(shift),
+                space=label_space,
             )
             chord[index] = c_arr[0]
             bass[index] = b_arr[0]
@@ -342,12 +347,14 @@ class ChordSequence(tf.keras.utils.Sequence):
         num_chords: int = NUM_CLASSES_170,
         root_labels: np.ndarray | None = None,
         quality_labels: np.ndarray | None = None,
+        label_space: str = "170",
     ):
         super().__init__()
         self.features = features
         self.chord = chord
         self.bass = bass
         self.num_chords = num_chords
+        self.label_space = label_space
         self.root_labels = root_labels
         self.quality_labels = quality_labels
         self.probabilities = probabilities
@@ -370,7 +377,8 @@ class ChordSequence(tf.keras.utils.Sequence):
         chord = self.chord[indices]
         bass = self.bass[indices]
         if self.augment:
-            features, chord, bass = augment_batch(features, chord, bass, self.rng)
+            features, chord, bass = augment_batch(
+                features, chord, bass, self.rng, label_space=self.label_space)
         targets = {
             "chord_probs": tf.keras.utils.to_categorical(chord, num_classes=self.num_chords),
             "bass_probs": tf.keras.utils.to_categorical(bass, num_classes=NUM_CLASSES_BASS),
@@ -756,6 +764,7 @@ def main(argv: list[str] | None = None) -> int:
         augment=not args.no_augment, num_chords=train["num_chords"],
         root_labels=train.get("root_labels"),
         quality_labels=train.get("quality_labels"),
+        label_space=config["label_space"],
     )
     n_train_sample = min(512, len(train["labels_native"]))
     callback = ValidationCheckpoint(
@@ -802,6 +811,7 @@ def main(argv: list[str] | None = None) -> int:
                 augment=False, num_chords=synthetic["num_chords"],
                 root_labels=synthetic.get("root_labels"),
                 quality_labels=synthetic.get("quality_labels"),
+                label_space=config["label_space"],
             )
             model.fit(synth_seq, epochs=synthetic_epochs, verbose=2)
 

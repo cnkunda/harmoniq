@@ -1,0 +1,1535 @@
+{
+  "tag": "phase4-core2",
+  "epochs": 25,
+  "config": "configs/chord170_base.yaml",
+  "variants": {
+    "170-baseline": {
+      "label_space": "170",
+      "args": "",
+      "val": {
+        "epoch": 15,
+        "metric": "val_wcsr_mirex",
+        "metric_value": 0.322660097111049,
+        "label_space": "170",
+        "n_windows": 406,
+        "n_tracks": 72,
+        "exact_accuracy": 0.3103448275862069,
+        "root_accuracy": 0.33251231527093594,
+        "macro_f1": 0.25461226515634333,
+        "top3_accuracy": 0.5985221674876847,
+        "ece": 0.06307806661857172,
+        "wcsr": {
+          "root": 0.3325123131234398,
+          "majmin": 0.31123328451511517,
+          "thirds": 0.3103448259172397,
+          "triads": 0.29064039187231316,
+          "sevenths": 0.30228418766917814,
+          "tetrads": 0.2783251210758215,
+          "mirex": 0.322660097111049
+        },
+        "ci": {
+          "exact_accuracy": [
+            0.2536120371995087,
+            0.3677581863979849
+          ],
+          "macro_f1": [
+            0.1925526489771771,
+            0.3032817125919803
+          ],
+          "n_tracks": 72,
+          "n_boot": 1000
+        },
+        "rich_170": {
+          "n_windows": 406,
+          "n_tracks": 72,
+          "macro_f1": 0.11727615428131229,
+          "exact_accuracy": 0.2660098522167488,
+          "top3_accuracy": 0.5221674876847291,
+          "top5_accuracy": 0.6600985221674877,
+          "ece": 0.03513960294388784,
+          "per_quality": {
+            "maj": {
+              "support": 215,
+              "precision": 0.6296296296296297,
+              "recall": 0.7116279069767442,
+              "f1": 0.6681222707423582
+            },
+            "min": {
+              "support": 84,
+              "precision": 0.4861111111111111,
+              "recall": 0.4166666666666667,
+              "f1": 0.44871794871794873
+            },
+            "dim": {
+              "support": 2,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "aug": {
+              "support": 6,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min6": {
+              "support": 0,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min7": {
+              "support": 3,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "maj7": {
+              "support": 5,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "7": {
+              "support": 26,
+              "precision": 0.058823529411764705,
+              "recall": 0.038461538461538464,
+              "f1": 0.04651162790697675
+            },
+            "dim7": {
+              "support": 8,
+              "precision": 1.0,
+              "recall": 0.125,
+              "f1": 0.2222222222222222
+            },
+            "sus2": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "sus4": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "N": {
+              "support": 41,
+              "precision": 0.1323529411764706,
+              "recall": 0.21951219512195122,
+              "f1": 0.1651376146788991
+            }
+          },
+          "wcsr": {
+            "root": 0.3054187180451536,
+            "majmin": 0.29359605778069475,
+            "thirds": 0.29064039332572683,
+            "triads": 0.2684729050495654,
+            "sevenths": 0.26270232180577724,
+            "tetrads": 0.24137931020302836,
+            "mirex": 0.2980295564974946
+          },
+          "bass": {
+            "overall": 0.3275862068965517,
+            "known_bass": 0.2868217054263566,
+            "chord_frames": 0.32054794520547947,
+            "n_known": 258
+          },
+          "slash": {
+            "root_position_acc": 0.2336448598130841,
+            "slash_acc": 0.019867549668874173,
+            "n_root_position": 107,
+            "n_slash": 151
+          },
+          "per_source": {
+            "guitar_techs": {
+              "n_windows": 82,
+              "macro_f1": 0.020492921712433904,
+              "exact_accuracy": 0.12195121951219512,
+              "wcsr_mirex": 0.1823412699920742
+            },
+            "guitarset": {
+              "n_windows": 324,
+              "macro_f1": 0.1844160457993394,
+              "exact_accuracy": 0.30246913580246915,
+              "wcsr_mirex": 0.33057539726205826
+            }
+          }
+        }
+      },
+      "test": {
+        "n_windows": 340,
+        "n_tracks": 63,
+        "macro_f1": 0.1723084078380673,
+        "exact_accuracy": 0.2852941176470588,
+        "top3_accuracy": 0.5705882352941176,
+        "top5_accuracy": 0.7411764705882353,
+        "ece": 0.07468887210330542,
+        "per_quality": {
+          "maj": {
+            "support": 207,
+            "precision": 0.7142857142857143,
+            "recall": 0.748792270531401,
+            "f1": 0.7311320754716982
+          },
+          "min": {
+            "support": 80,
+            "precision": 0.3561643835616438,
+            "recall": 0.325,
+            "f1": 0.3398692810457516
+          },
+          "dim": {
+            "support": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "maj7": {
+            "support": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "7": {
+            "support": 19,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "dim7": {
+            "support": 8,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "N": {
+            "support": 24,
+            "precision": 0.23255813953488372,
+            "recall": 0.4166666666666667,
+            "f1": 0.29850746268656714
+          }
+        },
+        "wcsr": {
+          "root": 0.31764705958319644,
+          "majmin": 0.2836624667161918,
+          "thirds": 0.29117647171270944,
+          "triads": 0.2705882363697561,
+          "sevenths": 0.26267507111044985,
+          "tetrads": 0.24705882415217176,
+          "mirex": 0.3000000002354133
+        },
+        "bass": {
+          "overall": 0.34705882352941175,
+          "known_bass": 0.2573099415204678,
+          "chord_frames": 0.33860759493670883,
+          "n_known": 171
+        },
+        "slash": {
+          "root_position_acc": 0.21176470588235294,
+          "slash_acc": 0.03488372093023256,
+          "n_root_position": 85,
+          "n_slash": 86
+        },
+        "per_source": {
+          "egset12": {
+            "n_windows": 16,
+            "macro_f1": 0.07619047619047618,
+            "exact_accuracy": 0.5,
+            "wcsr_mirex": 0.5111111078328556
+          },
+          "guitarset": {
+            "n_windows": 324,
+            "macro_f1": 0.16846439405586633,
+            "exact_accuracy": 0.27469135802469136,
+            "wcsr_mirex": 0.2844047624663261
+          }
+        },
+        "checkpoint": "/runs/chord170/sweeps/phase4-core2/170-baseline/best.keras",
+        "split": "test",
+        "sources": [
+          "egset12",
+          "guitarset"
+        ]
+      }
+    },
+    "170-aux": {
+      "label_space": "170",
+      "args": "--aux-heads",
+      "val": {
+        "epoch": 25,
+        "metric": "val_wcsr_mirex",
+        "metric_value": 0.3423645351179669,
+        "label_space": "170",
+        "n_windows": 406,
+        "n_tracks": 72,
+        "exact_accuracy": 0.33497536945812806,
+        "root_accuracy": 0.3620689655172414,
+        "macro_f1": 0.27397134432788,
+        "top3_accuracy": 0.5886699507389163,
+        "ece": 0.0515898323521532,
+        "wcsr": {
+          "root": 0.36206896821003015,
+          "majmin": 0.3306767555218521,
+          "thirds": 0.3325123182255348,
+          "triads": 0.3103448292803416,
+          "sevenths": 0.32353389803736293,
+          "tetrads": 0.2980295579731628,
+          "mirex": 0.3423645351179669
+        },
+        "ci": {
+          "exact_accuracy": [
+            0.2719911195278457,
+            0.40001228501228503
+          ],
+          "macro_f1": [
+            0.20258522533651155,
+            0.3244173922612015
+          ],
+          "n_tracks": 72,
+          "n_boot": 1000
+        },
+        "rich_170": {
+          "n_windows": 406,
+          "n_tracks": 72,
+          "macro_f1": 0.1430672448519027,
+          "exact_accuracy": 0.3078817733990148,
+          "top3_accuracy": 0.5467980295566502,
+          "top5_accuracy": 0.6748768472906403,
+          "ece": 0.05466495424031917,
+          "per_quality": {
+            "maj": {
+              "support": 215,
+              "precision": 0.6254681647940075,
+              "recall": 0.7767441860465116,
+              "f1": 0.6929460580912863
+            },
+            "min": {
+              "support": 84,
+              "precision": 0.42424242424242425,
+              "recall": 0.3333333333333333,
+              "f1": 0.3733333333333333
+            },
+            "dim": {
+              "support": 2,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "aug": {
+              "support": 6,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min6": {
+              "support": 0,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min7": {
+              "support": 3,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "maj7": {
+              "support": 5,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "7": {
+              "support": 26,
+              "precision": 0.2,
+              "recall": 0.038461538461538464,
+              "f1": 0.06451612903225806
+            },
+            "dim7": {
+              "support": 8,
+              "precision": 0.6666666666666666,
+              "recall": 0.25,
+              "f1": 0.36363636363636365
+            },
+            "sus2": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "sus4": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "N": {
+              "support": 41,
+              "precision": 0.13559322033898305,
+              "recall": 0.1951219512195122,
+              "f1": 0.16
+            }
+          },
+          "wcsr": {
+            "root": 0.34975369673914697,
+            "majmin": 0.3267475979087879,
+            "thirds": 0.32019704675465177,
+            "triads": 0.3004926126835093,
+            "sevenths": 0.3062631969605158,
+            "tetrads": 0.28078817932334404,
+            "mirex": 0.3251231547734308
+          },
+          "bass": {
+            "overall": 0.3768472906403941,
+            "known_bass": 0.29844961240310075,
+            "chord_frames": 0.3780821917808219,
+            "n_known": 258
+          },
+          "slash": {
+            "root_position_acc": 0.2523364485981308,
+            "slash_acc": 0.033112582781456956,
+            "n_root_position": 107,
+            "n_slash": 151
+          },
+          "per_source": {
+            "guitar_techs": {
+              "n_windows": 82,
+              "macro_f1": 0.015625,
+              "exact_accuracy": 0.08536585365853659,
+              "wcsr_mirex": 0.1565476196630288
+            },
+            "guitarset": {
+              "n_windows": 324,
+              "macro_f1": 0.26121305074076895,
+              "exact_accuracy": 0.36419753086419754,
+              "wcsr_mirex": 0.3528174623716411
+            }
+          }
+        }
+      },
+      "test": {
+        "n_windows": 340,
+        "n_tracks": 63,
+        "macro_f1": 0.24404411026764,
+        "exact_accuracy": 0.3323529411764706,
+        "top3_accuracy": 0.6323529411764706,
+        "top5_accuracy": 0.7735294117647059,
+        "ece": 0.0691899722113329,
+        "per_quality": {
+          "maj": {
+            "support": 207,
+            "precision": 0.6855895196506551,
+            "recall": 0.7584541062801933,
+            "f1": 0.7201834862385322
+          },
+          "min": {
+            "support": 80,
+            "precision": 0.47619047619047616,
+            "recall": 0.375,
+            "f1": 0.41958041958041953
+          },
+          "maj7": {
+            "support": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "7": {
+            "support": 19,
+            "precision": 0.25,
+            "recall": 0.05263157894736842,
+            "f1": 0.08695652173913043
+          },
+          "dim7": {
+            "support": 8,
+            "precision": 0.3333333333333333,
+            "recall": 0.125,
+            "f1": 0.18181818181818182
+          },
+          "N": {
+            "support": 24,
+            "precision": 0.2682926829268293,
+            "recall": 0.4583333333333333,
+            "f1": 0.3384615384615385
+          }
+        },
+        "wcsr": {
+          "root": 0.3735294114120033,
+          "majmin": 0.33570028092128845,
+          "thirds": 0.3411764710757578,
+          "triads": 0.3235294120681553,
+          "sevenths": 0.3204972002836072,
+          "tetrads": 0.3029411770574518,
+          "mirex": 0.35294117616922577
+        },
+        "bass": {
+          "overall": 0.4176470588235294,
+          "known_bass": 0.24561403508771928,
+          "chord_frames": 0.40822784810126583,
+          "n_known": 171
+        },
+        "slash": {
+          "root_position_acc": 0.3176470588235294,
+          "slash_acc": 0.046511627906976744,
+          "n_root_position": 85,
+          "n_slash": 86
+        },
+        "per_source": {
+          "egset12": {
+            "n_windows": 16,
+            "macro_f1": 0.08571428571428572,
+            "exact_accuracy": 0.5625,
+            "wcsr_mirex": 0.744444438053502
+          },
+          "guitarset": {
+            "n_windows": 324,
+            "macro_f1": 0.24599488805492165,
+            "exact_accuracy": 0.32098765432098764,
+            "wcsr_mirex": 0.333690476385647
+          }
+        },
+        "checkpoint": "/runs/chord170/sweeps/phase4-core2/170-aux/best.keras",
+        "split": "test",
+        "sources": [
+          "egset12",
+          "guitarset"
+        ]
+      }
+    },
+    "170-bass0.5": {
+      "label_space": "170",
+      "args": "--bass-loss-weight 0.5",
+      "val": {
+        "epoch": 20,
+        "metric": "val_wcsr_mirex",
+        "metric_value": 0.36945812990915894,
+        "label_space": "170",
+        "n_windows": 406,
+        "n_tracks": 72,
+        "exact_accuracy": 0.35960591133004927,
+        "root_accuracy": 0.3891625615763547,
+        "macro_f1": 0.28713958159721675,
+        "top3_accuracy": 0.5935960591133005,
+        "ece": 0.0387766186716815,
+        "wcsr": {
+          "root": 0.3891625622623977,
+          "majmin": 0.3464989445913025,
+          "thirds": 0.3571428580368803,
+          "triads": 0.3251231526519175,
+          "sevenths": 0.32814919119966857,
+          "tetrads": 0.30541871930853054,
+          "mirex": 0.36945812990915894
+        },
+        "ci": {
+          "exact_accuracy": [
+            0.2937939814814815,
+            0.43182519640852973
+          ],
+          "macro_f1": [
+            0.22312918011662217,
+            0.33486846823516325
+          ],
+          "n_tracks": 72,
+          "n_boot": 1000
+        },
+        "rich_170": {
+          "n_windows": 406,
+          "n_tracks": 72,
+          "macro_f1": 0.13005163603283024,
+          "exact_accuracy": 0.31527093596059114,
+          "top3_accuracy": 0.5541871921182266,
+          "top5_accuracy": 0.6748768472906403,
+          "ece": 0.05026710323365452,
+          "per_quality": {
+            "maj": {
+              "support": 215,
+              "precision": 0.6374045801526718,
+              "recall": 0.7767441860465116,
+              "f1": 0.70020964360587
+            },
+            "min": {
+              "support": 84,
+              "precision": 0.38666666666666666,
+              "recall": 0.34523809523809523,
+              "f1": 0.3647798742138365
+            },
+            "dim": {
+              "support": 2,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "aug": {
+              "support": 6,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min6": {
+              "support": 0,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min7": {
+              "support": 3,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "maj7": {
+              "support": 5,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "7": {
+              "support": 26,
+              "precision": 0.16666666666666666,
+              "recall": 0.038461538461538464,
+              "f1": 0.0625
+            },
+            "dim7": {
+              "support": 8,
+              "precision": 0.3333333333333333,
+              "recall": 0.25,
+              "f1": 0.28571428571428575
+            },
+            "sus2": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "sus4": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "N": {
+              "support": 41,
+              "precision": 0.18181818181818182,
+              "recall": 0.24390243902439024,
+              "f1": 0.20833333333333334
+            }
+          },
+          "wcsr": {
+            "root": 0.36699507457021163,
+            "majmin": 0.34211236197233524,
+            "thirds": 0.334975370528206,
+            "triads": 0.31034482771216015,
+            "sevenths": 0.296217452872977,
+            "tetrads": 0.2709359613413761,
+            "mirex": 0.3448275870976572
+          },
+          "bass": {
+            "overall": 0.3768472906403941,
+            "known_bass": 0.3023255813953488,
+            "chord_frames": 0.36712328767123287,
+            "n_known": 258
+          },
+          "slash": {
+            "root_position_acc": 0.2616822429906542,
+            "slash_acc": 0.026490066225165563,
+            "n_root_position": 107,
+            "n_slash": 151
+          },
+          "per_source": {
+            "guitar_techs": {
+              "n_windows": 82,
+              "macro_f1": 0.024122453367736385,
+              "exact_accuracy": 0.13414634146341464,
+              "wcsr_mirex": 0.2175264554530535
+            },
+            "guitarset": {
+              "n_windows": 324,
+              "macro_f1": 0.2127866220775785,
+              "exact_accuracy": 0.3611111111111111,
+              "wcsr_mirex": 0.3771626999881582
+            }
+          }
+        }
+      },
+      "test": {
+        "n_windows": 340,
+        "n_tracks": 63,
+        "macro_f1": 0.22070633942814397,
+        "exact_accuracy": 0.3323529411764706,
+        "top3_accuracy": 0.6294117647058823,
+        "top5_accuracy": 0.7529411764705882,
+        "ece": 0.09943066536284546,
+        "per_quality": {
+          "maj": {
+            "support": 207,
+            "precision": 0.7233009708737864,
+            "recall": 0.7198067632850241,
+            "f1": 0.7215496368038741
+          },
+          "min": {
+            "support": 80,
+            "precision": 0.35294117647058826,
+            "recall": 0.375,
+            "f1": 0.3636363636363636
+          },
+          "maj7": {
+            "support": 2,
+            "precision": 1.0,
+            "recall": 0.5,
+            "f1": 0.6666666666666666
+          },
+          "7": {
+            "support": 19,
+            "precision": 0.3333333333333333,
+            "recall": 0.05263157894736842,
+            "f1": 0.09090909090909091
+          },
+          "dim7": {
+            "support": 8,
+            "precision": 0.3333333333333333,
+            "recall": 0.125,
+            "f1": 0.18181818181818182
+          },
+          "N": {
+            "support": 24,
+            "precision": 0.23809523809523808,
+            "recall": 0.4166666666666667,
+            "f1": 0.30303030303030304
+          }
+        },
+        "wcsr": {
+          "root": 0.37058823630464177,
+          "majmin": 0.32278011363339854,
+          "thirds": 0.33823529523210366,
+          "triads": 0.3117647069867919,
+          "sevenths": 0.3173389369270944,
+          "tetrads": 0.3029411775165913,
+          "mirex": 0.3470588239426372
+        },
+        "bass": {
+          "overall": 0.4235294117647059,
+          "known_bass": 0.30409356725146197,
+          "chord_frames": 0.40822784810126583,
+          "n_known": 171
+        },
+        "slash": {
+          "root_position_acc": 0.36470588235294116,
+          "slash_acc": 0.046511627906976744,
+          "n_root_position": 85,
+          "n_slash": 86
+        },
+        "per_source": {
+          "egset12": {
+            "n_windows": 16,
+            "macro_f1": 0.06926406926406926,
+            "exact_accuracy": 0.5,
+            "wcsr_mirex": 0.5666666633884111
+          },
+          "guitarset": {
+            "n_windows": 324,
+            "macro_f1": 0.2292503172885948,
+            "exact_accuracy": 0.32407407407407407,
+            "wcsr_mirex": 0.32851190610502806
+          }
+        },
+        "checkpoint": "/runs/chord170/sweeps/phase4-core2/170-bass0.5/best.keras",
+        "split": "test",
+        "sources": [
+          "egset12",
+          "guitarset"
+        ]
+      }
+    },
+    "170-noaugment": {
+      "label_space": "170",
+      "args": "--no-augment",
+      "val": {
+        "epoch": 23,
+        "metric": "val_wcsr_mirex",
+        "metric_value": 0.4605911366406743,
+        "label_space": "170",
+        "n_windows": 406,
+        "n_tracks": 72,
+        "exact_accuracy": 0.45320197044334976,
+        "root_accuracy": 0.4605911330049261,
+        "macro_f1": 0.4291311416445794,
+        "top3_accuracy": 0.687192118226601,
+        "ece": 0.11911657278247066,
+        "wcsr": {
+          "root": 0.4605911370052511,
+          "majmin": 0.43757330847264886,
+          "thirds": 0.4507389200974391,
+          "triads": 0.4137931063031374,
+          "sevenths": 0.41167018862871435,
+          "tetrads": 0.3866995101412575,
+          "mirex": 0.4605911366406743
+        },
+        "ci": {
+          "exact_accuracy": [
+            0.3728684555233597,
+            0.53545667806059
+          ],
+          "macro_f1": [
+            0.32536074008291554,
+            0.5048722572467448
+          ],
+          "n_tracks": 72,
+          "n_boot": 1000
+        },
+        "rich_170": {
+          "n_windows": 406,
+          "n_tracks": 72,
+          "macro_f1": 0.2381464511364455,
+          "exact_accuracy": 0.4433497536945813,
+          "top3_accuracy": 0.6330049261083743,
+          "top5_accuracy": 0.7118226600985221,
+          "ece": 0.11826615876018118,
+          "per_quality": {
+            "maj": {
+              "support": 215,
+              "precision": 0.6956521739130435,
+              "recall": 0.8186046511627907,
+              "f1": 0.7521367521367521
+            },
+            "min": {
+              "support": 84,
+              "precision": 0.5555555555555556,
+              "recall": 0.47619047619047616,
+              "f1": 0.5128205128205129
+            },
+            "dim": {
+              "support": 2,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "aug": {
+              "support": 6,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min6": {
+              "support": 0,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min7": {
+              "support": 3,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "maj7": {
+              "support": 5,
+              "precision": 0.14285714285714285,
+              "recall": 0.2,
+              "f1": 0.16666666666666666
+            },
+            "7": {
+              "support": 26,
+              "precision": 0.3181818181818182,
+              "recall": 0.2692307692307692,
+              "f1": 0.2916666666666667
+            },
+            "dim7": {
+              "support": 8,
+              "precision": 1.0,
+              "recall": 0.5,
+              "f1": 0.6666666666666666
+            },
+            "sus2": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "sus4": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "N": {
+              "support": 41,
+              "precision": 0.3488372093023256,
+              "recall": 0.36585365853658536,
+              "f1": 0.35714285714285715
+            }
+          },
+          "wcsr": {
+            "root": 0.46305419105378987,
+            "majmin": 0.44378372330361043,
+            "thirds": 0.45320197414597785,
+            "triads": 0.41379310619710835,
+            "sevenths": 0.41320080035151274,
+            "tetrads": 0.3842364558511822,
+            "mirex": 0.4753694617387762
+          },
+          "bass": {
+            "overall": 0.45073891625615764,
+            "known_bass": 0.31007751937984496,
+            "chord_frames": 0.4328767123287671,
+            "n_known": 258
+          },
+          "slash": {
+            "root_position_acc": 0.4205607476635514,
+            "slash_acc": 0.033112582781456956,
+            "n_root_position": 107,
+            "n_slash": 151
+          },
+          "per_source": {
+            "guitar_techs": {
+              "n_windows": 82,
+              "macro_f1": 0.017423713021197294,
+              "exact_accuracy": 0.13414634146341464,
+              "wcsr_mirex": 0.20906084610975084
+            },
+            "guitarset": {
+              "n_windows": 324,
+              "macro_f1": 0.40731484544494984,
+              "exact_accuracy": 0.5216049382716049,
+              "wcsr_mirex": 0.5450396861482162
+            }
+          }
+        }
+      },
+      "test": {
+        "n_windows": 340,
+        "n_tracks": 63,
+        "macro_f1": 0.31731021282871147,
+        "exact_accuracy": 0.4470588235294118,
+        "top3_accuracy": 0.6764705882352942,
+        "top5_accuracy": 0.7823529411764706,
+        "ece": 0.10635146095472225,
+        "per_quality": {
+          "maj": {
+            "support": 207,
+            "precision": 0.7365853658536585,
+            "recall": 0.7294685990338164,
+            "f1": 0.7330097087378641
+          },
+          "min": {
+            "support": 80,
+            "precision": 0.5409836065573771,
+            "recall": 0.4125,
+            "f1": 0.46808510638297873
+          },
+          "dim": {
+            "support": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "aug": {
+            "support": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "min6": {
+            "support": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "maj6": {
+            "support": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "min7": {
+            "support": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "maj7": {
+            "support": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "7": {
+            "support": 19,
+            "precision": 0.42105263157894735,
+            "recall": 0.42105263157894735,
+            "f1": 0.42105263157894735
+          },
+          "dim7": {
+            "support": 8,
+            "precision": 0.6,
+            "recall": 0.375,
+            "f1": 0.4615384615384615
+          },
+          "N": {
+            "support": 24,
+            "precision": 0.21951219512195122,
+            "recall": 0.375,
+            "f1": 0.27692307692307694
+          }
+        },
+        "wcsr": {
+          "root": 0.4852941166432131,
+          "majmin": 0.42822829097217546,
+          "thirds": 0.4499999991743839,
+          "triads": 0.4117647055142065,
+          "sevenths": 0.3999929967759322,
+          "tetrads": 0.379411764480904,
+          "mirex": 0.46764705795617323
+        },
+        "bass": {
+          "overall": 0.4647058823529412,
+          "known_bass": 0.2982456140350877,
+          "chord_frames": 0.45569620253164556,
+          "n_known": 171
+        },
+        "slash": {
+          "root_position_acc": 0.4823529411764706,
+          "slash_acc": 0.03488372093023256,
+          "n_root_position": 85,
+          "n_slash": 86
+        },
+        "per_source": {
+          "egset12": {
+            "n_windows": 16,
+            "macro_f1": 0.057416267942583726,
+            "exact_accuracy": 0.375,
+            "wcsr_mirex": 0.40000000417232506
+          },
+          "guitarset": {
+            "n_windows": 324,
+            "macro_f1": 0.33540165657237053,
+            "exact_accuracy": 0.4506172839506173,
+            "wcsr_mirex": 0.47297618948910963
+          }
+        },
+        "checkpoint": "/runs/chord170/sweeps/phase4-core2/170-noaugment/best.keras",
+        "split": "test",
+        "sources": [
+          "egset12",
+          "guitarset"
+        ]
+      }
+    },
+    "mirex25": {
+      "label_space": "mirex25",
+      "args": "--label-space mirex25",
+      "error": "RuntimeError: command failed (1): python scripts/train_chord_170.py --config configs/chord170_base.yaml --out-dir /runs/chord170/sweeps/phase4-core2/mirex25 --label-space mirex25 --epochs 25 --patience 25\nime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at xla/tsl/protobuf/coordination_config.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/cost_graph.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/step_stats.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/allocation_description.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/tensor_description.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/protobuf/cluster.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/protobuf/debug.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\nLoading data (sources=['guitarset', 'guitar_techs', 'egset12', 'idmt_smt_guitar', 'rwc', 'pseudo_v2'])\n  space=mirex25 aux_heads=False\n  train: 7347 windows / 545 tracks\n  val  : 406 windows / 72 tracks\nWARNING: All log messages before absl::InitializeLog() is called are written to STDERR\nW0000 00:00:1794857643.612367   10500 gpu_device.cc:2342] Cannot dlopen some GPU libraries. Please make sure the missing libraries mentioned above are installed properly if you would like to use GPU. Follow the guide at https://www.tensorflow.org/install/gpu for how to download and setup the required libraries for your platform.\nSkipping registering GPU devices...\n  Running on CPU (float32)\nTraceback (most recent call last):\n  File \"/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/scripts/train_chord_170.py\", line 825, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/scripts/train_chord_170.py\", line 808, in main\n    history = model.fit(\n              ^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/dist-packages/tf_keras/src/utils/traceback_utils.py\", line 70, in error_handler\n    raise e.with_traceback(filtered_tb) from None\n  File \"/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/scripts/train_chord_170.py\", line 375, in __getitem__\n    \"chord_probs\": tf.keras.utils.to_categorical(chord, num_classes=self.num_chords),\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nIndexError: index 27 is out of bounds for axis 1 with size 25\n"
+    },
+    "vocab277": {
+      "label_space": "277",
+      "args": "--label-space 277",
+      "error": "RuntimeError: command failed (1): python scripts/train_chord_170.py --config configs/chord170_base.yaml --out-dir /runs/chord170/sweeps/phase4-core2/vocab277 --label-space 277 --epochs 25 --patience 25\n in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/graph.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/graph_debug_info.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/versions.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/protobuf/config.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at xla/tsl/protobuf/coordination_config.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/cost_graph.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/step_stats.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/allocation_description.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/framework/tensor_description.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/protobuf/cluster.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\n/usr/local/lib/python3.11/dist-packages/google/protobuf/runtime_version.py:98: UserWarning: Protobuf gencode version 5.28.3 is exactly one major version older than the runtime version 6.31.1 at tensorflow/core/protobuf/debug.proto. Please update the gencode to avoid compatibility violations in the next runtime release.\n  warnings.warn(\nLoading data (sources=['guitarset', 'guitar_techs', 'egset12', 'idmt_smt_guitar', 'rwc', 'pseudo_v2'])\nNo train/val windows found \u2014 run the data prepare step first.\n"
+    },
+    "synth5": {
+      "label_space": "170",
+      "args": "--synthetic-epochs 5 --synthetic-limit 1500",
+      "val": {
+        "epoch": 13,
+        "metric": "val_wcsr_mirex",
+        "metric_value": 0.2906403973806976,
+        "label_space": "170",
+        "n_windows": 406,
+        "n_tracks": 72,
+        "exact_accuracy": 0.28078817733990147,
+        "root_accuracy": 0.3078817733990148,
+        "macro_f1": 0.2120329999249946,
+        "top3_accuracy": 0.5591133004926109,
+        "ece": 0.044789175112993254,
+        "wcsr": {
+          "root": 0.3078817763331069,
+          "majmin": 0.28086148600611727,
+          "thirds": 0.27586207244105665,
+          "triads": 0.261083747137538,
+          "sevenths": 0.27560697082644525,
+          "tetrads": 0.25123153063834563,
+          "mirex": 0.2906403973806976
+        },
+        "ci": {
+          "exact_accuracy": [
+            0.223915848782261,
+            0.34257817927018586
+          ],
+          "macro_f1": [
+            0.16368596073721903,
+            0.2521491234297804
+          ],
+          "n_tracks": 72,
+          "n_boot": 1000
+        },
+        "rich_170": {
+          "n_windows": 406,
+          "n_tracks": 72,
+          "macro_f1": 0.09403225898044713,
+          "exact_accuracy": 0.2438423645320197,
+          "top3_accuracy": 0.4975369458128079,
+          "top5_accuracy": 0.625615763546798,
+          "ece": 0.060133433923712495,
+          "per_quality": {
+            "maj": {
+              "support": 215,
+              "precision": 0.5929824561403508,
+              "recall": 0.786046511627907,
+              "f1": 0.6759999999999998
+            },
+            "min": {
+              "support": 84,
+              "precision": 0.3442622950819672,
+              "recall": 0.25,
+              "f1": 0.2896551724137931
+            },
+            "dim": {
+              "support": 2,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "aug": {
+              "support": 6,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min7": {
+              "support": 3,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "maj7": {
+              "support": 5,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "7": {
+              "support": 26,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "dim7": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "sus2": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "sus4": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "N": {
+              "support": 41,
+              "precision": 0.14545454545454545,
+              "recall": 0.1951219512195122,
+              "f1": 0.16666666666666666
+            }
+          },
+          "wcsr": {
+            "root": 0.28078818010015244,
+            "majmin": 0.27992024757436,
+            "thirds": 0.25862069276601846,
+            "triads": 0.24630542159026902,
+            "sevenths": 0.25570021546717514,
+            "tetrads": 0.22660098899281392,
+            "mirex": 0.2709359639305823
+          },
+          "bass": {
+            "overall": 0.24630541871921183,
+            "known_bass": 0.20155038759689922,
+            "chord_frames": 0.2410958904109589,
+            "n_known": 258
+          },
+          "slash": {
+            "root_position_acc": 0.18691588785046728,
+            "slash_acc": 0.033112582781456956,
+            "n_root_position": 107,
+            "n_slash": 151
+          },
+          "per_source": {
+            "guitar_techs": {
+              "n_windows": 82,
+              "macro_f1": 0.02333152958152958,
+              "exact_accuracy": 0.12195121951219512,
+              "wcsr_mirex": 0.19656084949128927
+            },
+            "guitarset": {
+              "n_windows": 324,
+              "macro_f1": 0.15945147265386936,
+              "exact_accuracy": 0.27469135802469136,
+              "wcsr_mirex": 0.2916269871108149
+            }
+          }
+        }
+      },
+      "test": {
+        "n_windows": 340,
+        "n_tracks": 63,
+        "macro_f1": 0.17113259269830952,
+        "exact_accuracy": 0.27058823529411763,
+        "top3_accuracy": 0.5352941176470588,
+        "top5_accuracy": 0.6823529411764706,
+        "ece": 0.09088620561010693,
+        "per_quality": {
+          "maj": {
+            "support": 207,
+            "precision": 0.69377990430622,
+            "recall": 0.7004830917874396,
+            "f1": 0.6971153846153846
+          },
+          "min": {
+            "support": 80,
+            "precision": 0.4117647058823529,
+            "recall": 0.35,
+            "f1": 0.37837837837837834
+          },
+          "aug": {
+            "support": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "min6": {
+            "support": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "maj7": {
+            "support": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "7": {
+            "support": 19,
+            "precision": 0.5,
+            "recall": 0.15789473684210525,
+            "f1": 0.23999999999999996
+          },
+          "dim7": {
+            "support": 8,
+            "precision": 1.0,
+            "recall": 0.125,
+            "f1": 0.2222222222222222
+          },
+          "N": {
+            "support": 24,
+            "precision": 0.14814814814814814,
+            "recall": 0.3333333333333333,
+            "f1": 0.20512820512820512
+          }
+        },
+        "wcsr": {
+          "root": 0.2970588234997763,
+          "majmin": 0.26282212915443687,
+          "thirds": 0.27352941199302333,
+          "triads": 0.25000000009850615,
+          "sevenths": 0.24544117736491866,
+          "tetrads": 0.22941176525517995,
+          "mirex": 0.2794117649517306
+        },
+        "bass": {
+          "overall": 0.3558823529411765,
+          "known_bass": 0.2222222222222222,
+          "chord_frames": 0.34810126582278483,
+          "n_known": 171
+        },
+        "slash": {
+          "root_position_acc": 0.18823529411764706,
+          "slash_acc": 0.023255813953488372,
+          "n_root_position": 85,
+          "n_slash": 86
+        },
+        "per_source": {
+          "egset12": {
+            "n_windows": 16,
+            "macro_f1": 0.10576923076923077,
+            "exact_accuracy": 0.25,
+            "wcsr_mirex": 0.28888888743188645
+          },
+          "guitarset": {
+            "n_windows": 324,
+            "macro_f1": 0.18558310126246735,
+            "exact_accuracy": 0.2716049382716049,
+            "wcsr_mirex": 0.270615080108248
+          }
+        },
+        "checkpoint": "/runs/chord170/sweeps/phase4-core2/synth5/best.keras",
+        "split": "test",
+        "sources": [
+          "egset12",
+          "guitarset"
+        ]
+      }
+    },
+    "synth10": {
+      "label_space": "170",
+      "args": "--synthetic-epochs 10 --synthetic-limit 1500",
+      "val": {
+        "epoch": 13,
+        "metric": "val_wcsr_mirex",
+        "metric_value": 0.2881773428354534,
+        "label_space": "170",
+        "n_windows": 406,
+        "n_tracks": 72,
+        "exact_accuracy": 0.28078817733990147,
+        "root_accuracy": 0.3078817733990148,
+        "macro_f1": 0.2030273249698741,
+        "top3_accuracy": 0.5049261083743842,
+        "ece": 0.021689836945146174,
+        "wcsr": {
+          "root": 0.3078817752499792,
+          "majmin": 0.2631861370962714,
+          "thirds": 0.27832512537384335,
+          "triads": 0.2487684735465398,
+          "sevenths": 0.26396610443124113,
+          "tetrads": 0.24630541939605002,
+          "mirex": 0.2881773428354534
+        },
+        "ci": {
+          "exact_accuracy": [
+            0.22977822114272498,
+            0.3349403481898253
+          ],
+          "macro_f1": [
+            0.15324997577926214,
+            0.23800425525465418
+          ],
+          "n_tracks": 72,
+          "n_boot": 1000
+        },
+        "rich_170": {
+          "n_windows": 406,
+          "n_tracks": 72,
+          "macro_f1": 0.08694289381176984,
+          "exact_accuracy": 0.2561576354679803,
+          "top3_accuracy": 0.46551724137931033,
+          "top5_accuracy": 0.5812807881773399,
+          "ece": 0.08209746174073866,
+          "per_quality": {
+            "maj": {
+              "support": 215,
+              "precision": 0.6113074204946997,
+              "recall": 0.8046511627906977,
+              "f1": 0.6947791164658634
+            },
+            "min": {
+              "support": 84,
+              "precision": 0.3389830508474576,
+              "recall": 0.23809523809523808,
+              "f1": 0.2797202797202797
+            },
+            "dim": {
+              "support": 2,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "aug": {
+              "support": 6,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min6": {
+              "support": 0,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "min7": {
+              "support": 3,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "maj7": {
+              "support": 5,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "7": {
+              "support": 26,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "dim7": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "sus2": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "sus4": {
+              "support": 8,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "N": {
+              "support": 41,
+              "precision": 0.16071428571428573,
+              "recall": 0.21951219512195122,
+              "f1": 0.18556701030927836
+            }
+          },
+          "wcsr": {
+            "root": 0.2955665044519729,
+            "majmin": 0.26737626153058736,
+            "thirds": 0.27339901703464675,
+            "triads": 0.24137931148504774,
+            "sevenths": 0.2562104167535216,
+            "tetrads": 0.23152709514641365,
+            "mirex": 0.2807881804422418
+          },
+          "bass": {
+            "overall": 0.270935960591133,
+            "known_bass": 0.1744186046511628,
+            "chord_frames": 0.2493150684931507,
+            "n_known": 258
+          },
+          "slash": {
+            "root_position_acc": 0.19626168224299065,
+            "slash_acc": 0.033112582781456956,
+            "n_root_position": 107,
+            "n_slash": 151
+          },
+          "per_source": {
+            "guitar_techs": {
+              "n_windows": 82,
+              "macro_f1": 0.024646942110177407,
+              "exact_accuracy": 0.14634146341463414,
+              "wcsr_mirex": 0.2431216992608913
+            },
+            "guitarset": {
+              "n_windows": 324,
+              "macro_f1": 0.1387344575572476,
+              "exact_accuracy": 0.2839506172839506,
+              "wcsr_mirex": 0.2937896847658376
+            }
+          }
+        }
+      },
+      "test": {
+        "n_windows": 340,
+        "n_tracks": 63,
+        "macro_f1": 0.13551102075032817,
+        "exact_accuracy": 0.2647058823529412,
+        "top3_accuracy": 0.5264705882352941,
+        "top5_accuracy": 0.6647058823529411,
+        "ece": 0.056541193824480564,
+        "per_quality": {
+          "maj": {
+            "support": 207,
+            "precision": 0.6743119266055045,
+            "recall": 0.7101449275362319,
+            "f1": 0.691764705882353
+          },
+          "min": {
+            "support": 80,
+            "precision": 0.37254901960784315,
+            "recall": 0.2375,
+            "f1": 0.2900763358778626
+          },
+          "dim": {
+            "support": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "min6": {
+            "support": 0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "maj7": {
+            "support": 2,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "7": {
+            "support": 19,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "dim7": {
+            "support": 8,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "N": {
+            "support": 24,
+            "precision": 0.1875,
+            "recall": 0.5,
+            "f1": 0.2727272727272727
+          }
+        },
+        "wcsr": {
+          "root": 0.2823529435861177,
+          "majmin": 0.2653781535401696,
+          "thirds": 0.2676470610616253,
+          "triads": 0.25294117828794543,
+          "sevenths": 0.2562324949265061,
+          "tetrads": 0.23823529563990287,
+          "mirex": 0.2735294140553941
+        },
+        "bass": {
+          "overall": 0.3941176470588235,
+          "known_bass": 0.2222222222222222,
+          "chord_frames": 0.37658227848101267,
+          "n_known": 171
+        },
+        "slash": {
+          "root_position_acc": 0.23529411764705882,
+          "slash_acc": 0.011627906976744186,
+          "n_root_position": 85,
+          "n_slash": 86
+        },
+        "per_source": {
+          "egset12": {
+            "n_windows": 16,
+            "macro_f1": 0.09523809523809523,
+            "exact_accuracy": 0.4375,
+            "wcsr_mirex": 0.4444444409675068
+          },
+          "guitarset": {
+            "n_windows": 324,
+            "macro_f1": 0.1374052486673228,
+            "exact_accuracy": 0.25617283950617287,
+            "wcsr_mirex": 0.2620833357510664
+          }
+        },
+        "checkpoint": "/runs/chord170/sweeps/phase4-core2/synth10/best.keras",
+        "split": "test",
+        "sources": [
+          "egset12",
+          "guitarset"
+        ]
+      }
+    }
+  }
+}

@@ -222,21 +222,35 @@ def pitch_shift_labels(
     chord: np.ndarray | list[int],
     bass: np.ndarray | list[int],
     shift: int,
+    *,
+    space: str = "170",
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Transpose 170-class chord and bass labels by ``shift`` semitones.
+    """Transpose chord and bass labels by ``shift`` semitones.
 
-    Chord classes are ordered quality-major (``quality * 12 + root``), so the
-    root is ``idx % 12``. N/X are unchanged; unknown bass stays unknown.
+    Supports the 170 layout (quality-major), the legacy 277 layout
+    (quality-major, N = 276) and the MIREX-25 layout (12 major + 12 minor +
+    N). N/X labels are unchanged; unknown bass stays unknown.
     """
     chord_arr = np.asarray(chord).copy()
     bass_arr = np.asarray(bass).copy()
     shift = int(shift) % 12
     if shift == 0:
         return chord_arr, bass_arr
-    chord_mask = chord_arr < N_IDX_170
-    quality = chord_arr[chord_mask] // 12
-    root = chord_arr[chord_mask] % 12
-    chord_arr[chord_mask] = quality * 12 + ((root + shift) % 12)
+
+    if space in ("170", "277"):
+        n_index = N_IDX_170 if space == "170" else 276
+        chord_mask = chord_arr < n_index
+        quality = chord_arr[chord_mask] // 12
+        root = chord_arr[chord_mask] % 12
+        chord_arr[chord_mask] = quality * 12 + ((root + shift) % 12)
+    elif space == "mirex25":
+        major = chord_arr < 12
+        minor = (chord_arr >= 12) & (chord_arr < 24)
+        chord_arr[major] = (chord_arr[major] + shift) % 12
+        chord_arr[minor] = 12 + ((chord_arr[minor] - 12 + shift) % 12)
+    else:
+        raise ValueError(f"unknown label space: {space}")
+
     bass_mask = bass_arr != BASS_X_IDX
     bass_arr[bass_mask] = (bass_arr[bass_mask] + shift) % 12
     return chord_arr, bass_arr

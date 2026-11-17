@@ -1,0 +1,106 @@
+{
+  "note": "exact and WCSR-MIREX in the shared MIREX-25 space; macro_f1_native in each variant's native space",
+  "ablations": [
+    {
+      "variant": "170-baseline",
+      "label_space": "170",
+      "epochs": 25,
+      "exact": 0.285,
+      "macro_f1_native": 0.172,
+      "wcsr_mirex": 0.3,
+      "ece": 0.075
+    },
+    {
+      "variant": "170-aux",
+      "label_space": "170",
+      "epochs": 25,
+      "exact": 0.332,
+      "macro_f1_native": 0.244,
+      "wcsr_mirex": 0.353,
+      "ece": 0.069
+    },
+    {
+      "variant": "170-bass0.5",
+      "label_space": "170",
+      "epochs": 25,
+      "exact": 0.332,
+      "macro_f1_native": 0.221,
+      "wcsr_mirex": 0.347,
+      "ece": 0.099
+    },
+    {
+      "variant": "170-noaugment",
+      "label_space": "170",
+      "epochs": 25,
+      "exact": 0.447,
+      "macro_f1_native": 0.317,
+      "wcsr_mirex": 0.468,
+      "ece": 0.106
+    },
+    {
+      "variant": "170-aux-noaugment",
+      "label_space": "170",
+      "epochs": 25,
+      "exact": 0.506,
+      "macro_f1_native": 0.363,
+      "wcsr_mirex": 0.526,
+      "ece": 0.073
+    },
+    {
+      "variant": "mirex25",
+      "label_space": "mirex25",
+      "epochs": 25,
+      "exact": 0.335,
+      "macro_f1_native": 0.292,
+      "wcsr_mirex": 0.341,
+      "ece": 0.036
+    },
+    {
+      "variant": "vocab277",
+      "label_space": "277",
+      "epochs": 25,
+      "exact": 0.297,
+      "macro_f1_native": 0.263,
+      "wcsr_mirex": 0.306,
+      "ece": 0.015
+    },
+    {
+      "variant": "synth5",
+      "label_space": "170",
+      "epochs": 25,
+      "exact": 0.271,
+      "macro_f1_native": 0.171,
+      "wcsr_mirex": 0.279,
+      "ece": 0.091
+    },
+    {
+      "variant": "synth10",
+      "label_space": "170",
+      "epochs": 25,
+      "exact": 0.265,
+      "macro_f1_native": 0.136,
+      "wcsr_mirex": 0.274,
+      "ece": 0.057
+    }
+  ],
+  "finalists_noaugment_100ep": [
+    {
+      "variant": "noaugment-seed1",
+      "epochs": 100,
+      "exact": 0.426,
+      "wcsr_mirex": 0.456
+    },
+    {
+      "variant": "noaugment-seed2",
+      "epochs": 100,
+      "exact": 0.394,
+      "wcsr_mirex": 0.409
+    },
+    {
+      "variant": "noaugment-seed3",
+      "epochs": 100,
+      "exact": 0.424,
+      "wcsr_mirex": 0.45
+    }
+  ]
+}

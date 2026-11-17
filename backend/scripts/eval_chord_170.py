@@ -462,6 +462,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.label_space == "170":
         report = evaluate_arrays(y, chord_pred, b, bass_pred, chord_probs,
                                  track_ids, c, sources)
+        report["ci"] = bootstrap_ci(y, chord_pred, track_ids)
     else:
         report = evaluate_ablation(y, chord_probs, track_ids, c,
                                    space=args.label_space,
@@ -483,9 +484,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"report written to {args.out}")
     return 0
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
 
 
 # ---------------------------------------------------------------------------
@@ -632,3 +630,6 @@ def bootstrap_ci(
         "n_tracks": len(track_indices),
         "n_boot": n_boot,
     }
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -328,7 +328,7 @@ def eval_model(
     volumes={ROOT: data_volume, RUNS: runs_volume},
     retries=0,
 )
-def sweep(epochs: str = "25", tag: str = "") -> str:
+def sweep(epochs: str = "25", tag: str = "", suite: str = "core") -> str:
     """Run the Phase 4 ablation suite sequentially on one A10G.
 
     All variants share the config, seed, and epoch budget; patience equals the
@@ -342,16 +342,37 @@ def sweep(epochs: str = "25", tag: str = "") -> str:
     stamp = tag.strip() or time.strftime("sweep-%Y%m%d-%H%M%S")
     base_out = os.path.join(RUNS, "chord170", "sweeps", stamp)
     budget = int(epochs)
-    variants = [
-        ("170-baseline", "170", "--epochs %d --patience %d" % (budget, budget)),
-        ("170-aux", "170", "--aux-heads"),
-        ("170-bass0.5", "170", "--bass-loss-weight 0.5"),
-        ("170-noaugment", "170", "--no-augment"),
-        ("mirex25", "mirex25", "--label-space mirex25"),
-        ("vocab277", "277", "--label-space 277"),
-        ("synth5", "170", "--synthetic-epochs 5 --synthetic-limit 1500"),
-        ("synth10", "170", "--synthetic-epochs 10 --synthetic-limit 1500"),
-    ]
+    budget_args = ["--epochs", str(budget), "--patience", str(budget)]
+    suites = {
+        "core": [
+            ("170-baseline", "170", []),
+            ("170-aux", "170", ["--aux-heads"]),
+            ("170-bass0.5", "170", ["--bass-loss-weight", "0.5"]),
+            ("170-noaugment", "170", ["--no-augment"]),
+            ("mirex25", "mirex25", ["--label-space", "mirex25"]),
+            ("vocab277", "277", ["--label-space", "277"]),
+            ("synth5", "170", ["--synthetic-epochs", "5", "--synthetic-limit", "1500"]),
+            ("synth10", "170", ["--synthetic-epochs", "10", "--synthetic-limit", "1500"]),
+        ],
+        "fix": [
+            ("mirex25", "mirex25", ["--label-space", "mirex25"]),
+            ("vocab277", "277", ["--label-space", "277"]),
+            ("170-aux-noaugment", "170", ["--aux-heads", "--no-augment"]),
+        ],
+        "finalists": [
+            ("noaugment-seed1", "170", ["--no-augment", "--seed", "1"]),
+            ("noaugment-seed2", "170", ["--no-augment", "--seed", "2"]),
+            ("noaugment-seed3", "170", ["--no-augment", "--seed", "3"]),
+        ],
+        "finalists_aux": [
+            ("aux-noaugment-seed1", "170", ["--aux-heads", "--no-augment", "--seed", "1"]),
+            ("aux-noaugment-seed2", "170", ["--aux-heads", "--no-augment", "--seed", "2"]),
+            ("aux-noaugment-seed3", "170", ["--aux-heads", "--no-augment", "--seed", "3"]),
+        ],
+    }
+    if suite not in suites:
+        raise ValueError(f"unknown suite {suite!r}; choose from {sorted(suites)}")
+    variants = suites[suite]
     summary: dict = {"tag": stamp, "epochs": budget, "config": "configs/chord170_base.yaml",
                      "variants": {}}
     for name, space, extra in variants:
@@ -361,9 +382,8 @@ def sweep(epochs: str = "25", tag: str = "") -> str:
             "--config", "configs/chord170_base.yaml",
             "--out-dir", out_dir,
             "--label-space", space,
-        ]
-        # Avoid duplicating label-space/epochs flags for variants that set them.
-        extra_args = shlex.split(extra)
+        ] + budget_args
+        extra_args = list(extra)
         if "--label-space" in extra_args:
             index = extra_args.index("--label-space")
             extra_args = extra_args[:index] + extra_args[index + 2:]
@@ -379,7 +399,7 @@ def sweep(epochs: str = "25", tag: str = "") -> str:
                 "--label-space", space,
                 "--out", eval_out,
             ])
-            entry: dict = {"label_space": space, "args": extra}
+            entry: dict = {"label_space": space, "args": " ".join(extra)}
             metrics_path = os.path.join(out_dir, "metrics.json")
             if os.path.isfile(metrics_path):
                 entry["val"] = json.load(open(metrics_path, encoding="utf-8"))
@@ -387,7 +407,7 @@ def sweep(epochs: str = "25", tag: str = "") -> str:
                 entry["test"] = json.load(open(eval_out, encoding="utf-8"))
             summary["variants"][name] = entry
         except Exception as exc:  # record failures instead of aborting the suite
-            summary["variants"][name] = {"label_space": space, "args": extra,
+            summary["variants"][name] = {"label_space": space, "args": " ".join(extra),
                                          "error": f"{type(exc).__name__}: {exc}"}
             print(f"[sweep] {name} FAILED: {exc}", flush=True)
         runs_volume.commit()

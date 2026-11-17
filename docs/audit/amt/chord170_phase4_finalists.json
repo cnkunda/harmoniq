@@ -1,0 +1,52 @@
+{
+  "variants": [
+    {
+      "seed": 1,
+      "exact": 0.468,
+      "exact_ci95": [
+        0.386,
+        0.556
+      ],
+      "macro_f1": 0.327,
+      "wcsr_mirex": 0.471,
+      "ece": 0.091
+    },
+    {
+      "seed": 2,
+      "exact": 0.447,
+      "exact_ci95": [
+        0.359,
+        0.54
+      ],
+      "macro_f1": 0.301,
+      "wcsr_mirex": 0.485,
+      "ece": 0.12
+    },
+    {
+      "seed": 3,
+      "exact": 0.426,
+      "exact_ci95": [
+        0.344,
+        0.518
+      ],
+      "macro_f1": 0.328,
+      "wcsr_mirex": 0.447,
+      "ece": 0.121
+    }
+  ],
+  "mean_std": {
+    "exact": [
+      0.447,
+      0.017
+    ],
+    "macro_f1": [
+      0.319,
+      0.012
+    ],
+    "wcsr_mirex": [
+      0.468,
+      0.016
+    ]
+  },
+  "config": "170-class + bass + aux heads (root/quality 0.15), no augmentation, 25 epochs"
+}
