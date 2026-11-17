@@ -65,7 +65,13 @@ from app.chord_vocab_170 import (  # noqa: E402
     map_170_to_mirex25,
 )
 from scripts import chord_data_v2 as chord_data  # noqa: E402
-from scripts.chord_data_v2 import sampling_probabilities  # noqa: E402
+from scripts.chord_data_v2 import (  # noqa: E402
+    LABEL_SPACES,
+    N_INDEX_BY_SPACE,
+    bass_sample_weights,
+    chord_class_weights,
+    sampling_probabilities,
+)
 from scripts.eval_chord_170 import (
     bootstrap_ci,
     evaluate_ablation,
@@ -104,8 +110,6 @@ class CircularCqtPad(tf.keras.layers.Layer):
         return (input_shape[0], input_shape[1] + 2, input_shape[2])
 
 
-LABEL_SPACES: dict[str, int] = {"170": NUM_CLASSES_170, "277": len(CHORD_VOCAB_277), "mirex25": 25}
-N_INDEX_BY_SPACE: dict[str, int] = {"170": N_IDX_170, "277": len(CHORD_VOCAB_277) - 1, "mirex25": 24}
 NUM_ROOT_CLASSES = 13  # 12 roots + unknown
 NUM_QUALITY_CLASSES = 15  # 14 qualities + unknown
 
@@ -224,7 +228,8 @@ def load_split(
     feats, labels, labels277, bass, conf, tracks, centres, srcs = [], [], [], [], [], [], [], []
     for source in sources:
         data_dir = data_root / SOURCE_DIRS[source]
-        loaded = chord_data.load_dataset_dir_170(data_dir, split, limit_tracks=limit_tracks)
+        loaded = chord_data.load_dataset_dir_170(
+            data_dir, split, limit_tracks=limit_tracks, source=source)
         if len(loaded["labels170"]) == 0:
             continue
         if label_space == "277" and loaded.get("labels277") is None:
@@ -292,8 +297,16 @@ def augment_batch(
     pitch_shift_range: int = 3,
     specaug_p: float = 0.5,
     label_space: str = "170",
+    aug_level: str = "full",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """On-the-fly augmentation: pitch shift, gain, noise, SpecAugment."""
+    """On-the-fly augmentation: pitch shift, gain, noise, SpecAugment.
+
+    ``aug_level="mild"`` keeps gain/noise and ±1 semitone only (no
+    SpecAugment); ``"full"`` is the original recipe.
+    """
+    if aug_level == "mild":
+        pitch_shift_range = min(pitch_shift_range, 1)
+        specaug_p = 0.0
     features = features.copy()
     chord = chord.copy()
     bass = bass.copy()
@@ -348,6 +361,9 @@ class ChordSequence(tf.keras.utils.Sequence):
         root_labels: np.ndarray | None = None,
         quality_labels: np.ndarray | None = None,
         label_space: str = "170",
+        bass_weights: np.ndarray | None = None,
+        chord_weights: np.ndarray | None = None,
+        aug_level: str = "full",
     ):
         super().__init__()
         self.features = features
@@ -355,6 +371,9 @@ class ChordSequence(tf.keras.utils.Sequence):
         self.bass = bass
         self.num_chords = num_chords
         self.label_space = label_space
+        self.bass_weights = bass_weights
+        self.chord_weights = chord_weights
+        self.aug_level = aug_level
         self.root_labels = root_labels
         self.quality_labels = quality_labels
         self.probabilities = probabilities
@@ -378,10 +397,17 @@ class ChordSequence(tf.keras.utils.Sequence):
         bass = self.bass[indices]
         if self.augment:
             features, chord, bass = augment_batch(
-                features, chord, bass, self.rng, label_space=self.label_space)
+                features, chord, bass, self.rng, label_space=self.label_space,
+                aug_level=self.aug_level)
         targets = {
             "chord_probs": tf.keras.utils.to_categorical(chord, num_classes=self.num_chords),
             "bass_probs": tf.keras.utils.to_categorical(bass, num_classes=NUM_CLASSES_BASS),
+        }
+        weights = {
+            "chord_probs": (self.chord_weights[indices] if self.chord_weights is not None
+                            else np.ones(len(indices), dtype=np.float32)),
+            "bass_probs": (self.bass_weights[indices] if self.bass_weights is not None
+                           else np.ones(len(indices), dtype=np.float32)),
         }
         if self.root_labels is not None and self.quality_labels is not None:
             roots = self.root_labels[indices]
@@ -390,7 +416,9 @@ class ChordSequence(tf.keras.utils.Sequence):
                 roots, num_classes=NUM_ROOT_CLASSES)
             targets["quality_probs"] = tf.keras.utils.to_categorical(
                 qualities, num_classes=NUM_QUALITY_CLASSES)
-        return features, targets
+            weights["root_probs"] = np.ones(len(indices), dtype=np.float32)
+            weights["quality_probs"] = np.ones(len(indices), dtype=np.float32)
+        return features, targets, weights
 
     def on_epoch_end(self) -> None:
         self.epoch += 1
@@ -406,7 +434,8 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
     """Per-epoch WCSR/macro-F1 validation, CSV logging, best-checkpoint saving."""
 
     HEADER = [
-        "epoch", "loss", "chord_loss", "bass_loss", "train_acc", "train_macro_f1", "val_macro_f1",
+        "epoch", "loss", "chord_loss", "bass_loss", "train_acc", "train_macro_f1",
+        "val_macro_f1", "val_macro_f1_supported",
         "val_wcsr_mirex", "val_wcsr_root", "val_wcsr_tetrads",
         "val_bass_acc", "val_slash_acc", "val_ece", "lr",
     ]
@@ -479,6 +508,9 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
             "train_acc": train_acc,
             "train_macro_f1": train_f1,
             "val_macro_f1": report.get("macro_f1", 0.0),
+            "val_macro_f1_supported": (report.get("rich_170", {}).get("macro_f1_supported", 0.0)
+                                       if self.label_space == "170"
+                                       else report.get("macro_f1_supported", 0.0)),
             "val_wcsr_mirex": report["wcsr"]["mirex"],
             "val_wcsr_root": report["wcsr"]["root"],
             "val_wcsr_tetrads": report["wcsr"]["tetrads"],
@@ -495,20 +527,23 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
         print(
             f"    train acc={train_acc if train_acc != '' else 'n/a'} "
             f"val macroF1={report.get('macro_f1', 0.0):.4f} "
+            f"macroF1sup={entry.get('val_macro_f1_supported', 0.0):.4f} "
             f"WCSR-mirex={report['wcsr']['mirex']:.4f} "
             f"bass={entry['val_bass_acc']:.4f} ece={report['ece']:.4f} "
             f"({time.time() - started:.0f}s)",
             flush=True,
         )
 
-        metric = report["wcsr"]["mirex"]
+        metric = (report.get("rich_170", {}).get("macro_f1_supported", 0.0)
+                  if self.label_space == "170"
+                  else report.get("macro_f1_supported", 0.0))
         if metric > self.best_metric:
             self.best_metric = metric
             self.best_epoch = epoch + 1
             self.epochs_since_improvement = 0
             self.model.save(self.out_dir / "best.keras")
             (self.out_dir / "metrics.json").write_text(json.dumps(
-                {"epoch": self.best_epoch, "metric": "val_wcsr_mirex",
+                {"epoch": self.best_epoch, "metric": "val_macro_f1_supported",
                  "metric_value": metric, **report}, indent=2))
             chord_pred = None
             chord_probs, bass_probs = self._predict(self.val_data["features"])
@@ -525,12 +560,13 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
                     "recall": float(np.mean(chord_pred[mask] == cls)),
                 }
             (self.out_dir / "per_class.json").write_text(json.dumps(per_class, indent=2))
-            print(f"    saved best checkpoint (epoch {self.best_epoch})", flush=True)
+            print(f"    saved best checkpoint (epoch {self.best_epoch}, "
+                  f"macroF1sup={metric:.4f})", flush=True)
         else:
             self.epochs_since_improvement += 1
             if self.epochs_since_improvement >= self.patience:
                 print(
-                    f"    early stopping: no WCSR-MIREX improvement for "
+                    f"    early stopping: no supported-macro-F1 improvement for "
                     f"{self.patience} epochs",
                     flush=True,
                 )
@@ -650,6 +686,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--aux-heads", action="store_true")
     parser.add_argument("--synthetic-epochs", type=int, default=None)
     parser.add_argument("--synthetic-limit", type=int, default=0)
+    parser.add_argument("--bass-inversion-weight", type=float, default=None)
+    parser.add_argument("--chord-class-weight-tau", type=float, default=None)
+    parser.add_argument("--no-bass-mask", action="store_true")
+    parser.add_argument("--aug-level", default=None, choices=["none", "mild", "full"])
+    parser.add_argument("--feature-standardize", action="store_true")
     args = parser.parse_args(argv)
 
     config = {
@@ -666,6 +707,11 @@ def main(argv: list[str] | None = None) -> int:
         "synthetic_epochs": 0,
         "label_space": "170",
         "aux_heads": False,
+        "bass_mask_unknown": True,
+        "bass_inversion_weight": 2.0,
+        "chord_class_weight_tau": 0.0,
+        "aug_level": "full",
+        "feature_standardize": False,
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -688,6 +734,16 @@ def main(argv: list[str] | None = None) -> int:
         config["aux_heads"] = True
     if args.synthetic_epochs is not None:
         config["synthetic_epochs"] = args.synthetic_epochs
+    if args.bass_inversion_weight is not None:
+        config["bass_inversion_weight"] = args.bass_inversion_weight
+    if args.chord_class_weight_tau is not None:
+        config["chord_class_weight_tau"] = args.chord_class_weight_tau
+    if args.no_bass_mask:
+        config["bass_mask_unknown"] = False
+    if args.aug_level:
+        config["aug_level"] = args.aug_level
+    if args.feature_standardize:
+        config["feature_standardize"] = True
     if config["label_space"] not in LABEL_SPACES:
         raise SystemExit(f"unknown label space: {config['label_space']}")
 
@@ -707,6 +763,16 @@ def main(argv: list[str] | None = None) -> int:
                      aux_heads=config["aux_heads"])
     if train is None or val is None:
         raise SystemExit("No train/val windows found — run the data prepare step first.")
+    feature_mean = feature_std = None
+    if config["feature_standardize"]:
+        feature_mean = train["features"].mean(axis=(0, 1), keepdims=True)
+        feature_std = train["features"].std(axis=(0, 1), keepdims=True) + 1e-6
+        for split_data in (train, val):
+            split_data["features"] = ((split_data["features"] - feature_mean)
+                                      / feature_std).astype(np.float32)
+        np.savez(out_dir / "feature_stats.npz", mean=feature_mean, std=feature_std)
+        print("  feature standardisation enabled (train per-bin mean/std)", flush=True)
+
     print(
         f"  space={config['label_space']} aux_heads={config['aux_heads']}\n"
         f"  train: {len(train['labels_native'])} windows / {len(set(train['track_ids']))} tracks\n"
@@ -758,13 +824,34 @@ def main(argv: list[str] | None = None) -> int:
         train["labels_native"], train["sources"], temperature=float(config["temperature"]),
         n_classes=train["num_chords"], n_index=N_INDEX_BY_SPACE[config["label_space"]],
     )
+    bass_weights = bass_sample_weights(
+        train["bass_labels"], train["labels_native"],
+        inversion_weight=float(config["bass_inversion_weight"]),
+        mask_unknown=bool(config["bass_mask_unknown"]),
+        label_space=config["label_space"],
+    )
+    chord_weights = chord_class_weights(
+        train["labels_native"], tau=float(config["chord_class_weight_tau"]),
+        n_classes=train["num_chords"],
+    )
+    print(
+        f"  weights: bass masked={int(np.sum(bass_weights == 0))} "
+        f"root={int(np.sum(bass_weights == 1))} "
+        f"inversion={int(np.sum(bass_weights > 1))} "
+        f"(inversion_weight={config['bass_inversion_weight']})",
+        flush=True,
+    )
     sequence = ChordSequence(
         train["features"], train["labels_native"], train["bass_labels"], probabilities,
         batch_size=int(config["batch_size"]), seed=int(config["seed"]),
-        augment=not args.no_augment, num_chords=train["num_chords"],
+        augment=(not args.no_augment and config["aug_level"] != "none"),
+        num_chords=train["num_chords"],
         root_labels=train.get("root_labels"),
         quality_labels=train.get("quality_labels"),
         label_space=config["label_space"],
+        bass_weights=bass_weights,
+        chord_weights=chord_weights,
+        aug_level=config["aug_level"],
     )
     n_train_sample = min(512, len(train["labels_native"]))
     callback = ValidationCheckpoint(
@@ -798,6 +885,10 @@ def main(argv: list[str] | None = None) -> int:
         if synthetic is None:
             print("  [WARN] synthetic data unavailable — skipping pretraining", flush=True)
         else:
+            if feature_mean is not None:
+                synthetic["features"] = (
+                    (synthetic["features"] - feature_mean) / feature_std
+                ).astype(np.float32)
             print(f"  synthetic pretraining: {synthetic_epochs} epochs on "
                   f"{len(synthetic['labels_native'])} windows", flush=True)
             synth_prob = sampling_probabilities(
@@ -812,6 +903,12 @@ def main(argv: list[str] | None = None) -> int:
                 root_labels=synthetic.get("root_labels"),
                 quality_labels=synthetic.get("quality_labels"),
                 label_space=config["label_space"],
+                bass_weights=bass_sample_weights(
+                    synthetic["bass_labels"], synthetic["labels_native"],
+                    inversion_weight=float(config["bass_inversion_weight"]),
+                    mask_unknown=bool(config["bass_mask_unknown"]),
+                    label_space=config["label_space"],
+                ),
             )
             model.fit(synth_seq, epochs=synthetic_epochs, verbose=2)
 
@@ -826,7 +923,7 @@ def main(argv: list[str] | None = None) -> int:
         {k: [float(x) for x in v] for k, v in history.history.items()}, indent=2))
     print(f"Training complete. Artifacts in {out_dir}", flush=True)
     if callback.best_metric > -np.inf:
-        print(f"Best val WCSR-MIREX={callback.best_metric:.4f} "
+        print(f"Best val supported macro-F1={callback.best_metric:.4f} "
               f"(epoch {callback.best_epoch})", flush=True)
     return 0
 

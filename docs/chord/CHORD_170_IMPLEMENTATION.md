@@ -1,7 +1,8 @@
 # Chord 170 Program — Implementation
 
-Status: **Phases 0–4 complete** (2026-11-16). Phase 4 ablations produced a
-clear winning configuration; Phase 5 (distillation/deployment) next. Spec source: the "Harmoniq 170-Class Chord
+Status: **Phases 0–4 + gate iteration complete** (2026-11-16). The gate
+iteration corrected a split-leakage problem and showed the remaining gates
+require data expansion; production remains untouched. Spec source: the "Harmoniq 170-Class Chord
 Model v2" implementation brief; repo rules in
 [`AGENTS.md`](../../AGENTS.md).
 
@@ -218,6 +219,10 @@ augmentation/sampling tests.
 
 ### Baseline run (Modal A10G, seed 1)
 
+> **Superseded (2026-11-16):** these numbers were measured before the external
+> IDMT/RWC splits existed; the model had seen the now-held-out tracks. See
+> “Gate iteration” for the corrected, honest measurement.
+
 Command:
 
 ```bash
@@ -298,6 +303,12 @@ Artifacts: `docs/audit/amt/chord170_phase3_baseline_{val,test}.json`,
 
 
 ## Phase 4 — ablations and teacher comparison (complete)
+
+> **Superseded test numbers (2026-11-16):** the Phase 4 test metrics below
+> were measured on a test set that overlapped the training corpus (no external
+> IDMT/RWC holdout existed yet). The teacher comparison and the relative
+> ablation ordering remain informative; the absolute test numbers are leaked.
+> See “Gate iteration” for the honest baseline.
 
 Framework: `train_chord_170.py` now supports `--label-space {170,277,mirex25}`,
 `--aux-heads` (root 13 + quality 15, weight 0.15), `--bass-loss-weight`,
@@ -402,6 +413,80 @@ documented limitation, not silently skipped.
    epochs excluded by the program constraint (not run).
 4. Configured augmentation harms at this corpus size.
 5. 100-epoch cosine budget underperforms 25 epochs on ~7.3k windows.
+
+
+## Gate iteration (Stage A–C, 2026-11-16) — leakage correction and verdict
+
+### Stage A: external splits + honest measurement
+
+`scripts/make_external_splits.py` carves track-level, quality-stratified
+holdouts from IDMT (103 train / 13 val / 13 test) and RWC (80 / 10 / 10),
+keeps the GuitarSet player split, and excludes pseudo-labels that map to a
+held-out IDMT track. `data/chord170/splits.json` is applied by the loader.
+
+**Critical finding — earlier numbers were leaked.** The Phase 3/4 models
+were trained before the split file existed, so they saw the now-held-out
+IDMT/RWC tracks. Re-evaluating the Phase 4 winner on the corrected test gives
+macro-F1 0.705 / exact 0.691 / bass 0.688 / slash 0.323 — but it memorized
+those tracks. **All Phase 3/4 test numbers are superseded.**
+
+Corrected test: 820 windows / 86 tracks (GuitarSet p05 324, RWC 409, IDMT 71,
+EGSet12 16), 79 supported classes, zero leakage. Artifacts:
+`docs/audit/amt/chord170_gates_{iteration1,splits}.json`; the Phase 2 dataset
+card is regenerated from the new splits.
+
+### Stage B–C: ablations (honest splits)
+
+25 epochs (macro-F1 is supported-class on the external test):
+
+| Variant | Macro-F1 | Exact | WCSR-MIREX | Bass (known) | Slash | ECE |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| bass mask only | 0.152 | 0.316 | 0.412 | 0.349 | 0.045 | 0.170 |
+| + inversion ×2 | 0.142 | 0.327 | 0.417 | 0.308 | 0.071 | 0.154 |
+| + bass loss 1.0 | 0.150 | 0.326 | 0.401 | 0.336 | 0.026 | 0.154 |
+| + rare-class weights | 0.142 | 0.313 | 0.389 | 0.332 | 0.065 | 0.157 |
+| full augmentation | 0.087 | 0.257 | 0.334 | 0.363 | 0.039 | 0.043 |
+
+60-epoch generalization variants (patience 6):
+
+| Variant | Macro-F1 | Exact | WCSR-MIREX | Bass | Slash | ECE | RWC exact |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| early-stop, no aug | 0.127 | 0.274 | 0.365 | 0.336 | 0.039 | 0.173 | 0.115 |
+| mild augmentation | 0.105 | 0.257 | 0.340 | 0.334 | 0.045 | 0.145 | 0.152 |
+| feature standardization | 0.142 | 0.293 | 0.391 | 0.337 | 0.045 | 0.189 | 0.154 |
+| mild aug + standardize | 0.026 | 0.118 | 0.149 | 0.157 | 0.013 | 0.013 | 0.103 |
+
+Calibration (best variant): macro unchanged (0.138 → 0.138), **ECE 0.191 →
+0.050**.
+
+### Diagnosis
+
+The dominant blocker is **cross-song generalization on RWC**: RWC *training*
+macro-F1 is 0.828, held-out RWC macro-F1 is 0.044–0.050 (exact 0.115–0.174),
+and training accuracy reaches 1.0. GuitarSet and IDMT transfer moderately
+(0.43–0.52 exact); RWC does not. Bass masking lifts known-bass accuracy only
+to ~0.35; slash stays ≤0.07. Calibration fixes confidence but not accuracy.
+
+### Gate status after the cheap levers
+
+| Gate | Target | Best honest result | Status |
+| --- | ---: | ---: | --- |
+| Macro-F1 (supported) | 0.45 | 0.152 | ❌ |
+| Bass accuracy (known) | 0.60 | 0.349 | ❌ |
+| Slash accuracy | 0.50 | 0.071 | ❌ |
+| ECE | ≤0.15 | 0.050 (calibrated) | ✅ |
+
+**Verdict:** cheap levers are exhausted. Meeting the gates requires the
+data-expansion stage — BTC pseudo-labels on chord-oriented mixes of unlabeled
+audio plus additional datasets (Slakh, SheetSage-Chord) — and/or a
+generalization-focused modelling change. Production is untouched.
+
+### Bugs fixed during the iteration
+
+- `load_split` ignored the external split overrides (trained on leaked data).
+- `ChordSequence.__getitem__` dropped the per-sample weight dict, so bass
+  masking/inversion weighting/rare-class weighting were silently inert.
+- The sweep's evaluation hardcoded the old narrow sources.
 
 ## Phase plan (remaining)
 

@@ -534,3 +534,37 @@ class TestSamplingProbabilities:
         n_share = float(probs[labels == N_IDX_170].sum())
         natural = 0.10
         assert n_share <= max(1.5 * natural, natural + 0.05) + 1e-9
+
+
+class TestTrainingWeights:
+    def test_bass_weights_mask_unknown_and_boost_inversions(self):
+        from scripts.chord_data_v2 import bass_sample_weights
+        from app.chord_vocab_170 import BASS_TO_IDX, BASS_X_IDX, CHORD_TO_IDX_170
+
+        chord = np.array([CHORD_TO_IDX_170["C:maj"]] * 3)
+        bass = np.array([BASS_TO_IDX["C"], BASS_TO_IDX["E"], BASS_X_IDX])
+        weights = bass_sample_weights(bass, chord, inversion_weight=2.0)
+        assert weights.tolist() == [1.0, 2.0, 0.0]
+
+    def test_bass_weights_can_keep_unknown(self):
+        from scripts.chord_data_v2 import bass_sample_weights
+        from app.chord_vocab_170 import BASS_TO_IDX, CHORD_TO_IDX_170
+
+        chord = np.array([CHORD_TO_IDX_170["C:maj"]])
+        bass = np.array([BASS_TO_IDX["C"]])
+        weights = bass_sample_weights(bass, chord, mask_unknown=False)
+        assert weights.tolist() == [1.0]
+
+    def test_chord_class_weights_upweight_rare(self):
+        from scripts.chord_data_v2 import chord_class_weights
+
+        labels = np.array([0] * 90 + [1] * 10)
+        weights = chord_class_weights(labels, tau=0.3, n_classes=2)
+        assert weights[labels == 1].mean() > weights[labels == 0].mean()
+        assert abs(float(weights.mean()) - 1.0) < 1e-5
+
+    def test_chord_class_weights_zero_tau_noop(self):
+        from scripts.chord_data_v2 import chord_class_weights
+
+        weights = chord_class_weights(np.array([0, 1, 2]), tau=0.0, n_classes=3)
+        assert np.allclose(weights, 1.0)

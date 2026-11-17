@@ -140,14 +140,24 @@ def wcsr_metrics(
     return {key: float(scores.get(key, 0.0)) for key in _WCSR_KEYS}
 
 
-def macro_f1(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int = NUM_CLASSES_170) -> float:
-    """Macro F1 over classes present in either prediction or truth."""
+def macro_f1(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    n_classes: int = NUM_CLASSES_170,
+    labels: np.ndarray | None = None,
+) -> float:
+    """Macro F1.
+
+    ``labels=None`` averages over classes in truth **or** prediction (strict).
+    Passing ``labels`` restricts the average to those classes (support-based).
+    """
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
     if len(y_true) == 0:
         return 0.0
     f1s: list[float] = []
-    classes = np.unique(np.concatenate([y_true, y_pred]))
+    classes = (np.asarray(labels) if labels is not None
+               else np.unique(np.concatenate([y_true, y_pred])))
     for cls in classes:
         tp = int(np.sum((y_pred == cls) & (y_true == cls)))
         fp = int(np.sum((y_pred == cls) & (y_true != cls)))
@@ -289,10 +299,18 @@ def evaluate_arrays(
     bass_true = np.asarray(bass_true) if bass_true is not None else None
     bass_pred = np.asarray(bass_pred) if bass_pred is not None else None
 
+    supported_labels = np.unique(chord_true)
     report: dict = {
         "n_windows": int(len(chord_true)),
         "n_tracks": len(set(track_ids)),
         "macro_f1": macro_f1(chord_true, chord_pred),
+        "macro_f1_supported": macro_f1(chord_true, chord_pred,
+                                       labels=supported_labels),
+        "supported_class_count": int(len(supported_labels)),
+        "macro_f1_definition": {
+            "macro_f1": "union of truth and predicted classes (strict)",
+            "macro_f1_supported": "classes present in ground truth",
+        },
         "exact_accuracy": float(np.mean(chord_true == chord_pred)) if len(chord_true) else 0.0,
         "top3_accuracy": top_k_accuracy(chord_probs, chord_true, 3),
         "top5_accuracy": top_k_accuracy(chord_probs, chord_true, 5),
@@ -412,6 +430,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--label-space", default="170", choices=["170", "277", "mirex25"])
+    parser.add_argument("--calibration", type=Path, default=None,
+                        help="calibration params JSON from calibrate_chord_170.py")
+    parser.add_argument("--feature-stats", type=Path, default=None,
+                        help="feature_stats.npz (per-bin mean/std) from training")
     args = parser.parse_args(argv)
 
     from scripts import chord_data_v2 as data
@@ -426,7 +448,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     features, labels, bass, track_ids, centres, sources = [], [], [], [], [], []
     for name in [s.strip() for s in args.sources.split(",") if s.strip()]:
-        loaded = data.load_dataset_dir_170(source_dirs[name], args.split)
+        loaded = data.load_dataset_dir_170(source_dirs[name], args.split, source=name)
         if len(loaded["labels170"]) == 0:
             continue
         if args.label_space == "277":
@@ -452,11 +474,22 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     X = np.concatenate(features)
+    if args.feature_stats is not None:
+        stats = np.load(args.feature_stats)
+        X = ((X - stats["mean"]) / stats["std"]).astype(np.float32)
     y = np.concatenate(labels)
     b = np.concatenate(bass)
     c = np.concatenate(centres)
     model = load_model(args.checkpoint)
     chord_probs, bass_probs = predict_arrays(model, X, args.batch_size)
+    if args.calibration is not None:
+        params = json.loads(Path(args.calibration).read_text())
+        chord_probs = apply_calibration(chord_probs, params)
+        report_calibration = {"calibration": str(args.calibration),
+                              "temperature": params.get("temperature"),
+                              "prior_exponent": params.get("prior_exponent")}
+    else:
+        report_calibration = None
     chord_pred = chord_probs.argmax(axis=1)
     bass_pred = bass_probs.argmax(axis=1)
     if args.label_space == "170":
@@ -467,6 +500,8 @@ def main(argv: list[str] | None = None) -> int:
         report = evaluate_ablation(y, chord_probs, track_ids, c,
                                    space=args.label_space,
                                    bass_true=b, bass_pred=bass_pred)
+    if report_calibration is not None:
+        report.update(report_calibration)
     report["checkpoint"] = str(args.checkpoint)
     report["split"] = args.split
     report["sources"] = sorted(set(sources))
@@ -572,6 +607,9 @@ def evaluate_ablation(
             for a, b in zip(labels25, pred25)
         ])),
         "macro_f1": macro_f1(labels25, pred25, n_classes=25),
+        "macro_f1_supported": macro_f1(labels25, pred25, n_classes=25,
+                                       labels=np.unique(labels25)),
+        "supported_class_count": int(len(np.unique(labels25))),
         "top3_accuracy": top_k_accuracy(probs25, labels25, 3),
         "ece": expected_calibration_error(probs25, labels25),
     }
@@ -633,3 +671,66 @@ def bootstrap_ci(
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# ---------------------------------------------------------------------------
+# Post-hoc calibration (Stage C)
+# ---------------------------------------------------------------------------
+
+
+def apply_calibration(probs: np.ndarray, params: dict) -> np.ndarray:
+    """Apply temperature and class-prior calibration to chirality of probs.
+
+    ``params`` keys: ``temperature`` (float, >0) and optional ``priors``
+    (list of per-class multipliers) with ``prior_exponent``.
+    """
+    probs = np.asarray(probs, dtype=np.float64)
+    temperature = float(params.get("temperature", 1.0))
+    logits = np.log(np.clip(probs, 1e-12, 1.0)) / max(temperature, 1e-6)
+    exponent = float(params.get("prior_exponent", 0.0))
+    priors = params.get("priors")
+    if priors is not None and exponent:
+        prior_arr = np.asarray(priors, dtype=np.float64)
+        logits = logits + exponent * np.log(np.clip(prior_arr, 1e-12, 1.0))[None, :]
+    logits -= logits.max(axis=1, keepdims=True)
+    calibrated = np.exp(logits)
+    return (calibrated / calibrated.sum(axis=1, keepdims=True)).astype(np.float32)
+
+
+def fit_calibration(
+    probs: np.ndarray,
+    y_true: np.ndarray,
+    *,
+    n_grid: int = 40,
+    prior_exponents: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0),
+) -> dict:
+    """Fit temperature + prior exponent on a validation split.
+
+    Grid search maximising supported-class macro-F1 (ties broken by NLL).
+    No gradient training; safe on a few hundred windows.
+    """
+    probs = np.asarray(probs, dtype=np.float64)
+    y_true = np.asarray(y_true)
+    class_counts = np.bincount(y_true, minlength=probs.shape[1]).astype(np.float64)
+    priors = (class_counts / max(class_counts.sum(), 1.0)) + 1e-6
+    best = {"temperature": 1.0, "prior_exponent": 0.0,
+            "priors": priors.tolist(), "macro_f1_supported": -1.0, "nll": float("inf")}
+    labels_supported = np.unique(y_true)
+    for exponent in prior_exponents:
+        for temperature in np.exp(np.linspace(np.log(0.5), np.log(4.0), n_grid)):
+            params = {"temperature": float(temperature),
+                      "prior_exponent": float(exponent),
+                      "priors": priors.tolist()}
+            calibrated = apply_calibration(probs, params)
+            pred = calibrated.argmax(axis=1)
+            score = macro_f1(y_true, pred, labels=labels_supported)
+            nll = float(-np.mean(np.log(np.clip(
+                calibrated[np.arange(len(y_true)), y_true], 1e-12, 1.0))))
+            if score > best["macro_f1_supported"] + 1e-9 or (
+                abs(score - best["macro_f1_supported"]) <= 1e-9 and nll < best["nll"]
+            ):
+                best = {"temperature": float(temperature),
+                        "prior_exponent": float(exponent),
+                        "priors": priors.tolist(),
+                        "macro_f1_supported": float(score), "nll": nll}
+    return best

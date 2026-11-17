@@ -12,7 +12,16 @@
           "x_rate": 0.0,
           "unique_classes": 33,
           "bass_unknown_rate": 0.36574074074074076,
-          "slash_rate": 0.3441358024691358
+          "slash_rate": 0.3441358024691358,
+          "known_bass_frames": 822,
+          "inversion_frames": 446,
+          "quality_support": {
+            "maj": 824,
+            "min": 320,
+            "7": 72,
+            "dim7": 32,
+            "N": 48
+          }
         },
         "val": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/guitarset",
@@ -23,7 +32,16 @@
           "x_rate": 0.0,
           "unique_classes": 33,
           "bass_unknown_rate": 0.3549382716049383,
-          "slash_rate": 0.37037037037037035
+          "slash_rate": 0.37037037037037035,
+          "known_bass_frames": 209,
+          "inversion_frames": 120,
+          "quality_support": {
+            "maj": 206,
+            "min": 80,
+            "7": 18,
+            "dim7": 8,
+            "N": 12
+          }
         },
         "test": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/guitarset",
@@ -34,7 +52,16 @@
           "x_rate": 0.0,
           "unique_classes": 33,
           "bass_unknown_rate": 0.4783950617283951,
-          "slash_rate": 0.2623456790123457
+          "slash_rate": 0.2623456790123457,
+          "known_bass_frames": 169,
+          "inversion_frames": 85,
+          "quality_support": {
+            "maj": 206,
+            "min": 80,
+            "7": 18,
+            "dim7": 8,
+            "N": 12
+          }
         }
       }
     },
@@ -50,7 +77,19 @@
           "x_rate": 0.0,
           "unique_classes": 12,
           "bass_unknown_rate": 0.7111111111111111,
-          "slash_rate": 0.2
+          "slash_rate": 0.2,
+          "known_bass_frames": 13,
+          "inversion_frames": 9,
+          "quality_support": {
+            "maj": 1,
+            "min": 1,
+            "min7": 1,
+            "maj7": 3,
+            "7": 5,
+            "sus2": 1,
+            "sus4": 2,
+            "N": 31
+          }
         },
         "val": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/egset12",
@@ -72,7 +111,15 @@
           "x_rate": 0.0,
           "unique_classes": 4,
           "bass_unknown_rate": 0.875,
-          "slash_rate": 0.0625
+          "slash_rate": 0.0625,
+          "known_bass_frames": 2,
+          "inversion_frames": 1,
+          "quality_support": {
+            "maj": 1,
+            "maj7": 2,
+            "7": 1,
+            "N": 12
+          }
         }
       }
     },
@@ -88,7 +135,23 @@
           "x_rate": 0.0,
           "unique_classes": 96,
           "bass_unknown_rate": 0.174931129476584,
-          "slash_rate": 0.5736914600550964
+          "slash_rate": 0.5736914600550964,
+          "known_bass_frames": 1198,
+          "inversion_frames": 833,
+          "quality_support": {
+            "maj": 225,
+            "min": 199,
+            "dim": 181,
+            "aug": 75,
+            "min6": 126,
+            "maj6": 37,
+            "min7": 97,
+            "maj7": 119,
+            "7": 150,
+            "sus2": 9,
+            "sus4": 15,
+            "N": 219
+          }
         },
         "val": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/guitar_techs",
@@ -99,7 +162,21 @@
           "x_rate": 0.0,
           "unique_classes": 31,
           "bass_unknown_rate": 0.4024390243902439,
-          "slash_rate": 0.3780487804878049
+          "slash_rate": 0.3780487804878049,
+          "known_bass_frames": 49,
+          "inversion_frames": 31,
+          "quality_support": {
+            "maj": 9,
+            "min": 4,
+            "dim": 2,
+            "aug": 6,
+            "min7": 3,
+            "maj7": 5,
+            "7": 8,
+            "sus2": 8,
+            "sus4": 8,
+            "N": 29
+          }
         },
         "test": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/guitar_techs",
@@ -120,35 +197,69 @@
         "train": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/idmt_smt_guitar",
           "split": "train",
-          "n_tracks": 129,
-          "n_windows": 696,
-          "n_rate": 0.382183908045977,
+          "n_tracks": 103,
+          "n_windows": 551,
+          "n_rate": 0.3811252268602541,
           "x_rate": 0.0,
-          "unique_classes": 57,
-          "bass_unknown_rate": 0.5962643678160919,
-          "slash_rate": 0.30028735632183906
+          "unique_classes": 48,
+          "bass_unknown_rate": 0.5970961887477314,
+          "slash_rate": 0.2885662431941924,
+          "known_bass_frames": 222,
+          "inversion_frames": 159,
+          "quality_support": {
+            "maj": 206,
+            "min": 56,
+            "dim": 8,
+            "min7": 17,
+            "maj7": 12,
+            "7": 40,
+            "sus4": 2,
+            "N": 210
+          }
         },
         "val": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/idmt_smt_guitar",
           "split": "val",
-          "n_tracks": 0,
-          "n_windows": 0,
-          "n_rate": 0.0,
+          "n_tracks": 13,
+          "n_windows": 74,
+          "n_rate": 0.36486486486486486,
           "x_rate": 0.0,
-          "unique_classes": 0,
-          "bass_unknown_rate": 0.0,
-          "slash_rate": 0.0
+          "unique_classes": 28,
+          "bass_unknown_rate": 0.5945945945945946,
+          "slash_rate": 0.33783783783783783,
+          "known_bass_frames": 30,
+          "inversion_frames": 25,
+          "quality_support": {
+            "maj": 24,
+            "min": 6,
+            "min7": 6,
+            "maj7": 3,
+            "7": 8,
+            "N": 27
+          }
         },
         "test": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/idmt_smt_guitar",
           "split": "test",
-          "n_tracks": 0,
-          "n_windows": 0,
-          "n_rate": 0.0,
+          "n_tracks": 13,
+          "n_windows": 71,
+          "n_rate": 0.4084507042253521,
           "x_rate": 0.0,
-          "unique_classes": 0,
-          "bass_unknown_rate": 0.0,
-          "slash_rate": 0.0
+          "unique_classes": 22,
+          "bass_unknown_rate": 0.5915492957746479,
+          "slash_rate": 0.352112676056338,
+          "known_bass_frames": 29,
+          "inversion_frames": 25,
+          "quality_support": {
+            "maj": 21,
+            "min": 6,
+            "dim": 1,
+            "maj7": 4,
+            "7": 7,
+            "dim7": 1,
+            "sus4": 2,
+            "N": 29
+          }
         }
       }
     },
@@ -158,35 +269,86 @@
         "train": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/rwc",
           "split": "train",
-          "n_tracks": 100,
-          "n_windows": 3833,
-          "n_rate": 0.06678841638403339,
+          "n_tracks": 80,
+          "n_windows": 3036,
+          "n_rate": 0.06982872200263504,
           "x_rate": 0.0,
-          "unique_classes": 123,
-          "bass_unknown_rate": 0.07122358465953561,
-          "slash_rate": 0.12053222019306027
+          "unique_classes": 111,
+          "bass_unknown_rate": 0.07378129117259552,
+          "slash_rate": 0.11758893280632411,
+          "known_bass_frames": 2812,
+          "inversion_frames": 357,
+          "quality_support": {
+            "maj": 1304,
+            "min": 403,
+            "dim": 23,
+            "aug": 8,
+            "min6": 10,
+            "maj6": 54,
+            "min7": 422,
+            "maj7": 267,
+            "7": 240,
+            "dim7": 7,
+            "sus2": 13,
+            "sus4": 73,
+            "N": 212
+          }
         },
         "val": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/rwc",
           "split": "val",
-          "n_tracks": 0,
-          "n_windows": 0,
-          "n_rate": 0.0,
+          "n_tracks": 10,
+          "n_windows": 388,
+          "n_rate": 0.05154639175257732,
           "x_rate": 0.0,
-          "unique_classes": 0,
-          "bass_unknown_rate": 0.0,
-          "slash_rate": 0.0
+          "unique_classes": 64,
+          "bass_unknown_rate": 0.05412371134020619,
+          "slash_rate": 0.15721649484536082,
+          "known_bass_frames": 367,
+          "inversion_frames": 61,
+          "quality_support": {
+            "maj": 129,
+            "min": 73,
+            "dim": 1,
+            "aug": 1,
+            "min6": 1,
+            "maj6": 20,
+            "min7": 65,
+            "maj7": 29,
+            "7": 31,
+            "dim7": 3,
+            "sus2": 8,
+            "sus4": 7,
+            "N": 20
+          }
         },
         "test": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/rwc",
           "split": "test",
-          "n_tracks": 0,
-          "n_windows": 0,
-          "n_rate": 0.0,
+          "n_tracks": 10,
+          "n_windows": 409,
+          "n_rate": 0.05867970660146699,
           "x_rate": 0.0,
-          "unique_classes": 0,
-          "bass_unknown_rate": 0.0,
-          "slash_rate": 0.0
+          "unique_classes": 67,
+          "bass_unknown_rate": 0.06845965770171149,
+          "slash_rate": 0.10757946210268948,
+          "known_bass_frames": 381,
+          "inversion_frames": 44,
+          "quality_support": {
+            "maj": 195,
+            "min": 71,
+            "dim": 6,
+            "aug": 4,
+            "min6": 1,
+            "maj6": 8,
+            "min7": 47,
+            "maj7": 27,
+            "7": 12,
+            "dim7": 7,
+            "sus2": 3,
+            "sus4": 4,
+            "N": 24
+          }
         }
       }
     },
@@ -202,7 +364,14 @@
           "x_rate": 0.0,
           "unique_classes": 5,
           "bass_unknown_rate": 0.2,
-          "slash_rate": 0.48
+          "slash_rate": 0.48,
+          "known_bass_frames": 20,
+          "inversion_frames": 12,
+          "quality_support": {
+            "maj": 11,
+            "min": 9,
+            "N": 5
+          }
         },
         "test": {
           "data_dir": "/__modal/volumes/vo-c2I4thW1a0lkf55LchWA45/backend/data/chord170/pseudo_v2",
@@ -221,14 +390,14 @@
   "overlap": [],
   "totals": {
     "windows_per_split": {
-      "train": 7347,
-      "val": 406,
-      "test": 340
+      "train": 6405,
+      "val": 868,
+      "test": 820
     },
     "tracks_per_split": {
-      "train": 545,
-      "val": 72,
-      "test": 63
+      "train": 499,
+      "val": 95,
+      "test": 86
     },
     "cross_split_overlap_count": 0
   }

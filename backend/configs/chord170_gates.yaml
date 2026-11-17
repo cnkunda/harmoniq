@@ -1,0 +1,23 @@
+# Gate-focused training config (external splits, masked bass, aux heads).
+seed: 1
+epochs: 25
+batch_size: 64
+learning_rate: 0.001
+weight_decay: 0.0001
+label_smoothing: 0.07
+bass_loss_weight: 0.35
+temperature: 0.3
+patience: 25
+synthetic_epochs: 0
+label_space: "170"
+aux_heads: true
+bass_mask_unknown: true      # supervise bass only where ground truth exists
+bass_inversion_weight: 2.0   # oversample inversions for the bass head
+chord_class_weight_tau: 0.0  # rare-class weighting (Stage C sweep)
+sources:
+  - guitarset
+  - guitar_techs
+  - egset12
+  - idmt_smt_guitar
+  - rwc
+  - pseudo_v2

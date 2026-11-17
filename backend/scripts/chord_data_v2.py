@@ -68,6 +68,7 @@ from app.chord_vocab_170 import (  # noqa: E402
 DATA_ROOT = _BACKEND_DIR / "data"
 DEFAULT_PSEUDO_OUT = DATA_ROOT / "chord170" / "pseudo_v2"
 W1_ROOT = DATA_ROOT / "pseudo_label" / "w1"
+SPLITS_PATH = DATA_ROOT / "chord170" / "splits.json"
 
 _N_277_IDX = 276
 _MAP_TABLE = np.asarray(MAP_277_TO_170_TABLE, dtype=np.int64)
@@ -100,22 +101,58 @@ REAL_DATASETS: dict[str, Path] = {
 # ---------------------------------------------------------------------------
 
 
-def list_track_files(data_dir: Path, split: str | None = None) -> list[Path]:
-    """Return sorted .npz files under ``<data_dir>/processed/cqt``."""
+def load_split_overrides(path: Path = SPLITS_PATH) -> dict | None:
+    """Load the external split map (source → {track_id: split}), if present."""
+    if not Path(path).exists():
+        return None
+    try:
+        payload = json.loads(Path(path).read_text())
+        return payload.get("splits", {})
+    except Exception as exc:
+        print(f"  [WARN] could not read {path}: {exc}")
+        return None
+
+
+def resolve_split(
+    source: str | None,
+    track_id: str,
+    default: str,
+    overrides: dict | None,
+) -> str:
+    """Resolve a track's split, honouring the external split overrides."""
+    if not overrides or not source:
+        return default
+    return overrides.get(source, {}).get(track_id, default)
+
+
+def list_track_files(
+    data_dir: Path,
+    split: str | None = None,
+    *,
+    source: str | None = None,
+    overrides: dict | None = None,
+) -> list[Path]:
+    """Return sorted .npz files under ``<data_dir>/processed/cqt``.
+
+    When ``source`` and split overrides are available they take precedence
+    over the npz's own split key (external gate splits). Tracks resolved to
+    ``exclude`` are skipped.
+    """
     cqt_dir = Path(data_dir) / "processed" / "cqt"
     files: list[Path] = []
     for npz_path in sorted(cqt_dir.glob("*.npz")):
-        if split is not None:
-            try:
-                data = np.load(npz_path)
-                # Datasets without an explicit split key (IDMT, YouTube crawl)
-                # were used as training data — treat a missing key as "train".
-                track_split = _decode(data["split"]) if "split" in data.files else "train"
-            except Exception as exc:
-                print(f"  [WARN] skipping {npz_path.name}: {exc}")
-                continue
-            if track_split != split:
-                continue
+        try:
+            data = np.load(npz_path)
+            track_id = _decode(data["track_id"]) if "track_id" in data.files else npz_path.stem
+            track_split = _decode(data["split"]) if "split" in data.files else "train"
+        except Exception as exc:
+            print(f"  [WARN] skipping {npz_path.name}: {exc}")
+            continue
+        resolved = resolve_split(source, track_id, track_split, overrides)
+        if resolved == "exclude":
+            continue
+        if split is not None and resolved != split:
+            continue
         files.append(npz_path)
     return files
 
@@ -134,7 +171,8 @@ def _window_centers(data: "np.lib.npyio.NpzFile", n_windows: int) -> np.ndarray:
     return np.arange(n_windows, dtype=np.float64) * HOP_FRAMES * HOP_SEC
 
 
-def load_track(npz_path: Path) -> dict | None:
+def load_track(npz_path: Path, *, source: str | None = None,
+               overrides: dict | None = None) -> dict | None:
     """Load one .npz window file into 170-class arrays (+ sidecar bass)."""
     try:
         data = np.load(npz_path)
@@ -149,13 +187,15 @@ def load_track(npz_path: Path) -> dict | None:
                           if "confidence" in data.files
                           else np.ones(n_windows, dtype=np.float32))
             split = _decode(data["split"]) if "split" in data.files else "train"
+            track_id = _decode(data["track_id"]) if "track_id" in data.files else npz_path.stem
+            split = resolve_split(source, track_id, split, overrides)
             return {
                 "features": data["features"].astype(np.float32),
                 "labels170": labels170,
                 "labels277": None,  # v2 pseudo-label files have no 277 labels
                 "bass_labels": bass,
                 "confidence": confidence,
-                "track_id": _decode(data["track_id"]) if "track_id" in data.files else npz_path.stem,
+                "track_id": track_id,
                 "split": split,
                 "loss_weight": float(data["loss_weight"]) if "loss_weight" in data.files else 1.0,
                 "center_times": _window_centers(data, n_windows),
@@ -180,6 +220,8 @@ def load_track(npz_path: Path) -> dict | None:
             if "confidence" in sc.files:
                 extra["confidence"] = sc["confidence"].astype(np.float32)
         split = _decode(data["split"]) if "split" in data.files else "train"
+        track_id = _decode(data["track_id"]) if "track_id" in data.files else npz_path.stem
+        split = resolve_split(source, track_id, split, overrides)
         return {
             "features": data["features"].astype(np.float32),
             "labels170": labels170,
@@ -201,6 +243,7 @@ def load_dataset_dir_170(
     split: str | None = None,
     *,
     limit_tracks: int = 0,
+    source: str | None = None,
 ) -> dict:
     """Load a dataset's windows as concatenated 170-class arrays."""
     features: list[np.ndarray] = []
@@ -212,8 +255,9 @@ def load_dataset_dir_170(
     track_ids: list[str] = []
     weights: list[float] = []
     n_tracks = 0
-    for npz_path in list_track_files(data_dir, split):
-        track = load_track(npz_path)
+    overrides = load_split_overrides()
+    for npz_path in list_track_files(data_dir, split, source=source, overrides=overrides):
+        track = load_track(npz_path, source=source, overrides=overrides)
         if track is None:
             continue
         features.append(track["features"])
@@ -254,9 +298,10 @@ def load_dataset_dir_170(
     }
 
 
-def summarize_dataset(data_dir: Path, split: str | None = None) -> dict:
+def summarize_dataset(data_dir: Path, split: str | None = None,
+                      *, source: str | None = None) -> dict:
     """Dataset-card summary for one dataset directory."""
-    data = load_dataset_dir_170(data_dir, split)
+    data = load_dataset_dir_170(data_dir, split, source=source)
     labels = data["labels170"]
     bass = data["bass_labels"]
     n = len(labels)
@@ -274,12 +319,22 @@ def summarize_dataset(data_dir: Path, split: str | None = None) -> dict:
     known_bass = bass != BASS_X_IDX
     root_pc = np.array([int(i) % 12 for i in range(NUM_CLASSES_170)])
     slash = chord_idx & known_bass & (bass % 12 != root_pc[np.clip(labels, 0, NUM_CLASSES_170 - 1)])
+    from app.chord_vocab_170 import QUALITIES_14
+
+    quality_support: dict[str, int] = {}
+    for quality_index, quality in enumerate(QUALITIES_14):
+        low = quality_index * 12
+        quality_support[quality] = int(np.sum((labels >= low) & (labels < low + 12)))
+    quality_support["N"] = int(np.sum(labels == N_IDX_170))
     summary.update({
         "n_rate": float(np.mean(labels == N_IDX_170)),
         "x_rate": float(np.mean(labels == X_IDX_170)),
         "unique_classes": int(len(np.unique(labels))),
         "bass_unknown_rate": float(np.mean(bass == BASS_X_IDX)),
         "slash_rate": float(np.mean(slash)),
+        "known_bass_frames": int(np.sum(known_bass)),
+        "inversion_frames": int(np.sum(slash)),
+        "quality_support": {k: v for k, v in quality_support.items() if v},
     })
     return summary
 
@@ -835,6 +890,54 @@ def sampling_probabilities(
 
 
 # ---------------------------------------------------------------------------
+# Training sample weights (Stage B)
+# ---------------------------------------------------------------------------
+
+LABEL_SPACES: dict[str, int] = {"170": NUM_CLASSES_170, "277": 277, "mirex25": 25}
+N_INDEX_BY_SPACE: dict[str, int] = {"170": N_IDX_170, "277": 276, "mirex25": 24}
+
+
+def bass_sample_weights(
+    bass: np.ndarray,
+    chord: np.ndarray,
+    *,
+    inversion_weight: float = 2.0,
+    mask_unknown: bool = True,
+    label_space: str = "170",
+) -> np.ndarray:
+    """Per-window bass loss weights: 0 unknown, 1 root position, >1 inversions."""
+    weights = np.ones(len(bass), dtype=np.float32)
+    unknown = bass == BASS_X_IDX
+    weights[unknown] = 0.0 if mask_unknown else 1.0
+    n_index = N_INDEX_BY_SPACE[label_space]
+    last = LABEL_SPACES[label_space] - 1
+    roots = np.array([
+        int(c) % 12 if int(c) not in (n_index, last) else -1 for c in chord
+    ])
+    inversions = (~unknown) & (roots >= 0) & (bass != roots)
+    weights[inversions] = float(inversion_weight)
+    return weights
+
+
+def chord_class_weights(
+    labels: np.ndarray,
+    *,
+    tau: float = 0.0,
+    n_classes: int = NUM_CLASSES_170,
+) -> np.ndarray:
+    """Class-balanced per-window weights ``(1/count)^tau`` (mean-normalised)."""
+    if tau <= 0:
+        return np.ones(len(labels), dtype=np.float32)
+    counts = np.bincount(labels, minlength=n_classes).astype(np.float64)
+    safe = np.maximum(counts, 1.0)
+    weight_by_class = (1.0 / safe) ** tau
+    sample_weights = weight_by_class[labels]
+    mean = float(sample_weights.mean()) if len(sample_weights) else 1.0
+    sample_weights = sample_weights / max(mean, 1e-8)
+    return sample_weights.astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
 # Dataset card + split-overlap check
 # ---------------------------------------------------------------------------
 
@@ -846,7 +949,8 @@ def check_track_split_overlap(sources: list[dict]) -> list[dict]:
     """
     seen: dict[str, set[str]] = defaultdict(set)
     for source in sources:
-        data = load_dataset_dir_170(Path(source["data_dir"]), source.get("split"))
+        data = load_dataset_dir_170(Path(source["data_dir"]), source.get("split"),
+                                    source=source.get("name"))
         for track_id in set(data["track_ids"]):
             seen[track_id].add(str(source.get("split") or "all"))
     return [
@@ -871,11 +975,13 @@ def build_dataset_card(
     for spec in dataset_specs:
         entry: dict = {"kind": spec.get("kind", "real"), "splits": {}}
         for split in spec.get("splits", ["train", "val", "test"]):
-            summary = summarize_dataset(Path(spec["data_dir"]), split)
+            summary = summarize_dataset(Path(spec["data_dir"]), split,
+                                        source=spec["name"])
             entry["splits"][split] = summary
             per_split_windows[split] += summary["n_windows"]
             # Track sets for every split so train↔eval leakage is detectable.
-            data = load_dataset_dir_170(Path(spec["data_dir"]), split)
+            data = load_dataset_dir_170(Path(spec["data_dir"]), split,
+                                        source=spec["name"])
             split_track_sets[split].update(data["track_ids"])
         card["sources"][spec["name"]] = entry
 

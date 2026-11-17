@@ -17,3 +17,6 @@ sources:
   - idmt_smt_guitar
   - rwc
   - pseudo_v2
+bass_mask_unknown: true
+bass_inversion_weight: 2.0
+chord_class_weight_tau: 0.0

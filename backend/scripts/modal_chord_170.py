@@ -181,6 +181,7 @@ def prepare(extract_rwc: str = "false", datasets: str = "all") -> str:
         # Timelines (from the annotation CSVs) must exist before CQT extraction.
         output += _run(["python", "scripts/parse_rwc.py"])
         output += _run(["python", "scripts/extract_rwc_cqt.py"])
+    output += _run(["python", "scripts/make_external_splits.py"])
     output += _run(["python", "scripts/chord_data_v2.py", "build-real",
                     "--dataset", datasets])
     output += _run(["python", "scripts/chord_data_v2.py", "build-pseudo",
@@ -328,7 +329,8 @@ def eval_model(
     volumes={ROOT: data_volume, RUNS: runs_volume},
     retries=0,
 )
-def sweep(epochs: str = "25", tag: str = "", suite: str = "core") -> str:
+def sweep(epochs: str = "25", tag: str = "", suite: str = "core",
+          config: str = "configs/chord170_base.yaml") -> str:
     """Run the Phase 4 ablation suite sequentially on one A10G.
 
     All variants share the config, seed, and epoch budget; patience equals the
@@ -369,17 +371,46 @@ def sweep(epochs: str = "25", tag: str = "", suite: str = "core") -> str:
             ("aux-noaugment-seed2", "170", ["--aux-heads", "--no-augment", "--seed", "2"]),
             ("aux-noaugment-seed3", "170", ["--aux-heads", "--no-augment", "--seed", "3"]),
         ],
+        "gates": [
+            ("e1-mask", "170", ["--aux-heads", "--no-augment",
+                                 "--bass-inversion-weight", "1.0"]),
+            ("e2-inv2", "170", ["--aux-heads", "--no-augment",
+                                 "--bass-inversion-weight", "2.0"]),
+            ("e3-bass1", "170", ["--aux-heads", "--no-augment",
+                                  "--bass-inversion-weight", "2.0",
+                                  "--bass-loss-weight", "1.0"]),
+            ("e4-rare", "170", ["--aux-heads", "--no-augment",
+                                 "--bass-inversion-weight", "2.0",
+                                 "--chord-class-weight-tau", "0.3"]),
+            ("e5-augment", "170", ["--aux-heads",
+                                    "--bass-inversion-weight", "2.0"]),
+        ],
+        "generalization": [
+            ("g1-earlystop", "170", ["--aux-heads", "--no-augment",
+                                      "--aug-level", "none"]),
+            ("g2-mildaug", "170", ["--aux-heads", "--aug-level", "mild"]),
+            ("g3-standardize", "170", ["--aux-heads", "--no-augment",
+                                        "--aug-level", "none",
+                                        "--feature-standardize"]),
+            ("g4-mild-stand", "170", ["--aux-heads", "--aug-level", "mild",
+                                       "--feature-standardize"]),
+        ],
+        "gates_finalists": [
+            ("gates-seed1", "170", ["--aux-heads", "--no-augment", "--seed", "1"]),
+            ("gates-seed2", "170", ["--aux-heads", "--no-augment", "--seed", "2"]),
+            ("gates-seed3", "170", ["--aux-heads", "--no-augment", "--seed", "3"]),
+        ],
     }
     if suite not in suites:
         raise ValueError(f"unknown suite {suite!r}; choose from {sorted(suites)}")
     variants = suites[suite]
-    summary: dict = {"tag": stamp, "epochs": budget, "config": "configs/chord170_base.yaml",
-                     "variants": {}}
+    summary: dict = {"tag": stamp, "epochs": budget, "config": config,
+                     "suite": suite, "variants": {}}
     for name, space, extra in variants:
         out_dir = os.path.join(base_out, name)
         command = [
             "python", "scripts/train_chord_170.py",
-            "--config", "configs/chord170_base.yaml",
+            "--config", config,
             "--out-dir", out_dir,
             "--label-space", space,
         ] + budget_args
@@ -391,14 +422,18 @@ def sweep(epochs: str = "25", tag: str = "", suite: str = "core") -> str:
         try:
             _run(command)
             eval_out = os.path.join(out_dir, "eval_test.json")
-            _run([
+            eval_cmd = [
                 "python", "scripts/eval_chord_170.py",
                 "--checkpoint", os.path.join(out_dir, "best.keras"),
                 "--split", "test",
-                "--sources", "guitarset,egset12",
+                "--sources", "guitarset,egset12,idmt_smt_guitar,rwc",
                 "--label-space", space,
                 "--out", eval_out,
-            ])
+            ]
+            stats_path = os.path.join(out_dir, "feature_stats.npz")
+            if os.path.isfile(stats_path):
+                eval_cmd += ["--feature-stats", stats_path]
+            _run(eval_cmd)
             entry: dict = {"label_space": space, "args": " ".join(extra)}
             metrics_path = os.path.join(out_dir, "metrics.json")
             if os.path.isfile(metrics_path):
@@ -495,6 +530,35 @@ def btc_label_tracks(limit: str = "80", per_style: str = "10") -> str:
     runs_volume.commit()
     print(f"[btc] wrote {written} timelines to {out_dir}", flush=True)
     return out_dir
+
+
+@app.function(
+    image=image,
+    cpu=8,
+    memory=16384,
+    timeout=2 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+)
+def calibrate(checkpoint: str, feature_stats: str = "", sources: str = "guitarset,guitar_techs,idmt_smt_guitar,rwc") -> str:
+    """Fit post-hoc calibration on the validation split (Stage C)."""
+    _ensure_bundle()
+    out_dir = os.path.dirname(checkpoint)
+    out_path = os.path.join(out_dir, "calibration.json")
+    command = [
+        "python", "scripts/calibrate_chord_170.py",
+        "--checkpoint", checkpoint,
+        "--split", "val",
+        "--sources", sources,
+        "--out", out_path,
+    ]
+    if feature_stats.strip():
+        command += ["--feature-stats", feature_stats]
+    output = _run(command)
+    runs_volume.commit()
+    if os.path.isfile(out_path):
+        with open(out_path, encoding="utf-8") as handle:
+            print(handle.read(), flush=True)
+    return output
 
 
 @app.local_entrypoint()

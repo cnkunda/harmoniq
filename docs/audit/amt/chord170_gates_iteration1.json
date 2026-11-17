@@ -1,0 +1,159 @@
+{
+  "iteration": "gates-1",
+  "date": "2026-11-16",
+  "split_protocol": {
+    "guitarset": "players 00-03 train / 04 val / 05 test (unchanged)",
+    "guitar_techs": "player split (unchanged)",
+    "egset12": "9 train / 3 test (unchanged)",
+    "idmt_smt_guitar": "103 train / 13 val / 13 test, quality-stratified track-level holdout",
+    "rwc": "80 train / 10 val / 10 test, quality-stratified track-level holdout",
+    "pseudo_v2": "excluded if it maps to a held-out IDMT track (0 exclusions)",
+    "totals": {
+      "train_windows": 6405,
+      "val_windows": 868,
+      "test_windows": 820,
+      "test_tracks": 86,
+      "test_supported_classes": 79
+    },
+    "leakage_overlaps": 0
+  },
+  "critical_correction": {
+    "finding": "All Phase 3/4 test numbers were trained on the now-held-out IDMT/RWC tracks (no split file existed then). They are leaked and superseded.",
+    "leaked_reference_on_new_test": {
+      "model": "phase4 aux-noaugment seed1",
+      "macro_f1_supported": 0.705,
+      "exact": 0.691,
+      "bass_known": 0.688,
+      "slash": 0.323
+    },
+    "honest_baseline_macro_f1_supported": 0.142
+  },
+  "honest_ablations_25ep": [
+    {
+      "variant": "mask-only",
+      "macroSup": 0.152,
+      "exact": 0.316,
+      "mirex": 0.412,
+      "bass_known": 0.349,
+      "slash": 0.045,
+      "ece": 0.17
+    },
+    {
+      "variant": "inversion-x2",
+      "macroSup": 0.142,
+      "exact": 0.327,
+      "mirex": 0.417,
+      "bass_known": 0.308,
+      "slash": 0.071,
+      "ece": 0.154
+    },
+    {
+      "variant": "bass-weight-1.0",
+      "macroSup": 0.15,
+      "exact": 0.326,
+      "mirex": 0.401,
+      "bass_known": 0.336,
+      "slash": 0.026,
+      "ece": 0.154
+    },
+    {
+      "variant": "rare-class-weight",
+      "macroSup": 0.142,
+      "exact": 0.313,
+      "mirex": 0.389,
+      "bass_known": 0.332,
+      "slash": 0.065,
+      "ece": 0.157
+    },
+    {
+      "variant": "full-augmentation",
+      "macroSup": 0.087,
+      "exact": 0.257,
+      "mirex": 0.334,
+      "bass_known": 0.363,
+      "slash": 0.039,
+      "ece": 0.043
+    }
+  ],
+  "generalization_ablations_60ep_patience6": [
+    {
+      "variant": "early-stop-noaug",
+      "macroSup": 0.127,
+      "exact": 0.274,
+      "mirex": 0.365,
+      "bass_known": 0.336,
+      "slash": 0.039,
+      "ece": 0.173,
+      "rwc_exact": 0.115
+    },
+    {
+      "variant": "mild-aug",
+      "macroSup": 0.105,
+      "exact": 0.257,
+      "mirex": 0.34,
+      "bass_known": 0.334,
+      "slash": 0.045,
+      "ece": 0.145,
+      "rwc_exact": 0.152
+    },
+    {
+      "variant": "feature-standardize",
+      "macroSup": 0.142,
+      "exact": 0.293,
+      "mirex": 0.391,
+      "bass_known": 0.337,
+      "slash": 0.045,
+      "ece": 0.189,
+      "rwc_exact": 0.154
+    },
+    {
+      "variant": "mild-aug+standardize",
+      "macroSup": 0.026,
+      "exact": 0.118,
+      "mirex": 0.149,
+      "bass_known": 0.157,
+      "slash": 0.013,
+      "ece": 0.013,
+      "rwc_exact": 0.103
+    }
+  ],
+  "overfitting_evidence": {
+    "rwc_train_macro_f1": 0.828,
+    "rwc_heldout_macro_f1_range": [
+      0.044,
+      0.05
+    ],
+    "rwc_heldout_exact_range": [
+      0.115,
+      0.174
+    ],
+    "train_accuracy": 1.0,
+    "interpretation": "The model memorizes training songs and does not transfer chord quality recognition across RWC songs; this is the dominant blocker."
+  },
+  "calibration": {
+    "model": "g3-standardize",
+    "macro_before": 0.1385,
+    "macro_after": 0.1385,
+    "ece_before": 0.1909,
+    "ece_after": 0.0498
+  },
+  "gate_status": {
+    "macro_f1_supported >= 0.45": {
+      "result": 0.152,
+      "met": false
+    },
+    "bass_known >= 0.60": {
+      "result": 0.349,
+      "met": false
+    },
+    "slash >= 0.50": {
+      "result": 0.071,
+      "met": false
+    },
+    "ece <= 0.15": {
+      "result": 0.05,
+      "met": true
+    }
+  },
+  "verdict": "Cheap levers (bass masking, inversion weighting, rare-class loss, early stopping, mild augmentation, feature standardisation, calibration) are exhausted; none close the gap. The gates require data expansion (BTC pseudo-labels on chord-oriented mixes + additional datasets) and/or a generalisation-focused modelling change. Production remains untouched."
+}
