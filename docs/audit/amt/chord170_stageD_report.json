@@ -1,0 +1,76 @@
+{
+  "stage": "D",
+  "date": "2026-11-16",
+  "pipeline": {
+    "unlabeled_source": "YouTube crawl (264 x 30 s clips)",
+    "chord_mix": "Demucs htdemucs_6s, sum of bass+guitar+piano+other (vocals/drums removed)",
+    "teacher": "BTC 170-class, frame probabilities via output_projection softmax",
+    "bass": "separated bass stem, RMS-gated chroma argmax",
+    "filters": {
+      "min_confidence": 0.6,
+      "min_salient_pitches": 3,
+      "n_cap": 0.2
+    }
+  },
+  "pseudo_label_yield": {
+    "tracks_processed": 264,
+    "tracks_with_windows": 179,
+    "windows_in": 1319,
+    "windows_kept": 283,
+    "n_rate": 0.198,
+    "known_bass": 247,
+    "inversions": 114,
+    "qualities": {
+      "min": 42,
+      "maj": 142,
+      "min7": 18,
+      "maj7": 6,
+      "7": 15,
+      "sus4": 4
+    },
+    "dropped_low_confidence": 172,
+    "dropped_low_pitch": 2
+  },
+  "ab_test_25ep": [
+    {
+      "variant": "control (no pseudo_btc)",
+      "macroSup": 0.142,
+      "exact": 0.327,
+      "mirex": 0.417,
+      "bass_known": 0.308,
+      "slash": 0.071,
+      "rwc_exact": 0.169
+    },
+    {
+      "variant": "+ pseudo_btc (283 windows)",
+      "macroSup": 0.131,
+      "exact": 0.302,
+      "mirex": 0.391,
+      "bass_known": 0.332,
+      "slash": 0.039,
+      "rwc_exact": 0.154
+    }
+  ],
+  "additional_negative_levers": [
+    {
+      "variant": "per-track feature normalization",
+      "macroSup": 0.106,
+      "exact": 0.259,
+      "rwc_exact": 0.13
+    },
+    {
+      "variant": "per-track normalization + mild aug",
+      "macroSup": 0.005,
+      "exact": 0.076,
+      "rwc_exact": 0.034
+    }
+  ],
+  "diagnosis": "The 30 s unlabeled corpus yields only ~283 usable windows (~4% of the 6,405-window training set). The dominant failure remains cross-song generalization on RWC (train macro 0.83 vs held-out 0.05). Loss/metric tweaks, bass masking, calibration, augmentation, standardization and per-track normalization do not close the gap.",
+  "verdict": "Gate closure requires an order-of-magnitude increase in independent songs (Slakh2100, SheetSage-Chord, larger unlabeled corpora for BTC relabeling) and/or a representation/architecture change. The reusable Demucs+BTC pipeline is in place for that expansion. Production remains untouched.",
+  "artifacts": {
+    "pseudo_btc_report": "docs/audit/amt/chord170_pseudo_btc_report.json",
+    "mixes": "/chord170/backend/data/chord170/chord_mix (264 tracks)",
+    "pseudo_npz": "/chord170/backend/data/chord170/pseudo_btc (179 tracks / 283 windows)",
+    "runs": "/runs/chord170/sweeps/{stageD-iter1,norm-iter1}"
+  }
+}

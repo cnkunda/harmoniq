@@ -91,6 +91,7 @@ SOURCE_DIRS = {
     "idmt_smt_guitar": "idmt_smt_guitar",
     "rwc": "rwc",
     "pseudo_v2": "chord170/pseudo_v2",
+    "pseudo_btc": "chord170/pseudo_btc",
 }
 
 
@@ -223,13 +224,15 @@ def load_split(
     limit_tracks: int = 0,
     label_space: str = "170",
     aux_heads: bool = False,
+    normalize: str = "none",
 ) -> dict | None:
     """Load and concatenate one split across sources for a label space."""
     feats, labels, labels277, bass, conf, tracks, centres, srcs = [], [], [], [], [], [], [], []
     for source in sources:
         data_dir = data_root / SOURCE_DIRS[source]
         loaded = chord_data.load_dataset_dir_170(
-            data_dir, split, limit_tracks=limit_tracks, source=source)
+            data_dir, split, limit_tracks=limit_tracks, source=source,
+            normalize=normalize)
         if len(loaded["labels170"]) == 0:
             continue
         if label_space == "277" and loaded.get("labels277") is None:
@@ -691,6 +694,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-bass-mask", action="store_true")
     parser.add_argument("--aug-level", default=None, choices=["none", "mild", "full"])
     parser.add_argument("--feature-standardize", action="store_true")
+    parser.add_argument("--feature-normalize", default=None, choices=["none", "track"])
     args = parser.parse_args(argv)
 
     config = {
@@ -712,6 +716,7 @@ def main(argv: list[str] | None = None) -> int:
         "chord_class_weight_tau": 0.0,
         "aug_level": "full",
         "feature_standardize": False,
+        "feature_normalize": "none",
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -744,6 +749,8 @@ def main(argv: list[str] | None = None) -> int:
         config["aug_level"] = args.aug_level
     if args.feature_standardize:
         config["feature_standardize"] = True
+    if args.feature_normalize:
+        config["feature_normalize"] = args.feature_normalize
     if config["label_space"] not in LABEL_SPACES:
         raise SystemExit(f"unknown label space: {config['label_space']}")
 
@@ -756,11 +763,13 @@ def main(argv: list[str] | None = None) -> int:
     train = load_split(args.data_root, config["sources"], "train",
                        limit_tracks=args.limit_train,
                        label_space=config["label_space"],
-                       aux_heads=config["aux_heads"])
+                       aux_heads=config["aux_heads"],
+                       normalize=config["feature_normalize"])
     val = load_split(args.data_root, config["sources"], "val",
                      limit_tracks=args.limit_val_tracks,
                      label_space=config["label_space"],
-                     aux_heads=config["aux_heads"])
+                     aux_heads=config["aux_heads"],
+                     normalize=config["feature_normalize"])
     if train is None or val is None:
         raise SystemExit("No train/val windows found — run the data prepare step first.")
     feature_mean = feature_std = None

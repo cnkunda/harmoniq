@@ -434,6 +434,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="calibration params JSON from calibrate_chord_170.py")
     parser.add_argument("--feature-stats", type=Path, default=None,
                         help="feature_stats.npz (per-bin mean/std) from training")
+    parser.add_argument("--feature-normalize", default="none", choices=["none", "track"])
     args = parser.parse_args(argv)
 
     from scripts import chord_data_v2 as data
@@ -445,10 +446,12 @@ def main(argv: list[str] | None = None) -> int:
         "idmt_smt_guitar": args.data_root / "idmt_smt_guitar",
         "rwc": args.data_root / "rwc",
         "pseudo_v2": args.data_root / "chord170" / "pseudo_v2",
+        "pseudo_btc": args.data_root / "chord170" / "pseudo_btc",
     }
     features, labels, bass, track_ids, centres, sources = [], [], [], [], [], []
     for name in [s.strip() for s in args.sources.split(",") if s.strip()]:
-        loaded = data.load_dataset_dir_170(source_dirs[name], args.split, source=name)
+        loaded = data.load_dataset_dir_170(source_dirs[name], args.split, source=name,
+                                           normalize=args.feature_normalize)
         if len(loaded["labels170"]) == 0:
             continue
         if args.label_space == "277":

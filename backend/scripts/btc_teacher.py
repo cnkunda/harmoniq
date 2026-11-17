@@ -149,6 +149,37 @@ class BtcTeacher:
         self._mean = state["mean"]
         self._std = state["std"]
 
+    def predict_frame_probs(self, audio_path: str | Path) -> tuple[np.ndarray, float]:
+        """Return (frame_probabilities [T,170], seconds_per_frame).
+
+        BTC's SoftmaxOutputLayer emits class indices by default; the frame
+        logits are read from ``output_projection`` so pseudo-label
+        confidence filtering is possible.
+        """
+        torch = self._torch
+        feat = self._features.audio_to_features(
+            str(audio_path), sr_target=_SONG_HZ, inst_len=_INST_LEN,
+            n_bins=144, bins_per_octave=24, hop_length=_HOP,
+        )
+        feat = feat.T
+        feat = (feat - self._mean) / self._std
+        time_unit = _INST_LEN / _TIMESTEP
+        n = _TIMESTEP
+        pad = n - (feat.shape[0] % n)
+        feat = np.pad(feat, ((0, pad), (0, 0)), mode="constant", constant_values=0)
+        n_instances = feat.shape[0] // n
+        x = torch.tensor(feat, dtype=torch.float32).unsqueeze(0).to(self._device)
+        chunks: list[np.ndarray] = []
+        with torch.no_grad():
+            for t in range(n_instances):
+                attn_out, _ = self._model.self_attn_layers(x[:, n * t:n * (t + 1), :])
+                logits = self._model.output_layer.output_projection(attn_out)
+                probs = torch.softmax(logits, dim=-1)[0]
+                chunks.append(probs.cpu().numpy().astype(np.float32))
+        if not chunks:
+            return np.zeros((0, 170), dtype=np.float32), time_unit
+        return np.concatenate(chunks, axis=0), time_unit
+
     def predict_timeline(self, audio_path: str | Path) -> list[dict]:
         """Return ``[{start, end, chord}, ...]`` with BTC labels."""
         torch = self._torch

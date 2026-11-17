@@ -171,8 +171,19 @@ def _window_centers(data: "np.lib.npyio.NpzFile", n_windows: int) -> np.ndarray:
     return np.arange(n_windows, dtype=np.float64) * HOP_FRAMES * HOP_SEC
 
 
+def _normalize_track(features: np.ndarray, mode: str) -> np.ndarray:
+    """Per-track per-bin standardisation (removes recording/timbre bias)."""
+    if mode != "track":
+        return features
+    frames = features.reshape(-1, features.shape[-1])
+    mean = frames.mean(axis=0, keepdims=True)
+    std = frames.std(axis=0, keepdims=True) + 1e-6
+    return ((features - mean[None, :, :]) / std[None, :, :]).astype(np.float32)
+
+
 def load_track(npz_path: Path, *, source: str | None = None,
-               overrides: dict | None = None) -> dict | None:
+               overrides: dict | None = None,
+               normalize: str = "none") -> dict | None:
     """Load one .npz window file into 170-class arrays (+ sidecar bass)."""
     try:
         data = np.load(npz_path)
@@ -190,7 +201,7 @@ def load_track(npz_path: Path, *, source: str | None = None,
             track_id = _decode(data["track_id"]) if "track_id" in data.files else npz_path.stem
             split = resolve_split(source, track_id, split, overrides)
             return {
-                "features": data["features"].astype(np.float32),
+                "features": _normalize_track(data["features"].astype(np.float32), normalize),
                 "labels170": labels170,
                 "labels277": None,  # v2 pseudo-label files have no 277 labels
                 "bass_labels": bass,
@@ -223,7 +234,7 @@ def load_track(npz_path: Path, *, source: str | None = None,
         track_id = _decode(data["track_id"]) if "track_id" in data.files else npz_path.stem
         split = resolve_split(source, track_id, split, overrides)
         return {
-            "features": data["features"].astype(np.float32),
+            "features": _normalize_track(data["features"].astype(np.float32), normalize),
             "labels170": labels170,
             "labels277": labels277,
             "bass_labels": bass,
@@ -244,6 +255,7 @@ def load_dataset_dir_170(
     *,
     limit_tracks: int = 0,
     source: str | None = None,
+    normalize: str = "none",
 ) -> dict:
     """Load a dataset's windows as concatenated 170-class arrays."""
     features: list[np.ndarray] = []
@@ -257,7 +269,8 @@ def load_dataset_dir_170(
     n_tracks = 0
     overrides = load_split_overrides()
     for npz_path in list_track_files(data_dir, split, source=source, overrides=overrides):
-        track = load_track(npz_path, source=source, overrides=overrides)
+        track = load_track(npz_path, source=source, overrides=overrides,
+                           normalize=normalize)
         if track is None:
             continue
         features.append(track["features"])
@@ -1072,6 +1085,8 @@ def main(argv: list[str] | None = None) -> int:
             {"name": "idmt_smt_guitar", "data_dir": REAL_DATASETS["idmt_smt_guitar"], "kind": "real"},
             {"name": "rwc", "data_dir": REAL_DATASETS["rwc"], "kind": "real"},
             {"name": "pseudo_v2", "data_dir": DEFAULT_PSEUDO_OUT,
+             "kind": "pseudo", "splits": ["train", "test"]},
+            {"name": "pseudo_btc", "data_dir": DATA_ROOT / "chord170" / "pseudo_btc",
              "kind": "pseudo", "splits": ["train", "test"]},
         ]
         result = build_dataset_card(specs, out_path=args.out)

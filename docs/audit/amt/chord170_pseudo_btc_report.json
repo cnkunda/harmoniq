@@ -1,0 +1,23 @@
+{
+  "tracks": 179,
+  "tracks_skipped": 0,
+  "windows_in": 1319,
+  "windows_out": 283,
+  "dropped_low_confidence": 172,
+  "dropped_low_pitch": 2,
+  "n_out": 56,
+  "bass_known": 247,
+  "inversions": 114,
+  "qualities": {
+    "min": 42,
+    "maj": 142,
+    "min7": 18,
+    "maj7": 6,
+    "7": 15,
+    "sus4": 4
+  },
+  "source": "pseudo_btc",
+  "teacher": "btc",
+  "status": "ok",
+  "out_dir": "/chord170/backend/data/chord170/pseudo_btc"
+}

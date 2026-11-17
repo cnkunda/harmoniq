@@ -44,6 +44,7 @@ SOURCE_DIRS = {
     "idmt_smt_guitar": "idmt_smt_guitar",
     "rwc": "rwc",
     "pseudo_v2": "chord170/pseudo_v2",
+    "pseudo_btc": "chord170/pseudo_btc",
 }
 
 
@@ -56,12 +57,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--feature-stats", type=Path, default=None)
+    parser.add_argument("--feature-normalize", default="none", choices=["none", "track"])
     args = parser.parse_args(argv)
 
     features, labels, tracks = [], [], []
     for name in [s.strip() for s in args.sources.split(",") if s.strip()]:
         loaded = data.load_dataset_dir_170(args.data_root / SOURCE_DIRS[name],
-                                           args.split, source=name)
+                                           args.split, source=name,
+                                           normalize=args.feature_normalize)
         if len(loaded["labels170"]) == 0:
             continue
         features.append(loaded["features"])

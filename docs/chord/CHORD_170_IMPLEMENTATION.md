@@ -488,6 +488,43 @@ generalization-focused modelling change. Production is untouched.
   masking/inversion weighting/rare-class weighting were silently inert.
 - The sweep's evaluation hardcoded the old narrow sources.
 
+
+## Stage D — BTC pseudo-labels on chord mixes and the generalization ceiling (2026-11-16)
+
+Pipeline built and run end-to-end:
+`build_chord_mixes.py` (Demucs htdemucs_6s → bass+guitar+piano+other),
+`btc_teacher.predict_frame_probs` (softmax confidences via
+`output_projection`), `pseudo_label_btc.py` (confidence ≥0.6, ≥3 salient
+chroma classes, bass from the separated bass stem, N cap 20 %, v2 schema).
+Reusable Modal GPU entrypoints: `build_mixes`, `btc_pseudo` on a dedicated
+audio image; TORCH_HOME cached on the data volume.
+
+**Yield (264 YouTube 30 s clips):** 179 tracks yielded windows; **283 non-N
+windows**, N rate 19.8 %, 247 known bass, 114 inversions, 6 qualities —
+~4 % of the 6,405-window training set. Most clips are mostly silence/N, so
+BTC confidence filtering removes the rest.
+
+**A/B (external test, 25 epochs):**
+
+| Variant | Macro-F1 | Exact | WCSR-MIREX | Bass | Slash | RWC exact |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| control | 0.142 | 0.327 | 0.417 | 0.308 | 0.071 | 0.169 |
+| + BTC pseudo-labels | 0.131 | 0.302 | 0.391 | 0.332 | 0.039 | 0.154 |
+
+No improvement — the pseudo set is too small.
+
+Additional negative levers tested in the same iteration: **per-track feature
+normalization** (exact 0.259, RWC 0.130) and per-track normalization + mild
+augmentation (diverged, exact 0.076).
+
+**Verdict:** the dominant blocker is the corpus size/diversity, not loss or
+metric tuning. RWC train macro-F1 0.83 vs held-out 0.05 shows the model
+memorizes songs. Closing the gates requires an order-of-magnitude increase in
+*independent* songs (Slakh2100, SheetSage-Chord, larger unlabeled corpora via
+the now-built Demucs+BTC pipeline) and/or a representation/architecture
+change. Production remains untouched. Artifact:
+`docs/audit/amt/chord170_stageD_report.json`.
+
 ## Phase plan (remaining)
 
 | Phase | Scope | Gate |

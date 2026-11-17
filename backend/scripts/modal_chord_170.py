@@ -77,6 +77,15 @@ btc_image = (
     .env({"PYTHONUNBUFFERED": "1"})
 )
 
+audio_image = (
+    modal.Image.debian_slim("3.11")
+    .apt_install("ffmpeg", "libsndfile1")
+    .pip_install("torch==2.5.1", "torchaudio==2.5.1")
+    .pip_install("demucs>=4.0.1", "numpy>=1.26", "librosa>=0.10.2",
+                 "soundfile>=0.13")
+    .env({"PYTHONUNBUFFERED": "1", "TORCH_HOME": "/chord170/.cache/torch"})
+)
+
 ROOT = "/chord170"
 BACKEND = f"{ROOT}/backend"
 REPORT_DIR = f"{ROOT}/docs/audit/amt"
@@ -395,6 +404,20 @@ def sweep(epochs: str = "25", tag: str = "", suite: str = "core",
             ("g4-mild-stand", "170", ["--aux-heads", "--aug-level", "mild",
                                        "--feature-standardize"]),
         ],
+        "stageD": [
+            ("d1-control", "170", ["--aux-heads", "--no-augment",
+                                    "--sources",
+                                    "guitarset,guitar_techs,egset12,idmt_smt_guitar,rwc,pseudo_v2"]),
+            ("d2-btc", "170", ["--aux-heads", "--no-augment",
+                                "--sources",
+                                "guitarset,guitar_techs,egset12,idmt_smt_guitar,rwc,pseudo_v2,pseudo_btc"]),
+        ],
+        "normalize": [
+            ("n1-tracknorm", "170", ["--aux-heads", "--no-augment",
+                                      "--feature-normalize", "track"]),
+            ("n2-tracknorm-aug", "170", ["--aux-heads", "--aug-level", "mild",
+                                          "--feature-normalize", "track"]),
+        ],
         "gates_finalists": [
             ("gates-seed1", "170", ["--aux-heads", "--no-augment", "--seed", "1"]),
             ("gates-seed2", "170", ["--aux-heads", "--no-augment", "--seed", "2"]),
@@ -433,6 +456,12 @@ def sweep(epochs: str = "25", tag: str = "", suite: str = "core",
             stats_path = os.path.join(out_dir, "feature_stats.npz")
             if os.path.isfile(stats_path):
                 eval_cmd += ["--feature-stats", stats_path]
+            run_config = {}
+            config_path = os.path.join(out_dir, "config.json")
+            if os.path.isfile(config_path):
+                run_config = json.load(open(config_path, encoding="utf-8"))
+            if run_config.get("feature_normalize", "none") != "none":
+                eval_cmd += ["--feature-normalize", run_config["feature_normalize"]]
             _run(eval_cmd)
             entry: dict = {"label_space": space, "args": " ".join(extra)}
             metrics_path = os.path.join(out_dir, "metrics.json")
@@ -557,6 +586,64 @@ def calibrate(checkpoint: str, feature_stats: str = "", sources: str = "guitarse
     runs_volume.commit()
     if os.path.isfile(out_path):
         with open(out_path, encoding="utf-8") as handle:
+            print(handle.read(), flush=True)
+    return output
+
+
+@app.function(
+    image=audio_image,
+    gpu="A10G",
+    cpu=8,
+    memory=32768,
+    timeout=6 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def build_mixes(limit: str = "0", force: str = "false") -> str:
+    """Demucs chord-oriented mixes for unlabeled audio (Stage D)."""
+    _ensure_bundle()
+    command = [
+        "python", "scripts/build_chord_mixes.py",
+        "--audio-dir", os.path.join(BACKEND, "data", "youtube_crawl", "raw"),
+        "--out-dir", os.path.join(BACKEND, "data", "chord170", "chord_mix"),
+        "--device", "cuda",
+    ]
+    if int(limit or 0):
+        command += ["--limit", str(int(limit))]
+    if _truthy(force):
+        command.append("--force")
+    output = _run(command)
+    data_volume.commit()
+    return output
+
+
+@app.function(
+    image=audio_image,
+    gpu="A10G",
+    cpu=8,
+    memory=32768,
+    timeout=8 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def btc_pseudo(limit: str = "0", min_confidence: str = "0.6") -> str:
+    """BTC pseudo-labels on the chord mixes (Stage D)."""
+    _ensure_bundle()
+    report_path = os.path.join(BACKEND, "data", "chord170", "pseudo_btc_report.json")
+    command = [
+        "python", "scripts/pseudo_label_btc.py",
+        "--mix-dir", os.path.join(BACKEND, "data", "chord170", "chord_mix"),
+        "--out-dir", os.path.join(BACKEND, "data", "chord170", "pseudo_btc"),
+        "--device", "cuda",
+        "--min-confidence", str(min_confidence),
+        "--report", report_path,
+    ]
+    if int(limit or 0):
+        command += ["--limit", str(int(limit))]
+    output = _run(command)
+    data_volume.commit()
+    if os.path.isfile(report_path):
+        with open(report_path, encoding="utf-8") as handle:
             print(handle.read(), flush=True)
     return output
 

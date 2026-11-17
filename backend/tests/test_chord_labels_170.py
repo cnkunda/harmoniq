@@ -568,3 +568,34 @@ class TestTrainingWeights:
 
         weights = chord_class_weights(np.array([0, 1, 2]), tau=0.0, n_classes=3)
         assert np.allclose(weights, 1.0)
+
+
+class TestStageDHelpers:
+    def test_active_pitch_count(self):
+        from scripts.pseudo_label_btc import _active_pitch_count
+
+        window = np.zeros((128, 144), dtype=np.float32)
+        # Three pitch classes at full energy (bins 0/2 → pc 0, 24/26 → pc 12%12=0...
+        # choose distinct pcs: bins 0 (pc0), 2 (pc1), 8 (pc4))
+        for bin_index in (0, 2, 8):
+            window[:, bin_index] = 1.0
+        assert _active_pitch_count(window) == 3
+        single = np.zeros((128, 144), dtype=np.float32)
+        single[:, 0] = 1.0
+        assert _active_pitch_count(single) == 1
+
+    def test_per_track_normalization(self):
+        from scripts.chord_data_v2 import _normalize_track
+
+        features = np.random.RandomState(0).rand(4, 128, 144).astype(np.float32) + 1.0
+        normalized = _normalize_track(features, "track")
+        frames = normalized.reshape(-1, 144)
+        assert abs(float(frames.mean())) < 1e-4
+        assert abs(float(frames.std()) - 1.0) < 1e-3
+        assert np.allclose(_normalize_track(features, "none"), features)
+
+    def test_btc_frame_probs_mapping_shape(self):
+        from scripts.btc_teacher import BTC_INDEX_TO_170
+
+        assert BTC_INDEX_TO_170.shape == (170,)
+        assert sorted(BTC_INDEX_TO_170.tolist()) == list(range(170))
