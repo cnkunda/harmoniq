@@ -601,8 +601,10 @@ synthesized Slakh corpus and RWC/GuitarSet.
 **Full Slakh scale-up (1,710 tracks, ~285k windows)** with the same recipe
 gives the best honest result: macro-F1 **0.278**, exact 0.451, WCSR-MIREX
 0.633, bass **0.773**, slash **0.182**, ECE 0.083 (val, which includes
-in-domain Slakh val: 0.337 / 0.369). A run selecting checkpoints on the
-*external* validation split only (excluding Slakh val) is in progress.
+in-domain Slakh val: 0.337 / 0.369). Selecting checkpoints on the *external* validation split only (excluding
+Slakh val) was worse (test macro 0.239, slash 0.170) — the external val is
+small and selection is noisy. Combined-val selection remains the better
+protocol for now; k-fold/EMA checkpoint averaging is the next step.
 
 **Gates:** bass 0.773 ✅, ECE 0.083 ✅, macro-F1 0.278 ❌, slash 0.182 ❌. Next levers: full Slakh redux (1,710 tracks), a
 multi-scale model (local 1.6 s + global 6.4 s), a documented label-ambiguity

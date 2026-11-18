@@ -76,7 +76,8 @@
     "Inversion-head bass composition (bass 0.694 / slash 0.077) is worse than the bass head.",
     "Head fusion (chord * root * quality): macro 0.246 -> 0.222, ECE worsened -> not used.",
     "Fine Slakh (61k windows) did not lift external maj6/7th quality accuracy (domain gap).",
-    "Note: the two 'slash2' variants both passed --no-augment, so --aug-level mild was inert there; a corrected mild-augmentation run was the best configuration."
+    "Note: the two 'slash2' variants both passed --no-augment, so --aug-level mild was inert there; a corrected mild-augmentation run was the best configuration.",
+    "External-only validation selection underperformed combined-val selection (test macro 0.239 vs 0.278) \u2014 small external val makes selection noisy."
   ],
   "gate_status": {
     "macro_f1_supported >= 0.45": {
@@ -154,6 +155,20 @@
         "both_exact": 0.182
       },
       "note": "best honest result so far; val (in-domain Slakh val) 0.337 macro / 0.369 slash"
+    }
+  ],
+  "checkpoint_selection": [
+    {
+      "variant": "40 epochs, checkpoint selected on external val only (fine4)",
+      "best_epoch": 17,
+      "val_macro_supported": 0.281,
+      "test_macro_f1_supported": 0.239,
+      "test_exact": 0.438,
+      "test_wcsr_mirex": 0.626,
+      "test_bass_known": 0.765,
+      "test_slash": 0.17,
+      "test_ece": 0.086,
+      "note": "external val is small/noisy; selection on the combined val (incl. Slakh val) gave a better test checkpoint (0.278 / slash 0.182). Selection noise is now a measurable factor; k-fold/EMA checkpoint averaging is a next step."
     }
   ]
 }
