@@ -88,7 +88,7 @@
       "met": true
     },
     "slash >= 0.50": {
-      "best": 0.168,
+      "best": 0.184,
       "met": false
     },
     "ece <= 0.15": {
@@ -101,5 +101,20 @@
     "Multi-scale model (local 1.6 s + global 6.4 s) to improve quality discrimination.",
     "Label-ambiguity policy for 6th vs relative 7th chords (affects macro-F1).",
     "3 seeds + 5-fold RWC/IDMT for CIs."
+  ],
+  "longer_schedule": [
+    {
+      "variant": "same config, 60 epochs (mild aug, inversion head, rare, chord-inv 2)",
+      "macro_f1_supported": 0.264,
+      "exact": 0.44,
+      "wcsr_mirex": 0.61,
+      "bass_known": 0.745,
+      "slash": 0.184,
+      "ece": 0.11,
+      "note": "macro plateaued; slash improved 0.168 -> 0.184"
+    }
+  ],
+  "infrastructure_notes": [
+    "Scaling Slakh beyond 400 tracks stalled on a Zenodo streaming read timeout; next attempt should use a resumable full-tarball download (wget -c / HF snapshot) before extraction."
   ]
 }

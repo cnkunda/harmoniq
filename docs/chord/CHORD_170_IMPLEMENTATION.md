@@ -583,7 +583,8 @@ Fixed external test (3,121 windows at the fine hop):
 | fine-inv + rare weights | 0.209 | 0.455 | 0.606 | 0.712 | 0.140 | 0.142 |
 | + Slakh fine + inversion chord weight 2 | 0.213 | 0.450 | 0.606 | 0.719 | 0.129 | 0.159 |
 | + rare weights | 0.246 | 0.463 | 0.618 | 0.716 | 0.160 | 0.130 |
-| **+ mild augmentation (corrected)** | **0.266** | 0.440 | **0.629** | **0.761** | **0.168** | **0.065** |
+| **+ mild augmentation (25 ep)** | **0.266** | 0.440 | **0.629** | **0.761** | **0.168** | **0.065** |
+| same config, 60 epochs | 0.264 | 0.440 | 0.610 | 0.745 | **0.184** | 0.110 |
 
 The earlier "slash2" mild-augmentation variants accidentally also passed
 `--no-augment` (making the flag inert and both runs identical); a corrected
@@ -601,6 +602,8 @@ synthesized Slakh corpus and RWC/GuitarSet.
 ❌, slash 0.160 ❌. Next levers: full Slakh redux (1,710 tracks), a
 multi-scale model (local 1.6 s + global 6.4 s), a documented label-ambiguity
 policy for 6th vs relative 7th chords, and 3 seeds + 5-fold evaluation.
+Scaling Slakh past 400 tracks requires a resumable full-tarball download
+(the streaming Zenodo read timed out).
 Artifact: `docs/audit/amt/chord170_fine_inversion_report.json`.
 
 ## Phase plan (remaining)
