@@ -582,8 +582,13 @@ Fixed external test (3,121 windows at the fine hop):
 | fine-inv (4 corpora + coarse Slakh) | 0.223 | 0.466 | 0.611 | 0.720 | 0.160 | 0.145 |
 | fine-inv + rare weights | 0.209 | 0.455 | 0.606 | 0.712 | 0.140 | 0.142 |
 | + Slakh fine + inversion chord weight 2 | 0.213 | 0.450 | 0.606 | 0.719 | 0.129 | 0.159 |
-| + rare weights (best) | **0.246** | **0.463** | **0.618** | **0.716** | **0.160** | **0.130** |
+| + rare weights | 0.246 | 0.463 | 0.618 | 0.716 | 0.160 | 0.130 |
+| **+ mild augmentation (corrected)** | **0.266** | 0.440 | **0.629** | **0.761** | **0.168** | **0.065** |
 
+The earlier "slash2" mild-augmentation variants accidentally also passed
+`--no-augment` (making the flag inert and both runs identical); a corrected
+mild-augmentation run is the best configuration so far, with validation
+macro/slash still climbing at epoch 25 — a longer schedule is running.
 Slash diagnostic on 642 inversion frames: chord exact 0.315, bass exact
 0.530, both 0.151 — slash is gated by chord-quality accuracy on richer
 chords, not by bass composition. Composing bass from the inversion head was

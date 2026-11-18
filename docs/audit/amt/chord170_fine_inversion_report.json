@@ -52,6 +52,17 @@
       "bass_known": 0.716,
       "slash": 0.16,
       "ece": 0.13
+    },
+    {
+      "variant": "fine + slakh_fine + inversion head + inversion-chord-weight + rare + mild augmentation",
+      "n_windows": 3121,
+      "macro_f1_supported": 0.266,
+      "exact": 0.44,
+      "wcsr_mirex": 0.629,
+      "bass_known": 0.761,
+      "slash": 0.168,
+      "ece": 0.065,
+      "note": "best so far; val macro/slash were still climbing at epoch 25"
     }
   ],
   "slash_diagnostic": {
@@ -64,23 +75,24 @@
   "negative_results": [
     "Inversion-head bass composition (bass 0.694 / slash 0.077) is worse than the bass head.",
     "Head fusion (chord * root * quality): macro 0.246 -> 0.222, ECE worsened -> not used.",
-    "Fine Slakh (61k windows) did not lift external maj6/7th quality accuracy (domain gap)."
+    "Fine Slakh (61k windows) did not lift external maj6/7th quality accuracy (domain gap).",
+    "Note: the two 'slash2' variants both passed --no-augment, so --aug-level mild was inert there; a corrected mild-augmentation run was the best configuration."
   ],
   "gate_status": {
     "macro_f1_supported >= 0.45": {
-      "best": 0.246,
+      "best": 0.266,
       "met": false
     },
     "bass_known >= 0.60": {
-      "best": 0.72,
+      "best": 0.761,
       "met": true
     },
     "slash >= 0.50": {
-      "best": 0.16,
+      "best": 0.168,
       "met": false
     },
     "ece <= 0.15": {
-      "best": 0.13,
+      "best": 0.065,
       "met": true
     }
   },
