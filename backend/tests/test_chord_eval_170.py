@@ -312,3 +312,41 @@ class TestInversionDiagnostics:
         assert fused.shape == (1, 170)
         assert fused.sum() == pytest.approx(1.0)
         assert fused[0, 0] == pytest.approx(1.0)
+
+
+class TestBassDisambiguation:
+    def test_sixth_vs_relative_min7(self):
+        from scripts.eval_chord_170 import disambiguate_by_bass
+        from app.chord_vocab_170 import BASS_TO_IDX, CHORD_TO_IDX_170
+
+        c6 = CHORD_TO_IDX_170["C:maj6"]   # {C,E,G,A}
+        am7 = CHORD_TO_IDX_170["A:min7"]  # {A,C,E,G} — identical pitch set
+        probs = np.zeros(170, dtype=np.float32)
+        probs[c6] = 0.6
+        probs[am7] = 0.5
+        # Bass says A → prefer Am7
+        assert disambiguate_by_bass(c6, BASS_TO_IDX["A"], probs) == am7
+        # Bass says C → keep C6
+        assert disambiguate_by_bass(c6, BASS_TO_IDX["C"], probs) == c6
+        # Bass unknown → keep
+        assert disambiguate_by_bass(c6, 12, probs) == c6
+
+    def test_low_alternative_probability_kept(self):
+        from scripts.eval_chord_170 import disambiguate_by_bass
+        from app.chord_vocab_170 import BASS_TO_IDX, CHORD_TO_IDX_170
+
+        c6 = CHORD_TO_IDX_170["C:maj6"]
+        am7 = CHORD_TO_IDX_170["A:min7"]
+        probs = np.zeros(170, dtype=np.float32)
+        probs[c6] = 0.8
+        probs[am7] = 0.1  # below 0.5 * 0.8
+        assert disambiguate_by_bass(c6, BASS_TO_IDX["A"], probs) == c6
+
+    def test_non_ambiguous_chord_unchanged(self):
+        from scripts.eval_chord_170 import disambiguate_by_bass
+        from app.chord_vocab_170 import BASS_TO_IDX, CHORD_TO_IDX_170
+
+        c_maj = CHORD_TO_IDX_170["C:maj"]
+        probs = np.zeros(170, dtype=np.float32)
+        probs[c_maj] = 1.0
+        assert disambiguate_by_bass(c_maj, BASS_TO_IDX["E"], probs) == c_maj

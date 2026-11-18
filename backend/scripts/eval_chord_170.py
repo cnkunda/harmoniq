@@ -496,6 +496,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--feature-normalize", default="none", choices=["none", "track"])
     parser.add_argument("--crop-window", type=int, default=128)
     parser.add_argument("--fuse-heads", action="store_true")
+    parser.add_argument("--disambiguate-bass", action="store_true")
     parser.add_argument("--root-power", type=float, default=1.0)
     parser.add_argument("--quality-power", type=float, default=1.0)
     args = parser.parse_args(argv)
@@ -576,6 +577,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         report_calibration = None
     chord_pred = chord_probs.argmax(axis=1)
+    if args.disambiguate_bass and args.label_space == "170":
+        chord_pred = np.array([
+            disambiguate_by_bass(int(c), int(b), chord_probs[i])
+            for i, (c, b) in enumerate(zip(chord_pred, bass_probs.argmax(axis=1)))
+        ], dtype=np.int64)
     bass_pred = bass_probs.argmax(axis=1)
     if args.label_space == "170":
         report = evaluate_arrays(y, chord_pred, b, bass_pred, chord_probs,
@@ -780,9 +786,6 @@ def bootstrap_ci(
         "n_boot": n_boot,
     }
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
 
 # ---------------------------------------------------------------------------
 # Post-hoc calibration (Stage C)
@@ -845,3 +848,76 @@ def fit_calibration(
                         "priors": priors.tolist(),
                         "macro_f1_supported": float(score), "nll": nll}
     return best
+
+
+# ---------------------------------------------------------------------------
+# Bass-aware disambiguation (identical pitch-class sets, different roots)
+# ---------------------------------------------------------------------------
+
+_AMBIGUITY_GROUPS: dict[frozenset[int], list[int]] | None = None
+
+
+def _ambiguity_groups() -> dict[frozenset[int], list[int]]:
+    """Group 170 classes that share an identical pitch-class set (e.g. C6 ≡ Am7)."""
+    global _AMBIGUITY_GROUPS
+    if _AMBIGUITY_GROUPS is not None:
+        return _AMBIGUITY_GROUPS
+    from app.chord_vocab_170 import QUALITIES_14, QUALITY_INTERVALS_170
+
+    groups: dict[frozenset[int], list[int]] = {}
+    for quality_index, quality in enumerate(QUALITIES_14):
+        intervals = {interval % 12 for interval in QUALITY_INTERVALS_170[quality]}
+        for root in range(12):
+            tones = frozenset((root + interval) % 12 for interval in intervals)
+            groups.setdefault(tones, []).append(quality_index * 12 + root)
+    _AMBIGUITY_GROUPS = groups
+    return groups
+
+
+def disambiguate_by_bass(
+    chord_idx: int,
+    bass_idx: int,
+    chord_probs: np.ndarray | None = None,
+    *,
+    min_ratio: float = 0.5,
+) -> int:
+    """Resolve identical-pitch-set ambiguity using the predicted bass root.
+
+    If the predicted chord's pitch-class set is shared by another class whose
+    root equals the predicted bass, prefer that class when its probability is
+    at least ``min_ratio`` of the predicted chord's probability (or when no
+    probabilities are supplied). This uses only exported heads.
+    """
+    from app.chord_vocab_170 import (
+        BASS_X_IDX,
+        N_IDX_170,
+        QUALITIES_14,
+        QUALITY_INTERVALS_170,
+    )
+
+    chord_idx = int(chord_idx)
+    bass_idx = int(bass_idx)
+    if chord_idx >= N_IDX_170 or bass_idx == BASS_X_IDX:
+        return chord_idx
+    root = chord_idx % 12
+    if root == bass_idx:
+        return chord_idx
+    quality = QUALITIES_14[chord_idx // 12]
+    intervals = {interval % 12 for interval in QUALITY_INTERVALS_170[quality]}
+    tones = frozenset((root + interval) % 12 for interval in intervals)
+    alternatives = _ambiguity_groups().get(tones, [])
+    candidates = [c for c in alternatives if c % 12 == bass_idx and c != chord_idx]
+    if not candidates:
+        return chord_idx
+    top_prob = float(chord_probs[chord_idx]) if chord_probs is not None else 1.0
+    best = chord_idx
+    best_alt_prob = -1.0
+    for candidate in candidates:
+        prob = float(chord_probs[candidate]) if chord_probs is not None else 1.0
+        if prob >= min_ratio * top_prob and prob > best_alt_prob:
+            best = candidate
+            best_alt_prob = prob
+    return best
+
+if __name__ == "__main__":
+    raise SystemExit(main())

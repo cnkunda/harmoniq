@@ -79,7 +79,7 @@ btc_image = (
 
 audio_image = (
     modal.Image.debian_slim("3.11")
-    .apt_install("ffmpeg", "libsndfile1")
+    .apt_install("ffmpeg", "libsndfile1", "wget", "ca-certificates")
     .pip_install("torch==2.5.1", "torchaudio==2.5.1")
     .pip_install("demucs>=4.0.1", "numpy>=1.26", "librosa>=0.10.2",
                  "soundfile>=0.13", "pretty_midi>=0.2.10", "pyyaml>=6.0",
@@ -313,6 +313,7 @@ def eval_model(
     fuse_heads: str = "false",
     root_power: str = "1.0",
     quality_power: str = "1.0",
+    disambiguate_bass: str = "false",
 ) -> str:
     """Evaluate a checkpoint on the requested split (artifacts on /runs)."""
     _ensure_bundle()
@@ -333,6 +334,8 @@ def eval_model(
     if _truthy(fuse_heads):
         command += ["--fuse-heads", "--root-power", str(root_power),
                     "--quality-power", str(quality_power)]
+    if _truthy(disambiguate_bass):
+        command += ["--disambiguate-bass"]
     output = _run(command)
     runs_volume.commit()
     if os.path.isfile(out_path):
@@ -835,6 +838,72 @@ def prepare_slakh_fine(limit: str = "400", workers: str = "8",
         with open(report_path, encoding="utf-8") as handle:
             print(handle.read(), flush=True)
     return output
+
+
+@app.function(
+    image=audio_image,
+    cpu=8,
+    memory=32768,
+    timeout=24 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=2,
+)
+def download_slakh_full(limit: str = "1710") -> str:
+    """Resumably download the full Slakh2100-redux 16k tarball and extract
+    mix.flac + all_src.mid for up to ``limit`` tracks (default: all 1,710)."""
+    import subprocess as _sp
+    import tarfile
+
+    _ensure_bundle()
+    cache_dir = os.path.join(ROOT, ".cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    archive = os.path.join(cache_dir, "slakh2100_redux_16k.tar.gz")
+    url = "https://zenodo.org/records/7708270/files/slakh2100_redux_16k.tar.gz"
+    if not os.path.isfile(archive) or os.path.getsize(archive) < 40 * 1024**3:
+        command = ["wget", "-c", "-O", archive, url]
+        print("[download] " + " ".join(command), flush=True)
+        subprocess_run = _sp.run(command, text=True)
+        if subprocess_run.returncode not in (0, 8):  # 8 = server doesn't support resume
+            raise RuntimeError(f"wget failed: {subprocess_run.returncode}")
+    raw_dir = os.path.join(BACKEND, "data", "chord170", "slakh_raw")
+    os.makedirs(raw_dir, exist_ok=True)
+    wanted = ("mix.flac", "all_src.mid")
+    extracted = 0
+    seen: set[str] = set()
+    with tarfile.open(archive, "r:gz") as tar:
+        for member in tar:
+            parts = [part for part in member.name.split("/") if part]
+            if "omitted" in parts:
+                continue
+            track = next((p for p in parts if p.startswith("Track") and p[5:].isdigit()), None)
+            if track is None or not member.name.endswith(wanted):
+                continue
+            track_dir = os.path.join(raw_dir, track)
+            target = os.path.join(track_dir, parts[-1])
+            if os.path.exists(target):
+                seen.add(track)
+                continue
+            os.makedirs(track_dir, exist_ok=True)
+            source = tar.extractfile(member)
+            if source is None:
+                continue
+            with open(target, "wb") as handle:
+                while True:
+                    chunk = source.read(1 << 20)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+            if (os.path.exists(os.path.join(track_dir, "mix.flac"))
+                    and os.path.exists(os.path.join(track_dir, "all_src.mid"))):
+                seen.add(track)
+                extracted += 1
+                if extracted % 100 == 0:
+                    print(f"[extract] {extracted} new tracks ({len(seen)} total)", flush=True)
+            if len(seen) >= int(limit):
+                break
+    data_volume.commit()
+    print(f"[done] raw tracks present: {len(seen)}", flush=True)
+    return f"{len(seen)} tracks in {raw_dir}"
 
 
 @app.local_entrypoint()

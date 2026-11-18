@@ -169,6 +169,12 @@ def aux_labels_for(labels: np.ndarray, space: str) -> tuple[np.ndarray, np.ndarr
     return roots, qualities
 
 
+MODEL_SCALES: dict[str, dict[str, int]] = {
+    "base": {"conv1": 64, "conv2": 128, "lstm": 128, "dense": 256, "heads": 256},
+    "large": {"conv1": 96, "conv2": 192, "lstm": 192, "dense": 384, "heads": 384},
+}
+
+
 def build_model(
     window: int = WINDOW,
     feature_dim: int = FEATURE_DIM,
@@ -176,15 +182,17 @@ def build_model(
     num_bass: int = NUM_CLASSES_BASS,
     aux_heads: bool = False,
     inversion_head: bool = False,
+    model_scale: str = "base",
 ) -> tf.keras.Model:
     """Build the chord + bass CRNN (optional root/quality auxiliary heads)."""
+    scale = MODEL_SCALES.get(model_scale, MODEL_SCALES["base"])
     inputs = tf.keras.Input(shape=(window, feature_dim), name="cqt_window")
     x = CircularCqtPad(name="circular_cqt_pad")(inputs)
 
-    x = tf.keras.layers.Conv1D(64, kernel_size=3, padding="same", activation="relu",
-                               name="conv1d_64")(x)
-    x = tf.keras.layers.Conv1D(128, kernel_size=3, padding="same", activation="relu",
-                               name="conv1d_128")(x)
+    x = tf.keras.layers.Conv1D(scale["conv1"], kernel_size=3, padding="same",
+                               activation="relu", name="conv1d_64")(x)
+    x = tf.keras.layers.Conv1D(scale["conv2"], kernel_size=3, padding="same",
+                               activation="relu", name="conv1d_128")(x)
     x = tf.keras.layers.BatchNormalization(name="bn_cnn")(x)
 
     attention = tf.keras.layers.MultiHeadAttention(
@@ -196,12 +204,12 @@ def build_model(
     )
 
     x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(128, return_sequences=True), name="bilstm_1"
+        tf.keras.layers.LSTM(scale["lstm"], return_sequences=True), name="bilstm_1"
     )(x)
     x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(128, return_sequences=False), name="bilstm_2"
+        tf.keras.layers.LSTM(scale["lstm"], return_sequences=False), name="bilstm_2"
     )(x)
-    x = tf.keras.layers.Dense(256, activation="relu", name="dense_256")(x)
+    x = tf.keras.layers.Dense(scale["dense"], activation="relu", name="dense_256")(x)
     x = tf.keras.layers.Dropout(0.3, name="dropout")(x)
 
     outputs = {
@@ -735,6 +743,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--crop-window", type=int, default=None)
     parser.add_argument("--inversion-head", action="store_true")
     parser.add_argument("--chord-inversion-weight", type=float, default=None)
+    parser.add_argument("--model-scale", default=None, choices=list(MODEL_SCALES))
     args = parser.parse_args(argv)
 
     config = {
@@ -760,6 +769,7 @@ def main(argv: list[str] | None = None) -> int:
         "crop_window": 128,
         "inversion_head": False,
         "chord_inversion_weight": 1.0,
+        "model_scale": "base",
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -800,6 +810,8 @@ def main(argv: list[str] | None = None) -> int:
         config["inversion_head"] = True
     if args.chord_inversion_weight is not None:
         config["chord_inversion_weight"] = args.chord_inversion_weight
+    if args.model_scale:
+        config["model_scale"] = args.model_scale
     if config["label_space"] not in LABEL_SPACES:
         raise SystemExit(f"unknown label space: {config['label_space']}")
 
@@ -846,7 +858,8 @@ def main(argv: list[str] | None = None) -> int:
     model = build_model(window=int(train["features"].shape[1]),
                         num_chords=train["num_chords"],
                         aux_heads=config["aux_heads"],
-                        inversion_head=config["inversion_head"])
+                        inversion_head=config["inversion_head"],
+                        model_scale=config["model_scale"])
     optimizer = tf.keras.optimizers.AdamW(
         learning_rate=tf.keras.optimizers.schedules.CosineDecay(
             initial_learning_rate=float(config["learning_rate"]),
