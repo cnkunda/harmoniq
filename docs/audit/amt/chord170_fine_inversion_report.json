@@ -80,19 +80,19 @@
   ],
   "gate_status": {
     "macro_f1_supported >= 0.45": {
-      "best": 0.266,
+      "best": 0.278,
       "met": false
     },
     "bass_known >= 0.60": {
-      "best": 0.761,
+      "best": 0.773,
       "met": true
     },
     "slash >= 0.50": {
-      "best": 0.184,
+      "best": 0.182,
       "met": false
     },
     "ece <= 0.15": {
-      "best": 0.065,
+      "best": 0.083,
       "met": true
     }
   },
@@ -100,7 +100,10 @@
     "Full Slakh2100 redux (1,710 tracks) for song diversity.",
     "Multi-scale model (local 1.6 s + global 6.4 s) to improve quality discrimination.",
     "Label-ambiguity policy for 6th vs relative 7th chords (affects macro-F1).",
-    "3 seeds + 5-fold RWC/IDMT for CIs."
+    "3 seeds + 5-fold RWC/IDMT for CIs.",
+    "External-only validation sources for checkpoint selection (in-domain Slakh val inflates selection).",
+    "Larger real-guitar corpora (Guitar-TECHS fine, IDMT dataset1-3 XML-derived labels).",
+    "Frame-level supervision (16x labels per window) for quality/inversion accuracy."
   ],
   "longer_schedule": [
     {
@@ -133,6 +136,24 @@
       "exact": 0.441,
       "slash": 0.168,
       "note": "marginal (+0.002)"
+    }
+  ],
+  "full_slakh": [
+    {
+      "variant": "full Slakh fine (1,710 tracks, ~285k windows) + fine4, mild aug, inversion head, rare, chord-inv 2, 25 ep",
+      "macro_f1_supported": 0.278,
+      "exact": 0.451,
+      "wcsr_mirex": 0.633,
+      "bass_known": 0.773,
+      "slash": 0.182,
+      "ece": 0.083,
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.318,
+        "bass_exact": 0.642,
+        "both_exact": 0.182
+      },
+      "note": "best honest result so far; val (in-domain Slakh val) 0.337 macro / 0.369 slash"
     }
   ]
 }

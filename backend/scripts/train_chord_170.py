@@ -744,6 +744,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--inversion-head", action="store_true")
     parser.add_argument("--chord-inversion-weight", type=float, default=None)
     parser.add_argument("--model-scale", default=None, choices=list(MODEL_SCALES))
+    parser.add_argument("--val-sources", default=None,
+                        help="comma list of sources used only for validation/selection")
     args = parser.parse_args(argv)
 
     config = {
@@ -812,6 +814,8 @@ def main(argv: list[str] | None = None) -> int:
         config["chord_inversion_weight"] = args.chord_inversion_weight
     if args.model_scale:
         config["model_scale"] = args.model_scale
+    if args.val_sources:
+        config["val_sources"] = [s.strip() for s in args.val_sources.split(",") if s.strip()]
     if config["label_space"] not in LABEL_SPACES:
         raise SystemExit(f"unknown label space: {config['label_space']}")
 
@@ -827,7 +831,8 @@ def main(argv: list[str] | None = None) -> int:
                        aux_heads=config["aux_heads"],
                        normalize=config["feature_normalize"],
                        crop_window=int(config["crop_window"]))
-    val = load_split(args.data_root, config["sources"], "val",
+    val_sources = config.get("val_sources") or config["sources"]
+    val = load_split(args.data_root, val_sources, "val",
                      limit_tracks=args.limit_val_tracks,
                      label_space=config["label_space"],
                      aux_heads=config["aux_heads"],
@@ -961,6 +966,7 @@ def main(argv: list[str] | None = None) -> int:
                           zip(*np.unique(train["sources"], return_counts=True))},
         "val_sources": {str(k): int(v) for k, v in
                         zip(*np.unique(val["sources"], return_counts=True))},
+        "val_source_config": config.get("val_sources") or config["sources"],
     }, indent=2))
 
     synthetic_epochs = int(config.get("synthetic_epochs") or 0)

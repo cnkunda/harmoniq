@@ -598,8 +598,13 @@ reduced macro-F1 (0.246 → 0.222). Fine Slakh (61k windows) did not lift
 external 6th/7th quality accuracy, indicating a domain gap between the
 synthesized Slakh corpus and RWC/GuitarSet.
 
-**Gates:** bass 0.72 ✅, ECE 0.130 ✅ (0.06 calibrated earlier), macro-F1 0.246
-❌, slash 0.160 ❌. Next levers: full Slakh redux (1,710 tracks), a
+**Full Slakh scale-up (1,710 tracks, ~285k windows)** with the same recipe
+gives the best honest result: macro-F1 **0.278**, exact 0.451, WCSR-MIREX
+0.633, bass **0.773**, slash **0.182**, ECE 0.083 (val, which includes
+in-domain Slakh val: 0.337 / 0.369). A run selecting checkpoints on the
+*external* validation split only (excluding Slakh val) is in progress.
+
+**Gates:** bass 0.773 ✅, ECE 0.083 ✅, macro-F1 0.278 ❌, slash 0.182 ❌. Next levers: full Slakh redux (1,710 tracks), a
 multi-scale model (local 1.6 s + global 6.4 s), a documented label-ambiguity
 policy for 6th vs relative 7th chords, and 3 seeds + 5-fold evaluation.
 A larger encoder (conv 96/192, LSTM 192, Dense 384; 40 epochs) raised
