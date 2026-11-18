@@ -1,0 +1,146 @@
+{
+  "iterations": [
+    "context-iter1",
+    "context-iter2",
+    "context-iter3"
+  ],
+  "date": "2026-11-17",
+  "config": "configs/chord170_gates.yaml (aux heads, masked bass + inversion x2, no augmentation)",
+  "finding": "The 12.8 s (128-frame) context window averages multiple chords on fast harmonic-rhythm material (RWC); centre-cropping to 1.6-3.2 s dramatically improves cross-song generalization. Crop is derived from the existing 128-frame windows at no re-extraction cost.",
+  "results_coarse_test_820_windows": [
+    {
+      "window_frames": 128,
+      "window_s": 12.8,
+      "macro_f1_supported": 0.147,
+      "exact": 0.32,
+      "wcsr_mirex": 0.385,
+      "bass_known": 0.346,
+      "slash": 0.065,
+      "ece": 0.172,
+      "rwc_exact": 0.171
+    },
+    {
+      "window_frames": 64,
+      "window_s": 6.4,
+      "macro_f1_supported": 0.156,
+      "exact": 0.337,
+      "wcsr_mirex": 0.441,
+      "bass_known": 0.477,
+      "slash": 0.071,
+      "ece": 0.188,
+      "rwc_exact": 0.23
+    },
+    {
+      "window_frames": 48,
+      "window_s": 4.8,
+      "macro_f1_supported": 0.18,
+      "exact": 0.372,
+      "wcsr_mirex": 0.491,
+      "bass_known": 0.573,
+      "slash": 0.065,
+      "ece": 0.169,
+      "rwc_exact": 0.284
+    },
+    {
+      "window_frames": 32,
+      "window_s": 3.2,
+      "macro_f1_supported": 0.169,
+      "exact": 0.377,
+      "wcsr_mirex": 0.491,
+      "bass_known": 0.604,
+      "slash": 0.058,
+      "ece": 0.107,
+      "rwc_exact": 0.359
+    },
+    {
+      "window_frames": 24,
+      "window_s": 2.4,
+      "macro_f1_supported": 0.155,
+      "exact": 0.352,
+      "wcsr_mirex": 0.489,
+      "bass_known": 0.633,
+      "slash": 0.084,
+      "ece": 0.149,
+      "rwc_exact": 0.33
+    },
+    {
+      "window_frames": 16,
+      "window_s": 1.6,
+      "macro_f1_supported": 0.19,
+      "exact": 0.373,
+      "wcsr_mirex": 0.501,
+      "bass_known": 0.688,
+      "slash": 0.103,
+      "ece": 0.145,
+      "rwc_exact": 0.399
+    },
+    {
+      "window_frames": 8,
+      "window_s": 0.8,
+      "macro_f1_supported": 0.188,
+      "exact": 0.37,
+      "wcsr_mirex": 0.513,
+      "bass_known": 0.704,
+      "slash": 0.077,
+      "ece": 0.19,
+      "rwc_exact": 0.428
+    }
+  ],
+  "data_and_class_weighting": [
+    {
+      "variant": "w16 + Slakh subset (15,426 windows)",
+      "macro_f1_supported": 0.189,
+      "exact": 0.396,
+      "wcsr_mirex": 0.541,
+      "bass_known": 0.683,
+      "slash": 0.084,
+      "ece": 0.178,
+      "rwc_exact": 0.452
+    },
+    {
+      "variant": "w16 + rare-class weights (tau 0.3)",
+      "macro_f1_supported": 0.201,
+      "exact": 0.396,
+      "wcsr_mirex": 0.526,
+      "bass_known": 0.683,
+      "slash": 0.084,
+      "ece": 0.153,
+      "rwc_exact": 0.43
+    }
+  ],
+  "calibration_w16_slakh": {
+    "ece_before": 0.216,
+    "ece_after": 0.062,
+    "macro_before": 0.2037,
+    "macro_after": 0.2037
+  },
+  "gate_status": {
+    "macro_f1_supported >= 0.45": {
+      "best": 0.201,
+      "met": false
+    },
+    "bass_known >= 0.60": {
+      "best": 0.704,
+      "met": true
+    },
+    "slash >= 0.50": {
+      "best": 0.103,
+      "met": false
+    },
+    "ece <= 0.15": {
+      "best_calibrated": 0.062,
+      "met": true
+    }
+  },
+  "remaining_blockers": [
+    "Macro-F1: 79 supported classes; rare qualities (minmaj7/hdim7/min6) remain weak.",
+    "Slash: requires chord AND bass exact on inversion frames; chord quality on inversions is the bottleneck.",
+    "Coarse 6.4 s evaluation hop under-samples boundaries; fine-hop extraction is the natural next step."
+  ],
+  "next_levers": [
+    "Fine-hop feature extraction (1.6 s) with w16 for train and test (more windows + boundary localization).",
+    "Inversion auxiliary head / inversion-focused oversampling for slash accuracy.",
+    "Scale Slakh to the full redux set (stream further; pipeline supports it).",
+    "3 seeds + 5-fold RWC/IDMT for CIs on the finalist."
+  ]
+}

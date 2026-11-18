@@ -599,3 +599,43 @@ class TestStageDHelpers:
 
         assert BTC_INDEX_TO_170.shape == (170,)
         assert sorted(BTC_INDEX_TO_170.tolist()) == list(range(170))
+
+
+class TestSlakhHelpers:
+    def test_chord_template_matching(self):
+        from scripts.prepare_slakh import _chord_for
+        from app.chord_vocab_170 import CHORD_TO_IDX_170, N_IDX_170
+
+        assert _chord_for(frozenset({0, 4, 7})) == CHORD_TO_IDX_170["C:maj"]
+        assert _chord_for(frozenset({0, 4, 7, 11})) == CHORD_TO_IDX_170["C:maj7"]
+        # Dm7 and F6 share a pitch-class set; the matcher resolves to the
+        # first best template, so use unambiguous triads here.
+        assert _chord_for(frozenset({9, 0, 4})) == CHORD_TO_IDX_170["A:min"]
+        assert _chord_for(frozenset({2, 5, 9})) == CHORD_TO_IDX_170["D:min"]
+        assert _chord_for(frozenset({0, 3, 7})) == CHORD_TO_IDX_170["C:min"]
+        assert _chord_for(frozenset({4})) == N_IDX_170
+        assert _chord_for(frozenset()) == N_IDX_170
+
+    def test_slakh_split_is_deterministic_and_stratified(self):
+        from scripts.prepare_slakh import _split_for
+
+        ids = [f"Track{i:05d}" for i in range(1, 1001)]
+        assignments = {t: _split_for(t) for t in ids}
+        assert assignments == {t: _split_for(t) for t in ids}
+        counts = {s: sum(1 for v in assignments.values() if v == s)
+                  for s in ("train", "val", "test")}
+        assert counts["train"] > counts["val"] > 0
+        assert counts["test"] > 0
+        assert counts["train"] > 700
+
+
+class TestContextCrop:
+    def test_center_crop(self):
+        from scripts.chord_data_v2 import _crop_window
+
+        x = np.arange(2 * 128 * 3, dtype=np.float32).reshape(2, 128, 3)
+        cropped = _crop_window(x, 16)
+        assert cropped.shape == (2, 16, 3)
+        assert np.array_equal(cropped[0, :, 0], x[0, 56:72, 0])
+        assert _crop_window(x, 128).shape == (2, 128, 3)
+        assert np.array_equal(_crop_window(x, 256), x)

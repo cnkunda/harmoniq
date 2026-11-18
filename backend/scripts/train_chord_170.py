@@ -92,6 +92,7 @@ SOURCE_DIRS = {
     "rwc": "rwc",
     "pseudo_v2": "chord170/pseudo_v2",
     "pseudo_btc": "chord170/pseudo_btc",
+    "slakh": "chord170/slakh",
 }
 
 
@@ -225,6 +226,7 @@ def load_split(
     label_space: str = "170",
     aux_heads: bool = False,
     normalize: str = "none",
+    crop_window: int = 128,
 ) -> dict | None:
     """Load and concatenate one split across sources for a label space."""
     feats, labels, labels277, bass, conf, tracks, centres, srcs = [], [], [], [], [], [], [], []
@@ -232,7 +234,7 @@ def load_split(
         data_dir = data_root / SOURCE_DIRS[source]
         loaded = chord_data.load_dataset_dir_170(
             data_dir, split, limit_tracks=limit_tracks, source=source,
-            normalize=normalize)
+            normalize=normalize, crop_window=crop_window)
         if len(loaded["labels170"]) == 0:
             continue
         if label_space == "277" and loaded.get("labels277") is None:
@@ -249,8 +251,12 @@ def load_split(
     if not feats:
         return None
     features = np.concatenate(feats)
-    if features.shape[1:] != (WINDOW, FEATURE_DIM):
-        raise ValueError(f"unexpected feature shape {features.shape}; expected (*, {WINDOW}, {FEATURE_DIM})")
+    expected_window = int(min(crop_window, WINDOW))
+    if features.shape[1:] != (expected_window, FEATURE_DIM):
+        raise ValueError(
+            f"unexpected feature shape {features.shape}; expected "
+            f"(*, {expected_window}, {FEATURE_DIM})"
+        )
     windows = {
         "features": features.astype(np.float32),
         "labels170": np.concatenate(labels),
@@ -609,10 +615,12 @@ def load_synthetic_split(
     aux_heads: bool,
     *,
     limit_tracks: int = 0,
+    crop_window: int = 128,
 ) -> dict | None:
     """Load the VST synthetic CQT cache for optional short pretraining."""
     loaded = chord_data.load_dataset_dir_170(
-        data_root / "vst_synthetic", None, limit_tracks=limit_tracks
+        data_root / "vst_synthetic", None, limit_tracks=limit_tracks,
+        crop_window=crop_window,
     )
     if len(loaded["labels170"]) == 0:
         return None
@@ -695,6 +703,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--aug-level", default=None, choices=["none", "mild", "full"])
     parser.add_argument("--feature-standardize", action="store_true")
     parser.add_argument("--feature-normalize", default=None, choices=["none", "track"])
+    parser.add_argument("--crop-window", type=int, default=None)
     args = parser.parse_args(argv)
 
     config = {
@@ -717,6 +726,7 @@ def main(argv: list[str] | None = None) -> int:
         "aug_level": "full",
         "feature_standardize": False,
         "feature_normalize": "none",
+        "crop_window": 128,
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -751,6 +761,8 @@ def main(argv: list[str] | None = None) -> int:
         config["feature_standardize"] = True
     if args.feature_normalize:
         config["feature_normalize"] = args.feature_normalize
+    if args.crop_window is not None:
+        config["crop_window"] = int(args.crop_window)
     if config["label_space"] not in LABEL_SPACES:
         raise SystemExit(f"unknown label space: {config['label_space']}")
 
@@ -764,12 +776,14 @@ def main(argv: list[str] | None = None) -> int:
                        limit_tracks=args.limit_train,
                        label_space=config["label_space"],
                        aux_heads=config["aux_heads"],
-                       normalize=config["feature_normalize"])
+                       normalize=config["feature_normalize"],
+                       crop_window=int(config["crop_window"]))
     val = load_split(args.data_root, config["sources"], "val",
                      limit_tracks=args.limit_val_tracks,
                      label_space=config["label_space"],
                      aux_heads=config["aux_heads"],
-                     normalize=config["feature_normalize"])
+                     normalize=config["feature_normalize"],
+                     crop_window=int(config["crop_window"]))
     if train is None or val is None:
         raise SystemExit("No train/val windows found — run the data prepare step first.")
     feature_mean = feature_std = None
@@ -792,7 +806,8 @@ def main(argv: list[str] | None = None) -> int:
     tf.keras.utils.set_random_seed(int(config["seed"]))
     use_gpu = _configure_device(args.device)
 
-    model = build_model(num_chords=train["num_chords"],
+    model = build_model(window=int(train["features"].shape[1]),
+                        num_chords=train["num_chords"],
                         aux_heads=config["aux_heads"])
     optimizer = tf.keras.optimizers.AdamW(
         learning_rate=tf.keras.optimizers.schedules.CosineDecay(
@@ -890,6 +905,7 @@ def main(argv: list[str] | None = None) -> int:
         synthetic = load_synthetic_split(
             args.data_root, config["label_space"], config["aux_heads"],
             limit_tracks=args.synthetic_limit,
+            crop_window=int(config["crop_window"]),
         )
         if synthetic is None:
             print("  [WARN] synthetic data unavailable — skipping pretraining", flush=True)

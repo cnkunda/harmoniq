@@ -82,7 +82,8 @@ audio_image = (
     .apt_install("ffmpeg", "libsndfile1")
     .pip_install("torch==2.5.1", "torchaudio==2.5.1")
     .pip_install("demucs>=4.0.1", "numpy>=1.26", "librosa>=0.10.2",
-                 "soundfile>=0.13")
+                 "soundfile>=0.13", "pretty_midi>=0.2.10", "pyyaml>=6.0",
+                 "requests>=2.31", "scipy>=1.11")
     .env({"PYTHONUNBUFFERED": "1", "TORCH_HOME": "/chord170/.cache/torch"})
 )
 
@@ -418,6 +419,31 @@ def sweep(epochs: str = "25", tag: str = "", suite: str = "core",
             ("n2-tracknorm-aug", "170", ["--aux-heads", "--aug-level", "mild",
                                           "--feature-normalize", "track"]),
         ],
+        "stageE": [
+            ("e1-control", "170", ["--aux-heads", "--no-augment",
+                                    "--sources",
+                                    "guitarset,guitar_techs,egset12,idmt_smt_guitar,rwc,pseudo_v2"]),
+            ("e2-slakh", "170", ["--aux-heads", "--no-augment",
+                                  "--sources",
+                                  "guitarset,guitar_techs,egset12,idmt_smt_guitar,rwc,pseudo_v2,slakh"]),
+        ],
+        "context": [
+            ("w64", "170", ["--aux-heads", "--no-augment", "--crop-window", "64"]),
+            ("w32", "170", ["--aux-heads", "--no-augment", "--crop-window", "32"]),
+        ],
+        "context2": [
+            ("w48", "170", ["--aux-heads", "--no-augment", "--crop-window", "48"]),
+            ("w24", "170", ["--aux-heads", "--no-augment", "--crop-window", "24"]),
+            ("w16", "170", ["--aux-heads", "--no-augment", "--crop-window", "16"]),
+        ],
+        "context3": [
+            ("w8", "170", ["--aux-heads", "--no-augment", "--crop-window", "8"]),
+            ("w16-slakh", "170", ["--aux-heads", "--no-augment", "--crop-window", "16",
+                                   "--sources",
+                                   "guitarset,guitar_techs,egset12,idmt_smt_guitar,rwc,pseudo_v2,slakh"]),
+            ("w16-rare", "170", ["--aux-heads", "--no-augment", "--crop-window", "16",
+                                  "--chord-class-weight-tau", "0.3"]),
+        ],
         "gates_finalists": [
             ("gates-seed1", "170", ["--aux-heads", "--no-augment", "--seed", "1"]),
             ("gates-seed2", "170", ["--aux-heads", "--no-augment", "--seed", "2"]),
@@ -462,6 +488,8 @@ def sweep(epochs: str = "25", tag: str = "", suite: str = "core",
                 run_config = json.load(open(config_path, encoding="utf-8"))
             if run_config.get("feature_normalize", "none") != "none":
                 eval_cmd += ["--feature-normalize", run_config["feature_normalize"]]
+            if int(run_config.get("crop_window", 128)) != 128:
+                eval_cmd += ["--crop-window", str(int(run_config["crop_window"]))]
             _run(eval_cmd)
             entry: dict = {"label_space": space, "args": " ".join(extra)}
             metrics_path = os.path.join(out_dir, "metrics.json")
@@ -568,7 +596,7 @@ def btc_label_tracks(limit: str = "80", per_style: str = "10") -> str:
     timeout=2 * 60 * 60,
     volumes={ROOT: data_volume, RUNS: runs_volume},
 )
-def calibrate(checkpoint: str, feature_stats: str = "", sources: str = "guitarset,guitar_techs,idmt_smt_guitar,rwc") -> str:
+def calibrate(checkpoint: str, feature_stats: str = "", crop_window: str = "128", sources: str = "guitarset,guitar_techs,idmt_smt_guitar,rwc") -> str:
     """Fit post-hoc calibration on the validation split (Stage C)."""
     _ensure_bundle()
     out_dir = os.path.dirname(checkpoint)
@@ -582,6 +610,8 @@ def calibrate(checkpoint: str, feature_stats: str = "", sources: str = "guitarse
     ]
     if feature_stats.strip():
         command += ["--feature-stats", feature_stats]
+    if int(crop_window or 128) != 128:
+        command += ["--crop-window", str(int(crop_window))]
     output = _run(command)
     runs_volume.commit()
     if os.path.isfile(out_path):
@@ -640,6 +670,32 @@ def btc_pseudo(limit: str = "0", min_confidence: str = "0.6") -> str:
     ]
     if int(limit or 0):
         command += ["--limit", str(int(limit))]
+    output = _run(command)
+    data_volume.commit()
+    if os.path.isfile(report_path):
+        with open(report_path, encoding="utf-8") as handle:
+            print(handle.read(), flush=True)
+    return output
+
+
+@app.function(
+    image=audio_image,
+    cpu=16,
+    memory=65536,
+    timeout=12 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def prepare_slakh(limit: str = "400", workers: str = "8") -> str:
+    """Stream-extract a Slakh2100-redux subset and build CQT + labels."""
+    _ensure_bundle()
+    report_path = os.path.join(BACKEND, "data", "chord170", "slakh_report.json")
+    command = [
+        "python", "scripts/prepare_slakh.py",
+        "--limit", str(int(limit)),
+        "--workers", str(int(workers)),
+        "--report", report_path,
+    ]
     output = _run(command)
     data_volume.commit()
     if os.path.isfile(report_path):

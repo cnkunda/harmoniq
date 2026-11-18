@@ -1,8 +1,8 @@
 # Chord 170 Program — Implementation
 
-Status: **Phases 0–4 + gate iteration complete** (2026-11-16). The gate
-iteration corrected a split-leakage problem and showed the remaining gates
-require data expansion; production remains untouched. Spec source: the "Harmoniq 170-Class Chord
+Status: **Phases 0–4 + gate + context iterations complete** (2026-11-17).
+Context-window cropping fixed the main generalization failure: 2 of 4 gates
+now pass (bass, calibration), macro-F1/slash remain; production untouched. Spec source: the "Harmoniq 170-Class Chord
 Model v2" implementation brief; repo rules in
 [`AGENTS.md`](../../AGENTS.md).
 
@@ -524,6 +524,48 @@ memorizes songs. Closing the gates requires an order-of-magnitude increase in
 the now-built Demucs+BTC pipeline) and/or a representation/architecture
 change. Production remains untouched. Artifact:
 `docs/audit/amt/chord170_stageD_report.json`.
+
+
+## Context-length iteration (2026-11-17) — the generalization fix
+
+Diagnosing the RWC held-out failure (train macro 0.83 vs held-out 0.05) showed
+predictions were neighbouring chords from the same progression, not shifted:
+the 12.8 s (128-frame) window averages several chords on fast harmonic-rhythm
+material. Centre-cropping the existing windows to shorter contexts (no
+re-extraction) was tested under the gates config (aux heads, masked bass +
+inversion ×2, no augmentation):
+
+| Context | Macro-F1 | Exact | WCSR-MIREX | Bass (known) | Slash | ECE | RWC exact |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 12.8 s (128, control) | 0.147 | 0.320 | 0.385 | 0.346 | 0.065 | 0.172 | 0.171 |
+| 6.4 s (64) | 0.156 | 0.337 | 0.441 | 0.477 | 0.071 | 0.188 | 0.230 |
+| 4.8 s (48) | 0.180 | 0.372 | 0.491 | 0.573 | 0.065 | 0.169 | 0.284 |
+| 3.2 s (32) | 0.169 | 0.377 | 0.491 | **0.604** | 0.058 | 0.107 | 0.359 |
+| 2.4 s (24) | 0.155 | 0.352 | 0.489 | 0.633 | 0.084 | 0.149 | 0.330 |
+| **1.6 s (16)** | **0.190** | **0.373** | **0.501** | **0.688** | **0.103** | **0.145** | **0.399** |
+| 0.8 s (8) | 0.188 | 0.370 | 0.513 | 0.704 | 0.077 | 0.190 | 0.428 |
+
+**1.6 s + Slakh subset** (15,426 extra windows; 328/40/32 splits, 93 %
+bass-known, includes minmaj7/hdim7): exact **0.396**, WCSR-MIREX **0.541**,
+RWC exact **0.452**, bass 0.683. Adding rare-class weights (τ=0.3) gives
+macro-F1 **0.201**. Calibration on the w16 model: **ECE 0.216 → 0.062**
+(macro unchanged).
+
+### Gate status after this iteration
+
+| Gate | Target | Best honest | Status |
+| --- | ---: | ---: | --- |
+| Macro-F1 (supported) | 0.45 | 0.201 | ❌ |
+| Bass accuracy (known) | 0.60 | 0.704 | ✅ |
+| Slash accuracy | 0.50 | 0.103 | ❌ |
+| ECE | ≤ 0.15 | 0.062 (calibrated) | ✅ |
+
+Remaining blockers: macro-F1 over 79 supported classes (rare qualities still
+weak) and slash (requires chord *and* bass exact on inversions). Natural next
+levers: fine-hop feature extraction (1.6 s) for train+test, an exported
+inversion auxiliary head with inversion-focused sampling, scaling Slakh to the
+full redux set, and 3 seeds + 5-fold RWC/IDMT for CIs. Artifact:
+`docs/audit/amt/chord170_context_report.json`. Production remains untouched.
 
 ## Phase plan (remaining)
 

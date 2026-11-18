@@ -435,6 +435,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--feature-stats", type=Path, default=None,
                         help="feature_stats.npz (per-bin mean/std) from training")
     parser.add_argument("--feature-normalize", default="none", choices=["none", "track"])
+    parser.add_argument("--crop-window", type=int, default=128)
     args = parser.parse_args(argv)
 
     from scripts import chord_data_v2 as data
@@ -447,11 +448,13 @@ def main(argv: list[str] | None = None) -> int:
         "rwc": args.data_root / "rwc",
         "pseudo_v2": args.data_root / "chord170" / "pseudo_v2",
         "pseudo_btc": args.data_root / "chord170" / "pseudo_btc",
+        "slakh": args.data_root / "chord170" / "slakh",
     }
     features, labels, bass, track_ids, centres, sources = [], [], [], [], [], []
     for name in [s.strip() for s in args.sources.split(",") if s.strip()]:
         loaded = data.load_dataset_dir_170(source_dirs[name], args.split, source=name,
-                                           normalize=args.feature_normalize)
+                                           normalize=args.feature_normalize,
+                                           crop_window=args.crop_window)
         if len(loaded["labels170"]) == 0:
             continue
         if args.label_space == "277":
