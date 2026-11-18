@@ -1,0 +1,93 @@
+{
+  "iteration": "fine-hop + inversion head",
+  "date": "2026-11-18",
+  "data": {
+    "fine_hop": "window 16 frames (1.6 s), hop 16 frames, 144-bin CQT",
+    "fine_corpora": {
+      "guitarset": "360 tracks",
+      "egset12": "12 tracks",
+      "idmt_smt_guitar": "129 tracks",
+      "rwc": "100 tracks / 15,184 windows (N 2.2%)"
+    },
+    "slakh_fine": "400 tracks / 61,113 windows (N 23.7%, bass known 93.8%, 328/40/32)",
+    "total_fine_train_windows": "~85,000"
+  },
+  "results_fixed_external_test": [
+    {
+      "variant": "fine-inv (4 corpora + coarse slakh, inversion head)",
+      "n_windows": 3121,
+      "macro_f1_supported": 0.223,
+      "exact": 0.466,
+      "wcsr_mirex": 0.611,
+      "bass_known": 0.72,
+      "slash": 0.16,
+      "ece": 0.145
+    },
+    {
+      "variant": "fine-inv-rare (tau 0.3)",
+      "n_windows": 3121,
+      "macro_f1_supported": 0.209,
+      "exact": 0.455,
+      "wcsr_mirex": 0.606,
+      "bass_known": 0.712,
+      "slash": 0.14,
+      "ece": 0.142
+    },
+    {
+      "variant": "slash-inv2 (fine corpora + slakh_fine, inversion chord weight 2)",
+      "n_windows": 3121,
+      "macro_f1_supported": 0.213,
+      "exact": 0.45,
+      "wcsr_mirex": 0.606,
+      "bass_known": 0.719,
+      "slash": 0.129,
+      "ece": 0.159
+    },
+    {
+      "variant": "slash-inv2-rare",
+      "n_windows": 3121,
+      "macro_f1_supported": 0.246,
+      "exact": 0.463,
+      "wcsr_mirex": 0.618,
+      "bass_known": 0.716,
+      "slash": 0.16,
+      "ece": 0.13
+    }
+  ],
+  "slash_diagnostic": {
+    "inversion_frames": 642,
+    "chord_exact": 0.315,
+    "bass_exact": 0.53,
+    "both_exact": 0.151,
+    "interpretation": "Slash is gated by chord-quality accuracy on inversion frames (richer 7th/6th chords), not by bass composition. Composing bass from the inversion head was worse than the 13-class bass head."
+  },
+  "negative_results": [
+    "Inversion-head bass composition (bass 0.694 / slash 0.077) is worse than the bass head.",
+    "Head fusion (chord * root * quality): macro 0.246 -> 0.222, ECE worsened -> not used.",
+    "Fine Slakh (61k windows) did not lift external maj6/7th quality accuracy (domain gap)."
+  ],
+  "gate_status": {
+    "macro_f1_supported >= 0.45": {
+      "best": 0.246,
+      "met": false
+    },
+    "bass_known >= 0.60": {
+      "best": 0.72,
+      "met": true
+    },
+    "slash >= 0.50": {
+      "best": 0.16,
+      "met": false
+    },
+    "ece <= 0.15": {
+      "best": 0.13,
+      "met": true
+    }
+  },
+  "next_levers": [
+    "Full Slakh2100 redux (1,710 tracks) for song diversity.",
+    "Multi-scale model (local 1.6 s + global 6.4 s) to improve quality discrimination.",
+    "Label-ambiguity policy for 6th vs relative 7th chords (affects macro-F1).",
+    "3 seeds + 5-fold RWC/IDMT for CIs."
+  ]
+}

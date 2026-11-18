@@ -254,3 +254,46 @@ def pitch_shift_labels(
     bass_mask = bass_arr != BASS_X_IDX
     bass_arr[bass_mask] = (bass_arr[bass_mask] + shift) % 12
     return chord_arr, bass_arr
+
+
+INVERSION_LABELS: tuple[str, ...] = ("root", "first", "second", "third", "other")
+NUM_INVERSION_CLASSES = len(INVERSION_LABELS)
+
+
+def inversion_class(chord_idx: int, bass_idx: int) -> int:
+    """Inversion class of a chord given its bass.
+
+    0 = root position, 1/2/3 = first/second/third inversion (bass is the
+    chord's 2nd/3rd/4th interval), 4 = other/unknown (including no chord or
+    an unknown bass).
+    """
+    from app.chord_vocab_170 import BASS_X_IDX, N_IDX_170, QUALITIES_14, QUALITY_INTERVALS_170
+
+    chord_idx = int(chord_idx)
+    bass_idx = int(bass_idx)
+    if chord_idx >= N_IDX_170 or bass_idx == BASS_X_IDX:
+        return 4
+    quality = QUALITIES_14[chord_idx // 12]
+    root = chord_idx % 12
+    semitone = (bass_idx - root) % 12
+    intervals = [interval % 12 for interval in QUALITY_INTERVALS_170[quality]]
+    if semitone not in intervals:
+        return 4
+    position = intervals.index(semitone)
+    return position if position < 4 else 4
+
+
+def compose_bass_from_inversion(chord_idx: int, inversion_idx: int) -> int:
+    """Bass pitch class implied by (chord, inversion), or -1 if unknown."""
+    from app.chord_vocab_170 import N_IDX_170, QUALITIES_14, QUALITY_INTERVALS_170
+
+    chord_idx = int(chord_idx)
+    inversion_idx = int(inversion_idx)
+    if chord_idx >= N_IDX_170 or inversion_idx >= 4:
+        return -1
+    quality = QUALITIES_14[chord_idx // 12]
+    root = chord_idx % 12
+    intervals = [interval % 12 for interval in QUALITY_INTERVALS_170[quality]]
+    if inversion_idx >= len(intervals):
+        return -1
+    return (root + intervals[inversion_idx]) % 12

@@ -1,8 +1,8 @@
 # Chord 170 Program — Implementation
 
-Status: **Phases 0–4 + gate + context iterations complete** (2026-11-17).
-Context-window cropping fixed the main generalization failure: 2 of 4 gates
-now pass (bass, calibration), macro-F1/slash remain; production untouched. Spec source: the "Harmoniq 170-Class Chord
+Status: **Phases 0–4 + gate + context + fine-hop iterations complete**
+(2026-11-18). Context cropping + fine-hop + inversions: bass and calibration
+gates pass; macro-F1/slash remain; production untouched. Spec source: the "Harmoniq 170-Class Chord
 Model v2" implementation brief; repo rules in
 [`AGENTS.md`](../../AGENTS.md).
 
@@ -566,6 +566,37 @@ levers: fine-hop feature extraction (1.6 s) for train+test, an exported
 inversion auxiliary head with inversion-focused sampling, scaling Slakh to the
 full redux set, and 3 seeds + 5-fold RWC/IDMT for CIs. Artifact:
 `docs/audit/amt/chord170_context_report.json`. Production remains untouched.
+
+
+## Fine-hop + inversion iteration (2026-11-18)
+
+Built `extract_fine_windows.py` (1.6 s windows/hop for GuitarSet, EGSet12,
+IDMT, RWC) and `prepare_slakh_fine` (Slakh subset at 1.6 s). Added an exported
+inversion auxiliary head (root/first/second/third/other, weight 0.25),
+inversion-weighted chord loss, head fusion and slash diagnostics.
+
+Fixed external test (3,121 windows at the fine hop):
+
+| Variant | Macro-F1 | Exact | WCSR-MIREX | Bass | Slash | ECE |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| fine-inv (4 corpora + coarse Slakh) | 0.223 | 0.466 | 0.611 | 0.720 | 0.160 | 0.145 |
+| fine-inv + rare weights | 0.209 | 0.455 | 0.606 | 0.712 | 0.140 | 0.142 |
+| + Slakh fine + inversion chord weight 2 | 0.213 | 0.450 | 0.606 | 0.719 | 0.129 | 0.159 |
+| + rare weights (best) | **0.246** | **0.463** | **0.618** | **0.716** | **0.160** | **0.130** |
+
+Slash diagnostic on 642 inversion frames: chord exact 0.315, bass exact
+0.530, both 0.151 — slash is gated by chord-quality accuracy on richer
+chords, not by bass composition. Composing bass from the inversion head was
+worse than the 13-class bass head (0.69 bass, 0.077 slash), and head fusion
+reduced macro-F1 (0.246 → 0.222). Fine Slakh (61k windows) did not lift
+external 6th/7th quality accuracy, indicating a domain gap between the
+synthesized Slakh corpus and RWC/GuitarSet.
+
+**Gates:** bass 0.72 ✅, ECE 0.130 ✅ (0.06 calibrated earlier), macro-F1 0.246
+❌, slash 0.160 ❌. Next levers: full Slakh redux (1,710 tracks), a
+multi-scale model (local 1.6 s + global 6.4 s), a documented label-ambiguity
+policy for 6th vs relative 7th chords, and 3 seeds + 5-fold evaluation.
+Artifact: `docs/audit/amt/chord170_fine_inversion_report.json`.
 
 ## Phase plan (remaining)
 

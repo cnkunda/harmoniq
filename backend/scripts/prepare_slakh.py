@@ -182,7 +182,8 @@ def _note_events(midi_path: Path) -> list[tuple[float, float, float]]:
     ]
 
 
-def _process_track(track_dir: Path, out_dir: Path, splits_path: Path | None = None) -> dict:
+def _process_track(track_dir: Path, out_dir: Path, splits_path: Path | None = None,
+                   window: int = WINDOW, hop_frames: int = HOP_FRAMES) -> dict:
     import librosa
 
     mix_path = track_dir / "mix.flac"
@@ -203,17 +204,17 @@ def _process_track(track_dir: Path, out_dir: Path, splits_path: Path | None = No
         norms = cqt.sum(axis=1, keepdims=True).clip(1e-8, None)
         feats = cqt / norms
         n_frames = len(feats)
-        half = WINDOW // 2
+        half = window // 2
         padded = np.concatenate([np.zeros((half, NUM_BINS), dtype=np.float32), feats,
                                  np.zeros((half, NUM_BINS), dtype=np.float32)], axis=0)
-        n_windows = max(1, int(np.ceil(n_frames / HOP_FRAMES)))
-        windows = np.zeros((n_windows, WINDOW, NUM_BINS), dtype=np.float32)
-        centres = np.arange(n_windows, dtype=np.float64) * HOP_FRAMES * HOP_SEC
+        n_windows = max(1, int(np.ceil(n_frames / hop_frames)))
+        windows = np.zeros((n_windows, window, NUM_BINS), dtype=np.float32)
+        centres = np.arange(n_windows, dtype=np.float64) * hop_frames * HOP_SEC
         labels = np.full(n_windows, N_IDX_170, dtype=np.int64)
         bass = np.full(n_windows, 12, dtype=np.int64)  # BASS_X_IDX
         for index, centre in enumerate(centres):
-            start = index * HOP_FRAMES
-            windows[index] = padded[start:start + WINDOW]
+            start = index * hop_frames
+            windows[index] = padded[start:start + window]
             active = [pitch for (s, e, pitch) in notes if s <= centre < e]
             if not active:
                 continue
@@ -250,7 +251,8 @@ def _process_track(track_dir: Path, out_dir: Path, splits_path: Path | None = No
 
 
 def parse_and_extract(raw_dir: Path, out_dir: Path, workers: int = 8,
-                      limit: int = 0) -> dict:
+                      limit: int = 0, window: int = WINDOW,
+                      hop_frames: int = HOP_FRAMES) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     track_dirs = sorted(p for p in Path(raw_dir).iterdir() if p.is_dir())
     if limit:
@@ -258,10 +260,12 @@ def parse_and_extract(raw_dir: Path, out_dir: Path, workers: int = 8,
     splits_path = Path(raw_dir) / "slakh_splits.json"
     results: list[dict] = []
     if workers <= 1:
-        results = [_process_track(t, out_dir, splits_path) for t in track_dirs]
+        results = [_process_track(t, out_dir, splits_path, window, hop_frames)
+                   for t in track_dirs]
     else:
         with ProcessPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(_process_track, t, out_dir, splits_path): t
+            futures = {pool.submit(_process_track, t, out_dir, splits_path,
+                                   window, hop_frames): t
                        for t in track_dirs}
             for future in as_completed(futures):
                 results.append(future.result())
@@ -299,6 +303,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", type=Path,
                         default=_BACKEND_DIR / "data" / "chord170" / "slakh")
     parser.add_argument("--skip-download", action="store_true")
+    parser.add_argument("--window", type=int, default=WINDOW)
+    parser.add_argument("--hop", type=int, default=HOP_FRAMES)
     parser.add_argument("--report", type=Path, default=None)
     args = parser.parse_args(argv)
 
@@ -309,7 +315,8 @@ def main(argv: list[str] | None = None) -> int:
     report = {
         "download": download_report,
         "extract": parse_and_extract(args.raw_dir, args.out_dir / "processed" / "cqt",
-                                     workers=args.workers, limit=args.limit),
+                                     workers=args.workers, limit=args.limit,
+                                     window=args.window, hop_frames=args.hop),
     }
     print(json.dumps(report, indent=2))
     if args.report:

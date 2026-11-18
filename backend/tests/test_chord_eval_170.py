@@ -284,3 +284,31 @@ class TestAblationSpace:
         assert ci["exact_accuracy"][0] <= ci["exact_accuracy"][1]
         assert 0.0 <= ci["exact_accuracy"][0]
         assert ci["exact_accuracy"][1] <= 1.0
+
+
+class TestInversionDiagnostics:
+    def test_slash_breakdown(self):
+        from scripts.eval_chord_170 import slash_breakdown
+        from app.chord_vocab_170 import BASS_TO_IDX, CHORD_TO_IDX_170
+
+        c_maj = CHORD_TO_IDX_170["C:maj"]
+        chord_true = np.array([c_maj, c_maj, c_maj])
+        chord_pred = np.array([c_maj, CHORD_TO_IDX_170["C:min"], c_maj])
+        bass_true = np.array([BASS_TO_IDX["C"], BASS_TO_IDX["E"], BASS_TO_IDX["G"]])
+        bass_pred = np.array([BASS_TO_IDX["C"], BASS_TO_IDX["E"], BASS_TO_IDX["C"]])
+        report = slash_breakdown(chord_true, chord_pred, bass_true, bass_pred)
+        assert report["n"] == 2
+        assert report["chord_exact"] == pytest.approx(0.5)
+        assert report["bass_exact"] == pytest.approx(0.5)
+        assert report["both_exact"] == pytest.approx(0.0)
+
+    def test_fuse_head_probabilities(self):
+        from scripts.eval_chord_170 import fuse_head_probabilities
+
+        probs = np.full((1, 170), 1 / 170, dtype=np.float32)
+        root = np.zeros((1, 13), dtype=np.float32); root[0, 0] = 1.0
+        quality = np.zeros((1, 15), dtype=np.float32); quality[0, 0] = 1.0
+        fused = fuse_head_probabilities(probs, root, quality)
+        assert fused.shape == (1, 170)
+        assert fused.sum() == pytest.approx(1.0)
+        assert fused[0, 0] == pytest.approx(1.0)

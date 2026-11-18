@@ -373,6 +373,61 @@ def evaluate_arrays(
     return report
 
 
+def fuse_head_probabilities(
+    chord_probs: np.ndarray,
+    root_probs: np.ndarray,
+    quality_probs: np.ndarray,
+    *,
+    root_power: float = 1.0,
+    quality_power: float = 1.0,
+) -> np.ndarray:
+    """Combine chord/root/quality heads into a consistent chord distribution.
+
+    ``p(chord) * p(root)^a * p(quality)^b`` re-normalised per window. N/X use
+    the unknown root/quality classes. All heads are exported, so using this at
+    inference keeps checkpoint selection on exported heads.
+    """
+    chord_probs = np.asarray(chord_probs, dtype=np.float64)
+    root_probs = np.asarray(root_probs, dtype=np.float64)
+    quality_probs = np.asarray(quality_probs, dtype=np.float64)
+    root_map = np.array([12 if i >= N_IDX_170 else i % 12
+                         for i in range(NUM_CLASSES_170)])
+    quality_map = np.array([14 if i >= N_IDX_170 else i // 12
+                            for i in range(NUM_CLASSES_170)])
+    fused = (chord_probs
+             * np.power(root_probs[:, root_map], root_power)
+             * np.power(quality_probs[:, quality_map], quality_power))
+    total = fused.sum(axis=1, keepdims=True)
+    return (fused / np.clip(total, 1e-12, None)).astype(np.float32)
+
+
+def slash_breakdown(
+    chord_true: np.ndarray,
+    chord_pred: np.ndarray,
+    bass_true: np.ndarray,
+    bass_pred: np.ndarray,
+) -> dict:
+    """Per-component accuracy on inversion frames (diagnostic for slash)."""
+    roots = np.array([
+        ROOTS_12.index(_decode_label(int(i))[0]) if _decode_label(int(i))[0] else -1
+        for i in chord_true
+    ])
+    chord_mask = (chord_true != N_IDX_170) & (chord_true != X_IDX_170)
+    known = chord_mask & (bass_true != BASS_X_IDX)
+    inversions = known & (roots >= 0) & (bass_true != roots)
+    if not inversions.any():
+        return {"n": 0}
+    return {
+        "n": int(inversions.sum()),
+        "chord_exact": float(np.mean(
+            (chord_true == chord_pred)[inversions])),
+        "bass_exact": float(np.mean(
+            (bass_true == bass_pred)[inversions])),
+        "both_exact": float(np.mean(
+            ((chord_true == chord_pred) & (bass_true == bass_pred))[inversions])),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Checkpoint loading / prediction (TensorFlow imported lazily)
 # ---------------------------------------------------------------------------
@@ -407,18 +462,22 @@ def load_model(model_path: Path, *, build_fn=None):
             Path(patched).unlink(missing_ok=True)
 
 
-def predict_arrays(model, features: np.ndarray, batch_size: int = 256) -> tuple[np.ndarray, np.ndarray]:
+def predict_arrays(model, features: np.ndarray, batch_size: int = 256):
     """Return (chord_probs, bass_probs) as float32 arrays."""
     outputs = model.predict(features, batch_size=batch_size, verbose=0)
+    inversion = None
     if isinstance(outputs, dict):
         chord = outputs["chord_probs"]
         bass = outputs.get("bass_probs")
-    else:  # list output: chord, bass
+        inversion = outputs.get("inversion_probs")
+    else:  # list output: chord, bass[, ...]
         chord, bass = outputs[0], outputs[1] if len(outputs) > 1 else None
     chord = np.asarray(chord, dtype=np.float32)
     bass = (np.asarray(bass, dtype=np.float32) if bass is not None
             else np.zeros((len(chord), len(BASS_VOCAB)), dtype=np.float32))
-    return chord, bass
+    if inversion is not None:
+        inversion = np.asarray(inversion, dtype=np.float32)
+    return chord, bass, inversion
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -436,6 +495,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="feature_stats.npz (per-bin mean/std) from training")
     parser.add_argument("--feature-normalize", default="none", choices=["none", "track"])
     parser.add_argument("--crop-window", type=int, default=128)
+    parser.add_argument("--fuse-heads", action="store_true")
+    parser.add_argument("--root-power", type=float, default=1.0)
+    parser.add_argument("--quality-power", type=float, default=1.0)
     args = parser.parse_args(argv)
 
     from scripts import chord_data_v2 as data
@@ -449,6 +511,11 @@ def main(argv: list[str] | None = None) -> int:
         "pseudo_v2": args.data_root / "chord170" / "pseudo_v2",
         "pseudo_btc": args.data_root / "chord170" / "pseudo_btc",
         "slakh": args.data_root / "chord170" / "slakh",
+        "guitarset_fine": args.data_root / "chord170" / "fine" / "guitarset",
+        "egset12_fine": args.data_root / "chord170" / "fine" / "egset12",
+        "idmt_smt_guitar_fine": args.data_root / "chord170" / "fine" / "idmt_smt_guitar",
+        "rwc_fine": args.data_root / "chord170" / "fine" / "rwc",
+        "slakh_fine": args.data_root / "chord170" / "slakh_fine",
     }
     features, labels, bass, track_ids, centres, sources = [], [], [], [], [], []
     for name in [s.strip() for s in args.sources.split(",") if s.strip()]:
@@ -487,7 +554,19 @@ def main(argv: list[str] | None = None) -> int:
     b = np.concatenate(bass)
     c = np.concatenate(centres)
     model = load_model(args.checkpoint)
-    chord_probs, bass_probs = predict_arrays(model, X, args.batch_size)
+    full_outputs = model.predict(X, batch_size=args.batch_size, verbose=0)
+    if isinstance(full_outputs, dict):
+        chord_probs = np.asarray(full_outputs["chord_probs"], dtype=np.float32)
+        bass_probs = np.asarray(full_outputs.get("bass_probs"), dtype=np.float32)
+        inversion_probs = (np.asarray(full_outputs["inversion_probs"], dtype=np.float32)
+                           if "inversion_probs" in full_outputs else None)
+        if args.fuse_heads and "root_probs" in full_outputs and "quality_probs" in full_outputs:
+            chord_probs = fuse_head_probabilities(
+                chord_probs, full_outputs["root_probs"], full_outputs["quality_probs"],
+                root_power=args.root_power, quality_power=args.quality_power)
+    else:
+        chord_probs, bass_probs, inversion_probs = predict_arrays(
+            model, X, args.batch_size)
     if args.calibration is not None:
         params = json.loads(Path(args.calibration).read_text())
         chord_probs = apply_calibration(chord_probs, params)
@@ -506,8 +585,34 @@ def main(argv: list[str] | None = None) -> int:
         report = evaluate_ablation(y, chord_probs, track_ids, c,
                                    space=args.label_space,
                                    bass_true=b, bass_pred=bass_pred)
+    if b is not None:
+        report["slash_breakdown"] = slash_breakdown(y, chord_pred, b, bass_pred)
     if report_calibration is not None:
         report.update(report_calibration)
+    if inversion_probs is not None and args.label_space == "170":
+        from app.chord_labels import compose_bass_from_inversion, inversion_class
+        from app.chord_vocab_170 import BASS_TO_IDX, BASS_VOCAB
+
+        composed = []
+        for chord_index, inversion_index, fallback in zip(
+            chord_pred, inversion_probs.argmax(axis=1), bass_pred
+        ):
+            pc = compose_bass_from_inversion(int(chord_index), int(inversion_index))
+            if pc < 0:
+                composed.append(int(fallback))
+            else:
+                composed.append(BASS_TO_IDX[BASS_VOCAB[pc % 12]])
+        composed = np.asarray(composed, dtype=np.int64)
+        report["bass_composed"] = bass_accuracy(b, composed, y)
+        report["slash_composed"] = slash_accuracy(y, chord_pred, b, composed)
+        true_inversion = np.array([
+            inversion_class(int(c), int(bb)) for c, bb in zip(y, b)
+        ])
+        known = b != BASS_X_IDX
+        report["inversion_accuracy"] = (
+            float(np.mean(inversion_probs.argmax(axis=1)[known] == true_inversion[known]))
+            if known.any() else 0.0
+        )
     report["checkpoint"] = str(args.checkpoint)
     report["split"] = args.split
     report["sources"] = sorted(set(sources))

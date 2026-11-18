@@ -46,6 +46,11 @@ SOURCE_DIRS = {
     "pseudo_v2": "chord170/pseudo_v2",
     "pseudo_btc": "chord170/pseudo_btc",
     "slakh": "chord170/slakh",
+    "guitarset_fine": "chord170/fine/guitarset",
+    "egset12_fine": "chord170/fine/egset12",
+    "idmt_smt_guitar_fine": "chord170/fine/idmt_smt_guitar",
+    "rwc_fine": "chord170/fine/rwc",
+    "slakh_fine": "chord170/slakh_fine",
 }
 
 
@@ -83,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     y = np.concatenate(labels)
 
     model = load_model(args.checkpoint)
-    probs, _bass = predict_arrays(model, X, args.batch_size)
+    probs, _bass, _inversion = predict_arrays(model, X, args.batch_size)
     params = fit_calibration(probs, y)
     calibrated = apply_calibration(probs, params)
     before = macro_f1(y, probs.argmax(axis=1), labels=np.unique(y))

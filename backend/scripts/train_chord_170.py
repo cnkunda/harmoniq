@@ -93,6 +93,11 @@ SOURCE_DIRS = {
     "pseudo_v2": "chord170/pseudo_v2",
     "pseudo_btc": "chord170/pseudo_btc",
     "slakh": "chord170/slakh",
+    "guitarset_fine": "chord170/fine/guitarset",
+    "egset12_fine": "chord170/fine/egset12",
+    "idmt_smt_guitar_fine": "chord170/fine/idmt_smt_guitar",
+    "rwc_fine": "chord170/fine/rwc",
+    "slakh_fine": "chord170/slakh_fine",
 }
 
 
@@ -170,6 +175,7 @@ def build_model(
     num_chords: int = NUM_CLASSES_170,
     num_bass: int = NUM_CLASSES_BASS,
     aux_heads: bool = False,
+    inversion_head: bool = False,
 ) -> tf.keras.Model:
     """Build the chord + bass CRNN (optional root/quality auxiliary heads)."""
     inputs = tf.keras.Input(shape=(window, feature_dim), name="cqt_window")
@@ -209,6 +215,9 @@ def build_model(
             NUM_ROOT_CLASSES, activation="softmax", name="root_probs")(x)
         outputs["quality_probs"] = tf.keras.layers.Dense(
             NUM_QUALITY_CLASSES, activation="softmax", name="quality_probs")(x)
+    if inversion_head:
+        outputs["inversion_probs"] = tf.keras.layers.Dense(
+            5, activation="softmax", name="inversion_probs")(x)
     return tf.keras.Model(inputs=inputs, outputs=outputs, name="chord_crnn_170")
 
 
@@ -284,6 +293,11 @@ def load_split(
         roots, qualities = aux_labels_for(native, label_space)
         result["root_labels"] = roots
         result["quality_labels"] = qualities
+    if label_space == "170":
+        inv_labels, inv_weights = chord_data.inversion_training_labels(
+            result["labels_native"], result["bass_labels"])
+        result["inversion_labels"] = inv_labels
+        result["inversion_weights"] = inv_weights
     return result
 
 
@@ -372,6 +386,8 @@ class ChordSequence(tf.keras.utils.Sequence):
         label_space: str = "170",
         bass_weights: np.ndarray | None = None,
         chord_weights: np.ndarray | None = None,
+        inversion_labels: np.ndarray | None = None,
+        inversion_weights: np.ndarray | None = None,
         aug_level: str = "full",
     ):
         super().__init__()
@@ -382,6 +398,8 @@ class ChordSequence(tf.keras.utils.Sequence):
         self.label_space = label_space
         self.bass_weights = bass_weights
         self.chord_weights = chord_weights
+        self.inversion_labels = inversion_labels
+        self.inversion_weights = inversion_weights
         self.aug_level = aug_level
         self.root_labels = root_labels
         self.quality_labels = quality_labels
@@ -427,6 +445,12 @@ class ChordSequence(tf.keras.utils.Sequence):
                 qualities, num_classes=NUM_QUALITY_CLASSES)
             weights["root_probs"] = np.ones(len(indices), dtype=np.float32)
             weights["quality_probs"] = np.ones(len(indices), dtype=np.float32)
+        if self.inversion_labels is not None:
+            targets["inversion_probs"] = tf.keras.utils.to_categorical(
+                self.inversion_labels[indices], num_classes=5)
+            weights["inversion_probs"] = (
+                self.inversion_weights[indices] if self.inversion_weights is not None
+                else np.ones(len(indices), dtype=np.float32))
         return features, targets, weights
 
     def on_epoch_end(self) -> None:
@@ -642,6 +666,11 @@ def load_synthetic_split(
         roots, qualities = aux_labels_for(native, label_space)
         result["root_labels"] = roots
         result["quality_labels"] = qualities
+    if label_space == "170":
+        inv_labels, inv_weights = chord_data.inversion_training_labels(
+            result["labels_native"], result["bass_labels"])
+        result["inversion_labels"] = inv_labels
+        result["inversion_weights"] = inv_weights
     return result
 
 
@@ -704,6 +733,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--feature-standardize", action="store_true")
     parser.add_argument("--feature-normalize", default=None, choices=["none", "track"])
     parser.add_argument("--crop-window", type=int, default=None)
+    parser.add_argument("--inversion-head", action="store_true")
+    parser.add_argument("--chord-inversion-weight", type=float, default=None)
     args = parser.parse_args(argv)
 
     config = {
@@ -727,6 +758,8 @@ def main(argv: list[str] | None = None) -> int:
         "feature_standardize": False,
         "feature_normalize": "none",
         "crop_window": 128,
+        "inversion_head": False,
+        "chord_inversion_weight": 1.0,
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -763,6 +796,10 @@ def main(argv: list[str] | None = None) -> int:
         config["feature_normalize"] = args.feature_normalize
     if args.crop_window is not None:
         config["crop_window"] = int(args.crop_window)
+    if args.inversion_head:
+        config["inversion_head"] = True
+    if args.chord_inversion_weight is not None:
+        config["chord_inversion_weight"] = args.chord_inversion_weight
     if config["label_space"] not in LABEL_SPACES:
         raise SystemExit(f"unknown label space: {config['label_space']}")
 
@@ -808,7 +845,8 @@ def main(argv: list[str] | None = None) -> int:
 
     model = build_model(window=int(train["features"].shape[1]),
                         num_chords=train["num_chords"],
-                        aux_heads=config["aux_heads"])
+                        aux_heads=config["aux_heads"],
+                        inversion_head=config["inversion_head"])
     optimizer = tf.keras.optimizers.AdamW(
         learning_rate=tf.keras.optimizers.schedules.CosineDecay(
             initial_learning_rate=float(config["learning_rate"]),
@@ -841,6 +879,10 @@ def main(argv: list[str] | None = None) -> int:
         loss_weights["quality_probs"] = 0.15
         metrics["root_probs"] = [tf.keras.metrics.CategoricalAccuracy(name="acc")]
         metrics["quality_probs"] = [tf.keras.metrics.CategoricalAccuracy(name="acc")]
+    if config["inversion_head"]:
+        losses["inversion_probs"] = tf.keras.losses.CategoricalCrossentropy()
+        loss_weights["inversion_probs"] = 0.25
+        metrics["inversion_probs"] = [tf.keras.metrics.CategoricalAccuracy(name="acc")]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights,
                   metrics=metrics)
 
@@ -857,6 +899,10 @@ def main(argv: list[str] | None = None) -> int:
     chord_weights = chord_class_weights(
         train["labels_native"], tau=float(config["chord_class_weight_tau"]),
         n_classes=train["num_chords"],
+    )
+    chord_weights *= chord_data.chord_inversion_weights(
+        train["labels_native"], train["bass_labels"],
+        weight=float(config["chord_inversion_weight"]),
     )
     print(
         f"  weights: bass masked={int(np.sum(bass_weights == 0))} "
@@ -875,6 +921,10 @@ def main(argv: list[str] | None = None) -> int:
         label_space=config["label_space"],
         bass_weights=bass_weights,
         chord_weights=chord_weights,
+        inversion_labels=(train.get("inversion_labels")
+                          if config["inversion_head"] else None),
+        inversion_weights=(train.get("inversion_weights")
+                           if config["inversion_head"] else None),
         aug_level=config["aug_level"],
     )
     n_train_sample = min(512, len(train["labels_native"]))

@@ -946,6 +946,37 @@ def bass_sample_weights(
     return weights
 
 
+def inversion_training_labels(
+    chord: np.ndarray, bass: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return (inversion class labels, sample weights) for the aux head.
+
+    Unknown bass is masked (weight 0) so the head learns from real inversions.
+    """
+    from app.chord_labels import inversion_class
+
+    labels = np.array([inversion_class(int(c), int(b)) for c, b in zip(chord, bass)],
+                      dtype=np.int64)
+    weights = (bass != BASS_X_IDX).astype(np.float32)
+    return labels, weights
+
+
+def chord_inversion_weights(
+    chord: np.ndarray, bass: np.ndarray, weight: float = 2.0
+) -> np.ndarray:
+    """Multiplicative chord-loss weights for inversion frames (slash focus)."""
+    weights = np.ones(len(chord), dtype=np.float32)
+    if weight <= 1.0:
+        return weights
+    from app.chord_labels import inversion_class
+
+    inversion = np.array([
+        inversion_class(int(c), int(b)) for c, b in zip(chord, bass)
+    ], dtype=np.int64)
+    weights[(inversion > 0) & (inversion < 4)] = float(weight)
+    return weights
+
+
 def chord_class_weights(
     labels: np.ndarray,
     *,

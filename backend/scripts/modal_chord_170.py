@@ -308,6 +308,11 @@ def eval_model(
     split: str = "test",
     sources: str = "guitarset,egset12",
     out: str = "",
+    crop_window: str = "128",
+    feature_stats: str = "",
+    fuse_heads: str = "false",
+    root_power: str = "1.0",
+    quality_power: str = "1.0",
 ) -> str:
     """Evaluate a checkpoint on the requested split (artifacts on /runs)."""
     _ensure_bundle()
@@ -321,6 +326,13 @@ def eval_model(
         "--sources", sources,
         "--out", out_path,
     ]
+    if int(crop_window or 128) != 128:
+        command += ["--crop-window", str(int(crop_window))]
+    if feature_stats.strip():
+        command += ["--feature-stats", feature_stats]
+    if _truthy(fuse_heads):
+        command += ["--fuse-heads", "--root-power", str(root_power),
+                    "--quality-power", str(quality_power)]
     output = _run(command)
     runs_volume.commit()
     if os.path.isfile(out_path):
@@ -444,6 +456,56 @@ def sweep(epochs: str = "25", tag: str = "", suite: str = "core",
             ("w16-rare", "170", ["--aux-heads", "--no-augment", "--crop-window", "16",
                                   "--chord-class-weight-tau", "0.3"]),
         ],
+        "fine": [
+            ("fine-inv", "170", ["--aux-heads", "--no-augment", "--inversion-head",
+                                  "--crop-window", "16", "--batch-size", "128",
+                                  "--sources",
+                                  "guitarset_fine,egset12_fine,idmt_smt_guitar_fine,rwc_fine,slakh"]),
+            ("fine-inv-rare", "170", ["--aux-heads", "--no-augment", "--inversion-head",
+                                       "--crop-window", "16", "--batch-size", "128",
+                                       "--chord-class-weight-tau", "0.3",
+                                       "--sources",
+                                       "guitarset_fine,egset12_fine,idmt_smt_guitar_fine,rwc_fine,slakh"]),
+        ],
+        "inversion": [
+            ("inv-w16-coarse", "170", ["--aux-heads", "--no-augment", "--inversion-head",
+                                        "--crop-window", "16",
+                                        "--sources",
+                                        "guitarset,guitar_techs,egset12,idmt_smt_guitar,rwc,pseudo_v2,slakh"]),
+            ("inv-w16-coarse-rare", "170", ["--aux-heads", "--no-augment", "--inversion-head",
+                                             "--crop-window", "16",
+                                             "--chord-class-weight-tau", "0.3",
+                                             "--sources",
+                                             "guitarset,guitar_techs,egset12,idmt_smt_guitar,rwc,pseudo_v2,slakh"]),
+        ],
+        "slash": [
+            ("slash-inv2", "170", ["--aux-heads", "--no-augment", "--inversion-head",
+                                    "--crop-window", "16", "--batch-size", "128",
+                                    "--chord-inversion-weight", "2.0",
+                                    "--sources",
+                                    "guitarset_fine,egset12_fine,idmt_smt_guitar_fine,rwc_fine,slakh_fine"]),
+            ("slash-inv2-rare", "170", ["--aux-heads", "--no-augment", "--inversion-head",
+                                         "--crop-window", "16", "--batch-size", "128",
+                                         "--chord-inversion-weight", "2.0",
+                                         "--chord-class-weight-tau", "0.3",
+                                         "--sources",
+                                         "guitarset_fine,egset12_fine,idmt_smt_guitar_fine,rwc_fine,slakh_fine"]),
+        ],
+        "slash2": [
+            ("slash2-mildaug", "170", ["--aux-heads", "--no-augment", "--inversion-head",
+                                        "--crop-window", "16", "--batch-size", "128",
+                                        "--chord-inversion-weight", "2.0",
+                                        "--chord-class-weight-tau", "0.3",
+                                        "--aug-level", "mild",
+                                        "--sources",
+                                        "guitarset_fine,egset12_fine,idmt_smt_guitar_fine,rwc_fine,slakh_fine"]),
+            ("slash2-long", "170", ["--aux-heads", "--no-augment", "--inversion-head",
+                                     "--crop-window", "16", "--batch-size", "128",
+                                     "--chord-inversion-weight", "2.0",
+                                     "--chord-class-weight-tau", "0.3",
+                                     "--sources",
+                                     "guitarset_fine,egset12_fine,idmt_smt_guitar_fine,rwc_fine,slakh_fine"]),
+        ],
         "gates_finalists": [
             ("gates-seed1", "170", ["--aux-heads", "--no-augment", "--seed", "1"]),
             ("gates-seed2", "170", ["--aux-heads", "--no-augment", "--seed", "2"]),
@@ -490,6 +552,16 @@ def sweep(epochs: str = "25", tag: str = "", suite: str = "core",
                 eval_cmd += ["--feature-normalize", run_config["feature_normalize"]]
             if int(run_config.get("crop_window", 128)) != 128:
                 eval_cmd += ["--crop-window", str(int(run_config["crop_window"]))]
+            config_sources = run_config.get("sources") or []
+            if any(str(src).endswith("_fine") for src in config_sources):
+                eval_sources = "guitarset_fine,egset12_fine,idmt_smt_guitar_fine,rwc_fine"
+            else:
+                eval_sources = "guitarset,egset12,idmt_smt_guitar,rwc"
+            eval_cmd = [
+                part if part != "guitarset,egset12,idmt_smt_guitar,rwc"
+                else eval_sources
+                for part in eval_cmd
+            ]
             _run(eval_cmd)
             entry: dict = {"label_space": space, "args": " ".join(extra)}
             metrics_path = os.path.join(out_dir, "metrics.json")
@@ -694,6 +766,67 @@ def prepare_slakh(limit: str = "400", workers: str = "8") -> str:
         "python", "scripts/prepare_slakh.py",
         "--limit", str(int(limit)),
         "--workers", str(int(workers)),
+        "--report", report_path,
+    ]
+    output = _run(command)
+    data_volume.commit()
+    if os.path.isfile(report_path):
+        with open(report_path, encoding="utf-8") as handle:
+            print(handle.read(), flush=True)
+    return output
+
+
+@app.function(
+    image=audio_image,
+    cpu=16,
+    memory=65536,
+    timeout=12 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def prepare_fine(datasets: str = "guitarset,egset12,idmt_smt_guitar,rwc",
+                 workers: str = "8", window: str = "16", hop: str = "16") -> str:
+    """Fine-hop (1.6 s) feature extraction for the gate corpora."""
+    _ensure_bundle()
+    report_path = os.path.join(BACKEND, "data", "chord170", "fine_report.json")
+    command = [
+        "python", "scripts/extract_fine_windows.py",
+        "--datasets", datasets,
+        "--workers", str(int(workers)),
+        "--window", str(int(window)),
+        "--hop", str(int(hop)),
+        "--report", report_path,
+    ]
+    output = _run(command)
+    data_volume.commit()
+    if os.path.isfile(report_path):
+        with open(report_path, encoding="utf-8") as handle:
+            print(handle.read(), flush=True)
+    return output
+
+
+@app.function(
+    image=audio_image,
+    cpu=16,
+    memory=65536,
+    timeout=6 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def prepare_slakh_fine(limit: str = "400", workers: str = "8",
+                       window: str = "16", hop: str = "16") -> str:
+    """Fine-hop (1.6 s) Slakh features from the already-extracted subset."""
+    _ensure_bundle()
+    report_path = os.path.join(BACKEND, "data", "chord170", "slakh_fine_report.json")
+    command = [
+        "python", "scripts/prepare_slakh.py",
+        "--limit", str(int(limit)),
+        "--workers", str(int(workers)),
+        "--window", str(int(window)),
+        "--hop", str(int(hop)),
+        "--skip-download",
+        "--raw-dir", os.path.join(BACKEND, "data", "chord170", "slakh_raw"),
+        "--out-dir", os.path.join(BACKEND, "data", "chord170", "slakh_fine"),
         "--report", report_path,
     ]
     output = _run(command)

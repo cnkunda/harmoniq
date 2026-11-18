@@ -639,3 +639,50 @@ class TestContextCrop:
         assert np.array_equal(cropped[0, :, 0], x[0, 56:72, 0])
         assert _crop_window(x, 128).shape == (2, 128, 3)
         assert np.array_equal(_crop_window(x, 256), x)
+
+
+class TestInversionLabels:
+    def test_inversion_class(self):
+        from app.chord_labels import inversion_class
+        from app.chord_vocab_170 import BASS_TO_IDX, BASS_X_IDX, CHORD_TO_IDX_170, N_IDX_170
+
+        c_maj = CHORD_TO_IDX_170["C:maj"]
+        assert inversion_class(c_maj, BASS_TO_IDX["C"]) == 0
+        assert inversion_class(c_maj, BASS_TO_IDX["E"]) == 1
+        assert inversion_class(c_maj, BASS_TO_IDX["G"]) == 2
+        assert inversion_class(c_maj, BASS_TO_IDX["D"]) == 4
+        assert inversion_class(c_maj, BASS_X_IDX) == 4
+        assert inversion_class(N_IDX_170, BASS_TO_IDX["C"]) == 4
+        c7 = CHORD_TO_IDX_170["C:maj7"]
+        assert inversion_class(c7, BASS_TO_IDX["B"]) == 3
+
+    def test_compose_bass_from_inversion(self):
+        from app.chord_labels import compose_bass_from_inversion
+        from app.chord_vocab_170 import CHORD_TO_IDX_170
+
+        c_maj = CHORD_TO_IDX_170["C:maj"]
+        assert compose_bass_from_inversion(c_maj, 0) == 0
+        assert compose_bass_from_inversion(c_maj, 1) == 4
+        assert compose_bass_from_inversion(c_maj, 2) == 7
+        assert compose_bass_from_inversion(c_maj, 4) == -1
+
+    def test_inversion_training_weights_mask_unknown(self):
+        from scripts.chord_data_v2 import inversion_training_labels
+        from app.chord_vocab_170 import (
+            BASS_TO_IDX, BASS_X_IDX, CHORD_TO_IDX_170,
+        )
+
+        chord = np.array([CHORD_TO_IDX_170["C:maj"], CHORD_TO_IDX_170["C:maj"]])
+        bass = np.array([BASS_TO_IDX["E"], BASS_X_IDX])
+        labels, weights = inversion_training_labels(chord, bass)
+        assert labels.tolist() == [1, 4]
+        assert weights.tolist() == [1.0, 0.0]
+
+    def test_chord_inversion_weights(self):
+        from scripts.chord_data_v2 import chord_inversion_weights
+        from app.chord_vocab_170 import BASS_TO_IDX, CHORD_TO_IDX_170
+
+        chord = np.array([CHORD_TO_IDX_170["C:maj"]] * 3)
+        bass = np.array([BASS_TO_IDX["C"], BASS_TO_IDX["E"], BASS_TO_IDX["G"]])
+        weights = chord_inversion_weights(chord, bass, weight=2.0)
+        assert weights.tolist() == [1.0, 2.0, 2.0]
