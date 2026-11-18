@@ -116,5 +116,23 @@
   ],
   "infrastructure_notes": [
     "Scaling Slakh beyond 400 tracks stalled on a Zenodo streaming read timeout; next attempt should use a resumable full-tarball download (wget -c / HF snapshot) before extraction."
+  ],
+  "capacity_and_ambiguity": [
+    {
+      "variant": "large model (conv 96/192, LSTM 192, Dense 384), 40 ep",
+      "macro_f1_supported": 0.264,
+      "exact": 0.441,
+      "wcsr_mirex": 0.621,
+      "bass_known": 0.75,
+      "slash": 0.159,
+      "note": "val macro 0.303 but no external-test gain -> capacity is not the limit"
+    },
+    {
+      "variant": "bass-aware disambiguation (C6 vs Am7) on the base model",
+      "macro_f1_supported": 0.268,
+      "exact": 0.441,
+      "slash": 0.168,
+      "note": "marginal (+0.002)"
+    }
   ]
 }

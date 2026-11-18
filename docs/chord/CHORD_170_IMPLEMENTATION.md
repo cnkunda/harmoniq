@@ -602,8 +602,12 @@ synthesized Slakh corpus and RWC/GuitarSet.
 ❌, slash 0.160 ❌. Next levers: full Slakh redux (1,710 tracks), a
 multi-scale model (local 1.6 s + global 6.4 s), a documented label-ambiguity
 policy for 6th vs relative 7th chords, and 3 seeds + 5-fold evaluation.
-Scaling Slakh past 400 tracks requires a resumable full-tarball download
-(the streaming Zenodo read timed out).
+A larger encoder (conv 96/192, LSTM 192, Dense 384; 40 epochs) raised
+validation macro to 0.303 but left the external test unchanged (macro 0.264,
+slash 0.159) — capacity is not the bottleneck. Bass-aware disambiguation of
+identical pitch-class sets (C6 vs Am7) gained only +0.002 macro. Scaling
+Slakh past 400 tracks requires a resumable full-tarball download; a `wget -c`
+based `download_slakh_full` job is in place (48.7 GB, all 1,710 tracks).
 Artifact: `docs/audit/amt/chord170_fine_inversion_report.json`.
 
 ## Phase plan (remaining)
