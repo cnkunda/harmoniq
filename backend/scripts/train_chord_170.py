@@ -1112,6 +1112,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--context-blocks", type=int, default=None)
     parser.add_argument("--structured-heads", action="store_true",
                         help="add a 12-class pitch head for structured decoding")
+    parser.add_argument("--init-checkpoint", type=Path, default=None,
+                        help="initialise model weights from an existing checkpoint")
     args = parser.parse_args(argv)
 
     config = {
@@ -1142,6 +1144,7 @@ def main(argv: list[str] | None = None) -> int:
         "context_frames": 0,
         "context_blocks": 4,
         "structured_heads": False,
+        "init_checkpoint": "",
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -1196,6 +1199,8 @@ def main(argv: list[str] | None = None) -> int:
         config["structured_heads"] = True
         config["aux_heads"] = True
         config["inversion_head"] = True
+    if args.init_checkpoint is not None:
+        config["init_checkpoint"] = str(args.init_checkpoint)
     if int(config["context_frames"]) > 0:
         config["frame_supervision"] = True
         if config["label_space"] != "170":
@@ -1263,6 +1268,13 @@ def main(argv: list[str] | None = None) -> int:
                             inversion_head=config["inversion_head"],
                             model_scale=config["model_scale"],
                             frame_output=config["frame_supervision"])
+    init_checkpoint = str(config.get("init_checkpoint") or "").strip()
+    if init_checkpoint:
+        initial = tf.keras.models.load_model(
+            init_checkpoint, custom_objects={"CircularCqtPad": CircularCqtPad},
+            safe_mode=False)
+        model.set_weights(initial.get_weights())
+        print(f"  initialised weights from {init_checkpoint}", flush=True)
     optimizer = tf.keras.optimizers.AdamW(
         learning_rate=tf.keras.optimizers.schedules.CosineDecay(
             initial_learning_rate=float(config["learning_rate"]),
