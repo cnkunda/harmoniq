@@ -906,6 +906,35 @@ def download_slakh_full(limit: str = "1710") -> str:
     return f"{len(seen)} tracks in {raw_dir}"
 
 
+@app.function(
+    image=audio_image,
+    cpu=16,
+    memory=65536,
+    timeout=24 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def prepare_slakh_scaled(limit: str = "1710", workers: str = "8") -> str:
+    """Coarse + fine CQT for the full Slakh raw subset (run after download)."""
+    _ensure_bundle()
+    raw_dir = os.path.join(BACKEND, "data", "chord170", "slakh_raw")
+    coarse_out = os.path.join(BACKEND, "data", "chord170", "slakh")
+    fine_out = os.path.join(BACKEND, "data", "chord170", "slakh_fine")
+    output = _run([
+        "python", "scripts/prepare_slakh.py",
+        "--limit", str(int(limit)), "--workers", str(int(workers)),
+        "--skip-download", "--raw-dir", raw_dir, "--out-dir", coarse_out,
+    ])
+    output += _run([
+        "python", "scripts/prepare_slakh.py",
+        "--limit", str(int(limit)), "--workers", str(int(workers)),
+        "--window", "16", "--hop", "16",
+        "--skip-download", "--raw-dir", raw_dir, "--out-dir", fine_out,
+    ])
+    data_volume.commit()
+    return output
+
+
 @app.local_entrypoint()
 def main() -> None:
     print(status.remote())
