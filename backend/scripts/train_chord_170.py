@@ -49,7 +49,7 @@ os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
 
 import tensorflow as tf  # noqa: E402
 
-from app.chord_labels import pitch_shift_labels  # noqa: E402
+from app.chord_labels import inversion_class, pitch_shift_labels  # noqa: E402
 from app.chord_vocab import (  # noqa: E402
     CHORD_VOCAB as CHORD_VOCAB_277,
     ROOT_NOTES as ROOT_NOTES_277,
@@ -73,6 +73,7 @@ from scripts.chord_data_v2 import (  # noqa: E402
     sampling_probabilities,
 )
 from scripts.eval_chord_170 import (
+    aggregate_frame_probs,
     bootstrap_ci,
     evaluate_ablation,
     evaluate_arrays,
@@ -119,6 +120,21 @@ class CircularCqtPad(tf.keras.layers.Layer):
 
 NUM_ROOT_CLASSES = 13  # 12 roots + unknown
 NUM_QUALITY_CLASSES = 15  # 14 qualities + unknown
+
+_INVERSION_TABLE = np.array([
+    [inversion_class(chord, bass) for bass in range(NUM_CLASSES_BASS)]
+    for chord in range(NUM_CLASSES_170)
+], dtype=np.int64)
+
+
+def _frame_root_quality(frame_chords: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Derive (root13, quality15) labels from 170-class frame labels."""
+    roots = np.full(frame_chords.shape, NUM_ROOT_CLASSES - 1, dtype=np.int64)
+    qualities = np.full(frame_chords.shape, NUM_QUALITY_CLASSES - 1, dtype=np.int64)
+    chord_mask = frame_chords < N_IDX_170
+    roots[chord_mask] = frame_chords[chord_mask] % 12
+    qualities[chord_mask] = frame_chords[chord_mask] // 12
+    return roots, qualities
 
 
 def native_labels_for(windows: dict, space: str) -> tuple[np.ndarray, np.ndarray]:
@@ -183,8 +199,14 @@ def build_model(
     aux_heads: bool = False,
     inversion_head: bool = False,
     model_scale: str = "base",
+    frame_output: bool = False,
 ) -> tf.keras.Model:
-    """Build the chord + bass CRNN (optional root/quality auxiliary heads)."""
+    """Build the chord + bass CRNN (optional root/quality auxiliary heads).
+
+    ``frame_output=True`` keeps the second BiLSTM's time axis and produces
+    per-frame distributions ``(B, window, C)``; the window-level model
+    collapses that axis before the heads.
+    """
     scale = MODEL_SCALES.get(model_scale, MODEL_SCALES["base"])
     inputs = tf.keras.Input(shape=(window, feature_dim), name="cqt_window")
     x = CircularCqtPad(name="circular_cqt_pad")(inputs)
@@ -207,8 +229,13 @@ def build_model(
         tf.keras.layers.LSTM(scale["lstm"], return_sequences=True), name="bilstm_1"
     )(x)
     x = tf.keras.layers.Bidirectional(
-        tf.keras.layers.LSTM(scale["lstm"], return_sequences=False), name="bilstm_2"
+        tf.keras.layers.LSTM(scale["lstm"], return_sequences=frame_output),
+        name="bilstm_2",
     )(x)
+    if frame_output:
+        # CircularCqtPad added one frame on each side; restore the window grid.
+        x = tf.keras.layers.Cropping1D(
+            cropping=(1, 1), name="frame_alignment_crop")(x)
     x = tf.keras.layers.Dense(scale["dense"], activation="relu", name="dense_256")(x)
     x = tf.keras.layers.Dropout(0.3, name="dropout")(x)
 
@@ -244,9 +271,11 @@ def load_split(
     aux_heads: bool = False,
     normalize: str = "none",
     crop_window: int = 128,
+    frame_supervision: bool = False,
 ) -> dict | None:
     """Load and concatenate one split across sources for a label space."""
     feats, labels, labels277, bass, conf, tracks, centres, srcs = [], [], [], [], [], [], [], []
+    frame_labels, frame_bass = [], []
     for source in sources:
         data_dir = data_root / SOURCE_DIRS[source]
         loaded = chord_data.load_dataset_dir_170(
@@ -265,6 +294,16 @@ def load_split(
         tracks.extend(loaded["track_ids"])
         centres.append(loaded["center_times"])
         srcs.extend([source] * len(loaded["labels170"]))
+        if frame_supervision:
+            window = int(loaded["features"].shape[1])
+            frames = loaded.get("frame_labels")
+            frames_bass = loaded.get("frame_bass")
+            if frames is None:
+                frames = np.repeat(loaded["labels170"][:, None], window, axis=1)
+            if frames_bass is None:
+                frames_bass = np.repeat(loaded["bass_labels"][:, None], window, axis=1)
+            frame_labels.append(frames)
+            frame_bass.append(frames_bass)
     if not feats:
         return None
     features = np.concatenate(feats)
@@ -306,6 +345,16 @@ def load_split(
             result["labels_native"], result["bass_labels"])
         result["inversion_labels"] = inv_labels
         result["inversion_weights"] = inv_weights
+    if frame_supervision:
+        window = int(result["features"].shape[1])
+        if label_space == "170":
+            result["frame_labels"] = np.concatenate(frame_labels, axis=0)[keep]
+            result["frame_bass"] = np.concatenate(frame_bass, axis=0)[keep]
+        else:
+            result["frame_labels"] = np.repeat(
+                native[keep][:, None], window, axis=1)
+            result["frame_bass"] = np.repeat(
+                result["bass_labels"][:, None], window, axis=1)
     return result
 
 
@@ -329,11 +378,15 @@ def augment_batch(
     specaug_p: float = 0.5,
     label_space: str = "170",
     aug_level: str = "full",
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    frame_chord: np.ndarray | None = None,
+    frame_bass: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray,
+           np.ndarray | None, np.ndarray | None]:
     """On-the-fly augmentation: pitch shift, gain, noise, SpecAugment.
 
     ``aug_level="mild"`` keeps gain/noise and ±1 semitone only (no
-    SpecAugment); ``"full"`` is the original recipe.
+    SpecAugment); ``"full"`` is the original recipe. Per-frame labels, when
+    supplied, receive the same pitch shift as the window label.
     """
     if aug_level == "mild":
         pitch_shift_range = min(pitch_shift_range, 1)
@@ -341,6 +394,10 @@ def augment_batch(
     features = features.copy()
     chord = chord.copy()
     bass = bass.copy()
+    if frame_chord is not None:
+        frame_chord = frame_chord.copy()
+    if frame_bass is not None:
+        frame_bass = frame_bass.copy()
 
     # Pitch shift: roll the 144 CQT bins (24 per octave) and remap labels.
     shifts = rng.integers(-pitch_shift_range, pitch_shift_range + 1, size=len(features))
@@ -353,6 +410,14 @@ def augment_batch(
             )
             chord[index] = c_arr[0]
             bass[index] = b_arr[0]
+            if frame_chord is not None and frame_bass is not None:
+                fc, fb = pitch_shift_labels(
+                    frame_chord[index].reshape(1, -1),
+                    frame_bass[index].reshape(1, -1), int(shift),
+                    space=label_space,
+                )
+                frame_chord[index] = fc.reshape(-1)
+                frame_bass[index] = fb.reshape(-1)
 
     # Random gain + additive noise, then re-L1-normalise per frame.
     gain = rng.uniform(0.85, 1.15, size=(len(features), 1, 1)).astype(np.float32)
@@ -372,7 +437,7 @@ def augment_batch(
                 width = int(rng.integers(1, 13))
                 start = int(rng.integers(0, WINDOW - width))
                 features[index, start:start + width, :] = 0.0
-    return _renormalise(features), chord, bass
+    return _renormalise(features), chord, bass, frame_chord, frame_bass
 
 
 class ChordSequence(tf.keras.utils.Sequence):
@@ -397,12 +462,18 @@ class ChordSequence(tf.keras.utils.Sequence):
         inversion_labels: np.ndarray | None = None,
         inversion_weights: np.ndarray | None = None,
         aug_level: str = "full",
+        frame_supervision: bool = False,
+        frame_labels: np.ndarray | None = None,
+        frame_bass: np.ndarray | None = None,
     ):
         super().__init__()
         self.features = features
         self.chord = chord
         self.bass = bass
         self.num_chords = num_chords
+        self.frame_supervision = frame_supervision
+        self.frame_labels = frame_labels
+        self.frame_bass = frame_bass
         self.label_space = label_space
         self.bass_weights = bass_weights
         self.chord_weights = chord_weights
@@ -430,10 +501,69 @@ class ChordSequence(tf.keras.utils.Sequence):
         features = self.features[indices]
         chord = self.chord[indices]
         bass = self.bass[indices]
+        frame_chord = frame_bass = None
+        if self.frame_supervision:
+            window = int(features.shape[1])
+            frame_chord = (self.frame_labels[indices] if self.frame_labels is not None
+                           else np.repeat(chord[:, None], window, axis=1))
+            frame_bass = (self.frame_bass[indices] if self.frame_bass is not None
+                          else np.repeat(bass[:, None], window, axis=1))
         if self.augment:
-            features, chord, bass = augment_batch(
+            features, chord, bass, frame_chord, frame_bass = augment_batch(
                 features, chord, bass, self.rng, label_space=self.label_space,
-                aug_level=self.aug_level)
+                aug_level=self.aug_level, frame_chord=frame_chord,
+                frame_bass=frame_bass)
+        if self.frame_supervision:
+            targets = {
+                "chord_probs": tf.keras.utils.to_categorical(
+                    frame_chord, num_classes=self.num_chords),
+                "bass_probs": tf.keras.utils.to_categorical(
+                    frame_bass, num_classes=NUM_CLASSES_BASS),
+            }
+            chord_weight = (self.chord_weights[indices][:, None]
+                            if self.chord_weights is not None
+                            else np.ones(len(indices), dtype=np.float32)[:, None])
+            bass_known = (frame_bass != BASS_X_IDX).astype(np.float32)
+            bass_weight = (self.bass_weights[indices][:, None]
+                           if self.bass_weights is not None
+                           else np.ones(len(indices), dtype=np.float32)[:, None])
+            weights = {
+                "chord_probs": np.repeat(chord_weight[:, :, None], frame_chord.shape[1],
+                                         axis=1),
+                "bass_probs": (bass_weight * bass_known)[:, :, None],
+            }
+            if self.root_labels is not None and self.quality_labels is not None:
+                if self.label_space == "170":
+                    roots, qualities = _frame_root_quality(frame_chord)
+                else:
+                    roots = np.repeat(self.root_labels[indices][:, None],
+                                      frame_chord.shape[1], axis=1)
+                    qualities = np.repeat(self.quality_labels[indices][:, None],
+                                          frame_chord.shape[1], axis=1)
+                targets["root_probs"] = tf.keras.utils.to_categorical(
+                    roots, num_classes=NUM_ROOT_CLASSES)
+                targets["quality_probs"] = tf.keras.utils.to_categorical(
+                    qualities, num_classes=NUM_QUALITY_CLASSES)
+                weights["root_probs"] = np.ones(frame_chord.shape, dtype=np.float32)
+                weights["quality_probs"] = np.ones(frame_chord.shape, dtype=np.float32)
+            if self.inversion_labels is not None:
+                if self.label_space == "170":
+                    inversion = _INVERSION_TABLE[frame_chord, frame_bass]
+                    inv_weight = ((frame_bass != BASS_X_IDX).astype(np.float32)
+                                  * self.inversion_weights[indices][:, None]
+                                  if self.inversion_weights is not None else
+                                  (frame_bass != BASS_X_IDX).astype(np.float32))
+                else:
+                    inversion = np.repeat(self.inversion_labels[indices][:, None],
+                                          frame_chord.shape[1], axis=1)
+                    inv_weight = (np.repeat(self.inversion_weights[indices][:, None],
+                                            frame_chord.shape[1], axis=1)
+                                  if self.inversion_weights is not None
+                                  else np.ones(frame_chord.shape, dtype=np.float32))
+                targets["inversion_probs"] = tf.keras.utils.to_categorical(
+                    inversion, num_classes=5)
+                weights["inversion_probs"] = inv_weight
+            return features, targets, weights
         targets = {
             "chord_probs": tf.keras.utils.to_categorical(chord, num_classes=self.num_chords),
             "bass_probs": tf.keras.utils.to_categorical(bass, num_classes=NUM_CLASSES_BASS),
@@ -506,8 +636,8 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
 
     def _predict(self, features: np.ndarray):
         outputs = self.model.predict(features, batch_size=self.batch_size, verbose=0)
-        chord = np.asarray(outputs["chord_probs"], dtype=np.float32)
-        bass = np.asarray(outputs["bass_probs"], dtype=np.float32)
+        chord = aggregate_frame_probs(outputs["chord_probs"])
+        bass = aggregate_frame_probs(outputs["bass_probs"])
         return chord, bass
 
     def _evaluate(self) -> dict:
@@ -746,6 +876,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model-scale", default=None, choices=list(MODEL_SCALES))
     parser.add_argument("--val-sources", default=None,
                         help="comma list of sources used only for validation/selection")
+    parser.add_argument("--frame-supervision", action="store_true",
+                        help="per-frame heads trained on frame_labels in the fine npz")
     args = parser.parse_args(argv)
 
     config = {
@@ -772,6 +904,7 @@ def main(argv: list[str] | None = None) -> int:
         "inversion_head": False,
         "chord_inversion_weight": 1.0,
         "model_scale": "base",
+        "frame_supervision": False,
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -816,6 +949,8 @@ def main(argv: list[str] | None = None) -> int:
         config["model_scale"] = args.model_scale
     if args.val_sources:
         config["val_sources"] = [s.strip() for s in args.val_sources.split(",") if s.strip()]
+    if args.frame_supervision:
+        config["frame_supervision"] = True
     if config["label_space"] not in LABEL_SPACES:
         raise SystemExit(f"unknown label space: {config['label_space']}")
 
@@ -830,14 +965,16 @@ def main(argv: list[str] | None = None) -> int:
                        label_space=config["label_space"],
                        aux_heads=config["aux_heads"],
                        normalize=config["feature_normalize"],
-                       crop_window=int(config["crop_window"]))
+                       crop_window=int(config["crop_window"]),
+                       frame_supervision=config["frame_supervision"])
     val_sources = config.get("val_sources") or config["sources"]
     val = load_split(args.data_root, val_sources, "val",
                      limit_tracks=args.limit_val_tracks,
                      label_space=config["label_space"],
                      aux_heads=config["aux_heads"],
                      normalize=config["feature_normalize"],
-                     crop_window=int(config["crop_window"]))
+                     crop_window=int(config["crop_window"]),
+                     frame_supervision=config["frame_supervision"])
     if train is None or val is None:
         raise SystemExit("No train/val windows found — run the data prepare step first.")
     feature_mean = feature_std = None
@@ -864,7 +1001,8 @@ def main(argv: list[str] | None = None) -> int:
                         num_chords=train["num_chords"],
                         aux_heads=config["aux_heads"],
                         inversion_head=config["inversion_head"],
-                        model_scale=config["model_scale"])
+                        model_scale=config["model_scale"],
+                        frame_output=config["frame_supervision"])
     optimizer = tf.keras.optimizers.AdamW(
         learning_rate=tf.keras.optimizers.schedules.CosineDecay(
             initial_learning_rate=float(config["learning_rate"]),
@@ -944,6 +1082,9 @@ def main(argv: list[str] | None = None) -> int:
         inversion_weights=(train.get("inversion_weights")
                            if config["inversion_head"] else None),
         aug_level=config["aug_level"],
+        frame_supervision=config["frame_supervision"],
+        frame_labels=train.get("frame_labels"),
+        frame_bass=train.get("frame_bass"),
     )
     n_train_sample = min(512, len(train["labels_native"]))
     callback = ValidationCheckpoint(
@@ -1003,6 +1144,7 @@ def main(argv: list[str] | None = None) -> int:
                     mask_unknown=bool(config["bass_mask_unknown"]),
                     label_space=config["label_space"],
                 ),
+                frame_supervision=config["frame_supervision"],
             )
             model.fit(synth_seq, epochs=synthetic_epochs, verbose=2)
 

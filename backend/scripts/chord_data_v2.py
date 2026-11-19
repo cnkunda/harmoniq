@@ -179,6 +179,14 @@ def _crop_window(features: np.ndarray, window: int) -> np.ndarray:
     return features[:, offset:offset + int(window), :]
 
 
+def _crop_frames(frames: np.ndarray | None, window: int) -> np.ndarray | None:
+    """Centre-crop per-frame labels to match ``_crop_window``."""
+    if frames is None or window is None or window >= frames.shape[1]:
+        return frames
+    offset = (frames.shape[1] - int(window)) // 2
+    return frames[:, offset:offset + int(window)]
+
+
 def _normalize_track(features: np.ndarray, mode: str) -> np.ndarray:
     """Per-track per-bin standardisation (removes recording/timbre bias)."""
     if mode != "track":
@@ -221,6 +229,12 @@ def load_track(npz_path: Path, *, source: str | None = None,
                 "split": split,
                 "loss_weight": float(data["loss_weight"]) if "loss_weight" in data.files else 1.0,
                 "center_times": _window_centers(data, n_windows),
+                "frame_labels": _crop_frames(
+                    data["frame_labels"].astype(np.int64)
+                    if "frame_labels" in data.files else None, crop_window),
+                "frame_bass": _crop_frames(
+                    data["frame_bass"].astype(np.int64)
+                    if "frame_bass" in data.files else None, crop_window),
             }
         labels277 = data["labels"].astype(np.int64)
         labels170 = _MAP_TABLE[labels277]
@@ -256,6 +270,12 @@ def load_track(npz_path: Path, *, source: str | None = None,
             "split": split,
             "loss_weight": float(data["loss_weight"]) if "loss_weight" in data.files else 1.0,
             "center_times": _window_centers(data, n_windows),
+            "frame_labels": _crop_frames(
+                data["frame_labels"].astype(np.int64)
+                if "frame_labels" in data.files else None, crop_window),
+            "frame_bass": _crop_frames(
+                data["frame_bass"].astype(np.int64)
+                if "frame_bass" in data.files else None, crop_window),
         }
     except Exception as exc:
         print(f"  [WARN] skipping {npz_path.name}: {exc}")
@@ -278,6 +298,8 @@ def load_dataset_dir_170(
     bass: list[np.ndarray] = []
     conf: list[np.ndarray] = []
     centers: list[np.ndarray] = []
+    frame_labels: list[np.ndarray | None] = []
+    frame_bass: list[np.ndarray | None] = []
     track_ids: list[str] = []
     weights: list[float] = []
     n_tracks = 0
@@ -293,6 +315,8 @@ def load_dataset_dir_170(
         bass.append(track["bass_labels"])
         conf.append(track["confidence"])
         centers.append(track["center_times"])
+        frame_labels.append(track.get("frame_labels"))
+        frame_bass.append(track.get("frame_bass"))
         track_ids.extend([track["track_id"]] * track["features"].shape[0])
         weights.append(track["loss_weight"])
         n_tracks += 1
@@ -308,11 +332,15 @@ def load_dataset_dir_170(
             "center_times": np.zeros((0,), dtype=np.float64),
             "track_ids": [],
             "loss_weights": [],
+            "frame_labels": None,
+            "frame_bass": None,
         }
     if any(x is None for x in labels277):
         concatenated277 = None
     else:
         concatenated277 = np.concatenate(labels277, axis=0)
+    all_frames = all(x is not None for x in frame_labels)
+    all_frame_bass = all(x is not None for x in frame_bass)
     return {
         "features": np.concatenate(features, axis=0),
         "labels170": np.concatenate(labels, axis=0),
@@ -322,6 +350,10 @@ def load_dataset_dir_170(
         "center_times": np.concatenate(centers, axis=0),
         "track_ids": track_ids,
         "loss_weights": weights,
+        "frame_labels": (np.concatenate(frame_labels, axis=0)
+                         if all_frames else None),
+        "frame_bass": (np.concatenate(frame_bass, axis=0)
+                       if all_frame_bass else None),
     }
 
 

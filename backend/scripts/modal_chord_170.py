@@ -842,11 +842,45 @@ def prepare_slakh_fine(limit: str = "400", workers: str = "8",
 
 @app.function(
     image=audio_image,
+    cpu=16,
+    memory=65536,
+    timeout=12 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def add_frame_labels(
+    datasets: str = "guitarset,egset12,idmt_smt_guitar,rwc,guitar_techs,idmt_chords,slakh",
+    workers: str = "16",
+    limit: str = "0",
+    overwrite: str = "false",
+) -> str:
+    """Add per-frame chord/bass labels to the fine window caches."""
+    _ensure_bundle()
+    report_path = os.path.join(BACKEND, "data", "chord170", "frame_labels_report.json")
+    command = [
+        "python", "scripts/add_frame_labels.py",
+        "--datasets", datasets,
+        "--workers", str(int(workers)),
+        "--limit", str(int(limit)),
+        "--report", report_path,
+    ]
+    if _truthy(overwrite):
+        command.append("--overwrite")
+    output = _run(command)
+    data_volume.commit()
+    if os.path.isfile(report_path):
+        with open(report_path, encoding="utf-8") as handle:
+            print(handle.read(), flush=True)
+    return output
+
+
+@app.function(
+    image=audio_image,
     cpu=8,
     memory=32768,
     timeout=24 * 60 * 60,
     volumes={ROOT: data_volume, RUNS: runs_volume},
-    retries=2,
+    retries=1,
 )
 def download_slakh_full(limit: str = "1710") -> str:
     """Resumably download the full Slakh2100-redux 16k tarball and extract

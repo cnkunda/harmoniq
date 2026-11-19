@@ -86,6 +86,14 @@ def label_to_harte(
     return f"{label}/{_SEMITONE_TO_DEGREE[semitones]}"
 
 
+def aggregate_frame_probs(probs: np.ndarray) -> np.ndarray:
+    """Average per-frame distributions to window level (identity if 2-D)."""
+    probs = np.asarray(probs, dtype=np.float32)
+    if probs.ndim == 3:
+        return probs.mean(axis=1).astype(np.float32)
+    return probs
+
+
 def window_intervals(centres: np.ndarray, hop_s: float = 6.4) -> np.ndarray:
     """Build non-overlapping interval bounds for ordered window centres."""
     centres = np.asarray(centres, dtype=np.float64)
@@ -472,8 +480,8 @@ def predict_arrays(model, features: np.ndarray, batch_size: int = 256):
         inversion = outputs.get("inversion_probs")
     else:  # list output: chord, bass[, ...]
         chord, bass = outputs[0], outputs[1] if len(outputs) > 1 else None
-    chord = np.asarray(chord, dtype=np.float32)
-    bass = (np.asarray(bass, dtype=np.float32) if bass is not None
+    chord = aggregate_frame_probs(chord)
+    bass = (aggregate_frame_probs(bass) if bass is not None
             else np.zeros((len(chord), len(BASS_VOCAB)), dtype=np.float32))
     if inversion is not None:
         inversion = np.asarray(inversion, dtype=np.float32)
@@ -557,13 +565,14 @@ def main(argv: list[str] | None = None) -> int:
     model = load_model(args.checkpoint)
     full_outputs = model.predict(X, batch_size=args.batch_size, verbose=0)
     if isinstance(full_outputs, dict):
-        chord_probs = np.asarray(full_outputs["chord_probs"], dtype=np.float32)
-        bass_probs = np.asarray(full_outputs.get("bass_probs"), dtype=np.float32)
-        inversion_probs = (np.asarray(full_outputs["inversion_probs"], dtype=np.float32)
+        chord_probs = aggregate_frame_probs(full_outputs["chord_probs"])
+        bass_probs = aggregate_frame_probs(full_outputs.get("bass_probs"))
+        inversion_probs = (aggregate_frame_probs(full_outputs["inversion_probs"])
                            if "inversion_probs" in full_outputs else None)
         if args.fuse_heads and "root_probs" in full_outputs and "quality_probs" in full_outputs:
             chord_probs = fuse_head_probabilities(
-                chord_probs, full_outputs["root_probs"], full_outputs["quality_probs"],
+                chord_probs, aggregate_frame_probs(full_outputs["root_probs"]),
+                aggregate_frame_probs(full_outputs["quality_probs"]),
                 root_power=args.root_power, quality_power=args.quality_power)
     else:
         chord_probs, bass_probs, inversion_probs = predict_arrays(
