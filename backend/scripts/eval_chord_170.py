@@ -86,10 +86,16 @@ def label_to_harte(
     return f"{label}/{_SEMITONE_TO_DEGREE[semitones]}"
 
 
-def aggregate_frame_probs(probs: np.ndarray) -> np.ndarray:
-    """Average per-frame distributions to window level (identity if 2-D)."""
+def aggregate_frame_probs(probs: np.ndarray, mode: str = "mean") -> np.ndarray:
+    """Reduce per-frame distributions to window level (identity if 2-D).
+
+    ``mean`` averages all frames (training-time behaviour); ``center`` picks
+    the frame that carries the window label in the fine 16-frame cache.
+    """
     probs = np.asarray(probs, dtype=np.float32)
     if probs.ndim == 3:
+        if mode == "center":
+            return probs[:, probs.shape[1] // 2, :].astype(np.float32)
         return probs.mean(axis=1).astype(np.float32)
     return probs
 
@@ -470,7 +476,8 @@ def load_model(model_path: Path, *, build_fn=None):
             Path(patched).unlink(missing_ok=True)
 
 
-def predict_arrays(model, features: np.ndarray, batch_size: int = 256):
+def predict_arrays(model, features: np.ndarray, batch_size: int = 256,
+                   frame_aggregation: str = "mean"):
     """Return (chord_probs, bass_probs) as float32 arrays."""
     outputs = model.predict(features, batch_size=batch_size, verbose=0)
     inversion = None
@@ -480,8 +487,8 @@ def predict_arrays(model, features: np.ndarray, batch_size: int = 256):
         inversion = outputs.get("inversion_probs")
     else:  # list output: chord, bass[, ...]
         chord, bass = outputs[0], outputs[1] if len(outputs) > 1 else None
-    chord = aggregate_frame_probs(chord)
-    bass = (aggregate_frame_probs(bass) if bass is not None
+    chord = aggregate_frame_probs(chord, frame_aggregation)
+    bass = (aggregate_frame_probs(bass, frame_aggregation) if bass is not None
             else np.zeros((len(chord), len(BASS_VOCAB)), dtype=np.float32))
     if inversion is not None:
         inversion = np.asarray(inversion, dtype=np.float32)
@@ -503,6 +510,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="feature_stats.npz (per-bin mean/std) from training")
     parser.add_argument("--feature-normalize", default="none", choices=["none", "track"])
     parser.add_argument("--crop-window", type=int, default=128)
+    parser.add_argument("--frame-aggregation", default="mean",
+                        choices=["mean", "center"])
     parser.add_argument("--fuse-heads", action="store_true")
     parser.add_argument("--disambiguate-bass", action="store_true")
     parser.add_argument("--root-power", type=float, default=1.0)
@@ -567,18 +576,25 @@ def main(argv: list[str] | None = None) -> int:
     model = load_model(args.checkpoint)
     full_outputs = model.predict(X, batch_size=args.batch_size, verbose=0)
     if isinstance(full_outputs, dict):
-        chord_probs = aggregate_frame_probs(full_outputs["chord_probs"])
-        bass_probs = aggregate_frame_probs(full_outputs.get("bass_probs"))
-        inversion_probs = (aggregate_frame_probs(full_outputs["inversion_probs"])
-                           if "inversion_probs" in full_outputs else None)
+        chord_probs = aggregate_frame_probs(
+            full_outputs["chord_probs"], args.frame_aggregation)
+        bass_probs = aggregate_frame_probs(
+            full_outputs.get("bass_probs"), args.frame_aggregation)
+        inversion_probs = (
+            aggregate_frame_probs(full_outputs["inversion_probs"],
+                                  args.frame_aggregation)
+            if "inversion_probs" in full_outputs else None)
         if args.fuse_heads and "root_probs" in full_outputs and "quality_probs" in full_outputs:
             chord_probs = fuse_head_probabilities(
-                chord_probs, aggregate_frame_probs(full_outputs["root_probs"]),
-                aggregate_frame_probs(full_outputs["quality_probs"]),
+                chord_probs,
+                aggregate_frame_probs(full_outputs["root_probs"],
+                                      args.frame_aggregation),
+                aggregate_frame_probs(full_outputs["quality_probs"],
+                                      args.frame_aggregation),
                 root_power=args.root_power, quality_power=args.quality_power)
     else:
         chord_probs, bass_probs, inversion_probs = predict_arrays(
-            model, X, args.batch_size)
+            model, X, args.batch_size, args.frame_aggregation)
     if args.calibration is not None:
         params = json.loads(Path(args.calibration).read_text())
         chord_probs = apply_calibration(chord_probs, params)

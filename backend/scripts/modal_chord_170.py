@@ -314,6 +314,7 @@ def eval_model(
     root_power: str = "1.0",
     quality_power: str = "1.0",
     disambiguate_bass: str = "false",
+    frame_aggregation: str = "mean",
 ) -> str:
     """Evaluate a checkpoint on the requested split (artifacts on /runs)."""
     _ensure_bundle()
@@ -336,6 +337,8 @@ def eval_model(
                     "--quality-power", str(quality_power)]
     if _truthy(disambiguate_bass):
         command += ["--disambiguate-bass"]
+    if frame_aggregation and frame_aggregation != "mean":
+        command += ["--frame-aggregation", frame_aggregation]
     output = _run(command)
     runs_volume.commit()
     if os.path.isfile(out_path):

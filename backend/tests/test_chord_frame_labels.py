@@ -77,6 +77,11 @@ class TestFrameAggregation:
         assert agg.shape == (1, 2)
         assert np.allclose(agg, [[0.4, 0.6]])
 
+    def test_center_frame_aggregation(self):
+        probs = np.array([[[0.2, 0.8], [0.6, 0.4], [0.9, 0.1]]], dtype=np.float32)
+        agg = aggregate_frame_probs(probs, "center")
+        assert np.allclose(agg, [[0.6, 0.4]])
+
     def test_window_probs_unchanged(self):
         probs = np.array([[0.3, 0.7]], dtype=np.float32)
         assert np.array_equal(aggregate_frame_probs(probs), probs)
