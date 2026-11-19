@@ -28,12 +28,19 @@ _BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
+from scripts.chord_context import (  # noqa: E402
+    build_segment_index,
+    centre_window_predictions,
+    context_batch,
+    structured_decode,
+)
 from app.chord_vocab_170 import (  # noqa: E402
     BASS_VOCAB,
     BASS_X_IDX,
     CHORD_VOCAB_170,
     N_IDX_170,
     NUM_CLASSES_170,
+    NUM_CLASSES_BASS,
     QUALITIES_14,
     ROOTS_12,
     X_IDX_170,
@@ -179,6 +186,56 @@ def macro_f1(
         denom = 2 * tp + fp + fn
         f1s.append(2 * tp / denom if denom else 0.0)
     return float(np.mean(f1s))
+
+
+def per_class_report(y_true: np.ndarray, y_pred: np.ndarray) -> list[dict]:
+    """Per-class support/precision/recall/F1 on the target vocabulary."""
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    rows: list[dict] = []
+    for cls in np.unique(y_true):
+        mask = y_true == cls
+        tp = int(np.sum(mask & (y_pred == cls)))
+        fp = int(np.sum(~mask & (y_pred == cls)))
+        fn = int(np.sum(mask & (y_pred != cls)))
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        f1 = (2 * precision * recall / (precision + recall)
+              if precision + recall else 0.0)
+        rows.append({"class": int(cls), "support": int(mask.sum()),
+                     "precision": float(precision), "recall": float(recall),
+                     "f1": float(f1)})
+    return rows
+
+
+def macro_f1_min_support(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    min_support: int,
+) -> float:
+    """Macro-F1 over classes with at least ``min_support`` true frames."""
+    y_true = np.asarray(y_true)
+    classes = np.array([
+        cls for cls in np.unique(y_true)
+        if int(np.sum(y_true == cls)) >= int(min_support)
+    ], dtype=np.int64)
+    if len(classes) == 0:
+        return 0.0
+    return macro_f1(y_true, y_pred, labels=classes)
+
+
+def support_histogram(y_true: np.ndarray) -> dict[str, int]:
+    """Count classes by support bucket (1, 2-4, 5-9, 10-19, 20+)."""
+    counts = np.bincount(np.asarray(y_true), minlength=NUM_CLASSES_170)
+    present = counts[counts > 0]
+    return {
+        "1": int(np.sum(present == 1)),
+        "2-4": int(np.sum((present >= 2) & (present <= 4))),
+        "5-9": int(np.sum((present >= 5) & (present <= 9))),
+        "10-19": int(np.sum((present >= 10) & (present <= 19))),
+        "20+": int(np.sum(present >= 20)),
+        "classes": int(len(present)),
+    }
 
 
 def per_quality_report(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, dict]:
@@ -330,6 +387,11 @@ def evaluate_arrays(
         "top5_accuracy": top_k_accuracy(chord_probs, chord_true, 5),
         "ece": expected_calibration_error(chord_probs, chord_true),
         "per_quality": per_quality_report(chord_true, chord_pred),
+        "per_class": per_class_report(chord_true, chord_pred),
+        "support_histogram": support_histogram(chord_true),
+        "macro_f1_support_ge_5": macro_f1_min_support(chord_true, chord_pred, 5),
+        "macro_f1_support_ge_10": macro_f1_min_support(chord_true, chord_pred, 10),
+        "macro_f1_support_ge_20": macro_f1_min_support(chord_true, chord_pred, 20),
     }
 
     # WCSR per track, aggregated by window count.
@@ -495,6 +557,34 @@ def predict_arrays(model, features: np.ndarray, batch_size: int = 256,
     return chord, bass, inversion
 
 
+def predict_context_outputs(
+    model,
+    features: np.ndarray,
+    offsets: list[tuple[int, int, str]],
+    context_frames: int,
+    batch_size: int = 256,
+) -> dict[str, np.ndarray]:
+    """Predict per-window outputs by running long contexts and taking centres."""
+    segment_index = build_segment_index(offsets, len(features))
+    keys = ("chord_probs", "bass_probs", "root_probs", "quality_probs",
+            "inversion_probs", "pitch_probs")
+    chunks: dict[str, list[np.ndarray]] = {key: [] for key in keys}
+    for start in range(0, len(features), batch_size):
+        indices = np.arange(start, min(start + batch_size, len(features)))
+        batch = context_batch(
+            features, None, None, offsets, segment_index, indices, context_frames)
+        outputs = model.predict(batch["features"], batch_size=batch_size, verbose=0)
+        if not isinstance(outputs, dict):
+            raise ValueError("context model must return a dict of head outputs")
+        for key in keys:
+            if key not in outputs:
+                continue
+            probs = np.asarray(outputs[key], dtype=np.float32)
+            chunks[key].append(
+                centre_window_predictions(probs, batch["center_index"]))
+    return {key: np.concatenate(value) for key, value in chunks.items() if value}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, required=True)
@@ -512,6 +602,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--crop-window", type=int, default=128)
     parser.add_argument("--frame-aggregation", default="mean",
                         choices=["mean", "center"])
+    parser.add_argument("--context-frames", type=int, default=0,
+                        help="run the long-context model on this many frames")
+    parser.add_argument("--structured-decode", default="none",
+                        choices=["none", "fuse", "hybrid"])
+    parser.add_argument("--chord-weight", type=float, default=1.0)
+    parser.add_argument("--root-weight", type=float, default=1.0)
+    parser.add_argument("--quality-weight", type=float, default=1.0)
+    parser.add_argument("--pitch-weight", type=float, default=0.25)
     parser.add_argument("--fuse-heads", action="store_true")
     parser.add_argument("--disambiguate-bass", action="store_true")
     parser.add_argument("--root-power", type=float, default=1.0)
@@ -538,6 +636,8 @@ def main(argv: list[str] | None = None) -> int:
         "slakh_fine": args.data_root / "chord170" / "slakh_fine",
     }
     features, labels, bass, track_ids, centres, sources = [], [], [], [], [], []
+    offsets: list[tuple[int, int, str]] = []
+    window_cursor = 0
     for name in [s.strip() for s in args.sources.split(",") if s.strip()]:
         loaded = data.load_dataset_dir_170(source_dirs[name], args.split, source=name,
                                            normalize=args.feature_normalize,
@@ -562,6 +662,9 @@ def main(argv: list[str] | None = None) -> int:
         track_ids.extend(loaded["track_ids"])
         centres.append(loaded["center_times"])
         sources.extend([name] * len(loaded["labels170"]))
+        for start, n_tracks, track_id in loaded.get("track_offsets", []):
+            offsets.append((window_cursor + start, n_tracks, track_id))
+        window_cursor += len(loaded["labels170"])
     if not features:
         print("No windows for the requested sources/split.", file=sys.stderr)
         return 1
@@ -574,27 +677,47 @@ def main(argv: list[str] | None = None) -> int:
     b = np.concatenate(bass)
     c = np.concatenate(centres)
     model = load_model(args.checkpoint)
-    full_outputs = model.predict(X, batch_size=args.batch_size, verbose=0)
-    if isinstance(full_outputs, dict):
-        chord_probs = aggregate_frame_probs(
-            full_outputs["chord_probs"], args.frame_aggregation)
-        bass_probs = aggregate_frame_probs(
-            full_outputs.get("bass_probs"), args.frame_aggregation)
-        inversion_probs = (
-            aggregate_frame_probs(full_outputs["inversion_probs"],
-                                  args.frame_aggregation)
-            if "inversion_probs" in full_outputs else None)
-        if args.fuse_heads and "root_probs" in full_outputs and "quality_probs" in full_outputs:
-            chord_probs = fuse_head_probabilities(
-                chord_probs,
-                aggregate_frame_probs(full_outputs["root_probs"],
-                                      args.frame_aggregation),
-                aggregate_frame_probs(full_outputs["quality_probs"],
-                                      args.frame_aggregation),
-                root_power=args.root_power, quality_power=args.quality_power)
+    root_probs = quality_probs = pitch_probs = None
+    if args.context_frames > 0:
+        if not offsets:
+            raise SystemExit("context inference needs track offsets from the loader")
+        outputs = predict_context_outputs(
+            model, X, offsets, args.context_frames, args.batch_size)
+        chord_probs = outputs["chord_probs"]
+        n_windows = len(chord_probs)
+        bass_probs = outputs.get(
+            "bass_probs", np.zeros((n_windows, NUM_CLASSES_BASS), dtype=np.float32))
+        inversion_probs = outputs.get("inversion_probs")
+        root_probs = outputs.get("root_probs")
+        quality_probs = outputs.get("quality_probs")
+        pitch_probs = outputs.get("pitch_probs")
     else:
-        chord_probs, bass_probs, inversion_probs = predict_arrays(
-            model, X, args.batch_size, args.frame_aggregation)
+        full_outputs = model.predict(X, batch_size=args.batch_size, verbose=0)
+        if isinstance(full_outputs, dict):
+            chord_probs = aggregate_frame_probs(
+                full_outputs["chord_probs"], args.frame_aggregation)
+            bass_probs = aggregate_frame_probs(
+                full_outputs.get("bass_probs"), args.frame_aggregation)
+            inversion_probs = (
+                aggregate_frame_probs(full_outputs["inversion_probs"],
+                                      args.frame_aggregation)
+                if "inversion_probs" in full_outputs else None)
+            if "root_probs" in full_outputs:
+                root_probs = aggregate_frame_probs(
+                    full_outputs["root_probs"], args.frame_aggregation)
+            if "quality_probs" in full_outputs:
+                quality_probs = aggregate_frame_probs(
+                    full_outputs["quality_probs"], args.frame_aggregation)
+            if "pitch_probs" in full_outputs:
+                pitch_probs = aggregate_frame_probs(
+                    full_outputs["pitch_probs"], args.frame_aggregation)
+            if args.fuse_heads and root_probs is not None and quality_probs is not None:
+                chord_probs = fuse_head_probabilities(
+                    chord_probs, root_probs, quality_probs,
+                    root_power=args.root_power, quality_power=args.quality_power)
+        else:
+            chord_probs, bass_probs, inversion_probs = predict_arrays(
+                model, X, args.batch_size, args.frame_aggregation)
     if args.calibration is not None:
         params = json.loads(Path(args.calibration).read_text())
         chord_probs = apply_calibration(chord_probs, params)
@@ -603,7 +726,17 @@ def main(argv: list[str] | None = None) -> int:
                               "prior_exponent": params.get("prior_exponent")}
     else:
         report_calibration = None
-    chord_pred = chord_probs.argmax(axis=1)
+    if args.structured_decode != "none":
+        if root_probs is None or quality_probs is None:
+            raise SystemExit(
+                "--structured-decode needs root/quality heads in the checkpoint")
+        chord_pred = structured_decode(
+            chord_probs, root_probs, quality_probs, pitch_probs,
+            mode=args.structured_decode,
+            chord_weight=args.chord_weight, root_weight=args.root_weight,
+            quality_weight=args.quality_weight, pitch_weight=args.pitch_weight)
+    else:
+        chord_pred = chord_probs.argmax(axis=1)
     if args.disambiguate_bass and args.label_space == "170":
         chord_pred = np.array([
             disambiguate_by_bass(int(c), int(b), chord_probs[i])

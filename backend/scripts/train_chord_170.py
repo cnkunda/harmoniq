@@ -72,6 +72,13 @@ from scripts.chord_data_v2 import (  # noqa: E402
     chord_class_weights,
     sampling_probabilities,
 )
+from scripts.chord_context import (
+    build_segment_index,
+    context_batch,
+    inversion_from_chord_bass,
+    pitch_targets_from_chords,
+    root_quality_from_chords,
+)  # noqa: E402
 from scripts.eval_chord_170 import (
     aggregate_frame_probs,
     bootstrap_ci,
@@ -258,6 +265,78 @@ def build_model(
     return tf.keras.Model(inputs=inputs, outputs=outputs, name="chord_crnn_170")
 
 
+CONTEXT_SCALES: dict[str, dict[str, int]] = {
+    "base": {"conv": 192, "d_model": 192, "ff": 384, "dense": 256},
+    "large": {"conv": 256, "d_model": 256, "ff": 512, "dense": 384},
+}
+
+
+def build_context_model(
+    window: int,
+    feature_dim: int = FEATURE_DIM,
+    num_chords: int = NUM_CLASSES_170,
+    num_bass: int = NUM_CLASSES_BASS,
+    aux_heads: bool = False,
+    inversion_head: bool = False,
+    structured_heads: bool = False,
+    model_scale: str = "base",
+    num_blocks: int = 4,
+) -> tf.keras.Model:
+    """BTC/Conformer-style encoder over long frame sequences.
+
+    The input is a ``(window, feature_dim)`` context; every head keeps the
+    time axis so the model is supervised per frame. ``structured_heads``
+    adds a 12-class multi-label pitch head used by the structured decoder.
+    """
+    scale = CONTEXT_SCALES.get(model_scale, CONTEXT_SCALES["base"])
+    inputs = tf.keras.Input(shape=(window, feature_dim), name="cqt_context")
+    x = tf.keras.layers.Conv1D(
+        scale["conv"], kernel_size=3, padding="same", activation="relu",
+        name="context_conv")(inputs)
+    x = tf.keras.layers.BatchNormalization(name="context_bn")(x)
+    positions = tf.keras.layers.Embedding(
+        window, scale["d_model"], name="position_embedding")(
+            tf.range(window)[None, :])
+    x = x + positions
+    for block in range(num_blocks):
+        attention = tf.keras.layers.MultiHeadAttention(
+            num_heads=4, key_dim=scale["d_model"] // 4, dropout=0.1,
+            name=f"context_attention_{block}")
+        attended = attention(x, x)
+        x = tf.keras.layers.LayerNormalization(
+            epsilon=1e-6, name=f"context_attn_norm_{block}")(x + attended)
+        feed = tf.keras.layers.Dense(
+            scale["ff"], activation="relu", name=f"context_ff_1_{block}")(x)
+        feed = tf.keras.layers.Dropout(0.1, name=f"context_ff_drop_{block}")(feed)
+        feed = tf.keras.layers.Dense(
+            scale["d_model"], name=f"context_ff_2_{block}")(feed)
+        x = tf.keras.layers.LayerNormalization(
+            epsilon=1e-6, name=f"context_ff_norm_{block}")(x + feed)
+    x = tf.keras.layers.Dense(
+        scale["dense"], activation="relu", name="context_dense")(x)
+    x = tf.keras.layers.Dropout(0.3, name="context_dropout")(x)
+
+    outputs = {
+        "chord_probs": tf.keras.layers.Dense(
+            num_chords, activation="softmax", name="chord_probs")(x),
+        "bass_probs": tf.keras.layers.Dense(
+            num_bass, activation="softmax", name="bass_probs")(x),
+    }
+    if aux_heads:
+        outputs["root_probs"] = tf.keras.layers.Dense(
+            NUM_ROOT_CLASSES, activation="softmax", name="root_probs")(x)
+        outputs["quality_probs"] = tf.keras.layers.Dense(
+            NUM_QUALITY_CLASSES, activation="softmax", name="quality_probs")(x)
+    if inversion_head:
+        outputs["inversion_probs"] = tf.keras.layers.Dense(
+            5, activation="softmax", name="inversion_probs")(x)
+    if structured_heads:
+        outputs["pitch_probs"] = tf.keras.layers.Dense(
+            12, activation="sigmoid", name="pitch_probs")(x)
+    return tf.keras.Model(inputs=inputs, outputs=outputs,
+                          name="chord_context_transformer")
+
+
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
@@ -278,6 +357,8 @@ def load_split(
     """Load and concatenate one split across sources for a label space."""
     feats, labels, labels277, bass, conf, tracks, centres, srcs = [], [], [], [], [], [], [], []
     frame_labels, frame_bass = [], []
+    track_offsets: list[tuple[int, int, str]] = []
+    window_cursor = 0
     for source in sources:
         data_dir = data_root / SOURCE_DIRS[source]
         loaded = chord_data.load_dataset_dir_170(
@@ -296,6 +377,9 @@ def load_split(
         tracks.extend(loaded["track_ids"])
         centres.append(loaded["center_times"])
         srcs.extend([source] * len(loaded["labels170"]))
+        for start, n_tracks, track_id in loaded.get("track_offsets", []):
+            track_offsets.append((window_cursor + start, n_tracks, track_id))
+        window_cursor += len(loaded["labels170"])
         if frame_supervision:
             window = int(loaded["features"].shape[1])
             frames = loaded.get("frame_labels")
@@ -335,6 +419,7 @@ def load_split(
         "track_ids": [t for t, k in zip(tracks, keep) if k],
         "center_times": windows["center_times"][keep],
         "sources": windows["sources"][keep],
+        "track_offsets": track_offsets,
         "label_space": label_space,
         "num_chords": LABEL_SPACES[label_space],
     }
@@ -437,7 +522,7 @@ def augment_batch(
                 features[index, :, start:start + width] = 0.0
             if rng.random() < 0.5:
                 width = int(rng.integers(1, 13))
-                start = int(rng.integers(0, WINDOW - width))
+                start = int(rng.integers(0, features.shape[1] - width))
                 features[index, start:start + width, :] = 0.0
     return _renormalise(features), chord, bass, frame_chord, frame_bass
 
@@ -598,6 +683,123 @@ class ChordSequence(tf.keras.utils.Sequence):
         self.rng = np.random.default_rng(self.seed + self.epoch)
 
 
+class ContextSequence(tf.keras.utils.Sequence):
+    """Samples long contexts from contiguous fine windows with frame targets."""
+
+    def __init__(
+        self,
+        features: np.ndarray,
+        frame_labels: np.ndarray,
+        frame_bass: np.ndarray,
+        probabilities: np.ndarray,
+        offsets: list[tuple[int, int, str]],
+        context_frames: int,
+        *,
+        batch_size: int,
+        seed: int,
+        augment: bool = True,
+        num_chords: int = NUM_CLASSES_170,
+        chord_weights: np.ndarray | None = None,
+        bass_weights: np.ndarray | None = None,
+        inversion_weights: np.ndarray | None = None,
+        aux_heads: bool = False,
+        inversion_head: bool = False,
+        structured_heads: bool = False,
+        aug_level: str = "full",
+    ):
+        super().__init__()
+        self.features = features
+        self.frame_labels = frame_labels
+        self.frame_bass = frame_bass
+        self.probabilities = probabilities
+        self.offsets = offsets
+        self.context_frames = int(context_frames)
+        self.batch_size = int(batch_size)
+        self.seed = int(seed)
+        self.augment = augment
+        self.num_chords = num_chords
+        self.chord_weights = chord_weights
+        self.bass_weights = bass_weights
+        self.inversion_weights = inversion_weights
+        self.aux_heads = aux_heads
+        self.inversion_head = inversion_head
+        self.structured_heads = structured_heads
+        self.aug_level = aug_level
+        self.epoch = 0
+        self.rng = np.random.default_rng(seed)
+        self.segment_index = build_segment_index(offsets, len(features))
+
+    def __len__(self) -> int:
+        return max(1, int(np.ceil(len(self.features) / self.batch_size)))
+
+    def __getitem__(self, index: int):
+        indices = self.rng.choice(
+            len(self.features), size=self.batch_size,
+            replace=len(self.features) < self.batch_size,
+            p=self.probabilities,
+        )
+        batch = context_batch(
+            self.features, self.frame_labels, self.frame_bass, self.offsets,
+            self.segment_index, indices, self.context_frames)
+        features = batch["features"]
+        frame_chord = batch["frame_labels"]
+        frame_bass = batch["frame_bass"]
+        valid = batch["valid"]
+        center = batch["center_index"]
+        rows = np.arange(len(indices))
+        chord = frame_chord[rows, center]
+        bass = frame_bass[rows, center]
+        if self.augment:
+            features, chord, bass, frame_chord, frame_bass = augment_batch(
+                features, chord, bass, self.rng, label_space="170",
+                aug_level=self.aug_level, frame_chord=frame_chord,
+                frame_bass=frame_bass)
+        targets = {
+            "chord_probs": tf.keras.utils.to_categorical(
+                frame_chord, num_classes=self.num_chords),
+            "bass_probs": tf.keras.utils.to_categorical(
+                frame_bass, num_classes=NUM_CLASSES_BASS),
+        }
+        chord_weight = (self.chord_weights[indices][:, None]
+                        if self.chord_weights is not None
+                        else np.ones(len(indices), dtype=np.float32)[:, None])
+        bass_weight = (self.bass_weights[indices][:, None]
+                       if self.bass_weights is not None
+                       else np.ones(len(indices), dtype=np.float32)[:, None])
+        weights = {
+            "chord_probs": np.repeat(chord_weight[:, :, None],
+                                     frame_chord.shape[1], axis=1) * valid[:, :, None],
+            "bass_probs": (bass_weight
+                           * (frame_bass != BASS_X_IDX).astype(np.float32)
+                           )[..., None] * valid[:, :, None],
+        }
+        if self.aux_heads:
+            roots, qualities = root_quality_from_chords(frame_chord)
+            targets["root_probs"] = tf.keras.utils.to_categorical(
+                roots, num_classes=NUM_ROOT_CLASSES)
+            targets["quality_probs"] = tf.keras.utils.to_categorical(
+                qualities, num_classes=NUM_QUALITY_CLASSES)
+            weights["root_probs"] = valid
+            weights["quality_probs"] = valid
+        if self.inversion_head:
+            inversion = inversion_from_chord_bass(frame_chord, frame_bass)
+            targets["inversion_probs"] = tf.keras.utils.to_categorical(
+                inversion, num_classes=5)
+            inv_weight = ((frame_bass != BASS_X_IDX).astype(np.float32)
+                          if self.inversion_weights is None else
+                          (self.inversion_weights[indices][:, None]
+                           * (frame_bass != BASS_X_IDX).astype(np.float32)))
+            weights["inversion_probs"] = inv_weight * valid
+        if self.structured_heads:
+            targets["pitch_probs"] = pitch_targets_from_chords(frame_chord)
+            weights["pitch_probs"] = valid
+        return features, targets, weights
+
+    def on_epoch_end(self) -> None:
+        self.epoch += 1
+        self.rng = np.random.default_rng(self.seed + self.epoch)
+
+
 # ---------------------------------------------------------------------------
 # Validation callback (checkpoint metric = WCSR MIREX)
 # ---------------------------------------------------------------------------
@@ -622,9 +824,11 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
         batch_size: int = 256,
         train_sample: dict | None = None,
         label_space: str = "170",
+        context_frames: int = 0,
     ):
         super().__init__()
         self.label_space = label_space
+        self.context_frames = int(context_frames)
         self.val_data = val_data
         self.train_sample = train_sample
         self.out_dir = out_dir
@@ -637,10 +841,33 @@ class ValidationCheckpoint(tf.keras.callbacks.Callback):
         self.lines_written = 0
 
     def _predict(self, features: np.ndarray):
+        if self.context_frames > 0:
+            return self._predict_context(features)
         outputs = self.model.predict(features, batch_size=self.batch_size, verbose=0)
         chord = aggregate_frame_probs(outputs["chord_probs"])
         bass = aggregate_frame_probs(outputs["bass_probs"])
         return chord, bass
+
+    def _predict_context(self, features: np.ndarray):
+        offsets = self.val_data.get("track_offsets") or []
+        frame_labels = self.val_data.get("frame_labels")
+        frame_bass = self.val_data.get("frame_bass")
+        segment_index = build_segment_index(offsets, len(features))
+        chord_chunks, bass_chunks = [], []
+        for start in range(0, len(features), self.batch_size):
+            indices = np.arange(start, min(start + self.batch_size, len(features)))
+            batch = context_batch(
+                features, frame_labels, frame_bass, offsets, segment_index,
+                indices, self.context_frames)
+            outputs = self.model.predict(
+                batch["features"], batch_size=self.batch_size, verbose=0)
+            rows = np.arange(len(indices))
+            center = batch["center_index"]
+            chord_chunks.append(
+                np.asarray(outputs["chord_probs"])[rows, center])
+            bass_chunks.append(
+                np.asarray(outputs["bass_probs"])[rows, center])
+        return np.concatenate(chord_chunks), np.concatenate(bass_chunks)
 
     def _evaluate(self) -> dict:
         chord_probs, bass_probs = self._predict(self.val_data["features"])
@@ -880,6 +1107,11 @@ def main(argv: list[str] | None = None) -> int:
                         help="comma list of sources used only for validation/selection")
     parser.add_argument("--frame-supervision", action="store_true",
                         help="per-frame heads trained on frame_labels in the fine npz")
+    parser.add_argument("--context-frames", type=int, default=None,
+                        help="long-context transformer input length (requires frame supervision)")
+    parser.add_argument("--context-blocks", type=int, default=None)
+    parser.add_argument("--structured-heads", action="store_true",
+                        help="add a 12-class pitch head for structured decoding")
     args = parser.parse_args(argv)
 
     config = {
@@ -907,6 +1139,9 @@ def main(argv: list[str] | None = None) -> int:
         "chord_inversion_weight": 1.0,
         "model_scale": "base",
         "frame_supervision": False,
+        "context_frames": 0,
+        "context_blocks": 4,
+        "structured_heads": False,
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -953,6 +1188,18 @@ def main(argv: list[str] | None = None) -> int:
         config["val_sources"] = [s.strip() for s in args.val_sources.split(",") if s.strip()]
     if args.frame_supervision:
         config["frame_supervision"] = True
+    if args.context_frames is not None:
+        config["context_frames"] = int(args.context_frames)
+    if args.context_blocks is not None:
+        config["context_blocks"] = int(args.context_blocks)
+    if args.structured_heads:
+        config["structured_heads"] = True
+        config["aux_heads"] = True
+        config["inversion_head"] = True
+    if int(config["context_frames"]) > 0:
+        config["frame_supervision"] = True
+        if config["label_space"] != "170":
+            raise SystemExit("context training currently supports label_space=170 only")
     if config["label_space"] not in LABEL_SPACES:
         raise SystemExit(f"unknown label space: {config['label_space']}")
 
@@ -999,12 +1246,23 @@ def main(argv: list[str] | None = None) -> int:
     tf.keras.utils.set_random_seed(int(config["seed"]))
     use_gpu = _configure_device(args.device)
 
-    model = build_model(window=int(train["features"].shape[1]),
-                        num_chords=train["num_chords"],
-                        aux_heads=config["aux_heads"],
-                        inversion_head=config["inversion_head"],
-                        model_scale=config["model_scale"],
-                        frame_output=config["frame_supervision"])
+    if int(config["context_frames"]) > 0:
+        model = build_context_model(
+            window=int(config["context_frames"]),
+            num_chords=train["num_chords"],
+            aux_heads=config["aux_heads"],
+            inversion_head=config["inversion_head"],
+            structured_heads=config["structured_heads"],
+            model_scale=config["model_scale"],
+            num_blocks=int(config["context_blocks"]),
+        )
+    else:
+        model = build_model(window=int(train["features"].shape[1]),
+                            num_chords=train["num_chords"],
+                            aux_heads=config["aux_heads"],
+                            inversion_head=config["inversion_head"],
+                            model_scale=config["model_scale"],
+                            frame_output=config["frame_supervision"])
     optimizer = tf.keras.optimizers.AdamW(
         learning_rate=tf.keras.optimizers.schedules.CosineDecay(
             initial_learning_rate=float(config["learning_rate"]),
@@ -1041,6 +1299,10 @@ def main(argv: list[str] | None = None) -> int:
         losses["inversion_probs"] = tf.keras.losses.CategoricalCrossentropy()
         loss_weights["inversion_probs"] = 0.25
         metrics["inversion_probs"] = [tf.keras.metrics.CategoricalAccuracy(name="acc")]
+    if config["structured_heads"]:
+        losses["pitch_probs"] = tf.keras.losses.BinaryCrossentropy()
+        loss_weights["pitch_probs"] = 0.2
+        metrics["pitch_probs"] = [tf.keras.metrics.BinaryAccuracy(name="acc")]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights,
                   metrics=metrics)
 
@@ -1069,34 +1331,55 @@ def main(argv: list[str] | None = None) -> int:
         f"(inversion_weight={config['bass_inversion_weight']})",
         flush=True,
     )
-    sequence = ChordSequence(
-        train["features"], train["labels_native"], train["bass_labels"], probabilities,
-        batch_size=int(config["batch_size"]), seed=int(config["seed"]),
-        augment=(not args.no_augment and config["aug_level"] != "none"),
-        num_chords=train["num_chords"],
-        root_labels=train.get("root_labels"),
-        quality_labels=train.get("quality_labels"),
-        label_space=config["label_space"],
-        bass_weights=bass_weights,
-        chord_weights=chord_weights,
-        inversion_labels=(train.get("inversion_labels")
-                          if config["inversion_head"] else None),
-        inversion_weights=(train.get("inversion_weights")
-                           if config["inversion_head"] else None),
-        aug_level=config["aug_level"],
-        frame_supervision=config["frame_supervision"],
-        frame_labels=train.get("frame_labels"),
-        frame_bass=train.get("frame_bass"),
-    )
+    if int(config["context_frames"]) > 0:
+        sequence = ContextSequence(
+            train["features"], train["frame_labels"], train["frame_bass"],
+            probabilities, train["track_offsets"], int(config["context_frames"]),
+            batch_size=int(config["batch_size"]), seed=int(config["seed"]),
+            augment=(not args.no_augment and config["aug_level"] != "none"),
+            num_chords=train["num_chords"],
+            chord_weights=chord_weights,
+            bass_weights=bass_weights,
+            inversion_weights=(train.get("inversion_weights")
+                               if config["inversion_head"] else None),
+            aux_heads=config["aux_heads"],
+            inversion_head=config["inversion_head"],
+            structured_heads=config["structured_heads"],
+            aug_level=config["aug_level"],
+        )
+    else:
+        sequence = ChordSequence(
+            train["features"], train["labels_native"], train["bass_labels"], probabilities,
+            batch_size=int(config["batch_size"]), seed=int(config["seed"]),
+            augment=(not args.no_augment and config["aug_level"] != "none"),
+            num_chords=train["num_chords"],
+            root_labels=train.get("root_labels"),
+            quality_labels=train.get("quality_labels"),
+            label_space=config["label_space"],
+            bass_weights=bass_weights,
+            chord_weights=chord_weights,
+            inversion_labels=(train.get("inversion_labels")
+                              if config["inversion_head"] else None),
+            inversion_weights=(train.get("inversion_weights")
+                               if config["inversion_head"] else None),
+            aug_level=config["aug_level"],
+            frame_supervision=config["frame_supervision"],
+            frame_labels=train.get("frame_labels"),
+            frame_bass=train.get("frame_bass"),
+        )
     n_train_sample = min(512, len(train["labels_native"]))
+    train_sample = None
+    if int(config["context_frames"]) == 0:
+        train_sample = {
+            "features": train["features"][:n_train_sample],
+            "labels_native": train["labels_native"][:n_train_sample],
+        }
     callback = ValidationCheckpoint(
         val, out_dir, patience=int(config["patience"]),
         batch_size=max(256, int(config["batch_size"])),
-        train_sample={
-            "features": train["features"][:n_train_sample],
-            "labels_native": train["labels_native"][:n_train_sample],
-        },
+        train_sample=train_sample,
         label_space=config["label_space"],
+        context_frames=int(config["context_frames"]),
     )
 
     (out_dir / "config.json").write_text(json.dumps({
@@ -1113,6 +1396,10 @@ def main(argv: list[str] | None = None) -> int:
     }, indent=2))
 
     synthetic_epochs = int(config.get("synthetic_epochs") or 0)
+    if synthetic_epochs > 0 and int(config["context_frames"]) > 0:
+        print("  [WARN] synthetic pretraining is window-level; skipping for context model",
+              flush=True)
+        synthetic_epochs = 0
     if synthetic_epochs > 0:
         synthetic = load_synthetic_split(
             args.data_root, config["label_space"], config["aux_heads"],

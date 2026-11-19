@@ -301,7 +301,9 @@ def load_dataset_dir_170(
     frame_labels: list[np.ndarray | None] = []
     frame_bass: list[np.ndarray | None] = []
     track_ids: list[str] = []
+    track_offsets: list[tuple[int, int, str]] = []
     weights: list[float] = []
+    cursor = 0
     n_tracks = 0
     overrides = load_split_overrides()
     for npz_path in list_track_files(data_dir, split, source=source, overrides=overrides):
@@ -317,7 +319,10 @@ def load_dataset_dir_170(
         centers.append(track["center_times"])
         frame_labels.append(track.get("frame_labels"))
         frame_bass.append(track.get("frame_bass"))
-        track_ids.extend([track["track_id"]] * track["features"].shape[0])
+        n_windows = int(track["features"].shape[0])
+        track_ids.extend([track["track_id"]] * n_windows)
+        track_offsets.append((cursor, n_windows, track["track_id"]))
+        cursor += n_windows
         weights.append(track["loss_weight"])
         n_tracks += 1
         if limit_tracks and n_tracks >= limit_tracks:
@@ -331,6 +336,7 @@ def load_dataset_dir_170(
             "confidence": np.zeros((0,), dtype=np.float32),
             "center_times": np.zeros((0,), dtype=np.float64),
             "track_ids": [],
+            "track_offsets": [],
             "loss_weights": [],
             "frame_labels": None,
             "frame_bass": None,
@@ -349,6 +355,7 @@ def load_dataset_dir_170(
         "confidence": np.concatenate(conf, axis=0),
         "center_times": np.concatenate(centers, axis=0),
         "track_ids": track_ids,
+        "track_offsets": track_offsets,
         "loss_weights": weights,
         "frame_labels": (np.concatenate(frame_labels, axis=0)
                          if all_frames else None),

@@ -69,6 +69,31 @@ image = (
 data_volume = modal.Volume.from_name("harmoniq-chord170-data", create_if_missing=True)
 runs_volume = modal.Volume.from_name("harmoniq-chord170-runs", create_if_missing=True)
 
+context_image = (
+    modal.Image.from_registry("tensorflow/tensorflow:2.15.0-gpu")
+    .apt_install("ffmpeg", "libsndfile1")
+    .pip_install(
+        "numpy==1.26.4",
+        "pydantic>=2.0",
+        "scipy>=1.11",
+        "librosa>=0.10.2",
+        "soundfile>=0.13",
+        "scikit-learn>=1.3",
+        "pretty_midi>=0.2.10",
+        "mir_eval>=0.8",
+        "tqdm>=4.67",
+        "pyyaml>=6.0",
+        "tf_keras==2.15.0",
+    )
+    .env(
+        {
+            "TF_USE_LEGACY_KERAS": "1",
+            "TF_CPP_MIN_LOG_LEVEL": "2",
+            "PYTHONUNBUFFERED": "1",
+        }
+    )
+)
+
 btc_image = (
     modal.Image.debian_slim("3.11")
     .apt_install("ffmpeg", "libsndfile1")
@@ -296,6 +321,47 @@ def train(
     return output
 
 
+
+@app.function(
+    image=context_image,
+    gpu="A10G",
+    cpu=8,
+    memory=32768,
+    timeout=24 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def train_context(
+    config: str = "configs/chord170_gates.yaml",
+    run_name: str = "",
+    extra_args: str = "",
+) -> str:
+    """Train the long-context transformer on an A10G (TF 2.15 image)."""
+    import shlex
+
+    _ensure_bundle()
+    name = run_name.strip() or time.strftime("context-%Y%m%d-%H%M%S")
+    out_dir = os.path.join(RUNS, "chord170", name)
+    command = [
+        "python", "scripts/train_chord_170.py",
+        "--config", config,
+        "--out-dir", out_dir,
+    ]
+    if extra_args.strip():
+        command += shlex.split(extra_args)
+    output = _run(command)
+    runs_volume.commit()
+    metrics_path = os.path.join(out_dir, "metrics.json")
+    if os.path.isfile(metrics_path):
+        with open(metrics_path, encoding="utf-8") as handle:
+            print("===== metrics.json =====", flush=True)
+            print(handle.read(), flush=True)
+    with open(os.path.join(out_dir, "training_log.csv"), encoding="utf-8") as handle:
+        print("===== training_log.csv =====", flush=True)
+        print(handle.read(), flush=True)
+    return output
+
+
 @app.function(
     image=image,
     cpu=8,
@@ -339,6 +405,54 @@ def eval_model(
         command += ["--disambiguate-bass"]
     if frame_aggregation and frame_aggregation != "mean":
         command += ["--frame-aggregation", frame_aggregation]
+    output = _run(command)
+    runs_volume.commit()
+    if os.path.isfile(out_path):
+        with open(out_path, encoding="utf-8") as handle:
+            print("===== eval report =====", flush=True)
+            print(handle.read(), flush=True)
+    return output
+
+
+
+@app.function(
+    image=context_image,
+    cpu=8,
+    memory=32768,
+    timeout=2 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+)
+def eval_context(
+    checkpoint: str,
+    split: str = "test",
+    sources: str = "guitarset_fine,egset12_fine,idmt_smt_guitar_fine,rwc_fine",
+    out: str = "",
+    context_frames: str = "100",
+    structured_decode: str = "none",
+    chord_weight: str = "1.0",
+    root_weight: str = "1.0",
+    quality_weight: str = "1.0",
+    pitch_weight: str = "0.25",
+) -> str:
+    """Evaluate a long-context checkpoint with optional structured decoding."""
+    _ensure_bundle()
+    out_path = out.strip() or os.path.join(
+        RUNS, "chord170", "eval", f"{Path(checkpoint).stem}_{split}_context.json"
+    )
+    command = [
+        "python", "scripts/eval_chord_170.py",
+        "--checkpoint", checkpoint,
+        "--split", split,
+        "--sources", sources,
+        "--out", out_path,
+        "--context-frames", str(int(context_frames)),
+        "--crop-window", "16",
+        "--structured-decode", structured_decode,
+        "--chord-weight", str(chord_weight),
+        "--root-weight", str(root_weight),
+        "--quality-weight", str(quality_weight),
+        "--pitch-weight", str(pitch_weight),
+    ]
     output = _run(command)
     runs_volume.commit()
     if os.path.isfile(out_path):
