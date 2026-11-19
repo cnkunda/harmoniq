@@ -98,6 +98,8 @@ SOURCE_DIRS = {
     "egset12_fine": "chord170/fine/egset12",
     "idmt_smt_guitar_fine": "chord170/fine/idmt_smt_guitar",
     "rwc_fine": "chord170/fine/rwc",
+    "guitar_techs_fine": "chord170/fine/guitar_techs",
+    "idmt_chords_fine": "chord170/fine/idmt_chords",
     "slakh_fine": "chord170/slakh_fine",
 }
 

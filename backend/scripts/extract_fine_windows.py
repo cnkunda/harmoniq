@@ -20,8 +20,11 @@ Usage (Modal entrypoint ``prepare_fine`` in modal_chord_170.py)::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import sys
+import xml.etree.ElementTree as ET
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -32,8 +35,10 @@ if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
 from app.chord_labels import (  # noqa: E402
+    active_pitches,
     bass_pitch_class_from_notes,
     parse_annotation_label,
+    pitch_to_pitch_class,
 )
 from app.chord_vocab import CHORD_TO_IDX, NUM_CLASSES  # noqa: E402
 from app.chord_vocab_170 import (  # noqa: E402
@@ -50,10 +55,12 @@ from scripts.chord_data_v2 import (  # noqa: E402
     REAL_DATASETS,
     SPLITS_PATH,
     egset12_notes,
+    guitar_techs_notes,
     guitarset_notes,
     rwc_chord_labels,
     idmt_chord_labels,
 )
+from scripts.prepare_slakh import _chord_for  # noqa: E402
 
 TARGET_SR = 44100
 HOP_SEC = 0.1
@@ -94,6 +101,41 @@ def _bass_from_intervals(intervals: list[tuple[float, float, str]], time_s: floa
             pc = pitch_class_from_name(root)
             return BASS_TO_IDX[BASS_VOCAB[pc % 12]] if pc is not None else BASS_X_IDX
     return BASS_X_IDX
+
+
+def _hash_split(dataset: str, track_id: str) -> str:
+    """Deterministic 80/10/10 split for datasets without an external split."""
+    score = int(hashlib.sha256(f"{dataset}:{track_id}".encode()).hexdigest(), 16) % 100
+    if score < 10:
+        return "test"
+    if score < 20:
+        return "val"
+    return "train"
+
+
+def _idmt_xml_notes(xml_path: Path) -> list[tuple[float, float, float]]:
+    """Parse IDMT ``instrumentRecording`` XML note events."""
+    try:
+        root = ET.parse(xml_path).getroot()
+    except (ET.ParseError, OSError):
+        return []
+    notes: list[tuple[float, float, float]] = []
+    for event in root.iter("event"):
+        try:
+            pitch = float(event.findtext("pitch", ""))
+            onset = float(event.findtext("onsetSec", ""))
+            offset = float(event.findtext("offsetSec", ""))
+        except (TypeError, ValueError):
+            continue
+        notes.append((onset, offset, pitch))
+    return notes
+
+
+def _chord_from_notes(notes: list[tuple[float, float, float]], time_s: float) -> int:
+    """170-class label from the pitch classes sounding at ``time_s``."""
+    pitches = active_pitches(notes, time_s)
+    pitch_classes = frozenset(pitch_to_pitch_class(p) for p in pitches)
+    return _chord_for(pitch_classes)
 
 
 def _cqt_windows(audio_path: Path, window: int, hop: int) -> tuple[np.ndarray, np.ndarray]:
@@ -157,6 +199,40 @@ def _dataset_tracks(dataset: str, splits: dict) -> list[dict]:
             split = splits.get("egset12", {}).get(stem, "train")
             tracks.append({"track_id": stem, "timeline": path, "audio": audio,
                            "notes": notes.get(stem), "split": split})
+    elif dataset == "guitar_techs":
+        notes = guitar_techs_notes(root / "raw")
+        known = splits.get("guitar_techs", {})
+        for path in sorted(timelines.glob("*.json")):
+            stem = path.stem
+            if stem not in known:
+                continue
+            parts = stem.split("_", 2)
+            if len(parts) < 3:
+                continue
+            set_dir, name = "_".join(parts[:2]), parts[2]
+            audio = (root / "raw" / set_dir / "audio" / "directinput"
+                     / f"directinput_{name}.wav")
+            if not audio.exists():
+                continue
+            tracks.append({"track_id": stem, "timeline": path, "audio": audio,
+                           "notes": notes.get(stem), "split": known[stem]})
+    elif dataset == "idmt_chords":
+        dataset_root = root / "raw" / "audio" / "dataset1"
+        for track_dir in sorted(p for p in dataset_root.iterdir() if p.is_dir()):
+            if "Chords" not in track_dir.name:
+                continue
+            slug = re.sub(r"[^A-Za-z0-9_-]+", "_", track_dir.name).strip("_")
+            for xml_path in sorted((track_dir / "annotation").glob("*.xml")):
+                audio = track_dir / "audio" / f"{xml_path.stem}.wav"
+                if not audio.exists():
+                    continue
+                notes = _idmt_xml_notes(xml_path)
+                if not notes:
+                    continue
+                track_id = f"{slug}_{xml_path.stem}"
+                tracks.append({"track_id": track_id, "audio": audio, "notes": notes,
+                               "labels_from_notes": True,
+                               "split": _hash_split(dataset, track_id)})
     elif dataset == "idmt_smt_guitar":
         labels = idmt_chord_labels(root / "raw" / "audio" / "dataset4")
         for path in sorted(timelines.glob("*.json")):
@@ -190,15 +266,20 @@ def _dataset_tracks(dataset: str, splits: dict) -> list[dict]:
 def _process_track(track: dict, out_dir: Path, dataset: str,
                    window: int, hop: int) -> dict:
     try:
-        timeline = json.loads(Path(track["timeline"]).read_text())
+        timeline = (json.loads(Path(track["timeline"]).read_text())
+                    if track.get("timeline") else None)
         windows, centres = _cqt_windows(Path(track["audio"]), window, hop)
         if len(windows) == 0:
             return {"track": track["track_id"], "status": "empty"}
         labels = np.zeros(len(windows), dtype=np.int64)
         bass = np.full(len(windows), BASS_X_IDX, dtype=np.int64)
         for index, centre in enumerate(centres):
-            label_277 = _label_at(timeline, float(centre))
-            labels[index] = _MAP_TABLE[label_277] if label_277 < NUM_CLASSES - 1 else N_IDX_170
+            if track.get("labels_from_notes"):
+                labels[index] = _chord_from_notes(track["notes"], float(centre))
+            else:
+                label_277 = _label_at(timeline, float(centre))
+                labels[index] = (_MAP_TABLE[label_277]
+                                 if label_277 < NUM_CLASSES - 1 else N_IDX_170)
             if track.get("notes"):
                 pc = bass_pitch_class_from_notes(track["notes"], float(centre))
                 if pc is not None:

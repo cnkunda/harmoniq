@@ -524,6 +524,8 @@ def main(argv: list[str] | None = None) -> int:
         "egset12_fine": args.data_root / "chord170" / "fine" / "egset12",
         "idmt_smt_guitar_fine": args.data_root / "chord170" / "fine" / "idmt_smt_guitar",
         "rwc_fine": args.data_root / "chord170" / "fine" / "rwc",
+        "guitar_techs_fine": args.data_root / "chord170" / "fine" / "guitar_techs",
+        "idmt_chords_fine": args.data_root / "chord170" / "fine" / "idmt_chords",
         "slakh_fine": args.data_root / "chord170" / "slakh_fine",
     }
     features, labels, bass, track_ids, centres, sources = [], [], [], [], [], []
