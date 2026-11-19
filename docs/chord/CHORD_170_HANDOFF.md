@@ -54,7 +54,9 @@ Progress across iterations (external test unless noted):
 | Long-context 64 (400-track Slakh subset, hybrid decode) | 0.307 | 0.502 | 0.652 | 0.818 | 0.203 | 0.088 |
 | Long-context 64, full data (plain head) | 0.293 | 0.517 | 0.659 | 0.824 | 0.234 | 0.108 |
 | + guitar-only fine-tune (plain head) | **0.311** | **0.527** | **0.667** | **0.832** | 0.248 | 0.106 |
-| + guitar-only fine-tune (hybrid decode) | 0.297 | 0.523 | 0.661 | **0.832** | **0.260** | **0.105** |
+| + guitar-only fine-tune (hybrid decode) | 0.297 | 0.523 | 0.661 | **0.832** | **0.260** | 0.105 |
+| Quality-balanced Slakh subset (from scratch, plain) | 0.296 | 0.513 | 0.659 | 0.813 | 0.229 | **0.060** |
+| Balanced subset + guitar fine-tune (hybrid) | 0.304 | **0.525** | **0.669** | 0.826 | 0.237 | **0.063** |
 
 ---
 
@@ -178,6 +180,15 @@ Progress across iterations (external test unless noted):
   all non-Slakh sources): test macro **0.311** / exact **0.527** / MIREX
   **0.667** / bass **0.832** / slash 0.248 / ECE 0.106; hybrid decode slash
   **0.260**, macro 0.297. A second fine-tune (`guitarft2`) did not improve.
+- Balanced-subset follow-up (`build_slakh_subset.py`, `context-s64-guitar-bal`):
+  guitar sources + 400 Slakh tracks chosen by greedy 170-class/inversion
+  coverage (320/40/40 splits, 62,835 windows, 115/170 classes). From
+  scratch it reached macro 0.296 / exact 0.513 / MIREX 0.659 / bass 0.813 /
+  slash 0.229 / ECE 0.060. Fine-tuning it on guitar sources gave macro
+  0.305 / exact 0.525 / MIREX **0.669** / bass 0.826 / slash 0.237 / ECE
+  **0.063**, with macro over classes with ≥20 frames **0.497**. This did
+  not beat full-data pretraining + guitar fine-tuning on macro/slash, but it
+  is the best MIREX/ECE/high-support-macro configuration.
 - Evidence: `docs/audit/amt/chord170_context_structured.json`.
 
 ### Frame supervision + real-data additions (`d43253e`, `178014b`, `941c7da`, `88522c0`)
@@ -346,6 +357,7 @@ modal run scripts/modal_chord_170.py::eval_model \
 | `scripts/extract_fine_windows.py` | 1.6 s windows for GuitarSet/EGSet12/IDMT/RWC/Guitar-TECHS/IDMT-d1 |
 | `scripts/add_frame_labels.py` | per-frame chord/bass labels in the fine npz (no CQT recompute) |
 | `scripts/chord_context.py` | long-context slicing, pitch targets, structured decoding |
+| `scripts/build_slakh_subset.py` | quality-balanced Slakh fine subset (hardlinks, no CQT recompute) |
 | `scripts/eval_chord_baseline.py` | Phase 0 harness (25-class baseline) |
 | `scripts/compare_teachers.py` | MT3-template vs BTC on IDMT |
 | `scripts/modal_chord_170.py` | Modal app |

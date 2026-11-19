@@ -667,7 +667,9 @@ External fine test (3,121 windows, 86 tracks):
 | 400-track Slakh subset, hybrid | 0.307 | 0.502 | 0.652 | 0.818 | 0.203 | 0.088 |
 | Full data, plain head | 0.293 | 0.517 | 0.659 | 0.824 | 0.234 | 0.108 |
 | Full data + guitar-only fine-tune, plain | **0.311** | **0.527** | **0.667** | **0.832** | 0.248 | 0.106 |
-| Full data + guitar-only fine-tune, hybrid | 0.297 | 0.523 | 0.661 | **0.832** | **0.260** | **0.105** |
+| Full data + guitar-only fine-tune, hybrid | 0.297 | 0.523 | 0.661 | **0.832** | **0.260** | 0.105 |
+| Balanced Slakh subset, from scratch | 0.296 | 0.513 | 0.659 | 0.813 | 0.229 | **0.060** |
+| Balanced subset + guitar fine-tune, hybrid | 0.304 | **0.525** | **0.669** | 0.826 | 0.237 | 0.063 |
 
 This is the strongest iteration so far: +0.033 supported macro, +0.066 slash,
 +0.076 exact, +0.034 WCSR-MIREX, and +0.059 bass versus `slakh-full-fine`.
@@ -677,7 +679,15 @@ The macro gate is also a measurement problem: the 102 supported test classes
 include 15 with one frame, 19 with 2–4, and 14 with 5–9. Macro over classes
 with ≥10 frames is 0.444; over ≥20 frames it is 0.485 (passes 0.45).
 Changing the reported gate to a minimum-support definition is a metric
-decision and has not been made silently. Artifact:
+decision and has not been made silently.
+
+`scripts/build_slakh_subset.py` builds a deterministic 400-track Slakh subset
+by greedy coverage of the 170 classes and inversion classes (320/40/40
+splits, 62,835 windows, 115/170 classes) using hardlinks, no CQT recompute.
+A from-scratch context model on guitar sources + this subset did not beat the
+full-data + guitar-fine-tune recipe on macro/slash (0.296/0.229), but after
+guitar fine-tuning it gave the best MIREX (0.669) and ECE (0.063), and macro
+over classes with ≥20 frames reached 0.497. Artifact:
 `docs/audit/amt/chord170_context_structured.json`.
 
 ## Phase plan (remaining)
