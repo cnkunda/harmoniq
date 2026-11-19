@@ -995,6 +995,36 @@ def add_frame_labels(
     image=audio_image,
     cpu=8,
     memory=32768,
+    timeout=2 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def build_slakh_subset(limit: str = "400", seed: str = "0",
+                       force: str = "true") -> str:
+    """Select a quality-balanced Slakh fine subset (hardlinks existing npz)."""
+    _ensure_bundle()
+    report_path = os.path.join(
+        BACKEND, "data", "chord170", "slakh_balanced_report.json")
+    command = [
+        "python", "scripts/build_slakh_subset.py",
+        "--limit", str(int(limit)),
+        "--seed", str(int(seed)),
+        "--report", report_path,
+    ]
+    if _truthy(force):
+        command.append("--force")
+    output = _run(command)
+    data_volume.commit()
+    if os.path.isfile(report_path):
+        with open(report_path, encoding="utf-8") as handle:
+            print(handle.read(), flush=True)
+    return output
+
+
+@app.function(
+    image=audio_image,
+    cpu=8,
+    memory=32768,
     timeout=24 * 60 * 60,
     volumes={ROOT: data_volume, RUNS: runs_volume},
     retries=1,
