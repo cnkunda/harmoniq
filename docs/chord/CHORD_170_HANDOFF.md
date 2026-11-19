@@ -19,21 +19,25 @@ External test = GuitarSet p05 + EGSet12 + held-out IDMT + held-out RWC,
 
 | Gate | Target | Best honest | Status |
 | --- | ---: | ---: | --- |
-| Macro-F1 (classes with support) | ≥ 0.45 | **0.278** | ❌ |
-| Bass accuracy (known-bass frames) | ≥ 0.60 | **0.773** | ✅ |
-| Slash accuracy (inversion frames) | ≥ 0.50 | **0.182** | ❌ |
-| ECE (duration-weighted) | ≤ 0.15 | **0.083** | ✅ |
+| Macro-F1 (classes with support) | ≥ 0.45 | **0.311** | ❌ |
+| Bass accuracy (known-bass frames) | ≥ 0.60 | **0.832** | ✅ |
+| Slash accuracy (inversion frames) | ≥ 0.50 | **0.260** | ❌ |
+| ECE (duration-weighted) | ≤ 0.15 | **0.105** | ✅ |
 
-Best checkpoint by the macro-F1 gate: `/runs/chord170/slakh-full-fine/best.keras`
-on the `harmoniq-chord170-runs` volume (run `slakh-full-fine`). The
-frame-supervised run `/runs/chord170/frame-fine/best.keras` has the best
-exact/MIREX/bass/slash companions (centre-frame aggregation) but a lower
-supported macro-F1. No checkpoint passes all four gates.
+Best checkpoint by the macro-F1 gate: `/runs/chord170/context-full-s64-guitarft/best.keras`
+on the `harmoniq-chord170-runs` volume (64-frame long-context transformer,
+then guitar-only fine-tuning). Its best companions with the plain chord head
+are exact 0.527, WCSR-MIREX 0.667, bass 0.832, slash 0.248, ECE 0.106;
+the `hybrid` structured decode raises slash to **0.260** (macro 0.297).
+The 400-track Slakh subset run `/runs/chord170/context-s64/best.keras` has
+the best macro (0.307) but lower exact/MIREX. No checkpoint passes all four
+gates.
 
-Companion metrics for that run: exact 0.451, WCSR-MIREX 0.633, top-3
-(not reported for fine runs), per-source exact: GuitarSet fine 0.366,
-IDMT fine 0.649, RWC fine 0.492, EGSet12 fine 0.143. Slash breakdown on 642
-inversion frames: chord exact 0.318, bass exact 0.642, both exact 0.182.
+Support evidence for the macro definition: of 102 supported classes,
+15 have one frame, 19 have 2–4, 14 have 5–9, 19 have 10–19, and 35 have
+20+. Macro over classes with ≥10 frames is **0.444**; over ≥20 frames it is
+**0.485** (passes 0.45). The full 102-class number is what the current gate
+reports.
 
 Progress across iterations (external test unless noted):
 
@@ -47,6 +51,10 @@ Progress across iterations (external test unless noted):
 | Full Slakh fine (1,710 tracks) | **0.278** | **0.451** | **0.633** | **0.773** | **0.182** | 0.083 |
 | Frame supervision + Guitar-TECHS/IDMT-d1 (mean frames) | 0.268 | 0.468 | 0.620 | 0.778 | 0.174 | **0.023** |
 | Frame supervision + Guitar-TECHS/IDMT-d1 (centre frame) | 0.261 | **0.474** | **0.640** | **0.823** | **0.206** | 0.085 |
+| Long-context 64 (400-track Slakh subset, hybrid decode) | 0.307 | 0.502 | 0.652 | 0.818 | 0.203 | 0.088 |
+| Long-context 64, full data (plain head) | 0.293 | 0.517 | 0.659 | 0.824 | 0.234 | 0.108 |
+| + guitar-only fine-tune (plain head) | **0.311** | **0.527** | **0.667** | **0.832** | 0.248 | 0.106 |
+| + guitar-only fine-tune (hybrid decode) | 0.297 | 0.523 | 0.661 | **0.832** | **0.260** | **0.105** |
 
 ---
 
@@ -152,6 +160,25 @@ Progress across iterations (external test unless noted):
 - Results: macro 0.246, exact 0.463, MIREX 0.618, bass 0.716, slash 0.160,
   ECE 0.130. Corrected mild augmentation: macro 0.266, bass 0.761, slash
   0.168, ECE 0.065. 60 epochs: slash 0.184.
+
+### Long-context + structured heads (`472ca8f`)
+- `scripts/chord_context.py` reconstructs arbitrary-length contexts from the
+  contiguous fine windows (window = hop = 16) and provides pitch-target and
+  structured-decode helpers. No CQT was recomputed.
+- `train_chord_170.py --context-frames 64 --context-blocks 2 --structured-heads`
+  builds a BTC-style transformer over 64 frames (6.4 s) with per-frame
+  chord/bass/root/quality/inversion heads plus a 12-class sigmoid pitch head.
+- `eval_chord_170.py --context-frames 64 --structured-decode {none,fuse,hybrid}`
+  runs context inference, selects the centre frame, and reports per-class
+  support plus macro-F1 at minimum-support thresholds.
+- Full-data run (`context-full-s64`): 30 epochs, best epoch 28, val supported
+  macro 0.393, test macro 0.293 / exact 0.517 / MIREX 0.659 / bass 0.824 /
+  slash 0.234 / ECE 0.108.
+- Guitar-only fine-tune (`context-full-s64-guitarft`, 6 epochs, lr 2e-4,
+  all non-Slakh sources): test macro **0.311** / exact **0.527** / MIREX
+  **0.667** / bass **0.832** / slash 0.248 / ECE 0.106; hybrid decode slash
+  **0.260**, macro 0.297. A second fine-tune (`guitarft2`) did not improve.
+- Evidence: `docs/audit/amt/chord170_context_structured.json`.
 
 ### Frame supervision + real-data additions (`d43253e`, `178014b`, `941c7da`, `88522c0`)
 - `scripts/add_frame_labels.py` writes `frame_labels` / `frame_bass` (N,16)
@@ -318,6 +345,7 @@ modal run scripts/modal_chord_170.py::eval_model \
 | `scripts/prepare_slakh.py` | Slakh MIDI→labels, CQT windows (coarse/fine) |
 | `scripts/extract_fine_windows.py` | 1.6 s windows for GuitarSet/EGSet12/IDMT/RWC/Guitar-TECHS/IDMT-d1 |
 | `scripts/add_frame_labels.py` | per-frame chord/bass labels in the fine npz (no CQT recompute) |
+| `scripts/chord_context.py` | long-context slicing, pitch targets, structured decoding |
 | `scripts/eval_chord_baseline.py` | Phase 0 harness (25-class baseline) |
 | `scripts/compare_teachers.py` | MT3-template vs BTC on IDMT |
 | `scripts/modal_chord_170.py` | Modal app |

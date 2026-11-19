@@ -650,6 +650,36 @@ slash do not. This is a documented negative result for frame supervision as
 a route to the macro gate. Artifact:
 `docs/audit/amt/chord170_frame_supervision.json`.
 
+## Long-context transformer + structured heads (2026-11-19)
+
+The fine cache (window = hop = 16) tiles CQT frames exactly, so
+`scripts/chord_context.py` reconstructs 64-frame (6.4 s) contexts per
+training window and per external-test window without re-extracting audio.
+`train_chord_170.py` gains a BTC-style transformer (2 blocks, d_model 192,
+per-frame heads) and a 12-class pitch head; `eval_chord_170.py` gains
+context inference, centre-frame selection, `none/fuse/hybrid` structured
+decoding, per-class support, and macro-F1 at minimum-support thresholds.
+
+External fine test (3,121 windows, 86 tracks):
+
+| Run / decode | Macro (supported) | Exact | MIREX | Bass | Slash | ECE |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 400-track Slakh subset, hybrid | 0.307 | 0.502 | 0.652 | 0.818 | 0.203 | 0.088 |
+| Full data, plain head | 0.293 | 0.517 | 0.659 | 0.824 | 0.234 | 0.108 |
+| Full data + guitar-only fine-tune, plain | **0.311** | **0.527** | **0.667** | **0.832** | 0.248 | 0.106 |
+| Full data + guitar-only fine-tune, hybrid | 0.297 | 0.523 | 0.661 | **0.832** | **0.260** | **0.105** |
+
+This is the strongest iteration so far: +0.033 supported macro, +0.066 slash,
++0.076 exact, +0.034 WCSR-MIREX, and +0.059 bass versus `slakh-full-fine`.
+Macro-F1 and slash still miss their gates; production remains untouched.
+
+The macro gate is also a measurement problem: the 102 supported test classes
+include 15 with one frame, 19 with 2–4, and 14 with 5–9. Macro over classes
+with ≥10 frames is 0.444; over ≥20 frames it is 0.485 (passes 0.45).
+Changing the reported gate to a minimum-support definition is a metric
+decision and has not been made silently. Artifact:
+`docs/audit/amt/chord170_context_structured.json`.
+
 ## Phase plan (remaining)
 
 | Phase | Scope | Gate |
@@ -667,6 +697,7 @@ cd backend
 .venv-wsl/bin/python -m pytest -q tests/test_chord_vocab_170.py tests/test_chord_labels_170.py
 .venv-wsl/bin/python -m pytest -q tests/test_chord_eval_baseline.py
 .venv-wsl/bin/python -m pytest -q tests/test_chord_frame_labels.py
+.venv-wsl/bin/python -m pytest -q tests/test_chord_context.py
 .venv-wsl/bin/python scripts/chord_data_v2.py data/guitarset --split test
 ```
 

@@ -1,0 +1,956 @@
+{
+  "program": "Chord 170 long-context + structured heads",
+  "architecture": "64-frame BTC-style transformer (2 blocks, d_model 192) with per-frame chord/bass/root/quality/inversion/pitch heads",
+  "external_test": {
+    "sources": [
+      "guitarset_fine",
+      "egset12_fine",
+      "idmt_smt_guitar_fine",
+      "rwc_fine"
+    ],
+    "split": "test",
+    "n_windows": 3121,
+    "n_tracks": 86
+  },
+  "runs": {
+    "context-s64 (400-track Slakh subset)": {
+      "checkpoint": "/runs/chord170/context-s64/best.keras",
+      "selection": "combined val",
+      "best_epoch": 23
+    },
+    "context-full-s64 (all data)": {
+      "checkpoint": "/runs/chord170/context-full-s64/best.keras",
+      "selection": "combined val",
+      "best_epoch": 28
+    },
+    "context-full-s64-guitarft (best)": {
+      "checkpoint": "/runs/chord170/context-full-s64-guitarft/best.keras",
+      "init": "context-full-s64",
+      "fine_tune_sources": [
+        "guitarset_fine",
+        "egset12_fine",
+        "idmt_smt_guitar_fine",
+        "rwc_fine",
+        "guitar_techs_fine",
+        "idmt_chords_fine"
+      ],
+      "fine_tune_epochs": 6,
+      "learning_rate": 0.0002,
+      "selection": "guitar-only val",
+      "best_epoch": 6
+    },
+    "context-full-s64-guitarft2": {
+      "checkpoint": "/runs/chord170/context-full-s64-guitarft2/best.keras",
+      "init": "context-full-s64-guitarft",
+      "fine_tune_epochs": 10,
+      "learning_rate": 0.0001,
+      "best_epoch": 5
+    }
+  },
+  "reports": {
+    "subset_none": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.25496920269123025,
+      "macro_f1_supported": 0.30496316400323614,
+      "supported_class_count": 102,
+      "exact_accuracy": 0.4982377443127203,
+      "top3_accuracy": 0.7302146747837231,
+      "ece": 0.08774180169366792,
+      "wcsr": {
+        "root": 0.6324895866709388,
+        "majmin": 0.5986670692376448,
+        "thirds": 0.593719961550785,
+        "triads": 0.5732137135533483,
+        "sevenths": 0.515065946375487,
+        "tetrads": 0.48317846843960255,
+        "mirex": 0.644344761294457
+      },
+      "bass": {
+        "overall": 0.6786286446651714,
+        "known_bass": 0.8180385978731785,
+        "chord_frames": 0.7002697235333782,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.5487612018977333,
+        "slash_acc": 0.19937694704049844,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.19455026455026453,
+          "exact_accuracy": 0.4126984126984127,
+          "wcsr_mirex": 0.5405797101449276
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.25126612366568396,
+          "exact_accuracy": 0.40901360544217685,
+          "wcsr_mirex": 0.4875747823997833
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.5194718933457324,
+          "exact_accuracy": 0.6830188679245283,
+          "wcsr_mirex": 0.7438888710346281
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.2549086159373775,
+          "exact_accuracy": 0.536178107606679,
+          "wcsr_mirex": 0.7298829298573002
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.42740289937993986,
+          0.5618745204800266
+        ],
+        "macro_f1": [
+          0.2254367656669684,
+          0.3035887619365446
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.32242990654205606,
+        "bass_exact": 0.764797507788162,
+        "both_exact": 0.19937694704049844
+      },
+      "macro_f1_support_ge_5": 0.38802688316593875,
+      "macro_f1_support_ge_10": 0.43955237139414505,
+      "macro_f1_support_ge_20": 0.4620072345605627,
+      "support_histogram": {
+        "1": 15,
+        "2-4": 19,
+        "5-9": 14,
+        "10-19": 19,
+        "20+": 35,
+        "classes": 102
+      }
+    },
+    "subset_fuse": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.26782179525849853,
+      "macro_f1_supported": 0.304581649509665,
+      "supported_class_count": 102,
+      "exact_accuracy": 0.49631528356296056,
+      "top3_accuracy": 0.7302146747837231,
+      "ece": 0.08774180169366792,
+      "wcsr": {
+        "root": 0.6388977891701377,
+        "majmin": 0.5965557745797802,
+        "thirds": 0.5914770906760654,
+        "triads": 0.5722524831784684,
+        "sevenths": 0.510724466472114,
+        "tetrads": 0.4809355975648831,
+        "mirex": 0.6421018904197373
+      },
+      "bass": {
+        "overall": 0.6786286446651714,
+        "known_bass": 0.8180385978731785,
+        "chord_frames": 0.7002697235333782,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.5482340537691092,
+        "slash_acc": 0.20093457943925233,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.12267839687194527,
+          "exact_accuracy": 0.3492063492063492,
+          "wcsr_mirex": 0.4905797101449276
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.2802014576149716,
+          "exact_accuracy": 0.41581632653061223,
+          "wcsr_mirex": 0.49589303299083215
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.5246992265588091,
+          "exact_accuracy": 0.660377358490566,
+          "wcsr_mirex": 0.7269025893424639
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.26443112375069916,
+          "exact_accuracy": 0.533704390847248,
+          "wcsr_mirex": 0.7217756447060761
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.4212300231539094,
+          0.5610118028743784
+        ],
+        "macro_f1": [
+          0.23453446076351994,
+          0.30880558778594475
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.32087227414330216,
+        "bass_exact": 0.764797507788162,
+        "both_exact": 0.20093457943925233
+      },
+      "macro_f1_support_ge_5": 0.38225126214328536,
+      "macro_f1_support_ge_10": 0.4348665131128952,
+      "macro_f1_support_ge_20": 0.45468177159154655,
+      "support_histogram": {
+        "1": 15,
+        "2-4": 19,
+        "5-9": 14,
+        "10-19": 19,
+        "20+": 35,
+        "classes": 102
+      }
+    },
+    "subset_hybrid": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.26499003362504886,
+      "macro_f1_supported": 0.30655709772309575,
+      "supported_class_count": 102,
+      "exact_accuracy": 0.5017622556872797,
+      "top3_accuracy": 0.7302146747837231,
+      "ece": 0.08774645608879367,
+      "wcsr": {
+        "root": 0.6485100929189362,
+        "majmin": 0.604840673845168,
+        "thirds": 0.6001281640499839,
+        "triads": 0.5805831464274271,
+        "sevenths": 0.5151635538525782,
+        "tetrads": 0.4857417494392823,
+        "mirex": 0.6520346042934957
+      },
+      "bass": {
+        "overall": 0.6786286446651714,
+        "known_bass": 0.8180385978731785,
+        "chord_frames": 0.7002697235333782,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.5608856088560885,
+        "slash_acc": 0.20249221183800623,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.1113378684807256,
+          "exact_accuracy": 0.2698412698412698,
+          "wcsr_mirex": 0.4239130434782609
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.2798112478338803,
+          "exact_accuracy": 0.41836734693877553,
+          "wcsr_mirex": 0.49967749973182063
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.5123943344364567,
+          "exact_accuracy": 0.660377358490566,
+          "wcsr_mirex": 0.7451621076019823
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.26492134720356053,
+          "exact_accuracy": 0.5454545454545454,
+          "wcsr_mirex": 0.7392614817757812
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.42589831237175796,
+          0.569358096677633
+        ],
+        "macro_f1": [
+          0.23207325055956235,
+          0.30458657233611314
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.32398753894080995,
+        "bass_exact": 0.764797507788162,
+        "both_exact": 0.20249221183800623
+      },
+      "macro_f1_support_ge_5": 0.38521443446343145,
+      "macro_f1_support_ge_10": 0.43859791529382003,
+      "macro_f1_support_ge_20": 0.45813927519104647,
+      "support_histogram": {
+        "1": 15,
+        "2-4": 19,
+        "5-9": 14,
+        "10-19": 19,
+        "20+": 35,
+        "classes": 102
+      }
+    },
+    "full_none": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.24858843952343668,
+      "macro_f1_supported": 0.29245698767463135,
+      "supported_class_count": 102,
+      "exact_accuracy": 0.5168215315603973,
+      "top3_accuracy": 0.7295738545338033,
+      "ece": 0.10778808593750001,
+      "wcsr": {
+        "root": 0.6462672220442166,
+        "majmin": 0.6130628641239464,
+        "thirds": 0.6042934956744633,
+        "triads": 0.5863505286767062,
+        "sevenths": 0.5363787417232482,
+        "tetrads": 0.5049663569368792,
+        "mirex": 0.6590836270426146
+      },
+      "bass": {
+        "overall": 0.6831143864146108,
+        "known_bass": 0.8239464356045687,
+        "chord_frames": 0.7053270397842212,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.5714285714285714,
+        "slash_acc": 0.2336448598130841,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.23092554251974542,
+          "exact_accuracy": 0.5555555555555556,
+          "wcsr_mirex": 0.6572463768115941
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.24423524065867924,
+          "exact_accuracy": 0.42346938775510207,
+          "wcsr_mirex": 0.5031234694186559
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.49141334538141485,
+          "exact_accuracy": 0.660377358490566,
+          "wcsr_mirex": 0.6923064077315876
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.24605079106485953,
+          "exact_accuracy": 0.559678416821274,
+          "wcsr_mirex": 0.7432027293662233
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.45098232801549126,
+          0.5778897741337349
+        ],
+        "macro_f1": [
+          0.22343598454733546,
+          0.29405616647829014
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.35046728971962615,
+        "bass_exact": 0.7710280373831776,
+        "both_exact": 0.2336448598130841
+      },
+      "macro_f1_support_ge_5": 0.3945813013783552,
+      "macro_f1_support_ge_10": 0.43475822572488604,
+      "macro_f1_support_ge_20": 0.4702606390408372,
+      "support_histogram": {
+        "1": 15,
+        "2-4": 19,
+        "5-9": 14,
+        "10-19": 19,
+        "20+": 35,
+        "classes": 102
+      }
+    },
+    "full_fuse": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.24934694520221512,
+      "macro_f1_supported": 0.28601561361430555,
+      "supported_class_count": 102,
+      "exact_accuracy": 0.5126561999359179,
+      "top3_accuracy": 0.7295738545338033,
+      "ece": 0.107789024639038,
+      "wcsr": {
+        "root": 0.6507529637936559,
+        "majmin": 0.613674626596362,
+        "thirds": 0.6052547260493432,
+        "triads": 0.5866709388016661,
+        "sevenths": 0.5332022673062514,
+        "tetrads": 0.5008010253123999,
+        "mirex": 0.655879525793015
+      },
+      "bass": {
+        "overall": 0.6831143864146108,
+        "known_bass": 0.8239464356045687,
+        "chord_frames": 0.7053270397842212,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.5645756457564576,
+        "slash_acc": 0.24766355140186916,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.25450333979745743,
+          "exact_accuracy": 0.5555555555555556,
+          "wcsr_mirex": 0.6405797101449274
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.2615588924617948,
+          "exact_accuracy": 0.42772108843537415,
+          "wcsr_mirex": 0.5116353250305902
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.4747805874309885,
+          "exact_accuracy": 0.6528301886792452,
+          "wcsr_mirex": 0.6833498837027859
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.24395586494561422,
+          "exact_accuracy": 0.5497835497835498,
+          "wcsr_mirex": 0.7342754803744613
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.44424171635754867,
+          0.5763051342312806
+        ],
+        "macro_f1": [
+          0.2231091951122599,
+          0.2929030072395139
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.3644859813084112,
+        "bass_exact": 0.7710280373831776,
+        "both_exact": 0.24766355140186916
+      },
+      "macro_f1_support_ge_5": 0.38603968846713815,
+      "macro_f1_support_ge_10": 0.41812928970459673,
+      "macro_f1_support_ge_20": 0.4634688385524772,
+      "support_histogram": {
+        "1": 15,
+        "2-4": 19,
+        "5-9": 14,
+        "10-19": 19,
+        "20+": 35,
+        "classes": 102
+      }
+    },
+    "full_hybrid": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.24579227037064805,
+      "macro_f1_supported": 0.28675764876575605,
+      "supported_class_count": 102,
+      "exact_accuracy": 0.5142582505607177,
+      "top3_accuracy": 0.7295738545338033,
+      "ece": 0.107789024639038,
+      "wcsr": {
+        "root": 0.6533162447933355,
+        "majmin": 0.6160300433926924,
+        "thirds": 0.6071771867991028,
+        "triads": 0.5885933995514259,
+        "sevenths": 0.5341920895812663,
+        "tetrads": 0.5014418455623197,
+        "mirex": 0.6590836270426146
+      },
+      "bass": {
+        "overall": 0.6831143864146108,
+        "known_bass": 0.8239464356045687,
+        "chord_frames": 0.7053270397842212,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.5756457564575646,
+        "slash_acc": 0.24922118380062305,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.20754237288135596,
+          "exact_accuracy": 0.4126984126984127,
+          "wcsr_mirex": 0.49275362318840576
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.25711629159682775,
+          "exact_accuracy": 0.4328231292517007,
+          "wcsr_mirex": 0.5155540034931283
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.46417348577966017,
+          "exact_accuracy": 0.6188679245283019,
+          "wcsr_mirex": 0.6529058795323184
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.24867997847559653,
+          "exact_accuracy": 0.5602968460111317,
+          "wcsr_mirex": 0.7482722456203985
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.4446674213943951,
+          0.5782189253238486
+        ],
+        "macro_f1": [
+          0.22011525544130367,
+          0.286436921209445
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.3660436137071651,
+        "bass_exact": 0.7710280373831776,
+        "both_exact": 0.24922118380062305
+      },
+      "macro_f1_support_ge_5": 0.38715274119431387,
+      "macro_f1_support_ge_10": 0.4195309116573365,
+      "macro_f1_support_ge_20": 0.46401484357903056,
+      "support_histogram": {
+        "1": 15,
+        "2-4": 19,
+        "5-9": 14,
+        "10-19": 19,
+        "20+": 35,
+        "classes": 102
+      }
+    },
+    "full_guitarft_none": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.26844185788420405,
+      "macro_f1_supported": 0.31055038461113804,
+      "supported_class_count": 102,
+      "exact_accuracy": 0.5270746555591157,
+      "top3_accuracy": 0.7423902595322012,
+      "ece": 0.10571425956474288,
+      "wcsr": {
+        "root": 0.6578019865427748,
+        "majmin": 0.6249620875504293,
+        "thirds": 0.6171099006728613,
+        "triads": 0.5994873438000641,
+        "sevenths": 0.5479577614338169,
+        "tetrads": 0.5171419416853572,
+        "mirex": 0.6667734700416533
+      },
+      "bass": {
+        "overall": 0.6898429990387697,
+        "known_bass": 0.8322174084285152,
+        "chord_frames": 0.7124072825354012,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.5893516078017923,
+        "slash_acc": 0.24766355140186916,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.278027950310559,
+          "exact_accuracy": 0.5555555555555556,
+          "wcsr_mirex": 0.6695652173913044
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.2509470418535796,
+          "exact_accuracy": 0.41836734693877553,
+          "wcsr_mirex": 0.5084911965337897
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.5038420905664878,
+          "exact_accuracy": 0.6830188679245283,
+          "wcsr_mirex": 0.7237270409819061
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.26452385416102564,
+          "exact_accuracy": 0.5794681508967223,
+          "wcsr_mirex": 0.7505119684969259
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.4591890848014857,
+          0.5898726229411974
+        ],
+        "macro_f1": [
+          0.23957967804954214,
+          0.31352766666685455
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.3598130841121495,
+        "bass_exact": 0.778816199376947,
+        "both_exact": 0.24766355140186916
+      },
+      "macro_f1_support_ge_5": 0.40541474591764076,
+      "macro_f1_support_ge_10": 0.4434930479280659,
+      "macro_f1_support_ge_20": 0.48491607409886545,
+      "support_histogram": {
+        "1": 15,
+        "2-4": 19,
+        "5-9": 14,
+        "10-19": 19,
+        "20+": 35,
+        "classes": 102
+      }
+    },
+    "full_guitarft_hybrid": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.2569245221429131,
+      "macro_f1_supported": 0.2972264079692525,
+      "supported_class_count": 102,
+      "exact_accuracy": 0.5232297340595963,
+      "top3_accuracy": 0.7423902595322012,
+      "ece": 0.10538524467568486,
+      "wcsr": {
+        "root": 0.6670938801666133,
+        "majmin": 0.6242886127195582,
+        "thirds": 0.618391541172701,
+        "triads": 0.5972444729253444,
+        "sevenths": 0.5429968167855516,
+        "tetrads": 0.5097725088112784,
+        "mirex": 0.6613264979173342
+      },
+      "bass": {
+        "overall": 0.6898429990387697,
+        "known_bass": 0.8322174084285152,
+        "chord_frames": 0.7124072825354012,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.588297311544544,
+        "slash_acc": 0.2601246105919003,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.1950870889635242,
+          "exact_accuracy": 0.4126984126984127,
+          "wcsr_mirex": 0.5094202898550724
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.2666816118655378,
+          "exact_accuracy": 0.43537414965986393,
+          "wcsr_mirex": 0.5220529142602193
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.47850063132119625,
+          "exact_accuracy": 0.6226415094339622,
+          "wcsr_mirex": 0.6665993202422277
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.2614539712504546,
+          "exact_accuracy": 0.575139146567718,
+          "wcsr_mirex": 0.7489367476770117
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.4551361865164579,
+          0.5860649343954755
+        ],
+        "macro_f1": [
+          0.23170961324450595,
+          0.3041096948216514
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.38006230529595014,
+        "bass_exact": 0.778816199376947,
+        "both_exact": 0.2601246105919003
+      },
+      "macro_f1_support_ge_5": 0.396200362314629,
+      "macro_f1_support_ge_10": 0.42989540574300095,
+      "macro_f1_support_ge_20": 0.4709299165057537,
+      "support_histogram": {
+        "1": 15,
+        "2-4": 19,
+        "5-9": 14,
+        "10-19": 19,
+        "20+": 35,
+        "classes": 102
+      }
+    },
+    "full_guitarft2_none": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.26316888843895425,
+      "macro_f1_supported": 0.30187019556232986,
+      "supported_class_count": 102,
+      "exact_accuracy": 0.5222685036847164,
+      "top3_accuracy": 0.7427106696571611,
+      "ece": 0.11511467099762701,
+      "wcsr": {
+        "root": 0.656199935917975,
+        "majmin": 0.6238857906548405,
+        "thirds": 0.6148670297981417,
+        "triads": 0.5966036526754246,
+        "sevenths": 0.5442439561989789,
+        "tetrads": 0.5120153796859981,
+        "mirex": 0.662287728292214
+      },
+      "bass": {
+        "overall": 0.6888817686638897,
+        "known_bass": 0.8310358408822371,
+        "chord_frames": 0.7113958192852327,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.5840801265155509,
+        "slash_acc": 0.23208722741433022,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.23738977072310405,
+          "exact_accuracy": 0.5396825396825397,
+          "wcsr_mirex": 0.6405797101449274
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.23568781372846373,
+          "exact_accuracy": 0.40901360544217685,
+          "wcsr_mirex": 0.5029910158881817
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.5086780036797898,
+          "exact_accuracy": 0.6867924528301886,
+          "wcsr_mirex": 0.7322941977193775
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.25808111982060394,
+          "exact_accuracy": 0.5769944341372912,
+          "wcsr_mirex": 0.7468827684178344
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.45198859086174,
+          0.5866024940966393
+        ],
+        "macro_f1": [
+          0.2348699528771703,
+          0.30702441370638683
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.34579439252336447,
+        "bass_exact": 0.7757009345794392,
+        "both_exact": 0.23208722741433022
+      },
+      "macro_f1_support_ge_5": 0.39129735683555833,
+      "macro_f1_support_ge_10": 0.42796026392122355,
+      "macro_f1_support_ge_20": 0.4741726236186149,
+      "support_histogram": {
+        "1": 15,
+        "2-4": 19,
+        "5-9": 14,
+        "10-19": 19,
+        "20+": 35,
+        "classes": 102
+      }
+    },
+    "full_guitarft2_hybrid": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.26079012349272757,
+      "macro_f1_supported": 0.3042551440748488,
+      "supported_class_count": 102,
+      "exact_accuracy": 0.5235501441845563,
+      "top3_accuracy": 0.7427106696571611,
+      "ece": 0.11511467099762701,
+      "wcsr": {
+        "root": 0.6680551105414931,
+        "majmin": 0.6268541713646878,
+        "thirds": 0.6215956424223006,
+        "triads": 0.5991669336751041,
+        "sevenths": 0.5437472961767992,
+        "tetrads": 0.5100929189362384,
+        "mirex": 0.6603652675424544
+      },
+      "bass": {
+        "overall": 0.6888817686638897,
+        "known_bass": 0.8310358408822371,
+        "chord_frames": 0.7113958192852327,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.588297311544544,
+        "slash_acc": 0.2507788161993769,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.20238095238095238,
+          "exact_accuracy": 0.42857142857142855,
+          "wcsr_mirex": 0.5260869565217391
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.2623452315365565,
+          "exact_accuracy": 0.43197278911564624,
+          "wcsr_mirex": 0.5165698028888756
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.49678050380678956,
+          "exact_accuracy": 0.6339622641509434,
+          "wcsr_mirex": 0.673277901517583
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.2646190427354806,
+          "exact_accuracy": 0.5757575757575758,
+          "wcsr_mirex": 0.7495351561306414
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.4537029641462549,
+          0.5877093584826993
+        ],
+        "macro_f1": [
+          0.23841805847438094,
+          0.30656469139400017
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "slash_breakdown": {
+        "n": 642,
+        "chord_exact": 0.37383177570093457,
+        "bass_exact": 0.7757009345794392,
+        "both_exact": 0.2507788161993769
+      },
+      "macro_f1_support_ge_5": 0.3984801611508948,
+      "macro_f1_support_ge_10": 0.43739589316644656,
+      "macro_f1_support_ge_20": 0.47489419685348905,
+      "support_histogram": {
+        "1": 15,
+        "2-4": 19,
+        "5-9": 14,
+        "10-19": 19,
+        "20+": 35,
+        "classes": 102
+      }
+    }
+  },
+  "gate_status": {
+    "macro_f1": {
+      "target": 0.45,
+      "best_supported": 0.3106,
+      "run": "context-full-s64-guitarft",
+      "decode": "none",
+      "pass": false
+    },
+    "bass_known": {
+      "target": 0.6,
+      "best": 0.8322,
+      "run": "context-full-s64-guitarft",
+      "decode": "none/hybrid",
+      "pass": true
+    },
+    "slash_acc": {
+      "target": 0.5,
+      "best": 0.2601,
+      "run": "context-full-s64-guitarft",
+      "decode": "hybrid (pitch-weight 0.25)",
+      "pass": false
+    },
+    "ece": {
+      "target_max": 0.15,
+      "best": 0.1054,
+      "run": "context-full-s64-guitarft",
+      "decode": "hybrid",
+      "pass": true
+    }
+  },
+  "support_evidence": {
+    "classes": 102,
+    "support_histogram": {
+      "1": 15,
+      "2-4": 19,
+      "5-9": 14,
+      "10-19": 19,
+      "20+": 35
+    },
+    "macro_f1_support_ge_10": 0.4435,
+    "macro_f1_support_ge_20": 0.4849,
+    "note": "The full supported-macro gate includes 34 classes with <5 frames (15 with one frame); macro over classes with >=20 frames passes 0.45. Metric-definition decision pending."
+  },
+  "verdict": "Long-context supervision + guitar-domain fine-tuning is the strongest iteration so far (+0.033 supported macro, +0.066 slash, +0.076 exact, +0.034 MIREX, +0.059 bass over slakh-full-fine) but macro-F1 and slash still miss their gates. Production remains untouched."
+}
