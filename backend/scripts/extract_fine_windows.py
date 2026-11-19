@@ -177,7 +177,8 @@ def _resolve_audio(raw: str, dataset: str) -> Path | None:
 
 def _dataset_tracks(dataset: str, splits: dict) -> list[dict]:
     tracks: list[dict] = []
-    root = REAL_DATASETS[dataset]
+    root = (REAL_DATASETS["idmt_smt_guitar"] if dataset == "idmt_chords"
+            else REAL_DATASETS[dataset])
     timelines = root / "processed" / "timelines"
     if dataset == "guitarset":
         notes = guitarset_notes(root / "raw" / "annotation")
