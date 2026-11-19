@@ -101,9 +101,9 @@ def _frame_labels_for_meta(meta: dict, centres: np.ndarray, window: int
     bass = np.full(times.shape, BASS_X_IDX, dtype=np.uint8)
     timeline = (json.loads(Path(meta["timeline"]).read_text())
                 if meta.get("timeline") else None)
-    notes = meta.get("notes")
+    notes = meta.get("notes") or []
     intervals = meta.get("intervals")
-    from_notes = bool(meta.get("labels_from_notes"))
+    from_notes = bool(meta.get("labels_from_notes")) or timeline is None
     for index in range(times.shape[0]):
         for frame in range(window):
             time_s = float(times[index, frame])

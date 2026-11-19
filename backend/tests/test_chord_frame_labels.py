@@ -54,6 +54,14 @@ class TestFrameLabels:
         assert np.all(labels[:, 8:] == CHORD_TO_IDX_170["C:maj"])
         assert np.all(bass[:, 8:] == BASS_TO_IDX["C"])
 
+    def test_notes_only_meta_uses_note_labels(self):
+        notes = [(0.0, 10.0, 48.0), (0.0, 10.0, 52.0), (0.0, 10.0, 55.0)]
+        labels, bass = _frame_labels_for_meta(
+            {"notes": notes}, np.array([1.0]), window=16)
+        assert labels.shape == (1, 16)
+        assert np.all(labels == CHORD_TO_IDX_170["C:maj"])
+        assert np.all(bass == BASS_TO_IDX["C"])
+
     def test_silence_is_no_chord(self):
         labels, bass = _frame_labels_for_meta(
             {"notes": [], "labels_from_notes": True},
