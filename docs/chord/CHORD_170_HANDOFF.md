@@ -24,8 +24,11 @@ External test = GuitarSet p05 + EGSet12 + held-out IDMT + held-out RWC,
 | Slash accuracy (inversion frames) | ≥ 0.50 | **0.182** | ❌ |
 | ECE (duration-weighted) | ≤ 0.15 | **0.083** | ✅ |
 
-Best checkpoint: `/runs/chord170/slakh-full-fine/best.keras` on the
-`harmoniq-chord170-runs` volume (run `slakh-full-fine`).
+Best checkpoint by the macro-F1 gate: `/runs/chord170/slakh-full-fine/best.keras`
+on the `harmoniq-chord170-runs` volume (run `slakh-full-fine`). The
+frame-supervised run `/runs/chord170/frame-fine/best.keras` has the best
+exact/MIREX/bass/slash companions (centre-frame aggregation) but a lower
+supported macro-F1. No checkpoint passes all four gates.
 
 Companion metrics for that run: exact 0.451, WCSR-MIREX 0.633, top-3
 (not reported for fine runs), per-source exact: GuitarSet fine 0.366,
@@ -42,6 +45,8 @@ Progress across iterations (external test unless noted):
 | Fine-hop + inversion head | 0.246 | 0.463 | 0.618 | 0.716 | 0.160 | 0.130 |
 | + corrected mild augmentation | 0.266 | 0.440 | 0.629 | 0.761 | 0.168 | 0.065 |
 | Full Slakh fine (1,710 tracks) | **0.278** | **0.451** | **0.633** | **0.773** | **0.182** | 0.083 |
+| Frame supervision + Guitar-TECHS/IDMT-d1 (mean frames) | 0.268 | 0.468 | 0.620 | 0.778 | 0.174 | **0.023** |
+| Frame supervision + Guitar-TECHS/IDMT-d1 (centre frame) | 0.261 | **0.474** | **0.640** | **0.823** | **0.206** | 0.085 |
 
 ---
 
@@ -148,6 +153,26 @@ Progress across iterations (external test unless noted):
   ECE 0.130. Corrected mild augmentation: macro 0.266, bass 0.761, slash
   0.168, ECE 0.065. 60 epochs: slash 0.184.
 
+### Frame supervision + real-data additions (`d43253e`, `178014b`, `941c7da`, `88522c0`)
+- `scripts/add_frame_labels.py` writes `frame_labels` / `frame_bass` (N,16)
+  into every fine npz from timelines, MIDI notes, or IDMT XML events.
+- `extract_fine_windows.py` now also prepares Guitar-TECHS (directinput, 68
+  tracks / 6,056 windows) and IDMT dataset1 chord recordings (88 tracks /
+  176 windows, hash splits). Training sources: `guitar_techs_fine`,
+  `idmt_chords_fine`.
+- `train_chord_170.py --frame-supervision`: second BiLSTM keeps the time
+  axis (cropped back to 16 after circular padding), per-frame chord/bass/
+  root/quality/inversion heads, per-frame masked weights; validation and
+  eval aggregate frame probabilities.
+- External test, 40 epochs, combined val selection (best epoch 30):
+  mean-frame macro 0.268 / exact 0.468 / MIREX 0.620 / bass 0.778 /
+  slash 0.174 / ECE 0.023; centre-frame macro 0.261 / exact 0.474 /
+  MIREX 0.640 / bass 0.823 / slash 0.206 / ECE 0.085.
+- Verdict: frame supervision + the new real guitar data does **not** close
+  macro-F1 or slash. It improves exact/MIREX/bass/slash under centre-frame
+  aggregation, but supported macro falls below the window model. Evidence:
+  `docs/audit/amt/chord170_frame_supervision.json`.
+
 ### Full Slakh scale-up (`2a590a5`, `fb374b0`, `40a0c67`)
 - `download_slakh_full` (resumable `wget -c`, 48.7 GB) → all **1,710 tracks**
   (mix.flac + MIDI) on the data volume; `prepare_slakh_scaled` built coarse
@@ -180,6 +205,12 @@ Progress across iterations (external test unless noted):
 12. Note: "slash2" variants accidentally passed both `--no-augment` and
     `--aug-level mild` → augmentation was off and the two runs were
     identical. Corrected mild aug (25 ep) is the best base configuration.
+13. Frame-level supervision (+ Guitar-TECHS/IDMT-dataset1 fine data) did not
+    improve supported macro-F1 or slash: 0.268/0.174 mean-frame and
+    0.261/0.206 centre-frame vs 0.278/0.182 for the window model. It is the
+    best exact/MIREX/bass configuration with centre-frame aggregation.
+    Do not re-run as-is; the remaining gap is label/class imbalance and
+    cross-corpus generalization, not temporal resolution.
 
 ---
 
@@ -192,7 +223,9 @@ Progress across iterations (external test unless noted):
 - Real corpora (coarse 6.4 s hop): GuitarSet 360, EGSet12 12, Guitar-TECHS 68,
   IDMT dataset4 129, RWC 100; sidecars under `processed/chord170/`.
 - Fine (1.6 s) corpora: `data/chord170/fine/{guitarset,egset12,
-  idmt_smt_guitar,rwc}` (RWC 15,184 windows).
+  idmt_smt_guitar,rwc,guitar_techs,idmt_chords}` (RWC 15,184; Guitar-TECHS
+  6,056; IDMT-d1 176 windows). All fine npz files now carry per-frame
+  `frame_labels` / `frame_bass` (Slakh 266,870 windows included).
 - Slakh: `data/chord170/slakh_raw` (1,710 tracks: mix.flac + all_src.mid),
   `data/chord170/slakh` (coarse 1,710), `data/chord170/slakh_fine`
   (1,710; ~260k windows).
@@ -283,7 +316,8 @@ modal run scripts/modal_chord_170.py::eval_model \
 | `scripts/build_chord_mixes.py` | Demucs chord-oriented mixes |
 | `scripts/pseudo_label_btc.py` | BTC pseudo-labels on mixes |
 | `scripts/prepare_slakh.py` | Slakh MIDI→labels, CQT windows (coarse/fine) |
-| `scripts/extract_fine_windows.py` | 1.6 s windows for the four corpora |
+| `scripts/extract_fine_windows.py` | 1.6 s windows for GuitarSet/EGSet12/IDMT/RWC/Guitar-TECHS/IDMT-d1 |
+| `scripts/add_frame_labels.py` | per-frame chord/bass labels in the fine npz (no CQT recompute) |
 | `scripts/eval_chord_baseline.py` | Phase 0 harness (25-class baseline) |
 | `scripts/compare_teachers.py` | MT3-template vs BTC on IDMT |
 | `scripts/modal_chord_170.py` | Modal app |
@@ -355,34 +389,37 @@ modal run scripts/modal_chord_170.py::eval_model \
 
 ## 10. Next actions (concrete)
 
-### A. Frame-level supervision (main untested modelling lever)
-1. Add per-frame labels (16 frames/window) to fine npz:
-   - `scripts/add_frame_labels.py`: for each fine npz, use its `center_times`
-     and window geometry (`window 16, hop 16`; frame i time =
-     `(k*hop - window//2 + i) * 0.1`), read the dataset timeline (or MIDI for
-     Slakh) and write `frame_labels` (N,16) and `frame_bass` (N,16) into the
-     npz (labels only; no CQT recompute).
-2. Add `--frame-supervision` to `train_chord_170.py`:
-   - `build_model(..., frame_output=True)`: BiLSTM `return_sequences=True` +
-     per-frame Dense heads; outputs `(B,16,170)` etc.
-   - `ChordSequence` returns per-frame one-hot targets (broadcast if only
-     centre labels are present, but prefer real frame labels).
-   - Loss per frame; validation aggregates mean over frames for window-level
-     metrics; keep checkpoint selection on supported macro.
-3. Evaluate on the fixed external fine test with `--frame-supervision`
-   aggregation.
+### Done: frame supervision and real-data additions (see §2)
+- `add_frame_labels.py` is implemented and run for all fine sources.
+- `--frame-supervision` is implemented; run `frame-fine` is the reference.
+- Guitar-TECHS (68 tracks) and IDMT dataset1 (88 chord tracks) are in the
+  fine pipeline; dataset2/3 are technique/monophonic corpora and were not
+  added (dataset3's 5 polyphonic pieces could be added later).
 
-### B. Real-guitar data
-1. **Guitar-TECHS fine**: add `guitar_techs` to `extract_fine_windows.py`
-   (timelines + MIDI notes exist; audio ~4–5 GB under
-   `raw/*/audio/**`; pick a deterministic condition such as `directinput`).
-   Upload audio to the data volume, run `prepare_fine`.
-2. **IDMT datasets 1–3**: parse XML note events (pitch/onset/offset/string)
-   from `IDMT-SMT-GUITAR_V2.zip` (666 XMLs), map to audio
-   (`raw/audio/dataset{1,2,3}/...`), derive labels via pitch-set template
-   matching (bass-aware) and bass from the lowest note; fine windows; hash
-   splits. Dataset1 = chord recordings (400 files), dataset2/3 = techniques.
-3. Consider SheetSage-Chord only after confirming the licence (ask).
+### A. Ceiling evidence before further modelling
+The gates are not reachable with the current label space and data. Macro-F1
+is over ~102 supported classes on 3,121 external windows; per-source macro is
+0.175 (GuitarSet) / 0.222 (EGSet12) / 0.537 (IDMT) / 0.225 (RWC), and the
+ambiguity cap (maj6 ≡ relative min7) plus rare-class support dominate.
+Slash accuracy needs chord exact 0.33 and bass exact 0.59 to co-occur; with
+only 642 inversion frames the 95% CI is wide. Any further gate claim needs
+per-class support reporting, not a single macro number.
+
+### B. Only levers not yet ruled out
+1. Selection robustness: EMA or last-K checkpoint averaging over the
+   `frame-fine` last epochs (val still improving at epoch 40), 3 seeds,
+   k-fold over RWC/IDMT tracks; report CIs. Expected effect is a few points,
+   not the 0.18 macro gap.
+2. Class-imbalance treatment at the label level (e.g. merge the ambiguous
+   6/min7 families for training only, then report both raw and merged
+   macro-F1) — this is a metric-definition decision; ask before changing
+   the reported definition.
+3. Distillation is blocked; do not start Phase 5 until a checkpoint passes
+   all four gates.
+
+### C. Do not repeat
+- Frame supervision as-is (negative, §3 item 13).
+- Adding more monophonic/technique recordings (dataset2/3) as chord training.
 
 ### C. Selection robustness
 - EMA or last-K checkpoint averaging; k-fold over RWC/IDMT tracks; 3 seeds

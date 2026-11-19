@@ -617,6 +617,39 @@ Slakh past 400 tracks requires a resumable full-tarball download; a `wget -c`
 based `download_slakh_full` job is in place (48.7 GB, all 1,710 tracks).
 Artifact: `docs/audit/amt/chord170_fine_inversion_report.json`.
 
+## Frame supervision + real-guitar additions (2026-11-18)
+
+`scripts/add_frame_labels.py` adds per-frame `frame_labels` / `frame_bass`
+(N,16) to each fine npz using the stored `center_times` and the extractor
+geometry `(k*hop - window//2 + i) * 0.1 s`; no CQT is recomputed. Sources:
+timelines (GuitarSet/EGSet12/IDMT-d4/RWC/Guitar-TECHS), Slakh `all_src.mid`,
+and IDMT dataset1 XML note events.
+
+`extract_fine_windows.py` gained two real-guitar sources: Guitar-TECHS
+(directinput condition, 68 split-assigned tracks / 6,056 windows) and IDMT
+dataset1 chord recordings (88 tracks / 176 windows, deterministic hash
+splits; dataset2/3 are technique/monophonic corpora and were not added).
+
+`train_chord_170.py --frame-supervision` keeps the time axis through the
+second BiLSTM, crops back to 16 frames after the circular pad, and applies
+per-frame chord/bass/root/quality/inversion heads with masked per-frame
+weights. Validation and evaluation reduce frame probabilities to window
+level (mean by default, `--frame-aggregation center` optional).
+
+Run `frame-fine` (40 epochs, best epoch 30 on combined val) external test:
+
+| Aggregation | Macro-F1 | Exact | MIREX | Bass | Slash | ECE |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Mean frames | 0.268 | 0.468 | 0.620 | 0.778 | 0.174 | 0.023 |
+| Centre frame | 0.261 | 0.474 | 0.640 | 0.823 | 0.206 | 0.085 |
+
+Across the 3,121-window external test, supported macro-F1 is 0.268/0.261,
+below the window model's 0.278; centre-frame aggregation gives the best
+exact/MIREX/bass/slash companions. Bass and ECE gates pass; macro-F1 and
+slash do not. This is a documented negative result for frame supervision as
+a route to the macro gate. Artifact:
+`docs/audit/amt/chord170_frame_supervision.json`.
+
 ## Phase plan (remaining)
 
 | Phase | Scope | Gate |
@@ -633,6 +666,7 @@ Artifact: `docs/audit/amt/chord170_fine_inversion_report.json`.
 cd backend
 .venv-wsl/bin/python -m pytest -q tests/test_chord_vocab_170.py tests/test_chord_labels_170.py
 .venv-wsl/bin/python -m pytest -q tests/test_chord_eval_baseline.py
+.venv-wsl/bin/python -m pytest -q tests/test_chord_frame_labels.py
 .venv-wsl/bin/python scripts/chord_data_v2.py data/guitarset --split test
 ```
 
