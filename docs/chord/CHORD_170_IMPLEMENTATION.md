@@ -690,6 +690,38 @@ guitar fine-tuning it gave the best MIREX (0.669) and ECE (0.063), and macro
 over classes with ≥20 frames reached 0.497. Artifact:
 `docs/audit/amt/chord170_context_structured.json`.
 
+## Phases 1–3: structured objective, seeds/SWA, ensembles (2026-11-20)
+
+**Phase 1 — structured composition + CRF: negative.** Added a trainable
+`StructuredChordComposition` head (presence × root × quality) and per-track
+Viterbi smoothing. The composed decoder reaches exact 0.154 / MIREX 0.210;
+the flat head after the same fine-tune remains at exact 0.527 / MIREX 0.667.
+Viterbi over window predictions is neutral-to-negative (best exact 0.525 at
+self-transition 0.05 versus 0.527 unsmoothed). Keep the flat chord head.
+
+**Phase 2 — 96-frame / 3-block, 3 seeds + SWA.** Trained on guitar sources +
+the quality-balanced Slakh subset. Seeds 1/2/3 reach macro 0.311/0.328/0.327,
+exact 0.518/0.541/0.546, MIREX 0.657/0.669/0.675. Seed variance is ≈0.018
+macro. Last-5 epoch weight averaging (SWA) is neutral.
+
+**Phase 3 — ensembles: positive.** Averaging model probabilities is the most
+reliable lever:
+
+| Ensemble | Macro | Exact | MIREX | Bass | Slash | ECE |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Seed2-FT + seed3 | **0.351** | **0.570** | 0.688 | 0.822 | 0.224 | **0.022** |
+| FT1 + seed2-FT | 0.345 | 0.563 | **0.689** | 0.829 | 0.245 | 0.027 |
+| FT1 + balanced-FT | 0.320 | 0.544 | 0.677 | 0.830 | **0.266** | 0.033 |
+
+Best macro/exact/MIREX/ECE: seed2-FT + seed3. Best slash: FT1 +
+balanced-FT. Gates still fail for full 102-class macro (0.351 vs 0.45) and
+slash (0.266 vs 0.50); bass and ECE pass. Minimum-support macro reaches
+0.496 (≥10 frames) and 0.521 (≥20 frames).
+
+**Phase 4 decision:** build synthetic rare-chord/inversion guitar data rather
+than adding full-mix Slakh. The remaining gap is rare-class/inversion recall.
+Artifact: `docs/audit/amt/chord170_phases_1_3.json`.
+
 ## Phase plan (remaining)
 
 | Phase | Scope | Gate |

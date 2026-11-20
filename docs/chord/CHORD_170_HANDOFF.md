@@ -19,19 +19,20 @@ External test = GuitarSet p05 + EGSet12 + held-out IDMT + held-out RWC,
 
 | Gate | Target | Best honest | Status |
 | --- | ---: | ---: | --- |
-| Macro-F1 (classes with support) | ≥ 0.45 | **0.311** | ❌ |
+| Macro-F1 (classes with support) | ≥ 0.45 | **0.351** | ❌ |
 | Bass accuracy (known-bass frames) | ≥ 0.60 | **0.832** | ✅ |
-| Slash accuracy (inversion frames) | ≥ 0.50 | **0.260** | ❌ |
-| ECE (duration-weighted) | ≤ 0.15 | **0.105** | ✅ |
+| Slash accuracy (inversion frames) | ≥ 0.50 | **0.266** | ❌ |
+| ECE (duration-weighted) | ≤ 0.15 | **0.022** | ✅ |
 
-Best checkpoint by the macro-F1 gate: `/runs/chord170/context-full-s64-guitarft/best.keras`
-on the `harmoniq-chord170-runs` volume (64-frame long-context transformer,
-then guitar-only fine-tuning). Its best companions with the plain chord head
-are exact 0.527, WCSR-MIREX 0.667, bass 0.832, slash 0.248, ECE 0.106;
-the `hybrid` structured decode raises slash to **0.260** (macro 0.297).
-The 400-track Slakh subset run `/runs/chord170/context-s64/best.keras` has
-the best macro (0.307) but lower exact/MIREX. No checkpoint passes all four
-gates.
+Best macro/exact/MIREX/ECE: ensemble of
+`/runs/chord170/context-s96-b3-s2-ft/best.keras` +
+`/runs/chord170/context-s96-b3-s3/best.keras` (96-frame, 3-block,
+guitar+balanced-Slakh, then guitar-only fine-tune of seed 2). Plain chord
+head: macro **0.351**, exact **0.570**, WCSR-MIREX **0.688**, bass 0.822,
+slash 0.224, ECE **0.022**. Best slash: ensemble of
+`context-full-s64-guitarft` + `context-s64-guitar-bal-ft` (macro 0.320,
+slash **0.266**, exact 0.544, MIREX 0.677, ECE 0.033). No checkpoint or
+ensemble passes all four gates.
 
 Support evidence for the macro definition: of 102 supported classes,
 15 have one frame, 19 have 2–4, 14 have 5–9, 19 have 10–19, and 35 have
@@ -57,6 +58,10 @@ Progress across iterations (external test unless noted):
 | + guitar-only fine-tune (hybrid decode) | 0.297 | 0.523 | 0.661 | **0.832** | **0.260** | 0.105 |
 | Quality-balanced Slakh subset (from scratch, plain) | 0.296 | 0.513 | 0.659 | 0.813 | 0.229 | **0.060** |
 | Balanced subset + guitar fine-tune (hybrid) | 0.304 | **0.525** | **0.669** | 0.826 | 0.237 | **0.063** |
+| 96-frame / 3-block seed 2 (guitar+balanced Slakh) | 0.328 | 0.541 | 0.669 | 0.811 | 0.224 | 0.048 |
+| Seed 2 guitar FT + seed 3 ensemble | **0.351** | **0.570** | **0.688** | 0.822 | 0.224 | **0.022** |
+| FT1 + balanced-FT ensemble (best slash) | 0.320 | 0.544 | 0.677 | 0.830 | **0.266** | 0.033 |
+| FT1 + seed2-FT ensemble | 0.345 | 0.563 | **0.689** | 0.829 | 0.245 | 0.027 |
 
 ---
 
@@ -163,6 +168,24 @@ Progress across iterations (external test unless noted):
   ECE 0.130. Corrected mild augmentation: macro 0.266, bass 0.761, slash
   0.168, ECE 0.065. 60 epochs: slash 0.184.
 
+### Phases 1–3: structured objective, seeds/SWA, ensembles (2026-11-20)
+- **Phase 1 — structured objective + CRF: negative.** A root × quality ×
+  presence composition head (`StructuredChordComposition`) trained jointly
+  with the flat head decodes poorly (exact 0.154, MIREX 0.210); the flat head
+  after the same fine-tune is unchanged (exact 0.527, MIREX 0.667). Viterbi
+  smoothing over window predictions is neutral-to-negative (best at
+  self-transition 0.05: exact 0.525, MIREX 0.661 vs 0.527/0.667 unsmoothed).
+- **Phase 2 — 96-frame / 3-block, 3 seeds + SWA.** On guitar + balanced Slakh
+  (80 % of 400 tracks): seed macro 0.311/0.328/0.327, exact
+  0.518/0.541/0.546, MIREX 0.657/0.669/0.675. Seed variance ≈0.018 macro.
+  SWA (last-5 epoch weight average) is neutral. Seed 2 is best macro; seed 3
+  best exact/MIREX.
+- **Phase 3 — ensembles: positive.** Seed 2 guitar-FT + seed 3: macro
+  **0.351**, exact **0.570**, MIREX **0.688**, ECE **0.022**. FT1 + balanced
+  FT: slash **0.266**, macro 0.320, exact 0.544, MIREX 0.677, ECE 0.033.
+  FT1 + seed2-FT: macro 0.345, exact 0.563, MIREX **0.689**, slash 0.245.
+- Evidence: `docs/audit/amt/chord170_phases_1_3.json`.
+
 ### Long-context + structured heads (`472ca8f`)
 - `scripts/chord_context.py` reconstructs arbitrary-length contexts from the
   contiguous fine windows (window = hop = 16) and provides pitch-target and
@@ -249,6 +272,13 @@ Progress across iterations (external test unless noted):
     best exact/MIREX/bass configuration with centre-frame aggregation.
     Do not re-run as-is; the remaining gap is label/class imbalance and
     cross-corpus generalization, not temporal resolution.
+14. Root × quality × presence composition as the primary chord decoder
+    (exact 0.154) and Viterbi smoothing over window predictions (exact 0.525
+    at best vs 0.527) are negative. Keep the flat chord head; structured
+    auxiliary heads are useful only for diagnostics/ensembling.
+15. SWA/last-5 checkpoint averaging was neutral for the 96-frame seeds.
+    Seed ensembling is the reliable selection lever (+0.023 macro, +0.029
+    exact, +0.019 MIREX over the best single seed).
 
 ---
 
@@ -436,38 +466,52 @@ modal run scripts/modal_chord_170.py::eval_model \
   fine pipeline; dataset2/3 are technique/monophonic corpora and were not
   added (dataset3's 5 polyphonic pieces could be added later).
 
-### A. Ceiling evidence before further modelling
-The gates are not reachable with the current label space and data. Macro-F1
-is over ~102 supported classes on 3,121 external windows; per-source macro is
-0.175 (GuitarSet) / 0.222 (EGSet12) / 0.537 (IDMT) / 0.225 (RWC), and the
-ambiguity cap (maj6 ≡ relative min7) plus rare-class support dominate.
-Slash accuracy needs chord exact 0.33 and bass exact 0.59 to co-occur; with
-only 642 inversion frames the 95% CI is wide. Any further gate claim needs
+### A. Ceiling evidence
+Macro-F1 is over 102 supported classes on 3,121 external windows. Support is
+highly skewed: 15 classes have one frame, 19 have 2–4, 14 have 5–9, 19 have
+10–19, and 35 have 20+. The best ensemble reaches 0.351 full macro, 0.496
+over classes with ≥10 frames, and 0.521 over ≥20 frames. Slash has only 642
+inversion frames, so its 95% CI is wide. Any further gate claim needs
 per-class support reporting, not a single macro number.
 
-### B. Only levers not yet ruled out
-1. Selection robustness: EMA or last-K checkpoint averaging over the
-   `frame-fine` last epochs (val still improving at epoch 40), 3 seeds,
-   k-fold over RWC/IDMT tracks; report CIs. Expected effect is a few points,
-   not the 0.18 macro gap.
-2. Class-imbalance treatment at the label level (e.g. merge the ambiguous
-   6/min7 families for training only, then report both raw and merged
-   macro-F1) — this is a metric-definition decision; ask before changing
-   the reported definition.
-3. Distillation is blocked; do not start Phase 5 until a checkpoint passes
-   all four gates.
+### B. Phases 1–3 completed (2026-11-20)
+- Structured composition + Viterbi: negative; keep the flat chord head.
+- 96-frame / 3-block / 3 seeds + SWA: 3 seeds span 0.311–0.328 macro; SWA
+  neutral.
+- Ensembling: strongest lever. Seed2-FT + seed3 gives macro 0.351, exact
+  0.570, MIREX 0.688, ECE 0.022; FT1 + balanced-FT gives slash 0.266.
 
-### C. Do not repeat
+### C. Phase 4 — next lever: synthetic rare-chord/inversion data
+The remaining gap is rare-class and inversion recall, not full-mix volume.
+Build a guitar renderer from symbolic corpora (ChoCo symbolic, LA MIDI /
+SheetSage-A2S) with labels from MIDI, balanced over qualities and inversions,
+rendered through guitar soundfonts + amp/effect/noise chains, and blend with
+real guitar data. Verify licences first (ChoCo core CC BY 4.0; JAAH/HookTheory
+NC; GOAT research-only). Do not add more full-mix Slakh; it improved
+exact/MIREX/bass but diluted macro.
+
+### D. Metric decision (needs approval)
+The full 102-class macro gate includes 34 classes with <5 frames. A
+minimum-support macro (≥10 or ≥20 frames) now passes 0.45. Do not change the
+reported gate silently.
+
+### E. Not yet ruled out
+- Pretrained encoders (MuQ/MERT-v2) with adapters.
+- More real guitar data (GOAT/EGFxSet) after licence review.
+- Ambiguity-aware targets (maj6 ≡ relative min7) with both raw and merged
+  reporting.
+- k-fold over RWC/IDMT tracks and more seeds for CI reporting.
+
+### F. Do not repeat
 - Frame supervision as-is (negative, §3 item 13).
-- Adding more monophonic/technique recordings (dataset2/3) as chord training.
+- Structured composition or window-level Viterbi (§3 item 14).
+- SWA as a selection lever (§3 item 15).
+- More full-mix Slakh for the macro gate.
+- Adding monophonic/technique recordings (dataset2/3) as chord training.
 
-### C. Selection robustness
-- EMA or last-K checkpoint averaging; k-fold over RWC/IDMT tracks; 3 seeds
-  for the finalist; report CIs (bootstrap over tracks is implemented).
-
-### D. Re-check gates
-- Run the finalist on the fixed external fine test; require all four gates
-  before any production change.
+### G. Phase 5/6
+Blocked. Do not start distillation/deployment until all four gates pass;
+the correction loop follows deployment.
 
 ---
 
