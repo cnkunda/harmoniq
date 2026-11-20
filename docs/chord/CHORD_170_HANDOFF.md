@@ -186,6 +186,9 @@ Progress across iterations (external test unless noted):
   **0.351**, exact **0.570**, MIREX **0.688**, ECE **0.022**. FT1 + balanced
   FT: slash **0.266**, macro 0.320, exact 0.544, MIREX 0.677, ECE 0.033.
   FT1 + seed2-FT: macro 0.345, exact 0.563, MIREX **0.689**, slash 0.245.
+- Post-hoc prior calibration and 3-model ensembles are negative; see §3
+  items 16–17. Best finalists remain synth-s2ft+seed3 (macro/exact/MIREX/ECE)
+  and FT1+balancedFT (slash).
 - Evidence: `docs/audit/amt/chord170_phases_1_3.json`.
 
 ### Phase 4 — synthetic rare-chord/inversion data (2026-11-20)
@@ -302,6 +305,15 @@ Progress across iterations (external test unless noted):
 15. SWA/last-5 checkpoint averaging was neutral for the 96-frame seeds.
     Seed ensembling is the reliable selection lever (+0.023 macro, +0.029
     exact, +0.019 MIREX over the best single seed).
+16. Post-hoc temperature/prior calibration fitted on guitar val overfits:
+    synth ensemble macro 0.351→0.317 and ECE 0.018→0.192. Only the
+    temperature-only FT1+balancedFT calibration is harmless (ECE 0.0145,
+    macro/slash unchanged). Do not use prior calibration for the macro gate.
+17. Three-model ensembles dilute the best pair: s1+s2+s3 macro 0.348,
+    synth+s2+s3 0.346, FT1+balancedFT+s2ft 0.342, all below the two-model
+    finalist (0.351). Keep two-model finalists.
+18. Scaling the synthetic corpus 3,091→6,764 windows raised macro +0.002 but
+    cost exact −0.009 / MIREX −0.009 / ECE +0.009. Do not just add windows.
 
 ---
 

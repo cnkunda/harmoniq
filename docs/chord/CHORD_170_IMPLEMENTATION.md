@@ -718,6 +718,13 @@ balanced-FT. Gates still fail for full 102-class macro (0.351 vs 0.45) and
 slash (0.266 vs 0.50); bass and ECE pass. Minimum-support macro reaches
 0.496 (≥10 frames) and 0.521 (≥20 frames).
 
+**Phase 3b — calibration and 3-model ensembles: negative.** Post-hoc
+temperature/prior calibration fitted on guitar val overfits (synth macro
+0.351→0.317, ECE 0.018→0.192); temperature-only calibration is harmless for
+FT1+balancedFT (ECE 0.0145, macro/slash unchanged). Three-model averaging
+(0.342–0.348 macro) is below the best two-model finalist (0.351). Keep
+two-model finalists.
+
 **Phase 4 — synthetic rare-chord/inversion data.** `build_synthetic_chords.py`
 renders 3,091 balanced guitar windows (110/170 classes, all 12 bass classes)
 from Isophonics/Billboard/JAAH `.lab` annotations using additive synthesis and
