@@ -148,7 +148,8 @@ def select_balanced(segments: list[dict], limit: int, seed: int = 0) -> list[dic
     return selected
 
 
-def synth_clip(segment: dict, index: int) -> tuple[np.ndarray, int]:
+def synth_clip(segment: dict, index: int, duration: float = CLIP_SECONDS
+               ) -> tuple[np.ndarray, int]:
     """Additive guitar-like synthesis for one chord segment."""
     rng = np.random.default_rng(9000 + index)
     label = int(segment["label"])
@@ -170,7 +171,7 @@ def synth_clip(segment: dict, index: int) -> tuple[np.ndarray, int]:
         notes.append(bass_midi + 12)
 
     sr = TARGET_SR
-    n_samples = int(sr * CLIP_SECONDS)
+    n_samples = int(sr * duration)
     t = np.arange(n_samples, dtype=np.float32) / sr
     wave = np.zeros(n_samples, dtype=np.float32)
     for note_index, midi in enumerate(notes):
@@ -203,6 +204,7 @@ def synth_clip(segment: dict, index: int) -> tuple[np.ndarray, int]:
 
 
 def windows_for_clip(audio: np.ndarray) -> np.ndarray:
+    """Return non-overlapping 16-frame windows from a rendered clip."""
     import librosa
 
     cqt = np.abs(librosa.cqt(
@@ -213,17 +215,21 @@ def windows_for_clip(audio: np.ndarray) -> np.ndarray:
     if len(frames) < WINDOW:
         pad = np.zeros((WINDOW - len(frames), NUM_BINS), dtype=np.float32)
         frames = np.concatenate([frames, pad], axis=0)
-    if len(frames) > WINDOW:
-        start = (len(frames) - WINDOW) // 2
-        frames = frames[start:start + WINDOW]
-    return frames[None, :, :].astype(np.float32)
+    n_windows = max(1, (len(frames) - WINDOW) // WINDOW + 1)
+    windows = np.stack([
+        frames[start:start + WINDOW] for start in range(0, n_windows * WINDOW, WINDOW)
+    ], axis=0)
+    return windows.astype(np.float32)
 
 
-def process_segment(args: tuple[dict, int, Path]) -> dict:
-    segment, index, out_dir = args
+def process_segment(args: tuple[dict, int, Path, float]) -> dict:
+    segment, index, out_dir, max_clip_seconds = args
     try:
-        audio, bass_pc = synth_clip(segment, index)
+        duration = min(max(float(segment["duration"]), CLIP_SECONDS),
+                       float(max_clip_seconds))
+        audio, bass_pc = synth_clip(segment, index, duration)
         features = windows_for_clip(audio)
+        n_windows = int(features.shape[0])
         label = int(segment["label"])
         bass_idx = BASS_TO_IDX[BASS_VOCAB[bass_pc % 12]]
         track_id = f"synthetic_{index:06d}"
@@ -231,12 +237,13 @@ def process_segment(args: tuple[dict, int, Path]) -> dict:
         np.savez_compressed(
             out_dir / f"{track_id}.npz",
             features=features,
-            labels170=np.array([label], dtype=np.int64),
-            bass_labels=np.array([bass_idx], dtype=np.int64),
-            frame_labels=np.full((1, WINDOW), label, dtype=np.int64),
-            frame_bass=np.full((1, WINDOW), bass_idx, dtype=np.int64),
-            confidence=np.ones(1, dtype=np.float32),
-            center_times=np.array([(WINDOW // 2) * HOP_SEC], dtype=np.float32),
+            labels170=np.full(n_windows, label, dtype=np.int64),
+            bass_labels=np.full(n_windows, bass_idx, dtype=np.int64),
+            frame_labels=np.full((n_windows, WINDOW), label, dtype=np.int64),
+            frame_bass=np.full((n_windows, WINDOW), bass_idx, dtype=np.int64),
+            confidence=np.ones(n_windows, dtype=np.float32),
+            center_times=(np.arange(n_windows, dtype=np.float64) * WINDOW * HOP_SEC
+                          ).astype(np.float32),
             track_id=np.bytes_(track_id.encode()),
             split=np.bytes_(split.encode()),
             source=np.bytes_(b"synthetic_guitar"),
@@ -246,15 +253,15 @@ def process_segment(args: tuple[dict, int, Path]) -> dict:
             frame_version=np.int64(1),
         )
         return {"index": index, "label": label, "bass": bass_pc, "split": split,
-                "status": "ok"}
+                "windows": n_windows, "status": "ok"}
     except Exception as exc:
         return {"index": index, "status": f"error:{type(exc).__name__}: {exc}"}
 
 
 def build(annotation_root: Path = ANNOTATION_ROOT, out_dir: Path = OUT_ROOT,
           limit: int = 8000, workers: int = 8, seed: int = 0,
-          clips_per_segment: int = 1, force: bool = False,
-          report_path: Path | None = None) -> dict:
+          clips_per_segment: int = 1, max_clip_seconds: float = 4.8,
+          force: bool = False, report_path: Path | None = None) -> dict:
     segments = parse_segments(annotation_root)
     selected = select_balanced(segments, limit, seed)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -267,7 +274,7 @@ def build(annotation_root: Path = ANNOTATION_ROOT, out_dir: Path = OUT_ROOT,
         repeats = max(1, min(int(clips_per_segment),
                              int(segment["duration"] // (WINDOW * HOP_SEC))))
         for _ in range(repeats):
-            jobs.append((segment, index, out_dir))
+            jobs.append((segment, index, out_dir, max_clip_seconds))
             index += 1
     results: list[dict] = []
     if workers <= 1:
@@ -284,6 +291,7 @@ def build(annotation_root: Path = ANNOTATION_ROOT, out_dir: Path = OUT_ROOT,
         "segments_available": len(segments),
         "selected_segments": len(selected),
         "rendered": len(ok),
+        "windows": int(sum(r.get("windows", 0) for r in ok)),
         "splits": {split: sum(1 for r in ok if r["split"] == split)
                    for split in ("train", "val", "test")},
         "unique_classes": len(set(labels)),
@@ -309,11 +317,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--clips-per-segment", type=int, default=1)
+    parser.add_argument("--max-clip-seconds", type=float, default=4.8)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--report", type=Path, default=None)
     args = parser.parse_args(argv)
     report = build(args.annotation_root, args.out_dir, args.limit, args.workers,
-                   args.seed, args.clips_per_segment, args.force, args.report)
+                   args.seed, args.clips_per_segment, args.max_clip_seconds,
+                   args.force, args.report)
     print(json.dumps({k: v for k, v in report.items()
                       if k not in ("class_counts", "bass_counts")}, indent=2))
     return 0

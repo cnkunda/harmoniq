@@ -1202,6 +1202,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="initialise model weights from an existing checkpoint")
     parser.add_argument("--save-last-k", type=int, default=0,
                         help="save the last K epoch weights and write swa.keras")
+    parser.add_argument("--synthetic-sample-weight", type=float, default=None,
+                        help="multiply sampling probability for synthetic_guitar")
     args = parser.parse_args(argv)
 
     config = {
@@ -1235,6 +1237,7 @@ def main(argv: list[str] | None = None) -> int:
         "structured_objective": False,
         "init_checkpoint": "",
         "save_last_k": 0,
+        "synthetic_sample_weight": 1.0,
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -1296,6 +1299,8 @@ def main(argv: list[str] | None = None) -> int:
         config["init_checkpoint"] = str(args.init_checkpoint)
     if args.save_last_k:
         config["save_last_k"] = int(args.save_last_k)
+    if args.synthetic_sample_weight is not None:
+        config["synthetic_sample_weight"] = float(args.synthetic_sample_weight)
     if int(config["context_frames"]) > 0:
         config["frame_supervision"] = True
         if config["label_space"] != "170":
@@ -1444,6 +1449,14 @@ def main(argv: list[str] | None = None) -> int:
         train["labels_native"], train["sources"], temperature=float(config["temperature"]),
         n_classes=train["num_chords"], n_index=N_INDEX_BY_SPACE[config["label_space"]],
     )
+    synthetic_weight = float(config.get("synthetic_sample_weight") or 1.0)
+    if synthetic_weight != 1.0:
+        synthetic_mask = np.asarray(train["sources"]) == "synthetic_guitar"
+        if synthetic_mask.any():
+            probabilities[synthetic_mask] *= synthetic_weight
+            probabilities /= probabilities.sum()
+            print(f"  synthetic sampling weight: {synthetic_weight:.2f} "
+                  f"({int(synthetic_mask.sum())} windows)", flush=True)
     bass_weights = bass_sample_weights(
         train["bass_labels"], train["labels_native"],
         inversion_weight=float(config["bass_inversion_weight"]),

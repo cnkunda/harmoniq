@@ -1015,6 +1015,7 @@ def add_frame_labels(
 def build_synthetic_chords(limit: str = "8000", workers: str = "16",
                            seed: str = "0",
                            clips_per_segment: str = "1",
+                           max_clip_seconds: str = "4.8",
                            force: str = "false") -> str:
     """Render the balanced synthetic guitar chord corpus from .lab files."""
     _ensure_bundle()
@@ -1026,6 +1027,7 @@ def build_synthetic_chords(limit: str = "8000", workers: str = "16",
         "--workers", str(int(workers)),
         "--seed", str(int(seed)),
         "--clips-per-segment", str(int(clips_per_segment)),
+        "--max-clip-seconds", str(max_clip_seconds),
         "--report", report_path,
     ]
     if _truthy(force):
