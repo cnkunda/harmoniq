@@ -718,9 +718,16 @@ balanced-FT. Gates still fail for full 102-class macro (0.351 vs 0.45) and
 slash (0.266 vs 0.50); bass and ECE pass. Minimum-support macro reaches
 0.496 (≥10 frames) and 0.521 (≥20 frames).
 
-**Phase 4 decision:** build synthetic rare-chord/inversion guitar data rather
-than adding full-mix Slakh. The remaining gap is rare-class/inversion recall.
-Artifact: `docs/audit/amt/chord170_phases_1_3.json`.
+**Phase 4 — synthetic rare-chord/inversion data.** `build_synthetic_chords.py`
+renders 3,091 balanced guitar windows (110/170 classes, all 12 bass classes)
+from Isophonics/Billboard/JAAH `.lab` annotations using additive synthesis and
+the annotated bass for inversions. Fine-tuning seed2-FT with synthetic +
+guitar data gives val macro 0.285 (0.272 without), external alone macro 0.325
+/ exact 0.554 / MIREX 0.680. Ensembled with seed3: macro 0.351, exact
+**0.575**, MIREX **0.691**, bass 0.826, slash 0.229, ECE **0.018**, macro
+≥20 0.526. The gain is small but consistent; scale up synthetic windows and
+class coverage before another gate run. JAAH is NC, so this corpus is
+research-only. Artifact: `docs/audit/amt/chord170_phases_1_3.json`.
 
 ## Phase plan (remaining)
 

@@ -62,6 +62,7 @@ Progress across iterations (external test unless noted):
 | Seed 2 guitar FT + seed 3 ensemble | **0.351** | **0.570** | **0.688** | 0.822 | 0.224 | **0.022** |
 | FT1 + balanced-FT ensemble (best slash) | 0.320 | 0.544 | 0.677 | 0.830 | **0.266** | 0.033 |
 | FT1 + seed2-FT ensemble | 0.345 | 0.563 | **0.689** | 0.829 | 0.245 | 0.027 |
+| Synthetic-FT seed2 + seed3 ensemble | **0.351** | **0.575** | **0.691** | 0.826 | 0.229 | **0.018** |
 
 ---
 
@@ -185,6 +186,22 @@ Progress across iterations (external test unless noted):
   FT: slash **0.266**, macro 0.320, exact 0.544, MIREX 0.677, ECE 0.033.
   FT1 + seed2-FT: macro 0.345, exact 0.563, MIREX **0.689**, slash 0.245.
 - Evidence: `docs/audit/amt/chord170_phases_1_3.json`.
+
+### Phase 4 — synthetic rare-chord/inversion data (2026-11-20)
+- `scripts/build_synthetic_chords.py` renders a balanced synthetic guitar
+  corpus from the local Isophonics/Billboard/JAAH `.lab` annotations:
+  additive guitar-like plucks, inversions from the annotated bass, 1.6 s CQT
+  windows. 26,380 candidate segments → 3,091 windows (2,765/173/153),
+  110/170 classes, all 12 bass classes. JAAH is NC, so this corpus is
+  research-only.
+- Fine-tuning seed2-FT with guitar sources + synthetic (6 epochs) gives
+  val macro 0.285 (up from 0.272); external alone macro 0.325 / exact 0.554
+  / MIREX 0.680. Ensembled with seed3: macro **0.351**, exact **0.575**,
+  MIREX **0.691**, bass 0.826, slash 0.229, ECE **0.018**, macro ≥10 0.500,
+  macro ≥20 0.526.
+- Delta vs the no-synthetic ensemble is small but consistent: exact +0.004,
+  MIREX +0.004, ECE −0.004, bass +0.004, slash +0.005, macro flat. Scale up
+  synthetic windows/classes before another gate attempt.
 
 ### Long-context + structured heads (`472ca8f`)
 - `scripts/chord_context.py` reconstructs arbitrary-length contexts from the
@@ -481,19 +498,19 @@ per-class support reporting, not a single macro number.
 - Ensembling: strongest lever. Seed2-FT + seed3 gives macro 0.351, exact
   0.570, MIREX 0.688, ECE 0.022; FT1 + balanced-FT gives slash 0.266.
 
-### C. Phase 4 — next lever: synthetic rare-chord/inversion data
-The remaining gap is rare-class and inversion recall, not full-mix volume.
-Build a guitar renderer from symbolic corpora (ChoCo symbolic, LA MIDI /
-SheetSage-A2S) with labels from MIDI, balanced over qualities and inversions,
-rendered through guitar soundfonts + amp/effect/noise chains, and blend with
-real guitar data. Verify licences first (ChoCo core CC BY 4.0; JAAH/HookTheory
-NC; GOAT research-only). Do not add more full-mix Slakh; it improved
-exact/MIREX/bass but diluted macro.
+### C. Phase 4 — synthetic data implemented (small positive)
+`build_synthetic_chords.py` rendered 3,091 balanced windows from
+Isophonics/Billboard/JAAH `.lab` annotations (110/170 classes, all 12 bass
+classes). Fine-tuning seed2-FT with synthetic + guitar data improved exact
++0.004, MIREX +0.004, ECE −0.004, bass +0.004, slash +0.005; macro was flat.
+The next synthetic step is scale-up: multiple 1.6 s windows per long segment,
+more timbres/effects, more class coverage, and a larger share of training.
 
-### D. Metric decision (needs approval)
-The full 102-class macro gate includes 34 classes with <5 frames. A
-minimum-support macro (≥10 or ≥20 frames) now passes 0.45. Do not change the
-reported gate silently.
+### D. Metric decision
+Keep the **full 102-class macro-F1 as the primary gate** until a pre-registered
+metric change is agreed. Report minimum-support macro (≥10/≥20 frames) as a
+secondary diagnostic; it currently passes 0.45 (0.500/0.526) while the full
+gate is 0.351.
 
 ### E. Not yet ruled out
 - Pretrained encoders (MuQ/MERT-v2) with adapters.
