@@ -33,6 +33,7 @@ from scripts.chord_context import (  # noqa: E402
     centre_window_predictions,
     context_batch,
     structured_decode,
+    viterbi_smooth_tracks,
 )
 from app.chord_vocab_170 import (  # noqa: E402
     BASS_VOCAB,
@@ -528,9 +529,14 @@ def load_model(model_path: Path, *, build_fn=None):
 
     patched = keras_config_compat_copy(Path(model_path))
     try:
+        from scripts.train_chord_170 import StructuredChordComposition
+
         return tf.keras.models.load_model(
             str(patched or model_path),
-            custom_objects={"CircularCqtPad": CircularCqtPad},
+            custom_objects={
+                "CircularCqtPad": CircularCqtPad,
+                "StructuredChordComposition": StructuredChordComposition,
+            },
             safe_mode=False,
         )
     finally:
@@ -567,7 +573,8 @@ def predict_context_outputs(
     """Predict per-window outputs by running long contexts and taking centres."""
     segment_index = build_segment_index(offsets, len(features))
     keys = ("chord_probs", "bass_probs", "root_probs", "quality_probs",
-            "inversion_probs", "pitch_probs")
+            "inversion_probs", "pitch_probs", "composed_chord_probs",
+            "presence_probs")
     chunks: dict[str, list[np.ndarray]] = {key: [] for key in keys}
     for start in range(0, len(features), batch_size):
         indices = np.arange(start, min(start + batch_size, len(features)))
@@ -588,6 +595,8 @@ def predict_context_outputs(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--checkpoint-b", type=Path, default=None,
+                        help="optional second checkpoint for probability ensembling")
     parser.add_argument("--data-root", type=Path, default=_BACKEND_DIR / "data")
     parser.add_argument("--sources", default="guitarset,egset12")
     parser.add_argument("--split", default="test")
@@ -604,8 +613,15 @@ def main(argv: list[str] | None = None) -> int:
                         choices=["mean", "center"])
     parser.add_argument("--context-frames", type=int, default=0,
                         help="run the long-context model on this many frames")
+    parser.add_argument("--context-frames-b", type=int, default=0,
+                        help="context length for checkpoint-b (default: same)")
     parser.add_argument("--structured-decode", default="none",
                         choices=["none", "fuse", "hybrid"])
+    parser.add_argument("--decode-head", default="chord",
+                        choices=["chord", "composed"])
+    parser.add_argument("--viterbi", action="store_true",
+                        help="Viterbi smoothing over window predictions per track")
+    parser.add_argument("--viterbi-self-transition", type=float, default=0.9)
     parser.add_argument("--chord-weight", type=float, default=1.0)
     parser.add_argument("--root-weight", type=float, default=1.0)
     parser.add_argument("--quality-weight", type=float, default=1.0)
@@ -684,6 +700,14 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("context inference needs track offsets from the loader")
         outputs = predict_context_outputs(
             model, X, offsets, args.context_frames, args.batch_size)
+        if args.checkpoint_b is not None:
+            model_b = load_model(args.checkpoint_b)
+            context_b = (args.context_frames_b
+                         if args.context_frames_b > 0 else args.context_frames)
+            outputs_b = predict_context_outputs(
+                model_b, X, offsets, context_b, args.batch_size)
+            for key in set(outputs) & set(outputs_b):
+                outputs[key] = (outputs[key] + outputs_b[key]) / 2.0
         chord_probs = outputs["chord_probs"]
         n_windows = len(chord_probs)
         bass_probs = outputs.get(
@@ -694,6 +718,15 @@ def main(argv: list[str] | None = None) -> int:
         pitch_probs = outputs.get("pitch_probs")
     else:
         full_outputs = model.predict(X, batch_size=args.batch_size, verbose=0)
+        if args.checkpoint_b is not None and isinstance(full_outputs, dict):
+            model_b = load_model(args.checkpoint_b)
+            outputs_b = model_b.predict(X, batch_size=args.batch_size, verbose=0)
+            if isinstance(outputs_b, dict):
+                full_outputs = {
+                    key: (np.asarray(value) + np.asarray(outputs_b[key])) / 2.0
+                    if key in outputs_b else value
+                    for key, value in full_outputs.items()
+                }
         if isinstance(full_outputs, dict):
             chord_probs = aggregate_frame_probs(
                 full_outputs["chord_probs"], args.frame_aggregation)
@@ -727,7 +760,21 @@ def main(argv: list[str] | None = None) -> int:
                               "prior_exponent": params.get("prior_exponent")}
     else:
         report_calibration = None
-    if args.structured_decode != "none":
+    if args.decode_head == "composed":
+        if args.context_frames > 0:
+            composed = outputs.get("composed_chord_probs")
+        else:
+            composed = (full_outputs.get("composed_chord_probs")
+                        if isinstance(full_outputs, dict) else None)
+        if composed is None:
+            raise SystemExit("--decode-head composed needs a composed_chord_probs output")
+        chord_probs = aggregate_frame_probs(composed, args.frame_aggregation)
+        chord_pred = chord_probs.argmax(axis=1)
+    elif args.viterbi:
+        chord_pred = viterbi_smooth_tracks(
+            chord_probs, track_ids, c,
+            self_transition=args.viterbi_self_transition)
+    elif args.structured_decode != "none":
         if root_probs is None or quality_probs is None:
             raise SystemExit(
                 "--structured-decode needs root/quality heads in the checkpoint")
@@ -738,6 +785,10 @@ def main(argv: list[str] | None = None) -> int:
             quality_weight=args.quality_weight, pitch_weight=args.pitch_weight)
     else:
         chord_pred = chord_probs.argmax(axis=1)
+    if args.viterbi:
+        chord_pred = viterbi_smooth_tracks(
+            chord_probs, track_ids, c,
+            self_transition=args.viterbi_self_transition)
     if args.disambiguate_bass and args.label_space == "170":
         chord_pred = np.array([
             disambiguate_by_bass(int(c), int(b), chord_probs[i])
@@ -780,6 +831,11 @@ def main(argv: list[str] | None = None) -> int:
             float(np.mean(inversion_probs.argmax(axis=1)[known] == true_inversion[known]))
             if known.any() else 0.0
         )
+    report["checkpoint_b"] = (str(args.checkpoint_b)
+                              if args.checkpoint_b is not None else None)
+    report["decode_head"] = args.decode_head
+    report["viterbi"] = bool(args.viterbi)
+    report["viterbi_self_transition"] = float(args.viterbi_self_transition)
     report["checkpoint"] = str(args.checkpoint)
     report["split"] = args.split
     report["sources"] = sorted(set(sources))

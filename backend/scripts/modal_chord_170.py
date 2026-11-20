@@ -424,11 +424,16 @@ def eval_model(
 )
 def eval_context(
     checkpoint: str,
+    checkpoint_b: str = "",
+    context_frames_b: str = "0",
     split: str = "test",
     sources: str = "guitarset_fine,egset12_fine,idmt_smt_guitar_fine,rwc_fine",
     out: str = "",
     context_frames: str = "100",
     structured_decode: str = "none",
+    decode_head: str = "chord",
+    viterbi: str = "false",
+    viterbi_self_transition: str = "0.9",
     chord_weight: str = "1.0",
     root_weight: str = "1.0",
     quality_weight: str = "1.0",
@@ -448,11 +453,19 @@ def eval_context(
         "--context-frames", str(int(context_frames)),
         "--crop-window", "16",
         "--structured-decode", structured_decode,
+        "--decode-head", decode_head,
         "--chord-weight", str(chord_weight),
         "--root-weight", str(root_weight),
         "--quality-weight", str(quality_weight),
         "--pitch-weight", str(pitch_weight),
     ]
+    if _truthy(viterbi):
+        command += ["--viterbi", "--viterbi-self-transition",
+                    str(viterbi_self_transition)]
+    if checkpoint_b.strip():
+        command += ["--checkpoint-b", checkpoint_b]
+        if int(context_frames_b or 0) > 0:
+            command += ["--context-frames-b", str(int(context_frames_b))]
     output = _run(command)
     runs_volume.commit()
     if os.path.isfile(out_path):

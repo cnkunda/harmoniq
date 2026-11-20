@@ -266,6 +266,31 @@ def build_model(
     return tf.keras.Model(inputs=inputs, outputs=outputs, name="chord_crnn_170")
 
 
+@tf.keras.utils.register_keras_serializable(package="harmoniq")
+class StructuredChordComposition(tf.keras.layers.Layer):
+    """Compose a 170-class chord distribution from presence/root/quality.
+
+    Presence has 3 classes (chord, N, X); root and quality use their first
+    12/14 classes (the unknown classes are handled by presence). The chord
+    grid is flattened as ``quality * 12 + root`` to match the 170 vocabulary.
+    """
+
+    def call(self, inputs):
+        presence, root, quality = inputs
+        root12 = root[..., :12]
+        root12 = root12 / tf.maximum(
+            tf.reduce_sum(root12, axis=-1, keepdims=True), 1e-8)
+        quality14 = quality[..., :14]
+        quality14 = quality14 / tf.maximum(
+            tf.reduce_sum(quality14, axis=-1, keepdims=True), 1e-8)
+        grid = tf.einsum("btq,btr->btqr", quality14, root12)
+        shape = tf.shape(grid)
+        chord = tf.reshape(grid, [shape[0], shape[1], 168])
+        return tf.concat(
+            [presence[..., 0:1] * chord, presence[..., 1:2], presence[..., 2:3]],
+            axis=-1)
+
+
 CONTEXT_SCALES: dict[str, dict[str, int]] = {
     "base": {"conv": 192, "d_model": 192, "ff": 384, "dense": 256},
     "large": {"conv": 256, "d_model": 256, "ff": 512, "dense": 384},
@@ -280,6 +305,7 @@ def build_context_model(
     aux_heads: bool = False,
     inversion_head: bool = False,
     structured_heads: bool = False,
+    structured_objective: bool = False,
     model_scale: str = "base",
     num_blocks: int = 4,
 ) -> tf.keras.Model:
@@ -334,6 +360,15 @@ def build_context_model(
     if structured_heads:
         outputs["pitch_probs"] = tf.keras.layers.Dense(
             12, activation="sigmoid", name="pitch_probs")(x)
+    if structured_objective:
+        if not aux_heads:
+            raise ValueError("structured_objective needs root/quality heads")
+        outputs["presence_probs"] = tf.keras.layers.Dense(
+            3, activation="softmax", name="presence_probs")(x)
+        outputs["composed_chord_probs"] = StructuredChordComposition(
+            name="structured_composition")(
+                [outputs["presence_probs"], outputs["root_probs"],
+                 outputs["quality_probs"]])
     return tf.keras.Model(inputs=inputs, outputs=outputs,
                           name="chord_context_transformer")
 
@@ -706,6 +741,7 @@ class ContextSequence(tf.keras.utils.Sequence):
         aux_heads: bool = False,
         inversion_head: bool = False,
         structured_heads: bool = False,
+        structured_objective: bool = False,
         aug_level: str = "full",
     ):
         super().__init__()
@@ -725,6 +761,7 @@ class ContextSequence(tf.keras.utils.Sequence):
         self.aux_heads = aux_heads
         self.inversion_head = inversion_head
         self.structured_heads = structured_heads
+        self.structured_objective = structured_objective
         self.aug_level = aug_level
         self.epoch = 0
         self.rng = np.random.default_rng(seed)
@@ -794,11 +831,56 @@ class ContextSequence(tf.keras.utils.Sequence):
         if self.structured_heads:
             targets["pitch_probs"] = pitch_targets_from_chords(frame_chord)
             weights["pitch_probs"] = valid
+        if self.structured_objective:
+            presence = np.where(
+                frame_chord < N_IDX_170, 0,
+                np.where(frame_chord == N_IDX_170, 1, 2))
+            targets["presence_probs"] = tf.keras.utils.to_categorical(
+                presence, num_classes=3)
+            weights["presence_probs"] = valid
+            targets["composed_chord_probs"] = targets["chord_probs"]
+            weights["composed_chord_probs"] = weights["chord_probs"]
         return features, targets, weights
 
     def on_epoch_end(self) -> None:
         self.epoch += 1
         self.rng = np.random.default_rng(self.seed + self.epoch)
+
+
+class LastKCheckpoint(tf.keras.callbacks.Callback):
+    """Save the last K epoch weight files for checkpoint averaging/SWA."""
+
+    def __init__(self, out_dir: Path, keep: int):
+        super().__init__()
+        self.dir = Path(out_dir) / "lastk"
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self.keep = int(keep)
+        self.paths: list[Path] = []
+
+    def on_epoch_end(self, epoch: int, logs: dict | None = None) -> None:
+        path = self.dir / f"epoch_{epoch + 1:03d}.weights.h5"
+        self.model.save_weights(path)
+        self.paths.append(path)
+        while len(self.paths) > self.keep:
+            old = self.paths.pop(0)
+            old.unlink(missing_ok=True)
+
+
+def average_checkpoints(model, paths: list[Path]) -> None:
+    """Average the weights of the saved checkpoints and load them into model."""
+    if not paths:
+        return
+    totals = None
+    for path in paths:
+        model.load_weights(path)
+        weights = model.get_weights()
+        if totals is None:
+            totals = [np.asarray(weight, dtype=np.float64) for weight in weights]
+        else:
+            totals = [total + np.asarray(weight, dtype=np.float64)
+                      for total, weight in zip(totals, weights)]
+    model.set_weights([(total / len(paths)).astype(np.float32)
+                       for total in totals])
 
 
 # ---------------------------------------------------------------------------
@@ -1113,8 +1195,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--context-blocks", type=int, default=None)
     parser.add_argument("--structured-heads", action="store_true",
                         help="add a 12-class pitch head for structured decoding")
+    parser.add_argument("--structured-objective", action="store_true",
+                        help="compose the chord head from presence/root/quality")
     parser.add_argument("--init-checkpoint", type=Path, default=None,
                         help="initialise model weights from an existing checkpoint")
+    parser.add_argument("--save-last-k", type=int, default=0,
+                        help="save the last K epoch weights and write swa.keras")
     args = parser.parse_args(argv)
 
     config = {
@@ -1145,7 +1231,9 @@ def main(argv: list[str] | None = None) -> int:
         "context_frames": 0,
         "context_blocks": 4,
         "structured_heads": False,
+        "structured_objective": False,
         "init_checkpoint": "",
+        "save_last_k": 0,
     }
     config.update(load_config(args.config))
     for key, value in {
@@ -1200,12 +1288,19 @@ def main(argv: list[str] | None = None) -> int:
         config["structured_heads"] = True
         config["aux_heads"] = True
         config["inversion_head"] = True
+    if args.structured_objective:
+        config["structured_objective"] = True
+        config["aux_heads"] = True
     if args.init_checkpoint is not None:
         config["init_checkpoint"] = str(args.init_checkpoint)
+    if args.save_last_k:
+        config["save_last_k"] = int(args.save_last_k)
     if int(config["context_frames"]) > 0:
         config["frame_supervision"] = True
         if config["label_space"] != "170":
             raise SystemExit("context training currently supports label_space=170 only")
+    if config["structured_objective"] and int(config["context_frames"]) == 0:
+        raise SystemExit("--structured-objective currently requires --context-frames")
     if config["label_space"] not in LABEL_SPACES:
         raise SystemExit(f"unknown label space: {config['label_space']}")
 
@@ -1259,6 +1354,7 @@ def main(argv: list[str] | None = None) -> int:
             aux_heads=config["aux_heads"],
             inversion_head=config["inversion_head"],
             structured_heads=config["structured_heads"],
+            structured_objective=config["structured_objective"],
             model_scale=config["model_scale"],
             num_blocks=int(config["context_blocks"]),
         )
@@ -1272,10 +1368,22 @@ def main(argv: list[str] | None = None) -> int:
     init_checkpoint = str(config.get("init_checkpoint") or "").strip()
     if init_checkpoint:
         initial = tf.keras.models.load_model(
-            init_checkpoint, custom_objects={"CircularCqtPad": CircularCqtPad},
+            init_checkpoint,
+            custom_objects={
+                "CircularCqtPad": CircularCqtPad,
+                "StructuredChordComposition": StructuredChordComposition,
+            },
             safe_mode=False)
-        model.set_weights(initial.get_weights())
-        print(f"  initialised weights from {init_checkpoint}", flush=True)
+        copied, skipped = 0, []
+        for layer in model.layers:
+            try:
+                source = initial.get_layer(layer.name)
+                layer.set_weights(source.get_weights())
+                copied += 1
+            except Exception:
+                skipped.append(layer.name)
+        print(f"  initialised {copied} layers from {init_checkpoint} "
+              f"(new/random: {', '.join(skipped) or 'none'})", flush=True)
     optimizer = tf.keras.optimizers.AdamW(
         learning_rate=tf.keras.optimizers.schedules.CosineDecay(
             initial_learning_rate=float(config["learning_rate"]),
@@ -1316,6 +1424,18 @@ def main(argv: list[str] | None = None) -> int:
         losses["pitch_probs"] = tf.keras.losses.BinaryCrossentropy()
         loss_weights["pitch_probs"] = 0.2
         metrics["pitch_probs"] = [tf.keras.metrics.BinaryAccuracy(name="acc")]
+    if config["structured_objective"]:
+        losses["presence_probs"] = tf.keras.losses.CategoricalCrossentropy()
+        losses["composed_chord_probs"] = tf.keras.losses.CategoricalCrossentropy(
+            label_smoothing=float(config["label_smoothing"]))
+        loss_weights["presence_probs"] = 0.25
+        loss_weights["composed_chord_probs"] = 1.0
+        loss_weights["chord_probs"] = 0.25
+        loss_weights["root_probs"] = 0.30
+        loss_weights["quality_probs"] = 0.30
+        metrics["presence_probs"] = [tf.keras.metrics.CategoricalAccuracy(name="acc")]
+        metrics["composed_chord_probs"] = [
+            tf.keras.metrics.CategoricalAccuracy(name="acc")]
     model.compile(optimizer=optimizer, loss=losses, loss_weights=loss_weights,
                   metrics=metrics)
 
@@ -1358,6 +1478,7 @@ def main(argv: list[str] | None = None) -> int:
             aux_heads=config["aux_heads"],
             inversion_head=config["inversion_head"],
             structured_heads=config["structured_heads"],
+            structured_objective=config["structured_objective"],
             aug_level=config["aug_level"],
         )
     else:
@@ -1394,6 +1515,9 @@ def main(argv: list[str] | None = None) -> int:
         label_space=config["label_space"],
         context_frames=int(config["context_frames"]),
     )
+    last_k = (LastKCheckpoint(out_dir, int(config["save_last_k"]))
+              if int(config["save_last_k"]) > 0 else None)
+    callbacks = [callback] if last_k is None else [callback, last_k]
 
     (out_dir / "config.json").write_text(json.dumps({
         **config,
@@ -1453,10 +1577,15 @@ def main(argv: list[str] | None = None) -> int:
     history = model.fit(
         sequence,
         epochs=int(config["epochs"]),
-        callbacks=[callback],
+        callbacks=callbacks,
         verbose=2,
     )
     model.save(out_dir / "final.keras")
+    if last_k is not None and last_k.paths:
+        average_checkpoints(model, last_k.paths)
+        model.save(out_dir / "swa.keras")
+        print(f"  wrote checkpoint average over {len(last_k.paths)} epochs "
+              f"to {out_dir / 'swa.keras'}", flush=True)
     (out_dir / "history.json").write_text(json.dumps(
         {k: [float(x) for x in v] for k, v in history.history.items()}, indent=2))
     print(f"Training complete. Artifacts in {out_dir}", flush=True)

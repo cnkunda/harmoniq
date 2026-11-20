@@ -21,6 +21,8 @@ from scripts.chord_context import (  # noqa: E402
     pitch_targets_from_chords,
     root_quality_from_chords,
     structured_decode,
+    viterbi_smooth_sequence,
+    viterbi_smooth_tracks,
 )
 from scripts.eval_chord_170 import (  # noqa: E402
     macro_f1_min_support,
@@ -145,6 +147,26 @@ class TestStructuredHelpers:
         pitch = np.zeros((1, 12), dtype=np.float32)
         pitch[0, [0, 4, 7]] = 0.9
         assert structured_decode(chord, root, quality, pitch, mode="hybrid")[0] == target
+
+
+class TestViterbi:
+    def test_clean_sequence_follows_emissions(self):
+        probs = np.array([[0.9, 0.1], [0.9, 0.1], [0.1, 0.9], [0.1, 0.9]])
+        path = viterbi_smooth_sequence(probs, self_transition=0.6)
+        assert path.tolist() == [0, 0, 1, 1]
+
+    def test_persistence_removes_single_frame_flip(self):
+        probs = np.array([[0.9, 0.1], [0.9, 0.1], [0.4, 0.6],
+                          [0.9, 0.1], [0.9, 0.1]])
+        path = viterbi_smooth_sequence(probs, self_transition=0.95)
+        assert path.tolist() == [0, 0, 0, 0, 0]
+
+    def test_tracks_are_independent(self):
+        probs = np.array([[0.9, 0.1], [0.1, 0.9], [0.9, 0.1], [0.1, 0.9]])
+        tracks = ["a", "a", "b", "b"]
+        centres = np.array([0.0, 1.0, 0.0, 1.0])
+        path = viterbi_smooth_tracks(probs, tracks, centres, self_transition=0.5)
+        assert path.tolist() == [0, 1, 0, 1]
 
 
 class TestSupportMetrics:

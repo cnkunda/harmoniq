@@ -220,6 +220,59 @@ def structured_decode(
     return scores.argmax(axis=1)
 
 
+def viterbi_smooth_sequence(
+    probs: np.ndarray,
+    *,
+    self_transition: float = 0.9,
+) -> np.ndarray:
+    """Viterbi path over a sequence of class probabilities (persistence prior)."""
+    probs = np.asarray(probs, dtype=np.float64)
+    if len(probs) == 0:
+        return np.zeros(0, dtype=np.int64)
+    n_states = probs.shape[1]
+    if n_states == 1:
+        return np.zeros(len(probs), dtype=np.int64)
+    self_transition = float(np.clip(self_transition, 0.0, 1.0 - 1e-6))
+    off = (1.0 - self_transition) / (n_states - 1)
+    transition = np.full((n_states, n_states), off, dtype=np.float64)
+    np.fill_diagonal(transition, self_transition)
+    log_transition = np.log(np.clip(transition, 1e-12, 1.0))
+    log_emission = np.log(np.clip(probs, 1e-12, 1.0))
+    delta = log_emission[0]
+    back = np.zeros((len(probs), n_states), dtype=np.int64)
+    states = np.arange(n_states)
+    for t in range(1, len(probs)):
+        scores = delta[:, None] + log_transition
+        back[t] = scores.argmax(axis=0)
+        delta = scores[back[t], states] + log_emission[t]
+    path = np.zeros(len(probs), dtype=np.int64)
+    path[-1] = int(delta.argmax())
+    for t in range(len(probs) - 2, -1, -1):
+        path[t] = back[t + 1, path[t + 1]]
+    return path
+
+
+def viterbi_smooth_tracks(
+    probs: np.ndarray,
+    track_ids: list[str],
+    centres: np.ndarray,
+    *,
+    self_transition: float = 0.9,
+) -> np.ndarray:
+    """Apply Viterbi independently per track, ordered by window centre."""
+    probs = np.asarray(probs)
+    centres = np.asarray(centres)
+    predictions = probs.argmax(axis=1).astype(np.int64)
+    grouped: dict[str, list[int]] = {}
+    for index, track in enumerate(track_ids):
+        grouped.setdefault(track, []).append(index)
+    for indices in grouped.values():
+        order = np.asarray(indices)[np.argsort(centres[indices], kind="stable")]
+        predictions[order] = viterbi_smooth_sequence(
+            probs[order], self_transition=self_transition)
+    return predictions
+
+
 def centre_window_predictions(
     probs: np.ndarray,
     center_indices: np.ndarray,
@@ -276,4 +329,6 @@ __all__ = [
     "root_quality_from_chords",
     "structured_decode",
     "structured_scores",
+    "viterbi_smooth_sequence",
+    "viterbi_smooth_tracks",
 ]
