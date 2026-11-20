@@ -62,7 +62,8 @@ Progress across iterations (external test unless noted):
 | Seed 2 guitar FT + seed 3 ensemble | **0.351** | **0.570** | **0.688** | 0.822 | 0.224 | **0.022** |
 | FT1 + balanced-FT ensemble (best slash) | 0.320 | 0.544 | 0.677 | 0.830 | **0.266** | 0.033 |
 | FT1 + seed2-FT ensemble | 0.345 | 0.563 | **0.689** | 0.829 | 0.245 | 0.027 |
-| Synthetic-FT seed2 + seed3 ensemble | **0.351** | **0.575** | **0.691** | 0.826 | 0.229 | **0.018** |
+| Synthetic-FT seed2 + seed3 ensemble | 0.351 | **0.575** | **0.691** | 0.826 | 0.229 | **0.018** |
+| Synthetic scale-up (6,764 windows) + seed3 | **0.353** | 0.565 | 0.683 | 0.827 | 0.227 | 0.027 |
 
 ---
 
@@ -200,8 +201,13 @@ Progress across iterations (external test unless noted):
   MIREX **0.691**, bass 0.826, slash 0.229, ECE **0.018**, macro ≥10 0.500,
   macro ≥20 0.526.
 - Delta vs the no-synthetic ensemble is small but consistent: exact +0.004,
-  MIREX +0.004, ECE −0.004, bass +0.004, slash +0.005, macro flat. Scale up
-  synthetic windows/classes before another gate attempt.
+  MIREX +0.004, ECE −0.004, bass +0.004, slash +0.005, macro flat.
+- Scale-up (6,764 windows, multi-window rendering, 2× synthetic sampling):
+  macro 0.353 (+0.002) but exact 0.565 (−0.009), MIREX 0.683 (−0.009),
+  ECE 0.027 (+0.009). Not a reliable win; stop adding windows and change the
+  synthetic timbre/domain or source instead. The 3,091-window corpus is the
+  better finalist for exact/MIREX/ECE; the 6,764-window run is the macro
+  point estimate.
 
 ### Long-context + structured heads (`472ca8f`)
 - `scripts/chord_context.py` reconstructs arbitrary-length contexts from the
@@ -498,13 +504,15 @@ per-class support reporting, not a single macro number.
 - Ensembling: strongest lever. Seed2-FT + seed3 gives macro 0.351, exact
   0.570, MIREX 0.688, ECE 0.022; FT1 + balanced-FT gives slash 0.266.
 
-### C. Phase 4 — synthetic data implemented (small positive)
+### C. Phase 4 — synthetic data tested; scale-up is not a reliable win
 `build_synthetic_chords.py` rendered 3,091 balanced windows from
 Isophonics/Billboard/JAAH `.lab` annotations (110/170 classes, all 12 bass
 classes). Fine-tuning seed2-FT with synthetic + guitar data improved exact
 +0.004, MIREX +0.004, ECE −0.004, bass +0.004, slash +0.005; macro was flat.
-The next synthetic step is scale-up: multiple 1.6 s windows per long segment,
-more timbres/effects, more class coverage, and a larger share of training.
+Scaling to 6,764 windows (+2× sampling) gave macro 0.353 but exact 0.565,
+MIREX 0.683, ECE 0.027 — worse companions. Do not just add windows; the next
+synthetic attempt should change the timbre/domain (soundfont/amp/effects) or
+use a different symbolic source.
 
 ### D. Metric decision
 Keep the **full 102-class macro-F1 as the primary gate** until a pre-registered

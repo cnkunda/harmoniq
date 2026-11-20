@@ -725,9 +725,12 @@ the annotated bass for inversions. Fine-tuning seed2-FT with synthetic +
 guitar data gives val macro 0.285 (0.272 without), external alone macro 0.325
 / exact 0.554 / MIREX 0.680. Ensembled with seed3: macro 0.351, exact
 **0.575**, MIREX **0.691**, bass 0.826, slash 0.229, ECE **0.018**, macro
-≥20 0.526. The gain is small but consistent; scale up synthetic windows and
-class coverage before another gate run. JAAH is NC, so this corpus is
-research-only. Artifact: `docs/audit/amt/chord170_phases_1_3.json`.
+≥20 0.526. A scale-up to 6,764 windows (multi-window rendering, 2× synthetic
+sampling) gives macro 0.353 but exact 0.565 / MIREX 0.683 / ECE 0.027, so
+more of the same synthetic data is not a reliable win. The 3,091-window
+corpus remains the finalist for exact/MIREX/ECE; the 6,764-window run is the
+macro point estimate. JAAH is NC, so this corpus is research-only. Artifact:
+`docs/audit/amt/chord170_phases_1_3.json`.
 
 ## Phase plan (remaining)
 
