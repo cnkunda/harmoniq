@@ -19,20 +19,20 @@ External test = GuitarSet p05 + EGSet12 + held-out IDMT + held-out RWC,
 
 | Gate | Target | Best honest | Status |
 | --- | ---: | ---: | --- |
-| Macro-F1 (classes with support) | ≥ 0.45 | **0.351** | ❌ |
-| Bass accuracy (known-bass frames) | ≥ 0.60 | **0.832** | ✅ |
+| Macro-F1 (classes with support) | ≥ 0.45 | **0.359** | ❌ |
+| Bass accuracy (known-bass frames) | ≥ 0.60 | **0.834** | ✅ |
 | Slash accuracy (inversion frames) | ≥ 0.50 | **0.266** | ❌ |
-| ECE (duration-weighted) | ≤ 0.15 | **0.022** | ✅ |
+| ECE (duration-weighted) | ≤ 0.15 | **0.0147** | ✅ |
 
-Best macro/exact/MIREX/ECE: ensemble of
-`/runs/chord170/context-s96-b3-s2-ft/best.keras` +
-`/runs/chord170/context-s96-b3-s3/best.keras` (96-frame, 3-block,
-guitar+balanced-Slakh, then guitar-only fine-tune of seed 2). Plain chord
-head: macro **0.351**, exact **0.570**, WCSR-MIREX **0.688**, bass 0.822,
-slash 0.224, ECE **0.022**. Best slash: ensemble of
-`context-full-s64-guitarft` + `context-s64-guitar-bal-ft` (macro 0.320,
-slash **0.266**, exact 0.544, MIREX 0.677, ECE 0.033). No checkpoint or
-ensemble passes all four gates.
+Best macro/MIREX/ECE: cross-context ensemble of
+`/runs/chord170/context-s96-b3-s2-ft-synth/best.keras` (96-frame) +
+`/runs/chord170/context-s128-b4-s1/best.keras` (128-frame). Plain chord
+head: macro **0.359**, exact 0.568, WCSR-MIREX **0.693**, bass 0.830,
+slash 0.238, ECE **0.0147**. Best exact: synth seed2-FT + seed3 (96+96),
+exact **0.575**. Best slash: FT1 + balanced-FT (64+64), macro 0.320,
+slash **0.266**, exact 0.544, MIREX 0.677, ECE 0.0145. Best bass: the
+three-context cross ensemble, 0.834. No checkpoint or ensemble passes all
+four gates.
 
 Support evidence for the macro definition: of 102 supported classes,
 15 have one frame, 19 have 2–4, 14 have 5–9, 19 have 10–19, and 35 have
@@ -212,6 +212,16 @@ Progress across iterations (external test unless noted):
   better finalist for exact/MIREX/ECE; the 6,764-window run is the macro
   point estimate.
 
+### Phase 4c — context capacity and cross-context ensembles (2026-11-20)
+- 128-frame / 4-block, 3 seeds on guitar + balanced Slakh: external macro
+  0.322 / 0.306 / 0.297 — worse than 96-frame despite higher val macro.
+  Context/capacity is saturated past 96 frames.
+- Cross-context diversity is positive: synth seed2-FT (96) + seed1 (128)
+  gives macro **0.359**, exact 0.568, MIREX **0.693**, bass 0.830, slash
+  0.238, ECE **0.0147**. Adding FT1 (64) as a third context lowers macro to
+  0.342 but raises slash to 0.255 and bass to **0.834**.
+- Evidence: `docs/audit/amt/chord170_phases_1_3.json`.
+
 ### Long-context + structured heads (`472ca8f`)
 - `scripts/chord_context.py` reconstructs arbitrary-length contexts from the
   contiguous fine windows (window = hop = 16) and provides pitch-target and
@@ -314,6 +324,9 @@ Progress across iterations (external test unless noted):
     finalist (0.351). Keep two-model finalists.
 18. Scaling the synthetic corpus 3,091→6,764 windows raised macro +0.002 but
     cost exact −0.009 / MIREX −0.009 / ECE +0.009. Do not just add windows.
+19. 128-frame / 4-block is worse than 96-frame / 3-block (macro 0.322/0.306/
+    0.297 vs 0.328/0.327); context/capacity is saturated. Cross-context
+    ensembling (96 + 128) is the useful part, not the longer model alone.
 
 ---
 
@@ -516,15 +529,18 @@ per-class support reporting, not a single macro number.
 - Ensembling: strongest lever. Seed2-FT + seed3 gives macro 0.351, exact
   0.570, MIREX 0.688, ECE 0.022; FT1 + balanced-FT gives slash 0.266.
 
-### C. Phase 4 — synthetic data tested; scale-up is not a reliable win
-`build_synthetic_chords.py` rendered 3,091 balanced windows from
-Isophonics/Billboard/JAAH `.lab` annotations (110/170 classes, all 12 bass
-classes). Fine-tuning seed2-FT with synthetic + guitar data improved exact
-+0.004, MIREX +0.004, ECE −0.004, bass +0.004, slash +0.005; macro was flat.
-Scaling to 6,764 windows (+2× sampling) gave macro 0.353 but exact 0.565,
-MIREX 0.683, ECE 0.027 — worse companions. Do not just add windows; the next
-synthetic attempt should change the timbre/domain (soundfont/amp/effects) or
-use a different symbolic source.
+### C. Phase 4c — context capacity/ensemble (done)
+128-frame / 4-block is worse than 96/3 on the external test. Cross-context
+ensembling is the win: synth1 (96) + 128 seed1 gives macro **0.359**, exact
+0.568, MIREX **0.693**, ECE **0.0147**; adding FT1 (64) gives slash 0.255 and
+bass **0.834**. Context/capacity is saturated; further gains need a different
+representation or data, not a longer context.
+
+### C2. Phase 4d — next lever: pretrained encoder or real guitar data
+The remaining high-upside options are (a) MuQ/MERT-v2 pretrained features with
+light adapters, or (b) more real guitar data (GOAT/EGFxSet after licence
+review). More of the same synthetic corpus and longer contexts are not
+promising.
 
 ### D. Metric decision
 Keep the **full 102-class macro-F1 as the primary gate** until a pre-registered

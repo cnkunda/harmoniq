@@ -725,6 +725,13 @@ FT1+balancedFT (ECE 0.0145, macro/slash unchanged). Three-model averaging
 (0.342–0.348 macro) is below the best two-model finalist (0.351). Keep
 two-model finalists.
 
+**Phase 4c — context capacity.** 128-frame / 4-block, 3 seeds reach external
+macro 0.322/0.306/0.297, below 96/3 (0.328/0.327); context/capacity is
+saturated. Cross-context ensembling is positive: synth1 (96) + 128 seed1 gives
+macro **0.359**, exact 0.568, MIREX **0.693**, ECE **0.0147**, slash 0.238.
+Adding FT1 (64) as a third context gives macro 0.342, slash 0.255, bass
+**0.834**. Artifact: `docs/audit/amt/chord170_phases_1_3.json`.
+
 **Phase 4 — synthetic rare-chord/inversion data.** `build_synthetic_chords.py`
 renders 3,091 balanced guitar windows (110/170 classes, all 12 bass classes)
 from Isophonics/Billboard/JAAH `.lab` annotations using additive synthesis and
