@@ -597,6 +597,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--checkpoint-b", type=Path, default=None,
                         help="optional second checkpoint for probability ensembling")
+    parser.add_argument("--checkpoint-c", type=Path, default=None,
+                        help="optional third checkpoint for probability ensembling")
     parser.add_argument("--data-root", type=Path, default=_BACKEND_DIR / "data")
     parser.add_argument("--sources", default="guitarset,egset12")
     parser.add_argument("--split", default="test")
@@ -605,6 +607,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--label-space", default="170", choices=["170", "277", "mirex25"])
     parser.add_argument("--calibration", type=Path, default=None,
                         help="calibration params JSON from calibrate_chord_170.py")
+    parser.add_argument("--fit-calibration-on-val", action="store_true",
+                        help="fit temperature/prior on the val split and apply to test")
     parser.add_argument("--feature-stats", type=Path, default=None,
                         help="feature_stats.npz (per-bin mean/std) from training")
     parser.add_argument("--feature-normalize", default="none", choices=["none", "track"])
@@ -615,6 +619,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="run the long-context model on this many frames")
     parser.add_argument("--context-frames-b", type=int, default=0,
                         help="context length for checkpoint-b (default: same)")
+    parser.add_argument("--context-frames-c", type=int, default=0,
+                        help="context length for checkpoint-c (default: same)")
     parser.add_argument("--structured-decode", default="none",
                         choices=["none", "fuse", "hybrid"])
     parser.add_argument("--decode-head", default="chord",
@@ -695,12 +701,14 @@ def main(argv: list[str] | None = None) -> int:
     b = np.concatenate(bass)
     c = np.concatenate(centres)
     model = load_model(args.checkpoint)
+    model_b = model_c = None
     root_probs = quality_probs = pitch_probs = None
     if args.context_frames > 0:
         if not offsets:
             raise SystemExit("context inference needs track offsets from the loader")
         outputs = predict_context_outputs(
             model, X, offsets, args.context_frames, args.batch_size)
+        blend_count = 1
         if args.checkpoint_b is not None:
             model_b = load_model(args.checkpoint_b)
             context_b = (args.context_frames_b
@@ -708,7 +716,20 @@ def main(argv: list[str] | None = None) -> int:
             outputs_b = predict_context_outputs(
                 model_b, X, offsets, context_b, args.batch_size)
             for key in set(outputs) & set(outputs_b):
-                outputs[key] = (outputs[key] + outputs_b[key]) / 2.0
+                outputs[key] = outputs[key] + outputs_b[key]
+            blend_count += 1
+        if args.checkpoint_c is not None:
+            model_c = load_model(args.checkpoint_c)
+            context_c = (args.context_frames_c
+                         if args.context_frames_c > 0 else args.context_frames)
+            outputs_c = predict_context_outputs(
+                model_c, X, offsets, context_c, args.batch_size)
+            for key in set(outputs) & set(outputs_c):
+                outputs[key] = outputs[key] + outputs_c[key]
+            blend_count += 1
+        if blend_count > 1:
+            for key in outputs:
+                outputs[key] = outputs[key] / blend_count
         chord_probs = outputs["chord_probs"]
         n_windows = len(chord_probs)
         bass_probs = outputs.get(
@@ -719,13 +740,31 @@ def main(argv: list[str] | None = None) -> int:
         pitch_probs = outputs.get("pitch_probs")
     else:
         full_outputs = model.predict(X, batch_size=args.batch_size, verbose=0)
-        if args.checkpoint_b is not None and isinstance(full_outputs, dict):
-            model_b = load_model(args.checkpoint_b)
-            outputs_b = model_b.predict(X, batch_size=args.batch_size, verbose=0)
-            if isinstance(outputs_b, dict):
+        if isinstance(full_outputs, dict):
+            blend_count = 1
+            add_outputs: dict | None = None
+            if args.checkpoint_b is not None:
+                model_b = load_model(args.checkpoint_b)
+                add_outputs = model_b.predict(X, batch_size=args.batch_size, verbose=0)
+                if isinstance(add_outputs, dict):
+                    blend_count += 1
+            if args.checkpoint_c is not None:
+                model_c = load_model(args.checkpoint_c)
+                outputs_c = model_c.predict(X, batch_size=args.batch_size, verbose=0)
+                if isinstance(outputs_c, dict):
+                    if add_outputs is None:
+                        add_outputs = outputs_c
+                    else:
+                        add_outputs = {
+                            key: np.asarray(add_outputs[key]) + np.asarray(outputs_c[key])
+                            if key in outputs_c else add_outputs[key]
+                            for key in add_outputs
+                        }
+                    blend_count += 1
+            if add_outputs is not None and blend_count > 1:
                 full_outputs = {
-                    key: (np.asarray(value) + np.asarray(outputs_b[key])) / 2.0
-                    if key in outputs_b else value
+                    key: ((np.asarray(value) + np.asarray(add_outputs[key]))
+                          / blend_count if key in add_outputs else value)
                     for key, value in full_outputs.items()
                 }
         if isinstance(full_outputs, dict):
@@ -761,6 +800,58 @@ def main(argv: list[str] | None = None) -> int:
                               "prior_exponent": params.get("prior_exponent")}
     else:
         report_calibration = None
+    posthoc = None
+    if args.fit_calibration_on_val:
+        val_feats, val_labels, val_offsets = [], [], []
+        val_cursor = 0
+        for name in [s.strip() for s in args.sources.split(",") if s.strip()]:
+            loaded = data.load_dataset_dir_170(
+                source_dirs[name], "val", source=name,
+                normalize=args.feature_normalize,
+                crop_window=args.crop_window)
+            if len(loaded["labels170"]) == 0:
+                continue
+            val_feats.append(loaded["features"])
+            val_labels.append(loaded["labels170"])
+            for start, n_tracks, track_id in loaded.get("track_offsets", []):
+                val_offsets.append((val_cursor + start, n_tracks, track_id))
+            val_cursor += len(loaded["labels170"])
+        if val_feats:
+            VX = np.concatenate(val_feats)
+            if args.feature_stats is not None:
+                VX = ((VX - stats["mean"]) / stats["std"]).astype(np.float32)
+            VY = np.concatenate(val_labels)
+            if args.context_frames > 0:
+                vout = predict_context_outputs(
+                    model, VX, val_offsets, args.context_frames, args.batch_size)
+                if model_b is not None:
+                    context_b = (args.context_frames_b
+                                 if args.context_frames_b > 0 else args.context_frames)
+                    vout_b = predict_context_outputs(
+                        model_b, VX, val_offsets, context_b, args.batch_size)
+                    for key in set(vout) & set(vout_b):
+                        vout[key] = (vout[key] + vout_b[key]) / 2.0
+                vchord = (vout.get("composed_chord_probs")
+                          if args.decode_head == "composed"
+                          else vout["chord_probs"])
+            else:
+                vfull = model.predict(VX, batch_size=args.batch_size, verbose=0)
+                vchord = (vfull.get("composed_chord_probs")
+                          if args.decode_head == "composed"
+                          else vfull["chord_probs"])
+                vchord = aggregate_frame_probs(vchord, args.frame_aggregation)
+            params = fit_calibration(vchord, VY)
+            chord_probs = apply_calibration(chord_probs, params)
+            posthoc = {
+                "temperature": params["temperature"],
+                "prior_exponent": params["prior_exponent"],
+                "val_macro_f1_supported_before": float(macro_f1(
+                    VY, vchord.argmax(axis=1), labels=np.unique(VY))),
+                "val_macro_f1_supported_after": float(macro_f1(
+                    VY, apply_calibration(vchord, params).argmax(axis=1),
+                    labels=np.unique(VY))),
+                "n_val_windows": int(len(VY)),
+            }
     if args.decode_head == "composed":
         if args.context_frames > 0:
             composed = outputs.get("composed_chord_probs")
@@ -834,6 +925,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     report["checkpoint_b"] = (str(args.checkpoint_b)
                               if args.checkpoint_b is not None else None)
+    report["checkpoint_c"] = (str(args.checkpoint_c)
+                              if args.checkpoint_c is not None else None)
+    if posthoc is not None:
+        report["posthoc_calibration"] = posthoc
     report["decode_head"] = args.decode_head
     report["viterbi"] = bool(args.viterbi)
     report["viterbi_self_transition"] = float(args.viterbi_self_transition)
