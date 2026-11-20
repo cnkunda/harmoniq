@@ -109,6 +109,7 @@ SOURCE_DIRS = {
     "idmt_chords_fine": "chord170/fine/idmt_chords",
     "slakh_fine": "chord170/slakh_fine",
     "slakh_bal_fine": "chord170/slakh_balanced",
+    "synthetic_guitar": "chord170/synthetic_guitar",
 }
 
 

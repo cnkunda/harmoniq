@@ -651,6 +651,7 @@ def main(argv: list[str] | None = None) -> int:
         "idmt_chords_fine": args.data_root / "chord170" / "fine" / "idmt_chords",
         "slakh_fine": args.data_root / "chord170" / "slakh_fine",
         "slakh_bal_fine": args.data_root / "chord170" / "slakh_balanced",
+        "synthetic_guitar": args.data_root / "chord170" / "synthetic_guitar",
     }
     features, labels, bass, track_ids, centres, sources = [], [], [], [], [], []
     offsets: list[tuple[int, int, str]] = []

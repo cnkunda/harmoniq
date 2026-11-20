@@ -1006,6 +1006,40 @@ def add_frame_labels(
 
 @app.function(
     image=audio_image,
+    cpu=16,
+    memory=65536,
+    timeout=6 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def build_synthetic_chords(limit: str = "8000", workers: str = "16",
+                           seed: str = "0",
+                           clips_per_segment: str = "1",
+                           force: str = "false") -> str:
+    """Render the balanced synthetic guitar chord corpus from .lab files."""
+    _ensure_bundle()
+    report_path = os.path.join(
+        BACKEND, "data", "chord170", "synthetic_report.json")
+    command = [
+        "python", "scripts/build_synthetic_chords.py",
+        "--limit", str(int(limit)),
+        "--workers", str(int(workers)),
+        "--seed", str(int(seed)),
+        "--clips-per-segment", str(int(clips_per_segment)),
+        "--report", report_path,
+    ]
+    if _truthy(force):
+        command.append("--force")
+    output = _run(command)
+    data_volume.commit()
+    if os.path.isfile(report_path):
+        with open(report_path, encoding="utf-8") as handle:
+            print(handle.read(), flush=True)
+    return output
+
+
+@app.function(
+    image=audio_image,
     cpu=8,
     memory=32768,
     timeout=2 * 60 * 60,
