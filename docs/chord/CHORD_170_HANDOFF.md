@@ -237,6 +237,17 @@ Progress across iterations (external test unless noted):
   non-CQT features can be tested without corrupting pitch-shift augmentation.
 - Evidence: `docs/audit/amt/chord170_phases_1_3.json`.
 
+### Phase 4e — real guitar-only baseline and ensembles (2026-11-24)
+- CQT guitar-only baseline (no Slakh/synthetic): val macro 0.289, external
+  macro 0.318 / exact 0.532 / MIREX 0.671 / slash 0.218 / ECE 0.085.
+- Adding it to the two-context finalist: macro 0.3541, exact **0.5755**,
+  MIREX **0.6988**, slash 0.240, ECE 0.0162. Best exact/MIREX; lower macro
+  than the 0.359 two-model finalist. Synthetic fine-tuning of the guitar-only
+  model is negative (val 0.289→0.266).
+- Verdict: CQT ensembles are saturated. Best macro 0.359; best slash 0.266.
+  Closing the gates needs more real guitar data (GOAT access) or a
+  research-grade representation/adaptation change, not more CQT ensembles.
+
 ### Long-context + structured heads (`472ca8f`)
 - `scripts/chord_context.py` reconstructs arbitrary-length contexts from the
   contiguous fine windows (window = hop = 16) and provides pitch-target and
@@ -345,6 +356,10 @@ Progress across iterations (external test unless noted):
 20. MuQ (layer 6/2) as a direct CQT replacement is negative: val macro
     0.076/0.194 vs CQT guitar-only 0.289. MuQ features likely encode
     track/timbre identity; do not scale without domain adaptation.
+21. Synthetic fine-tuning of the guitar-only model hurts val macro
+    (0.289→0.266). Adding the guitar-only model as a third ensemble member
+    improves exact/MIREX (0.576/0.699) but lowers macro (0.354 vs 0.359).
+    The CQT ensemble is saturated.
 
 ---
 

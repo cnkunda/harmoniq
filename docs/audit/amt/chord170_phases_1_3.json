@@ -2904,6 +2904,7 @@
       "macro_f1": 0.29749659585661586,
       "macro_f1_supported": 0.3179130289055993,
       "exact_accuracy": 0.5318808074335148,
+      "top3_accuracy": 0.7555270746555591,
       "ece": 0.08488251680901554,
       "wcsr": {
         "root": 0.6658122396667735,
@@ -2966,6 +2967,146 @@
       },
       "macro_f1_support_ge_10": 0.4415088998684293,
       "macro_f1_support_ge_20": 0.48256491847866345
+    },
+    "phase4e_guitaronly_3ctx": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.3283347821200781,
+      "macro_f1_supported": 0.35408652973733906,
+      "exact_accuracy": 0.5754565844280679,
+      "top3_accuracy": 0.7792374239025953,
+      "ece": 0.016163177162800305,
+      "wcsr": {
+        "root": 0.6866388977891701,
+        "majmin": 0.6628296464194869,
+        "thirds": 0.6536366549182954,
+        "triads": 0.6347324575456584,
+        "sevenths": 0.596885289976486,
+        "tetrads": 0.5594360781800705,
+        "mirex": 0.6988144825376482
+      },
+      "bass": {
+        "overall": 0.68760012816405,
+        "known_bass": 0.828672705789681,
+        "chord_frames": 0.7093728927848955,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.6410121244069583,
+        "slash_acc": 0.2398753894080997,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.3019047619047619,
+          "exact_accuracy": 0.5396825396825397,
+          "wcsr_mirex": 0.6217391304347827
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.3168792939989193,
+          "exact_accuracy": 0.48214285714285715,
+          "wcsr_mirex": 0.5659463959418833
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.596941566602403,
+          "exact_accuracy": 0.7283018867924528,
+          "wcsr_mirex": 0.7807672555203471
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.30552470019869177,
+          "exact_accuracy": 0.6196660482374768,
+          "wcsr_mirex": 0.7730780522221976
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.5105088294881771,
+          0.635474641606277
+        ],
+        "macro_f1": [
+          0.28787616841334207,
+          0.3742387407611762
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "macro_f1_support_ge_10": 0.48685851880677944,
+      "macro_f1_support_ge_20": 0.5272846929117059
+    },
+    "phase4e_guitaronly_2ctx": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.30832357989991194,
+      "macro_f1_supported": 0.33250582146068935,
+      "exact_accuracy": 0.5600768984299904,
+      "top3_accuracy": 0.774751682153156,
+      "ece": 0.030220548948467027,
+      "wcsr": {
+        "root": 0.6783082345402115,
+        "majmin": 0.6563384980558641,
+        "thirds": 0.6453059916693368,
+        "triads": 0.6299263056712592,
+        "sevenths": 0.5856791549393894,
+        "tetrads": 0.5498237744312721,
+        "mirex": 0.6866388977891701
+      },
+      "bass": {
+        "overall": 0.6831143864146108,
+        "known_bass": 0.82315872390705,
+        "chord_frames": 0.7046527309507754,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.628360569319979,
+        "slash_acc": 0.24454828660436137,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.27000184263865856,
+          "exact_accuracy": 0.49206349206349204,
+          "wcsr_mirex": 0.5884057971014494
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.3050944282562795,
+          "exact_accuracy": 0.47023809523809523,
+          "wcsr_mirex": 0.5450548999574235
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.5779724175706139,
+          "exact_accuracy": 0.7169811320754716,
+          "wcsr_mirex": 0.7739192718426781
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.28652634327297005,
+          "exact_accuracy": 0.6023500309214594,
+          "wcsr_mirex": 0.7621469239470398
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.49509792872561387,
+          0.621062943174839
+        ],
+        "macro_f1": [
+          0.26603931065547265,
+          0.36446456450730486
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "macro_f1_support_ge_10": 0.4676284176945091,
+      "macro_f1_support_ge_20": 0.5093690559453498
     }
   },
   "phase4_synthetic_guitar": {
@@ -3099,7 +3240,7 @@
     "note": "Three-model averaging dilutes the best pair; keep the two-model finalists."
   },
   "best_finalists": {
-    "macro_mirex_ece": {
+    "macro": {
       "ensemble": [
         "context-s96-b3-s2-ft-synth",
         "context-s128-b4-s1"
@@ -3107,30 +3248,28 @@
       "macro_supported": 0.3588,
       "exact": 0.5678,
       "mirex": 0.6927,
-      "ece": 0.0147,
-      "slash": 0.2383
+      "ece": 0.0147
     },
-    "exact": {
+    "exact_mirex": {
       "ensemble": [
         "context-s96-b3-s2-ft-synth",
-        "context-s96-b3-s3"
+        "context-s128-b4-s1",
+        "context-s96-b3-guitar-only"
       ],
-      "macro_supported": 0.3511,
-      "exact": 0.5745,
-      "mirex": 0.6914,
-      "ece": 0.0181,
-      "slash": 0.229
+      "exact": 0.5755,
+      "mirex": 0.6988,
+      "macro_supported": 0.3541,
+      "ece": 0.0162
     },
     "slash": {
       "ensemble": [
         "context-full-s64-guitarft",
         "context-s64-guitar-bal-ft"
       ],
+      "slash": 0.2664,
       "macro_supported": 0.32,
       "exact": 0.5441,
-      "mirex": 0.677,
-      "ece": 0.0145,
-      "slash": 0.2664
+      "ece": 0.0145
     },
     "bass": {
       "ensemble": [
@@ -3142,7 +3281,7 @@
       "macro_supported": 0.3423
     }
   },
-  "verdict": "Best honest result remains macro 0.359, exact 0.575, MIREX 0.693, bass 0.834, slash 0.266, ECE 0.0147. MuQ pretrained features underperform CQT in this setup (val 0.076-0.194 vs 0.318). Macro/slash gates still fail; Phase 5/6 remain blocked. Next lever: more real guitar data or a scoped MuQ adaptation, not direct replacement.",
+  "verdict": "CQT ensembles are saturated: best macro 0.359, exact 0.576, MIREX 0.699, bass 0.834, slash 0.266, ECE 0.0147. MuQ pretrained features (layers 2/6) are negative (val 0.194/0.076 vs CQT 0.289), and guitar-only synthetic fine-tuning is negative (0.289\u21920.266). Macro and slash gates still fail; Phase 5/6 blocked. Closing them requires more real guitar data (GOAT access) or a research-grade representation/adaptation change.",
   "phase4c_context_capacity": {
     "runs": "128-frame / 4-block, 3 seeds, guitar+balanced Slakh",
     "seed1": {
@@ -3203,5 +3342,29 @@
       "ece": 0.0849
     },
     "verdict": "MuQ features did not transfer in this pipeline: layer 6 val macro 0.076, layer 2 0.194, versus CQT guitar-only 0.318. Do not scale MuQ without a different adaptation/probing/domain-alignment strategy. MuQ weights are NC, research-only."
+  },
+  "phase4e_real_guitar_only_ensembles": {
+    "synth1_96_plus_128s1_plus_guitaronly_96": {
+      "macro_supported": 0.3541,
+      "exact": 0.5755,
+      "mirex": 0.6988,
+      "bass": 0.8287,
+      "slash": 0.2399,
+      "ece": 0.0162,
+      "ge10": 0.4869,
+      "ge20": 0.5273
+    },
+    "synth1_96_plus_guitaronly_96": {
+      "macro_supported": 0.3325,
+      "exact": 0.5601,
+      "mirex": 0.6866,
+      "slash": 0.2445,
+      "ece": 0.0302
+    },
+    "guitaronly_synth_finetune_val": {
+      "macro_supported": 0.2658,
+      "note": "synthetic fine-tune of the guitar-only model hurt val (0.289\u21920.266); not evaluated externally"
+    },
+    "verdict": "Adding the guitar-only model improves exact/MIREX (0.576/0.699) but not macro (0.354 vs 0.359). Synthetic fine-tuning of the guitar-only model hurts. The CQT ensemble is saturated."
   }
 }

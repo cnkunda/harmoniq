@@ -732,6 +732,13 @@ macro **0.359**, exact 0.568, MIREX **0.693**, ECE **0.0147**, slash 0.238.
 Adding FT1 (64) as a third context gives macro 0.342, slash 0.255, bass
 **0.834**. Artifact: `docs/audit/amt/chord170_phases_1_3.json`.
 
+**Phase 4e — CQT guitar-only baseline/ensembles.** CQT guitar-only reaches
+val macro 0.289 and external macro 0.318 / exact 0.532 / MIREX 0.671 / slash
+0.218 / ECE 0.085. Adding it to the 96+128 finalist gives macro 0.3541, exact
+**0.5755**, MIREX **0.6988**, slash 0.240, ECE 0.0162 — best exact/MIREX but
+below the 0.359 macro finalist. Synthetic fine-tuning of the guitar-only model
+hurt val (0.289→0.266). CQT ensembles are saturated.
+
 **Phase 4d — pretrained MuQ encoder: negative.** `extract_muq_features.py`
 extracts MuQ hidden states, resamples 25→10 Hz, projects 1024→128, and writes
 the fine-window schema. MuQ layer 6 reaches val macro 0.076; layer 2 reaches
