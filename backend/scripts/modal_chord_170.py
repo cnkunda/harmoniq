@@ -94,6 +94,30 @@ context_image = (
     )
 )
 
+muq_image = (
+    modal.Image.debian_slim("3.11")
+    .apt_install("ffmpeg", "libsndfile1")
+    .pip_install(
+        "torch==2.5.1",
+        "torchaudio==2.5.1",
+        "muq",
+        "transformers==4.46.3",
+        "numpy==1.26.4",
+        "librosa>=0.10.2",
+        "soundfile>=0.13",
+        "scipy>=1.11",
+        "huggingface_hub>=0.20",
+        "pyyaml>=6.0",
+    )
+    .env(
+        {
+            "PYTHONUNBUFFERED": "1",
+            "TORCH_HOME": "/chord170/.cache/torch",
+            "HF_HOME": "/chord170/.cache/huggingface",
+        }
+    )
+)
+
 btc_image = (
     modal.Image.debian_slim("3.11")
     .apt_install("ffmpeg", "libsndfile1")
@@ -1067,6 +1091,38 @@ def build_slakh_subset(limit: str = "400", seed: str = "0",
         "python", "scripts/build_slakh_subset.py",
         "--limit", str(int(limit)),
         "--seed", str(int(seed)),
+        "--report", report_path,
+    ]
+    if _truthy(force):
+        command.append("--force")
+    output = _run(command)
+    data_volume.commit()
+    if os.path.isfile(report_path):
+        with open(report_path, encoding="utf-8") as handle:
+            print(handle.read(), flush=True)
+    return output
+
+
+@app.function(
+    image=muq_image,
+    gpu="A10G",
+    cpu=8,
+    memory=32768,
+    timeout=24 * 60 * 60,
+    volumes={ROOT: data_volume, RUNS: runs_volume},
+    retries=1,
+)
+def prepare_muq(datasets: str = "guitarset,egset12,idmt_smt_guitar,rwc,guitar_techs,idmt_chords",
+                limit_tracks: str = "0", layer: str = "6",
+                force: str = "false") -> str:
+    """Extract MuQ representations for the fine tracks."""
+    _ensure_bundle()
+    report_path = os.path.join(BACKEND, "data", "chord170", "muq_report.json")
+    command = [
+        "python", "scripts/extract_muq_features.py",
+        "--datasets", datasets,
+        "--limit-tracks", str(int(limit_tracks)),
+        "--layer", str(int(layer)),
         "--report", report_path,
     ]
     if _truthy(force):

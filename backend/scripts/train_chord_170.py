@@ -110,6 +110,12 @@ SOURCE_DIRS = {
     "slakh_fine": "chord170/slakh_fine",
     "slakh_bal_fine": "chord170/slakh_balanced",
     "synthetic_guitar": "chord170/synthetic_guitar",
+    "muq_guitarset_fine": "chord170/muq/guitarset",
+    "muq_egset12_fine": "chord170/muq/egset12",
+    "muq_idmt_smt_guitar_fine": "chord170/muq/idmt_smt_guitar",
+    "muq_rwc_fine": "chord170/muq/rwc",
+    "muq_guitar_techs_fine": "chord170/muq/guitar_techs",
+    "muq_idmt_chords_fine": "chord170/muq/idmt_chords",
 }
 
 
@@ -431,10 +437,10 @@ def load_split(
         return None
     features = np.concatenate(feats)
     expected_window = int(min(crop_window, WINDOW))
-    if features.shape[1:] != (expected_window, FEATURE_DIM):
+    if features.shape[1] != expected_window:
         raise ValueError(
-            f"unexpected feature shape {features.shape}; expected "
-            f"(*, {expected_window}, {FEATURE_DIM})"
+            f"unexpected feature window {features.shape}; expected "
+            f"(*, {expected_window}, C)"
         )
     windows = {
         "features": features.astype(np.float32),
@@ -515,6 +521,9 @@ def augment_batch(
     if aug_level == "mild":
         pitch_shift_range = min(pitch_shift_range, 1)
         specaug_p = 0.0
+    if aug_level == "gain":
+        pitch_shift_range = 0
+        specaug_p = 0.0
     features = features.copy()
     chord = chord.copy()
     bass = bass.copy()
@@ -523,7 +532,8 @@ def augment_batch(
     if frame_bass is not None:
         frame_bass = frame_bass.copy()
 
-    # Pitch shift: roll the 144 CQT bins (24 per octave) and remap labels.
+    # Pitch shift: roll the CQT bins and remap labels. Learned/foundation-model
+    # features are not frequency-ordered, so `aug_level="gain"` disables it.
     shifts = rng.integers(-pitch_shift_range, pitch_shift_range + 1, size=len(features))
     for index, shift in enumerate(shifts):
         if shift:
@@ -555,7 +565,7 @@ def augment_batch(
         for index in range(len(features)):
             if rng.random() < 0.5:
                 width = int(rng.integers(1, 9))
-                start = int(rng.integers(0, FEATURE_DIM - width))
+                start = int(rng.integers(0, features.shape[2] - width))
                 features[index, :, start:start + width] = 0.0
             if rng.random() < 0.5:
                 width = int(rng.integers(1, 13))
@@ -1180,7 +1190,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bass-inversion-weight", type=float, default=None)
     parser.add_argument("--chord-class-weight-tau", type=float, default=None)
     parser.add_argument("--no-bass-mask", action="store_true")
-    parser.add_argument("--aug-level", default=None, choices=["none", "mild", "full"])
+    parser.add_argument("--aug-level", default=None,
+                        choices=["none", "mild", "full", "gain"])
     parser.add_argument("--feature-standardize", action="store_true")
     parser.add_argument("--feature-normalize", default=None, choices=["none", "track"])
     parser.add_argument("--crop-window", type=int, default=None)
@@ -1356,6 +1367,7 @@ def main(argv: list[str] | None = None) -> int:
     if int(config["context_frames"]) > 0:
         model = build_context_model(
             window=int(config["context_frames"]),
+            feature_dim=int(train["features"].shape[2]),
             num_chords=train["num_chords"],
             aux_heads=config["aux_heads"],
             inversion_head=config["inversion_head"],
@@ -1366,6 +1378,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         model = build_model(window=int(train["features"].shape[1]),
+                            feature_dim=int(train["features"].shape[2]),
                             num_chords=train["num_chords"],
                             aux_heads=config["aux_heads"],
                             inversion_head=config["inversion_head"],

@@ -658,6 +658,12 @@ def main(argv: list[str] | None = None) -> int:
         "slakh_fine": args.data_root / "chord170" / "slakh_fine",
         "slakh_bal_fine": args.data_root / "chord170" / "slakh_balanced",
         "synthetic_guitar": args.data_root / "chord170" / "synthetic_guitar",
+        "muq_guitarset_fine": args.data_root / "chord170" / "muq" / "guitarset",
+        "muq_egset12_fine": args.data_root / "chord170" / "muq" / "egset12",
+        "muq_idmt_smt_guitar_fine": args.data_root / "chord170" / "muq" / "idmt_smt_guitar",
+        "muq_rwc_fine": args.data_root / "chord170" / "muq" / "rwc",
+        "muq_guitar_techs_fine": args.data_root / "chord170" / "muq" / "guitar_techs",
+        "muq_idmt_chords_fine": args.data_root / "chord170" / "muq" / "idmt_chords",
     }
     features, labels, bass, track_ids, centres, sources = [], [], [], [], [], []
     offsets: list[tuple[int, int, str]] = []
