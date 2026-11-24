@@ -222,6 +222,21 @@ Progress across iterations (external test unless noted):
   0.342 but raises slash to 0.255 and bass to **0.834**.
 - Evidence: `docs/audit/amt/chord170_phases_1_3.json`.
 
+### Phase 4d — pretrained MuQ encoder (2026-11-24, negative)
+- Added `extract_muq_features.py`, a MuQ Modal image, `prepare_muq`, and
+  `muq_*` sources. Pipeline: 24 kHz audio → MuQ hidden state → 25→10 Hz
+  resample → fixed Gaussian projection 1024→128 → 16-frame windows.
+- MuQ layer 6: best val supported macro **0.076**. MuQ layer 2: **0.194**.
+  CQT guitar-only baseline (same 96/3 recipe): val macro **0.289**, external
+  macro 0.318 / exact 0.532 / MIREX 0.671 / slash 0.218 / ECE 0.085.
+- Verdict: MuQ representations do not transfer in this pipeline; lower layers
+  help but remain far below CQT. MuQ weights are CC-BY-NC 4.0, research-only.
+  Do not scale MuQ without a different adaptation/probing/domain-alignment
+  strategy.
+- Added `aug-level=gain` (no CQT bin roll) and dynamic feature-dim support so
+  non-CQT features can be tested without corrupting pitch-shift augmentation.
+- Evidence: `docs/audit/amt/chord170_phases_1_3.json`.
+
 ### Long-context + structured heads (`472ca8f`)
 - `scripts/chord_context.py` reconstructs arbitrary-length contexts from the
   contiguous fine windows (window = hop = 16) and provides pitch-target and
@@ -327,6 +342,9 @@ Progress across iterations (external test unless noted):
 19. 128-frame / 4-block is worse than 96-frame / 3-block (macro 0.322/0.306/
     0.297 vs 0.328/0.327); context/capacity is saturated. Cross-context
     ensembling (96 + 128) is the useful part, not the longer model alone.
+20. MuQ (layer 6/2) as a direct CQT replacement is negative: val macro
+    0.076/0.194 vs CQT guitar-only 0.289. MuQ features likely encode
+    track/timbre identity; do not scale without domain adaptation.
 
 ---
 
@@ -536,11 +554,13 @@ ensembling is the win: synth1 (96) + 128 seed1 gives macro **0.359**, exact
 bass **0.834**. Context/capacity is saturated; further gains need a different
 representation or data, not a longer context.
 
-### C2. Phase 4d — next lever: pretrained encoder or real guitar data
-The remaining high-upside options are (a) MuQ/MERT-v2 pretrained features with
-light adapters, or (b) more real guitar data (GOAT/EGFxSet after licence
-review). More of the same synthetic corpus and longer contexts are not
-promising.
+### C2. Phase 4d — pretrained encoder tried (MuQ, negative)
+MuQ layer 6 val macro 0.076; layer 2 0.194; CQT guitar-only baseline 0.289.
+Direct MuQ replacement is not viable in this pipeline. A future encoder
+attempt needs a different adaptation strategy (e.g. layer-wise probe,
+domain-adversarial training, or per-frame feature normalization) before
+scaling. The remaining high-upside lever is **more real guitar data**
+(GOAT/EGFxSet after licence review), not another direct feature swap.
 
 ### D. Metric decision
 Keep the **full 102-class macro-F1 as the primary gate** until a pre-registered

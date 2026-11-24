@@ -732,6 +732,15 @@ macro **0.359**, exact 0.568, MIREX **0.693**, ECE **0.0147**, slash 0.238.
 Adding FT1 (64) as a third context gives macro 0.342, slash 0.255, bass
 **0.834**. Artifact: `docs/audit/amt/chord170_phases_1_3.json`.
 
+**Phase 4d — pretrained MuQ encoder: negative.** `extract_muq_features.py`
+extracts MuQ hidden states, resamples 25→10 Hz, projects 1024→128, and writes
+the fine-window schema. MuQ layer 6 reaches val macro 0.076; layer 2 reaches
+0.194. The matched CQT guitar-only baseline reaches val macro 0.289 and
+external macro 0.318 / exact 0.532 / MIREX 0.671 / slash 0.218 / ECE 0.085.
+MuQ features do not transfer in this setup (likely track/timbre identity);
+MuQ weights are CC-BY-NC 4.0 (research-only). Added `aug-level=gain` and
+dynamic feature-dim support for non-CQT features.
+
 **Phase 4 — synthetic rare-chord/inversion data.** `build_synthetic_chords.py`
 renders 3,091 balanced guitar windows (110/170 classes, all 12 bass classes)
 from Isophonics/Billboard/JAAH `.lab` annotations using additive synthesis and

@@ -88,7 +88,7 @@
     "macro_f1": {
       "target": 0.45,
       "best_supported": 0.3588,
-      "run": "ensemble synth1(96)+128seed1",
+      "run": "cross-context synth1(96)+128s1",
       "pass": false
     },
     "bass_known": {
@@ -2897,6 +2897,75 @@
         "20+": 35,
         "classes": 102
       }
+    },
+    "phase4d_cqt_guitar_only": {
+      "n_windows": 3121,
+      "n_tracks": 86,
+      "macro_f1": 0.29749659585661586,
+      "macro_f1_supported": 0.3179130289055993,
+      "exact_accuracy": 0.5318808074335148,
+      "ece": 0.08488251680901554,
+      "wcsr": {
+        "root": 0.6658122396667735,
+        "majmin": 0.6367422479284736,
+        "thirds": 0.6302467157962192,
+        "triads": 0.6119833386735021,
+        "sevenths": 0.5539212175284729,
+        "tetrads": 0.5200256328099968,
+        "mirex": 0.6706183915411728
+      },
+      "bass": {
+        "overall": 0.681191925664851,
+        "known_bass": 0.8207955888144939,
+        "chord_frames": 0.7026298044504383,
+        "n_known": 2539
+      },
+      "slash": {
+        "root_position_acc": 0.5977859778597786,
+        "slash_acc": 0.21806853582554517,
+        "n_root_position": 1897,
+        "n_slash": 642
+      },
+      "per_source": {
+        "egset12_fine": {
+          "n_windows": 63,
+          "macro_f1": 0.2613598673300166,
+          "exact_accuracy": 0.49206349206349204,
+          "wcsr_mirex": 0.5884057971014494
+        },
+        "guitarset_fine": {
+          "n_windows": 1176,
+          "macro_f1": 0.27536024922901486,
+          "exact_accuracy": 0.4489795918367347,
+          "wcsr_mirex": 0.530492006917153
+        },
+        "idmt_smt_guitar_fine": {
+          "n_windows": 265,
+          "macro_f1": 0.5511452112845301,
+          "exact_accuracy": 0.7132075471698113,
+          "wcsr_mirex": 0.7809177095537854
+        },
+        "rwc_fine": {
+          "n_windows": 1617,
+          "macro_f1": 0.27884019887893474,
+          "exact_accuracy": 0.5640074211502782,
+          "wcsr_mirex": 0.7403079638698572
+        }
+      },
+      "ci": {
+        "exact_accuracy": [
+          0.4592022500926311,
+          0.5956255819747872
+        ],
+        "macro_f1": [
+          0.2588944621769233,
+          0.34227984978381704
+        ],
+        "n_tracks": 86,
+        "n_boot": 1000
+      },
+      "macro_f1_support_ge_10": 0.4415088998684293,
+      "macro_f1_support_ge_20": 0.48256491847866345
     }
   },
   "phase4_synthetic_guitar": {
@@ -3073,7 +3142,7 @@
       "macro_supported": 0.3423
     }
   },
-  "verdict": "Best honest result: macro 0.359, exact 0.575, MIREX 0.693, bass 0.834, slash 0.266, ECE 0.0147. Long context 96 + seed/context ensembles is the winning selection strategy; 128/4, structured composition, Viterbi, post-hoc calibration, synthetic scale-up, and 3-model same-context ensembles are negative/neutral. Macro and slash gates still fail; Phase 5/6 remain blocked.",
+  "verdict": "Best honest result remains macro 0.359, exact 0.575, MIREX 0.693, bass 0.834, slash 0.266, ECE 0.0147. MuQ pretrained features underperform CQT in this setup (val 0.076-0.194 vs 0.318). Macro/slash gates still fail; Phase 5/6 remain blocked. Next lever: more real guitar data or a scoped MuQ adaptation, not direct replacement.",
   "phase4c_context_capacity": {
     "runs": "128-frame / 4-block, 3 seeds, guitar+balanced Slakh",
     "seed1": {
@@ -3113,5 +3182,26 @@
       "ge20": 0.5264
     },
     "verdict": "Cross-context diversity helps: the 2-model 96+128 ensemble is the best macro/MIREX/ECE point (0.359/0.693/0.0147). Adding a third context dilutes macro but improves slash/bass."
+  },
+  "phase4d_muq_pretrained": {
+    "source": "OpenMuQ/MuQ-large-msd-iter (weights CC-BY-NC 4.0)",
+    "pipeline": "24 kHz audio \u2192 MuQ hidden state \u2192 25\u219210 Hz resample \u2192 fixed Gaussian projection 1024\u2192128 \u2192 16-frame windows",
+    "layer6_val": {
+      "macro_supported": 0.076,
+      "note": "best val epoch 2; training diverged to chance"
+    },
+    "layer2_val": {
+      "macro_supported": 0.1941,
+      "note": "best val epoch 3; lower layer helps but still far below CQT"
+    },
+    "cqt_guitar_only_baseline": {
+      "macro_supported": 0.3179,
+      "exact": 0.5319,
+      "mirex": 0.6706,
+      "bass": 0.8208,
+      "slash": 0.2181,
+      "ece": 0.0849
+    },
+    "verdict": "MuQ features did not transfer in this pipeline: layer 6 val macro 0.076, layer 2 0.194, versus CQT guitar-only 0.318. Do not scale MuQ without a different adaptation/probing/domain-alignment strategy. MuQ weights are NC, research-only."
   }
 }
