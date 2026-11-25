@@ -264,7 +264,7 @@ CREATE TABLE jam_snapshots (
 - *"You've got the notes. Your phrasing just needs to breathe more."*
 - *"Solid position comfort. Let's start building vocabulary beyond position 1."*
 
-**Cold start song prompt:** "What's a song you've always wanted to solo over?" → YouTube URL input. This becomes Session 1. If skipped, the app defaults to a built-in starter: "Gravity" by John Mayer (G major pentatonic, manageable tempo, expressive phrasing — a perfect first session).
+**Cold start song prompt:** "What's a song you've always wanted to solo over?" → YouTube URL input. This becomes Session 1. If skipped, the app currently shows empty-library states with an "Add a song" CTA (a built-in "Gravity" starter song is product-spec intent, not yet implemented).
 
 ---
 

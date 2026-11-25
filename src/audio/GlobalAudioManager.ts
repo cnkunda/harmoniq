@@ -1,7 +1,9 @@
 import { Audio } from 'expo-av'
 import { Platform } from 'react-native'
 
-const LOG = '[GlobalAudioManager]'
+import { createLogger } from '@/src/utils/logger'
+
+const log = createLogger('[GlobalAudioManager]')
 
 type AudioInstanceType = 'expo-sound' | 'expo-recording' | 'audio-api-recorder' | 'audio-api-manager'
 
@@ -26,7 +28,7 @@ class GlobalAudioManager {
   private cleanupInProgress = false
 
   private constructor() {
-    console.info(`${LOG} singleton initialized`)
+    log.info(`singleton initialized`)
   }
 
   static getInstance(): GlobalAudioManager {
@@ -50,7 +52,7 @@ class GlobalAudioManager {
     cleanup: () => Promise<void>,
   ): void {
     if (this.audioInstances.has(id)) {
-      console.warn(`${LOG} instance ${id} already registered, replacing`)
+      log.warn(`instance ${id} already registered, replacing`)
       void this.unregisterInstance(id)
     }
 
@@ -61,7 +63,7 @@ class GlobalAudioManager {
       cleanup,
       createdAt: Date.now(),
     })
-    console.info(`${LOG} registered ${type} instance: ${id} (total: ${this.audioInstances.size})`)
+    log.info(`registered ${type} instance: ${id} (total: ${this.audioInstances.size})`)
   }
 
   /**
@@ -70,18 +72,22 @@ class GlobalAudioManager {
   async unregisterInstance(id: string): Promise<void> {
     const entry = this.audioInstances.get(id)
     if (!entry) {
-      console.warn(`${LOG} instance ${id} not found for unregistration`)
+      log.warn(`instance ${id} not found for unregistration`)
       return
     }
 
-    console.info(`${LOG} unregistering ${entry.type} instance: ${id}`)
+    log.info(`unregistering ${entry.type} instance: ${id}`)
     try {
       await entry.cleanup()
     } catch (err) {
-      console.error(`${LOG} cleanup failed for ${id}:`, err)
+      log.error(`cleanup failed for ${id}:`, err)
     }
-    this.audioInstances.delete(id)
-    console.info(`${LOG} unregistered ${id} (remaining: ${this.audioInstances.size})`)
+    // A re-registration while cleanup was in flight owns this id now — only
+    // remove the entry if it is still the one we just cleaned up.
+    if (this.audioInstances.get(id) === entry) {
+      this.audioInstances.delete(id)
+    }
+    log.info(`unregistered ${id} (remaining: ${this.audioInstances.size})`)
   }
 
   /**
@@ -98,17 +104,17 @@ class GlobalAudioManager {
     const currentStr = this.currentAudioMode ? JSON.stringify(this.currentAudioMode) : null
 
     if (configStr === currentStr) {
-      console.debug(`${LOG} audio mode unchanged, skipping setAudioModeAsync`)
+      log.debug(`audio mode unchanged, skipping setAudioModeAsync`)
       return
     }
 
-    console.info(`${LOG} setting audio mode:`, config)
+    log.info(`setting audio mode:`, config)
     try {
       await Audio.setAudioModeAsync(config)
       this.currentAudioMode = config
-      console.info(`${LOG} audio mode set successfully`)
+      log.info(`audio mode set successfully`)
     } catch (err) {
-      console.error(`${LOG} failed to set audio mode:`, err)
+      log.error(`failed to set audio mode:`, err)
       throw err
     }
   }
@@ -119,33 +125,33 @@ class GlobalAudioManager {
    */
   async cleanupAll(options?: { skipTypes?: AudioInstanceType[] }): Promise<void> {
     if (this.cleanupInProgress) {
-      console.warn(`${LOG} cleanup already in progress, skipping`)
+      log.warn(`cleanup already in progress, skipping`)
       return
     }
 
     this.cleanupInProgress = true
-    console.info(`${LOG} starting cleanup of all instances (total: ${this.audioInstances.size})`)
+    log.info(`starting cleanup of all instances (total: ${this.audioInstances.size})`)
 
     const skipTypes = options?.skipTypes ?? []
     const entries = Array.from(this.audioInstances.entries())
 
     for (const [id, entry] of entries) {
       if (skipTypes.includes(entry.type)) {
-        console.debug(`${LOG} skipping ${entry.type} instance: ${id}`)
+        log.debug(`skipping ${entry.type} instance: ${id}`)
         continue
       }
 
       try {
         await entry.cleanup()
-        console.info(`${LOG} cleaned up ${entry.type} instance: ${id}`)
+        log.info(`cleaned up ${entry.type} instance: ${id}`)
       } catch (err) {
-        console.error(`${LOG} cleanup failed for ${id}:`, err)
+        log.error(`cleanup failed for ${id}:`, err)
       }
       this.audioInstances.delete(id)
     }
 
     this.cleanupInProgress = false
-    console.info(`${LOG} cleanup complete (remaining: ${this.audioInstances.size})`)
+    log.info(`cleanup complete (remaining: ${this.audioInstances.size})`)
   }
 
   /**

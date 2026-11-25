@@ -1,0 +1,44 @@
+[nav] === / ===
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+[warning] [expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality.
+[warning] Require cycle: src/music/chordDbAdapter.ts -> src/music/chordVoicing.ts -> src/music/chordDbAdapter.ts
+
+Require cycles are allowed, but can result in uninitialized values. Consider refactoring to remove the need for a cycle.
+[warning] "shadow*" style props are deprecated. Use "boxShadow".
+[info] [GlobalAudioManager] singleton initialized
+[log] [db/web] Migration v4 SUCCESS
+[log] [db/web] Migration v5 SUCCESS
+[log] [db/web] Migration v6 SUCCESS
+[log] [db/web] Migration v7 SUCCESS
+[log] [db/web] Migration v8 SUCCESS
+[warning] props.pointerEvents is deprecated. Use style.pointerEvents
+[nav] === /library ===
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+[warning] [expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality.
+[warning] Require cycle: src/music/chordDbAdapter.ts -> src/music/chordVoicing.ts -> src/music/chordDbAdapter.ts
+
+Require cycles are allowed, but can result in uninitialized values. Consider refactoring to remove the need for a cycle.
+[warning] "shadow*" style props are deprecated. Use "boxShadow".
+[info] [GlobalAudioManager] singleton initialized
+[warning] props.pointerEvents is deprecated. Use style.pointerEvents
+[nav] === /jam-practice ===
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] Running application "main" with appParams:
+ {rootTag: #root, hydrate: undefined} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+[warning] [expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality.
+[warning] Require cycle: src/music/chordDbAdapter.ts -> src/music/chordVoicing.ts -> src/music/chordDbAdapter.ts
+
+Require cycles are allowed, but can result in uninitialized values. Consider refactoring to remove the need for a cycle.
+[warning] "shadow*" style props are deprecated. Use "boxShadow".
+[info] [GlobalAudioManager] singleton initialized
+[warning] props.pointerEvents is deprecated. Use style.pointerEvents

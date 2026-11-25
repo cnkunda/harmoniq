@@ -19,6 +19,9 @@ import type {
     SkillNodeRow,
     UserFeedbackRow,
 } from '@/src/db/types'
+import { createLogger } from '@/src/utils/logger'
+
+const log = createLogger('[db/web]')
 
 const DB_NAME = 'harmoniq_web_v1'
 const DB_VERSION = 8
@@ -110,9 +113,7 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
             const migrationStore = tx.objectStore(S_MIGRATIONS)
             migrationStore.put({ version: 4, applied_at: new Date().toISOString() })
           }
-          if (__DEV__) {
-            console.log('[db/web] Migration v4 SUCCESS')
-          }
+          log.debug('Migration v4 SUCCESS')
         }
 
         if (oldVersion < 5) {
@@ -121,9 +122,7 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
             const migrationStore = tx.objectStore(S_MIGRATIONS)
             migrationStore.put({ version: 5, applied_at: new Date().toISOString() })
           }
-          if (__DEV__) {
-            console.log('[db/web] Migration v5 SUCCESS')
-          }
+          log.debug('Migration v5 SUCCESS')
         }
 
         if (oldVersion < 6) {
@@ -132,9 +131,7 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
             const migrationStore = tx.objectStore(S_MIGRATIONS)
             migrationStore.put({ version: 6, applied_at: new Date().toISOString() })
           }
-          if (__DEV__) {
-            console.log('[db/web] Migration v6 SUCCESS')
-          }
+          log.debug('Migration v6 SUCCESS')
         }
 
         if (oldVersion < 7) {
@@ -143,9 +140,7 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
             const migrationStore = tx.objectStore(S_MIGRATIONS)
             migrationStore.put({ version: 7, applied_at: new Date().toISOString() })
           }
-          if (__DEV__) {
-            console.log('[db/web] Migration v7 SUCCESS')
-          }
+          log.debug('Migration v7 SUCCESS')
         }
 
         if (oldVersion < 8) {
@@ -154,14 +149,12 @@ export async function openHarmoniqIdb(): Promise<IDBDatabase | null> {
             const migrationStore = tx.objectStore(S_MIGRATIONS)
             migrationStore.put({ version: 8, applied_at: new Date().toISOString() })
           }
-          if (__DEV__) {
-            console.log('[db/web] Migration v8 SUCCESS')
-          }
+          log.debug('Migration v8 SUCCESS')
         }
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e)
         if (__DEV__) {
-          console.error(`[db/web] Migration v${newVersion} FAILED: ${error}`)
+          log.error(`Migration v${newVersion} FAILED: ${error}`)
         }
         // IndexedDB will automatically abort the transaction on error, which rolls back changes
         throw e

@@ -26,7 +26,7 @@
     "audit:inventory": "node scripts/audit/generate-inventory.mjs",
     "audit:platform": "node scripts/audit/generate-platform-audit.mjs",
     "audit:ui": "node scripts/audit/audit-ui-feedback.mjs",
-    "ux:improve": "node scripts/audit/ux-improve-loop.mjs --skip-server",
+    "ux:improve": "node scripts/audit/ux-improve-loop.mjs",
     "ux:verify": "node scripts/audit/ux-improve-loop.mjs --verify",
     "ux:guard": "node scripts/audit/ux-improve-loop.mjs --guard"
   },
@@ -79,17 +79,21 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
+    "@testing-library/react-native": "^13.3.3",
     "@types/react": "~19.1.0",
     "@types/react-test-renderer": "^19.1.0",
     "@vitest/coverage-v8": "4.1.12",
+    "babel-plugin-transform-remove-console": "^6.9.4",
     "babel-preset-expo": "~54.0.11",
     "detox": "^20.50.1",
     "jest": "^30.3.0",
     "jest-circus": "^30.3.0",
+    "jsdom": "^27.4.0",
     "react-test-renderer": "19.1.0",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.9.2",
     "vite": "^8.3.8",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "vitest-native": "^0.14.1"
   }
 }

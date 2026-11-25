@@ -9,6 +9,9 @@ import { loadOnnxModel } from '@/src/chord/onnxFallback'
 import type { ChordDetection } from '@/src/chord/chordModelTypes'
 import { useLiveChordStore } from '@/src/chord/liveChordStore'
 import { globalAudioManager } from '@/src/audio/GlobalAudioManager'
+import { createLogger } from '@/src/utils/logger'
+
+const log = createLogger('[ChordDetector]')
 
 /** How often to run model inference (ms). Decoupled from audio callback cadence. */
 const INFERENCE_INTERVAL_MS = 500
@@ -89,7 +92,7 @@ export function useChordDetector() {
       }
       modelTypeRef.current = 'tflite'
       setModelType('tflite')
-      console.log('[ChordDetector] TFLite model loaded (native)')
+      log.debug('TFLite model loaded (native)')
       return 'tflite'
     } catch {
       // Not on mobile or TFLite unavailable — fall through to ONNX
@@ -100,7 +103,7 @@ export function useChordDetector() {
       modelRef.current = await loadOnnxModel()
       modelTypeRef.current = 'onnx'
       setModelType('onnx')
-      console.log('[ChordDetector] ONNX model loaded')
+      log.debug('ONNX model loaded')
       return 'onnx'
     } catch (e) {
       throw new Error(`Failed to load chord model: ${e instanceof Error ? e.message : String(e)}`)
@@ -141,8 +144,8 @@ export function useChordDetector() {
       const latencyMs = performance.now() - startMs
 
       if (latencyMs > 120) {
-        console.warn(
-          `[ChordDetector] Slow inference: ${latencyMs.toFixed(1)}ms ` +
+        log.warn(
+          `Slow inference: ${latencyMs.toFixed(1)}ms ` +
             `(threshold: 120ms, model: ${modelTypeRef.current ?? 'unknown'})`,
         )
       }
@@ -157,7 +160,7 @@ export function useChordDetector() {
       }
       setCurrentChord(detection)
     } catch (e) {
-      console.error('[ChordDetector] inference failed:', e instanceof Error ? e.message : String(e))
+      log.error('inference failed:', e instanceof Error ? e.message : String(e))
     } finally {
       inferInFlightRef.current = false
     }
@@ -221,7 +224,7 @@ export function useChordDetector() {
 
     setStatus('idle')
     setListening(false)
-    console.log('[ChordDetector] Listening stopped')
+    log.debug('Listening stopped')
   }, [setListening, setStatus])
 
   /** Start listening: load models, start mic, begin inference loop. */
@@ -308,7 +311,7 @@ export function useChordDetector() {
 
       runningRef.current = true
       setStatus('warming')
-      console.log('[ChordDetector] Listening started')
+      log.debug('Listening started')
 
       // Drive inference on a fixed interval (guarded against overlap).
       inferTimerRef.current = setInterval(() => {
@@ -328,7 +331,7 @@ export function useChordDetector() {
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      console.error('[ChordDetector] start failed:', msg)
+      log.error('start failed:', msg)
       setError(msg)
       setStatus('idle')
       setListening(false)

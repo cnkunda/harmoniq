@@ -1,0 +1,35 @@
+env: load .env
+env: export EXPO_PUBLIC_API_URL EXPO_ANDROID_ARCHITECTURES EXPO_PUBLIC_ALPHATAB_RUNTIME_DIAG OPENCODE_API_KEY OPENROUTER_API_KEY GEMINI_API_KEY PROJECT_NUMBER
+Starting project at C:\workspace\harmoniq
+Metro is running in CI mode, reloads are disabled. Remove CI=true to enable watch mode.
+Starting Metro Bundler
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@54.0.35 - expected version: ~54.0.37
+  expo-asset@12.0.13 - expected version: ~12.0.14
+  expo-constants@18.0.13 - expected version: ~18.0.14
+  expo-file-system@55.0.23 - expected version: ~19.0.24
+  expo-sharing@55.0.21 - expected version: ~14.0.8
+  jest@30.4.2 - expected version: ~29.7.0
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web node_modules\expo-router\entry.js ▓▓░░░░░░░░░░░░░░ 17.1% ( 61/282)
+Web node_modules\expo-router\entry.js ▓▓░░░░░░░░░░░░░░ 17.1% (167/512)
+Web node_modules\expo-router\entry.js ▓▓▓░░░░░░░░░░░░░ 22.9% (311/686)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓░░░░░░░░░░░ 35.8% (531/911)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 52.5% ( 855/1180)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓░░░░░░░ 60.4% (1019/2950)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓░░░░░░░ 60.4% (1184/3058)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓░░░░░░░ 60.4% (1185/3058)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.0% (3183/3301)
+Web Bundled 33764ms node_modules\expo-router\entry.js (3434 modules)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 180ms node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web Bundled 147ms node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 175ms node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console

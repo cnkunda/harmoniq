@@ -12,20 +12,21 @@ import type {
   PlanSlotResultPayload,
   PracticePlanPayload,
 } from '@/src/types'
+import { createLogger } from '@/src/utils/logger'
 
-const LOG_PREFIX = '[planPersistence]'
+const log = createLogger('[planPersistence]')
 
 function parseArray<T>(raw: string | null | undefined, label: string): T[] {
   if (!raw) return []
   try {
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) {
-      console.error(`${LOG_PREFIX} ${label} is not an array; ignoring`)
+      log.error(`${label} is not an array; ignoring`)
       return []
     }
     return parsed as T[]
   } catch (e) {
-    console.error(`${LOG_PREFIX} failed to parse ${label}`, e)
+    log.error(`failed to parse ${label}`, e)
     return []
   }
 }
@@ -46,7 +47,7 @@ export async function startActivePracticePlan(plan: PracticePlanPayload): Promis
       started_at: new Date(startedAt).toISOString(),
     })
   } catch (e) {
-    console.error(`${LOG_PREFIX} failed to start active plan`, e)
+    log.error(`failed to start active plan`, e)
   }
   return normalized
 }
@@ -57,7 +58,7 @@ export async function resumeActivePracticePlan(): Promise<PracticePlanPayload | 
   try {
     row = await getActivePracticePlanRow()
   } catch (e) {
-    console.error(`${LOG_PREFIX} failed to read active plan`, e)
+    log.error(`failed to read active plan`, e)
     return null
   }
   if (!row) return null
@@ -81,11 +82,11 @@ export async function resumeActivePracticePlan(): Promise<PracticePlanPayload | 
     )
     return plan
   } catch (e) {
-    console.error(`${LOG_PREFIX} failed to restore active plan; abandoning it`, e)
+    log.error(`failed to restore active plan; abandoning it`, e)
     try {
       await markPracticePlanStatus(row.plan_id, 'abandoned')
     } catch (markError) {
-      console.error(`${LOG_PREFIX} failed to abandon malformed plan`, markError)
+      log.error(`failed to abandon malformed plan`, markError)
     }
     usePlanStore.getState().clearPlan()
     return null
@@ -101,7 +102,7 @@ export async function saveActivePlanProgress(input: {
 }): Promise<void> {
   const plan = input.plan ?? usePlanStore.getState().currentPlan
   if (!plan) {
-    console.error(`${LOG_PREFIX} cannot save progress without an active plan`)
+    log.error(`cannot save progress without an active plan`)
     return
   }
   try {
@@ -112,7 +113,7 @@ export async function saveActivePlanProgress(input: {
       adaptation_log: JSON.stringify(input.adaptationLog),
     })
   } catch (e) {
-    console.error(`${LOG_PREFIX} failed to save active plan progress`, e)
+    log.error(`failed to save active plan progress`, e)
   }
 }
 
@@ -121,7 +122,7 @@ export async function abandonActivePlan(planId: string): Promise<void> {
   try {
     await markPracticePlanStatus(planId, 'abandoned')
   } catch (e) {
-    console.error(`${LOG_PREFIX} failed to abandon active plan`, e)
+    log.error(`failed to abandon active plan`, e)
   }
   usePlanStore.getState().clearPlan()
 }

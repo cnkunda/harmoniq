@@ -88,7 +88,7 @@ Execute the TODO list fully, in order.
 
 ### Code standards
 - Reuse existing patterns (check how similar things are done in the repo first)
-- Add `console.log` / `print` at meaningful checkpoints — not everywhere, just where failures would be silent
+- Add diagnostics at meaningful checkpoints — frontend `log.debug()` via `createLogger` (see `src/utils/logger.ts`), backend `print` / logger — not everywhere, just where failures would be silent
 - Every error path must surface a clear message — no bare `catch (e) {}` swallowing
 - No abstractions beyond what this commit explicitly requires
 - Backend: add a `HARMONIQ_SKIP_*` env toggle if the feature involves heavy ML or external calls (matches existing pattern)

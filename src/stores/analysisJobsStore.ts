@@ -19,6 +19,9 @@ import {
 import { getAppPref, setAppPref, upsertLessonFromAnalysis } from '@/src/db/client'
 import { PREF_ANALYSIS_JOBS_JSON } from '@/src/db/schema'
 import type { AnalyzeJob, LessonJSON } from '@/src/types'
+import { createLogger } from '@/src/utils/logger'
+
+const log = createLogger('[analysisJobs]')
 
 export interface AnalysisJobsState {
   jobs: TrackedAnalysisJob[]
@@ -44,7 +47,7 @@ function persistJobs(jobs: readonly TrackedAnalysisJob[]): Promise<void> {
     .catch(() => {})
     .then(() => setAppPref(PREF_ANALYSIS_JOBS_JSON, raw))
     .catch((error) => {
-      console.log('[analysisJobs] could not persist tracked jobs', error)
+      log.debug('could not persist tracked jobs', error)
     })
   return persistChain
 }
@@ -67,7 +70,7 @@ function notifyReady(title: string): void {
       toast.success(`${title} is ready.`)
     })
     .catch((error) => {
-      console.log('[analysisJobs] ready toast failed', error)
+      log.debug('ready toast failed', error)
     })
 }
 
@@ -124,7 +127,7 @@ export const useAnalysisJobsStore = create<AnalysisJobsState>((set, get) => {
           locallyCompleted.add(jobId)
           await commitJobs(removeTrackedAnalysisJob(get().jobs, jobId))
         } catch (error) {
-          console.log('[analysisJobs] could not save completed lesson', error)
+          log.debug('could not save completed lesson', error)
           await commitJobs(
             upsertTrackedAnalysisJob(
               get().jobs,
@@ -187,7 +190,7 @@ export const useAnalysisJobsStore = create<AnalysisJobsState>((set, get) => {
                     locallyCompleted.delete(entry.jobId)
                   }
                 } catch (error) {
-                  console.log('[analysisJobs] could not save completed lesson', error)
+                  log.debug('could not save completed lesson', error)
                   updates.set(
                     entry.jobId,
                     markTrackedJobFailed(
@@ -222,7 +225,7 @@ export const useAnalysisJobsStore = create<AnalysisJobsState>((set, get) => {
                   ),
                 )
               } else {
-                console.log('[analysisJobs] status refresh failed', entry.jobId, error)
+                log.debug('status refresh failed', entry.jobId, error)
               }
             }
           }),

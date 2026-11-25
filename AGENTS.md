@@ -83,7 +83,7 @@ mrt models init && mrt models download mrt2_small
 | `python scripts/promote_model.py --version X.Y.Z --force` | Force promote (skip metric check) |
 | `python scripts/download_mt3_checkpoint.py` | Download MT3 T5-small checkpoint for transcription |
 | `python scripts/quick_smoke_test.py` | Run quick pipeline validation on bundled test audio |
-| `python scripts/pseudo_label_generate.py --audio-dir <dir>` | Generate MT3 pseudo-labels for all audio in a directory |
+| `python scripts/pseudo_label_pipeline.py --audio-dir <dir>` | Generate CRNN pseudo-labels for unlabeled audio (see script docstring for flags) |
 
 **Research / evaluation:**
 | `python -m pytest -q tests/test_mt3_pipeline.py tests/test_mt3_accuracy.py tests/test_mt3_performance.py` | MT3 inference tests |
@@ -129,11 +129,7 @@ This loop is also available as an agent skill: `.claude/skills/ux-improve-loop/S
 
 ### One-shot (no pre-started server)
 
-If you don't have Expo running, Playwright can auto-start it:
-```bash
-PLAYWRIGHT_USE_WEBSERVER=1 npm run ux:improve
-```
-First run takes ~3 min (Expo cold start). Subsequent runs reuse the server.
+`npm run ux:improve` does not require a pre-started server: if Expo isn't running, Playwright auto-starts it (`playwright.config.ts` `webServer`, on unless `PLAYWRIGHT_USE_WEBSERVER=0`) and the loop prints a liveness tip. Start `npm run web` first only when you want to reuse a warm server.
 
 ### Agent instructions
 
@@ -216,7 +212,7 @@ const volume = useAppStore((s) => s.volume)
 **Error handling — fail loudly**
 - No bare `catch (e) {}` — never silence errors.
 - User-facing errors: `toast.error('Something went wrong: ' + message)`.
-- Dev logging: `console.log('[ModuleName]', message)`.
+- Dev logging: `createLogger('[ModuleName]')` from `src/utils/logger.ts` — `log.debug()` / `log.info()` are dev-only (gated on `__DEV__`; `babel-plugin-transform-remove-console` also strips raw `console.log/info/debug` from production bundles), while `log.warn()` / `log.error()` always emit. Raw `console.*` remains only in modules below the Commit 19 cut line (≥5 calls per module were migrated).
 - Backend: raise `HarmoniqAPIError` for known failure modes (caught by global handler).
 - Backend feature toggles: `if os.getenv("HARMONIQ_SKIP_FOO", "").strip() == "1": raise HTTPException(503, ...)`.
 
@@ -239,12 +235,12 @@ const volume = useAppStore((s) => s.volume)
 
 ## Architecture
 
-### Session flow (7 steps, 4 phases + pre-flight)
+### Session flow (7 steps, 5 phases + pre-flight)
 
-Pre-flight: `tune` → `musical-tolerance`
-Phase 1 (Orient): `listen`
+Pre-flight: `tune` → `musical-tolerance` (`mood-check` gates the first daily session; `warmup` is a standalone finger-drill screen that continues to `slow`, not an alias for it)
+Phase 1 (Orient): `listen` — **opt-in**, not part of the default flow (`MANDATORY_SESSION_STEPS` excludes it)
 Phase 2 (Isolate): `study`
-Phase 3 (Refine): `slow` (`warmup` is a URL alias for `slow`)
+Phase 3 (Refine): `slow`
 Phase 4 (Apply): `play`
 Phase 5 (Reflect): `review`
 
@@ -269,7 +265,7 @@ The shared contract suite runs against both clients in CI — see [`docs/DB_CONT
 
 ### Backend pipeline (MT3-primary)
 
-- `POST /analyze` + `GET /analyze/{job_id}` run the full pipeline: Demucs → two-branch transcription (chord mix for chords; a separate MT3 pass on the guitar stem for solo, guitar programs only) → tab assignment → MusicXML (lead + rhythm parts) → LessonJSON.
+- `POST /analyze` + `GET /analyze/{job_id}` run the full pipeline: Demucs → two-branch transcription (chord mix for chords; a separate MT3 pass on the guitar stem for solo, guitar programs only) → tab assignment → MusicXML (lead + rhythm parts) → LessonJSON. Lyrics: Whisper (base, local) on the Demucs vocals stem with word timestamps, beat-aligned (`app/transcribe.py` → `transcribe_vocals_to_lyrics_aligned`).
 - **Primary transcription engine — two-branch architecture:**
   - **Branch A (chords, instrument-agnostic):** full mix or harmonic-bed submix → aggregate pitch/chroma representation (MT3 Flat granularity or dedicated chroma extractor) → template matching against `CHORD_INTERVALS`. Chord confidence reflects chroma clarity + template match quality, decoupled from guitar-stem separation.
   - **Branch B (solo, guitar-only):** separate MT3 inference on the Demucs guitar stem → solo decoder restricted to GM guitar programs (24–31) → melodic line with per-note confidence, technique tags, DP-assigned string/fret, and per-note `part_role`. MR-MT3 memory retention / prior-token sampling / token shuffling are research (W2/W3), not production. `leakage_risk` remains an instrument-confusion proxy.
@@ -307,18 +303,20 @@ The shared contract suite runs against both clients in CI — see [`docs/DB_CONT
 
 ## Design system
 
-### Colors (`src/constants/colors.ts`, not `constants/Colors.ts`)
+### Colors (`src/constants/colors.ts`)
 
 | Token | Hex | Usage |
 |-------|-----|-------|
-| `wood.900` | `#2C1810` | Deepest backgrounds |
-| `wood.800` | `#3D2317` | Surface cards |
-| `wood.700` | `#3D2B1F` | Card backgrounds |
-| `amber.accent` | `#D4A574` | Primary accent |
+| `wood.900` | `#1b120e` | Deepest backgrounds |
+| `wood.800` | `#2a1c15` | Surface cards |
+| `wood.700` | `#3a271b` | Card backgrounds |
+| `amber.accent` | `#dba25e` | Primary accent |
 | `amber.light` | `#E8B86D` | Active tint / secondary accent |
-| `cream` | `#F5E6D0` | Primary text |
+| `cream` | `#f3e7d6` | Primary text |
 | `danger` | `#C17B5F` | Missed notes (terracotta) |
 | `success` | `#7A9B6D` | Hit notes (sage) |
+
+Values are mirrored in `tailwind.config.js` — keep both in sync when changing a token.
 
 ### Typography
 
@@ -352,7 +350,7 @@ Slow and intentional — "jazz club lighting, not mobile game." Shared spring/ti
 
 | Framework | What for | Where | Run command |
 |-----------|----------|-------|-------------|
-| Vitest | Unit tests | `src/` (co-located `*.test.ts`) | `npm run test` |
+| Vitest | Unit tests | `src/` + `components/` (co-located `*.test.ts` / `*.test.tsx`) | `npm run test` |
 | Coverage | Regression gate | `src/` + `backend/app/` | `npm run test:coverage` / `python -m pytest --cov=app --cov-branch` |
 | Playwright | E2E + visual regression | `tests/ui/` | `npm run test:ui` / `npm run test:visual` |
 | Detox | Mobile E2E | `tests/mobile/` | `npm run test:mobile` |
@@ -374,6 +372,12 @@ describe('getChordFunction', () => {
 
 - Tests co-located next to their source module.
 - All test files run in CI (`vitest run`).
+- Component tests (`*.test.tsx`) render via `@testing-library/react-native`
+  under the `vitest-native` plugin. Flow/Expo native modules (`expo-haptics`,
+  `expo-av`, …) cannot load in Vitest — mock them with `vi.mock` factories
+  (see `components/Button.test.tsx`); platform-paired modules must be imported
+  by their explicit `.native`/`.web` path (Metro platform order would flip a
+  bare import to `.native.ts`).
 
 ### Playwright patterns
 
@@ -398,7 +402,7 @@ class TestViterbiDecoder:
 ```
 
 - Fixtures defined as `@pytest.fixture` in test files.
-- 10 specific test files run in CI (scoring + chord model + Viterbi + boundary tie).
+- On PRs, CI runs a curated subset of ~36 test files (scoring, chord model, Viterbi, boundary tie, pipeline, API, and regression guards) with `--cov=app`; pushes to `main`/`master` run the full suite.
 
 ### Pre-submit checklist
 
@@ -467,8 +471,8 @@ Full 6-phase process in `docs/CODER.md` (read before implementing a commit):
 | `.github/copilot-instructions.md` | Legacy copilot context (partially stale) |
 | `src/config.ts` | API URL resolution and feature flags |
 | `src/constants/sessionFlow.ts` | Session step ordering and entry logic |
-| `src/constants/sessionPhases.ts` | 4-phase pedagogical model |
-| `src/constants/colors.ts` | Real color palette (not `constants/Colors.ts`) |
+| `src/constants/sessionPhases.ts` | 5-phase pedagogical model |
+| `src/constants/colors.ts` | Real color palette |
 | `src/db/harmoniqDbClient.ts` | DB interface contract |
 | `docs/DB_CONTRACT.md` | Shared DB contract suite (native + web) and intentional platform differences |
 
@@ -598,6 +602,6 @@ Both datasets derive chord labels from MIDI note data rather than explicit chord
 - **CSS grid**: Not available in React Native. Use `flex-row flex-wrap` instead.
 - **Job runtime**: Staging/production require the Celery `worker`. `HARMONIQ_SKIP_CELERY=1` is local/dev/test only; `/health` reports `job_runtime=thread` with a degraded status. API restarts do not resume thread jobs (processing rows reload but are not re-dispatched).
 - **WSL networking**: Use LAN IP (`192.168.x.x`) in both `EXPO_PUBLIC_API_URL` and `HARMONIQ_CORS_ORIGINS` so physical devices can reach the backend.
-- **Starter song**: "Gravity" by John Mayer (G major pentatonic) — the default if no song is added.
+- **Starter song**: No built-in default song is seeded — empty libraries prompt "Add a song". Demo mode uses `"Reggae pocket (demo)"` (`src/demo/demoLesson.ts`). The "Gravity" starter in the README product spec is not implemented.
 - **DB versions**: Web's `DB_VERSION` (idbWeb.ts, 8) is unrelated to native's 22 SQL migrations. The `schema_version: 1` written on web skill-node rows is the **skill-node row** version (native V14), not a database version. Never renumber one sequence into the other — see the mapping in `docs/MIGRATIONS.md`.
 - **DB contract harness**: `expo-sqlite`, `expo-constants`, and the `lessonStore` graph all pull react-native, which cannot load in Vitest node or a plain browser bundle. The contract suite mocks/aliases them (see `docs/DB_CONTRACT.md`); don't import those modules into shared contract code.

@@ -1,8 +1,8 @@
 # Test Coverage Baseline
 
-Last updated: 2026-11-12. Coverage is a **regression gate only** for the first
-90 days: the numbers below are the floor, not a product target. Raising them is
-tracked separately (Commit 18).
+Last updated: 2026-11-17 (Commit 18). Coverage is a **regression gate only**:
+the numbers below are the floor, not a product target. Raising them further is
+tracked separately from the gate.
 
 ## Commands
 
@@ -24,16 +24,16 @@ the same `fail_under` applies to both.
 
 ## Baseline
 
-Measured 2026-11-12 on Node v24.15.0 / Python 3.12.1 with Vitest 4.1.9 and
-coverage.py 7.17.2. CI runs Node 22 / Python 3.11; the threshold leaves a small
-buffer for that difference.
+Measured 2026-11-17 on Node v22.14.0 (matches the CI runner) with Vitest
+4.1.12 and the vitest-native component harness; backend measured with
+coverage.py 7.17.2. Gates use the one-decimal floor of the measurement.
 
 | Layer | Metric | Baseline | Gate |
 | --- | --- | ---: | ---: |
-| Frontend (`src/**`) | Lines | 39.50% | 39.40% |
-| Frontend (`src/**`) | Branches | 34.68% | 34.60% |
-| Frontend (`src/**`) | Statements | 38.52% | not gated |
-| Frontend (`src/**`) | Functions | 38.14% | not gated |
+| Frontend (`src/**`) | Lines | 47.59% | 47.50% |
+| Frontend (`src/**`) | Branches | 40.32% | 40.30% |
+| Frontend (`src/**`) | Statements | 45.98% | not gated |
+| Frontend (`src/**`) | Functions | 45.77% | not gated |
 | Backend (`app/**`, lines + branches) | Total | 34.71% | 34.50% |
 | Backend (`app/**`) | Lines | 38.29% | included in total |
 | Backend (`app/**`) | Branches | 24.01% | included in total |
@@ -45,9 +45,11 @@ of truth, this table is documentation.
 
 ## Scope and exclusions
 
-- Frontend coverage is scoped to `src/**/*.{ts,tsx}`. `components/`, `app/`,
-  and `scripts/` are excluded because no component/screen test infrastructure
-  exists yet (Commit 18).
+- Frontend coverage is scoped to `src/**/*.{ts,tsx}`. Component tests
+  (`components/**/*.test.tsx`, Commit 18) run in the suite but `components/`
+  and `app/` stay out of the coverage denominator: they hold ~160 files of
+  which only a handful are tested, so including them would fail the gate for
+  reasons unrelated to the tested modules.
 - Backend coverage is scoped to the `app` package. Subprocesses spawned by
   tests are not measured.
 - Uncovered files are included in the denominator (`coverage.include` /

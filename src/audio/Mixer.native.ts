@@ -1,10 +1,12 @@
 import { Audio } from 'expo-av'
 
+import { createLogger } from '@/src/utils/logger'
 import { globalAudioManager } from './GlobalAudioManager'
 import type { StemDefinition, StemMixer } from './mixerTypes'
 import { assertStemDefinitions } from './mixerTypes'
 
 const LOG = '[StemMixer.native]'
+const log = createLogger(LOG)
 
 function clampGain(g: number): number {
   if (Number.isNaN(g)) {
@@ -41,7 +43,7 @@ class ExpoParallelStemMixer implements StemMixer {
 
     await globalAudioManager.resetToPlaybackMode()
 
-    console.info(`${LOG} loading ${stems.length} stem(s):`, stems.map((s) => s.id).join(', '))
+    log.info(`loading ${stems.length} stem(s):`, stems.map((s) => s.id).join(', '))
 
     const created: { id: string; sound: Audio.Sound }[] = []
 
@@ -83,9 +85,9 @@ class ExpoParallelStemMixer implements StemMixer {
         },
       )
 
-      console.info(`${LOG} load OK duration≈${this.durationSec.toFixed(2)}s`)
+      log.info(`load OK duration≈${this.durationSec.toFixed(2)}s`)
     } catch (e) {
-      console.error(`${LOG} load failed, unloading partial`, e)
+      log.error(`load failed, unloading partial`, e)
       for (const { sound } of created) {
         await sound.unloadAsync().catch(() => {})
       }
@@ -130,7 +132,7 @@ class ExpoParallelStemMixer implements StemMixer {
     if (this.stems.size === 0) {
       throw new Error(`${LOG} play() called before load()`)
     }
-    console.info(`${LOG} play`)
+    log.info(`play`)
     await Promise.all(
       [...this.stems.values()].map(async ({ sound, gain }) => {
         await sound.setVolumeAsync(gain)
@@ -146,7 +148,7 @@ class ExpoParallelStemMixer implements StemMixer {
     if (this.stems.size === 0) {
       throw new Error(`${LOG} pause() called before load()`)
     }
-    console.info(`${LOG} pause`)
+    log.info(`pause`)
     this.stopSampleLoop()
     await Promise.all([...this.stems.values()].map(({ sound }) => sound.pauseAsync()))
     await this.refreshSampleFromNative()
@@ -207,21 +209,21 @@ class ExpoParallelStemMixer implements StemMixer {
     }
     const g = clampGain(linearGain)
     entry.gain = g
-    console.info(`${LOG} setStemGain ${stemId} -> ${g}`)
+    log.info(`setStemGain ${stemId} -> ${g}`)
     await entry.sound.setVolumeAsync(g)
   }
 
   async unload(): Promise<void> {
     this.stopSampleLoop()
     if (this.stems.size === 0) {
-      console.info(`${LOG} unload (no-op, empty)`)
+      log.info(`unload (no-op, empty)`)
       return
     }
-    console.info(`${LOG} unload ${this.stems.size} sound(s)`)
+    log.info(`unload ${this.stems.size} sound(s)`)
     await Promise.all(
       [...this.stems.values()].map(({ sound }) =>
         sound.unloadAsync().catch((err) => {
-          console.error(`${LOG} unloadAsync error`, err)
+          log.error(`unloadAsync error`, err)
         }),
       ),
     )

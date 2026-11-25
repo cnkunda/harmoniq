@@ -76,6 +76,10 @@ import { useSkillStore } from '@/src/stores/skillStore'
 import { spotifyTasteLooksPresent } from '@/src/taste/tasteQuizGate'
 import type { PracticePlanPayload } from '@/src/types'
 import { lessonFromSavedLick } from '@/src/utils/lessonFromSavedLick'
+import { createLogger } from '@/src/utils/logger'
+
+const log = createLogger('[home]')
+const dailyLickLog = createLogger('[DailyLick]')
 
 function getGreeting(): string {
   const h = new Date().getHours()
@@ -321,7 +325,7 @@ export default function HomeScreen() {
         router.replace(href)
         return null
       } catch (error) {
-        console.warn('[home] could not open song', error)
+        log.warn('could not open song', error)
         return 'Could not open song.'
       }
     },
@@ -450,7 +454,7 @@ export default function HomeScreen() {
             usePlanStore.getState().setHomePreviewPlan(next)
           }
         } catch (e) {
-          console.warn('[home] practice plan unavailable', e)
+          log.warn('practice plan unavailable', e)
           if (options?.keepPreviewOnError) {
             setPracticePlanStartError('Could not regenerate your plan. Try again.')
           } else {
@@ -461,7 +465,7 @@ export default function HomeScreen() {
         }
       })
       .catch((e) => {
-        console.error('[home] refresh failed', e)
+        log.error('refresh failed', e)
         setLoadError(true)
         setSessionsLog([])
         setPracticePlanLoading(false)
@@ -494,7 +498,7 @@ export default function HomeScreen() {
     setDemoBusy(true)
     void startDemoSession(router, saveLesson, setLessonSectionIndex)
       .then(() => refresh())
-      .catch((e) => console.warn('[home] demo session', e))
+      .catch((e) => log.warn('demo session', e))
       .finally(() => setDemoBusy(false))
   }, [demoBusy, refresh, router, saveLesson, setLessonSectionIndex])
 
@@ -598,7 +602,7 @@ export default function HomeScreen() {
       await dismissDailyLick()
       setDailyLickDismissed(true)
     } catch {
-      console.log('[DailyLick] dismiss failed')
+      dailyLickLog.debug('dismiss failed')
     }
   }, [])
 

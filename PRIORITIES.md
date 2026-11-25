@@ -1033,7 +1033,7 @@ Out:
 
 ## Commit 18: Add Tests for Critical Untested Paths
 
-**Status:** ready
+**Status:** complete
 **Priority:** P1
 **Depends on:** Commit 3
 **Evidence:** [`vitest.config.ts`](vitest.config.ts), `src/audio/`, `src/db/`, [`src/config.ts`](src/config.ts), [`techdebt/REPORT.md`](techdebt/REPORT.md)
@@ -1061,10 +1061,10 @@ Out:
 - Device-level audio accuracy tests.
 
 **Acceptance criteria:**
-- [ ] The named modules have direct tests.
-- [ ] Component tests run in CI.
-- [ ] Coverage for the named modules is recorded.
-- [ ] Tests do not require a physical device.
+- [x] The named modules have direct tests.
+- [x] Component tests run in CI.
+- [x] Coverage for the named modules is recorded.
+- [x] Tests do not require a physical device.
 
 **Verification:** `npm run test -- --coverage`, inspect per-file coverage.
 
@@ -1080,11 +1080,23 @@ Out:
 
 **References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-17 (accessed 2026-11-11).
 
+**Completion (2026-11-17):**
+
+- **Harness:** `vitest-native@0.14.1` (`reactNative()` plugin) + `@testing-library/react-native@13.3.3` + `jsdom@^27.4.0`. `vitest.config.ts` include adds `src/**/*.test.tsx` + `components/**/*.test.tsx`; coverage include stays `src/**`. DOM tests opt in per file with `/** @vitest-environment jsdom */`. `@/src/db/client` is aliased to the `.ts` stub — the plugin's Metro extension order resolves `.native.ts` first and pulls in `expo-sqlite`.
+- **Module tests (47):** `src/config.test.ts` (13) — hoisted `expo-constants` mock, `vi.resetModules` + `vi.stubEnv` precedence cases; `src/audio/GlobalAudioManager.test.ts` (17) — register/stop/cleanupAll, platform guards, `getInstanceCount`; `src/audio/recordSession.native.test.ts` (9) — real GlobalAudioManager integration via shared module registry, factory-mocked `expo-av`; `src/audio/recordSession.web.test.ts` (8) — jsdom, stubbed `MediaRecorder`/`getUserMedia`, Node `Blob.arrayBuffer` stub.
+- **Component tests (45):** `components/{ErrorBanner,Button,EmptyState,LoadingSkeleton,AnimatedPressable}.test.tsx` — render, press, variant/className/haptic assertions; `expo-haptics`/`expo-av` mocked with `vi.mock` factories. Platform-paired modules imported by explicit `.native`/`.web` path (a bare import flips to `.native.ts` under the plugin).
+- **Bug found by tests (user-approved fix):** `GlobalAudioManager.unregisterInstance`'s fire-and-forget delete could remove a concurrently re-registered instance; now identity-guarded (`if (this.audioInstances.get(id) === entry)` before `delete`).
+- **DB clients:** no new tests — Commit 17's contract suite satisfies this spec's persistence AC (17 cases per leg, native Vitest + web Playwright); per-file coverage unchanged (native 80% lines, web 20%).
+- **Coverage ratchet:** measured 2026-11-17 on Node v22.14.0 (matches CI): lines 47.59% / branches 40.32%. Gates raised in `vitest.config.ts` from 39.4/34.6 to **47.5/40.3** (one-decimal floor per `docs/COVERAGE.md`); baseline table, measurement date, and scope note updated in [`docs/COVERAGE.md`](docs/COVERAGE.md); [`AGENTS.md`](AGENTS.md) framework map + Vitest patterns now cover `.test.tsx` and the mocking rules.
+- **Per-module coverage (lines):** `config.ts` 100%, `GlobalAudioManager.ts` 100%, `recordSession.native.ts` 100%, `recordSession.web.ts` 100%, `client.native.ts` 80%, `client.web.ts` 20%.
+- **Deviations:** `jsdom@^27.4.0` instead of the researched `^31.0.1` — jsdom 31's bundled undici 8.12.4 crashes at load on Node 22.14 (`createZstdDecompress` undefined). `components/` stays out of the coverage denominator (~160 files, 5 tested) — including it would fail the gate for reasons unrelated to the tested modules (documented in `docs/COVERAGE.md`).
+- Verification: `npm run lint` → 0 errors; `npm run test` → 103 files / 842 passed (750 baseline + 92 new); `npm run test:coverage` → gate pass (47.59% ≥ 47.5, 40.32% ≥ 40.3); `npm run check:markers` → pass; `npx vitest-native doctor` → no blocking problems.
+
 ---
 
 ## Commit 19: Remove Unstripped Frontend Console Logging (Monitor)
 
-**Status:** deferred
+**Status:** complete
 **Priority:** P2
 **Depends on:** None
 **Evidence:** `src/`, `app/`, `components/` (179 `console.*` calls), [`AGENTS.md`](AGENTS.md)
@@ -1112,10 +1124,10 @@ Out:
 - Backend logging changes.
 
 **Acceptance criteria:**
-- [ ] A frontend logger exists and is documented.
-- [ ] High-volume modules use it.
-- [ ] Production builds emit no debug-level logs.
-- [ ] The remaining raw `console.*` count is tracked.
+- [x] A frontend logger exists and is documented.
+- [x] High-volume modules use it.
+- [x] Production builds emit no debug-level logs.
+- [x] The remaining raw `console.*` count is tracked.
 
 **Verification:** Build for production and inspect logs; `rg -c 'console\\.' src app components`.
 
@@ -1129,6 +1141,17 @@ Out:
 - ASSUMPTION: Debug logs are not required in release support bundles.
 
 **References:** [`techdebt/backlog.json`](techdebt/backlog.json) TD-18 (accessed 2026-11-11).
+
+**Completion (2026-11-17):**
+
+- **Logger module:** `src/utils/logger.ts` — `createLogger(prefix)` returns `Logger` (`debug`/`info`/`warn`/`error`). `debug`/`info` are gated on `__DEV__` (undefined-safe: a missing `__DEV__` fail-safes to gated), `warn`/`error` always emit. `format()` keeps the existing prefix convention (`` `${prefix} ${msg}` `` for string first-args, so `stringContaining` assertions keep working). 5 co-located tests in `src/utils/logger.test.ts` (flips the RN ambient `const __DEV__` via `Object.defineProperty(globalThis, …)`).
+- **Production strip:** `babel-plugin-transform-remove-console@^6.9.4` devDep; `babel.config.js` `env.production.plugins` → `['transform-remove-console', { exclude: ['error', 'warn'] }]`, so first-party bundles ship no `console.log/info/debug` while warn/error support diagnostics survive regardless of migration status.
+- **Migrated modules (12 files / 109 calls — the ≥5-call cut line):** `pitchStream.native.ts` (19), `GlobalAudioManager.ts` (17), `design-preview.tsx` (11), `Mixer.web.ts` (10), `activePlanPersistence.ts` (9), `mentorNote.ts` (9), `Mixer.native.ts` (9), `useChordDetector.ts` (7), `idbWeb.ts` (6), `analysisJobsStore.ts` (5), `pitchStream.web.ts` (5), `app/(tabs)/index.tsx` (5). Mechanical level mapping: `console.log→log.debug`, `console.info→log.info`, `warn`/`error` unchanged. Multi-prefix screens get one logger per prefix (`index.tsx`: `[home]` + `[DailyLick]`; `design-preview.tsx`: `[Harmoniq]`/`[StemMixerDev]`/`[PitchDev]`).
+- **Behavior notes:** `idbWeb.ts` migration-success logs dropped their now-redundant `if (__DEV__)` wrapper (the logger gates identically); its `__DEV__`-gated migration-failure `console.error` kept the guard (behavior-preserving). `analysisJobsStore.ts`'s `console.log` failure handlers mapped to `log.debug` per the level-mapping rule (previously stripped from prod anyway).
+- **Docs:** `AGENTS.md` error-handling convention now documents `createLogger`, the `__DEV__` gating, the babel strip, and that raw `console.*` survives only below the cut line; `docs/CODER.md` Phase 2 checkpoint guidance points at the logger.
+- **AC4 — remaining raw `console.*` (tracked):** **101** non-test call sites (was 210; 214→103 including tests) — `log` 25 / `warn` 49 / `error` 22 / `info` 4 / `debug` 1; by dir: `src` 54, `app` 38, `components` 11.
+- **AC3 — production evidence (2026-11-17):** `CI=1 npx expo export -p web` → first-party chunks contain **0** `console.log(` / `console.info(` / `console.debug(`; `console.warn(` / `console.error(` present as designed. Only vendored `ort/ort.all.min.js` (ONNX Runtime) retains its own `console.log` calls — third-party, out of scope.
+- **Verification:** `npm run lint` → 0 errors; `npm run test` → 104 files / 847 passed (842 baseline + 5 logger tests); `npm run check:markers` → pass. Console-assertion suites unaffected: `GlobalAudioManager.test.ts` 17/17, `analyze.test.ts` (below cut line, untouched), `useChordDetector.test.ts` (its latency specs reimplement the guard locally and do not import the source).
 
 ---
 

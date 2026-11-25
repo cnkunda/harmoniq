@@ -1,0 +1,266 @@
+
+> harmoniq@1.0.0 test
+> vitest run --coverage
+
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+ RUN  v4.1.12 C:/workspace/harmoniq
+      Coverage enabled with v8
+
+(node:23756) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ Test Files  94 passed (94)
+      Tests  750 passed (750)
+   Start at  21:14:38
+   Duration  105.78s (transform 30.15s, setup 0ms, import 89.23s, tests 53.25s, environment 113ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   44.44 |    39.45 |   44.32 |   45.89 |                   
+ src               |       0 |        0 |       0 |       0 |                   
+  config.ts        |       0 |        0 |       0 |       0 | 8-31              
+ src/analysis      |   90.14 |       85 |   94.11 |   94.82 |                   
+  ...alysisJobs.ts |   90.14 |       85 |   94.11 |   94.82 | 43-45             
+ src/analytics     |   80.57 |    76.19 |   70.37 |   82.62 |                   
+  ...cle.native.ts |       0 |        0 |       0 |       0 | 5-8               
+  appLifecycle.ts  |       0 |      100 |       0 |       0 | 6                 
+  ...ecycle.web.ts |       0 |        0 |       0 |       0 | 3-16              
+  csv.ts           |     100 |       60 |     100 |     100 | 15-16             
+  eventBus.ts      |   81.91 |    83.33 |   78.26 |   82.14 | ...09,152,186-188 
+  ...tAudioPlay.ts |       0 |        0 |       0 |       0 | 3-20              
+  metrics.ts       |   98.43 |    88.46 |     100 |     100 | ...97,106-107,119 
+  ...ionTracker.ts |   95.55 |     86.2 |     100 |     100 | 37,49,87,104      
+ src/api           |   38.96 |    26.96 |   33.54 |   41.23 |                   
+  analyze.ts       |   31.64 |    14.39 |    31.3 |   34.95 | ...2-883,911-1412 
+  analyzeSse.ts    |   74.31 |    76.86 |      64 |   73.58 | ...30-363,385-389 
+  discovery.ts     |       0 |        0 |       0 |       0 | 12-25             
+  jam.ts           |       0 |        0 |       0 |       0 | 39-228            
+  mentor.ts        |       0 |        0 |       0 |       0 | 119-150           
+  orient.ts        |   83.33 |       60 |      50 |     100 | 39                
+  tabs.ts          |       0 |        0 |       0 |       0 | 18-29             
+ src/audio         |   18.62 |    20.52 |   15.62 |    18.9 |                   
+  ...dioManager.ts |       0 |        0 |       0 |       0 | 4-213             
+  Mixer.native.ts  |       0 |        0 |       0 |       0 | 7-239             
+  Mixer.web.ts     |       0 |        0 |       0 |       0 | 6-277             
+  countIn.ts       |       0 |        0 |       0 |       0 | 23-111            
+  ...tMetronome.ts |       0 |        0 |       0 |       0 | 7-19              
+  ...tConstants.ts |       0 |      100 |     100 |       0 | 2-3               
+  ghostStem.web.ts |       0 |        0 |       0 |       0 | 6-107             
+  ...CoachPrefs.ts |       0 |        0 |       0 |       0 | 7-22              
+  ...ome.native.ts |       0 |        0 |       0 |       0 | 14-123            
+  metronome.web.ts |    94.2 |    77.14 |     100 |     100 | 40,54-69,82-98    
+  ...nomeShared.ts |   79.41 |    68.96 |     100 |   83.48 | ...,82-83,132-149 
+  mixerTypes.ts    |       0 |        0 |       0 |       0 | 14-22             
+  noiseGate.ts     |     100 |    84.61 |     100 |     100 | 17-33             
+  ...sFromAudio.ts |       0 |        0 |       0 |       0 | 3-36              
+  ...ion.native.ts |       0 |        0 |       0 |       0 | 7-71              
+  ...ession.web.ts |       0 |        0 |       0 |       0 | 4-60              
+  ...ontBundled.ts |       0 |        0 |       0 |       0 | 9-19              
+  ...ersistence.ts |       0 |      100 |       0 |       0 | 7                 
+  ...ntProfiles.ts |   88.23 |    72.22 |      50 |   88.23 | 22,43             
+  ...backBridge.ts |       0 |        0 |       0 |       0 | 24-135            
+  ...temSidecar.ts |       0 |        0 |       0 |       0 | 22-115            
+  useLoopAudio.ts  |   78.94 |    73.91 |   77.77 |   93.75 | 70-71             
+  useMetronome.ts  |       0 |        0 |       0 |       0 | 21-66             
+  ...ontProfile.ts |       0 |        0 |       0 |       0 | 17-31             
+  ...ach.native.ts |       0 |        0 |       0 |       0 | 10-47             
+  voiceCoach.ts    |       0 |        0 |       0 |       0 | 13-54             
+  ...eCoach.web.ts |       0 |        0 |       0 |       0 | 8-62              
+  ...oachShared.ts |       0 |        0 |       0 |       0 | 3-35              
+ src/chord         |   30.23 |    17.16 |      20 |   29.85 |                   
+  ...tenerCard.tsx |       0 |        0 |       0 |       0 | 20-149            
+  ...oryStream.tsx |       0 |        0 |       0 |       0 | 17-25             
+  ...enceMeter.tsx |       0 |        0 |       0 |       0 | 16-36             
+  ...ModelTypes.ts |       0 |      100 |     100 |       0 | 39                
+  ...dSmoothing.ts |     100 |    71.87 |     100 |     100 | ...8,68-80,97,112 
+  chordVocab.ts    |       0 |        0 |       0 |       0 | 7-47              
+  computeCqt.ts    |   93.75 |    85.18 |   92.85 |   93.75 | 215,240-245       
+  ...ChordStore.ts |       0 |        0 |       0 |       0 | 16-52             
+  ...ack.native.ts |       0 |      100 |       0 |       0 | 11                
+  ...llback.web.ts |       0 |        0 |       0 |       0 | 6-71              
+  ...rdDetector.ts |       0 |        0 |       0 |       0 | 14-359            
+  ...icRecorder.ts |       0 |        0 |       0 |       0 | 13-232            
+ src/constants     |      27 |       40 |   66.66 |   27.08 |                   
+  ...abPlayerUi.ts |       0 |      100 |     100 |       0 | 9-120             
+  ...untimeDiag.ts |       0 |        0 |       0 |       0 | 10-33             
+  animations.ts    |       0 |      100 |       0 |       0 | 2-16              
+  backingTracks.ts |       0 |      100 |     100 |       0 | 27                
+  buttonStyles.ts  |       0 |      100 |     100 |       0 | 11-27             
+  ...rdingSteps.ts |       0 |      100 |     100 |       0 | 8-32              
+  sessionFlow.ts   |   95.65 |    83.33 |     100 |     100 | 51,82             
+  sessionPhases.ts |       0 |        0 |       0 |       0 | 15-112            
+  ...aybackCard.ts |       0 |      100 |     100 |       0 | 6                 
+  stemMixerDev.ts  |       0 |      100 |     100 |       0 | 4                 
+  tuner.ts         |       0 |      100 |     100 |       0 | 2                 
+  uiTokens.ts      |       0 |      100 |     100 |       0 | 9-56              
+ src/context       |   29.88 |    40.62 |    12.5 |    31.5 |                   
+  MusicContext.tsx |   29.88 |    40.62 |    12.5 |    31.5 | ...71-201,243-319 
+ src/db            |   48.18 |    34.81 |   41.77 |   51.11 |                   
+  client.native.ts |   77.77 |    63.01 |   83.01 |      80 | ...1446,1491-1500 
+  client.web.ts    |   17.76 |     9.85 |   15.87 |   20.04 | ...1-866,895-1129 
+  ...FromLesson.ts |       0 |        0 |       0 |       0 | 8-16              
+  ...nFromLicks.ts |       0 |        0 |       0 |       0 | 5-7               
+  idbWeb.ts        |   11.88 |     3.65 |   13.11 |    11.7 | ...23-374,381-403 
+  ...onIdentity.ts |   98.46 |    89.79 |     100 |   98.21 | 33                
+  migrations.ts    |   56.52 |    33.33 |     100 |   56.52 | 41-52,65,69,82    
+  ...chedLesson.ts |       0 |        0 |       0 |       0 |                   
+  ...Lesson.web.ts |       0 |      100 |       0 |       0 | 5-9               
+ src/db/contract   |   92.51 |    48.57 |   95.65 |   94.69 |                   
+  ...ractAssert.ts |   65.21 |    36.36 |   85.71 |   83.33 | 13-18,52          
+  ...tractCases.ts |   95.23 |    69.23 |   97.43 |   95.59 | 546-558           
+ src/demo          |    1.88 |        0 |       0 |    2.22 |                   
+  ...emRegistry.ts |       0 |        0 |       0 |       0 | 11-46             
+  demoLesson.ts    |       0 |        0 |       0 |       0 | 6-107             
+  ...onTourCopy.ts |       0 |      100 |     100 |       0 | 10-26             
+  ...emoSession.ts |       0 |        0 |       0 |       0 | 20-28             
+  ...DemoLesson.ts |       0 |      100 |       0 |       0 | 6-7               
+ src/discovery     |   87.75 |     62.5 |     100 |   86.04 |                   
+  agent.ts         |   87.75 |     62.5 |     100 |   86.04 | 61-70,115         
+ src/errors        |   70.88 |     63.1 |   71.42 |   76.05 |                   
+  mapErrorToUi.ts  |   74.66 |    64.35 |   76.92 |   79.41 | ...66-267,313-325 
+  ...ppSettings.ts |       0 |        0 |       0 |       0 | 5-7               
+ src/home          |   69.49 |    74.57 |   76.19 |    67.3 |                   
+  dailyLick.ts     |       0 |        0 |       0 |       0 | 31-92             
+  ...ionSummary.ts |     100 |    78.57 |     100 |     100 | 18-19             
+  ...onAccuracy.ts |   88.88 |     87.5 |     100 |     100 | 9                 
+  ...ickerItems.ts |     100 |       80 |     100 |     100 | 36,48,53-57       
+  ...PulseLogic.ts |     100 |       75 |     100 |     100 | 7                 
+ src/jam           |    67.9 |    64.54 |      72 |   70.68 |                   
+  ...eHighlight.ts |       0 |        0 |       0 |       0 | 7-113             
+  ...ngPlayable.ts |       0 |        0 |       0 |       0 | 9-27              
+  ...kingSource.ts |     100 |    91.66 |     100 |     100 | 22                
+  ...hraseCoach.ts |      90 |       92 |     100 |      90 | 67,80             
+  ...seFeatures.ts |   85.54 |    68.18 |     100 |   92.42 | 43-44,56-58       
+  ...eSegmenter.ts |   86.56 |     85.1 |     100 |   86.36 | ...26-127,145-146 
+  ...cticeTrack.ts |    93.1 |       75 |     100 |   94.11 | 27                
+  ...tedClassic.ts |       0 |        0 |       0 |       0 | 5-9               
+  ...maryRunner.ts |   76.92 |     61.9 |   81.81 |   76.31 | ...47,118,125-131 
+  lessonBed.ts     |   94.73 |    94.73 |     100 |     100 | 83,87,90          
+  ...abAudioUri.ts |       0 |        0 |       0 |       0 | 5-10              
+  ...sHistogram.ts |      80 |    73.68 |   83.33 |   83.52 | ...36,173-177,189 
+ src/layout        |       0 |        0 |       0 |       0 |                   
+  ...ntentInset.ts |       0 |        0 |       0 |       0 | 5                 
+ src/lib           |       0 |        0 |       0 |       0 |                   
+  corpusAssets.ts  |       0 |        0 |       0 |       0 | 3-35              
+ src/music         |   73.51 |    69.71 |    78.7 |   76.58 |                   
+  barLoopBounds.ts |   90.47 |    77.27 |     100 |   97.22 | 28                
+  ...Suggestion.ts |   33.33 |    23.52 |   33.33 |   37.03 | 39-65             
+  ...dDbAdapter.ts |   86.44 |    79.48 |   83.33 |   91.11 | 196-199           
+  ...Difficulty.ts |      95 |    91.66 |     100 |    92.3 | 44                
+  chordFunction.ts |   90.62 |    78.57 |     100 |   96.55 | 76                
+  chordVoicing.ts  |   73.64 |    67.32 |      70 |   80.72 | ...87,404-432,462 
+  diagramMirror.ts |     100 |     92.3 |     100 |     100 | 36                
+  ...onicChords.ts |       0 |        0 |       0 |       0 | 12-141            
+  dnaComputer.ts   |   73.61 |    60.65 |   92.85 |   80.34 | ...25,168,213-218 
+  ...Suggestion.ts |   87.09 |    83.33 |     100 |     100 | 30-45             
+  fretboardCell.ts |   73.33 |    53.48 |     100 |   77.14 | 14-15,59-60,77-80 
+  ...Similarity.ts |   90.24 |     87.5 |     100 |   98.18 | 87                
+  intervals.ts     |     100 |    66.66 |     100 |     100 | 54-58             
+  noteNames.ts     |   33.33 |        0 |       0 |   33.33 | 19-20             
+  ...tionDetail.ts |   91.11 |       80 |     100 |   97.43 | 58                
+  ...ion.native.ts |       0 |        0 |       0 |       0 | 4-162             
+  ...dition.web.ts |       0 |        0 |       0 |       0 | 7-74              
+  scaleDegree.ts   |   89.47 |       60 |     100 |   89.47 | 21-22             
+  ...eFavorites.ts |      96 |    93.75 |     100 |     100 | 17                
+  scales.ts        |     100 |    91.66 |     100 |     100 | 132,140           
+  ...yGenerator.ts |   97.82 |       75 |   97.29 |   98.36 | 62,546            
+  soloHarmony.ts   |   96.66 |    94.39 |     100 |     100 | ...29,159,166,172 
+  techniques.ts    |   89.47 |    80.76 |     100 |   92.85 | 36                
+ src/onboarding    |   67.82 |    52.23 |      80 |   69.89 |                   
+  ...mentScores.ts |   84.93 |    71.42 |   90.47 |   92.59 | 14,49-50,73       
+  ...ementCoach.ts |       0 |      100 |     100 |       0 | 3                 
+  ...ngAnalyses.ts |   92.85 |      100 |     100 |    92.3 | 39                
+  suggestSongs.ts  |       0 |        0 |       0 |       0 | 25-183            
+ src/pitch         |       0 |        0 |       0 |       0 |                   
+  ...eam.native.ts |       0 |        0 |       0 |       0 | 10-340            
+  ...Stream.web.ts |       0 |        0 |       0 |       0 | 5-219             
+  ...eam.native.ts |       0 |        0 |       0 |       0 | 7-25              
+  ...Stream.web.ts |       0 |        0 |       0 |       0 | 7-25              
+ src/preferences   |   68.42 |    71.42 |   66.66 |   68.75 |                   
+  guitarHand.ts    |       0 |        0 |       0 |       0 | 7-17              
+ src/progress      |   77.49 |    63.18 |    79.2 |   82.31 |                   
+  mentorNote.ts    |   70.19 |    60.46 |   78.57 |   72.63 | ...59,272,281,292 
+  ...Trajectory.ts |   78.89 |    63.88 |   70.49 |   82.53 | ...78,282,329,379 
+  ...ssTimeline.ts |     100 |       50 |     100 |     100 | 9-10              
+  pulseData.ts     |   78.78 |    64.35 |   88.88 |   86.31 | ...86,442,460,462 
+ src/session       |    23.5 |    24.07 |   29.14 |    24.1 |                   
+  ...ersistence.ts |       0 |        0 |       0 |       0 | 16-126            
+  ...abSongMeta.ts |       0 |        0 |       0 |       0 | 5-92              
+  coachFeedback.ts |       0 |        0 |       0 |       0 | 6-81              
+  ...coreResult.ts |       0 |        0 |       0 |       0 | 3-68              
+  ...gGhostTake.ts |       0 |        0 |       0 |       0 | 13-70             
+  focusArea.ts     |       0 |        0 |       0 |       0 | 8-183             
+  ...sportDebug.ts |       0 |        0 |       0 |       0 | 5-7               
+  ...uracyBeats.ts |   17.77 |    18.84 |   21.05 |   22.38 | 21-130            
+  ...manceFocus.ts |   71.73 |       75 |     100 |   72.22 | 60-68,76,80-86    
+  ...tGhostTake.ts |       0 |        0 |       0 |       0 | 8-86              
+  ...malization.ts |   95.23 |    87.87 |     100 |   94.44 | 16                
+  planProgress.ts  |   84.61 |    53.33 |   85.71 |   84.61 | ...36-137,141-143 
+  ...Navigation.ts |       0 |        0 |       0 |       0 | 16-107            
+  ...essSignals.ts |   78.94 |       55 |     100 |     100 | 4-6,24-27         
+  skillMutator.ts  |   85.55 |    68.29 |     100 |   90.27 | 31,62,72-81,89-90 
+  ...LoopRegion.ts |   26.59 |       20 |      50 |   29.76 | ...61-181,184-220 
+  smartScroll.ts   |       0 |        0 |       0 |       0 | 1-47              
+  ...emePresets.ts |     100 |    88.88 |     100 |     100 | 69                
+  ...boardTuner.ts |       0 |        0 |       0 |       0 | 6-115             
+  useOrientClip.ts |       0 |        0 |       0 |       0 | 19-124            
+  ...layCapture.ts |       0 |        0 |       0 |       0 | 61-553            
+  ...martScroll.ts |       0 |        0 |       0 |       0 | 38-56             
+  ...hNarration.ts |       0 |        0 |       0 |       0 | 14-27             
+ src/settings      |   54.38 |       25 |      25 |   55.31 |                   
+  ...rnalExport.ts |   59.61 |       25 |     100 |   60.46 | 37-39,46-61       
+  ...eDefaultOn.ts |       0 |      100 |       0 |       0 | 9-15              
+ src/spaced        |     100 |    84.37 |     100 |     100 |                   
+  sm2.ts           |     100 |    84.37 |     100 |     100 | 47-78,117         
+ src/spotify       |       0 |        0 |       0 |       0 |                   
+  ...ectSpotify.ts |       0 |        0 |       0 |       0 | 16-72             
+  ...iveSpotify.ts |       0 |      100 |       0 |       0 | 10-13             
+  ...nectErrors.ts |       0 |        0 |       0 |       0 | 5-23              
+  ...romSpotify.ts |       0 |      100 |       0 |       0 | 7-11              
+ src/stores        |   23.44 |     12.5 |   20.54 |   25.46 |                   
+  ...eDiagStore.ts |       0 |        0 |       0 |       0 | 38-91             
+  ...sJobsStore.ts |   71.42 |    47.72 |   83.33 |   74.75 | ...91,213-225,254 
+  ...dEditStore.ts |       0 |        0 |       0 |       0 | 40-79             
+  ...ctionStore.ts |       0 |        0 |       0 |       0 | 25-275            
+  dnaStore.ts      |       0 |        0 |       0 |       0 | 12-35             
+  ...rHandStore.ts |       0 |        0 |       0 |       0 | 22-33             
+  lessonStore.ts   |       0 |        0 |       0 |       0 | 37-230            
+  ...ementStore.ts |       0 |        0 |       0 |       0 | 11-26             
+  planStore.ts     |   77.27 |     37.5 |   83.33 |   76.47 | 72,103-105        
+  ...tionsStore.ts |       0 |        0 |       0 |       0 | 16-40             
+  ...PhaseStore.ts |       0 |      100 |       0 |       0 | 23-29             
+  ...nPlayStore.ts |       0 |        0 |       0 |       0 | 19-27             
+  ...PrefsStore.ts |   38.46 |    19.35 |   33.33 |   39.13 | ...15-132,141-154 
+  skillStore.ts    |       0 |      100 |       0 |       0 | 12-17             
+  useAppStore.ts   |       0 |        0 |       0 |       0 | 43-124            
+  ...PrefsStore.ts |       0 |      100 |       0 |       0 | 12-16             
+ src/taste         |       0 |        0 |       0 |       0 |                   
+  tasteQuizGate.ts |       0 |        0 |       0 |       0 | 10-42             
+  ...eQuizSeeds.ts |       0 |      100 |     100 |       0 | 11-44             
+ src/utils         |   40.51 |    35.87 |   38.23 |   42.54 |                   
+  ...orrections.ts |       0 |        0 |       0 |       0 | 21-100            
+  ...Uint8Array.ts |   91.66 |    83.33 |     100 |   90.47 | 9,27,39,59        
+  bytesToBase64.ts |       0 |        0 |       0 |       0 | 7-15              
+  exportShare.ts   |       0 |        0 |       0 |       0 | 7-116             
+  feedback.ts      |     100 |    89.58 |     100 |     100 | 54-57,91,109      
+  ...ShareState.ts |       0 |        0 |       0 |       0 | 11-105            
+  lessonAudio.ts   |       0 |        0 |       0 |       0 | 9-120             
+  ...rdTimeline.ts |   94.59 |    81.57 |     100 |     100 | 39-47,52,71       
+  ...mSavedLick.ts |       0 |        0 |       0 |       0 | 5-28              
+  lessonTabs.ts    |   22.85 |    30.23 |   16.66 |      24 | 12-31,62-75       
+  ...reSnapshot.ts |   81.81 |    86.48 |     100 |   88.88 | 35                
+  stemExport.ts    |   92.85 |    93.75 |     100 |     100 | 26                
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 44.44% ( 4785/10766 )
+Branches     : 39.45% ( 2890/7324 )
+Functions    : 44.32% ( 860/1940 )
+Lines        : 45.89% ( 4273/9311 )
+================================================================================
+DONE:0

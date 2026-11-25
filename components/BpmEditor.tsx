@@ -1,7 +1,8 @@
 /** Commit 109: BPM editor — numeric display with fine/coarse adjustment and reset. */
 
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { colors } from '@/src/constants/colors'
 
 export interface BpmEditorProps {
@@ -27,7 +28,8 @@ function AdjustButton({
   disabled?: boolean
 }) {
   return (
-    <Pressable
+    <AnimatedPressable
+      haptic="none"
       onPress={() => {
         if (!disabled) onPress()
       }}
@@ -46,7 +48,7 @@ function AdjustButton({
       >
         {label}
       </Text>
-    </Pressable>
+    </AnimatedPressable>
   )
 }
 
@@ -83,7 +85,8 @@ export function BpmEditor({ bpm, autoBpm, onChange, onReset, disabled = false }:
 
       {/* Reset to auto */}
       {isOverridden && (
-        <Pressable
+        <AnimatedPressable
+          haptic="none"
           onPress={() => {
             if (!disabled && hasAuto) {
               onChange(autoBpm!)
@@ -95,7 +98,7 @@ export function BpmEditor({ bpm, autoBpm, onChange, onReset, disabled = false }:
           <Text className="font-sans text-xs" style={{ color: colors.amber.light }}>
             Reset to Auto ({autoBpm!.toFixed(0)})
           </Text>
-        </Pressable>
+        </AnimatedPressable>
       )}
     </View>
   )

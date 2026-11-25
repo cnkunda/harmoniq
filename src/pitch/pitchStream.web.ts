@@ -1,6 +1,9 @@
 import type { PitchReading, PitchStream } from '@/src/pitch/pitchTypes'
+import { createLogger } from '@/src/utils/logger'
 
 export type { PitchReading, PitchStream }
+
+const log = createLogger('[PitchStream.web]')
 
 const WORKLET_PROCESSOR_NAME = 'harmoniq-pitch-detector'
 
@@ -126,7 +129,7 @@ class PitchStreamWeb implements PitchStream {
 
   async start(onPitch: (reading: PitchReading) => void): Promise<void> {
     if (this.running) {
-      console.log('[PitchStream.web] start skipped; already running')
+      log.debug('start skipped; already running')
       return
     }
     if (typeof window === 'undefined' || typeof navigator === 'undefined') {
@@ -139,7 +142,7 @@ class PitchStreamWeb implements PitchStream {
       throw new Error('[PitchStream.web] getUserMedia is unavailable in this browser')
     }
 
-    console.log('[PitchStream.web] requesting microphone access')
+    log.debug('requesting microphone access')
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -177,11 +180,11 @@ class PitchStreamWeb implements PitchStream {
 
     this.sourceNode.connect(this.workletNode)
     this.running = true
-    console.log('[PitchStream.web] microphone stream started')
+    log.debug('microphone stream started')
   }
 
   async stop(): Promise<void> {
-    console.log('[PitchStream.web] stopping microphone stream')
+    log.debug('stopping microphone stream')
     this.running = false
 
     if (this.workletNode) {
@@ -207,7 +210,7 @@ class PitchStreamWeb implements PitchStream {
       URL.revokeObjectURL(this.moduleUrl)
       this.moduleUrl = null
     }
-    console.log('[PitchStream.web] resources released')
+    log.debug('resources released')
   }
 
   isRunning(): boolean {

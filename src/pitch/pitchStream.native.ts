@@ -4,8 +4,11 @@ import { TurboModuleRegistry } from 'react-native'
 import { globalAudioManager } from '@/src/audio/GlobalAudioManager'
 import { isPitchJsiEnabled } from '@/src/config'
 import type { PitchReading, PitchStream } from '@/src/pitch/pitchTypes'
+import { createLogger } from '@/src/utils/logger'
 
 export type { PitchReading, PitchStream }
+
+const log = createLogger('[PitchStream.native]')
 
 const SAMPLE_RATE_PREF = 44100
 /** ~46ms of audio per native buffer — balances latency vs stable autocorrelation. */
@@ -41,8 +44,8 @@ function getPitchDetector(): PitchDetectorBridge | null {
   try {
     nativeModule = TurboModuleRegistry.get('HarmoniqPitchDetector')
   } catch (error) {
-    console.warn(
-      '[PitchStream.native] pitch detector module lookup failed; falling back to the JS estimator',
+    log.warn(
+      'pitch detector module lookup failed; falling back to the JS estimator',
       error instanceof Error ? error.message : String(error),
     )
     cachedPitchDetector = null
@@ -56,7 +59,7 @@ function getPitchDetector(): PitchDetectorBridge | null {
 
   const bridge = (globalThis as PitchDetectorGlobal).__harmoniqPitch
   if (!bridge) {
-    console.warn('[PitchStream.native] pitch detector JSI bridge missing; falling back to the JS estimator')
+    log.warn('pitch detector JSI bridge missing; falling back to the JS estimator')
     cachedPitchDetector = null
     return cachedPitchDetector
   }
@@ -159,15 +162,15 @@ class PitchStreamNative implements PitchStream {
 
     const sorted = [...this.updateIntervalsMs].sort((a, b) => a - b)
     const percentile = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))]!
-    console.log(
-      `[PitchStream.native] jsi update interval p50=${percentile(0.5)}ms p95=${percentile(0.95)}ms n=${sorted.length}`,
+    log.debug(
+      `jsi update interval p50=${percentile(0.5)}ms p95=${percentile(0.95)}ms n=${sorted.length}`,
     )
     this.updateIntervalsMs.length = 0
   }
 
   async start(onPitch: (reading: PitchReading) => void): Promise<void> {
     if (this.running) {
-      console.log('[PitchStream.native] start skipped; already running')
+      log.debug('start skipped; already running')
       return
     }
 
@@ -177,16 +180,16 @@ class PitchStreamNative implements PitchStream {
       iosOptions: [],
     })
 
-    console.log('[PitchStream.native] requesting microphone permission')
+    log.debug('requesting microphone permission')
     const perm = await AudioManager.requestRecordingPermissions()
-    console.log('[PitchStream.native] microphone permission status:', perm)
+    log.debug('microphone permission status:', perm)
     if (perm !== 'Granted') {
-      console.warn('[PitchStream.native] recording permission not granted:', perm)
+      log.warn('recording permission not granted:', perm)
       throw new Error('MIC_PERMISSION_DENIED')
     }
 
     const sessionOk = await AudioManager.setAudioSessionActivity(true)
-    console.log('[PitchStream.native] audio session activation result:', sessionOk)
+    log.debug('audio session activation result:', sessionOk)
     if (!sessionOk) {
       throw new Error('[PitchStream.native] Could not activate audio session')
     }
@@ -201,8 +204,8 @@ class PitchStreamNative implements PitchStream {
     const jsiEnabled = isPitchJsiEnabled()
     this.detector = jsiEnabled ? getPitchDetector() : null
     if (jsiEnabled && !this.detector) {
-      console.warn(
-        '[PitchStream.native] EXPO_PUBLIC_HARMONIQ_PITCH_JSI=1 but the native detector is unavailable; using the JS estimator',
+      log.warn(
+        'EXPO_PUBLIC_HARMONIQ_PITCH_JSI=1 but the native detector is unavailable; using the JS estimator',
       )
     }
     const useJsi = this.detector != null
@@ -235,15 +238,15 @@ class PitchStreamNative implements PitchStream {
           const rms = detector.getRms()
           const peakAbs = detector.getPeakAbs()
           if (this.callbackCount % 20 === 0) {
-            console.log(
-              `[PitchStream.native] jsi cb=${this.callbackCount} frames=${frameCount} sr=${buffer.sampleRate} rms=${rms.toFixed(5)} peak=${peakAbs.toFixed(5)} hz=${hz.toFixed(2)}`,
+            log.debug(
+              `jsi cb=${this.callbackCount} frames=${frameCount} sr=${buffer.sampleRate} rms=${rms.toFixed(5)} peak=${peakAbs.toFixed(5)} hz=${hz.toFixed(2)}`,
             )
           }
           if (hz > 0 && Number.isFinite(hz)) {
             this.emittedPitchCount += 1
             if (this.emittedPitchCount <= 5 || this.emittedPitchCount % 10 === 0) {
-              console.log(
-                `[PitchStream.native] jsi pitch hit #${this.emittedPitchCount}: ${hz.toFixed(2)}Hz (rms=${rms.toFixed(5)}, peak=${peakAbs.toFixed(5)})`,
+              log.debug(
+                `jsi pitch hit #${this.emittedPitchCount}: ${hz.toFixed(2)}Hz (rms=${rms.toFixed(5)}, peak=${peakAbs.toFixed(5)})`,
               )
             }
             this.recordJsiUpdateInterval()
@@ -254,8 +257,8 @@ class PitchStreamNative implements PitchStream {
 
         const { rms, peakAbs } = getSampleStats(slice)
         if (this.callbackCount % 20 === 0) {
-          console.log(
-            `[PitchStream.native] cb=${this.callbackCount} frames=${frameCount} sr=${buffer.sampleRate} rms=${rms.toFixed(5)} peak=${peakAbs.toFixed(5)}`,
+          log.debug(
+            `cb=${this.callbackCount} frames=${frameCount} sr=${buffer.sampleRate} rms=${rms.toFixed(5)} peak=${peakAbs.toFixed(5)}`,
           )
         }
 
@@ -263,14 +266,14 @@ class PitchStreamNative implements PitchStream {
         if (hz) {
           this.emittedPitchCount += 1
           if (this.emittedPitchCount <= 5 || this.emittedPitchCount % 10 === 0) {
-            console.log(
-              `[PitchStream.native] pitch hit #${this.emittedPitchCount}: ${hz.toFixed(2)}Hz (rms=${rms.toFixed(5)}, peak=${peakAbs.toFixed(5)})`,
+            log.debug(
+              `pitch hit #${this.emittedPitchCount}: ${hz.toFixed(2)}Hz (rms=${rms.toFixed(5)}, peak=${peakAbs.toFixed(5)})`,
             )
           }
           this.onPitchUser(toReading(hz, rms, peakAbs))
         } else if (this.callbackCount % 20 === 0) {
-          console.log(
-            `[PitchStream.native] no pitch (rms=${rms.toFixed(5)} < ${MIN_RMS_FOR_PITCH.toFixed(3)} or weak correlation)`,
+          log.debug(
+            `no pitch (rms=${rms.toFixed(5)} < ${MIN_RMS_FOR_PITCH.toFixed(3)} or weak correlation)`,
           )
         }
       },
@@ -282,7 +285,7 @@ class PitchStreamNative implements PitchStream {
       await AudioManager.setAudioSessionActivity(false)
       throw new Error(`[PitchStream.native] onAudioReady failed: ${ready.message}`)
     }
-    console.log('[PitchStream.native] onAudioReady registered')
+    log.debug('onAudioReady registered')
 
     const started = this.recorder.start()
     if (started.status === 'error') {
@@ -294,7 +297,7 @@ class PitchStreamNative implements PitchStream {
     }
 
     this.running = true
-    console.log(`[PitchStream.native] microphone stream started (jsi=${useJsi}, buffer=${bufferSamples})`)
+    log.debug(`microphone stream started (jsi=${useJsi}, buffer=${bufferSamples})`)
 
     // Register pitch stream with GlobalAudioManager
     globalAudioManager.registerInstance(
@@ -310,8 +313,8 @@ class PitchStreamNative implements PitchStream {
   }
 
   async stop(): Promise<void> {
-    console.log(
-      `[PitchStream.native] stopping microphone stream (callbacks=${this.callbackCount}, pitchHits=${this.emittedPitchCount})`,
+    log.debug(
+      `stopping microphone stream (callbacks=${this.callbackCount}, pitchHits=${this.emittedPitchCount})`,
     )
     this.running = false
     this.onPitchUser = null
@@ -323,13 +326,13 @@ class PitchStreamNative implements PitchStream {
     if (this.recorder.isRecording()) {
       const result = this.recorder.stop()
       if (result.status === 'error') {
-        console.error('[PitchStream.native] stop result error:', result.message)
+        log.error('stop result error:', result.message)
       }
     }
 
     this.recorder.clearOnAudioReady()
     await AudioManager.setAudioSessionActivity(false)
-    console.log('[PitchStream.native] resources released')
+    log.debug('resources released')
 
     // Unregister from GlobalAudioManager
     void globalAudioManager.unregisterInstance(this.streamInstanceId)

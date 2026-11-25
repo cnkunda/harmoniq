@@ -21,9 +21,10 @@ import {
   MENTOR_RETRY_THROTTLE_MS,
   type MentorTrajectoryBuildResult,
 } from '@/src/progress/mentorTrajectory'
+import { createLogger } from '@/src/utils/logger'
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const LOG_PREFIX = '[Mentor]'
+const log = createLogger('[Mentor]')
 
 export interface MentorPersistedState {
   note: MentorNote | null
@@ -75,7 +76,7 @@ function parseState(raw: string | null): MentorPersistedState {
   try {
     const parsed = JSON.parse(raw) as unknown
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      console.warn(`${LOG_PREFIX} persisted state was not an object; ignoring`)
+      log.warn(`persisted state was not an object; ignoring`)
       return emptyState()
     }
     const record = parsed as Record<string, unknown>
@@ -86,7 +87,7 @@ function parseState(raw: string | null): MentorPersistedState {
       last_error: typeof record.last_error === 'string' ? record.last_error : null,
     }
   } catch (error) {
-    console.warn(`${LOG_PREFIX} could not parse persisted state`, error)
+    log.warn(`could not parse persisted state`, error)
     return emptyState()
   }
 }
@@ -130,7 +131,7 @@ async function loadLibrarySongs(): Promise<MentorLibrarySong[]> {
       try {
         lesson = await getLessonByJobId(row.job_id)
       } catch (error) {
-        console.warn(`${LOG_PREFIX} could not load lesson detail for job ${row.job_id}`, error)
+        log.warn(`could not load lesson detail for job ${row.job_id}`, error)
       }
       const title = row.song_title?.trim() || lesson?.song_title?.trim() || ''
       if (!title) return null
@@ -171,7 +172,7 @@ async function prepareMentorData(mode: MentorMode, now: Date): Promise<MentorTra
       await useDnaStore.getState().refresh()
       dna = useDnaStore.getState().dna
     } catch (error) {
-      console.warn(`${LOG_PREFIX} could not refresh Riff DNA`, error)
+      log.warn(`could not refresh Riff DNA`, error)
     }
   }
 
@@ -202,7 +203,7 @@ export async function loadMentorView(mode: MentorMode, options: MentorLoadOption
   try {
     prepared = await prepareMentorData(mode, now)
   } catch (error) {
-    console.error(`${LOG_PREFIX} could not read practice history`, error)
+    log.error(`could not read practice history`, error)
     return {
       kind: 'error',
       message: 'Could not read your practice history. Try again in a moment.',
@@ -256,7 +257,7 @@ export async function loadMentorView(mode: MentorMode, options: MentorLoadOption
     try {
       librarySongs = await loadLibrarySongs()
     } catch (error) {
-      console.warn(`${LOG_PREFIX} could not load library songs`, error)
+      log.warn(`could not load library songs`, error)
     }
     const requestPayload = { ...payload, library_songs: librarySongs }
     const note = await requestMentorNote(requestPayload)
@@ -269,16 +270,16 @@ export async function loadMentorView(mode: MentorMode, options: MentorLoadOption
     try {
       await saveMentorState(nextState)
     } catch (error) {
-      console.error(`${LOG_PREFIX} could not persist mentor note`, error)
+      log.error(`could not persist mentor note`, error)
     }
     return { kind: 'ready', note, trajectory: requestPayload, stale: false, refreshError: null }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Mentor request failed.'
-    console.error(`${LOG_PREFIX} mentor request failed`, error)
+    log.error(`mentor request failed`, error)
     try {
       await saveMentorState({ ...state, last_attempt_at: now.toISOString(), last_error: message })
     } catch (persistError) {
-      console.error(`${LOG_PREFIX} could not persist mentor failure`, persistError)
+      log.error(`could not persist mentor failure`, persistError)
     }
     if (hasNote) {
       return {

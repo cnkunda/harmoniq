@@ -1,9 +1,11 @@
 import { Asset } from 'expo-asset'
 
+import { createLogger } from '@/src/utils/logger'
 import type { StemDefinition, StemMixer } from './mixerTypes'
 import { assertStemDefinitions } from './mixerTypes'
 
 const LOG = '[StemMixer.web]'
+const log = createLogger(LOG)
 
 function clampGain(g: number): number {
   if (Number.isNaN(g)) {
@@ -96,7 +98,7 @@ class WebAudioStemMixer implements StemMixer {
 
     const Ctor = getAudioContextClass()
     this.ctx = new Ctor()
-    console.info(`${LOG} AudioContext state=${this.ctx.state}, loading ${stems.length} stem(s)`)
+    log.info(`AudioContext state=${this.ctx.state}, loading ${stems.length} stem(s)`)
 
     try {
       let maxDur = 0
@@ -110,17 +112,17 @@ class WebAudioStemMixer implements StemMixer {
         gain.gain.value = 1
         gain.connect(this.ctx.destination)
         this.stems.set(def.id, { label: def.label, buffer, gain, sources: [] })
-        console.info(
-          `${LOG} decoded ${def.id} (${def.label}) duration=${buffer.duration.toFixed(2)}s sr=${buffer.sampleRate}`,
+        log.info(
+          `decoded ${def.id} (${def.label}) duration=${buffer.duration.toFixed(2)}s sr=${buffer.sampleRate}`,
         )
       }
       this.durationSec = maxDur
       this.pausedAt = 0
       this.playbackRate = 1
       this.playing = false
-      console.info(`${LOG} load OK duration=${this.durationSec.toFixed(2)}s`)
+      log.info(`load OK duration=${this.durationSec.toFixed(2)}s`)
     } catch (e) {
-      console.error(`${LOG} load failed`, e)
+      log.error(`load failed`, e)
       await this.unload()
       throw e
     }
@@ -166,13 +168,13 @@ class WebAudioStemMixer implements StemMixer {
     }
     if (this.ctx.state === 'suspended') {
       await this.ctx.resume()
-      console.info(`${LOG} AudioContext resumed -> ${this.ctx.state}`)
+      log.info(`AudioContext resumed -> ${this.ctx.state}`)
     }
     this.stopLoopSources()
     this.playStartCtxTime = this.ctx.currentTime
     this.playing = true
     this.startLoopSources()
-    console.info(`${LOG} play from ${this.pausedAt.toFixed(3)}s rate=${this.playbackRate}`)
+    log.info(`play from ${this.pausedAt.toFixed(3)}s rate=${this.playbackRate}`)
   }
 
   async pause(): Promise<void> {
@@ -186,7 +188,7 @@ class WebAudioStemMixer implements StemMixer {
     }
     this.stopLoopSources()
     this.playing = false
-    console.info(`${LOG} pause at ${this.pausedAt.toFixed(3)}s`)
+    log.info(`pause at ${this.pausedAt.toFixed(3)}s`)
   }
 
   async seek(positionSeconds: number): Promise<void> {
@@ -253,7 +255,7 @@ class WebAudioStemMixer implements StemMixer {
     }
     const g = clampGain(linearGain)
     state.gain.gain.value = g
-    console.info(`${LOG} setStemGain ${stemId} -> ${g}`)
+    log.info(`setStemGain ${stemId} -> ${g}`)
   }
 
   async unload(): Promise<void> {
@@ -266,8 +268,8 @@ class WebAudioStemMixer implements StemMixer {
     this.pausedAt = 0
     this.playing = false
     if (this.ctx) {
-      await this.ctx.close().catch((err) => console.error(`${LOG} context.close`, err))
-      console.info(`${LOG} AudioContext closed`)
+      await this.ctx.close().catch((err) => log.error(`context.close`, err))
+      log.info(`AudioContext closed`)
     }
     this.ctx = null
   }

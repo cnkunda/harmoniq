@@ -1,7 +1,8 @@
 /** Commit 109: Time signature picker — numerator/denominator chips per section. */
 
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { colors } from '@/src/constants/colors'
 
 const NUMERATOR_OPTIONS = [2, 3, 4, 6, 9, 12] as const
@@ -26,7 +27,8 @@ function Chip({
   disabled?: boolean
 }) {
   return (
-    <Pressable
+    <AnimatedPressable
+      haptic="none"
       onPress={() => {
         if (!disabled) onPress()
       }}
@@ -45,7 +47,7 @@ function Chip({
       >
         {label}
       </Text>
-    </Pressable>
+    </AnimatedPressable>
   )
 }
 

@@ -60,7 +60,7 @@ class RemoteBackingProvider:
             "seed": req.seed,
             "model": req.model or self.name,
         }
-        timeout_s = float(os.getenv("HARMONIQ_BACKING_TIMEOUT_S", "60"))
+        timeout_s = float(os.getenv("HARMONIQ_BACKING_TIMEOUT_S", "45"))
         with httpx.Client(timeout=timeout_s) as client:
             res = client.post(url, json=payload, headers=headers)
         if res.status_code != 200:

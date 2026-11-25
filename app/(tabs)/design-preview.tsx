@@ -29,6 +29,11 @@ import { useAlphaTabRuntimeDiagStore } from '@/src/stores/alphaTabRuntimeDiagSto
 import type { PitchReading } from '@/src/pitch/pitchTypes'
 import { usePitchStream } from '@/src/pitch/usePitchStream'
 import { colors } from '@/src/constants/colors'
+import { createLogger } from '@/src/utils/logger'
+
+const harmoniqLog = createLogger('[Harmoniq]')
+const mixerLog = createLogger('[StemMixerDev]')
+const pitchLog = createLogger('[PitchDev]')
 
 const WOOD_SWATCHES = [
   { label: 'wood-900', className: 'bg-wood-900' },
@@ -165,7 +170,7 @@ function BackingTrackDevSection() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    console.log('[Harmoniq] API_BASE_URL =', API_BASE_URL)
+    harmoniqLog.debug('API_BASE_URL =', API_BASE_URL)
   }, [])
 
   const runSmokeTest = useCallback(async () => {
@@ -238,14 +243,14 @@ function StemMixerDevSection() {
       try {
         await mixer.load(STEM_MIXER_DEV_STEMS)
         if (cancelled) {
-          await mixer.unload().catch((err: unknown) => console.error('[StemMixerDev] unload after cancel', err))
+          await mixer.unload().catch((err: unknown) => mixerLog.error('unload after cancel', err))
           return
         }
         setReady(true)
         setStatus('Loaded — press Play')
-        console.log('[StemMixerDev] load OK')
+        mixerLog.debug('load OK')
       } catch (e) {
-        console.error('[StemMixerDev] load failed', e)
+        mixerLog.error('load failed', e)
         if (!cancelled) {
           setStatus(`Load error: ${e instanceof Error ? e.message : String(e)}`)
         }
@@ -260,7 +265,7 @@ function StemMixerDevSection() {
 
     return () => {
       cancelled = true
-      mixer.unload().catch((err: unknown) => console.error('[StemMixerDev] unload', err))
+      mixer.unload().catch((err: unknown) => mixerLog.error('unload', err))
       mixerRef.current = null
     }
   }, [])
@@ -268,13 +273,13 @@ function StemMixerDevSection() {
   useEffect(() => {
     const m = mixerRef.current
     if (!m || !ready) return
-    void m.setStemGain('guitar', guitarOn ? 1 : 0).catch((err: unknown) => console.error('[StemMixerDev] guitar gain', err))
+    void m.setStemGain('guitar', guitarOn ? 1 : 0).catch((err: unknown) => mixerLog.error('guitar gain', err))
   }, [guitarOn, ready])
 
   useEffect(() => {
     const m = mixerRef.current
     if (!m || !ready) return
-    void m.setStemGain('drums', drumsOn ? 1 : 0).catch((err: unknown) => console.error('[StemMixerDev] drums gain', err))
+    void m.setStemGain('drums', drumsOn ? 1 : 0).catch((err: unknown) => mixerLog.error('drums gain', err))
   }, [drumsOn, ready])
 
   const togglePlay = async () => {
@@ -292,7 +297,7 @@ function StemMixerDevSection() {
         setStatus('Playing (loop)')
       }
     } catch (e) {
-      console.error('[StemMixerDev] play/pause', e)
+      mixerLog.error('play/pause', e)
       setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy(false)
@@ -359,7 +364,7 @@ function PitchWorkletDevSection() {
       await stop()
       setStatus('Mic stopped')
     } catch (error) {
-      console.error('[PitchDev] stop failed', error)
+      pitchLog.error('stop failed', error)
       setStatus(`Stop error: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setActive(false)
@@ -378,10 +383,10 @@ function PitchWorkletDevSection() {
       })
       setActive(true)
       setStatus('Listening')
-      console.log('[PitchDev] stream started')
+      pitchLog.debug('stream started')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.error('[PitchDev] start failed', error)
+      pitchLog.error('start failed', error)
       if (message === 'MIC_PERMISSION_DENIED') {
         setPermissionBlocked(true)
         setStatus('Permission denied')

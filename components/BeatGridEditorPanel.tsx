@@ -1,8 +1,9 @@
 /** Commit 109: Beat grid editor panel — expandable within the metronome card in session screens. */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Pressable, View } from 'react-native'
+import { View } from 'react-native'
 
+import { AnimatedPressable } from '@/components/AnimatedPressable'
 import { BpmEditor } from '@/components/BpmEditor'
 import { BeatGridTimeline } from '@/components/BeatGridTimeline'
 import { TimeSignaturePicker } from '@/components/TimeSignaturePicker'
@@ -212,7 +213,8 @@ export function BeatGridEditorPanel({
   return (
     <View className="rounded-lg border border-wood-600/45 bg-wood-800/40">
       {/* Collapsed header — always visible */}
-      <Pressable
+      <AnimatedPressable
+        haptic="none"
         onPress={() => setExpanded(!expanded)}
         className="flex-row items-center justify-between px-3 py-2"
       >
@@ -230,7 +232,7 @@ export function BeatGridEditorPanel({
         <NativeText className="font-sans text-xs" style={{ color: colors.muted.brown }}>
           {expanded ? '▼' : '▶'}
         </NativeText>
-      </Pressable>
+      </AnimatedPressable>
 
       {/* Expanded editor */}
       {expanded && (
@@ -266,7 +268,8 @@ export function BeatGridEditorPanel({
 
           {/* Undo/Redo + Apply buttons */}
           <View className="flex-row items-center gap-2">
-            <Pressable
+            <AnimatedPressable
+              haptic="none"
               onPress={handleUndo}
               disabled={!canUndo() || isRecomputing}
               className="h-8 min-w-[36px] items-center justify-center rounded-lg bg-wood-700 px-2"
@@ -275,9 +278,10 @@ export function BeatGridEditorPanel({
               <NativeText className="font-sans text-xs" style={{ color: colors.cream }}>
                 Undo
               </NativeText>
-            </Pressable>
+            </AnimatedPressable>
 
-            <Pressable
+            <AnimatedPressable
+              haptic="none"
               onPress={handleRedo}
               disabled={!canRedo() || isRecomputing}
               className="h-8 min-w-[36px] items-center justify-center rounded-lg bg-wood-700 px-2"
@@ -286,12 +290,13 @@ export function BeatGridEditorPanel({
               <NativeText className="font-sans text-xs" style={{ color: colors.cream }}>
                 Redo
               </NativeText>
-            </Pressable>
+            </AnimatedPressable>
 
             <View className="flex-1" />
 
             {isDirty && (
-              <Pressable
+              <AnimatedPressable
+                haptic="none"
                 onPress={handleApply}
                 disabled={isRecomputing}
                 className="h-8 items-center justify-center rounded-lg px-4"
@@ -305,7 +310,7 @@ export function BeatGridEditorPanel({
                 >
                   {isRecomputing ? (recomputeResult?.stage_label ?? 'Recomputing…') : 'Apply'}
                 </NativeText>
-              </Pressable>
+              </AnimatedPressable>
             )}
           </View>
 
