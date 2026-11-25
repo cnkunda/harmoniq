@@ -6,6 +6,11 @@ program after the Phases 0–4 work and five gate-focused iterations
 inversions, full Slakh scale-up). It is written so a fresh session can
 continue without re-deriving context.
 
+> **Planning report:** read
+> [`CHORD_170_PROGRAM_REPORT.md`](CHORD_170_PROGRAM_REPORT.md) for the full
+> results, ceilings, data/licence research, practice-correction plan, and the
+> path to production. This handoff is the compact continuation card.
+
 **Production is untouched.** `backend/app/chord_inference.py`, the model
 registry, and the feature flag are unchanged. Nothing ships until the gates
 pass.
